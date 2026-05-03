@@ -16,6 +16,14 @@ enum class DType {
 
 using CellValue = std::variant<std::monostate, std::string, int64_t, double, bool>;
 
+using ColumnData = std::variant<
+    std::monostate,
+    std::vector<std::string>,
+    std::vector<int64_t>,
+    std::vector<double>,
+    std::vector<bool>
+>;
+
 inline std::string dtype_to_string(DType dt) {
     switch (dt) {
         case DType::STRING:    return "string";

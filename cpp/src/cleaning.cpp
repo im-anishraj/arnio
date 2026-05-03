@@ -28,7 +28,7 @@ static std::vector<size_t> resolve_subset(const Frame& frame,
 static std::string row_key(const Frame& frame, size_t row, const std::vector<size_t>& cols) {
     std::ostringstream oss;
     for (size_t ci : cols) {
-        const auto& cell = frame.column(ci).at(row);
+        auto cell = frame.column(ci).at(row);
         if (std::holds_alternative<std::monostate>(cell)) {
             oss << "\x00";
         } else if (std::holds_alternative<std::string>(cell)) {
@@ -275,7 +275,7 @@ Frame cast_types(const Frame& frame,
                 col.push_null();
                 continue;
             }
-            const auto& cell = src.at(r);
+            auto cell = src.at(r);
 
             // Convert to string first, then parse to target
             std::string str_val;

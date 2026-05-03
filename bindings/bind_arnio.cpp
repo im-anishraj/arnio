@@ -46,7 +46,7 @@ PYBIND11_MODULE(_arnio_cpp, m) {
         })
         .def("at", [](const Column& col, size_t idx) -> py::object {
             if (col.is_null(idx)) return py::none();
-            const auto& val = col.at(idx);
+            auto val = col.at(idx);
             if (std::holds_alternative<std::string>(val))
                 return py::cast(std::get<std::string>(val));
             if (std::holds_alternative<int64_t>(val))
