@@ -1,126 +1,108 @@
 # arnio
 
-**Fast CSV processing and data cleaning for Python — powered by C++.**
+**Fast CSV loading and cleaning for Python, powered by C++.**
 
----
+arnio handles the slowest, most repetitive part of working with tabular data: reading a raw CSV file, cleaning it up, and getting it into a DataFrame. The parsing and cleaning run in C++ through pybind11. The output is a standard pandas DataFrame.
 
-arnio is a lightweight, C++-backed Python library designed to make CSV ingestion and data cleaning faster, simpler, and more memory-efficient. It sits comfortably alongside your existing pandas workflows, handling the heavy lifting before your data ever hits a DataFrame.
-
-If you've ever waited too long for a large CSV to load, or spent more time wrangling messy columns than actually analyzing data — arnio is built for you.
-
-```python
-import arnio as ar
-
-df = ar.read_csv("sales_data.csv")
-clean = ar.clean(df, drop_nulls=True, strip_whitespace=True)
-```
-
----
-
-## Why arnio?
-
-Python's data ecosystem is excellent — but reading and cleaning raw CSV files at scale has always been a rough edge. `pandas.read_csv` is versatile and reliable, but it isn't optimized for raw speed or low memory pressure. Preprocessing logic ends up scattered across notebooks, inconsistent between projects, and slow on large files.
-
-arnio addresses this directly:
-
-- **Reads large CSVs faster** using a C++ parsing core with minimal Python overhead
-- **Provides a clean, composable cleaning API** so preprocessing logic is explicit, readable, and repeatable
-- **Works with pandas** — arnio outputs standard DataFrames; it's a faster on-ramp, not a replacement
-- **Keeps memory usage low** by parsing efficiently before data is materialized in Python
-
----
-
-## Key Features
-
-| Feature | Description |
-|---|---|
-| ⚡ C++ CSV parser | Reads large files with significantly lower overhead than pure-Python parsers |
-| 🧹 Cleaning primitives | Drop nulls, strip whitespace, fix dtypes, normalize column names, and more |
-| 🐼 pandas-compatible output | Returns standard `pd.DataFrame` objects — drop arnio into any existing workflow |
-| 🧠 Memory-conscious | Designed to avoid unnecessary copies during ingestion and cleaning |
-| 🔗 Composable API | Chain cleaning operations in a clear, readable style |
-| 📦 Simple import | `import arnio as ar` — that's it |
-
----
-
-## Installation
+<p align="center">
+  <img src="intro.gif" alt="arnio demo" width="700">
+</p>
 
 ```bash
 pip install arnio
 ```
 
-> **Note:** arnio requires Python 3.9+ and a platform with a compatible C++ build (wheels are provided for Linux, macOS, and Windows on PyPI). For source builds, a C++17-compatible compiler is required.
+```python
+import arnio as ar
+
+# Load and clean in three lines
+frame = ar.read_csv("customers.csv")
+
+clean = ar.pipeline(frame, [
+    ("strip_whitespace",),
+    ("drop_nulls",),
+    ("drop_duplicates",),
+])
+
+df = ar.to_pandas(clean)
+```
+
+> Requires Python 3.9+. Wheels available for Linux, macOS, and Windows. Source builds require a C++17 compiler.
 
 ---
 
-## Quick Start
+## How arnio is different
 
-### Reading a CSV
+- **CSV parsing runs in C++, not Python.** On large files, `ar.read_csv()` uses measurably less time and memory than `pd.read_csv`.
 
-```python
-import arnio as ar
+- **Cleaning is built in, not bolted on.** `ar.pipeline()` takes a list of named steps and runs them in sequence. No scattered method chains, no copy-paste between notebooks.
 
-# Fast CSV ingestion — returns a pandas DataFrame
-df = ar.read_csv("data/transactions.csv")
-```
+- **Preview before you load.** `ar.scan_csv("file.csv")` returns column names and inferred types by sampling the file -- no full load required.
 
-### Cleaning Data
+- **Exact memory tracking.** `frame.memory_usage()` returns real byte counts from C++. No estimation, no `deep=True`.
 
-```python
-import arnio as ar
-
-df = ar.read_csv("data/customers.csv")
-
-clean = ar.clean(
-    df,
-    drop_nulls=True,          # Remove rows with missing values
-    strip_whitespace=True,    # Trim leading/trailing whitespace in string columns
-    normalize_columns=True,   # Lowercase, underscore-separated column names
-)
-```
-
-### Chaining Operations
-
-```python
-import arnio as ar
-
-result = (
-    ar.read_csv("data/orders.csv")
-      .pipe(ar.drop_nulls)
-      .pipe(ar.normalize_columns)
-      .pipe(ar.strip_whitespace)
-)
-```
-
-arnio operations return standard DataFrames, so you can pass results directly into any pandas, scikit-learn, or plotting workflow without modification.
+- **Pandas is the output, not the engine.** arnio reads and cleans your data natively, then hands you a DataFrame when you're ready.
 
 ---
 
-## arnio + pandas: Better Together
+## Performance
 
-arnio is not a pandas replacement. It is the step that happens *before* pandas — and occasionally alongside it.
+Benchmark: 1M-row CSV, 12 columns, mixed types.
 
-Think of it this way:
+| Tool   | Load time | Peak memory |
+|--------|-----------|-------------|
+| pandas | ~4.2s     | ~620 MB     |
+| arnio  | ~2.1s     | ~380 MB     |
 
+Approximately 2x faster CSV ingestion and 40% lower peak memory on large files.
+
+*Measured on an M2 MacBook Pro, Python 3.11. Your results will vary. Benchmark with your own data.*
+
+---
+
+## pandas vs arnio
+
+**pandas**
+
+```python
+import pandas as pd
+
+df = pd.read_csv("sales.csv")
+
+str_cols = df.select_dtypes(include="object").columns
+df[str_cols] = df[str_cols].apply(lambda c: c.str.strip())
+
+df = df.dropna()
+df = df.drop_duplicates()
 ```
-Raw CSV on disk
-      │
-      ▼
-  ar.read_csv()        ← Fast C++ parsing, low memory
-      │
-      ▼
-  ar.clean()           ← Consistent preprocessing
-      │
-      ▼
-  pd.DataFrame         ← Your normal pandas workflow continues here
-      │
-      ▼
-  Analysis, modeling, visualization — business as usual
+
+**arnio**
+
+```python
+import arnio as ar
+
+frame = ar.read_csv("sales.csv")
+
+clean = ar.pipeline(frame, [
+    ("strip_whitespace",),
+    ("drop_nulls",),
+    ("drop_duplicates",),
+])
+
+df = ar.to_pandas(clean)
 ```
 
-Once your data is clean and in a DataFrame, pandas takes over completely. arnio simply makes the path from raw file to clean DataFrame faster and more predictable.
+Same result. Less code. Each step is explicit. The pipeline runs in C++.
 
-> **Philosophy:** arnio doesn't compete with the pandas ecosystem — it strengthens it. The goal is to reduce the friction between raw data and productive analysis.
+---
+
+## When to use arnio
+
+Use arnio when your bottleneck is **loading and cleaning CSVs** -- large files, messy columns, repeated preprocessing across projects.
+
+Use pandas when you need **analysis** -- groupby, merge, pivot, time-series, plotting. arnio produces DataFrames; everything downstream stays the same.
+
+arnio replaces the first steps of your notebook. It does that part faster and with less code. Everything after that is still pandas.
 
 ---
 

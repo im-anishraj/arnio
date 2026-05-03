@@ -48,6 +48,13 @@ class TestReadCsv:
         frame = ar.read_csv(sample_csv)
         assert len(frame) == 3
 
+    def test_header_whitespace_strip(self, tmp_path):
+        test_file = tmp_path / "whitespace.csv"
+        test_file.write_text("name,age \nAlice,30\nBob,25")
+        
+        frame = ar.read_csv(str(test_file))
+        assert frame.columns == ["name", "age"]
+
 
 class TestScanCsv:
     def test_scan_schema(self, sample_csv):

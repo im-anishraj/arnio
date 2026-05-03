@@ -131,6 +131,10 @@ Frame CsvReader::read(const std::string& path) const {
     // Read header
     if (config_.has_header && std::getline(file, line)) {
         header = parse_line(line);
+        for (auto& h : header) {
+            h.erase(h.begin(), std::find_if(h.begin(), h.end(), [](unsigned char ch) { return !std::isspace(ch); }));
+            h.erase(std::find_if(h.rbegin(), h.rend(), [](unsigned char ch) { return !std::isspace(ch); }).base(), h.end());
+        }
     }
 
     // Read all rows
@@ -213,6 +217,10 @@ std::unordered_map<std::string, std::string> CsvReader::scan_schema(const std::s
 
     if (std::getline(file, line)) {
         header = parse_line(line);
+        for (auto& h : header) {
+            h.erase(h.begin(), std::find_if(h.begin(), h.end(), [](unsigned char ch) { return !std::isspace(ch); }));
+            h.erase(std::find_if(h.rbegin(), h.rend(), [](unsigned char ch) { return !std::isspace(ch); }).base(), h.end());
+        }
     }
 
     // Read up to 100 rows for type inference
