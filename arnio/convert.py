@@ -72,6 +72,8 @@ def from_pandas(df: pd.DataFrame) -> ArFrame:
         col = _Column(str(col_name), target)
 
         for val in series:
+            if isinstance(val, (list, dict, tuple, set, np.ndarray)):
+                raise TypeError(f"Unsupported nested/complex type in column '{col_name}': {type(val).__name__}")
             if pd.isna(val):
                 col.push_null()
             elif target == _DType.INT64:

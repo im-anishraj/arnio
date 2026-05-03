@@ -54,3 +54,13 @@ class TestFromPandas:
         df2 = ar.to_pandas(frame)
         assert list(df2["name"]) == ["Alice", "Bob"]
         assert list(df2["score"]) == [95.5, 87.0]
+
+    def test_from_pandas_nested_data(self):
+        import pytest
+        df_list = pd.DataFrame({"a": [[1, 2], [3, 4]]})
+        with pytest.raises(TypeError, match="Unsupported nested/complex type"):
+            ar.from_pandas(df_list)
+
+        df_dict = pd.DataFrame({"a": [{"x": 1}, {"y": 2}]})
+        with pytest.raises(TypeError, match="Unsupported nested/complex type"):
+            ar.from_pandas(df_dict)
