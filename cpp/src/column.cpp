@@ -1,5 +1,6 @@
 #include "arnio/column.h"
 #include <stdexcept>
+#include <utility>
 
 namespace arnio {
 
