@@ -57,6 +57,24 @@ class TestReadCsv:
         frame = ar.read_csv(csv_path)
         assert frame.columns == ["name", "age"]
 
+    def test_unsupported_extension(self, tmp_path):
+        import pytest
+        file_path = str(tmp_path / "data.json")
+        with open(file_path, "w") as f:
+            f.write('{"a": 1}')
+        
+        with pytest.raises(ValueError, match="Unsupported file format"):
+            ar.read_csv(file_path)
+            
+    def test_binary_file_rejection(self, tmp_path):
+        import pytest
+        file_path = str(tmp_path / "data.csv")
+        with open(file_path, "wb") as f:
+            f.write(b"col1,col2\n\0binary\0,data\n")
+            
+        with pytest.raises(ValueError, match="File appears to be binary"):
+            ar.read_csv(file_path)
+
 
 class TestScanCsv:
     def test_scan_schema(self, sample_csv):
