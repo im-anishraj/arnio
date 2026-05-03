@@ -5,12 +5,14 @@ Chained cleaning pipeline.
 
 from __future__ import annotations
 
+from typing import Callable
+
 from .frame import ArFrame
 from . import cleaning
 
 
 # Map step names to cleaning functions
-_STEP_REGISTRY: dict[str, callable] = {
+_STEP_REGISTRY: dict[str, Callable] = {
     "drop_nulls": cleaning.drop_nulls,
     "fill_nulls": cleaning.fill_nulls,
     "drop_duplicates": cleaning.drop_duplicates,
