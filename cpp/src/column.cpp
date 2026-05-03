@@ -72,16 +72,29 @@ void Column::push_back(const CellValue& value) {
 
     if (std::holds_alternative<std::vector<std::string>>(data_)) {
         auto& vec = std::get<std::vector<std::string>>(data_);
-        vec.push_back(std::holds_alternative<std::string>(value) ? std::get<std::string>(value) : "");
+        if (std::holds_alternative<std::string>(value)) vec.push_back(std::get<std::string>(value));
+        else if (std::holds_alternative<int64_t>(value)) vec.push_back(std::to_string(std::get<int64_t>(value)));
+        else if (std::holds_alternative<double>(value)) vec.push_back(std::to_string(std::get<double>(value)));
+        else if (std::holds_alternative<bool>(value)) vec.push_back(std::get<bool>(value) ? "true" : "false");
+        else vec.push_back("");
     } else if (std::holds_alternative<std::vector<int64_t>>(data_)) {
         auto& vec = std::get<std::vector<int64_t>>(data_);
-        vec.push_back(std::holds_alternative<int64_t>(value) ? std::get<int64_t>(value) : 0);
+        if (std::holds_alternative<int64_t>(value)) vec.push_back(std::get<int64_t>(value));
+        else if (std::holds_alternative<bool>(value)) vec.push_back(std::get<bool>(value) ? 1 : 0);
+        else if (std::holds_alternative<double>(value)) vec.push_back(static_cast<int64_t>(std::get<double>(value)));
+        else vec.push_back(0);
     } else if (std::holds_alternative<std::vector<double>>(data_)) {
         auto& vec = std::get<std::vector<double>>(data_);
-        vec.push_back(std::holds_alternative<double>(value) ? std::get<double>(value) : 0.0);
+        if (std::holds_alternative<double>(value)) vec.push_back(std::get<double>(value));
+        else if (std::holds_alternative<int64_t>(value)) vec.push_back(static_cast<double>(std::get<int64_t>(value)));
+        else if (std::holds_alternative<bool>(value)) vec.push_back(std::get<bool>(value) ? 1.0 : 0.0);
+        else vec.push_back(0.0);
     } else if (std::holds_alternative<std::vector<bool>>(data_)) {
         auto& vec = std::get<std::vector<bool>>(data_);
-        vec.push_back(std::holds_alternative<bool>(value) ? std::get<bool>(value) : false);
+        if (std::holds_alternative<bool>(value)) vec.push_back(std::get<bool>(value));
+        else if (std::holds_alternative<int64_t>(value)) vec.push_back(std::get<int64_t>(value) != 0);
+        else if (std::holds_alternative<double>(value)) vec.push_back(std::get<double>(value) != 0.0);
+        else vec.push_back(false);
     }
 }
 
