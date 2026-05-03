@@ -4,7 +4,7 @@ Internal module that imports the C++ extension.
 """
 
 try:
-    from _arnio_cpp import (  # type: ignore[import-not-found]
+    from ._arnio_cpp import (  # type: ignore[import-not-found]
         Frame as _Frame,
         Column as _Column,
         CsvConfig as _CsvConfig,
