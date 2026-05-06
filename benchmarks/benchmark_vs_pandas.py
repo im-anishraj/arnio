@@ -5,11 +5,13 @@ Run: python benchmarks/benchmark_vs_pandas.py
 
 import time
 import tracemalloc
+
 import pandas as pd
+
 import arnio as ar
 
 CSV_FILE = "benchmarks/benchmark_1m.csv"
-RUNS = 1
+RUNS = 3
 
 
 def benchmark_pandas(path):
@@ -19,6 +21,7 @@ def benchmark_pandas(path):
     df = pd.read_csv(path)
     df.columns = df.columns.str.strip()
     df = df.dropna()
+    df = df.drop_duplicates()
     for col in ["name", "city", "active", "category", "region"]:
         if col in df.columns:
             df[col] = df[col].astype(str).str.strip().str.lower()
@@ -33,20 +36,17 @@ def benchmark_arnio(path):
     tracemalloc.start()
     t0 = time.perf_counter()
 
-    print("    Reading CSV...")
     frame = ar.read_csv(path)
-    print("    Running pipeline...")
     clean = ar.pipeline(
         frame,
         [
             ("strip_whitespace",),
             ("normalize_case", {"case_type": "lower"}),
             ("drop_nulls",),
+            ("drop_duplicates",),
         ],
     )
-    print("    Converting to pandas...")
     ar.to_pandas(clean)
-    print("    Done.")
 
     elapsed = time.perf_counter() - t0
     _, peak = tracemalloc.get_traced_memory()
@@ -62,10 +62,7 @@ if __name__ == "__main__":
     pd_rams, ar_rams = [], []
 
     for i in range(RUNS):
-        print(f"Run {i+1}...")
-        print("  Pandas...")
         pt, pr = benchmark_pandas(CSV_FILE)
-        print("  Arnio...")
         at, ar_r = benchmark_arnio(CSV_FILE)
         pd_times.append(pt)
         ar_times.append(at)

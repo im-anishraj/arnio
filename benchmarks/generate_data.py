@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 
 
-def generate(rows=100_000, path="benchmarks/benchmark_1m.csv"):
+def generate(rows=1_000_000, path="benchmarks/benchmark_1m.csv"):
     rng = np.random.default_rng(42)
     df = pd.DataFrame(
         {
