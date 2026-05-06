@@ -52,10 +52,16 @@ def from_pandas(df: pd.DataFrame) -> ArFrame:
     """Convert pandas.DataFrame to ArFrame."""
     columns = {}
     for col_name in df.columns:
+        series = df[col_name]
+        if series.dtype == object:
+            for val in series:
+                if isinstance(val, (list, dict, tuple, set, np.ndarray)):
+                    raise TypeError(f"Unsupported nested/complex type in column '{col_name}': {type(val).__name__}")
+        
         # Convert pandas series to python list.
         # This handles pd.NA natively by converting to None in the resulting list.
         # It takes one boundary crossing per column.
-        columns[str(col_name)] = df[col_name].replace({pd.NA: None, np.nan: None}).tolist()
+        columns[str(col_name)] = series.replace({pd.NA: None, np.nan: None}).tolist()
         
     cpp_frame = _Frame.from_dict(columns)
     return ArFrame(cpp_frame)

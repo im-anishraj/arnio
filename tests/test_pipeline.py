@@ -46,9 +46,9 @@ class TestPipeline:
         frame = ar.read_csv(sample_csv)
         try:
             ar.pipeline(frame, [("nonexistent_op",)])
-            assert False, "Should have raised ValueError"
-        except ValueError as e:
-            assert "Unknown step" in str(e)
+            assert False, "Should have raised UnknownStepError"
+        except ar.UnknownStepError as e:
+            assert "Unknown pipeline step" in str(e)
 
     def test_invalid_step_format(self, sample_csv):
         frame = ar.read_csv(sample_csv)

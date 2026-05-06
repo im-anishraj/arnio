@@ -24,6 +24,7 @@ from .cleaning import (
 )
 from .convert import to_pandas, from_pandas
 from .pipeline import pipeline, register_step
+from .exceptions import ArnioError, UnknownStepError, CsvReadError, TypeCastError
 
 __all__ = [
     # Core class
@@ -46,4 +47,6 @@ __all__ = [
     # Pipeline
     "pipeline",
     "register_step",
+    # Exceptions
+    "UnknownStepError",
 ]
