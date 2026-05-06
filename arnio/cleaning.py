@@ -65,10 +65,10 @@ def normalize_case(
     frame: ArFrame,
     *,
     subset: Optional[list[str]] = None,
-    case: str = "lower",
+    case_type: str = "lower",
 ) -> ArFrame:
     """Normalize string columns to lower/upper/title case."""
-    result = _normalize_case(frame._frame, subset=subset, case_type=case)
+    result = _normalize_case(frame._frame, subset=subset, case_type=case_type)
     return ArFrame(result)
 
 

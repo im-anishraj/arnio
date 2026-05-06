@@ -15,76 +15,47 @@ from .frame import ArFrame
 def to_pandas(frame: ArFrame) -> pd.DataFrame:
     """Convert ArFrame to pandas.DataFrame."""
     cpp_frame = frame._frame
-    data: dict[str, np.ndarray] = {}
+    data = {}
 
     for i in range(cpp_frame.num_cols()):
         col = cpp_frame.column_by_index(i)
         name = col.name()
-        size = col.size()
         dtype = col.dtype()
+        mask = col.get_null_mask()
 
         if dtype == _DType.INT64:
-            # Use nullable integer to handle nulls
-            values = []
-            for r in range(size):
-                values.append(col.at(r))
-            data[name] = pd.array(values, dtype=pd.Int64Dtype())
+            arr = col.to_numpy_int()
+            # pandas Int64Dtype handles nulls via mask
+            series = pd.Series(arr, dtype=pd.Int64Dtype())
+            series[mask] = pd.NA
+            data[name] = series
         elif dtype == _DType.FLOAT64:
-            arr = np.empty(size, dtype=np.float64)
-            for r in range(size):
-                val = col.at(r)
-                arr[r] = float(val) if val is not None else np.nan
+            arr = col.to_numpy_float().copy()
+            arr[mask] = np.nan
             data[name] = arr
         elif dtype == _DType.BOOL:
-            values = []
-            for r in range(size):
-                values.append(col.at(r))
-            data[name] = pd.array(values, dtype=pd.BooleanDtype())
+            arr = col.to_numpy_bool()
+            series = pd.Series(arr, dtype=pd.BooleanDtype())
+            series[mask] = pd.NA
+            data[name] = series
         else:
             # STRING or unknown
-            values = []
-            for r in range(size):
-                val = col.at(r)
-                values.append(val if val is not None else None)
-            data[name] = pd.array(values, dtype=pd.StringDtype())
+            values = col.to_python_list()
+            series = pd.Series(values, dtype=pd.StringDtype())
+            series[mask] = pd.NA
+            data[name] = series
 
     return pd.DataFrame(data)
 
 
 def from_pandas(df: pd.DataFrame) -> ArFrame:
     """Convert pandas.DataFrame to ArFrame."""
-    cpp_frame = _Frame()
-
+    columns = {}
     for col_name in df.columns:
-        series = df[col_name]
-        col_dtype = series.dtype
-
-        # Determine target DType
-        if pd.api.types.is_integer_dtype(col_dtype):
-            target = _DType.INT64
-        elif pd.api.types.is_float_dtype(col_dtype):
-            target = _DType.FLOAT64
-        elif pd.api.types.is_bool_dtype(col_dtype):
-            target = _DType.BOOL
-        else:
-            target = _DType.STRING
-
-        col = _Column(str(col_name), target)
-
-        for val in series:
-            if isinstance(val, (list, dict, tuple, set, np.ndarray)):
-                raise TypeError(f"Unsupported nested/complex type in column '{col_name}': {type(val).__name__}")
-            if pd.isna(val):
-                col.push_null()
-            elif target == _DType.INT64:
-                col.push_back(int(val))
-            elif target == _DType.FLOAT64:
-                col.push_back(float(val))
-            elif target == _DType.BOOL:
-                col.push_back(bool(val))
-            else:
-                col.push_back(str(val))
-
-        cpp_frame.add_column(col)
-
+        # Convert pandas series to python list.
+        # This handles pd.NA natively by converting to None in the resulting list.
+        # It takes one boundary crossing per column.
+        columns[str(col_name)] = df[col_name].replace({pd.NA: None, np.nan: None}).tolist()
+        
+    cpp_frame = _Frame.from_dict(columns)
     return ArFrame(cpp_frame)

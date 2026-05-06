@@ -71,19 +71,19 @@ class TestStripWhitespace:
 class TestNormalizeCase:
     def test_lower(self, sample_csv):
         frame = ar.read_csv(sample_csv)
-        result = ar.normalize_case(frame, subset=["name"], case="lower")
+        result = ar.normalize_case(frame, subset=["name"], case_type="lower")
         df = ar.to_pandas(result)
         assert df["name"].iloc[0] == "alice"
 
     def test_upper(self, sample_csv):
         frame = ar.read_csv(sample_csv)
-        result = ar.normalize_case(frame, subset=["name"], case="upper")
+        result = ar.normalize_case(frame, subset=["name"], case_type="upper")
         df = ar.to_pandas(result)
         assert df["name"].iloc[0] == "ALICE"
 
     def test_title(self, sample_csv):
         frame = ar.read_csv(sample_csv)
-        result = ar.normalize_case(frame, subset=["name"], case="title")
+        result = ar.normalize_case(frame, subset=["name"], case_type="title")
         df = ar.to_pandas(result)
         assert df["name"].iloc[0] == "Alice"
 

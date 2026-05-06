@@ -4,7 +4,11 @@ arnio — Fast CSV processing and data cleaning companion for pandas.
 import arnio as ar
 """
 
-__version__ = "0.1.2"
+try:
+    from importlib.metadata import version
+    __version__ = version("arnio")
+except Exception:
+    __version__ = "unknown"
 
 from .frame import ArFrame
 from .io import read_csv, scan_csv
@@ -19,7 +23,7 @@ from .cleaning import (
     clean,
 )
 from .convert import to_pandas, from_pandas
-from .pipeline import pipeline
+from .pipeline import pipeline, register_step
 
 __all__ = [
     # Core class
@@ -41,4 +45,5 @@ __all__ = [
     "from_pandas",
     # Pipeline
     "pipeline",
+    "register_step",
 ]

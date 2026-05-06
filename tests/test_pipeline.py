@@ -15,7 +15,7 @@ class TestPipeline:
         frame = ar.read_csv(csv_with_whitespace)
         result = ar.pipeline(frame, [
             ("strip_whitespace",),
-            ("normalize_case", {"case": "lower"}),
+            ("normalize_case", {"case_type": "lower"}),
         ])
         df = ar.to_pandas(result)
         assert df["name"].iloc[0] == "alice"

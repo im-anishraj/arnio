@@ -1,5 +1,6 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
+#include <pybind11/numpy.h>
 
 #include "arnio/cleaning.h"
 #include "arnio/column.h"
@@ -60,6 +61,53 @@ PYBIND11_MODULE(_arnio_cpp, m) {
         if (std::holds_alternative<bool>(val))
           return py::cast(std::get<bool>(val));
         return py::none();
+      })
+      .def("to_numpy_float", [](py::object col_obj) {
+          const Column& col = col_obj.cast<const Column&>();
+          if (col.dtype() != DType::FLOAT64) throw std::runtime_error("Not a FLOAT64 column");
+          const auto& vec = std::get<std::vector<double>>(col.data());
+          return py::array_t<double>({vec.size()}, {sizeof(double)}, vec.data(), col_obj);
+      })
+      .def("to_numpy_int", [](py::object col_obj) {
+          const Column& col = col_obj.cast<const Column&>();
+          if (col.dtype() != DType::INT64) throw std::runtime_error("Not an INT64 column");
+          const auto& vec = std::get<std::vector<int64_t>>(col.data());
+          return py::array_t<int64_t>({vec.size()}, {sizeof(int64_t)}, vec.data(), col_obj);
+      })
+      .def("to_numpy_bool", [](py::object col_obj) {
+          const Column& col = col_obj.cast<const Column&>();
+          if (col.dtype() != DType::BOOL) throw std::runtime_error("Not a BOOL column");
+          const auto& vec = std::get<std::vector<bool>>(col.data());
+          auto result = py::array_t<bool>(vec.size());
+          auto ptr = result.mutable_data();
+          for (size_t i = 0; i < vec.size(); ++i) ptr[i] = static_cast<bool>(vec[i]);
+          return result;
+      })
+      .def("to_python_list", [](const Column& col) {
+          py::list result;
+          if (col.dtype() == DType::STRING) {
+              const auto& vec = std::get<std::vector<std::string>>(col.data());
+              for (const auto& s : vec) result.append(py::str(s));
+          } else if (col.dtype() == DType::BOOL) {
+              const auto& vec = std::get<std::vector<bool>>(col.data());
+              for (auto b : vec) result.append(py::bool_(static_cast<bool>(b)));
+          } else if (col.dtype() == DType::INT64) {
+              const auto& vec = std::get<std::vector<int64_t>>(col.data());
+              for (auto v : vec) result.append(py::int_(v));
+          } else if (col.dtype() == DType::FLOAT64) {
+              const auto& vec = std::get<std::vector<double>>(col.data());
+              for (auto v : vec) result.append(py::float_(v));
+          } else {
+              for (size_t i = 0; i < col.size(); ++i) result.append(py::none());
+          }
+          return result;
+      })
+      .def("get_null_mask", [](const Column& col) {
+          const auto& mask = col.null_mask();
+          auto result = py::array_t<bool>(mask.size());
+          auto ptr = result.mutable_data();
+          for (size_t i = 0; i < mask.size(); ++i) ptr[i] = static_cast<bool>(mask[i]);
+          return result;
       });
 
   // --- Frame ---
@@ -85,7 +133,34 @@ PYBIND11_MODULE(_arnio_cpp, m) {
           },
           py::return_value_policy::reference_internal)
       .def("add_column", &Frame::add_column)
-      .def("clone", &Frame::clone);
+      .def("clone", &Frame::clone)
+      .def_static("from_dict", [](py::dict cols_dict) {
+          Frame frame;
+          for (auto item : cols_dict) {
+              std::string name = py::cast<std::string>(item.first);
+              py::list values = py::cast<py::list>(item.second);
+              
+              DType dtype = DType::STRING;
+              for (auto val : values) {
+                  if (val.is_none()) continue;
+                  if (py::isinstance<py::bool_>(val)) { dtype = DType::BOOL; break; }
+                  if (py::isinstance<py::int_>(val)) { dtype = DType::INT64; break; }
+                  if (py::isinstance<py::float_>(val)) { dtype = DType::FLOAT64; break; }
+                  break;
+              }
+              
+              Column col(name, dtype);
+              for (auto val : values) {
+                  if (val.is_none()) { col.push_null(); continue; }
+                  if (dtype == DType::BOOL) col.push_back(val.cast<bool>());
+                  else if (dtype == DType::INT64) col.push_back(val.cast<int64_t>());
+                  else if (dtype == DType::FLOAT64) col.push_back(val.cast<double>());
+                  else col.push_back(py::str(val).cast<std::string>());
+              }
+              frame.add_column(col);
+          }
+          return frame;
+      });
 
   // --- CsvReader ---
   py::class_<CsvConfig>(m, "CsvConfig")

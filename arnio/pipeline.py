@@ -23,6 +23,12 @@ _STEP_REGISTRY: dict[str, Callable] = {
 }
 
 
+_PYTHON_STEP_REGISTRY: dict[str, Callable] = {}
+
+def register_step(name: str, fn: Callable):
+    """Register a custom Python pipeline step."""
+    _PYTHON_STEP_REGISTRY[name] = fn
+
 def pipeline(
     frame: ArFrame,
     steps: list[tuple],
@@ -38,6 +44,9 @@ def pipeline(
             ("drop_duplicates", {"keep": "first"}),
         ])
     """
+    from .exceptions import UnknownStepError
+    from .convert import to_pandas, from_pandas
+
     result = frame
     for step in steps:
         if len(step) == 1:
@@ -48,13 +57,17 @@ def pipeline(
         else:
             raise ValueError(f"Invalid step format: {step}. Expected (name,) or (name, kwargs)")
 
-        if name not in _STEP_REGISTRY:
-            raise ValueError(
-                f"Unknown step: '{name}'. "
-                f"Available: {list(_STEP_REGISTRY.keys())}"
-            )
-
-        fn = _STEP_REGISTRY[name]
-        result = fn(result, **kwargs)
+        if name in _STEP_REGISTRY:
+            # C++ backed step - fast path
+            fn = _STEP_REGISTRY[name]
+            result = fn(result, **kwargs)
+        elif name in _PYTHON_STEP_REGISTRY:
+            # Pure Python step - slower but contributor-friendly
+            df = to_pandas(result)
+            df = _PYTHON_STEP_REGISTRY[name](df, **kwargs)
+            result = from_pandas(df)
+        else:
+            available = list(_STEP_REGISTRY.keys()) + list(_PYTHON_STEP_REGISTRY.keys())
+            raise UnknownStepError(name, available)
 
     return result
