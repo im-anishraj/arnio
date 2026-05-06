@@ -1,17 +1,27 @@
 #include "arnio/column.h"
+
 #include <stdexcept>
 #include <utility>
 
 namespace arnio {
 
-Column::Column(const std::string& name, DType dtype)
-    : name_(name), dtype_(dtype) {
+Column::Column(const std::string& name, DType dtype) : name_(name), dtype_(dtype) {
     switch (dtype) {
-        case DType::STRING: data_ = std::vector<std::string>{}; break;
-        case DType::INT64: data_ = std::vector<int64_t>{}; break;
-        case DType::FLOAT64: data_ = std::vector<double>{}; break;
-        case DType::BOOL: data_ = std::vector<bool>{}; break;
-        case DType::NULL_TYPE: data_ = std::monostate{}; break;
+        case DType::STRING:
+            data_ = std::vector<std::string>{};
+            break;
+        case DType::INT64:
+            data_ = std::vector<int64_t>{};
+            break;
+        case DType::FLOAT64:
+            data_ = std::vector<double>{};
+            break;
+        case DType::BOOL:
+            data_ = std::vector<bool>{};
+            break;
+        case DType::NULL_TYPE:
+            data_ = std::monostate{};
+            break;
     }
 }
 
@@ -50,8 +60,8 @@ const CellValue Column::at(size_t idx) const {
 size_t Column::memory_usage() const {
     size_t usage = sizeof(Column);
     usage += name_.capacity();
-    usage += null_mask_.capacity() / 8; // approx vector<bool> memory
-    
+    usage += null_mask_.capacity() / 8;  // approx vector<bool> memory
+
     if (std::holds_alternative<std::vector<std::string>>(data_)) {
         const auto& vec = std::get<std::vector<std::string>>(data_);
         usage += vec.capacity() * sizeof(std::string);
@@ -72,29 +82,46 @@ void Column::push_back(const CellValue& value) {
 
     if (std::holds_alternative<std::vector<std::string>>(data_)) {
         auto& vec = std::get<std::vector<std::string>>(data_);
-        if (std::holds_alternative<std::string>(value)) vec.push_back(std::get<std::string>(value));
-        else if (std::holds_alternative<int64_t>(value)) vec.push_back(std::to_string(std::get<int64_t>(value)));
-        else if (std::holds_alternative<double>(value)) vec.push_back(std::to_string(std::get<double>(value)));
-        else if (std::holds_alternative<bool>(value)) vec.push_back(std::get<bool>(value) ? "true" : "false");
-        else vec.push_back("");
+        if (std::holds_alternative<std::string>(value))
+            vec.push_back(std::get<std::string>(value));
+        else if (std::holds_alternative<int64_t>(value))
+            vec.push_back(std::to_string(std::get<int64_t>(value)));
+        else if (std::holds_alternative<double>(value))
+            vec.push_back(std::to_string(std::get<double>(value)));
+        else if (std::holds_alternative<bool>(value))
+            vec.push_back(std::get<bool>(value) ? "true" : "false");
+        else
+            vec.push_back("");
     } else if (std::holds_alternative<std::vector<int64_t>>(data_)) {
         auto& vec = std::get<std::vector<int64_t>>(data_);
-        if (std::holds_alternative<int64_t>(value)) vec.push_back(std::get<int64_t>(value));
-        else if (std::holds_alternative<bool>(value)) vec.push_back(std::get<bool>(value) ? 1 : 0);
-        else if (std::holds_alternative<double>(value)) vec.push_back(static_cast<int64_t>(std::get<double>(value)));
-        else vec.push_back(0);
+        if (std::holds_alternative<int64_t>(value))
+            vec.push_back(std::get<int64_t>(value));
+        else if (std::holds_alternative<bool>(value))
+            vec.push_back(std::get<bool>(value) ? 1 : 0);
+        else if (std::holds_alternative<double>(value))
+            vec.push_back(static_cast<int64_t>(std::get<double>(value)));
+        else
+            vec.push_back(0);
     } else if (std::holds_alternative<std::vector<double>>(data_)) {
         auto& vec = std::get<std::vector<double>>(data_);
-        if (std::holds_alternative<double>(value)) vec.push_back(std::get<double>(value));
-        else if (std::holds_alternative<int64_t>(value)) vec.push_back(static_cast<double>(std::get<int64_t>(value)));
-        else if (std::holds_alternative<bool>(value)) vec.push_back(std::get<bool>(value) ? 1.0 : 0.0);
-        else vec.push_back(0.0);
+        if (std::holds_alternative<double>(value))
+            vec.push_back(std::get<double>(value));
+        else if (std::holds_alternative<int64_t>(value))
+            vec.push_back(static_cast<double>(std::get<int64_t>(value)));
+        else if (std::holds_alternative<bool>(value))
+            vec.push_back(std::get<bool>(value) ? 1.0 : 0.0);
+        else
+            vec.push_back(0.0);
     } else if (std::holds_alternative<std::vector<bool>>(data_)) {
         auto& vec = std::get<std::vector<bool>>(data_);
-        if (std::holds_alternative<bool>(value)) vec.push_back(std::get<bool>(value));
-        else if (std::holds_alternative<int64_t>(value)) vec.push_back(std::get<int64_t>(value) != 0);
-        else if (std::holds_alternative<double>(value)) vec.push_back(std::get<double>(value) != 0.0);
-        else vec.push_back(false);
+        if (std::holds_alternative<bool>(value))
+            vec.push_back(std::get<bool>(value));
+        else if (std::holds_alternative<int64_t>(value))
+            vec.push_back(std::get<int64_t>(value) != 0);
+        else if (std::holds_alternative<double>(value))
+            vec.push_back(std::get<double>(value) != 0.0);
+        else
+            vec.push_back(false);
     }
 }
 
@@ -117,8 +144,6 @@ void Column::set_dtype(DType dtype) { dtype_ = dtype; }
 const ColumnData& Column::data() const { return data_; }
 const std::vector<bool>& Column::null_mask() const { return null_mask_; }
 
-Column Column::clone() const {
-    return Column(name_, dtype_, data_, null_mask_);
-}
+Column Column::clone() const { return Column(name_, dtype_, data_, null_mask_); }
 
-} // namespace arnio
+}  // namespace arnio

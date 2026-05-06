@@ -98,14 +98,14 @@ def clean(
     drop_duplicates: bool = False,
 ) -> ArFrame:
     """Convenience function to apply common cleaning operations.
-    
+
     Operations are applied in this order (if enabled):
     1. strip_whitespace
     2. drop_nulls
     3. drop_duplicates
     """
     from .pipeline import pipeline
-    
+
     steps = []
     if strip_whitespace:
         steps.append(("strip_whitespace",))
@@ -113,8 +113,8 @@ def clean(
         steps.append(("drop_nulls",))
     if drop_duplicates:
         steps.append(("drop_duplicates",))
-        
+
     if not steps:
         return frame
-        
+
     return pipeline(frame, steps)

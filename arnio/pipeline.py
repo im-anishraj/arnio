@@ -25,9 +25,11 @@ _STEP_REGISTRY: dict[str, Callable] = {
 
 _PYTHON_STEP_REGISTRY: dict[str, Callable] = {}
 
+
 def register_step(name: str, fn: Callable):
     """Register a custom Python pipeline step."""
     _PYTHON_STEP_REGISTRY[name] = fn
+
 
 def pipeline(
     frame: ArFrame,
@@ -55,7 +57,9 @@ def pipeline(
         elif len(step) == 2:
             name, kwargs = step[0], step[1]
         else:
-            raise ValueError(f"Invalid step format: {step}. Expected (name,) or (name, kwargs)")
+            raise ValueError(
+                f"Invalid step format: {step}. Expected (name,) or (name, kwargs)"
+            )
 
         if name in _STEP_REGISTRY:
             # C++ backed step - fast path

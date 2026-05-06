@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 Ask a Question
+    url: https://github.com/im-anishraj/arnio/discussions
+    about: Use Discussions for questions, not Issues
+  - name: 📖 Documentation
+    url: https://github.com/im-anishraj/arnio#readme
+    about: Check the README first

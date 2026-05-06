@@ -2,8 +2,6 @@
 Test fixtures for arnio.
 """
 
-import os
-import tempfile
 import pytest
 
 
@@ -37,7 +35,9 @@ def csv_with_duplicates(tmp_path):
 @pytest.fixture
 def csv_with_whitespace(tmp_path):
     """CSV with whitespace in values."""
-    csv_content = 'name,city\n  Alice  , New York  \n Bob ,  London\n  Charlie ,Tokyo  \n'
+    csv_content = (
+        "name,city\n  Alice  , New York  \n Bob ,  London\n  Charlie ,Tokyo  \n"
+    )
     path = tmp_path / "whitespace.csv"
     path.write_text(csv_content)
     return str(path)

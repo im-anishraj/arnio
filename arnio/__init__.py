@@ -6,6 +6,7 @@ import arnio as ar
 
 try:
     from importlib.metadata import version
+
     __version__ = version("arnio")
 except Exception:
     __version__ = "unknown"
@@ -49,4 +50,7 @@ __all__ = [
     "register_step",
     # Exceptions
     "UnknownStepError",
+    "ArnioError",
+    "CsvReadError",
+    "TypeCastError",
 ]

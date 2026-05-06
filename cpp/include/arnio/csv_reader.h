@@ -1,11 +1,12 @@
 #pragma once
 
-#include "frame.h"
+#include <optional>
 #include <string>
-#include <vector>
 #include <unordered_map>
 #include <unordered_set>
-#include <optional>
+#include <vector>
+
+#include "frame.h"
 
 namespace arnio {
 
@@ -18,7 +19,7 @@ struct CsvConfig {
 };
 
 class CsvReader {
-public:
+   public:
     explicit CsvReader(const CsvConfig& config = CsvConfig{});
 
     // Read full CSV into a Frame
@@ -27,7 +28,7 @@ public:
     // Scan schema only (column names + inferred types)
     std::unordered_map<std::string, std::string> scan_schema(const std::string& path) const;
 
-private:
+   private:
     CsvConfig config_;
 
     // Parse a single CSV line respecting quotes
@@ -43,4 +44,4 @@ private:
     static CellValue parse_value(const std::string& raw, DType dtype);
 };
 
-} // namespace arnio
+}  // namespace arnio

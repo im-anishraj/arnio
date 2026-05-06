@@ -1,14 +1,15 @@
 #pragma once
 
-#include "types.h"
-#include <vector>
-#include <string>
 #include <cstddef>
+#include <string>
+#include <vector>
+
+#include "types.h"
 
 namespace arnio {
 
 class Column {
-public:
+   public:
     Column(const std::string& name, DType dtype);
     Column(const std::string& name, DType dtype, ColumnData data, std::vector<bool> null_mask);
 
@@ -33,11 +34,11 @@ public:
     // Clone
     Column clone() const;
 
-private:
+   private:
     std::string name_;
     DType dtype_;
     ColumnData data_;
     std::vector<bool> null_mask_;  // true = null
 };
 
-} // namespace arnio
+}  // namespace arnio

@@ -1,0 +1,44 @@
+name: New Pipeline Step
+description: Propose a new data cleaning or processing step
+title: "[STEP] "
+labels: ["enhancement", "pipeline"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for proposing a new feature! Please provide the following details.
+  - type: dropdown
+    id: target_dtype
+    attributes:
+      label: What data type does this step target?
+      description: Select the column types this step applies to.
+      options:
+        - String columns only
+        - Numeric columns only
+        - Boolean columns only
+        - All columns
+    validations:
+      required: true
+  - type: textarea
+    id: purpose
+    attributes:
+      label: Purpose
+      description: What data cleaning problem does this step solve?
+    validations:
+      required: true
+  - type: textarea
+    id: example
+    attributes:
+      label: Example Output
+      description: Show a before/after example of what the step does to a pandas Series.
+      render: python
+    validations:
+      required: true
+  - type: checkboxes
+    id: python_only
+    attributes:
+      label: Implementation Path
+      description: Do you plan to implement this in pure Python or C++?
+      options:
+        - label: I can implement this in pure Python using `register_step`
+        - label: I believe this requires C++ for performance

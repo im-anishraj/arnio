@@ -1,22 +1,22 @@
 #include "arnio/csv_reader.h"
+
+#include <algorithm>
+#include <cctype>
 #include <fstream>
 #include <sstream>
-#include <algorithm>
 #include <stdexcept>
-#include <cctype>
 
 namespace arnio {
 
 namespace {
-    inline void trim_in_place(std::string& s) {
-        s.erase(s.begin(), std::find_if(s.begin(), s.end(), [](unsigned char ch) {
-            return !std::isspace(ch);
-        }));
-        s.erase(std::find_if(s.rbegin(), s.rend(), [](unsigned char ch) {
-            return !std::isspace(ch);
-        }).base(), s.end());
-    }
-} // namespace
+inline void trim_in_place(std::string& s) {
+    s.erase(s.begin(),
+            std::find_if(s.begin(), s.end(), [](unsigned char ch) { return !std::isspace(ch); }));
+    s.erase(std::find_if(s.rbegin(), s.rend(), [](unsigned char ch) { return !std::isspace(ch); })
+                .base(),
+            s.end());
+}
+}  // namespace
 
 CsvReader::CsvReader(const CsvConfig& config) : config_(config) {}
 
@@ -257,4 +257,4 @@ std::unordered_map<std::string, std::string> CsvReader::scan_schema(const std::s
     return schema;
 }
 
-} // namespace arnio
+}  // namespace arnio

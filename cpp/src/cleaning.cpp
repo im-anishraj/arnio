@@ -1,16 +1,17 @@
 #include "arnio/cleaning.h"
+
 #include <algorithm>
-#include <unordered_set>
-#include <sstream>
 #include <cctype>
 #include <functional>
+#include <sstream>
 #include <stdexcept>
+#include <unordered_set>
 
 namespace arnio {
 
 // Helper: resolve subset columns or default to all
 static std::vector<size_t> resolve_subset(const Frame& frame,
-    const std::optional<std::vector<std::string>>& subset) {
+                                          const std::optional<std::vector<std::string>>& subset) {
     std::vector<size_t> indices;
     if (subset.has_value()) {
         for (const auto& name : subset.value()) {
@@ -40,7 +41,7 @@ static std::string row_key(const Frame& frame, size_t row, const std::vector<siz
         } else if (std::holds_alternative<bool>(cell)) {
             oss << (std::get<bool>(cell) ? "T" : "F");
         }
-        oss << "\x1F"; // unit separator
+        oss << "\x1F";  // unit separator
     }
     return oss.str();
 }
@@ -77,7 +78,7 @@ Frame drop_nulls(const Frame& frame, const std::optional<std::vector<std::string
 }
 
 Frame fill_nulls(const Frame& frame, const CellValue& value,
-    const std::optional<std::vector<std::string>>& subset) {
+                 const std::optional<std::vector<std::string>>& subset) {
     auto target_indices_set = resolve_subset(frame, subset);
     std::unordered_set<size_t> targets(target_indices_set.begin(), target_indices_set.end());
 
@@ -102,9 +103,8 @@ Frame fill_nulls(const Frame& frame, const CellValue& value,
     return Frame(std::move(new_cols));
 }
 
-Frame drop_duplicates(const Frame& frame,
-    const std::optional<std::vector<std::string>>& subset,
-    const std::string& keep) {
+Frame drop_duplicates(const Frame& frame, const std::optional<std::vector<std::string>>& subset,
+                      const std::string& keep) {
     auto col_indices = resolve_subset(frame, subset);
 
     if (keep == "first") {
@@ -145,8 +145,7 @@ Frame drop_duplicates(const Frame& frame,
     throw std::invalid_argument("keep must be 'first', 'last', or 'none'");
 }
 
-Frame strip_whitespace(const Frame& frame,
-    const std::optional<std::vector<std::string>>& subset) {
+Frame strip_whitespace(const Frame& frame, const std::optional<std::vector<std::string>>& subset) {
     auto target_indices_set = resolve_subset(frame, subset);
     std::unordered_set<size_t> targets(target_indices_set.begin(), target_indices_set.end());
 
@@ -180,9 +179,8 @@ Frame strip_whitespace(const Frame& frame,
     return Frame(std::move(new_cols));
 }
 
-Frame normalize_case(const Frame& frame,
-    const std::optional<std::vector<std::string>>& subset,
-    const std::string& case_type) {
+Frame normalize_case(const Frame& frame, const std::optional<std::vector<std::string>>& subset,
+                     const std::string& case_type) {
     auto target_indices_set = resolve_subset(frame, subset);
     std::unordered_set<size_t> targets(target_indices_set.begin(), target_indices_set.end());
 
@@ -241,7 +239,7 @@ Frame normalize_case(const Frame& frame,
 }
 
 Frame rename_columns(const Frame& frame,
-    const std::unordered_map<std::string, std::string>& mapping) {
+                     const std::unordered_map<std::string, std::string>& mapping) {
     std::vector<Column> new_cols;
     new_cols.reserve(frame.num_cols());
     for (size_t ci = 0; ci < frame.num_cols(); ++ci) {
@@ -255,8 +253,7 @@ Frame rename_columns(const Frame& frame,
     return Frame(std::move(new_cols));
 }
 
-Frame cast_types(const Frame& frame,
-    const std::unordered_map<std::string, std::string>& mapping) {
+Frame cast_types(const Frame& frame, const std::unordered_map<std::string, std::string>& mapping) {
     std::vector<Column> new_cols;
     new_cols.reserve(frame.num_cols());
     for (size_t ci = 0; ci < frame.num_cols(); ++ci) {
@@ -294,12 +291,18 @@ Frame cast_types(const Frame& frame,
                     col.push_back(str_val);
                     break;
                 case DType::INT64:
-                    try { col.push_back(static_cast<int64_t>(std::stoll(str_val))); }
-                    catch (...) { col.push_null(); }
+                    try {
+                        col.push_back(static_cast<int64_t>(std::stoll(str_val)));
+                    } catch (...) {
+                        col.push_null();
+                    }
                     break;
                 case DType::FLOAT64:
-                    try { col.push_back(std::stod(str_val)); }
-                    catch (...) { col.push_null(); }
+                    try {
+                        col.push_back(std::stod(str_val));
+                    } catch (...) {
+                        col.push_null();
+                    }
                     break;
                 case DType::BOOL: {
                     std::string lower = str_val;
@@ -317,4 +320,4 @@ Frame cast_types(const Frame& frame,
     return Frame(std::move(new_cols));
 }
 
-} // namespace arnio
+}  // namespace arnio

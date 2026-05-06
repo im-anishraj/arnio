@@ -1,15 +1,16 @@
 #pragma once
 
-#include "column.h"
-#include <vector>
 #include <string>
 #include <unordered_map>
 #include <utility>
+#include <vector>
+
+#include "column.h"
 
 namespace arnio {
 
 class Frame {
-public:
+   public:
     Frame() = default;
     explicit Frame(std::vector<Column> columns);
 
@@ -36,10 +37,10 @@ public:
     // Clone
     Frame clone() const;
 
-private:
+   private:
     std::vector<Column> columns_;
     std::unordered_map<std::string, size_t> name_index_;
     void rebuild_index();
 };
 
-} // namespace arnio
+}  // namespace arnio

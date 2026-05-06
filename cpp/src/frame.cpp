@@ -1,25 +1,19 @@
 #include "arnio/frame.h"
+
 #include <stdexcept>
 
 namespace arnio {
 
-Frame::Frame(std::vector<Column> columns)
-    : columns_(std::move(columns)) {
-    rebuild_index();
-}
+Frame::Frame(std::vector<Column> columns) : columns_(std::move(columns)) { rebuild_index(); }
 
-std::pair<size_t, size_t> Frame::shape() const {
-    return {num_rows(), num_cols()};
-}
+std::pair<size_t, size_t> Frame::shape() const { return {num_rows(), num_cols()}; }
 
 size_t Frame::num_rows() const {
     if (columns_.empty()) return 0;
     return columns_[0].size();
 }
 
-size_t Frame::num_cols() const {
-    return columns_.size();
-}
+size_t Frame::num_cols() const { return columns_.size(); }
 
 std::vector<std::string> Frame::column_names() const {
     std::vector<std::string> names;
@@ -78,9 +72,7 @@ void Frame::add_column(Column col) {
     columns_.push_back(std::move(col));
 }
 
-const std::vector<Column>& Frame::columns() const {
-    return columns_;
-}
+const std::vector<Column>& Frame::columns() const { return columns_; }
 
 Frame Frame::clone() const {
     std::vector<Column> cloned;
@@ -98,4 +90,4 @@ void Frame::rebuild_index() {
     }
 }
 
-} // namespace arnio
+}  // namespace arnio
