@@ -2,6 +2,8 @@ name: Build & Publish Wheels
 
 on:
   push:
+    branches:
+      - gssoc-prep-2
     tags:
       - 'v*'
   workflow_dispatch:  # allows manual trigger for testing

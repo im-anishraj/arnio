@@ -1,6 +1,9 @@
 name: Benchmark
 
 on:
+  push:
+    branches:
+      - gssoc-prep-2
   workflow_dispatch:  # allows manual trigger for testing
 
 jobs:
