@@ -1,0 +1,22 @@
+name: Benchmark
+
+on:
+  workflow_dispatch:  # allows manual trigger for testing
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Generate Data
+        run: python benchmarks/generate_data.py
+      - name: Run Benchmark
+        run: python -u benchmarks/benchmark_vs_pandas.py

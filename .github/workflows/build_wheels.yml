@@ -1,0 +1,55 @@
+name: Build & Publish Wheels
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:  # allows manual trigger for testing
+
+jobs:
+  build_wheels:
+    name: Build wheels (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build wheels
+        uses: pypa/cibuildwheel@v2.16.0
+        env:
+          CIBW_BUILD: "cp39-* cp310-* cp311-* cp312-*"
+          CIBW_SKIP: "*-win32 *-manylinux_i686 *-musllinux*"
+          CIBW_TEST_REQUIRES: pytest
+          CIBW_TEST_COMMAND: "pytest {project}/tests/ -v --tb=short -x"
+          CIBW_BUILD_VERBOSITY: 1
+
+      - name: Upload wheels as artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.os }}
+          path: ./wheelhouse/*.whl
+          retention-days: 7
+
+  publish:
+    name: Publish to PyPI
+    needs: [build_wheels]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    environment: pypi  # requires a "pypi" environment configured in repo settings
+    permissions:
+      id-token: write  # required for trusted publishing
+
+    steps:
+      - name: Download all wheels
+        uses: actions/download-artifact@v4
+        with:
+          pattern: wheels-*
+          merge-multiple: true
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1

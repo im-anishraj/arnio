@@ -21,7 +21,29 @@ dependencies = [
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
+    "black>=24.0",
+    "ruff>=0.4.0",
+    "pre-commit>=3.0",
 ]
+
+[tool.setuptools.package-data]
+arnio = ["py.typed"]
+
+[tool.black]
+line-length = 88
+target-version = ["py39", "py310", "py311", "py312"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
 
 [tool.scikit-build]
 wheel.packages = ["arnio"]
