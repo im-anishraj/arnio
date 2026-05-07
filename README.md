@@ -4,6 +4,7 @@
     <img alt="Arnio Logo" src="arnio.svg">
   </picture>
   <br />
+
     <b>Arnio</b> is an open-source C++ accelerated data preprocessing library<br />
     <i>for Python. Built for speed and memory efficiency — and actively being optimized during GSSoC 2026.</i>
   <br />
