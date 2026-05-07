@@ -9,11 +9,15 @@
   <i>for Python. Built for speed and memory efficiency — and actively being optimized during GSSoC 2026.</i>
   <br />
 
-  [![CI](https://github.com/im-anishraj/arnio/actions/workflows/ci.yml/badge.svg?style=for-the-badge&color=2ea44f)](https://github.com/im-anishraj/arnio/actions/workflows/ci.yml)
-  [![PyPI](https://img.shields.io/pypi/v/arnio?style=for-the-badge&color=blue)](https://pypi.org/project/arnio/)
-  [![Python](https://img.shields.io/pypi/pyversions/arnio?style=for-the-badge&color=black)](https://pypi.org/project/arnio/)
-  [![License](https://img.shields.io/badge/license-MIT-blue.svg?style=for-the-badge)](LICENSE)
+  <br />
 
+  | | |
+  | --- | --- |
+  | **🧪 Testing** | [![CI](https://img.shields.io/github/actions/workflow/status/im-anishraj/arnio/ci.yml?branch=main&label=CI&style=flat-square&logo=github)](https://github.com/im-anishraj/arnio/actions/workflows/ci.yml) [![Build Wheels](https://img.shields.io/github/actions/workflow/status/im-anishraj/arnio/build_wheels.yml?branch=main&label=Build%20Wheels&style=flat-square&logo=github)](https://github.com/im-anishraj/arnio/actions/workflows/build_wheels.yml) |
+  | **📦 Package** | [![PyPI Latest Release](https://img.shields.io/pypi/v/arnio.svg?style=flat-square&logo=pypi&logoColor=white)](https://pypi.org/project/arnio/) [![Python Versions](https://img.shields.io/pypi/pyversions/arnio?style=flat-square&logo=python&logoColor=white)](https://pypi.org/project/arnio/) [![PyPI Downloads](https://img.shields.io/pypi/dm/arnio.svg?label=Downloads&style=flat-square&logo=pypi&logoColor=white)](https://pypi.org/project/arnio/) |
+  | **🛡️ Meta** | [![License](https://img.shields.io/pypi/l/arnio.svg?style=flat-square)](LICENSE) [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg?style=flat-square)](https://github.com/psf/black) [![GSSoC](https://img.shields.io/badge/GSSoC-2026-orange.svg?style=flat-square)](https://gssoc.girlscript.tech/) |
+
+  <br />
   <p>
     <a href="#-the-problem">The Problem</a> •
     <a href="#-the-solution-arnio">The Solution</a> •
