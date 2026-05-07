@@ -5,8 +5,8 @@
   </picture>
   <br />
 
-    <b>Arnio</b> is an open-source C++ accelerated data preprocessing library<br />
-    <i>for Python. Built for speed and memory efficiency — and actively being optimized during GSSoC 2026.</i>
+  <b>Arnio</b> is an open-source C++ accelerated data preprocessing library<br />
+  <i>for Python. Built for speed and memory efficiency — and actively being optimized during GSSoC 2026.</i>
   <br />
 
   [![CI](https://github.com/im-anishraj/arnio/actions/workflows/ci.yml/badge.svg?style=for-the-badge&color=2ea44f)](https://github.com/im-anishraj/arnio/actions/workflows/ci.yml)
