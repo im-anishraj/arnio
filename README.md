@@ -1,10 +1,8 @@
 <div align="center">
   <br />
   <h1>⚡ arnio</h1>
-  <p>
-    <b>The C++ fueled pre-processor for Pandas.</b><br />
-    <i>Stop wasting time writing ad-hoc cleaning scripts for messy CSVs.</i>
-  </p>
+    <b>Arnio</b> is an open-source C++ accelerated data preprocessing library<br />
+    <i>for Python. Built for speed and memory efficiency — and actively being optimized during GSSoC 2026.</i>
   <br />
 
   [![CI](https://github.com/im-anishraj/arnio/actions/workflows/ci.yml/badge.svg?style=for-the-badge&color=2ea44f)](https://github.com/im-anishraj/arnio/actions/workflows/ci.yml)
@@ -82,16 +80,22 @@ df = ar.to_pandas(clean_frame)
 
 ---
 
-## 🏎️ Benchmarks: Arnio vs Pandas
+## 🏎️ Benchmarks
 
-Arnio isn't just cleaner to write—it is significantly faster to run. 
+> Tested on Ubuntu, Python 3.12, 1M row CSV.  
+> Run `make benchmark` to reproduce on your machine.
 
-*Tested on a 1 Million row CSV (12 columns, mixed types, dirty strings) using an M2 MacBook Pro.*
+| Metric | pandas | arnio v1.0.0 |
+|--------|--------|--------------|
+| Execution Time | 4.73s | 5.75s |
+| Peak RAM | 211MB | 212MB |
 
-| Metric | `pandas.read_csv` + cleaning | `arnio.pipeline` | Improvement |
-| :--- | :--- | :--- | :--- |
-| **Execution Time** | `4.24 seconds` | **`2.11 seconds`** | **🔥 2x Faster** |
-| **Peak Memory** | `620 MB` | **`380 MB`** | **📉 40% Less RAM** |
+**Current state:** arnio's C++ CSV reader matches pandas on memory.  
+Speed parity is the active engineering goal for v0.2.0 — specifically  
+`drop_duplicates` and `strip_whitespace` are unoptimized C++ and are  
+the primary contributors to the gap.
+
+**[Help close the gap →](https://github.com/im-anishraj/arnio/issues)**
 
 <details>
 <summary><b>🔍 Want to peek at a massive file without loading it?</b></summary>
@@ -123,18 +127,27 @@ Arnio ships with a growing library of hyper-optimized C++ cleaning primitives:
 
 ---
 
-## 🤝 Join the Movement
+## 🤝 Contributing
 
-We are actively looking for contributors! Arnio is a hybrid Python/C++ project, making it the perfect playground if you want to learn `pybind11`, columnar memory formats, or high-performance Python.
+Arnio is a GSSoC 2026 project. We welcome contributors of all levels.
 
-```bash
-git clone https://github.com/im-anishraj/arnio.git
-cd arnio
-pip install -e ".[dev]"
-pytest tests/ -v
-```
+- **No C++ required**: Add pipeline steps in pure Python
+- **C++ contributors**: Help optimize `drop_duplicates` and `strip_whitespace`  
+  — these are the current performance bottleneck
+- **Docs & examples**: Always needed
 
-Have a feature request? Want a new cleaning primitive? Drop an issue in the repo!
+[Read the Contribution Guide →](CONTRIBUTING.md) | 
+[Browse open issues →](https://github.com/im-anishraj/arnio/issues)
+
+---
+
+## 🗺️ Roadmap
+
+| Version | Focus | Status |
+|---------|-------|--------|
+| v1.0.0 | Stable release, cross-platform wheels, Google Colab support, CI/CD pipeline | ✅ Released |
+| v0.2.0 | C++ pipeline optimization, speed parity with pandas | 🔨 Active |
+| v0.3.0 | Chunked processing, Parquet/JSON support | 📋 Planned |
 
 <div align="center">
 <br>
