@@ -1,7 +1,7 @@
 <div align="center">
   <picture align="center">
-    <source media="(prefers-color-scheme: dark)" srcset="arnio-transparent-logo.svg">
-    <img alt="Arnio Logo" src="arnio-transparent-logo.svg">
+    <source media="(prefers-color-scheme: dark)" srcset="updated-icons.svg">
+    <img alt="Arnio Logo" src="updated-icons.svg">
   </picture>
   <br />
 
