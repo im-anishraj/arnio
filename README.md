@@ -1,13 +1,13 @@
 <div align="center">
   <picture align="center">
-    <source media="(prefers-color-scheme: dark)" srcset="arnio.svg">
-    <img alt="Arnio Logo" src="arnio.svg">
+    <source media="(prefers-color-scheme: dark)" srcset="arnio-transparent-logo.svg">
+    <img alt="Arnio Logo" src="arnio-transparent-logo.svg">
   </picture>
   <br />
 
-  <b>Arnio</b> is an open-source C++ accelerated data preprocessing library<br />
-  <i>for Python. Built for speed and memory efficiency — and actively being optimized during GSSoC 2026.</i>
-  <br />
+<b>Arnio</b> is an open-source C++ accelerated data preprocessing library<br />
+<i>for Python. Built for speed and memory efficiency — and actively being optimized during GSSoC 2026.</i>
+<br />
 
   <br />
   <p align="center">
@@ -43,19 +43,19 @@
 
 ## 🧨 The Problem
 
-Every data project starts the same way. You load a CSV. It crashes your RAM. You load it again in chunks. You find random nulls, weird capitalization, and trailing whitespaces. You write a 15-line script chaining `.apply()`, `.dropna()`, and `.str.strip()`. You copy-paste this script into your next 5 Jupyter notebooks. 
+Every data project starts the same way. You load a CSV. It crashes your RAM. You load it again in chunks. You find random nulls, weird capitalization, and trailing whitespaces. You write a 15-line script chaining `.apply()`, `.dropna()`, and `.str.strip()`. You copy-paste this script into your next 5 Jupyter notebooks.
 
 It's slow. It's unreadable. It's error-prone.
 
 ## ✨ The Solution: Arnio
 
-**Arnio** replaces your messy ingestion script with a high-performance, declarative pipeline powered by `pybind11` and C++. 
+**Arnio** replaces your messy ingestion script with a high-performance, declarative pipeline powered by `pybind11` and C++.
 
-| ❌ The Old Way (Pandas) | ⚡ The Arnio Way |
-| :--- | :--- |
+| ❌ The Old Way (Pandas)                                                    | ⚡ The Arnio Way                                                       |
+| :------------------------------------------------------------------------- | :--------------------------------------------------------------------- |
 | **Memory Spikes**: Python loads the entire raw string file before casting. | **C++ Native**: Parses and infers types directly into columnar memory. |
-| **Spaghetti Code**: `.apply()` lambda functions scattered across cells. | **Declarative**: A strict, readable list of cleaning steps. |
-| **Slow Execution**: Python loops over strings to strip whitespaces. | **Blazing Fast**: Cleaning primitives run at near metal speeds. |
+| **Spaghetti Code**: `.apply()` lambda functions scattered across cells.    | **Declarative**: A strict, readable list of cleaning steps.            |
+| **Slow Execution**: Python loops over strings to strip whitespaces.        | **Blazing Fast**: Cleaning primitives run at near metal speeds.        |
 
 ---
 
@@ -99,10 +99,10 @@ df = ar.to_pandas(clean_frame)
 > Tested on Ubuntu, Python 3.12, 1M row CSV.  
 > Run `make benchmark` to reproduce on your machine.
 
-| Metric | pandas | arnio v1.0.0 |
-|--------|--------|--------------|
-| Execution Time | 4.73s | 5.75s |
-| Peak RAM | 211MB | 212MB |
+| Metric         | pandas | arnio v1.0.0 |
+| -------------- | ------ | ------------ |
+| Execution Time | 4.73s  | 5.75s        |
+| Peak RAM       | 211MB  | 212MB        |
 
 **Current state:** arnio's C++ CSV reader matches pandas on memory.  
 Speed parity is the active engineering goal for v0.2.0 — specifically  
@@ -121,9 +121,10 @@ Arnio lets you instantly scan a massive CSV to infer its schema without loading 
 import arnio as ar
 
 schema = ar.scan_csv("100GB_file.csv")
-print(schema) 
+print(schema)
 # {'id': 'INT64', 'name': 'STRING', 'is_active': 'BOOL'}
 ```
+
 </details>
 
 ---
@@ -150,18 +151,18 @@ Arnio is a GSSoC 2026 project. We welcome contributors of all levels.
   — these are the current performance bottleneck
 - **Docs & examples**: Always needed
 
-[Read the Contribution Guide →](CONTRIBUTING.md) | 
+[Read the Contribution Guide →](CONTRIBUTING.md) |
 [Browse open issues →](https://github.com/im-anishraj/arnio/issues)
 
 ---
 
 ## 🗺️ Roadmap
 
-| Version | Focus | Status |
-|---------|-------|--------|
-| v1.0.0 | Stable release, cross-platform wheels, Google Colab support, CI/CD pipeline | ✅ Released |
-| v0.2.0 | C++ pipeline optimization, speed parity with pandas | 🔨 Active |
-| v0.3.0 | Chunked processing, Parquet/JSON support | 📋 Planned |
+| Version | Focus                                                                       | Status      |
+| ------- | --------------------------------------------------------------------------- | ----------- |
+| v1.0.0  | Stable release, cross-platform wheels, Google Colab support, CI/CD pipeline | ✅ Released |
+| v0.2.0  | C++ pipeline optimization, speed parity with pandas                         | 🔨 Active   |
+| v0.3.0  | Chunked processing, Parquet/JSON support                                    | 📋 Planned  |
 
 <div align="center">
 <br>
