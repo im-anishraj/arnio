@@ -1,7 +1,9 @@
 """Tests for CSV reading functionality."""
 
+import pandas as pd
 import arnio as ar
 
+MESSY_CSV = "tests/fixtures/messy_sales_data.csv"
 
 class TestReadCsv:
     def test_basic_read(self, sample_csv):
@@ -76,6 +78,30 @@ class TestReadCsv:
 
         with pytest.raises(ValueError, match="File appears to be binary"):
             ar.read_csv(file_path)
+
+    def test_read_with_nulls(self, csv_with_nulls):
+        frame = ar.read_csv(csv_with_nulls)
+        assert frame.shape == (4, 3)
+
+        df = ar.to_pandas(frame)
+        assert df["name"].isna().sum() == 1
+        assert df["age"].isna().sum() == 1
+        assert df["score"].isna().sum() == 1
+
+        assert pd.isna(df.loc[1, "name"])
+        assert pd.isna(df.loc[1, "score"])
+        assert pd.isna(df.loc[2, "age"])
+
+        assert df.loc[0, "name"] == "Alice"
+        assert df.loc[3, "name"] == "Diana"
+
+    def test_read_messy_nulls(self):
+        frame = ar.read_csv(MESSY_CSV)
+        assert frame.shape == (3, 3)
+
+        df = ar.to_pandas(frame)
+        assert df["revenue"].isna().sum() == 1
+        assert pd.isna(df.loc[1, "revenue"])
 
     def test_utf8_bom_handling(self, tmp_path):
         csv_path = tmp_path / "bom.csv"
