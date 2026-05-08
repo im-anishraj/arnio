@@ -87,16 +87,40 @@ PYBIND11_MODULE(_arnio_cpp, m) {
                  py::list result;
                  if (col.dtype() == DType::STRING) {
                      const auto& vec = std::get<std::vector<std::string>>(col.data());
-                     for (const auto& s : vec) result.append(py::str(s));
+                     for (size_t i = 0; i < vec.size(); ++i) {
+                         if (col.is_null(i)) {
+                             result.append(py::none());
+                         } else {
+                             result.append(py::str(vec[i]));
+                         }
+                     }
                  } else if (col.dtype() == DType::BOOL) {
                      const auto& vec = std::get<std::vector<bool>>(col.data());
-                     for (auto b : vec) result.append(py::bool_(static_cast<bool>(b)));
+                     for (size_t i = 0; i < vec.size(); ++i) {
+                         if (col.is_null(i)) {
+                             result.append(py::none());
+                         } else {
+                             result.append(py::bool_(static_cast<bool>(vec[i])));
+                         }
+                     }
                  } else if (col.dtype() == DType::INT64) {
                      const auto& vec = std::get<std::vector<int64_t>>(col.data());
-                     for (auto v : vec) result.append(py::int_(v));
+                     for (size_t i = 0; i < vec.size(); ++i) {
+                         if (col.is_null(i)) {
+                             result.append(py::none());
+                         } else {
+                             result.append(py::int_(vec[i]));
+                         }
+                     }
                  } else if (col.dtype() == DType::FLOAT64) {
                      const auto& vec = std::get<std::vector<double>>(col.data());
-                     for (auto v : vec) result.append(py::float_(v));
+                     for (size_t i = 0; i < vec.size(); ++i) {
+                         if (col.is_null(i)) {
+                             result.append(py::none());
+                         } else {
+                             result.append(py::float_(vec[i]));
+                         }
+                     }
                  } else {
                      for (size_t i = 0; i < col.size(); ++i) result.append(py::none());
                  }

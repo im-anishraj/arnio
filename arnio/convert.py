@@ -13,7 +13,23 @@ from .frame import ArFrame
 
 
 def to_pandas(frame: ArFrame) -> pd.DataFrame:
-    """Convert ArFrame to pandas.DataFrame."""
+    """Convert ArFrame to pandas.DataFrame.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input ArFrame to convert.
+
+    Returns
+    -------
+    pd.DataFrame
+        Equivalent pandas DataFrame with proper dtypes and null handling.
+
+    Examples
+    --------
+    >>> frame = ar.read_csv("data.csv")
+    >>> df = ar.to_pandas(frame)
+    """
     cpp_frame = frame._frame
     data = {}
 
@@ -49,7 +65,29 @@ def to_pandas(frame: ArFrame) -> pd.DataFrame:
 
 
 def from_pandas(df: pd.DataFrame) -> ArFrame:
-    """Convert pandas.DataFrame to ArFrame."""
+    """Convert pandas.DataFrame to ArFrame.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Input pandas DataFrame to convert.
+
+    Returns
+    -------
+    ArFrame
+        Equivalent ArFrame with inferred types.
+
+    Raises
+    ------
+    TypeError
+        If DataFrame contains unsupported nested/complex types.
+
+    Examples
+    --------
+    >>> import pandas as pd
+    >>> df = pd.DataFrame({"name": ["Alice"], "age": [25]})
+    >>> frame = ar.from_pandas(df)
+    """
     columns = {}
     for col_name in df.columns:
         series = df[col_name]
