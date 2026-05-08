@@ -20,7 +20,37 @@ def read_csv(
     nrows: Optional[int] = None,
     encoding: str = "utf-8",
 ) -> ArFrame:
-    """Read a CSV file into an ArFrame via C++ backend."""
+    """Read a CSV file into an ArFrame via C++ backend.
+
+    Parameters
+    ----------
+    path : str
+        Path to the CSV file. Supports .csv, .txt, and .tsv extensions.
+    delimiter : str, default ","
+        Field delimiter character.
+    has_header : bool, default True
+        Whether the file has a header row.
+    usecols : list[str], optional
+        Columns to read. If None, reads all columns.
+    nrows : int, optional
+        Number of rows to read. If None, reads all rows.
+    encoding : str, default "utf-8"
+        File encoding.
+
+    Returns
+    -------
+    ArFrame
+        Data frame containing the CSV data.
+
+    Raises
+    ------
+    ValueError
+        If file format is unsupported or file appears binary.
+
+    Examples
+    --------
+    >>> frame = ar.read_csv("data.csv", delimiter=",", has_header=True)
+    """
     path_str = str(path).lower()
     if not (
         path_str.endswith(".csv")
@@ -60,7 +90,31 @@ def scan_csv(
     *,
     delimiter: str = ",",
 ) -> dict[str, str]:
-    """Return schema (column names + inferred types) without loading data."""
+    """Return schema (column names + inferred types) without loading data.
+
+    Parameters
+    ----------
+    path : str
+        Path to the CSV file. Supports .csv, .txt, and .tsv extensions.
+    delimiter : str, default ","
+        Field delimiter character.
+
+    Returns
+    -------
+    dict[str, str]
+        Dictionary mapping column names to inferred type strings.
+
+    Raises
+    ------
+    ValueError
+        If file format is unsupported or file appears binary.
+
+    Examples
+    --------
+    >>> schema = ar.scan_csv("data.csv")
+    >>> print(schema)
+    {'name': 'string', 'age': 'int64'}
+    """
     path_str = str(path).lower()
     if not (
         path_str.endswith(".csv")

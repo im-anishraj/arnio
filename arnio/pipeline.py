@@ -27,7 +27,21 @@ _PYTHON_STEP_REGISTRY: dict[str, Callable] = {}
 
 
 def register_step(name: str, fn: Callable):
-    """Register a custom Python pipeline step."""
+    """Register a custom Python pipeline step.
+
+    Parameters
+    ----------
+    name : str
+        Name of the step for use in pipelines.
+    fn : Callable
+        Function to call for this step. Should accept (df, **kwargs) and return modified df.
+
+    Examples
+    --------
+    >>> def custom_clean(df, threshold=0.5):
+    ...     return df.dropna(thresh=threshold)
+    >>> ar.register_step("custom_clean", custom_clean)
+    """
     _PYTHON_STEP_REGISTRY[name] = fn
 
 
@@ -39,12 +53,33 @@ def pipeline(
 
     Each step is a tuple of (step_name,) or (step_name, kwargs_dict).
 
-    Example:
-        ar.pipeline(frame, [
-            ("drop_nulls", {"subset": ["age"]}),
-            ("strip_whitespace",),
-            ("drop_duplicates", {"keep": "first"}),
-        ])
+    Parameters
+    ----------
+    frame : ArFrame
+        Input data frame.
+    steps : list[tuple]
+        List of steps to apply. Each step is (name,) or (name, kwargs).
+
+    Returns
+    -------
+    ArFrame
+        Data frame with all steps applied sequentially.
+
+    Raises
+    ------
+    ValueError
+        If step format is invalid.
+    UnknownStepError
+        If step name is not registered.
+
+    Examples
+    --------
+    >>> frame = ar.read_csv("data.csv")
+    >>> cleaned = ar.pipeline(frame, [
+    ...     ("drop_nulls", {"subset": ["age"]}),
+    ...     ("strip_whitespace",),
+    ...     ("drop_duplicates", {"keep": "first"}),
+    ... ])
     """
     from .exceptions import UnknownStepError
     from .convert import to_pandas, from_pandas
