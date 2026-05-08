@@ -22,6 +22,30 @@ class TestToPandas:
         df = ar.to_pandas(frame)
         assert df.isna().any().any()  # Should have some NaN/NA values
 
+    def test_to_python_list_with_nulls(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "name": ["Alice", None, "Charlie"],
+                    "score": [95, None, 88],
+                    "active": [True, None, False],
+                },
+                dtype=object,
+            )
+        )
+
+        assert frame._frame.column_by_name("name").to_python_list() == [
+            "Alice",
+            None,
+            "Charlie",
+        ]
+        assert frame._frame.column_by_name("score").to_python_list() == [95, None, 88]
+        assert frame._frame.column_by_name("active").to_python_list() == [
+            True,
+            None,
+            False,
+        ]
+
 
 class TestFromPandas:
     def test_basic_roundtrip(self, sample_csv):
