@@ -77,6 +77,36 @@ class TestReadCsv:
         with pytest.raises(ValueError, match="File appears to be binary"):
             ar.read_csv(file_path)
 
+    def test_non_utf8_encoding_rejected(self, tmp_path):
+        import arnio as ar
+        import pytest
+
+        file_path = str(tmp_path / "latin1.csv")
+        with open(file_path, "w") as f:
+            f.write("col1,col2\n1,2\n")
+
+        with pytest.raises(ar.CsvReadError, match="not yet supported"):
+            ar.read_csv(file_path, encoding="latin-1")
+
+    def test_utf8_encoding_accepted(self, sample_csv):
+        # Should work fine — default encoding is utf-8
+        frame = ar.read_csv(sample_csv, encoding="utf-8")
+        assert frame.shape == (3, 4)
+
+    def test_utf8_variant_encodings_accepted(self, tmp_path):
+        # Variants like "UTF8", "UTF_8" should also work
+        import arnio as ar
+
+        file_path = str(tmp_path / "data.csv")
+        with open(file_path, "w") as f:
+            f.write("col1,col2\n1,2\n")
+
+        frame = ar.read_csv(file_path, encoding="UTF8")
+        assert frame.shape == (1, 2)
+
+        frame = ar.read_csv(file_path, encoding="UTF_8")
+        assert frame.shape == (1, 2)
+
 
 class TestScanCsv:
     def test_scan_schema(self, sample_csv):
