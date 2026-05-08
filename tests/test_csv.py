@@ -77,6 +77,18 @@ class TestReadCsv:
         with pytest.raises(ValueError, match="File appears to be binary"):
             ar.read_csv(file_path)
 
+    def test_utf8_bom_handling(self, tmp_path):
+        csv_path = tmp_path / "bom.csv"
+        csv_path.write_bytes(b"\xef\xbb\xbfname,age\nAlice,30\nBob,25\n")
+
+        frame = ar.read_csv(str(csv_path), usecols=["name"])
+        assert frame.columns == ["name"]
+        assert frame.shape == (2, 1)
+
+        schema = ar.scan_csv(str(csv_path))
+        assert "name" in schema
+        assert "\ufeffname" not in schema
+
 
 class TestScanCsv:
     def test_scan_schema(self, sample_csv):

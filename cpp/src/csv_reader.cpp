@@ -16,6 +16,13 @@ inline void trim_in_place(std::string& s) {
                 .base(),
             s.end());
 }
+
+inline void strip_utf8_bom(std::string& s) {
+    if (s.size() >= 3 && static_cast<unsigned char>(s[0]) == 0xEF &&
+        static_cast<unsigned char>(s[1]) == 0xBB && static_cast<unsigned char>(s[2]) == 0xBF) {
+        s.erase(0, 3);
+    }
+}
 }  // namespace
 
 CsvReader::CsvReader(const CsvConfig& config) : config_(config) {}
@@ -141,6 +148,7 @@ Frame CsvReader::read(const std::string& path) const {
 
     // Read header
     if (config_.has_header && std::getline(file, line)) {
+        strip_utf8_bom(line);
         header = parse_line(line);
         for (auto& h : header) {
             trim_in_place(h);
@@ -226,6 +234,7 @@ std::unordered_map<std::string, std::string> CsvReader::scan_schema(const std::s
     std::vector<std::string> header;
 
     if (std::getline(file, line)) {
+        strip_utf8_bom(line);
         header = parse_line(line);
         for (auto& h : header) {
             trim_in_place(h);
