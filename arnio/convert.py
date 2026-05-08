@@ -62,38 +62,6 @@ def to_pandas(frame: ArFrame) -> pd.DataFrame:
             data[name] = series
 
     return pd.DataFrame(data)
-    cpp_frame = frame._frame
-    data = {}
-
-    for i in range(cpp_frame.num_cols()):
-        col = cpp_frame.column_by_index(i)
-        name = col.name()
-        dtype = col.dtype()
-        mask = col.get_null_mask()
-
-        if dtype == _DType.INT64:
-            arr = col.to_numpy_int()
-            # pandas Int64Dtype handles nulls via mask
-            series = pd.Series(arr, dtype=pd.Int64Dtype())
-            series[mask] = pd.NA
-            data[name] = series
-        elif dtype == _DType.FLOAT64:
-            arr = col.to_numpy_float().copy()
-            arr[mask] = np.nan
-            data[name] = arr
-        elif dtype == _DType.BOOL:
-            arr = col.to_numpy_bool()
-            series = pd.Series(arr, dtype=pd.BooleanDtype())
-            series[mask] = pd.NA
-            data[name] = series
-        else:
-            # STRING or unknown
-            values = col.to_python_list()
-            series = pd.Series(values, dtype=pd.StringDtype())
-            series[mask] = pd.NA
-            data[name] = series
-
-    return pd.DataFrame(data)
 
 
 def from_pandas(df: pd.DataFrame) -> ArFrame:

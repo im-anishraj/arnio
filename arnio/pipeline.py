@@ -110,32 +110,3 @@ def pipeline(
             raise UnknownStepError(name, available)
 
     return result
-    from .exceptions import UnknownStepError
-    from .convert import to_pandas, from_pandas
-
-    result = frame
-    for step in steps:
-        if len(step) == 1:
-            name = step[0]
-            kwargs = {}
-        elif len(step) == 2:
-            name, kwargs = step[0], step[1]
-        else:
-            raise ValueError(
-                f"Invalid step format: {step}. Expected (name,) or (name, kwargs)"
-            )
-
-        if name in _STEP_REGISTRY:
-            # C++ backed step - fast path
-            fn = _STEP_REGISTRY[name]
-            result = fn(result, **kwargs)
-        elif name in _PYTHON_STEP_REGISTRY:
-            # Pure Python step - slower but contributor-friendly
-            df = to_pandas(result)
-            df = _PYTHON_STEP_REGISTRY[name](df, **kwargs)
-            result = from_pandas(df)
-        else:
-            available = list(_STEP_REGISTRY.keys()) + list(_PYTHON_STEP_REGISTRY.keys())
-            raise UnknownStepError(name, available)
-
-    return result
