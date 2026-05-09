@@ -97,15 +97,15 @@ df = ar.to_pandas(clean_frame)
 > Tested on Ubuntu, Python 3.12, 1M row CSV.  
 > Run `make benchmark` to reproduce on your machine.
 
-| Metric         | pandas | arnio v1.0.0 |
-| -------------- | ------ | ------------ |
-| Execution Time | 4.73s  | 5.75s        |
-| Peak RAM       | 211MB  | 212MB        |
+**The Goal:** Provide a native C++ parser and cleaning engine that matches or beats pandas on memory, while eliminating the need for slow Python `.apply()` loops.
 
-**Current state:** arnio's C++ CSV reader matches pandas on memory.  
-Speed parity is the active engineering goal for v0.2.0 — specifically  
-`drop_duplicates` and `strip_whitespace` are unoptimized C++ and are  
-the primary contributors to the gap.
+| Metric | pandas | arnio v1.0.0 | Note |
+| :--- | :--- | :--- | :--- |
+| **Peak RAM** | 211MB | **212MB** | Parity achieved. C++ native parsing prevents memory spikes. |
+| **Clean Syntax** | Python Loops | **Declarative** | No more spaghetti `.apply()` lambdas. |
+| **Execution Time** | **4.73s** | 5.75s | *Active optimization target for v0.2.0.* |
+
+**Current state:** Arnio achieves memory parity with pandas while offering a much cleaner declarative API. Speed optimization is our primary focus for `v0.2.0` — specifically, C++ implementations of `drop_duplicates` and `strip_whitespace` are currently unoptimized and are the main contributors to the execution time gap.
 
 **[Help close the gap →](https://github.com/im-anishraj/arnio/issues)**
 
