@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip show *)",
+      "Bash(python -c \"import pybind11; print\\(pybind11.get_cmake_dir\\(\\)\\)\")",
+      "Bash(cmake --help-policy CMP0167)",
+      "Bash(where cmake *)",
+      "Bash(cmake --version)",
+      "Bash(export pybind11_DIR=\"C:\\\\Users\\\\xertion\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python314\\\\Lib\\\\site-packages\\\\pybind11\\\\share\\\\cmake\\\\pybind11\")",
+      "Bash(pip install *)",
+      "Bash(python -m pytest tests/ -v --tb=short)"
+    ]
+  }
+}
