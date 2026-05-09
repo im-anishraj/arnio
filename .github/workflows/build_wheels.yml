@@ -1,8 +1,11 @@
 name: Build & Publish Wheels
 
 on:
-  release:
-    types: [published]
+  workflow_call:
+    inputs:
+      tag_name:
+        required: true
+        type: string
   workflow_dispatch:  # allows manual trigger for testing
 
 jobs:
@@ -11,6 +14,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag_name || github.ref }}
       - name: Build sdist
         run: pipx run build --sdist
       - uses: actions/upload-artifact@v4
@@ -29,6 +34,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag_name || github.ref }}
 
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.22
