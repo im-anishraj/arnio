@@ -16,5 +16,3 @@ jobs:
       - uses: googleapis/release-please-action@v4
         with:
           release-type: python
-          package-name: arnio
-          version-file: pyproject.toml
