@@ -19,6 +19,7 @@
     <!-- Health / Meta -->
     <a href="https://github.com/im-anishraj/arnio/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/im-anishraj/arnio/ci.yml?branch=main&label=CI&style=for-the-badge&logo=github&color=2ea44f" alt="CI"></a>
     <a href="https://github.com/im-anishraj/arnio/actions/workflows/build_wheels.yml"><img src="https://img.shields.io/github/actions/workflow/status/im-anishraj/arnio/build_wheels.yml?label=Wheels&style=for-the-badge&logo=github&color=2ea44f" alt="Build Wheels"></a>
+    <a href="https://codecov.io/gh/im-anishraj/arnio"><img src="https://img.shields.io/codecov/c/github/im-anishraj/arnio?style=for-the-badge&logo=codecov&color=2ea44f" alt="Coverage"></a>
     <a href="https://github.com/psf/black"><img src="https://img.shields.io/badge/code%20style-black-000000.svg?style=for-the-badge" alt="Code style: black"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge" alt="License"></a>
     <a href="https://gssoc.girlscript.tech/"><img src="https://img.shields.io/badge/GSSoC-2026-orange.svg?style=for-the-badge" alt="GSSoC"></a>
