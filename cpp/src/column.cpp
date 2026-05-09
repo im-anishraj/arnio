@@ -1,5 +1,6 @@
 #include "arnio/column.h"
 
+#include <cassert>
 #include <stdexcept>
 #include <utility>
 
@@ -146,26 +147,22 @@ void Column::set_name(const std::string& name) { name_ = name; }
 void Column::set_dtype(DType dtype) { dtype_ = dtype; }
 
 void Column::assert_type_consistency() const {
-    bool consistent = false;
     switch (dtype_) {
         case DType::STRING:
-            consistent = std::holds_alternative<std::vector<std::string>>(data_);
+            assert(std::holds_alternative<std::vector<std::string>>(data_));
             break;
         case DType::INT64:
-            consistent = std::holds_alternative<std::vector<int64_t>>(data_);
+            assert(std::holds_alternative<std::vector<int64_t>>(data_));
             break;
         case DType::FLOAT64:
-            consistent = std::holds_alternative<std::vector<double>>(data_);
+            assert(std::holds_alternative<std::vector<double>>(data_));
             break;
         case DType::BOOL:
-            consistent = std::holds_alternative<std::vector<bool>>(data_);
+            assert(std::holds_alternative<std::vector<bool>>(data_));
             break;
         case DType::NULL_TYPE:
-            consistent = std::holds_alternative<std::monostate>(data_);
+            assert(std::holds_alternative<std::monostate>(data_));
             break;
-    }
-    if (!consistent) {
-        throw std::logic_error("Column type inconsistency: dtype does not match data variant");
     }
 }
 
@@ -175,9 +172,6 @@ const ColumnData& Column::data() const {
 }
 const std::vector<bool>& Column::null_mask() const { return null_mask_; }
 
-Column Column::clone() const {
-    assert_type_consistency();
-    return Column(name_, dtype_, data_, null_mask_);
-}
+Column Column::clone() const { return Column(name_, dtype_, data_, null_mask_); }
 
 }  // namespace arnio
