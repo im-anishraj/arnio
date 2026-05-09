@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+### Fixed
+- Fixed type consistency check in Column (#52)
 
 ## [1.0.0] - 2026-05-08
 ### Added
