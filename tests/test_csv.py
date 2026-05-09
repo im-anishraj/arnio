@@ -1,9 +1,13 @@
 """Tests for CSV reading functionality."""
 
+import os
+
 import pandas as pd
+
 import arnio as ar
 
-MESSY_CSV = "tests/fixtures/messy_sales_data.csv"
+MESSY_CSV = os.path.join(os.path.dirname(__file__), "fixtures", "messy_sales_data.csv")
+
 
 class TestReadCsv:
     def test_basic_read(self, sample_csv):
