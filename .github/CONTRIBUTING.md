@@ -80,12 +80,16 @@ def test_remove_special_chars(sample_csv):
 3. If you've changed APIs, update the documentation.
 4. Ensure the test suite passes (`make test`).
 5. Ensure your code passes linting (`make lint`). This is a **required** pre-PR step.
-6. Issue that pull request!
+6. Issue that pull request! Ensure your PR title follows **Conventional Commits**.
+
+### Commit Message Convention
+We use an automated release system that relies on [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/). Your PR title must use one of the following prefixes:
+- `feat:` for new features (e.g., `feat: add robust boolean parsing`)
+- `fix:` for bug fixes (e.g., `fix: memory leak in string allocation`)
+- `docs:` for documentation changes
+- `chore:` for maintenance (e.g., CI/CD changes)
+
+This allows our CI to automatically generate changelogs and bump version numbers.
 
 We use `black`, `ruff`, and `clang-format` to format our code. `pre-commit` will run these automatically before each commit if installed.
 
----
-
-## Tracking Changes
-
-We use `CHANGELOG.md` to track project history. When submitting a PR, please update the `[Unreleased]` section with a brief note of your changes.

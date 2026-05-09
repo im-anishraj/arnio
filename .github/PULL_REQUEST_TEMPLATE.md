@@ -11,5 +11,5 @@
 - [ ] `make lint` passes locally  
 - [ ] New tests added for new functionality
 - [ ] Docstring added for any new public function
-- [ ] CHANGELOG.md updated under `[Unreleased]`
+- [ ] PR title follows **Conventional Commits** (e.g., `feat: ...`, `fix: ...`)
 - [ ] README updated if public API changed
