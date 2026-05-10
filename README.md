@@ -29,7 +29,7 @@ No `.apply()`. No lambda chains. No spaghetti.
 
 <br><br>
 
-```
+```bash
 pip install arnio
 ```
 
@@ -177,7 +177,7 @@ df = ar.to_pandas(ar.pipeline(frame, [
 
 Arnio is not a pandas wrapper. It's a separate runtime with its own data model.
 
-```
+```text
 ┌──────────────────────────────────────────────────────────────┐
 │  Your Python Code                                            │
 │  frame = ar.read_csv("data.csv")                             │
@@ -225,7 +225,7 @@ Arnio is not a pandas wrapper. It's a separate runtime with its own data model.
 > **Setup**: Ubuntu, Python 3.12, 1M rows × 12 columns, synthetic messy CSV.<br>
 > **Reproduce**: `make benchmark` — generates data and runs both engines.
 
-```
+```text
                      pandas         arnio
 ────────────────────────────────────────────
 Exec Time (avg)       4.73s         5.75s
@@ -373,7 +373,7 @@ pytest tests/ -v
 
 ## 📐 Project structure
 
-```
+```text
 arnio/
 ├── cpp/
 │   ├── include/arnio/      # C++ headers — types, column, frame, csv_reader, cleaning
