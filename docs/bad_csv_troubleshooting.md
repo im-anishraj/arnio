@@ -52,7 +52,7 @@ Rows contain different numbers of columns.
 
 ### Expected Arnio Behavior
 
-Parsing may fail or produce inconsistent results.
+Arnio raises a `CsvReadError` when structural parsing fails (e.g., unclosed quotes or inconsistent column counts). For encoding or corrupted input, parsing may fail during decoding before frame construction.
 
 ### Fix
 
@@ -75,7 +75,8 @@ The CSV uses semicolons instead of commas.
 
 ### Expected Arnio Behavior
 
-Columns may not split correctly during parsing.
+Arnio may misinterpret column boundaries, resulting in a
+`CsvReadError` or incorrect column alignment during frame construction.
 
 ### Fix
 
@@ -105,7 +106,7 @@ The CSV does not contain a header row.
 
 ### Expected Arnio Behavior
 
-The first row may be interpreted as headers.
+If headers are not explicitly provided, Arnio treats the first row as column headers by default.
 
 ### Fix
 
@@ -125,7 +126,7 @@ alice,21,mumbai
 
 ### Problem
 
-Non-UTF-8 files may contain corrupted characters.
+Non-UTF-8 encoded files may fail during decoding or produce replacement characters depending on system-level encoding detection and decoding fallback behavior.
 
 ### Example
 
@@ -162,3 +163,4 @@ Verify the file opens correctly in a text editor before using `read_csv()`.
 - Avoid malformed quotes
 - Use proper delimiters
 - Always include headers
+
