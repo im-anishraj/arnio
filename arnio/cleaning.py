@@ -5,6 +5,7 @@ Data cleaning functions.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Any
 
 from ._core import (
@@ -198,6 +199,72 @@ def rename_columns(
     result = _rename_columns(frame._frame, mapping)
     return ArFrame(result)
 
+
+
+def combine_columns(
+    frame: ArFrame,
+    columns: list[str],
+    output_column: str,
+    *,
+    separator: str = "",
+    drop_original: bool = False,
+) -> ArFrame:
+    """Build a string column by joining multiple existing columns.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input data frame.
+    columns : list[str]
+        Existing columns to combine in order.
+    output_column : str
+        Name of the new combined column.
+    separator : str, default ""
+        String inserted between non-null values.
+    drop_original : bool, default False
+        Whether to remove the source columns after creating the new column.
+
+    Returns
+    -------
+    ArFrame
+        New frame with the combined string column.
+
+    Examples
+    --------
+    >>> frame = ar.read_csv("people.csv")
+    >>> combined = combine_columns(frame, ["first", "last"], "full_name", separator=" ")
+    """
+    if not isinstance(columns, Iterable) or isinstance(columns, (str, bytes)):
+        raise ValueError("columns must be a non-empty list of column names")
+
+    columns = list(columns)
+    if not columns:
+        raise ValueError("columns must be a non-empty list of column names")
+
+    if not output_column:
+        raise ValueError("output_column must be a non-empty string")
+
+    from .convert import from_pandas, to_pandas
+    import pandas as pd
+
+    df = to_pandas(frame)
+    missing = [column for column in columns if column not in df.columns]
+    if missing:
+        raise KeyError(f"Missing columns: {missing}")
+
+    def combine_row(row):
+        values = []
+        for column in columns:
+            value = row[column]
+            if value is not None and not pd.isna(value):
+                values.append(str(value))
+        return separator.join(values)
+
+    df[output_column] = df.apply(combine_row, axis=1)
+    if drop_original:
+        df = df.drop(columns=columns)
+
+    return from_pandas(df)
 
 def cast_types(
     frame: ArFrame,
