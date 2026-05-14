@@ -4,6 +4,8 @@ First off, thank you for considering contributing to Arnio. Whether you're fixin
 
 If you are contributing through GSSoC 2026, read [GSSOC_GUIDE.md](../GSSOC_GUIDE.md) before asking to be assigned.
 
+Need quick setup or onboarding help? Join the [Arnio Discord Community](https://discord.gg/xsEw7r78M). GitHub remains the source of truth for issue assignment and PR reviews.
+
 ## Quick Start (Local Setup)
 
 To set up your local development environment:
