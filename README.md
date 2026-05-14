@@ -274,7 +274,7 @@ Every operation below runs natively in C++. No Python loops.
 | Primitive | What it does | Example |
 |:---|:---|:---|
 | `drop_nulls` | Remove rows with null/empty values | `ar.drop_nulls(frame, subset=["age"])` |
-| `filter_rows` | Filter rows using comparison operators | `ar.filter_rows(frame, column="age", operator=">", value=18)` |
+| `filter_rows` | Filter rows using comparison operators | `ar.filter_rows(frame, column="age", op=">", value=18)` |
 | `fill_nulls` | Replace nulls with a scalar | `ar.fill_nulls(frame, 0, subset=["revenue"])` |
 | `drop_duplicates` | Deduplicate rows (first/last/none) | `ar.drop_duplicates(frame, keep="first")` |
 | `strip_whitespace` | Trim leading/trailing spaces from strings | `ar.strip_whitespace(frame)` |
@@ -301,7 +301,7 @@ Use `filter_rows` to keep only rows matching a condition.
 clean = ar.pipeline(frame, [
     ("filter_rows", {
         "column": "revenue",
-        "operator": ">=",
+        "op": ">=",
         "value": 1000
     }),
 ])
