@@ -63,6 +63,16 @@ class ArFrame:
         """
         return self._frame.memory_usage()
 
+    def has_column(self, name: str) -> bool:
+        """Return whether a column exists."""
+        return self._frame.has_column(name)
+
+    def get_column_dtype(self, name: str) -> str:
+        """Return dtype for a specific column name."""
+        if not self.has_column(name):
+            raise KeyError(f"Column not found: {name}")
+        return self.dtypes[name]
+
     # --- Dunder methods ---
 
     def __len__(self) -> int:
