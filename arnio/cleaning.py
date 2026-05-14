@@ -229,6 +229,68 @@ def cast_types(
     return ArFrame(result)
 
 
+def split_column(
+    frame: ArFrame,
+    column: str,
+    into: list[str],
+    *,
+    sep: str = ",",
+    regex: bool = False,
+    maxsplit: int = -1,
+    drop: bool = False,
+) -> ArFrame:
+    """Split one string column into multiple output columns.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input data frame.
+    column : str
+        Name of the source column to split.
+    into : list[str]
+        Names of the output columns.
+    sep : str, default ","
+        Delimiter or regex pattern to split on.
+    regex : bool, default False
+        Whether ``sep`` should be treated as a regular expression.
+    maxsplit : int, default -1
+        Maximum number of splits. ``-1`` means no explicit limit.
+    drop : bool, default False
+        Whether to drop the original source column.
+
+    Returns
+    -------
+    ArFrame
+        New frame with the split output columns added.
+    """
+    if column not in frame.columns:
+        raise ValueError(f"Unknown source column: {column!r}")
+    if not into:
+        raise ValueError("into must contain at least one output column")
+    if len(set(into)) != len(into):
+        raise ValueError("Output column names in into must be unique")
+
+    existing = set(frame.columns) - ({column} if drop else set())
+    collisions = existing.intersection(into)
+    if collisions:
+        names = ", ".join(sorted(collisions))
+        raise ValueError(f"Output column already exists: {names}")
+
+    from .convert import from_pandas, to_pandas
+
+    df = to_pandas(frame)
+    source = df[column].astype("string")
+    parts = source.str.split(sep, n=maxsplit, expand=True, regex=regex)
+    parts = parts.reindex(columns=range(len(into)))
+
+    if drop:
+        df = df.drop(columns=[column])
+    for index, name in enumerate(into):
+        df[name] = parts[index].astype("string")
+
+    return from_pandas(df)
+
+
 def clean(
     frame: ArFrame,
     *,
