@@ -45,7 +45,49 @@ A `Column` represents a single 1D array of homogeneous data.
 A `Frame` is an ordered collection of `Column` objects, representing a 2D dataset.
 - The `Frame` maintains an index mapping column names to their respective `Column` objects for `O(1)` access.
 
-## 4. Pipeline Execution
+## 4. Pandas Dtype Compatibility
+
+Arnio supports the most common pandas dtypes directly through its native C++ columnar model, while some advanced or mixed dtypes may require conversion or are currently unsupported.
+
+This section helps users understand which dtype workflows are fully supported, partially supported, unsupported, or planned.
+
+### Fully Supported
+
+The following dtypes are fully supported and map efficiently to strongly typed C++ vectors:
+
+- `int64`
+- `float64`
+- `string`
+- `datetime64[ns]`
+
+These allow efficient parsing, cleaning operations, and zero-copy or near zero-copy conversion back to pandas where possible.
+
+### Partially Supported
+
+The following dtypes are partially supported and may require preprocessing depending on the workflow:
+
+- `object`
+- `boolean`
+- `category`
+
+These may work depending on column consistency and operation type. Mixed `object` columns, categorical operations, and some boolean workflows may require explicit conversion before pipeline execution.
+
+### Currently Unsupported / Planned
+
+The following dtypes are currently unsupported or planned for future improvements:
+
+- `timedelta64[ns]`
+- Nullable integer types such as `Int64`
+
+These require additional handling for null semantics, type inference improvements, and conversion consistency.
+
+### User-facing Behavior
+
+When unsupported dtypes are encountered, Arnio should provide clear user-facing errors instead of silent failures.
+
+Users are encouraged to prefer strongly typed columns such as `int64`, `float64`, and `string` for best performance and compatibility.
+
+## 5. Pipeline Execution
 
 The `pipeline()` function in Python accepts a list of declarative steps. 
 
@@ -53,6 +95,6 @@ The `pipeline()` function in Python accepts a list of declarative steps.
 2. **C++ Execution**: For natively supported operations, the Python wrapper calls the C++ function directly, passing the `Frame` pointer. The operation modifies the data or returns a new `Frame` entirely within C++.
 3. **Python Fallback**: If a step is registered via pure Python (`ar.register_step()`), the `Frame` is temporarily converted to a pandas DataFrame, the Python function executes, and the result is converted back. *(Note: This incurs a conversion penalty and is intended for prototyping or operations not yet supported in C++).*
 
-## 5. Converting to Pandas
+## 6. Converting to Pandas
 
 The `to_pandas()` function is the most critical boundary. It uses the NumPy C-API (via pybind11's buffer protocol) to expose the underlying C++ `std::vector` memory directly to pandas, avoiding expensive element-by-element copies where possible (zero-copy for numerics and booleans). String columns currently require instantiation of Python `str` objects.

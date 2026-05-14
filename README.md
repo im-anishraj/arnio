@@ -316,6 +316,37 @@ clean = ar.pipeline(frame, [
 
 <br>
 
+## 📊 Pandas Dtype Support Matrix
+
+This table helps users understand which pandas dtypes and workflows are fully supported, partially supported, unsupported, or planned.
+
+If a dtype is partially supported, users may need conversion before processing. Unsupported dtypes should raise clear errors where applicable.
+
+| Pandas Dtype | Support Status | Notes |
+|---|---|---|
+| `int64` | ✅ Supported | Fully supported with native C++ columnar storage |
+| `float64` | ✅ Supported | Fully supported with zero-copy conversion where possible |
+| `string` | ✅ Supported | Recommended over `object` dtype for text workflows |
+| `datetime64[ns]` | ✅ Supported | Standard datetime workflows are supported |
+| `object` | ⚠️ Partial | Supported with limitations depending on mixed values |
+| `boolean` | ⚠️ Partial | Some workflows may require explicit conversion |
+| `category` | ⚠️ Partial | Limited compatibility in some operations |
+| `timedelta64[ns]` | ❌ Unsupported | Not currently supported |
+| `Int64` (nullable integer) | 📋 Planned | Support improvements planned for future releases |
+
+### Notes
+
+- Numeric and boolean columns are optimized for zero-copy conversion between C++ and pandas.
+- String columns require Python string object creation during `to_pandas()` conversion.
+- Mixed `object` columns may reduce type inference accuracy and may require preprocessing.
+- Unsupported dtypes should raise clear user-facing errors instead of silent failures.
+
+<br>
+
+---
+
+<br>
+
 ## 🧠 Data quality engine
 
 Arnio now includes built-in dataset understanding before you analyze in pandas.
