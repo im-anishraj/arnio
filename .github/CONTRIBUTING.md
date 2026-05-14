@@ -33,6 +33,19 @@ Or run the commands manually — each `make` target is just one or two commands 
 
 ---
 
+## Contributor Glossary
+
+- **ArFrame**: Arnio's internal table object. It stores data in a C++-backed, column-oriented format before you convert it to a pandas DataFrame.
+- **pipeline step**: One cleaning action inside `ar.pipeline(...)`, such as `strip_whitespace` or `drop_duplicates`. Steps run in order to transform a frame.
+- **schema**: A set of rules that describes what valid data should look like, such as required columns, expected types, allowed values, or limits.
+- **quality report**: A summary of data health for a frame. It highlights things like nulls, duplicates, whitespace problems, semantic hints, and suggested cleanup steps.
+- **zero-copy**: A fast conversion style where Arnio can expose existing C++ memory to pandas without duplicating the data first, especially for numeric and boolean columns.
+- **C++ core**: The compiled engine underneath the Python API that performs the heavy CSV reading and cleaning work.
+- **pandas bridge**: The conversion path between Arnio data structures and pandas DataFrames, used when exporting results or running pure-Python custom steps.
+- **validation result**: The object returned after checking a frame against a schema. It tells you whether validation passed and lists any issues that were found.
+
+---
+
 ## Adding a Pure Python Pipeline Step (No C++ Required)
 
 Most new features do not require touching C++! You can write a pure Python step and register it with Arnio. This is how 90% of GSSoC contributors will contribute.
