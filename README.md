@@ -25,8 +25,13 @@ No `.apply()`. No lambda chains. No spaghetti.
 <a href="https://github.com/im-anishraj/arnio/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/im-anishraj/arnio/ci.yml?branch=main&label=CI&style=flat-square&logo=github&labelColor=0d1117&color=2ea44f" alt="CI"></a>&nbsp;
 <a href="https://codecov.io/gh/im-anishraj/arnio"><img src="https://img.shields.io/codecov/c/github/im-anishraj/arnio?style=flat-square&logo=codecov&labelColor=0d1117&color=2ea44f" alt="Coverage"></a>&nbsp;
 <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square&labelColor=0d1117" alt="MIT"></a>&nbsp;
-<a href="https://gssoc.girlscript.tech/"><img src="https://img.shields.io/badge/GSSoC-2026-ff6b35?style=flat-square&labelColor=0d1117" alt="GSSoC 2026"></a>
+<a href="https://gssoc.girlscript.tech/"><img src="https://img.shields.io/badge/GSSoC-2026-ff6b35?style=flat-square&labelColor=0d1117" alt="GSSoC 2026"></a>&nbsp;
+<a href="https://discord.gg/xsEw7r78M"><img src="https://img.shields.io/badge/Discord-Join%20Community-5865F2?style=flat-square&logo=discord&logoColor=white&labelColor=0d1117" alt="Join Discord"></a>
 [![PyPI Downloads](https://static.pepy.tech/personalized-badge/arnio?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads)](https://pepy.tech/projects/arnio)
+
+<br><br>
+
+<a href="https://discord.gg/xsEw7r78M"><img src="https://img.shields.io/badge/Join%20the%20Arnio%20Discord%20Community-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Join the Arnio Discord Community"></a>
 
 <br><br>
 
@@ -36,7 +41,7 @@ pip install arnio
 
 <br>
 
-<a href="#-quickstart">Quickstart</a>&ensp;·&ensp;<a href="#-why-arnio-exists">Why Arnio</a>&ensp;·&ensp;<a href="#%EF%B8%8F-architecture">Architecture</a>&ensp;·&ensp;<a href="#-benchmarks">Benchmarks</a>&ensp;·&ensp;<a href="#-contribute">Contribute</a>
+<a href="#-quickstart">Quickstart</a>&ensp;·&ensp;<a href="#-why-arnio-exists">Why Arnio</a>&ensp;·&ensp;<a href="#%EF%B8%8F-architecture">Architecture</a>&ensp;·&ensp;<a href="#-benchmarks">Benchmarks</a>&ensp;·&ensp;<a href="#-community">Community</a>&ensp;·&ensp;<a href="#-contribute">Contribute</a>
 
 </div>
 
@@ -480,6 +485,22 @@ DataQualityReport(
 
 <br>
 
+## 💬 Community
+
+Join the **[Arnio Discord Community](https://discord.gg/xsEw7r78M)** for quick setup help, contributor onboarding, GSSoC 2026 coordination, feature discussion, and community updates.
+
+Discord is for fast conversation and support. GitHub remains the source of truth for issue assignment, PR reviews, bugs, roadmap decisions, and releases.
+
+<p align="center">
+<a href="https://discord.gg/xsEw7r78M"><img src="https://img.shields.io/badge/Join%20Arnio%20Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Join Arnio Discord"></a>
+</p>
+
+<br>
+
+---
+
+<br>
+
 ## 🤝 Contribute
 
 Arnio is a **[GSSoC 2026](https://gssoc.girlscript.tech/)** project with a structured contributor backlog across beginner, intermediate, and advanced tracks.
@@ -532,7 +553,8 @@ For GSSoC contributors, please read **[GSSOC_GUIDE.md](GSSOC_GUIDE.md)** before 
 <a href=".github/CONTRIBUTING.md"><b>📖 Full Contributing Guide</b></a>&ensp;·&ensp;
 <a href="GSSOC_GUIDE.md"><b>GSSoC Guide</b></a>&ensp;·&ensp;
 <a href="https://github.com/im-anishraj/arnio/issues"><b>🐛 Open Issues</b></a>&ensp;·&ensp;
-<a href="https://github.com/im-anishraj/arnio/discussions"><b>💬 Discussions</b></a>
+<a href="https://github.com/im-anishraj/arnio/discussions"><b>💬 Discussions</b></a>&ensp;·&ensp;
+<a href="https://discord.gg/xsEw7r78M"><b>Discord</b></a>
 </p>
 
 <br>
@@ -586,7 +608,8 @@ arnio/
 <a href="https://pypi.org/project/arnio/"><img src="https://img.shields.io/pypi/dm/arnio?style=flat-square&logo=pypi&logoColor=white&labelColor=0d1117&color=3572A5&label=installs" alt="Downloads"></a>&ensp;
 <a href="https://github.com/im-anishraj/arnio/stargazers"><img src="https://img.shields.io/github/stars/im-anishraj/arnio?style=flat-square&logo=github&labelColor=0d1117&color=e3b341&label=stars" alt="Stars"></a>&ensp;
 <a href="https://github.com/im-anishraj/arnio/network/members"><img src="https://img.shields.io/github/forks/im-anishraj/arnio?style=flat-square&logo=github&labelColor=0d1117&color=8b949e&label=forks" alt="Forks"></a>&ensp;
-<a href="https://arnio.vercel.app/"><img src="https://img.shields.io/badge/website-arnio.vercel.app-blue?style=flat-square&labelColor=0d1117" alt="Website"></a>
+<a href="https://arnio.vercel.app/"><img src="https://img.shields.io/badge/website-arnio.vercel.app-blue?style=flat-square&labelColor=0d1117" alt="Website"></a>&ensp;
+<a href="https://discord.gg/xsEw7r78M"><img src="https://img.shields.io/badge/community-Discord-5865F2?style=flat-square&logo=discord&logoColor=white&labelColor=0d1117" alt="Discord"></a>
 
 <br>
 
