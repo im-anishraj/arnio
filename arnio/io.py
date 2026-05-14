@@ -162,7 +162,7 @@ def scan_csv(
 
     Raises
     ------
-        ValueError
+    ValueError
         If file format is unsupported.
 
     CsvReadError
