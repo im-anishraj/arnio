@@ -16,6 +16,27 @@ class ArFrame:
     def __init__(self, cpp_frame: _Frame) -> None:
         self._frame = cpp_frame
 
+    @classmethod
+    def from_records(cls, records: list[dict[str, object]]) -> "ArFrame":
+        """Build an ArFrame from a list of row dictionaries."""
+        if not isinstance(records, list):
+            raise TypeError("records must be a list of dictionaries")
+
+        columns: dict[str, list[object]] = {}
+        for row_index, record in enumerate(records):
+            if not isinstance(record, dict):
+                raise TypeError("records must be a list of dictionaries")
+
+            for key in record:
+                name = str(key)
+                if name not in columns:
+                    columns[name] = [None] * row_index
+
+            for name, values in columns.items():
+                values.append(record.get(name))
+
+        return cls(_Frame.from_dict(columns))
+
     # --- Properties ---
 
     @property
