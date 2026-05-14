@@ -361,9 +361,10 @@ This is the layer pandas does not try to own: profiling, data contracts, row-lev
 | Version | Focus | Status |
 |:---:|:---|:---:|
 | **v1.0** | Stable release · cross-platform wheels · CI/CD · PyPI publishing · Google Colab support | ✅ Shipped |
-| **v0.2** | C++ pipeline optimization · speed parity with pandas · hash-based deduplication | 🔨 Active |
-| **v0.3** | Chunked / streaming processing · Parquet & JSON readers | 📋 Planned |
-| **v0.4** | Parallel column processing · SIMD string operations | 💭 Exploring |
+| **v1.1** | Production readiness · release hardening · docs/tooling | ✅ Shipped |
+| **v1.2** | C++ pipeline optimization · speed parity with pandas · hash-based deduplication | 🔨 Active |
+| **v1.3** | Chunked / streaming processing · Parquet & JSON readers | 📋 Planned |
+| **v1.4** | Parallel column processing · SIMD string operations | 💭 Exploring |
 
 <br>
 
