@@ -437,6 +437,7 @@ The biggest performance wins are in:
 ### Getting started
 
 ```bash
+
 # macOS / Linux
 git clone https://github.com/im-anishraj/arnio.git && cd arnio
 make install   # pip install -e ".[dev]" + pre-commit
@@ -444,9 +445,56 @@ make test      # pytest with coverage
 make lint      # ruff + black
 
 # Windows
+
+Before installing, make sure you have:
+- Python 3.10+
+- Git
+- Latest `pip`
+- Microsoft Visual Studio Build Tools (C++ Build Tools)
+
+Some dependencies may require compiler support for building wheels or editable installs.
+
+Upgrade packaging tools first:
+```bash
+python -m pip install --upgrade pip setuptools wheel build
+```
+
+Install the project in editable mode for development:
+```bash
 pip install -e ".[dev]"
+```
+
+This ensures local code changes are reflected immediately without reinstalling.
+
+Install pre-commit hooks:
+```bash
 pre-commit install
+```
+Run tests:
+```bash
 pytest tests/ -v
+```
+
+### Common Windows Errors
+
+#### Microsoft Visual C++ 14.0 or greater is required
+Install Microsoft C++ Build Tools from Visual Studio Build Tools, then restart your terminal and retry installation.
+
+#### Failed building wheel
+Upgrade build dependencies first:
+
+```bash
+python -m pip install --upgrade pip setuptools wheel build
+```
+Then retry installation.
+
+#### Python or pip command not found
+Ensure Python and the Scripts directory are added to your system PATH.
+
+Verify using:
+```bash
+python --version
+pip --version
 ```
 
 > **PR titles must follow [Conventional Commits](https://www.conventionalcommits.org/)** — `feat:`, `fix:`, `docs:`, `chore:`. Our release pipeline auto-generates changelogs from these.
