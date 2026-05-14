@@ -166,6 +166,12 @@ def parse_bool_strings(
     ArFrame
         New frame with parsed boolean values.
 
+    Notes
+    -----
+    Columns containing both parsed boolean values and unsupported string values
+    may round-trip as strings because of ArFrame column typing semantics.
+    Unsupported values are preserved unchanged.
+
     Examples
     --------
     >>> parsed = ar.parse_bool_strings(frame)
@@ -181,6 +187,12 @@ def parse_bool_strings(
 
     true_values = {v.strip().lower() for v in true_values}
     false_values = {v.strip().lower() for v in false_values}
+    overlap = true_values & false_values
+
+    if overlap:
+        raise ValueError(
+            f"true_values and false_values overlap after normalization: {overlap}"
+        )
 
     columns = subset or df.select_dtypes(include=["object", "string"]).columns
 

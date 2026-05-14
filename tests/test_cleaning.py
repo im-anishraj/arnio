@@ -226,6 +226,59 @@ class TestParseBoolStrings:
         assert cleaned["active"].tolist() == [True, False]
         assert cleaned["other"].tolist() == ["YES", "no"]
 
+    def test_parse_bool_strings_custom_values(self):
+        import pandas as pd
+
+        df = pd.DataFrame(
+            {
+                "status": [
+                    "enabled",
+                    "disabled",
+                    " ENABLED ",
+                    " DISABLED ",
+                    "maybe",
+                ],
+            },
+            dtype=object,
+        )
+
+        frame = ar.from_pandas(df)
+
+        result = ar.parse_bool_strings(
+            frame,
+            true_values={"enabled"},
+            false_values={"disabled"},
+        )
+
+        cleaned = ar.to_pandas(result)
+
+        assert cleaned["status"].tolist() == [
+            "True",
+            "False",
+            "True",
+            "False",
+            "maybe",
+        ]
+
+    def test_parse_bool_strings_overlap_rejected(self):
+        import pandas as pd
+
+        df = pd.DataFrame(
+            {
+                "active": ["yes", "no"],
+            },
+            dtype=object,
+        )
+
+        frame = ar.from_pandas(df)
+
+        with pytest.raises(ValueError):
+            ar.parse_bool_strings(
+                frame,
+                true_values={"yes"},
+                false_values={" YES "},
+            )
+
 
 class TestRenameColumns:
     def test_rename(self, sample_csv):
