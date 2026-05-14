@@ -560,6 +560,38 @@ If you are new to Arnio terms, see the [contributor glossary](.github/CONTRIBUTI
 
 <br>
 
+## 🚢 Release process
+
+Arnio releases are automated through Release Please and GitHub Actions.
+
+1. Merge user-facing changes with Conventional Commit PR titles (`feat:`, `fix:`, `docs:`, or `chore:`) so Release Please can choose the version bump and changelog entries.
+2. Review and merge the Release Please PR on `main`; this updates release metadata and creates the GitHub release and tag.
+3. Confirm the `Build & Publish Wheels` workflow succeeds for the release tag. It builds the sdist and wheels, then publishes to PyPI through Trusted Publishing.
+4. Smoke test the published package in a clean environment:
+
+```bash
+python -m venv /tmp/arnio-smoke
+source /tmp/arnio-smoke/bin/activate
+python -m pip install -U pip
+python -m pip install arnio
+printf 'name,revenue\n Ada,10\n' > /tmp/arnio-smoke.csv
+python - <<'PY'
+import arnio as ar
+print(ar.__version__)
+print(ar.scan_csv("/tmp/arnio-smoke.csv"))
+PY
+```
+
+5. Verify the GitHub release, PyPI project page, and install command all show the expected version before announcing the release.
+
+If any publish or smoke-test step fails, leave the failed tag and GitHub release in place until maintainers agree on the recovery plan.
+
+<br>
+
+---
+
+<br>
+
 ## 📐 Project structure
 
 ```text
