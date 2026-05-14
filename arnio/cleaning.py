@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import pandas as pd
+
 from ._core import (
     _cast_types,
     _drop_duplicates,
@@ -197,6 +199,46 @@ def rename_columns(
     """
     result = _rename_columns(frame._frame, mapping)
     return ArFrame(result)
+
+
+def parse_bool_strings(
+    frame: ArFrame,
+    *,
+    subset: list[str] | None = None,
+) -> ArFrame:
+    """Normalize common boolean-like strings to bool values.
+
+    Values such as ``yes``/``no``, ``y``/``n``, ``1``/``0``, and
+    ``true``/``false`` are matched case-insensitively after trimming whitespace.
+    Non-matching values are left unchanged so mixed columns can be reviewed or
+    handled by a later validation step.
+    """
+    from .convert import from_pandas, to_pandas
+
+    truthy = {"true", "t", "yes", "y", "1"}
+    falsy = {"false", "f", "no", "n", "0"}
+    df = to_pandas(frame).copy()
+    columns = subset if subset is not None else list(df.columns)
+
+    for column in columns:
+        if column not in df.columns:
+            raise KeyError(f"Column not found: {column}")
+
+        def parse_value(value: Any) -> Any:
+            if pd.isna(value):
+                return value
+            if isinstance(value, bool):
+                return value
+            normalized = str(value).strip().lower()
+            if normalized in truthy:
+                return True
+            if normalized in falsy:
+                return False
+            return value
+
+        df[column] = df[column].map(parse_value)
+
+    return from_pandas(df)
 
 
 def cast_types(

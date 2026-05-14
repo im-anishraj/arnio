@@ -75,6 +75,30 @@ class TestPipeline:
         assert result.dtypes["years"] == "float64"
         assert "age" not in result.columns
 
+
+    def test_parse_bool_strings_step(self, tmp_path):
+        path = tmp_path / "flags.csv"
+        path.write_text("enabled,archived\nyes,0\n No ,1\nTRUE,false\ny,N\n")
+        frame = ar.read_csv(path)
+
+        result = ar.pipeline(frame, [("parse_bool_strings",)])
+        df = ar.to_pandas(result)
+
+        assert df["enabled"].tolist() == [True, False, True, True]
+        assert df["archived"].tolist() == [False, True, False, False]
+
+    def test_parse_bool_strings_subset_and_invalid_values(self, tmp_path):
+        path = tmp_path / "flags.csv"
+        path.write_text("enabled,label\nyes,no\n0,maybe\n")
+        frame = ar.read_csv(path)
+
+        result = ar.pipeline(frame, [("parse_bool_strings", {"subset": ["enabled"]})])
+        df = ar.to_pandas(result)
+
+        assert df["enabled"].tolist() == [True, False]
+        assert df["label"].tolist() == ["no", "maybe"]
+
+
     def test_empty_pipeline(self, sample_csv):
         frame = ar.read_csv(sample_csv)
         result = ar.pipeline(frame, [])
