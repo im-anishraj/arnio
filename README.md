@@ -31,10 +31,6 @@ No `.apply()`. No lambda chains. No spaghetti.
 
 <br><br>
 
-<a href="https://discord.gg/xsEw7r78M"><img src="https://img.shields.io/badge/Join%20the%20Arnio%20Discord%20Community-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Join the Arnio Discord Community"></a>
-
-<br><br>
-
 ```bash
 pip install arnio
 ```
