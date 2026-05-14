@@ -103,3 +103,94 @@ class TestPipeline:
             assert False, "Should have raised ValueError"
         except ValueError as e:
             assert "Expected a dict" in str(e)
+
+
+def test_filter_rows_greater_than():
+    import pandas as pd
+    import arnio as ar
+
+    df = pd.DataFrame({
+        "age": [20, 30, 40]
+    })
+
+    frame = ar.from_pandas(df)
+
+    result = ar.pipeline(frame, [
+        ("filter_rows", {
+            "column": "age",
+            "op": ">",
+            "value": 25
+        })
+    ])
+
+    result_df = ar.to_pandas(result)
+
+    assert len(result_df) == 2
+    assert list(result_df["age"]) == [30, 40]
+
+
+def test_filter_rows_equal_string():
+    import pandas as pd
+    import arnio as ar
+
+    df = pd.DataFrame({
+        "name": ["Alice", "Bob", "Alice"]
+    })
+
+    frame = ar.from_pandas(df)
+
+    result = ar.pipeline(frame, [
+        ("filter_rows", {
+            "column": "name",
+            "op": "==",
+            "value": "Alice"
+        })
+    ])
+
+    result_df = ar.to_pandas(result)
+
+    assert len(result_df) == 2
+
+
+def test_filter_rows_bool():
+    import pandas as pd
+    import arnio as ar
+
+    df = pd.DataFrame({
+        "active": [True, False, True]
+    })
+
+    frame = ar.from_pandas(df)
+
+    result = ar.pipeline(frame, [
+        ("filter_rows", {
+            "column": "active",
+            "op": "==",
+            "value": True
+        })
+    ])
+
+    result_df = ar.to_pandas(result)
+
+    assert len(result_df) == 2
+
+
+def test_filter_rows_invalid_operator():
+    import pandas as pd
+    import pytest
+    import arnio as ar
+
+    df = pd.DataFrame({
+        "age": [20, 30]
+    })
+
+    frame = ar.from_pandas(df)
+
+    with pytest.raises(ValueError):
+        ar.pipeline(frame, [
+            ("filter_rows", {
+                "column": "age",
+                "op": "invalid",
+                "value": 25
+            })
+        ])

@@ -118,3 +118,6 @@ def pipeline(
             raise UnknownStepError(name, available)
 
     return result
+
+
+register_step("filter_rows", cleaning.filter_rows)

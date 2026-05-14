@@ -278,3 +278,21 @@ def clean(
         return frame
 
     return pipeline(frame, steps)
+
+
+def filter_rows(df, column, op, value):
+    """Filter rows based on a column condition."""
+
+    ops = {
+        ">": "gt",
+        "<": "lt",
+        ">=": "ge",
+        "<=": "le",
+        "==": "eq",
+        "!=": "ne",
+    }
+
+    if op not in ops:
+        raise ValueError(f"Unsupported operator: {op}")
+
+    return df[getattr(df[column], ops[op])(value)]
