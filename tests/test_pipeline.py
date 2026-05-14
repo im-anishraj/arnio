@@ -107,21 +107,16 @@ class TestPipeline:
 
 def test_filter_rows_greater_than():
     import pandas as pd
+
     import arnio as ar
 
-    df = pd.DataFrame({
-        "age": [20, 30, 40]
-    })
+    df = pd.DataFrame({"age": [20, 30, 40]})
 
     frame = ar.from_pandas(df)
 
-    result = ar.pipeline(frame, [
-        ("filter_rows", {
-            "column": "age",
-            "op": ">",
-            "value": 25
-        })
-    ])
+    result = ar.pipeline(
+        frame, [("filter_rows", {"column": "age", "op": ">", "value": 25})]
+    )
 
     result_df = ar.to_pandas(result)
 
@@ -131,21 +126,16 @@ def test_filter_rows_greater_than():
 
 def test_filter_rows_equal_string():
     import pandas as pd
+
     import arnio as ar
 
-    df = pd.DataFrame({
-        "name": ["Alice", "Bob", "Alice"]
-    })
+    df = pd.DataFrame({"name": ["Alice", "Bob", "Alice"]})
 
     frame = ar.from_pandas(df)
 
-    result = ar.pipeline(frame, [
-        ("filter_rows", {
-            "column": "name",
-            "op": "==",
-            "value": "Alice"
-        })
-    ])
+    result = ar.pipeline(
+        frame, [("filter_rows", {"column": "name", "op": "==", "value": "Alice"})]
+    )
 
     result_df = ar.to_pandas(result)
 
@@ -154,21 +144,16 @@ def test_filter_rows_equal_string():
 
 def test_filter_rows_bool():
     import pandas as pd
+
     import arnio as ar
 
-    df = pd.DataFrame({
-        "active": [True, False, True]
-    })
+    df = pd.DataFrame({"active": [True, False, True]})
 
     frame = ar.from_pandas(df)
 
-    result = ar.pipeline(frame, [
-        ("filter_rows", {
-            "column": "active",
-            "op": "==",
-            "value": True
-        })
-    ])
+    result = ar.pipeline(
+        frame, [("filter_rows", {"column": "active", "op": "==", "value": True})]
+    )
 
     result_df = ar.to_pandas(result)
 
@@ -178,19 +163,14 @@ def test_filter_rows_bool():
 def test_filter_rows_invalid_operator():
     import pandas as pd
     import pytest
+
     import arnio as ar
 
-    df = pd.DataFrame({
-        "age": [20, 30]
-    })
+    df = pd.DataFrame({"age": [20, 30]})
 
     frame = ar.from_pandas(df)
 
     with pytest.raises(ValueError):
-        ar.pipeline(frame, [
-            ("filter_rows", {
-                "column": "age",
-                "op": "invalid",
-                "value": 25
-            })
-        ])
+        ar.pipeline(
+            frame, [("filter_rows", {"column": "age", "op": "invalid", "value": 25})]
+        )
