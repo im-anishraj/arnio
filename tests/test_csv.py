@@ -75,13 +75,14 @@ class TestReadCsv:
             ar.read_csv(file_path)
 
     def test_binary_file_rejection(self, tmp_path):
-        import pytest
-
         file_path = str(tmp_path / "data.csv")
         with open(file_path, "wb") as f:
             f.write(b"col1,col2\n\0binary\0,data\n")
 
-        with pytest.raises(ValueError, match="File appears to be binary"):
+        with pytest.raises(
+            ar.CsvReadError,
+            match="CSV input contains NUL bytes and appears to be binary or corrupted",
+        ):
             ar.read_csv(file_path)
 
     def test_read_with_nulls(self, csv_with_nulls):
@@ -174,3 +175,15 @@ class TestScanCsv:
         schema = ar.scan_csv(csv_path, encoding="latin-1")
 
         assert schema == {"name": "string"}
+
+    def test_scan_binary_file_rejection(self, tmp_path):
+        file_path = str(tmp_path / "data.csv")
+
+        with open(file_path, "wb") as f:
+            f.write(b"col1,col2\n\0binary\0,data\n")
+
+        with pytest.raises(
+            ar.CsvReadError,
+            match="CSV input contains NUL bytes and appears to be binary or corrupted",
+        ):
+            ar.scan_csv(file_path)
