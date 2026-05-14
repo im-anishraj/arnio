@@ -95,6 +95,22 @@ The `pipeline()` function in Python accepts a list of declarative steps.
 2. **C++ Execution**: For natively supported operations, the Python wrapper calls the C++ function directly, passing the `Frame` pointer. The operation modifies the data or returns a new `Frame` entirely within C++.
 3. **Python Fallback**: If a step is registered via pure Python (`ar.register_step()`), the `Frame` is temporarily converted to a pandas DataFrame, the Python function executes, and the result is converted back. *(Note: This incurs a conversion penalty and is intended for prototyping or operations not yet supported in C++).*
 
+## CSV Parsing Limitations and Troubleshooting
+
+Arnio follows standard RFC 4180-style CSV parsing behavior. Malformed CSV input may raise parsing errors or produce inconsistent results.
+
+Common unsupported or problematic cases include:
+
+- Unclosed or malformed quoted fields
+- Inconsistent row widths
+- Delimiter mismatches
+- Missing header rows
+- Non-UTF-8 encoded files
+- Binary or corrupted input files
+
+For practical examples and fixes, see:
+- [Bad CSV Troubleshooting Guide](docs/bad_csv_troubleshooting.md)
+
 ## 6. Converting to Pandas
 
 The `to_pandas()` function is the most critical boundary. It uses the NumPy C-API (via pybind11's buffer protocol) to expose the underlying C++ `std::vector` memory directly to pandas, avoiding expensive element-by-element copies where possible (zero-copy for numerics and booleans). String columns currently require instantiation of Python `str` objects.
