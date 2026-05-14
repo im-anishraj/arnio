@@ -303,10 +303,10 @@ clean = ar.pipeline(frame, [
 
 | Version | Focus | Status |
 |:---:|:---|:---:|
-| **v0.2** | C++ pipeline optimization · speed parity with pandas · hash-based deduplication | 🔨 Active |
-| **v0.3** | Chunked / streaming processing · Parquet & JSON readers | 📋 Planned |
-| **v0.4** | Parallel column processing · SIMD string operations | 💭 Exploring |
 | **v1.0** | Stable release · cross-platform wheels · CI/CD · PyPI publishing · Google Colab support | ✅ Shipped |
+| **v1.1** | C++ pipeline optimization · speed parity with pandas · hash-based deduplication | 🔨 Active |
+| **v1.2** | Chunked / streaming processing · Parquet & JSON readers | 📋 Planned |
+| **v1.3** | Parallel column processing · SIMD string operations | 💭 Exploring |
 
 <br>
 
