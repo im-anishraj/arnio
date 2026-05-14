@@ -175,7 +175,7 @@ class TestScanCsv:
         schema = ar.scan_csv(csv_path, encoding="latin-1")
 
         assert schema == {"name": "string"}
-        
+
     def test_scan_binary_file_rejection(self, tmp_path):
         file_path = str(tmp_path / "data.csv")
 

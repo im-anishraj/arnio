@@ -86,7 +86,10 @@ def read_csv(
     Raises
     ------
     ValueError
-        If file format is unsupported or file appears binary.
+        If file format is unsupported.
+
+    CsvReadError
+        If CSV input contains NUL bytes and appears binary or corrupted.
 
     Examples
     --------
@@ -107,7 +110,7 @@ def read_csv(
         with open(path, "rb") as f:
             if b"\0" in f.read(1024):
                 raise CsvReadError(
-                    f"CSV input contains NUL bytes and appears to be binary or corrupted"
+                    "CSV input contains NUL bytes and appears to be binary or corrupted"
                 )
     except FileNotFoundError:
         pass  # Let C++ backend handle or raise standard error
@@ -159,8 +162,11 @@ def scan_csv(
 
     Raises
     ------
-    ValueError
-        If file format is unsupported or file appears binary.
+        ValueError
+        If file format is unsupported.
+
+    CsvReadError
+        If CSV input contains NUL bytes and appears binary or corrupted.
 
     Examples
     --------
@@ -183,7 +189,7 @@ def scan_csv(
         with open(path, "rb") as f:
             if b"\0" in f.read(1024):
                 raise CsvReadError(
-                    f"CSV input contains NUL bytes and appears to be binary or corrupted"
+                    "CSV input contains NUL bytes and appears to be binary or corrupted"
                 )
     except FileNotFoundError:
         pass
