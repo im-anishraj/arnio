@@ -286,11 +286,12 @@ Small differences are expected across CPUs, operating systems, compilers, Python
 
 ## 🧰 Cleaning primitives
 
-Every operation below runs natively in C++. No Python loops.
+Most operations below run natively in C++. The current `filter_rows` step uses the Python pipeline backend and may be optimized in C++ later.
 
 | Primitive | What it does | Example |
 |:---|:---|:---|
 | `drop_nulls` | Remove rows with null/empty values | `ar.drop_nulls(frame, subset=["age"])` |
+| `filter_rows` | Filter rows using comparison operators | `ar.filter_rows(frame, column="age", op=">", value=18)` |
 | `fill_nulls` | Replace nulls with a scalar | `ar.fill_nulls(frame, 0, subset=["revenue"])` |
 | `drop_duplicates` | Deduplicate rows (first/last/none) | `ar.drop_duplicates(frame, keep="first")` |
 | `strip_whitespace` | Trim leading/trailing spaces from strings | `ar.strip_whitespace(frame)` |
@@ -309,6 +310,35 @@ clean = ar.pipeline(frame, [
     ("drop_duplicates", {"keep": "first"}),
 ])
 ```
+### 🔎 Filter rows inside pipelines
+
+Use `filter_rows` to keep only rows matching a condition.
+
+```python
+clean = ar.pipeline(frame, [
+    ("filter_rows", {
+        "column": "revenue",
+        "op": ">=",
+        "value": 1000
+    }),
+])
+```
+
+Supported operators:
+
+- `>`
+- `<`
+- `>=`
+- `<=`
+- `==`
+- `!=`
+
+Works with:
+
+- integers
+- floats
+- strings
+- booleans
 
 <br>
 
