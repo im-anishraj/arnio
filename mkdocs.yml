@@ -1,0 +1,28 @@
+site_name: Arnio API Reference
+site_description: API reference documentation for Arnio – Fast CSV processing and data cleaning
+theme:
+  name: material
+  palette:
+    primary: indigo
+  features:
+    - navigation.instant
+    - navigation.sections
+    - content.code.copy
+
+nav:
+  - Home: index.md
+  - API Reference:
+    - I/O: api/io.md
+    - Cleaning: api/cleaning.md
+    - Conversion: api/convert.md
+    - Pipeline: api/pipeline.md
+    - Schema Validation: api/schema.md
+    - Data Quality: api/quality.md
+    - Exceptions: api/exceptions.md
+
+markdown_extensions:
+  - pymdownx.highlight
+  - pymdownx.superfences
+  - admonition
+  - toc:
+      permalink: true
