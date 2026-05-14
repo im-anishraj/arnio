@@ -318,6 +318,8 @@ clean = ar.pipeline(frame, [
 
 ## 📊 Pandas Dtype Support Matrix
 
+## 📊 Pandas Dtype Support Matrix
+
 This table helps users understand which pandas dtypes and workflows are fully supported, partially supported, unsupported, or planned.
 
 If a dtype is partially supported, users may need conversion before processing. Unsupported dtypes should raise clear errors where applicable.
@@ -326,13 +328,13 @@ If a dtype is partially supported, users may need conversion before processing. 
 |---|---|---|
 | `int64` | ✅ Supported | Fully supported with native C++ columnar storage |
 | `float64` | ✅ Supported | Fully supported with zero-copy conversion where possible |
+| `bool` | ✅ Supported | Native supported boolean type |
 | `string` | ✅ Supported | Recommended over `object` dtype for text workflows |
-| `datetime64[ns]` | ✅ Supported | Standard datetime workflows are supported |
-| `object` | ⚠️ Partial | Supported with limitations depending on mixed values |
-| `boolean` | ⚠️ Partial | Some workflows may require explicit conversion |
-| `category` | ⚠️ Partial | Limited compatibility in some operations |
+| `datetime64[ns]` | ⚠️ Limited | Usually converted before processing, not natively supported |
+| `category` | ⚠️ Limited | May require conversion before pipeline execution |
+| `object` (mixed columns) | ⚠️ Limited | Mixed object columns reduce type inference reliability |
+| nullable pandas dtypes (`Int64`, `boolean`) | 📋 Planned | Additional null semantics handling is planned |
 | `timedelta64[ns]` | ❌ Unsupported | Not currently supported |
-| `Int64` (nullable integer) | 📋 Planned | Support improvements planned for future releases |
 
 ### Notes
 

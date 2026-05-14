@@ -47,45 +47,39 @@ A `Frame` is an ordered collection of `Column` objects, representing a 2D datase
 
 ## 4. Pandas Dtype Compatibility
 
-Arnio supports the most common pandas dtypes directly through its native C++ columnar model, while some advanced or mixed dtypes may require conversion or are currently unsupported.
-
+Arnio supports a focused set of pandas dtypes directly through its native C++ columnar model. Some advanced pandas dtypes are currently handled through conversion, have limited support, or are planned for future improvements.
 This section helps users understand which dtype workflows are fully supported, partially supported, unsupported, or planned.
 
 ### Fully Supported
-
-The following dtypes are fully supported and map efficiently to strongly typed C++ vectors:
-
+The following dtypes are natively supported and map efficiently to strongly typed C++ vectors:
 - `int64`
 - `float64`
+- `bool`
 - `string`
-- `datetime64[ns]`
-
 These allow efficient parsing, cleaning operations, and zero-copy or near zero-copy conversion back to pandas where possible.
 
-### Partially Supported
-
-The following dtypes are partially supported and may require preprocessing depending on the workflow:
-
-- `object`
-- `boolean`
+### Limited / Converted Support
+The following dtypes are not natively supported but may work through conversion or preprocessing depending on the workflow:
+- `datetime64[ns]`
 - `category`
+- mixed `object` columns
+These may require conversion before pipeline execution. Mixed object columns can reduce type inference reliability, and categorical workflows may require normalization before cleaning operations.
 
-These may work depending on column consistency and operation type. Mixed `object` columns, categorical operations, and some boolean workflows may require explicit conversion before pipeline execution.
+### Planned Support
+The following pandas-specific nullable dtypes require additional handling for null semantics and conversion consistency:
+- nullable integer types such as `Int64`
+- nullable boolean dtype such as `boolean`
+Support improvements for these dtypes are planned for future releases.
 
-### Currently Unsupported / Planned
-
-The following dtypes are currently unsupported or planned for future improvements:
-
+### Currently Unsupported
+The following dtype is currently unsupported:
 - `timedelta64[ns]`
-- Nullable integer types such as `Int64`
 
-These require additional handling for null semantics, type inference improvements, and conversion consistency.
+This requires additional parsing and inference support in the C++ runtime and is not yet available.
 
 ### User-facing Behavior
-
-When unsupported dtypes are encountered, Arnio should provide clear user-facing errors instead of silent failures.
-
-Users are encouraged to prefer strongly typed columns such as `int64`, `float64`, and `string` for best performance and compatibility.
+When unsupported or partially supported dtypes are encountered, Arnio should provide clear user-facing errors instead of silent failures.
+For best performance and compatibility, users are encouraged to prefer strongly typed columns such as `int64`, `float64`, `bool`, and `string`.
 
 ## 5. Pipeline Execution
 
