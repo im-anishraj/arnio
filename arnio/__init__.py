@@ -17,6 +17,7 @@ from .cleaning import (
     drop_duplicates,
     drop_nulls,
     fill_nulls,
+    filter_rows,
     normalize_case,
     rename_columns,
     strip_whitespace,
@@ -56,6 +57,7 @@ __all__ = [
     # Cleaning
     "drop_nulls",
     "fill_nulls",
+    "filter_rows",
     "drop_duplicates",
     "strip_whitespace",
     "normalize_case",

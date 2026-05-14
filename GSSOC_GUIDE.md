@@ -40,7 +40,7 @@ Keep your PR focused, avoid editing unrelated files, and keep formatting-only ch
 Do not open duplicate PRs for the same issue. Unassigned duplicate PRs do not count as accepted GSSoC work.
 
 **Where should I ask questions if I get stuck?**
-Use GitHub Discussions for onboarding and general questions, and use issue comments for task-specific updates.
+Use Discord for quick setup or onboarding help, GitHub Discussions for general questions, and issue or PR comments as the source of truth for task-specific work and reviews.
 
 **What information should I include when asking for help?**
 Share what you tried, the exact command or code, the error output, and your operating system and Python version.

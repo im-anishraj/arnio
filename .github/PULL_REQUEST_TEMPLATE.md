@@ -1,6 +1,8 @@
 ## Summary
 <!-- What changed and why? Keep this short but specific. -->
 
+<!-- Need quick setup or contribution help? Join Discord: https://discord.gg/xsEw7r78M -->
+
 ## Linked issue
 <!-- Use "Fixes #123" when the PR fully resolves an issue. Use "Refs #123" for partial work. -->
 
