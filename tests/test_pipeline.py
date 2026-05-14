@@ -174,3 +174,19 @@ def test_filter_rows_invalid_operator():
         ar.pipeline(
             frame, [("filter_rows", {"column": "age", "op": "invalid", "value": 25})]
         )
+
+
+def test_filter_rows_direct_api():
+    import pandas as pd
+
+    import arnio as ar
+
+    df = pd.DataFrame({"age": [20, 30, 40]})
+
+    frame = ar.from_pandas(df)
+
+    result = ar.filter_rows(frame, column="age", op=">", value=25)
+
+    result_df = ar.to_pandas(result)
+
+    assert list(result_df["age"]) == [30, 40]
