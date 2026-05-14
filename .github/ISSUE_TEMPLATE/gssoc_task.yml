@@ -1,0 +1,78 @@
+name: GSSoC task proposal
+description: Maintainer-scoped task for GSSoC contributors.
+title: "GSSoC: "
+labels: ["gssoc", "status: needs triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template for well-scoped contributor tasks. Keep the issue focused enough for one pull request.
+
+  - type: dropdown
+    id: track
+    attributes:
+      label: Track
+      options:
+        - CSV parser and I/O
+        - C++ cleaning engine
+        - Python API
+        - Data quality engine
+        - Schema validation
+        - pandas interoperability
+        - Performance
+        - Testing
+        - Documentation
+        - Developer experience
+        - Website
+    validations:
+      required: true
+
+  - type: dropdown
+    id: level
+    attributes:
+      label: GSSoC level
+      options:
+        - Level 1 - beginner
+        - Level 2 - intermediate
+        - Level 3 - advanced
+        - Needs maintainer decision
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Why does this task matter?
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: What should the contributor change?
+      placeholder: |
+        - Update ...
+        - Add tests for ...
+        - Document ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Objective checks for reviewers.
+      placeholder: |
+        - [ ] ...
+        - [ ] Tests pass locally and in CI
+        - [ ] Public behavior is documented
+    validations:
+      required: true
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes for contributors
+      description: Helpful files, implementation hints, or known constraints.

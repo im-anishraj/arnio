@@ -356,7 +356,7 @@ This is the layer pandas does not try to own: profiling, data contracts, row-lev
 
 ## 🤝 Contribute
 
-Arnio is a **[GSSoC 2026](https://gssoc.girlscript.tech/)** project with **55+ open issues** across all skill levels.
+Arnio is a **[GSSoC 2026](https://gssoc.girlscript.tech/)** project with a structured contributor backlog across beginner, intermediate, and advanced tracks.
 
 ### You don't need C++ to contribute
 
@@ -400,8 +400,11 @@ pytest tests/ -v
 
 > **PR titles must follow [Conventional Commits](https://www.conventionalcommits.org/)** — `feat:`, `fix:`, `docs:`, `chore:`. Our release pipeline auto-generates changelogs from these.
 
+For GSSoC contributors, please read **[GSSOC_GUIDE.md](GSSOC_GUIDE.md)** before asking to be assigned. It explains issue claiming, contribution levels, review expectations, and what maintainers look for in a strong PR.
+
 <p align="center">
 <a href=".github/CONTRIBUTING.md"><b>📖 Full Contributing Guide</b></a>&ensp;·&ensp;
+<a href="GSSOC_GUIDE.md"><b>GSSoC Guide</b></a>&ensp;·&ensp;
 <a href="https://github.com/im-anishraj/arnio/issues"><b>🐛 Open Issues</b></a>&ensp;·&ensp;
 <a href="https://github.com/im-anishraj/arnio/discussions"><b>💬 Discussions</b></a>
 </p>

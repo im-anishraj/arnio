@@ -1,8 +1,11 @@
 blank_issues_enabled: false
 contact_links:
-  - name: 💬 Questions & Discussion
+  - name: Questions and discussion
     url: https://github.com/im-anishraj/arnio/discussions
     about: Ask questions or start a discussion instead of opening an issue.
-  - name: 📖 Contributing Guide
+  - name: GSSoC contributor guide
+    url: https://github.com/im-anishraj/arnio/blob/main/GSSOC_GUIDE.md
+    about: Read this before claiming a GSSoC issue.
+  - name: Contributing guide
     url: https://github.com/im-anishraj/arnio/blob/main/.github/CONTRIBUTING.md
     about: Read this before making your first contribution.

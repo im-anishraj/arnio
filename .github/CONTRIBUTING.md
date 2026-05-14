@@ -1,6 +1,8 @@
 # Contributing to Arnio
 
-First off, thank you for considering contributing to Arnio! Whether you're fixing a bug, adding a new pipeline step, or improving documentation, your help makes this project better.
+First off, thank you for considering contributing to Arnio. Whether you're fixing a bug, adding a new pipeline step, improving tests, or writing documentation, your help makes the project stronger.
+
+If you are contributing through GSSoC 2026, read [GSSOC_GUIDE.md](../GSSOC_GUIDE.md) before asking to be assigned.
 
 ## Quick Start (Local Setup)
 
@@ -76,11 +78,22 @@ def test_remove_special_chars(sample_csv):
 ## Pull Request Process
 
 1. Fork the repo and create your branch from `main`.
-2. If you've added code that should be tested, add tests.
-3. If you've changed APIs, update the documentation.
-4. Ensure the test suite passes (`make test`).
-5. Ensure your code passes linting (`make lint`). This is a **required** pre-PR step.
-6. Issue that pull request! Ensure your PR title follows **Conventional Commits**.
+2. Claim one issue by commenting with your approach. Wait for maintainer confirmation before starting GSSoC-scored work.
+3. Keep your PR focused. One issue should normally mean one pull request.
+4. If you've added code that should be tested, add tests.
+5. If you've changed public behavior, update documentation or examples.
+6. Ensure the test suite passes (`make test`).
+7. Ensure your code passes linting (`make lint`). This is a required pre-PR step.
+8. Open the pull request and link the issue with `Fixes #issue-number` when complete.
+9. Ensure your PR title follows **Conventional Commits**.
+
+### Review expectations
+
+- Do not open duplicate PRs for the same issue.
+- Do not mix unrelated formatting, refactors, and features in one PR.
+- Do not edit generated files, build output, cache folders, or local logs.
+- Be patient during review. Maintainers may ask for tests, edge cases, or a narrower scope.
+- If you stop working on an assigned issue, please comment so it can be reassigned.
 
 ### Commit Message Convention
 We use an automated release system that relies on [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/). Your PR title must use one of the following prefixes:

@@ -1,0 +1,16 @@
+title: "[Show and tell] "
+labels: ["type: discussion"]
+body:
+  - type: textarea
+    id: project
+    attributes:
+      label: What did you build or try?
+      description: Share a workflow, benchmark, notebook, tutorial, or learning.
+    validations:
+      required: true
+
+  - type: textarea
+    id: details
+    attributes:
+      label: Details
+      description: Links, screenshots, benchmark numbers, or code snippets.

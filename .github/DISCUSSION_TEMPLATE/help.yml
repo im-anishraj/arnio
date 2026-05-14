@@ -1,0 +1,23 @@
+title: "[Help] "
+labels: ["question"]
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: What are you trying to do?
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Include code, data shape, platform, and what you already tried.
+      render: markdown
+
+  - type: input
+    id: version
+    attributes:
+      label: Arnio version
+      placeholder: "1.1.0"

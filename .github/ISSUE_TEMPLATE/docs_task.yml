@@ -1,0 +1,43 @@
+name: Documentation task
+description: Improve docs, examples, tutorials, website content, or contributor guidance.
+title: "Docs: "
+labels: ["type: docs", "area: docs", "status: needs triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What documentation is missing or unclear?
+      description: Point to a file, README section, API, website page, or example.
+    validations:
+      required: true
+
+  - type: textarea
+    id: audience
+    attributes:
+      label: Target reader
+      description: Who should this help?
+      placeholder: "New contributor, pandas user, C++ contributor, maintainer, package user, etc."
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Suggested scope
+      placeholder: |
+        - Add ...
+        - Update ...
+        - Include an example for ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      placeholder: |
+        - [ ] Clear code sample included where useful
+        - [ ] Links are valid
+        - [ ] Terminology matches the README and API
+    validations:
+      required: true

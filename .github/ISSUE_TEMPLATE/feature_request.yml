@@ -1,13 +1,12 @@
-name: ✨ Feature Request
-description: Suggest a new feature or improvement for Arnio
+name: Feature request
+description: Propose a new API, capability, integration, or user-facing improvement.
 title: "Feature: "
-labels: ["feature"]
+labels: ["type: feature", "status: needs triage"]
 body:
   - type: markdown
     attributes:
       value: |
-        Have an idea to make Arnio better? We'd love to hear it!
-        If you're interested in implementing this yourself, mention it below — contributions are always welcome.
+        Arnio is focused on fast, reliable data preparation before pandas. Please connect your idea to a real workflow.
 
   - type: textarea
     id: problem
@@ -34,6 +33,27 @@ body:
       required: true
 
   - type: textarea
+    id: user-story
+    attributes:
+      label: User story
+      description: Who needs this, and when would they use it?
+      placeholder: "As a data analyst cleaning vendor CSV files, I want ... so that ..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: What would make this feature complete?
+      placeholder: |
+        - [ ] Public API is documented
+        - [ ] Unit tests cover success and failure cases
+        - [ ] Example added when useful
+    validations:
+      required: true
+
+  - type: textarea
     id: alternatives
     attributes:
       label: Alternatives considered
@@ -49,6 +69,9 @@ body:
         - New pipeline step (C++)
         - CSV reader / I/O
         - Performance optimization
+        - Data profiling / quality engine
+        - Schema validation
+        - pandas interoperability
         - API design
         - Documentation
         - CI / Infrastructure
@@ -57,15 +80,38 @@ body:
       required: true
 
   - type: dropdown
+    id: difficulty
+    attributes:
+      label: Expected difficulty
+      description: If you are not sure, choose "Needs maintainer review".
+      options:
+        - Good first issue
+        - Intermediate
+        - Advanced
+        - Needs maintainer review
+    validations:
+      required: true
+
+  - type: dropdown
     id: willing
     attributes:
       label: Would you like to implement this?
       options:
-        - "Yes — I'd like to submit a PR"
-        - "Maybe — I'd need guidance"
-        - "No — just suggesting"
+        - "Yes - I'd like to submit a PR"
+        - "Maybe - I'd need guidance"
+        - "No - just suggesting"
     validations:
       required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-flight checks
+      options:
+        - label: I searched existing issues and did not find a duplicate.
+          required: true
+        - label: This request fits Arnio's goal of reliable data preparation, profiling, validation, or pandas handoff.
+          required: true
 
   - type: textarea
     id: additional

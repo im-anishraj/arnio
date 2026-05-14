@@ -1,0 +1,43 @@
+name: Testing task
+description: Add or improve unit, integration, fuzz, CI, packaging, or benchmark coverage.
+title: "Test: "
+labels: ["type: tests", "status: needs triage"]
+body:
+  - type: textarea
+    id: gap
+    attributes:
+      label: Coverage gap
+      description: Which behavior is untested or weakly tested?
+    validations:
+      required: true
+
+  - type: textarea
+    id: files
+    attributes:
+      label: Relevant files
+      description: Mention source and test files that probably need changes.
+      placeholder: "arnio/io.py, cpp/src/csv_reader.cpp, tests/test_csv.py"
+    validations:
+      required: true
+
+  - type: textarea
+    id: cases
+    attributes:
+      label: Test cases to cover
+      placeholder: |
+        - ...
+        - ...
+        - ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      placeholder: |
+        - [ ] Tests fail before the fix when possible
+        - [ ] Tests pass locally
+        - [ ] CI remains green
+    validations:
+      required: true

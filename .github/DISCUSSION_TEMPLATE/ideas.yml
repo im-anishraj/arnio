@@ -1,0 +1,29 @@
+title: "[Idea] "
+labels: ["type: discussion"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this for early ideas that are not ready to become implementation issues yet.
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: Idea
+      description: What should Arnio explore?
+    validations:
+      required: true
+
+  - type: textarea
+    id: workflow
+    attributes:
+      label: Real-world workflow
+      description: Which user problem or data workflow would this improve?
+    validations:
+      required: true
+
+  - type: textarea
+    id: tradeoffs
+    attributes:
+      label: Tradeoffs or open questions
+      description: What needs design discussion before this becomes an issue?

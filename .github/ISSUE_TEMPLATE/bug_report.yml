@@ -1,27 +1,47 @@
-name: 🐛 Bug Report
-description: Report a bug or unexpected behavior in Arnio
+name: Bug report
+description: Report a reproducible runtime, API, packaging, or documentation bug.
 title: "Bug: "
-labels: ["bug"]
+labels: ["type: bug", "status: needs triage"]
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for reporting a bug! Please fill out the sections below so we can reproduce and fix it quickly.
+        Thanks for helping make Arnio more reliable. A small reproducible example helps us triage quickly.
 
   - type: textarea
     id: description
     attributes:
-      label: Describe the bug
-      description: A clear and concise description of what went wrong.
+      label: What happened?
+      description: Describe the failure, crash, incorrect result, confusing behavior, or broken documentation.
       placeholder: "When I call ar.pipeline(...), it raises a TypeError instead of..."
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Pick the closest area. Choose "Not sure" if you do not know.
+      options:
+        - CSV parser / read_csv / scan_csv
+        - C++ cleaning engine
+        - Python API / ArFrame
+        - Pipeline / custom steps
+        - Data profiling / quality reports
+        - Schema validation
+        - pandas conversion
+        - Packaging / install / wheels
+        - Documentation / examples / website
+        - CI / developer tooling
+        - Not sure
     validations:
       required: true
 
   - type: textarea
     id: reproduction
     attributes:
-      label: Steps to reproduce
-      description: Minimal code or steps to reproduce the issue.
+      label: Minimal reproduction
+      description: Include the smallest code snippet, CSV sample, command, or link that reproduces the issue.
       placeholder: |
         ```python
         import arnio as ar
@@ -37,7 +57,7 @@ body:
     id: expected
     attributes:
       label: Expected behavior
-      description: What did you expect to happen?
+      description: What should Arnio do instead?
     validations:
       required: true
 
@@ -45,7 +65,22 @@ body:
     id: actual
     attributes:
       label: Actual behavior
-      description: What actually happened? Include the full error traceback if applicable.
+      description: Include the full traceback, command output, or incorrect result.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: impact
+    attributes:
+      label: Impact
+      options:
+        - Blocks installation or import
+        - Causes crash or data loss
+        - Produces incorrect data
+        - Breaks documented API
+        - Performance regression
+        - Confusing UX or documentation
+        - Minor issue
     validations:
       required: true
 
@@ -54,7 +89,15 @@ body:
     attributes:
       label: Arnio version
       description: "Run `python -c \"import arnio; print(arnio.__version__)\"` to find this."
-      placeholder: "1.0.0"
+      placeholder: "1.1.0"
+    validations:
+      required: true
+
+  - type: input
+    id: install-method
+    attributes:
+      label: Install method
+      placeholder: "pip install arnio, pip install -e .[dev], built from source, Google Colab, etc."
     validations:
       required: true
 
@@ -75,9 +118,26 @@ body:
     id: python-version
     attributes:
       label: Python version
-      placeholder: "3.12"
+      placeholder: "3.12.4"
     validations:
       required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment details
+      description: Paste relevant output from `pip show arnio`, compiler details, shell, CI URL, or notebook environment.
+      render: shell
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-flight checks
+      options:
+        - label: I searched existing issues and did not find a duplicate.
+          required: true
+        - label: I included a minimal reproduction or explained why one is not possible.
+          required: true
 
   - type: textarea
     id: additional

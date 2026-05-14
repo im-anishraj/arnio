@@ -1,0 +1,61 @@
+# Label taxonomy for maintainers.
+# Keep labels focused on type, area, priority, difficulty, size, and workflow state.
+
+types:
+  - "type: bug"
+  - "type: feature"
+  - "type: docs"
+  - "type: tests"
+  - "type: refactor"
+  - "type: performance"
+  - "type: security"
+  - "type: ci"
+  - "type: discussion"
+
+areas:
+  - "area: csv-parser"
+  - "area: cpp-core"
+  - "area: python-api"
+  - "area: pipeline"
+  - "area: cleaning"
+  - "area: pandas-interop"
+  - "area: quality"
+  - "area: schema"
+  - "area: docs"
+  - "area: website"
+  - "area: ci-packaging"
+  - "area: benchmarks"
+  - "area: examples"
+  - "area: developer-experience"
+  - "area: release"
+
+priorities:
+  - "priority: critical"
+  - "priority: high"
+  - "priority: medium"
+  - "priority: low"
+
+difficulty:
+  - "difficulty: beginner"
+  - "difficulty: intermediate"
+  - "difficulty: advanced"
+
+gssoc:
+  - "gssoc"
+  - "gssoc: good first issue"
+  - "gssoc: level 1"
+  - "gssoc: level 2"
+  - "gssoc: level 3"
+
+workflow:
+  - "status: needs triage"
+  - "status: ready"
+  - "status: claimed"
+  - "status: blocked"
+  - "status: needs maintainer"
+
+size:
+  - "size: xs"
+  - "size: s"
+  - "size: m"
+  - "size: l"

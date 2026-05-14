@@ -1,0 +1,41 @@
+name: Performance task
+description: Report or propose parser, conversion, memory, or C++ performance work.
+title: "Performance: "
+labels: ["type: performance", "status: needs triage"]
+body:
+  - type: textarea
+    id: workload
+    attributes:
+      label: Workload
+      description: Describe the dataset shape, columns, operations, and environment.
+      placeholder: "1M rows x 12 columns, quoted CSV, drop_duplicates + strip_whitespace..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: baseline
+    attributes:
+      label: Current behavior or baseline
+      description: Include timing, memory, benchmark command, profiler output, or comparison against pandas.
+    validations:
+      required: true
+
+  - type: textarea
+    id: target
+    attributes:
+      label: Target improvement
+      description: What should improve, and how will we know it worked?
+      placeholder: "Reduce peak memory, avoid a second copy, improve parser throughput, reduce Python round-trip overhead..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      placeholder: |
+        - [ ] Reproducible benchmark or regression test added
+        - [ ] Improvement is measured before/after
+        - [ ] No correctness regressions in existing tests
+    validations:
+      required: true
