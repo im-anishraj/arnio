@@ -86,9 +86,34 @@ schema = ar.scan_csv("100GB_file.csv")
 ```
 
 Useful for exploring datasets before committing memory.
-</details>
-
 <details>
+<summary><b>👀 Preview rows without loading everything</b></summary>
+<br>
+
+`preview()` reads only the first `n` rows directly from the C++ frame — no pandas conversion triggered.
+
+```python
+frame = ar.read_csv("huge_file.csv")
+
+print(frame.preview())      # first 5 rows (default)
+print(frame.preview(n=10))  # first 10 rows
+```
+
+Example output:
+
+```text
+ArFrame preview (showing 5 of 1000000 rows):
+id    name     age
+----  -------  ---
+1     Alice    30
+2     Bob      25
+3     Charlie  35
+4     Diana    28
+5     Eve      22
+```
+
+Raises `ValueError` for invalid `n` (zero, negative, or non-integer).
+</details>
 <summary><b>🧩 Add custom steps without touching C++</b></summary>
 <br>
 
