@@ -269,7 +269,7 @@ API Clarity         Imperative    Declarative
 
 ## 🧰 Cleaning primitives
 
-Every operation below runs natively in C++. No Python loops.
+Most operations below run natively in C++. The current `filter_rows` step uses the Python pipeline backend and may be optimized in C++ later.
 
 | Primitive | What it does | Example |
 |:---|:---|:---|
