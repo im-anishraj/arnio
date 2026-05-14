@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <functional>
 #include <sstream>
 #include <stdexcept>
@@ -48,7 +49,12 @@ struct RowHash {
                 } else if (std::holds_alternative<int64_t>(cell)) {
                     h = std::hash<int64_t>{}(std::get<int64_t>(cell));
                 } else if (std::holds_alternative<double>(cell)) {
-                    h = std::hash<double>{}(std::get<double>(cell));
+                    double d = std::get<double>(cell);
+                    if (std::isnan(d)) {
+                        h = std::hash<int>{}(0xDEADBEEF);
+                    } else {
+                        h = std::hash<double>{}(d);
+                    }
                 } else if (std::holds_alternative<bool>(cell)) {
                     h = std::hash<bool>{}(std::get<bool>(cell));
                 }
@@ -70,7 +76,14 @@ struct RowEqual {
             if (col.is_null(lhs)) continue;
             auto cell_l = col.at(lhs);
             auto cell_r = col.at(rhs);
-            if (cell_l != cell_r) return false;
+            if (cell_l != cell_r) {
+                if (std::holds_alternative<double>(cell_l) && std::holds_alternative<double>(cell_r)) {
+                    if (std::isnan(std::get<double>(cell_l)) && std::isnan(std::get<double>(cell_r))) {
+                        continue;
+                    }
+                }
+                return false;
+            }
         }
         return true;
     }
