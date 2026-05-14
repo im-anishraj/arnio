@@ -21,6 +21,7 @@ _STEP_REGISTRY: dict[str, Callable] = {
     "drop_constant_columns": cleaning.drop_constant_columns,
     "clip_numeric": cleaning.clip_numeric,
     "strip_whitespace": cleaning.strip_whitespace,
+    "parse_bool_strings": cleaning.parse_bool_strings,
     "normalize_case": cleaning.normalize_case,
     "normalize_unicode": cleaning.normalize_unicode,
     "rename_columns": cleaning.rename_columns,
