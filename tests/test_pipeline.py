@@ -190,3 +190,22 @@ def test_filter_rows_direct_api():
     result_df = ar.to_pandas(result)
 
     assert list(result_df["age"]) == [30, 40]
+
+
+def test_pipeline_coalesce_columns():
+    import pandas as pd
+
+    import arnio as ar
+
+    frame = ar.from_pandas(
+        pd.DataFrame({"primary": [None, "a", None], "backup": ["x", "b", None]})
+    )
+
+    result = ar.pipeline(
+        frame, [("coalesce_columns", {"columns": ["primary", "backup"], "output_column": "resolved"})]
+    )
+
+    resolved = ar.to_pandas(result)["resolved"]
+    assert resolved.iloc[0] == "x"
+    assert resolved.iloc[1] == "a"
+    assert resolved.isna().iloc[2]

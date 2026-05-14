@@ -306,3 +306,19 @@ def filter_rows(frame, column, op, value):
     filtered = df[getattr(df[column], ops[op])(value)]
 
     return from_pandas(filtered) if is_arframe else filtered
+
+def coalesce_columns(frame: ArFrame, columns: list[str], output_column: str) -> ArFrame:
+    """Create a column from the first non-null value across fallback columns."""
+    if not columns:
+        raise ValueError("coalesce_columns requires at least one source column")
+
+    from .convert import from_pandas, to_pandas
+
+    df = to_pandas(frame)
+    missing = [column for column in columns if column not in df.columns]
+    if missing:
+        raise KeyError(f"Missing columns for coalesce_columns: {missing}")
+
+    result = df.copy()
+    result[output_column] = result[columns].bfill(axis=1).iloc[:, 0]
+    return from_pandas(result)
