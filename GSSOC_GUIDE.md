@@ -10,6 +10,41 @@ Arnio is a GSSoC 2026 project focused on fast, reliable data preparation before 
 4. Wait for maintainer assignment before starting scored GSSoC work.
 5. Keep one issue to one PR unless a maintainer asks otherwise.
 
+## GSSoC FAQ
+
+**How do I set up the project locally?**
+Clone the repo, install dev dependencies with `pip install -e ".[dev]"`, install pre-commit hooks, and run `pytest tests/ -v`. On Windows, install Visual Studio Build Tools with the "Desktop development with C++" workload first.
+
+**How does issue assignment work?**
+For GSSoC-scored work, maintainers expect contributors to comment with a short implementation approach and wait for assignment before starting.
+
+**How do I claim an issue?**
+Read the issue carefully, search for existing PRs, then comment with a short plan so maintainers can review and assign the work.
+
+**Can I start working before I am assigned?**
+For scored GSSoC work, no. Wait for maintainer assignment before you start so work is not duplicated.
+
+**Should one PR cover more than one issue?**
+Usually no. Keep one issue to one PR unless a maintainer explicitly asks otherwise.
+
+**What should I expect during PR review?**
+Maintainers may ask for tests, doc updates, edge cases, or a narrower scope. Respond politely and clearly during review.
+
+**What testing or linting should I run before opening a PR?**
+Run tests before requesting review. A good local checklist is `pytest tests/ -v`, and if you are using the full contributor workflow, also run `make test` and `make lint`.
+
+**What contribution etiquette should I follow?**
+Keep your PR focused, avoid editing unrelated files, and keep formatting-only changes separate from feature work.
+
+**Can I open a PR if someone already has the issue or PR in progress?**
+Do not open duplicate PRs for the same issue. Unassigned duplicate PRs do not count as accepted GSSoC work.
+
+**Where should I ask questions if I get stuck?**
+Use GitHub Discussions for onboarding and general questions, and use issue comments for task-specific updates.
+
+**What information should I include when asking for help?**
+Share what you tried, the exact command or code, the error output, and your operating system and Python version.
+
 ## Good First Contributions
 
 Start with issues labeled:
