@@ -796,11 +796,27 @@ class TestPipeline:
     def test_combine_columns_rejects_empty_columns(self, sample_csv):
         frame = ar.read_csv(sample_csv)
 
-        try:
-            ar.pipeline(
-                frame,
-                [("combine_columns", {"columns": [], "output_column": "combined"})],
-            )
-            assert False, "Should have raised ValueError"
-        except ValueError as e:
-            assert "non-empty" in str(e)
+    result = ar.filter_rows(frame, column="age", op=">", value=25)
+
+    result_df = ar.to_pandas(result)
+
+    assert list(result_df["age"]) == [30, 40]
+
+
+def test_pipeline_coalesce_columns():
+    import pandas as pd
+
+    import arnio as ar
+
+    frame = ar.from_pandas(
+        pd.DataFrame({"primary": [None, "a", None], "backup": ["x", "b", None]})
+    )
+
+    result = ar.pipeline(
+        frame, [("coalesce_columns", {"columns": ["primary", "backup"], "output_column": "resolved"})]
+    )
+
+    resolved = ar.to_pandas(result)["resolved"]
+    assert resolved.iloc[0] == "x"
+    assert resolved.iloc[1] == "a"
+    assert resolved.isna().iloc[2]

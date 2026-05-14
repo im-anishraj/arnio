@@ -56,7 +56,7 @@ _STEP_REGISTRY: dict[str, Callable] = {
     "normalize_unicode": cleaning.normalize_unicode,
     "rename_columns": cleaning.rename_columns,
     "cast_types": cleaning.cast_types,
-    "combine_columns": cleaning.combine_columns,
+    "coalesce_columns": cleaning.coalesce_columns,
 }
 
 _REGISTRY_LOCK = Lock()
