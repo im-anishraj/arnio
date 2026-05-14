@@ -103,3 +103,61 @@ class TestPipeline:
             assert False, "Should have raised ValueError"
         except ValueError as e:
             assert "Expected a dict" in str(e)
+
+    def test_combine_columns_step(self, tmp_path):
+        path = tmp_path / "names.csv"
+        path.write_text("first,last,age\nAda,Lovelace,36\nGrace,Hopper,85\n")
+        frame = ar.read_csv(path)
+
+        result = ar.pipeline(
+            frame,
+            [
+                (
+                    "combine_columns",
+                    {
+                        "columns": ["first", "last"],
+                        "output_column": "full_name",
+                        "separator": " ",
+                    },
+                ),
+            ],
+        )
+
+        df = ar.to_pandas(result)
+        assert df["full_name"].tolist() == ["Ada Lovelace", "Grace Hopper"]
+        assert "first" in result.columns
+
+    def test_combine_columns_step_can_drop_original_columns(self, tmp_path):
+        path = tmp_path / "names.csv"
+        path.write_text("first,last\nAda,Lovelace\n")
+        frame = ar.read_csv(path)
+
+        result = ar.pipeline(
+            frame,
+            [
+                (
+                    "combine_columns",
+                    {
+                        "columns": ["first", "last"],
+                        "output_column": "full_name",
+                        "separator": " ",
+                        "drop_original": True,
+                    },
+                ),
+            ],
+        )
+
+        assert result.columns == ["full_name"]
+        assert ar.to_pandas(result)["full_name"].iloc[0] == "Ada Lovelace"
+
+    def test_combine_columns_rejects_empty_columns(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        try:
+            ar.pipeline(
+                frame,
+                [("combine_columns", {"columns": [], "output_column": "combined"})],
+            )
+            assert False, "Should have raised ValueError"
+        except ValueError as e:
+            assert "non-empty" in str(e)
