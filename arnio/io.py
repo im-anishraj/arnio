@@ -5,19 +5,60 @@ CSV reading functions.
 
 from __future__ import annotations
 
-from typing import Optional
+import os
+import tempfile
+from collections.abc import Iterator
+from contextlib import contextmanager
 
 from ._core import _CsvConfig, _CsvReader
+from .exceptions import CsvReadError
 from .frame import ArFrame
 
 
+@contextmanager
+def _utf8_csv_path(path: str, encoding: str) -> Iterator[str]:
+    """Return a UTF-8 file path for the C++ reader.
+
+    The native reader currently consumes UTF-8 bytes. For other encodings,
+    transcode through a temporary UTF-8 file so the public encoding parameter is
+    honored without leaking platform-specific decoding behavior through pybind.
+    """
+    if encoding.lower().replace("_", "-") in {"utf-8", "utf8"}:
+        yield path
+        return
+
+    tmp_name: str | None = None
+    try:
+        with open(path, encoding=encoding, newline="") as src:
+            with tempfile.NamedTemporaryFile(
+                "w", encoding="utf-8", newline="", suffix=".csv", delete=False
+            ) as tmp:
+                tmp.write(src.read())
+                tmp_name = tmp.name
+        yield tmp_name
+    except LookupError as e:
+        raise ValueError(f"Unknown encoding: {encoding}") from e
+    except UnicodeDecodeError as e:
+        raise CsvReadError(
+            f"Could not decode {path!r} using encoding {encoding!r}"
+        ) from e
+    except OSError as e:
+        raise CsvReadError(str(e)) from e
+    finally:
+        if tmp_name is not None:
+            try:
+                os.unlink(tmp_name)
+            except OSError:
+                pass
+
+
 def read_csv(
-    path: str,
+    path: str | os.PathLike[str],
     *,
     delimiter: str = ",",
     has_header: bool = True,
-    usecols: Optional[list[str]] = None,
-    nrows: Optional[int] = None,
+    usecols: list[str] | None = None,
+    nrows: int | None = None,
     encoding: str = "utf-8",
 ) -> ArFrame:
     """Read a CSV file into an ArFrame via C++ backend.
@@ -51,11 +92,12 @@ def read_csv(
     --------
     >>> frame = ar.read_csv("data.csv", delimiter=",", has_header=True)
     """
-    path_str = str(path).lower()
+    path = os.fspath(path)
+    path_lower = path.lower()
     if not (
-        path_str.endswith(".csv")
-        or path_str.endswith(".txt")
-        or path_str.endswith(".tsv")
+        path_lower.endswith(".csv")
+        or path_lower.endswith(".txt")
+        or path_lower.endswith(".tsv")
     ):
         raise ValueError(
             f"Unsupported file format: {path}. Only .csv, .txt, and .tsv are supported."
@@ -81,14 +123,23 @@ def read_csv(
         config.nrows = nrows
 
     reader = _CsvReader(config)
-    cpp_frame = reader.read(path)
+    try:
+        with _utf8_csv_path(path, encoding) as native_path:
+            cpp_frame = reader.read(native_path)
+    except ValueError:
+        raise
+    except CsvReadError:
+        raise
+    except RuntimeError as e:
+        raise CsvReadError(str(e)) from e
     return ArFrame(cpp_frame)
 
 
 def scan_csv(
-    path: str,
+    path: str | os.PathLike[str],
     *,
     delimiter: str = ",",
+    encoding: str = "utf-8",
 ) -> dict[str, str]:
     """Return schema (column names + inferred types) without loading data.
 
@@ -98,6 +149,8 @@ def scan_csv(
         Path to the CSV file. Supports .csv, .txt, and .tsv extensions.
     delimiter : str, default ","
         Field delimiter character.
+    encoding : str, default "utf-8"
+        File encoding. Non-UTF-8 inputs are transcoded before native scanning.
 
     Returns
     -------
@@ -115,11 +168,12 @@ def scan_csv(
     >>> print(schema)
     {'name': 'string', 'age': 'int64'}
     """
-    path_str = str(path).lower()
+    path = os.fspath(path)
+    path_lower = path.lower()
     if not (
-        path_str.endswith(".csv")
-        or path_str.endswith(".txt")
-        or path_str.endswith(".tsv")
+        path_lower.endswith(".csv")
+        or path_lower.endswith(".txt")
+        or path_lower.endswith(".tsv")
     ):
         raise ValueError(
             f"Unsupported file format: {path}. Only .csv, .txt, and .tsv are supported."
@@ -136,5 +190,10 @@ def scan_csv(
 
     config = _CsvConfig()
     config.delimiter = delimiter
+    config.encoding = encoding
     reader = _CsvReader(config)
-    return reader.scan_schema(path)
+    try:
+        with _utf8_csv_path(path, encoding) as native_path:
+            return reader.scan_schema(native_path)
+    except RuntimeError as e:
+        raise CsvReadError(str(e)) from e

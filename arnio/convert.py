@@ -8,8 +8,60 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from ._core import _Frame, _DType
+from ._core import _DType, _Frame
 from .frame import ArFrame
+
+
+def _is_nested(value: object) -> bool:
+    return isinstance(value, (list, dict, tuple, set, np.ndarray))
+
+
+def _normalize_scalar(value: object) -> object:
+    if pd.isna(value):
+        return None
+    if isinstance(value, np.generic):
+        return value.item()
+    if not isinstance(value, (bool, int, float, str)):
+        return str(value)
+    return value
+
+
+def _scalar_kind(value: object) -> str:
+    if isinstance(value, bool):
+        return "bool"
+    if isinstance(value, int):
+        return "int"
+    if isinstance(value, float):
+        return "float"
+    return "string"
+
+
+def _series_to_python_values(series: pd.Series, col_name: object) -> list[object]:
+    values: list[object] = []
+    kinds: set[str] = set()
+
+    for raw in series.tolist():
+        if _is_nested(raw):
+            raise TypeError(
+                f"Unsupported nested/complex type in column '{col_name}': "
+                f"{type(raw).__name__}"
+            )
+
+        value = _normalize_scalar(raw)
+        values.append(value)
+        if value is not None:
+            kinds.add(_scalar_kind(value))
+
+    if "string" in kinds and len(kinds) > 1:
+        return [None if value is None else str(value) for value in values]
+
+    if "bool" in kinds and len(kinds) > 1:
+        return [None if value is None else str(value) for value in values]
+
+    if kinds == {"int", "float"}:
+        return [None if value is None else float(value) for value in values]
+
+    return values
 
 
 def to_pandas(frame: ArFrame) -> pd.DataFrame:
@@ -91,17 +143,7 @@ def from_pandas(df: pd.DataFrame) -> ArFrame:
     columns = {}
     for col_name in df.columns:
         series = df[col_name]
-        if series.dtype == object:
-            for val in series:
-                if isinstance(val, (list, dict, tuple, set, np.ndarray)):
-                    raise TypeError(
-                        f"Unsupported nested/complex type in column '{col_name}': {type(val).__name__}"
-                    )
-
-        # Convert pandas series to python list.
-        # This handles pd.NA natively by converting to None in the resulting list.
-        # It takes one boundary crossing per column.
-        columns[str(col_name)] = series.replace({pd.NA: None, np.nan: None}).tolist()
+        columns[str(col_name)] = _series_to_python_values(series, col_name)
 
     cpp_frame = _Frame.from_dict(columns)
     return ArFrame(cpp_frame)

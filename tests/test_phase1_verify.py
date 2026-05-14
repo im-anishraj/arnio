@@ -1,6 +1,7 @@
 """Verify Phase 1 implementation (to_pandas, from_pandas, registry)."""
 
 import pandas as pd
+
 import arnio as ar
 
 

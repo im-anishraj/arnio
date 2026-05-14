@@ -46,6 +46,82 @@ static std::string row_key(const Frame& frame, size_t row, const std::vector<siz
     return oss.str();
 }
 
+static std::string cell_to_string(const CellValue& cell) {
+    if (std::holds_alternative<std::string>(cell)) {
+        return std::get<std::string>(cell);
+    }
+    if (std::holds_alternative<int64_t>(cell)) {
+        return std::to_string(std::get<int64_t>(cell));
+    }
+    if (std::holds_alternative<double>(cell)) {
+        return std::to_string(std::get<double>(cell));
+    }
+    if (std::holds_alternative<bool>(cell)) {
+        return std::get<bool>(cell) ? "true" : "false";
+    }
+    return "";
+}
+
+static CellValue coerce_value(const CellValue& value, DType target) {
+    if (std::holds_alternative<std::monostate>(value)) {
+        return std::monostate{};
+    }
+
+    if (target == DType::STRING) {
+        return cell_to_string(value);
+    }
+
+    if (target == DType::INT64) {
+        if (std::holds_alternative<int64_t>(value)) return std::get<int64_t>(value);
+        if (std::holds_alternative<bool>(value)) {
+            return std::get<bool>(value) ? int64_t{1} : int64_t{0};
+        }
+        if (std::holds_alternative<double>(value)) {
+            return static_cast<int64_t>(std::get<double>(value));
+        }
+        if (std::holds_alternative<std::string>(value)) {
+            const auto& s = std::get<std::string>(value);
+            try {
+                size_t pos = 0;
+                int64_t parsed = std::stoll(s, &pos);
+                if (pos == s.size()) return parsed;
+            } catch (...) {
+            }
+        }
+    }
+
+    if (target == DType::FLOAT64) {
+        if (std::holds_alternative<double>(value)) return std::get<double>(value);
+        if (std::holds_alternative<int64_t>(value)) {
+            return static_cast<double>(std::get<int64_t>(value));
+        }
+        if (std::holds_alternative<bool>(value)) return std::get<bool>(value) ? 1.0 : 0.0;
+        if (std::holds_alternative<std::string>(value)) {
+            const auto& s = std::get<std::string>(value);
+            try {
+                size_t pos = 0;
+                double parsed = std::stod(s, &pos);
+                if (pos == s.size()) return parsed;
+            } catch (...) {
+            }
+        }
+    }
+
+    if (target == DType::BOOL) {
+        if (std::holds_alternative<bool>(value)) return std::get<bool>(value);
+        if (std::holds_alternative<int64_t>(value)) return std::get<int64_t>(value) != 0;
+        if (std::holds_alternative<double>(value)) return std::get<double>(value) != 0.0;
+        if (std::holds_alternative<std::string>(value)) {
+            std::string lower = std::get<std::string>(value);
+            std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+            if (lower == "true" || lower == "1") return true;
+            if (lower == "false" || lower == "0") return false;
+        }
+    }
+
+    throw std::invalid_argument("Fill value is incompatible with target column type");
+}
+
 // Helper: build a new frame from selected row indices
 static Frame select_rows(const Frame& frame, const std::vector<size_t>& row_indices) {
     std::vector<Column> new_cols;
@@ -88,9 +164,10 @@ Frame fill_nulls(const Frame& frame, const CellValue& value,
         const auto& src = frame.column(ci);
         if (targets.count(ci)) {
             Column col(src.name(), src.dtype());
+            CellValue fill_value = coerce_value(value, src.dtype());
             for (size_t r = 0; r < src.size(); ++r) {
                 if (src.is_null(r)) {
-                    col.push_back(value);
+                    col.push_back(fill_value);
                 } else {
                     col.push_back(src.at(r));
                 }
@@ -265,6 +342,10 @@ Frame cast_types(const Frame& frame, const std::unordered_map<std::string, std::
         }
 
         DType target = string_to_dtype(it->second);
+        if (target == DType::NULL_TYPE) {
+            throw std::invalid_argument("Unknown target dtype for column '" + src.name() +
+                                        "': " + it->second);
+        }
         Column col(src.name(), target);
 
         for (size_t r = 0; r < src.size(); ++r) {

@@ -5,6 +5,7 @@
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
+#include <unordered_set>
 
 namespace arnio {
 
@@ -21,6 +22,56 @@ inline void strip_utf8_bom(std::string& s) {
     if (s.size() >= 3 && static_cast<unsigned char>(s[0]) == 0xEF &&
         static_cast<unsigned char>(s[1]) == 0xBB && static_cast<unsigned char>(s[2]) == 0xBF) {
         s.erase(0, 3);
+    }
+}
+
+inline bool record_complete(const std::string& record) {
+    bool in_quotes = false;
+
+    for (size_t i = 0; i < record.size(); ++i) {
+        if (record[i] != '"') continue;
+
+        if (in_quotes && i + 1 < record.size() && record[i + 1] == '"') {
+            ++i;
+        } else {
+            in_quotes = !in_quotes;
+        }
+    }
+
+    return !in_quotes;
+}
+
+bool read_record(std::istream& file, std::string& record) {
+    record.clear();
+
+    std::string line;
+    while (std::getline(file, line)) {
+        if (!record.empty()) {
+            record.push_back('\n');
+        }
+        record += line;
+
+        if (record_complete(record)) {
+            return true;
+        }
+    }
+
+    if (!record.empty() && !record_complete(record)) {
+        throw std::runtime_error("Unterminated quoted CSV record");
+    }
+
+    return !record.empty();
+}
+
+void validate_header(const std::vector<std::string>& header) {
+    std::unordered_set<std::string> seen;
+    for (const auto& name : header) {
+        if (name.empty()) {
+            throw std::runtime_error("CSV header contains an empty column name");
+        }
+        if (!seen.insert(name).second) {
+            throw std::runtime_error("Duplicate column name: " + name);
+        }
     }
 }
 }  // namespace
@@ -147,17 +198,18 @@ Frame CsvReader::read(const std::string& path) const {
     std::vector<std::vector<std::string>> raw_data;
 
     // Read header
-    if (config_.has_header && std::getline(file, line)) {
+    if (config_.has_header && read_record(file, line)) {
         strip_utf8_bom(line);
         header = parse_line(line);
         for (auto& h : header) {
             trim_in_place(h);
         }
+        validate_header(header);
     }
 
     // Read all rows
     size_t row_count = 0;
-    while (std::getline(file, line)) {
+    while (read_record(file, line)) {
         if (config_.nrows.has_value() && row_count >= config_.nrows.value()) break;
         if (line.empty()) continue;
         raw_data.push_back(parse_line(line));
@@ -170,6 +222,7 @@ Frame CsvReader::read(const std::string& path) const {
         for (size_t i = 0; i < raw_data[0].size(); ++i) {
             header.push_back("col_" + std::to_string(i));
         }
+        validate_header(header);
     }
 
     size_t num_cols = header.size();
@@ -233,12 +286,13 @@ std::unordered_map<std::string, std::string> CsvReader::scan_schema(const std::s
     std::string line;
     std::vector<std::string> header;
 
-    if (std::getline(file, line)) {
+    if (read_record(file, line)) {
         strip_utf8_bom(line);
         header = parse_line(line);
         for (auto& h : header) {
             trim_in_place(h);
         }
+        validate_header(header);
     }
 
     // Read up to 100 rows for type inference
@@ -246,7 +300,7 @@ std::unordered_map<std::string, std::string> CsvReader::scan_schema(const std::s
     std::vector<DType> col_types(num_cols, DType::NULL_TYPE);
     size_t sample_count = 0;
 
-    while (std::getline(file, line) && sample_count < 100) {
+    while (sample_count < 100 && read_record(file, line)) {
         if (line.empty()) continue;
         auto fields = parse_line(line);
         for (size_t i = 0; i < num_cols && i < fields.size(); ++i) {

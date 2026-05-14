@@ -49,6 +49,32 @@ class TestPipeline:
         )
         assert result.shape[0] == 3
 
+    def test_pipeline_mapping_shorthand(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        result = ar.pipeline(
+            frame,
+            [
+                ("cast_types", {"age": "float64"}),
+                ("rename_columns", {"age": "years"}),
+            ],
+        )
+
+        assert result.dtypes["years"] == "float64"
+        assert "age" not in result.columns
+
+    def test_pipeline_mapping_keyword_form(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        result = ar.pipeline(
+            frame,
+            [
+                ("cast_types", {"mapping": {"age": "float64"}}),
+                ("rename_columns", {"mapping": {"age": "years"}}),
+            ],
+        )
+
+        assert result.dtypes["years"] == "float64"
+        assert "age" not in result.columns
+
     def test_empty_pipeline(self, sample_csv):
         frame = ar.read_csv(sample_csv)
         result = ar.pipeline(frame, [])
@@ -69,3 +95,11 @@ class TestPipeline:
             assert False, "Should have raised ValueError"
         except ValueError as e:
             assert "Invalid step format" in str(e)
+
+    def test_invalid_step_kwargs(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        try:
+            ar.pipeline(frame, [("drop_nulls", "subset=name")])
+            assert False, "Should have raised ValueError"
+        except ValueError as e:
+            assert "Expected a dict" in str(e)

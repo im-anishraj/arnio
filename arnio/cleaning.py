@@ -5,24 +5,25 @@ Data cleaning functions.
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from ._core import (
+    _cast_types,
+    _drop_duplicates,
     _drop_nulls,
     _fill_nulls,
-    _drop_duplicates,
-    _strip_whitespace,
     _normalize_case,
     _rename_columns,
-    _cast_types,
+    _strip_whitespace,
 )
+from .exceptions import TypeCastError
 from .frame import ArFrame
 
 
 def drop_nulls(
     frame: ArFrame,
     *,
-    subset: Optional[list[str]] = None,
+    subset: list[str] | None = None,
 ) -> ArFrame:
     """Remove rows containing null/empty values.
 
@@ -52,7 +53,7 @@ def fill_nulls(
     frame: ArFrame,
     value: Any,
     *,
-    subset: Optional[list[str]] = None,
+    subset: list[str] | None = None,
 ) -> ArFrame:
     """Replace null/empty values with a given fill value.
 
@@ -82,8 +83,8 @@ def fill_nulls(
 def drop_duplicates(
     frame: ArFrame,
     *,
-    subset: Optional[list[str]] = None,
-    keep: str = "first",
+    subset: list[str] | None = None,
+    keep: str | bool = "first",
 ) -> ArFrame:
     """Remove duplicate rows.
 
@@ -93,8 +94,9 @@ def drop_duplicates(
         Input data frame.
     subset : list[str], optional
         Column names to consider for duplicates. If None, uses all columns.
-    keep : str, default "first"
-        Which duplicate to keep. Options: "first", "last", or False (drop all duplicates).
+    keep : str or bool, default "first"
+        Which duplicate to keep. Options: "first", "last", "none", or False
+        (drop all duplicates).
 
     Returns
     -------
@@ -106,14 +108,15 @@ def drop_duplicates(
     >>> frame = ar.read_csv("data.csv")
     >>> unique = ar.drop_duplicates(frame, subset=["name"], keep="first")
     """
-    result = _drop_duplicates(frame._frame, subset=subset, keep=keep)
+    keep_arg = "none" if keep is False else keep
+    result = _drop_duplicates(frame._frame, subset=subset, keep=keep_arg)
     return ArFrame(result)
 
 
 def strip_whitespace(
     frame: ArFrame,
     *,
-    subset: Optional[list[str]] = None,
+    subset: list[str] | None = None,
 ) -> ArFrame:
     """Trim leading/trailing whitespace from string columns.
 
@@ -141,7 +144,7 @@ def strip_whitespace(
 def normalize_case(
     frame: ArFrame,
     *,
-    subset: Optional[list[str]] = None,
+    subset: list[str] | None = None,
     case_type: str = "lower",
 ) -> ArFrame:
     """Normalize string columns to lower/upper/title case.
@@ -219,7 +222,10 @@ def cast_types(
     >>> frame = ar.read_csv("data.csv")
     >>> casted = ar.cast_types(frame, {"age": "int64", "score": "float64"})
     """
-    result = _cast_types(frame._frame, mapping)
+    try:
+        result = _cast_types(frame._frame, mapping)
+    except ValueError as e:
+        raise TypeCastError(str(e)) from e
     return ArFrame(result)
 
 

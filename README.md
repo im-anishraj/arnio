@@ -234,7 +234,7 @@ Peak RAM               211MB         212MB
 API Clarity         Imperative    Declarative
 ```
 
-**Arnio achieves full memory parity** with pandas while replacing ad-hoc Python string loops with a compiled, declarative pipeline. The execution time gap is a known, active optimization target — the current `drop_duplicates` and `strip_whitespace` implementations use unoptimized row-key serialization.
+**Arnio is near memory parity in the reference benchmark** while replacing ad-hoc Python string loops with a compiled, declarative pipeline. Validate memory and speed on your own workload. The execution time gap is a known, active optimization target — the current `drop_duplicates` and `strip_whitespace` implementations use unoptimized row-key serialization.
 
 <table>
 <tr>

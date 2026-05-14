@@ -1,6 +1,7 @@
 """Tests for pandas conversion."""
 
 import pandas as pd
+
 import arnio as ar
 
 
@@ -92,3 +93,18 @@ class TestFromPandas:
         df_dict = pd.DataFrame({"a": [{"x": 1}, {"y": 2}]})
         with pytest.raises(TypeError, match="Unsupported nested/complex type"):
             ar.from_pandas(df_dict)
+
+    def test_from_pandas_mixed_object_column(self):
+        df = pd.DataFrame({"a": [1, "x", 3]}, dtype=object)
+        frame = ar.from_pandas(df)
+        df2 = ar.to_pandas(frame)
+
+        assert list(df2["a"]) == ["1", "x", "3"]
+
+    def test_from_pandas_unsupported_scalar_object_column(self):
+        timestamp = pd.Timestamp("2026-05-14 12:30:00")
+        frame = ar.from_pandas(pd.DataFrame({"created_at": [timestamp]}))
+
+        assert frame._frame.column_by_name("created_at").to_python_list() == [
+            str(timestamp)
+        ]

@@ -1,12 +1,13 @@
 """Tests for CSV reading functionality."""
 
-import os
+from pathlib import Path
 
 import pandas as pd
+import pytest
 
 import arnio as ar
 
-MESSY_CSV = os.path.join(os.path.dirname(__file__), "fixtures", "messy_sales_data.csv")
+MESSY_CSV = str(Path(__file__).parent / "fixtures" / "messy_sales_data.csv")
 
 
 class TestReadCsv:
@@ -119,6 +120,44 @@ class TestReadCsv:
         assert "name" in schema
         assert "\ufeffname" not in schema
 
+    def test_pathlike_input(self, sample_csv):
+        frame = ar.read_csv(Path(sample_csv))
+        assert frame.shape == (3, 4)
+
+    def test_non_utf8_encoding(self, tmp_path):
+        csv_path = tmp_path / "latin.csv"
+        csv_path.write_bytes("name\nAndré\n".encode("latin-1"))
+
+        frame = ar.read_csv(csv_path, encoding="latin-1")
+        df = ar.to_pandas(frame)
+
+        assert df["name"].iloc[0] == "André"
+
+    def test_quoted_newline_record(self, tmp_path):
+        csv_path = tmp_path / "quoted_newline.csv"
+        csv_path.write_text('id,text\n1,"hello\nworld"\n2,ok\n')
+
+        frame = ar.read_csv(csv_path)
+        df = ar.to_pandas(frame)
+
+        assert frame.shape == (2, 2)
+        assert df["text"].iloc[0] == "hello\nworld"
+        assert df["text"].iloc[1] == "ok"
+
+    def test_unterminated_quote_rejected(self, tmp_path):
+        csv_path = tmp_path / "unterminated.csv"
+        csv_path.write_text('id,text\n1,"hello\n')
+
+        with pytest.raises(ar.CsvReadError, match="Unterminated quoted CSV record"):
+            ar.read_csv(csv_path)
+
+    def test_duplicate_headers_rejected(self, tmp_path):
+        csv_path = tmp_path / "duplicate_headers.csv"
+        csv_path.write_text("a,a\n1,2\n")
+
+        with pytest.raises(ar.CsvReadError, match="Duplicate column name: a"):
+            ar.read_csv(csv_path)
+
 
 class TestScanCsv:
     def test_scan_schema(self, sample_csv):
@@ -127,3 +166,11 @@ class TestScanCsv:
         assert "name" in schema
         assert "age" in schema
         assert schema["age"] == "int64"
+
+    def test_scan_non_utf8_encoding(self, tmp_path):
+        csv_path = tmp_path / "latin.csv"
+        csv_path.write_bytes("name\nAndré\n".encode("latin-1"))
+
+        schema = ar.scan_csv(csv_path, encoding="latin-1")
+
+        assert schema == {"name": "string"}

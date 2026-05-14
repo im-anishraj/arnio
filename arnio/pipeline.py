@@ -7,9 +7,8 @@ from __future__ import annotations
 
 from typing import Callable
 
-from .frame import ArFrame
 from . import cleaning
-
+from .frame import ArFrame
 
 # Map step names to cleaning functions
 _STEP_REGISTRY: dict[str, Callable] = {
@@ -52,6 +51,8 @@ def pipeline(
     """Apply a list of cleaning steps sequentially.
 
     Each step is a tuple of (step_name,) or (step_name, kwargs_dict).
+    For mapping-based steps (`cast_types`, `rename_columns`), the kwargs dict
+    can be used directly as the mapping or passed as {"mapping": {...}}.
 
     Parameters
     ----------
@@ -81,8 +82,8 @@ def pipeline(
     ...     ("drop_duplicates", {"keep": "first"}),
     ... ])
     """
+    from .convert import from_pandas, to_pandas
     from .exceptions import UnknownStepError
-    from .convert import to_pandas, from_pandas
 
     result = frame
     for step in steps:
@@ -91,6 +92,10 @@ def pipeline(
             kwargs = {}
         elif len(step) == 2:
             name, kwargs = step[0], step[1]
+            if not isinstance(kwargs, dict):
+                raise ValueError(
+                    f"Invalid step kwargs for {name!r}: {kwargs!r}. Expected a dict"
+                )
         else:
             raise ValueError(
                 f"Invalid step format: {step}. Expected (name,) or (name, kwargs)"
@@ -99,7 +104,10 @@ def pipeline(
         if name in _STEP_REGISTRY:
             # C++ backed step - fast path
             fn = _STEP_REGISTRY[name]
-            result = fn(result, **kwargs)
+            if name in {"rename_columns", "cast_types"} and "mapping" not in kwargs:
+                result = fn(result, kwargs)
+            else:
+                result = fn(result, **kwargs)
         elif name in _PYTHON_STEP_REGISTRY:
             # Pure Python step - slower but contributor-friendly
             df = to_pandas(result)

@@ -1,5 +1,7 @@
 """Tests for data cleaning functions."""
 
+import pytest
+
 import arnio as ar
 
 
@@ -29,6 +31,14 @@ class TestFillNulls:
         result = ar.fill_nulls(frame, 0)
         assert result.shape == frame.shape
 
+    def test_incompatible_fill_rejected(self, tmp_path):
+        path = tmp_path / "numbers.csv"
+        path.write_text("x,y\n1,a\n,b\n3,c\n")
+        frame = ar.read_csv(path)
+
+        with pytest.raises(ValueError, match="Fill value is incompatible"):
+            ar.fill_nulls(frame, "bad", subset=["x"])
+
 
 class TestDropDuplicates:
     def test_drop_dupes_first(self, csv_with_duplicates):
@@ -44,6 +54,12 @@ class TestDropDuplicates:
     def test_drop_dupes_none(self, csv_with_duplicates):
         frame = ar.read_csv(csv_with_duplicates)
         result = ar.drop_duplicates(frame, keep="none")
+        # Only Charlie is unique
+        assert result.shape[0] == 1
+
+    def test_drop_dupes_false_alias(self, csv_with_duplicates):
+        frame = ar.read_csv(csv_with_duplicates)
+        result = ar.drop_duplicates(frame, keep=False)
         # Only Charlie is unique
         assert result.shape[0] == 1
 
@@ -107,6 +123,12 @@ class TestCastTypes:
         frame = ar.read_csv(sample_csv)
         result = ar.cast_types(frame, {"age": "float64"})
         assert result.dtypes["age"] == "float64"
+
+    def test_cast_unknown_type_rejected(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(ar.TypeCastError, match="Unknown target dtype"):
+            ar.cast_types(frame, {"age": "decimal"})
 
 
 class TestCleanAPI:
