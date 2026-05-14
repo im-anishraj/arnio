@@ -139,7 +139,7 @@ def test_filter_rows_equal_string():
 
     result_df = ar.to_pandas(result)
 
-    assert len(result_df) == 2
+    assert list(result_df["name"]) == ["Alice", "Alice"]
 
 
 def test_filter_rows_bool():
@@ -157,7 +157,7 @@ def test_filter_rows_bool():
 
     result_df = ar.to_pandas(result)
 
-    assert len(result_df) == 2
+    assert list(result_df["active"]) == [True, True]
 
 
 def test_filter_rows_invalid_operator():
