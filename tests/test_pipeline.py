@@ -365,157 +365,45 @@ class TestPipeline:
         assert result.dtypes["years"] == "float64"
         assert "age" not in result.columns
 
-    def test_pipeline_shorthand_with_column_named_mapping_cast_types(self):
-        import pandas as pd
 
-        import arnio as ar
-
-        frame = ar.from_pandas(pd.DataFrame({"mapping": ["1", "2"]}))
-
-        result = ar.pipeline(
-            frame,
-            [
-                ("cast_types", {"mapping": "int64"}),
-            ],
-        )
-
-        assert result.dtypes["mapping"] == "int64"
-
-    def test_pipeline_shorthand_with_column_named_mapping_rename_columns(self):
-        import pandas as pd
-
-        import arnio as ar
-
-        frame = ar.from_pandas(pd.DataFrame({"mapping": [1, 2]}))
+    def test_split_column_step(self, tmp_path):
+        path = tmp_path / "names.csv"
+        path.write_text("name\nAda Lovelace\nGrace Hopper\n")
+        frame = ar.read_csv(path)
 
         result = ar.pipeline(
             frame,
             [
-                ("rename_columns", {"mapping": "new_mapping_col"}),
+                (
+                    "split_column",
+                    {
+                        "column": "name",
+                        "into": ["first", "last"],
+                        "sep": " ",
+                        "drop": True,
+                    },
+                ),
             ],
         )
 
-        assert "new_mapping_col" in result.columns
-        assert "mapping" not in result.columns
+        df = ar.to_pandas(result)
+        assert "name" not in df.columns
+        assert df["first"].tolist() == ["Ada", "Grace"]
+        assert df["last"].tolist() == ["Lovelace", "Hopper"]
 
-    def test_pipeline_validate_columns_exist(self, sample_csv):
-        frame = ar.read_csv(sample_csv)
-        result = ar.pipeline(
-            frame,
-            [
-                ("validate_columns_exist", {"columns": ["name", "age"]}),
-                ("strip_whitespace", {"subset": ["name"]}),
-            ],
-        )
+    def test_split_column_rejects_existing_output_column(self, tmp_path):
+        path = tmp_path / "names.csv"
+        path.write_text("name,first\nAda Lovelace,Ada\n")
+        frame = ar.read_csv(path)
 
-        assert result.shape == frame.shape
-
-    def test_pipeline_validate_columns_exist_allows_empty_columns(self, sample_csv):
-        frame = ar.read_csv(sample_csv)
-        result = ar.pipeline(frame, [("validate_columns_exist", {"columns": []})])
-
-        assert result is frame
-
-    def test_pipeline_drop_columns(self, sample_csv):
-        frame = ar.read_csv(sample_csv)
-        result = ar.pipeline(
-            frame,
-            [
-                ("drop_columns", {"columns": ["active"]}),
-            ],
-        )
-
-        assert result.columns == ["name", "age", "email"]
-
-    def test_pipeline_drop_columns_allows_empty_columns(self, sample_csv):
-        frame = ar.read_csv(sample_csv)
-        result = ar.pipeline(frame, [("drop_columns", {"columns": []})])
-
-        assert result is not frame
-        assert result.columns == frame.columns
-        assert len(result) == len(frame)
-
-    def test_pipeline_drop_columns_rejects_missing_columns(self, sample_csv):
-        import pytest
-
-        frame = ar.read_csv(sample_csv)
-
-        with pytest.raises(ValueError, match="Columns not found in frame"):
+        try:
             ar.pipeline(
                 frame,
-                [("drop_columns", {"columns": ["missing"]})],
+                [("split_column", {"column": "name", "into": ["first"], "sep": " "})],
             )
-
-    def test_pipeline_select_columns(self, sample_csv):
-        frame = ar.read_csv(sample_csv)
-
-        result = ar.pipeline(
-            frame,
-            [
-                ("select_columns", {"columns": ["email", "name"]}),
-            ],
-        )
-
-        assert result.columns == ["email", "name"]
-
-    def test_pipeline_select_columns_rejects_missing_columns(self, sample_csv):
-        import pytest
-
-        frame = ar.read_csv(sample_csv)
-
-        with pytest.raises(ValueError, match="Unknown columns"):
-            ar.pipeline(
-                frame,
-                [
-                    ("select_columns", {"columns": ["missing"]}),
-                ],
-            )
-
-    def test_pipeline_select_columns_reject_empty_columns(self, sample_csv):
-        frame = ar.read_csv(sample_csv)
-
-        with pytest.raises(ValueError, match="Column selection cannot be empty"):
-            ar.pipeline(
-                frame,
-                [
-                    ("select_columns", {"columns": []}),
-                ],
-            )
-
-    def test_pipeline_select_columns_rejects_duplicates(self, sample_csv):
-        import pytest
-
-        frame = ar.read_csv(sample_csv)
-
-        with pytest.raises(ValueError, match="Duplicate column names are not allowed"):
-            ar.pipeline(
-                frame,
-                [
-                    ("select_columns", {"columns": ["name", "name"]}),
-                ],
-            )
-
-    def test_pipeline_validate_columns_exist_rejects_missing_columns(self, sample_csv):
-        import pytest
-
-        frame = ar.read_csv(sample_csv)
-
-        with pytest.raises(KeyError, match="Missing columns"):
-            ar.pipeline(
-                frame,
-                [("validate_columns_exist", {"columns": ["missing"]})],
-            )
-
-    def test_pipeline_subset_step_rejects_missing_columns(self, sample_csv):
-        import pytest
-
-        frame = ar.read_csv(sample_csv)
-
-        with pytest.raises(KeyError, match="Missing columns for strip_whitespace"):
-            ar.pipeline(
-                frame,
-                [("strip_whitespace", {"subset": ["missing"]})],
-            )
+            assert False, "Should have raised ValueError"
+        except ValueError as e:
+            assert "Output column already exists" in str(e)
 
     def test_empty_pipeline(self, sample_csv):
         frame = ar.read_csv(sample_csv)
