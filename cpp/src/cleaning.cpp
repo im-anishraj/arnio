@@ -34,7 +34,7 @@ struct RowContext {
 struct RowHash {
     const RowContext& ctx;
     RowHash(const RowContext& c) : ctx(c) {}
-    
+
     std::size_t operator()(size_t row) const {
         std::size_t seed = 0;
         for (size_t ci : *ctx.cols) {
@@ -68,7 +68,7 @@ struct RowHash {
 struct RowEqual {
     const RowContext& ctx;
     RowEqual(const RowContext& c) : ctx(c) {}
-    
+
     bool operator()(size_t lhs, size_t rhs) const {
         for (size_t ci : *ctx.cols) {
             const auto& col = ctx.frame->column(ci);
