@@ -223,8 +223,23 @@ Arnio is not a pandas wrapper. It's a separate runtime with its own data model.
 
 ## 🏎️ Benchmarks
 
-> **Setup**: Ubuntu, Python 3.12, 1M rows × 12 columns, synthetic messy CSV.<br>
-> **Reproduce**: `make benchmark` — generates data and runs both engines.
+> **Reference environment**: Ubuntu, Python 3.12, 1M rows × 12 columns, synthetic messy CSV.<br>
+> **Reproduce**: `make benchmark` — generates the deterministic dataset and runs both engines.
+
+To reproduce the published numbers from a fresh checkout:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -U pip
+python -m pip install -e .
+python benchmarks/generate_data.py
+python benchmarks/benchmark_vs_pandas.py
+```
+
+`benchmarks/generate_data.py` uses NumPy's `default_rng(42)`, so every run creates the same `benchmarks/benchmark_1m.csv` input. The benchmark then executes three pandas runs and three arnio runs, printing average wall-clock time from `time.perf_counter()` and peak Python allocation from `tracemalloc`. For cleaner comparisons, close other memory-heavy processes and run the script from the repository root after installing the same Python, pandas, NumPy, compiler, and arnio commit you want to compare.
+
+Expected output format:
 
 ```text
                      pandas         arnio
@@ -233,6 +248,8 @@ Exec Time (avg)       4.73s         5.75s
 Peak RAM               211MB         212MB
 API Clarity         Imperative    Declarative
 ```
+
+Small differences are expected across CPUs, operating systems, compilers, Python builds, and pandas/NumPy versions. If you share benchmark results in an issue or PR, include your OS, Python version, CPU model, pandas/NumPy versions, arnio commit, and the full command output so maintainers can compare like for like.
 
 **Arnio is near memory parity in the reference benchmark** while replacing ad-hoc Python string loops with a compiled, declarative pipeline. Validate memory and speed on your own workload. The execution time gap is a known, active optimization target — the current `drop_duplicates` and `strip_whitespace` implementations use unoptimized row-key serialization.
 
