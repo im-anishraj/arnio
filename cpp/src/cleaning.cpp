@@ -25,26 +25,56 @@ static std::vector<size_t> resolve_subset(const Frame& frame,
     return indices;
 }
 
-// Helper: build a row hash for deduplication
-static std::string row_key(const Frame& frame, size_t row, const std::vector<size_t>& cols) {
-    std::ostringstream oss;
-    for (size_t ci : cols) {
-        auto cell = frame.column(ci).at(row);
-        if (std::holds_alternative<std::monostate>(cell)) {
-            oss << "\x00";
-        } else if (std::holds_alternative<std::string>(cell)) {
-            oss << std::get<std::string>(cell);
-        } else if (std::holds_alternative<int64_t>(cell)) {
-            oss << std::get<int64_t>(cell);
-        } else if (std::holds_alternative<double>(cell)) {
-            oss << std::get<double>(cell);
-        } else if (std::holds_alternative<bool>(cell)) {
-            oss << (std::get<bool>(cell) ? "T" : "F");
+struct RowContext {
+    const Frame* frame;
+    const std::vector<size_t>* cols;
+};
+
+struct RowHash {
+    const RowContext& ctx;
+    RowHash(const RowContext& c) : ctx(c) {}
+    
+    std::size_t operator()(size_t row) const {
+        std::size_t seed = 0;
+        for (size_t ci : *ctx.cols) {
+            const auto& col = ctx.frame->column(ci);
+            if (col.is_null(row)) {
+                seed ^= std::hash<int>{}(0) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+            } else {
+                auto cell = col.at(row);
+                std::size_t h = 0;
+                if (std::holds_alternative<std::string>(cell)) {
+                    h = std::hash<std::string>{}(std::get<std::string>(cell));
+                } else if (std::holds_alternative<int64_t>(cell)) {
+                    h = std::hash<int64_t>{}(std::get<int64_t>(cell));
+                } else if (std::holds_alternative<double>(cell)) {
+                    h = std::hash<double>{}(std::get<double>(cell));
+                } else if (std::holds_alternative<bool>(cell)) {
+                    h = std::hash<bool>{}(std::get<bool>(cell));
+                }
+                seed ^= h + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+            }
         }
-        oss << "\x1F";  // unit separator
+        return seed;
     }
-    return oss.str();
-}
+};
+
+struct RowEqual {
+    const RowContext& ctx;
+    RowEqual(const RowContext& c) : ctx(c) {}
+    
+    bool operator()(size_t lhs, size_t rhs) const {
+        for (size_t ci : *ctx.cols) {
+            const auto& col = ctx.frame->column(ci);
+            if (col.is_null(lhs) != col.is_null(rhs)) return false;
+            if (col.is_null(lhs)) continue;
+            auto cell_l = col.at(lhs);
+            auto cell_r = col.at(rhs);
+            if (cell_l != cell_r) return false;
+        }
+        return true;
+    }
+};
 
 static std::string cell_to_string(const CellValue& cell) {
     if (std::holds_alternative<std::string>(cell)) {
@@ -183,21 +213,23 @@ Frame fill_nulls(const Frame& frame, const CellValue& value,
 Frame drop_duplicates(const Frame& frame, const std::optional<std::vector<std::string>>& subset,
                       const std::string& keep) {
     auto col_indices = resolve_subset(frame, subset);
+    RowContext ctx{&frame, &col_indices};
+    RowHash hash(ctx);
+    RowEqual eq(ctx);
 
     if (keep == "first") {
-        std::unordered_set<std::string> seen;
+        std::unordered_set<size_t, RowHash, RowEqual> seen(0, hash, eq);
         std::vector<size_t> keep_rows;
         for (size_t r = 0; r < frame.num_rows(); ++r) {
-            std::string key = row_key(frame, r, col_indices);
-            if (seen.insert(key).second) {
+            if (seen.insert(r).second) {
                 keep_rows.push_back(r);
             }
         }
         return select_rows(frame, keep_rows);
     } else if (keep == "last") {
-        std::unordered_map<std::string, size_t> last_seen;
+        std::unordered_map<size_t, size_t, RowHash, RowEqual> last_seen(0, hash, eq);
         for (size_t r = 0; r < frame.num_rows(); ++r) {
-            last_seen[row_key(frame, r, col_indices)] = r;
+            last_seen[r] = r;
         }
         std::vector<size_t> keep_rows;
         for (auto& [_, ri] : last_seen) {
@@ -206,9 +238,9 @@ Frame drop_duplicates(const Frame& frame, const std::optional<std::vector<std::s
         std::sort(keep_rows.begin(), keep_rows.end());
         return select_rows(frame, keep_rows);
     } else if (keep == "none") {
-        std::unordered_map<std::string, std::vector<size_t>> groups;
+        std::unordered_map<size_t, std::vector<size_t>, RowHash, RowEqual> groups(0, hash, eq);
         for (size_t r = 0; r < frame.num_rows(); ++r) {
-            groups[row_key(frame, r, col_indices)].push_back(r);
+            groups[r].push_back(r);
         }
         std::vector<size_t> keep_rows;
         for (auto& [_, rows] : groups) {
