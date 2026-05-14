@@ -278,3 +278,31 @@ def clean(
         return frame
 
     return pipeline(frame, steps)
+
+
+def filter_rows(frame, column, op, value):
+    """Filter rows based on a column condition."""
+
+    import pandas as pd
+
+    from .convert import from_pandas, to_pandas
+
+    is_arframe = not isinstance(frame, pd.DataFrame)
+
+    df = to_pandas(frame) if is_arframe else frame
+
+    ops = {
+        ">": "gt",
+        "<": "lt",
+        ">=": "ge",
+        "<=": "le",
+        "==": "eq",
+        "!=": "ne",
+    }
+
+    if op not in ops:
+        raise ValueError(f"Unsupported operator: {op}")
+
+    filtered = df[getattr(df[column], ops[op])(value)]
+
+    return from_pandas(filtered) if is_arframe else filtered

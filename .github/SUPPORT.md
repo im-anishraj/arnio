@@ -2,6 +2,12 @@
 
 Use the right channel so maintainers and contributors can help quickly.
 
+## Discord
+
+Join the [Arnio Discord Community](https://discord.gg/xsEw7r78M) for quick setup help, contributor onboarding, GSSoC coordination, and community discussion.
+
+GitHub remains the source of truth for issue assignment, PR reviews, bug reports, roadmap decisions, and releases.
+
 ## Questions
 
 Use [GitHub Discussions](https://github.com/im-anishraj/arnio/discussions) for:

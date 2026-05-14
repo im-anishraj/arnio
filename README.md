@@ -25,7 +25,8 @@ No `.apply()`. No lambda chains. No spaghetti.
 <a href="https://github.com/im-anishraj/arnio/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/im-anishraj/arnio/ci.yml?branch=main&label=CI&style=flat-square&logo=github&labelColor=0d1117&color=2ea44f" alt="CI"></a>&nbsp;
 <a href="https://codecov.io/gh/im-anishraj/arnio"><img src="https://img.shields.io/codecov/c/github/im-anishraj/arnio?style=flat-square&logo=codecov&labelColor=0d1117&color=2ea44f" alt="Coverage"></a>&nbsp;
 <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square&labelColor=0d1117" alt="MIT"></a>&nbsp;
-<a href="https://gssoc.girlscript.tech/"><img src="https://img.shields.io/badge/GSSoC-2026-ff6b35?style=flat-square&labelColor=0d1117" alt="GSSoC 2026"></a>
+<a href="https://gssoc.girlscript.tech/"><img src="https://img.shields.io/badge/GSSoC-2026-ff6b35?style=flat-square&labelColor=0d1117" alt="GSSoC 2026"></a>&nbsp;
+<a href="https://discord.gg/xsEw7r78M"><img src="https://img.shields.io/badge/Discord-Join%20Community-5865F2?style=flat-square&logo=discord&logoColor=white&labelColor=0d1117" alt="Join Discord"></a>
 [![PyPI Downloads](https://static.pepy.tech/personalized-badge/arnio?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads)](https://pepy.tech/projects/arnio)
 
 <br><br>
@@ -36,7 +37,7 @@ pip install arnio
 
 <br>
 
-<a href="#-quickstart">Quickstart</a>&ensp;·&ensp;<a href="#-why-arnio-exists">Why Arnio</a>&ensp;·&ensp;<a href="#%EF%B8%8F-architecture">Architecture</a>&ensp;·&ensp;<a href="#-benchmarks">Benchmarks</a>&ensp;·&ensp;<a href="#-contribute">Contribute</a>
+<a href="#-quickstart">Quickstart</a>&ensp;·&ensp;<a href="#-why-arnio-exists">Why Arnio</a>&ensp;·&ensp;<a href="#%EF%B8%8F-architecture">Architecture</a>&ensp;·&ensp;<a href="#-benchmarks">Benchmarks</a>&ensp;·&ensp;<a href="#-community">Community</a>&ensp;·&ensp;<a href="#-contribute">Contribute</a>
 
 </div>
 
@@ -286,11 +287,12 @@ Small differences are expected across CPUs, operating systems, compilers, Python
 
 ## 🧰 Cleaning primitives
 
-Every operation below runs natively in C++. No Python loops.
+Most operations below run natively in C++. The current `filter_rows` step uses the Python pipeline backend and may be optimized in C++ later.
 
 | Primitive | What it does | Example |
 |:---|:---|:---|
 | `drop_nulls` | Remove rows with null/empty values | `ar.drop_nulls(frame, subset=["age"])` |
+| `filter_rows` | Filter rows using comparison operators | `ar.filter_rows(frame, column="age", op=">", value=18)` |
 | `fill_nulls` | Replace nulls with a scalar | `ar.fill_nulls(frame, 0, subset=["revenue"])` |
 | `drop_duplicates` | Deduplicate rows (first/last/none) | `ar.drop_duplicates(frame, keep="first")` |
 | `strip_whitespace` | Trim leading/trailing spaces from strings | `ar.strip_whitespace(frame)` |
@@ -309,6 +311,35 @@ clean = ar.pipeline(frame, [
     ("drop_duplicates", {"keep": "first"}),
 ])
 ```
+### 🔎 Filter rows inside pipelines
+
+Use `filter_rows` to keep only rows matching a condition.
+
+```python
+clean = ar.pipeline(frame, [
+    ("filter_rows", {
+        "column": "revenue",
+        "op": ">=",
+        "value": 1000
+    }),
+])
+```
+
+Supported operators:
+
+- `>`
+- `<`
+- `>=`
+- `<=`
+- `==`
+- `!=`
+
+Works with:
+
+- integers
+- floats
+- strings
+- booleans
 
 <br>
 
@@ -382,9 +413,87 @@ clean, report = ar.auto_clean(frame, mode="strict", return_report=True)
 This is the layer pandas does not try to own: profiling, data contracts, row-level validation issues, and safe cleaning suggestions for messy incoming datasets.
 
 <br>
+## Data Quality Reports
 
----
+Arnio provides detailed profiling for datasets via `ar.profile()`. To generate the report shown in these examples, the following code was used:
 
+```python
+import arnio as ar
+import pandas as pd
+
+# Sample dataset used for these examples
+data = {
+    "user_id": [101, 102, 103, 104],
+    "email": ["test@arnio.ai", "invalid-email", None, "test@arnio.ai"],
+    "score": [85.5, 90.0, None, 88.2]
+}
+df = ar.from_pandas(pd.DataFrame(data))
+report = ar.profile(df)
+```
+
+### 1. Terminal Representation (Simplified Example)
+*A simplified view of the standard string representation of the report object:*
+
+```text
+DataQualityReport(
+    row_count=4,
+    column_count=3,
+    memory_usage=733,
+    duplicate_rows=0,
+    columns={
+        'user_id': ColumnProfile(dtype='int64', semantic_type='identifier', unique_count=4),
+        'email': ColumnProfile(dtype='string', semantic_type='categorical', null_count=1, unique_ratio=0.666667),
+        'score': ColumnProfile(dtype='float64', semantic_type='numeric', mean=87.9, min=85.5, max=90.0)
+    }
+)
+```
+
+### 2. JSON Format (Excerpts from .to_dict())
+*Key fields from the structured JSON export for integration with APIs or dashboards:*
+
+```json
+{
+  "row_count": 4,
+  "column_count": 3,
+  "memory_usage": 733,
+  "duplicate_rows": 0,
+  "duplicate_ratio": 0.0,
+  "columns": {
+    "user_id": {
+      "dtype": "int64",
+      "semantic_type": "identifier",
+      "null_count": 0,
+      "unique_ratio": 1.0
+    },
+    "email": {
+      "dtype": "string",
+      "semantic_type": "categorical",
+      "null_count": 1,
+      "unique_ratio": 0.666667,
+      "warnings": ["contains_nulls"]
+    },
+    "score": {
+      "dtype": "float64",
+      "semantic_type": "numeric",
+      "null_count": 1,
+      "mean": 87.9,
+      "min": 85.5,
+      "max": 90.0,
+      "warnings": ["contains_nulls"]
+    }
+  }
+}
+```
+
+### 3. Example Summary Table
+*A manually formatted Markdown table representing the core metrics:*
+
+| Metric | Value |
+| :--- | :--- |
+| **Row Count** | 4 |
+| **Column Count** | 3 |
+| **Memory Usage** | 733 bytes |
+| **Duplicates** | 0 (0.0%) |
 <br>
 
 ## 🗺️ Roadmap
@@ -396,6 +505,22 @@ This is the layer pandas does not try to own: profiling, data contracts, row-lev
 | **v1.2** | C++ pipeline optimization · speed parity with pandas · hash-based deduplication | 🔨 Active |
 | **v1.3** | Chunked / streaming processing · Parquet & JSON readers | 📋 Planned |
 | **v1.4** | Parallel column processing · SIMD string operations | 💭 Exploring |
+
+<br>
+
+---
+
+<br>
+
+## 💬 Community
+
+Join the **[Arnio Discord Community](https://discord.gg/xsEw7r78M)** for quick setup help, contributor onboarding, GSSoC 2026 coordination, feature discussion, and community updates.
+
+Discord is for fast conversation and support. GitHub remains the source of truth for issue assignment, PR reviews, bugs, roadmap decisions, and releases.
+
+<p align="center">
+<a href="https://discord.gg/xsEw7r78M"><img src="https://img.shields.io/badge/Join%20Arnio%20Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Join Arnio Discord"></a>
+</p>
 
 <br>
 
@@ -449,14 +574,48 @@ pytest tests/ -v
 
 > **PR titles must follow [Conventional Commits](https://www.conventionalcommits.org/)** — `feat:`, `fix:`, `docs:`, `chore:`. Our release pipeline auto-generates changelogs from these.
 
-For GSSoC contributors, please read **[GSSOC_GUIDE.md](GSSOC_GUIDE.md)** before asking to be assigned. It explains issue claiming, contribution levels, review expectations, and what maintainers look for in a strong PR.
+For GSSoC contributors, please read **[GSSOC_GUIDE.md](GSSOC_GUIDE.md)** before asking to be assigned. It explains issue claiming, contribution levels, review expectations, and what maintainers look for in a strong PR. If you want a quick onboarding refresher, see the [GSSoC FAQ](GSSOC_GUIDE.md#gssoc-faq).
+If you are new to Arnio terms, see the [contributor glossary](.github/CONTRIBUTING.md#contributor-glossary).
 
 <p align="center">
 <a href=".github/CONTRIBUTING.md"><b>📖 Full Contributing Guide</b></a>&ensp;·&ensp;
 <a href="GSSOC_GUIDE.md"><b>GSSoC Guide</b></a>&ensp;·&ensp;
 <a href="https://github.com/im-anishraj/arnio/issues"><b>🐛 Open Issues</b></a>&ensp;·&ensp;
-<a href="https://github.com/im-anishraj/arnio/discussions"><b>💬 Discussions</b></a>
+<a href="https://github.com/im-anishraj/arnio/discussions"><b>💬 Discussions</b></a>&ensp;·&ensp;
+<a href="https://discord.gg/xsEw7r78M"><b>Discord</b></a>
 </p>
+
+<br>
+
+---
+
+<br>
+
+## 🚢 Release process
+
+Arnio releases are automated through Release Please and GitHub Actions.
+
+1. Merge user-facing changes with Conventional Commit PR titles (`feat:`, `fix:`, `docs:`, or `chore:`) so Release Please can choose the version bump and changelog entries.
+2. Review and merge the Release Please PR on `main`; this updates release metadata and creates the GitHub release and tag.
+3. Confirm the `Build & Publish Wheels` workflow succeeds for the release tag. It builds the sdist and wheels, then publishes to PyPI through Trusted Publishing.
+4. Smoke test the published package in a clean environment:
+
+```bash
+python -m venv /tmp/arnio-smoke
+source /tmp/arnio-smoke/bin/activate
+python -m pip install -U pip
+python -m pip install arnio
+printf 'name,revenue\n Ada,10\n' > /tmp/arnio-smoke.csv
+python - <<'PY'
+import arnio as ar
+print(ar.__version__)
+print(ar.scan_csv("/tmp/arnio-smoke.csv"))
+PY
+```
+
+5. Verify the GitHub release, PyPI project page, and install command all show the expected version before announcing the release.
+
+If any publish or smoke-test step fails, leave the failed tag and GitHub release in place until maintainers agree on the recovery plan.
 
 <br>
 
@@ -509,7 +668,8 @@ arnio/
 <a href="https://pypi.org/project/arnio/"><img src="https://img.shields.io/pypi/dm/arnio?style=flat-square&logo=pypi&logoColor=white&labelColor=0d1117&color=3572A5&label=installs" alt="Downloads"></a>&ensp;
 <a href="https://github.com/im-anishraj/arnio/stargazers"><img src="https://img.shields.io/github/stars/im-anishraj/arnio?style=flat-square&logo=github&labelColor=0d1117&color=e3b341&label=stars" alt="Stars"></a>&ensp;
 <a href="https://github.com/im-anishraj/arnio/network/members"><img src="https://img.shields.io/github/forks/im-anishraj/arnio?style=flat-square&logo=github&labelColor=0d1117&color=8b949e&label=forks" alt="Forks"></a>&ensp;
-<a href="https://arnio.vercel.app/"><img src="https://img.shields.io/badge/website-arnio.vercel.app-blue?style=flat-square&labelColor=0d1117" alt="Website"></a>
+<a href="https://arnio.vercel.app/"><img src="https://img.shields.io/badge/website-arnio.vercel.app-blue?style=flat-square&labelColor=0d1117" alt="Website"></a>&ensp;
+<a href="https://discord.gg/xsEw7r78M"><img src="https://img.shields.io/badge/community-Discord-5865F2?style=flat-square&logo=discord&logoColor=white&labelColor=0d1117" alt="Discord"></a>
 
 <br>
 
