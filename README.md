@@ -359,42 +359,41 @@ Arnio provides detailed profiling for datasets via `ar.profile()`. To generate t
 import arnio as ar
 import pandas as pd
 
-# Sample dataset
+# Sample dataset used for these examples
 data = {
     "user_id": [101, 102, 103, 104],
     "email": ["test@arnio.ai", "invalid-email", None, "test@arnio.ai"],
     "score": [85.5, 90.0, None, 88.2]
 }
-
 df = ar.from_pandas(pd.DataFrame(data))
 report = ar.profile(df)
 ```
 
-### 1. Terminal Representation
-*Standard string representation of the report object:*
+### 1. Terminal Representation (Simplified Example)
+*A simplified view of the standard string representation of the report object:*
 
 ```text
 DataQualityReport(
     row_count=4,
     column_count=3,
-    memory_usage=785,
+    memory_usage=733,
     duplicate_rows=0,
     columns={
         'user_id': ColumnProfile(dtype='int64', semantic_type='identifier', unique_count=4),
-        'email': ColumnProfile(dtype='string', semantic_type='categorical', null_count=1, warnings=['contains_nulls']),
-        'score': ColumnProfile(dtype='float64', semantic_type='numeric', mean=87.9)
+        'email': ColumnProfile(dtype='string', semantic_type='categorical', null_count=1, unique_ratio=0.666667),
+        'score': ColumnProfile(dtype='float64', semantic_type='numeric', mean=87.9, min=85.5, max=90.0)
     }
 )
 ```
 
-### 2. JSON Format
-*Reports can be exported as structured JSON (via `.to_dict()`) for integration with APIs or dashboards:*
+### 2. JSON Format (Excerpts from .to_dict())
+*Key fields from the structured JSON export for integration with APIs or dashboards:*
 
 ```json
 {
   "row_count": 4,
   "column_count": 3,
-  "memory_usage": 785,
+  "memory_usage": 733,
   "duplicate_rows": 0,
   "duplicate_ratio": 0.0,
   "columns": {
@@ -402,14 +401,13 @@ DataQualityReport(
       "dtype": "int64",
       "semantic_type": "identifier",
       "null_count": 0,
-      "unique_ratio": 1.0,
-      "mean": 102.5
+      "unique_ratio": 1.0
     },
     "email": {
       "dtype": "string",
       "semantic_type": "categorical",
       "null_count": 1,
-      "unique_ratio": 0.67,
+      "unique_ratio": 0.666667,
       "warnings": ["contains_nulls"]
     },
     "score": {
@@ -417,6 +415,8 @@ DataQualityReport(
       "semantic_type": "numeric",
       "null_count": 1,
       "mean": 87.9,
+      "min": 85.5,
+      "max": 90.0,
       "warnings": ["contains_nulls"]
     }
   }
@@ -424,17 +424,14 @@ DataQualityReport(
 ```
 
 ### 3. Example Summary Table
-*Example of a manually formatted Markdown table representing the core metrics:*
+*A manually formatted Markdown table representing the core metrics:*
 
 | Metric | Value |
 | :--- | :--- |
 | **Row Count** | 4 |
 | **Column Count** | 3 |
-| **Memory Usage** | 785 bytes |
-| **Duplicates** | 0 (0.0%) |<br>
-
----
-
+| **Memory Usage** | 733 bytes |
+| **Duplicates** | 0 (0.0%) |
 <br>
 
 ## 🗺️ Roadmap
