@@ -25,7 +25,6 @@ class Column {
     void push_back(const CellValue& value);
     void push_null();
     void set_name(const std::string& name);
-    void set_dtype(DType dtype);
 
     // Data access
     const ColumnData& data() const;
@@ -35,6 +34,9 @@ class Column {
     Column clone() const;
 
    private:
+    void set_dtype(DType dtype);
+    void assert_type_consistency() const;
+
     std::string name_;
     DType dtype_;
     ColumnData data_;

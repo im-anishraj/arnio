@@ -40,6 +40,7 @@ bool Column::is_null(size_t idx) const {
 }
 
 const CellValue Column::at(size_t idx) const {
+    assert_type_consistency();
     if (idx >= null_mask_.size()) {
         throw std::out_of_range("Column index out of range");
     }
@@ -58,6 +59,7 @@ const CellValue Column::at(size_t idx) const {
 }
 
 size_t Column::memory_usage() const {
+    assert_type_consistency();
     size_t usage = sizeof(Column);
     usage += name_.capacity();
     usage += null_mask_.capacity() / 8;  // approx vector<bool> memory
@@ -77,6 +79,7 @@ size_t Column::memory_usage() const {
 }
 
 void Column::push_back(const CellValue& value) {
+    assert_type_consistency();
     bool is_null_val = std::holds_alternative<std::monostate>(value);
     null_mask_.push_back(is_null_val);
 
@@ -126,6 +129,7 @@ void Column::push_back(const CellValue& value) {
 }
 
 void Column::push_null() {
+    assert_type_consistency();
     null_mask_.push_back(true);
     if (std::holds_alternative<std::vector<std::string>>(data_)) {
         std::get<std::vector<std::string>>(data_).push_back("");
@@ -141,9 +145,39 @@ void Column::push_null() {
 void Column::set_name(const std::string& name) { name_ = name; }
 void Column::set_dtype(DType dtype) { dtype_ = dtype; }
 
-const ColumnData& Column::data() const { return data_; }
+void Column::assert_type_consistency() const {
+    bool consistent = false;
+    switch (dtype_) {
+        case DType::STRING:
+            consistent = std::holds_alternative<std::vector<std::string>>(data_);
+            break;
+        case DType::INT64:
+            consistent = std::holds_alternative<std::vector<int64_t>>(data_);
+            break;
+        case DType::FLOAT64:
+            consistent = std::holds_alternative<std::vector<double>>(data_);
+            break;
+        case DType::BOOL:
+            consistent = std::holds_alternative<std::vector<bool>>(data_);
+            break;
+        case DType::NULL_TYPE:
+            consistent = std::holds_alternative<std::monostate>(data_);
+            break;
+    }
+    if (!consistent) {
+        throw std::logic_error("Column type inconsistency: dtype does not match data variant");
+    }
+}
+
+const ColumnData& Column::data() const {
+    assert_type_consistency();
+    return data_;
+}
 const std::vector<bool>& Column::null_mask() const { return null_mask_; }
 
-Column Column::clone() const { return Column(name_, dtype_, data_, null_mask_); }
+Column Column::clone() const {
+    assert_type_consistency();
+    return Column(name_, dtype_, data_, null_mask_);
+}
 
 }  // namespace arnio
