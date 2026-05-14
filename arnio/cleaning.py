@@ -141,6 +141,65 @@ def strip_whitespace(
     return ArFrame(result)
 
 
+def parse_bool_strings(
+    frame: ArFrame,
+    *,
+    subset: list[str] | None = None,
+    true_values: set[str] | None = None,
+    false_values: set[str] | None = None,
+) -> ArFrame:
+    """Convert common boolean-like string values into actual booleans.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input Arnio frame.
+    subset : list[str], optional
+        Columns to apply conversion on. If None, applies to all object/string columns.
+    true_values : set[str], optional
+        String values treated as True.
+    false_values : set[str], optional
+        String values treated as False.
+
+    Returns
+    -------
+    ArFrame
+        New frame with parsed boolean values.
+
+    Examples
+    --------
+    >>> parsed = ar.parse_bool_strings(frame)
+    """
+    from .convert import from_pandas, to_pandas
+
+    df = to_pandas(frame).copy()
+    if true_values is None:
+        true_values = {"true", "yes", "y", "1"}
+
+    if false_values is None:
+        false_values = {"false", "no", "n", "0"}
+
+    true_values = {v.strip().lower() for v in true_values}
+    false_values = {v.strip().lower() for v in false_values}
+
+    columns = subset or df.select_dtypes(include=["object", "string"]).columns
+
+    for col in columns:
+        df[col] = df[col].apply(
+            lambda x: (
+                True
+                if isinstance(x, str) and x.strip().lower() in true_values
+                else (
+                    False
+                    if isinstance(x, str) and x.strip().lower() in false_values
+                    else x
+                )
+            )
+        )
+
+    return from_pandas(df)
+
+
 def normalize_case(
     frame: ArFrame,
     *,

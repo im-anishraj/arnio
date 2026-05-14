@@ -104,6 +104,129 @@ class TestNormalizeCase:
         assert df["name"].iloc[0] == "Alice"
 
 
+class TestParseBoolStrings:
+    def test_parse_basic_bool_strings(self):
+        import pandas as pd
+
+        df = pd.DataFrame(
+            {
+                "active": ["YES", "no", "True", "0"],
+            }
+        )
+
+        frame = ar.from_pandas(df)
+
+        result = ar.pipeline(
+            frame,
+            [
+                ("parse_bool_strings",),
+            ],
+        )
+
+        cleaned = ar.to_pandas(result)
+
+        assert cleaned["active"].tolist() == [True, False, True, False]
+
+    def test_parse_bool_strings_preserves_unknown_values(self):
+        import pandas as pd
+
+        df = pd.DataFrame(
+            {
+                "active": ["YES", "maybe", "0"],
+            }
+        )
+
+        frame = ar.from_pandas(df)
+
+        result = ar.pipeline(
+            frame,
+            [
+                ("parse_bool_strings",),
+            ],
+        )
+
+        cleaned = ar.to_pandas(result)
+
+        assert cleaned["active"].tolist() == [
+            "True",
+            "maybe",
+            "False",
+        ]
+
+    def test_parse_bool_strings_mixed_object_column(self):
+        import pandas as pd
+
+        df = pd.DataFrame(
+            {
+                "active": ["YES", 123, "0"],
+            },
+            dtype=object,
+        )
+
+        frame = ar.from_pandas(df)
+
+        result = ar.pipeline(
+            frame,
+            [
+                ("parse_bool_strings",),
+            ],
+        )
+
+        cleaned = ar.to_pandas(result)
+
+        assert cleaned["active"].tolist() == [
+            "True",
+            "123",
+            "False",
+        ]
+
+    def test_parse_bool_strings_direct_usage(self):
+        import pandas as pd
+
+        df = pd.DataFrame(
+            {
+                "active": [" YES ", "no", "maybe", None],
+            }
+        )
+
+        frame = ar.from_pandas(df)
+
+        result = ar.parse_bool_strings(frame)
+
+        cleaned = ar.to_pandas(result)
+
+        assert cleaned["active"].tolist()[:3] == [
+            "True",
+            "False",
+            "maybe",
+        ]
+
+        assert pd.isna(cleaned["active"].iloc[3])
+
+    def test_parse_bool_strings_subset(self):
+        import pandas as pd
+
+        df = pd.DataFrame(
+            {
+                "active": ["YES", "no"],
+                "other": ["YES", "no"],
+            },
+            dtype=object,
+        )
+
+        frame = ar.from_pandas(df)
+
+        result = ar.parse_bool_strings(
+            frame,
+            subset=["active"],
+        )
+
+        cleaned = ar.to_pandas(result)
+
+        assert cleaned["active"].tolist() == [True, False]
+        assert cleaned["other"].tolist() == ["YES", "no"]
+
+
 class TestRenameColumns:
     def test_rename(self, sample_csv):
         frame = ar.read_csv(sample_csv)
