@@ -705,6 +705,12 @@ arnio/
 
 <br>
 
+
+## 📚 Documentation
+
+- Bad CSV Troubleshooting Guide → docs/bad_csv_troubleshooting.md
+
+<br>
 ---
 
 <br>
@@ -730,10 +736,7 @@ arnio/
 
 <br>
 
+
 <sub>Built with C++ and pybind11 · Licensed under MIT · Maintained by <a href="https://github.com/im-anishraj">@im-anishraj</a></sub>
 
 </div>
-
-## Troubleshooting
-
-- [Bad CSV Troubleshooting Guide](docs/bad_csv_troubleshooting.md)
