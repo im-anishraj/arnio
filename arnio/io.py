@@ -52,6 +52,42 @@ def _utf8_csv_path(path: str, encoding: str) -> Iterator[str]:
                 pass
 
 
+@contextmanager
+def _comment_filtered_csv_path(path: str, encoding: str, comment: str | None) -> Iterator[str]:
+    """Return a path with full-line comments removed before native parsing."""
+    if comment is None:
+        with _utf8_csv_path(path, encoding) as native_path:
+            yield native_path
+        return
+
+    tmp_name: str | None = None
+    try:
+        with open(path, encoding=encoding, newline="") as src:
+            with tempfile.NamedTemporaryFile(
+                "w", encoding="utf-8", newline="", suffix=".csv", delete=False
+            ) as tmp:
+                tmp_name = tmp.name
+                for line in src:
+                    if line.lstrip().startswith(comment):
+                        continue
+                    tmp.write(line)
+        yield tmp_name
+    except LookupError as e:
+        raise ValueError(f"Unknown encoding: {encoding}") from e
+    except UnicodeDecodeError as e:
+        raise CsvReadError(
+            f"Could not decode {path!r} using encoding {encoding!r}"
+        ) from e
+    except OSError as e:
+        raise CsvReadError(str(e)) from e
+    finally:
+        if tmp_name is not None:
+            try:
+                os.unlink(tmp_name)
+            except OSError:
+                pass
+
+
 def read_csv(
     path: str | os.PathLike[str],
     *,
@@ -60,6 +96,7 @@ def read_csv(
     usecols: list[str] | None = None,
     nrows: int | None = None,
     encoding: str = "utf-8",
+    comment: str | None = None,
 ) -> ArFrame:
     """Read a CSV file into an ArFrame via C++ backend.
 
@@ -77,6 +114,8 @@ def read_csv(
         Number of rows to read. If None, reads all rows.
     encoding : str, default "utf-8"
         File encoding.
+    comment : str, optional
+        Single character marking full-line comments to skip after leading whitespace.
 
     Returns
     -------
@@ -119,6 +158,8 @@ def read_csv(
     config.delimiter = delimiter
     config.has_header = has_header
     config.encoding = encoding
+    if comment is not None and len(comment) != 1:
+        raise ValueError("comment must be a single character")
 
     if usecols is not None:
         config.usecols = usecols
@@ -127,7 +168,7 @@ def read_csv(
 
     reader = _CsvReader(config)
     try:
-        with _utf8_csv_path(path, encoding) as native_path:
+        with _comment_filtered_csv_path(path, encoding, comment) as native_path:
             cpp_frame = reader.read(native_path)
     except ValueError:
         raise
@@ -143,6 +184,7 @@ def scan_csv(
     *,
     delimiter: str = ",",
     encoding: str = "utf-8",
+    comment: str | None = None,
 ) -> dict[str, str]:
     """Return schema (column names + inferred types) without loading data.
 
@@ -154,6 +196,8 @@ def scan_csv(
         Field delimiter character.
     encoding : str, default "utf-8"
         File encoding. Non-UTF-8 inputs are transcoded before native scanning.
+    comment : str, optional
+        Single character marking full-line comments to skip after leading whitespace.
 
     Returns
     -------
@@ -199,7 +243,7 @@ def scan_csv(
     config.encoding = encoding
     reader = _CsvReader(config)
     try:
-        with _utf8_csv_path(path, encoding) as native_path:
+        with _comment_filtered_csv_path(path, encoding, comment) as native_path:
             return reader.scan_schema(native_path)
     except RuntimeError as e:
         raise CsvReadError(str(e)) from e
