@@ -355,11 +355,12 @@ import arnio as ar
 
 frame = ar.read_csv("data.csv")
 
-# Basic conversion — dtype preserved
+# Basic conversion
 arr = frame.to_numpy()
-# int columns  → int64
-# float columns → float64
-# bool columns  → bool
+# All-int frame → int64
+# All-float frame → float64
+# All-bool frame → bool
+# Mixed int/float/bool → NumPy promotes to a common dtype (e.g. float64)
 
 # Handle null values with fill_value
 arr = frame.to_numpy(fill_value=0)
