@@ -662,22 +662,24 @@ void CsvParser::parse_line(const std::string& line, std::vector<std::string>& fi
     }
 }
 
-bool CsvParser::is_null_sentinel(const std::string& value) const {
-    if (config_.null_values.has_value()) {
-        const auto& sentinels = config_.null_values.value();
-        for (const auto& sentinel : sentinels) {
-            if (value.size() != sentinel.size()) continue;
-            bool match = true;
-            for (size_t i = 0; i < value.size(); ++i) {
-                if (std::tolower(static_cast<unsigned char>(value[i])) !=
-                    std::tolower(static_cast<unsigned char>(sentinel[i]))) {
-                    match = false;
-                    break;
-                }
-            }
-            if (match) return true;
-        }
-        return false;
+DType CsvReader::infer_type(const std::string& value) const {
+    if (value.empty()) return DType::NULL_TYPE;
+
+    // Check configurable null sentinel values (pandas-compatible defaults)
+    if (config_.null_values.count(value)) return DType::NULL_TYPE;
+
+    // Try bool
+    std::string lower = value;
+    std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+    if (lower == "true" || lower == "false") return DType::BOOL;
+
+    // Try int64
+    {
+        const char* start = value.c_str();
+        char* end = nullptr;
+        long long val = std::strtoll(start, &end, 10);
+        (void)val;
+        if (end != start && *end == '\0') return DType::INT64;
     }
 
     return value.empty();
@@ -758,9 +760,8 @@ DType CsvParser::promote_type(DType current, DType incoming) {
     return DType::STRING;
 }
 
-CellValue CsvParser::parse_value(const std::string& raw, DType dtype, bool is_forced) const {
-    const std::string sanitized = handle_utf8_errors(raw, config_.encoding_errors);
-    if (is_null_sentinel(sanitized)) return std::monostate{};
+CellValue CsvReader::parse_value(const std::string& raw, DType dtype) {
+    if (raw.empty() || config_.null_values.count(raw)) return std::monostate{};
 
     switch (dtype) {
         case DType::BOOL: {

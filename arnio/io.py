@@ -213,7 +213,7 @@ def read_csv(
     nrows: int | None = None,
     skiprows: int | None = None,
     encoding: str = "utf-8",
-    comment: str | None = None,
+    null_values: set[str] | None = None,
 ) -> ArFrame:
     """Read a CSV file into an ArFrame via C++ backend.
 
@@ -243,8 +243,11 @@ def read_csv(
         If None, no lines are skipped.
     encoding : str, default "utf-8"
         File encoding.
-    comment : str, optional
-        Single character marking full-line comments to skip after leading whitespace.
+    null_values : set[str], optional
+        Set of strings to treat as null/missing values.
+        Defaults to pandas-compatible set:
+        {"NA", "N/A", "null", "None", "NaN", "nan", "#N/A", "-"}.
+        Pass an empty set to disable null sentinel recognition.
 
     Returns
     -------
@@ -706,7 +709,13 @@ def write_csv(
     if comment is not None and len(comment) != 1:
         raise ValueError("comment must be a single character")
 
-    writer = _CsvWriter(config)
+    if null_values is not None:
+        config.null_values = null_values
+
+    if usecols is not None:
+        config.usecols = usecols
+    if nrows is not None:
+        config.nrows = nrows
 
     if _is_utf8_encoding(encoding):
         # Fast path: native writer emits UTF-8 directly — no transcoding overhead.
@@ -741,7 +750,7 @@ def scan_csv(
     *,
     delimiter: str | None = None,
     encoding: str = "utf-8",
-    comment: str | None = None,
+    null_values: set[str] | None = None,
 ) -> dict[str, str]:
     """Return schema (column names + inferred types) without loading data.
 
@@ -759,8 +768,10 @@ def scan_csv(
         explicit value always takes precedence.
     encoding : str, default "utf-8"
         File encoding. Non-UTF-8 inputs are transcoded before native scanning.
-    comment : str, optional
-        Single character marking full-line comments to skip after leading whitespace.
+    null_values : set[str], optional
+        Set of strings to treat as null/missing values.
+        Defaults to pandas-compatible set:
+        {"NA", "N/A", "null", "None", "NaN", "nan", "#N/A", "-"}.
 
         Values containing delimiter characters must still be quoted
         properly in the CSV input. For example, when using a comma
@@ -937,9 +948,14 @@ def _validate_jsonl_path(path: str) -> None:
         )
 
 
-def _parse_jsonl_record(line: str, lineno: int, path: str) -> dict:
-    from .convert import _is_nested
+    config = _CsvConfig()
+    config.delimiter = delimiter
+    config.encoding = encoding
 
+    if null_values is not None:
+        config.null_values = null_values
+
+    reader = _CsvReader(config)
     try:
         with _comment_filtered_csv_path(path, encoding, comment) as native_path:
             return reader.scan_schema(native_path)

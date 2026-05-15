@@ -21,45 +21,9 @@ struct CsvConfig {
     std::optional<size_t> nrows = std::nullopt;
     std::optional<size_t> skip_rows = std::nullopt;
     std::string encoding = "utf-8";  // Currently only utf-8 supported
-    bool trim_headers = true;        // for implementing the trim_headers option
-    char decimal_separator = '.';
-    std::optional<char> thousands_separator = std::nullopt;
-    std::optional<size_t> sample_size = std::nullopt;
-    std::optional<std::vector<std::string>> null_values = std::nullopt;
-    std::string mode = "strict";
-    std::string encoding_errors = "strict";
-};
-
-struct BadRow {
-    size_t row;
-    size_t expected;
-    size_t actual;
-};
-
-struct CsvParseResult {
-    Frame frame;
-    std::vector<BadRow> bad_rows;
-};
-
-// Shared CSV field parsing and type inference used by CsvReader and CsvChunkReader.
-class CsvParser {
-   public:
-    explicit CsvParser(const CsvConfig& config = CsvConfig{});
-
-    const CsvConfig& config() const { return config_; }
-
-    std::vector<std::string> parse_line(const std::string& line) const;
-    void parse_line(const std::string& line, std::vector<std::string>& out_fields) const;
-    bool is_null_sentinel(const std::string& value) const;
-    DType infer_type(const std::string& value) const;
-    static DType promote_type(DType current, DType incoming);
-    CellValue parse_value(const std::string& raw, DType dtype, bool is_forced = false) const;
-
-   private:
-    CsvConfig config_;
-    // 256-byte lookup table: non-zero for chars that stop the unquoted
-    // bulk-scan (delimiter, '"', '\r'). Initialised once in the constructor.
-    std::array<uint8_t, 256> stop_unquoted_{};
+    std::unordered_set<std::string> null_values = {
+        "NA", "N/A", "null", "None", "NaN", "nan", "#N/A", "-"
+    };
 };
 
 class CsvReader {
@@ -83,10 +47,8 @@ class CsvChunkReader {
     explicit CsvChunkReader(const CsvConfig& config = CsvConfig{});
     ~CsvChunkReader();
 
-    void open(const std::string& path);
-    std::optional<CsvParseResult> next_chunk(size_t chunksize,
-                                             const std::string& on_bad_lines = "error");
-    void close();
+    // Infer DType from a string value
+    DType infer_type(const std::string& value) const;
 
    private:
     CsvParser parser_;
