@@ -22,6 +22,7 @@ from .cleaning import (
     filter_rows,
     normalize_case,
     rename_columns,
+    safe_divide_columns,
     strip_whitespace,
 )
 from .convert import from_pandas, to_pandas
@@ -68,6 +69,7 @@ __all__ = [
     "rename_columns",
     "cast_types",
     "clean",
+    "safe_divide_columns",
     # Conversion
     "to_pandas",
     "from_pandas",
