@@ -652,11 +652,11 @@ This project is a Python/C++ package. It does NOT run as a Node.js app.
 =======
 This project is a Python + C++ package.
 
-
 ---
 >>>>>>> f8f4810 (docs: improve installation instructions)
 
 ### 1. Clone the repository
+
 ```bash
 git clone https://github.com/im-anishraj/arnio.git
 cd arnio
