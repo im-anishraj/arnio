@@ -88,7 +88,7 @@ class ArFrame:
         if isinstance(columns, str):
             raise TypeError("columns must be a sequence of column names, not a string.")
 
-        if not isinstance(columns, list | tuple):
+        if not isinstance(columns, (list, tuple)):
             raise TypeError("columns must be a list or tuple of column names.")
 
         if not columns:
