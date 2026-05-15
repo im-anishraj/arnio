@@ -1,25 +1,26 @@
-.PHONY: install test lint format benchmark clean
+.PHONY: install test lint format benchmark clean help
 
-install:
+help:  ## Show this help message
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
+
+install: ## Install dependencies and pre-commit
 	pip install -e ".[dev]"
 	pre-commit install
 
-test:
+test: ## Run tests with coverage
 	pytest tests/ -v --cov=arnio --cov-report=term-missing
 
-lint:
+lint: ## Check linting
 	ruff check .
 	black --check .
 
-format:
+format: ## Format code
 	black .
 	ruff check --fix .
 
-benchmark:
+benchmark: ## Run benchmarks
 	python benchmarks/generate_data.py
 	python benchmarks/benchmark_vs_pandas.py
 
-clean:  ## Remove build artifacts (Linux/macOS only; Windows: delete manually)
-	find . -type d -name "__pycache__" -exec rm -rf {} +
-	find . -name "*.pyc" -delete
-	rm -rf .pytest_cache dist build *.egg-info
+clean: ## Remove build artifacts
+	python -c "import shutil, os, glob; [shutil.rmtree(p, ignore_errors=True) for p in ['dist', 'build', '.pytest_cache'] + glob.glob('*.egg-info') + glob.glob('**/__pycache__', recursive=True)]; [os.remove(f) for f in glob.glob('**/*.pyc', recursive=True)]"
