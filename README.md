@@ -47,7 +47,7 @@ pip install arnio
 
 <br>
 
-## ⚡ Quickstart
+## <img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/zap.svg" width="22" height="22" align="top"> Quickstart
 
 Three lines. That's the entire workflow.
 
@@ -75,7 +75,7 @@ df = ar.to_pandas(clean)
 <br>
 
 <details>
-<summary><b>📸 Peek at a 100 GB file without loading it</b></summary>
+<summary><b><img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/camera.svg" width="18" height="18" align="top"> Peek at a 100 GB file without loading it</b></summary>
 <br>
 
 `scan_csv` reads only the header + a sample to infer the schema. Zero data loaded.
@@ -89,7 +89,7 @@ Useful for exploring datasets before committing memory.
 </details>
 
 <details>
-<summary><b>🧩 Add custom steps without touching C++</b></summary>
+<summary><b><img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/puzzle.svg" width="18" height="18" align="top"> Add custom steps without touching C++</b></summary>
 <br>
 
 Register any Python function as a pipeline step. It receives a `DataFrame`, returns a `DataFrame`.
@@ -117,12 +117,12 @@ Custom steps run through a pandas↔ArFrame conversion bridge. Prototype in Pyth
 
 <br>
 
-## 🔍 Why Arnio exists
+## <img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/search.svg" width="22" height="22" align="top"> Why Arnio exists
 
 Every data project starts the same way:
 
 ```python
-df = pd.read_csv("data.csv")              # 💥 RAM spike — entire file as raw strings
+df = pd.read_csv("data.csv")              # <img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/bomb.svg" width="16" height="16" align="top"> RAM spike — entire file as raw strings
 df.columns = df.columns.str.strip()        # Why is this not automatic?
 df["name"] = df["name"].str.strip()        # Python loop over every cell
 df["name"] = df["name"].str.lower()        # Another Python loop
@@ -175,7 +175,7 @@ df = ar.to_pandas(ar.pipeline(frame, [
 
 <br>
 
-## 🏗️ Architecture
+## <img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/layers.svg" width="22" height="22" align="top"> Architecture
 
 Arnio is not a pandas wrapper. It's a separate runtime with its own data model.
 
@@ -222,7 +222,7 @@ Arnio is not a pandas wrapper. It's a separate runtime with its own data model.
 
 <br>
 
-## 🏎️ Benchmarks
+## <img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/gauge.svg" width="22" height="22" align="top"> Benchmarks
 
 > **Reference environment**: Ubuntu, Python 3.12, 1M rows × 12 columns, synthetic messy CSV.<br>
 > **Reproduce**: `make benchmark` — generates the deterministic dataset and runs both engines.
@@ -256,8 +256,8 @@ Small differences are expected across CPUs, operating systems, compilers, Python
 
 <table>
 <tr>
-<td>✅ <b>What's already won</b></td>
-<td>🎯 <b>What's being optimized</b></td>
+<td><img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/check-circle.svg" width="18" height="18" align="top"> <b>What's already won</b></td>
+<td><img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/target.svg" width="18" height="18" align="top"> <b>What's being optimized</b></td>
 </tr>
 <tr>
 <td>
@@ -285,7 +285,7 @@ Small differences are expected across CPUs, operating systems, compilers, Python
 
 <br>
 
-## 🧰 Cleaning primitives
+## <img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/wrench.svg" width="22" height="22" align="top"> Cleaning primitives
 
 Most operations below run natively in C++. The current `filter_rows` step uses the Python pipeline backend and may be optimized in C++ later.
 
@@ -311,7 +311,7 @@ clean = ar.pipeline(frame, [
     ("drop_duplicates", {"keep": "first"}),
 ])
 ```
-### 🔎 Filter rows inside pipelines
+### <img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/filter.svg" width="20" height="20" align="top"> Filter rows inside pipelines
 
 Use `filter_rows` to keep only rows matching a condition.
 
@@ -347,7 +347,7 @@ Works with:
 
 <br>
 
-## 🧠 Data quality engine
+## <img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/brain.svg" width="22" height="22" align="top"> Data quality engine
 
 Arnio now includes built-in dataset understanding before you analyze in pandas.
 
@@ -465,15 +465,15 @@ DataQualityReport(
 | **Duplicates** | 0 (0.0%) |
 <br>
 
-## 🗺️ Roadmap
+## <img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/map.svg" width="22" height="22" align="top"> Roadmap
 
 | Version | Focus | Status |
 |:---:|:---|:---:|
 | **v1.0** | Stable release · cross-platform wheels · CI/CD · PyPI publishing · Google Colab support | ✅ Shipped |
 | **v1.1** | Production readiness · release hardening · docs/tooling | ✅ Shipped |
-| **v1.2** | C++ pipeline optimization · speed parity with pandas · hash-based deduplication | 🔨 Active |
-| **v1.3** | Chunked / streaming processing · Parquet & JSON readers | 📋 Planned |
-| **v1.4** | Parallel column processing · SIMD string operations | 💭 Exploring |
+| **v1.2** | C++ pipeline optimization · speed parity with pandas · hash-based deduplication | <img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/hammer.svg" width="16" height="16" align="top"> Active |
+| **v1.3** | Chunked / streaming processing · Parquet & JSON readers | <img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/clipboard-list.svg" width="16" height="16" align="top"> Planned |
+| **v1.4** | Parallel column processing · SIMD string operations | <img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/lightbulb.svg" width="16" height="16" align="top"> Exploring |
 
 <br>
 
@@ -481,7 +481,7 @@ DataQualityReport(
 
 <br>
 
-## 💬 Community
+## <img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/message-square.svg" width="22" height="22" align="top"> Community
 
 Join the **[Arnio Discord Community](https://discord.gg/xsEw7r78M)** for quick setup help, contributor onboarding, GSSoC 2026 coordination, feature discussion, and community updates.
 
@@ -497,7 +497,7 @@ Discord is for fast conversation and support. GitHub remains the source of truth
 
 <br>
 
-## 🤝 Contribute
+## <img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/users.svg" width="22" height="22" align="top"> Contribute
 
 Arnio is a **[GSSoC 2026](https://gssoc.girlscript.tech/)** project with a structured contributor backlog across beginner, intermediate, and advanced tracks.
 
@@ -547,10 +547,10 @@ For GSSoC contributors, please read **[GSSOC_GUIDE.md](GSSOC_GUIDE.md)** before 
 If you are new to Arnio terms, see the [contributor glossary](.github/CONTRIBUTING.md#contributor-glossary).
 
 <p align="center">
-<a href=".github/CONTRIBUTING.md"><b>📖 Full Contributing Guide</b></a>&ensp;·&ensp;
+<a href=".github/CONTRIBUTING.md"><b><img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/book-open.svg" width="18" height="18" align="top"> Full Contributing Guide</b></a>&ensp;·&ensp;
 <a href="GSSOC_GUIDE.md"><b>GSSoC Guide</b></a>&ensp;·&ensp;
-<a href="https://github.com/im-anishraj/arnio/issues"><b>🐛 Open Issues</b></a>&ensp;·&ensp;
-<a href="https://github.com/im-anishraj/arnio/discussions"><b>💬 Discussions</b></a>&ensp;·&ensp;
+<a href="https://github.com/im-anishraj/arnio/issues"><b><img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/bug.svg" width="18" height="18" align="top"> Open Issues</b></a>&ensp;·&ensp;
+<a href="https://github.com/im-anishraj/arnio/discussions"><b><img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/message-circle.svg" width="18" height="18" align="top"> Discussions</b></a>&ensp;·&ensp;
 <a href="https://discord.gg/xsEw7r78M"><b>Discord</b></a>
 </p>
 
@@ -560,7 +560,7 @@ If you are new to Arnio terms, see the [contributor glossary](.github/CONTRIBUTI
 
 <br>
 
-## 🚢 Release process
+## <img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/ship.svg" width="22" height="22" align="top"> Release process
 
 Arnio releases are automated through Release Please and GitHub Actions.
 
@@ -592,7 +592,7 @@ If any publish or smoke-test step fails, leave the failed tag and GitHub release
 
 <br>
 
-## 📐 Project structure
+## <img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/layout.svg" width="22" height="22" align="top"> Project structure
 
 ```text
 arnio/
