@@ -11,11 +11,10 @@ from ._core import _Frame
 class ArFrame:
     """Lightweight columnar data container backed by C++."""
 
-    __slots__ = ("_frame", "_attrs")
+    __slots__ = ("_frame",)
 
-    def __init__(self, cpp_frame: _Frame, attrs: dict | None = None) -> None:
-            self._frame = cpp_frame
-            self._attrs: dict = attrs if attrs is not None else {}
+    def __init__(self, cpp_frame: _Frame) -> None:
+        self._frame = cpp_frame
 
     # --- Properties ---
 
