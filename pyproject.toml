@@ -10,14 +10,14 @@ build-backend = "scikit_build_core.build"
 [project]
 name = "arnio"
 version = "1.2.0"
-description = "C++ accelerated CSV preprocessing and data cleaning for pandas"
+description = "C++ accelerated data preparation for pandas and the Python data stack"
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.9"
 authors = [
     { name = "Anish Raj", email = "anishrajyadav97@gmail.com" }
 ]
-keywords = ["pandas", "csv", "data-cleaning", "preprocessing", "c++", "performance"]
+keywords = ["pandas", "csv", "data-cleaning", "preprocessing", "data-quality", "schema-validation", "c++", "performance"]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
