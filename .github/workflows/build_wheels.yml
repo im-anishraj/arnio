@@ -6,7 +6,12 @@ on:
       tag_name:
         required: true
         type: string
-  workflow_dispatch:  # allows manual trigger for testing
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Git tag or ref to build and publish"
+        required: false
+        type: string
 
 jobs:
   build_sdist:
@@ -41,6 +46,8 @@ jobs:
         uses: pypa/cibuildwheel@v2.22
         env:
           CIBW_ARCHS_MACOS: "x86_64 arm64"
+          CIBW_TEST_COMMAND: >-
+            python -c "import pathlib, sys, pytest; sys.path.insert(0, str(pathlib.Path(r'{project}'))); raise SystemExit(pytest.main([str(pathlib.Path(r'{project}') / 'tests'), '-v', '--tb=short', '-x']))"
 
       - name: Upload wheels as artifacts
         uses: actions/upload-artifact@v4
