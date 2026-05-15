@@ -298,6 +298,7 @@ Most operations below run natively in C++. The current `filter_rows` step uses t
 | `strip_whitespace` | Trim leading/trailing spaces from strings | `ar.strip_whitespace(frame)` |
 | `normalize_case` | Force lower/upper/title case | `ar.normalize_case(frame, case_type="title")` |
 | `rename_columns` | Rename columns via mapping | `ar.rename_columns(frame, {"old": "new"})` |
+| `drop_columns` | Remove specified columns from the frame | `ar.drop_columns(frame, ["col1", "col2"])` |
 | `cast_types` | Cast column types | `ar.cast_types(frame, {"age": "int64"})` |
 | `clean` | Convenience shorthand | `ar.clean(frame, drop_nulls=True)` |
 
