@@ -1,7 +1,5 @@
 """Tests for ArFrame class."""
 
-import pytest
-
 import arnio as ar
 
 
@@ -31,3 +29,4 @@ class TestArFrame:
         frame = ar.read_csv(str(csv_path))
         assert frame.is_empty is False
         assert len(frame) == 1
+        
