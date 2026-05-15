@@ -36,6 +36,7 @@ from .quality import (
 from .schema import (
     URL,
     Bool,
+    Date,
     Email,
     Field,
     Float64,
@@ -91,4 +92,5 @@ __all__ = [
     "ArnioError",
     "CsvReadError",
     "TypeCastError",
+    "Date",
 ]

@@ -6,6 +6,7 @@ Production data contracts and validation.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any
 
 import pandas as pd
@@ -233,6 +234,16 @@ def URL(*, nullable: bool = True, unique: bool = False) -> Field:
     return Field(dtype="string", nullable=nullable, semantic="url", unique=unique)
 
 
+def Date(*, nullable: bool = True, unique: bool = False) -> Field:
+    """Create a date schema field."""
+    return Field(
+        dtype="string",
+        nullable=nullable,
+        semantic="date",
+        unique=unique,
+    )
+
+
 def _validate_column(
     series: pd.Series,
     actual_dtype: str | None,
@@ -341,7 +352,19 @@ def _validate_column(
                 )
             )
         else:
-            invalid = non_null[~text.str.fullmatch(pattern, na=False)]
+            if field_def.semantic == "date":
+                invalid_values = []
+
+                for index, value in non_null.items():
+                    try:
+                        datetime.strptime(str(value), "%Y-%m-%d")
+                    except ValueError:
+                        invalid_values.append((index, value))
+
+                invalid = pd.Series({index: value for index, value in invalid_values})
+            else:
+                invalid = non_null[~text.str.fullmatch(pattern, na=False)]
+
             issues.extend(
                 _row_issues(
                     invalid,
@@ -407,4 +430,5 @@ _SEMANTIC_PATTERNS = {
     "email": r"[^@\s]+@[^@\s]+\.[^@\s]+",
     "url": r"https?://[^\s]+",
     "phone": r"\+?[0-9][0-9 .()\-]{6,}[0-9]",
+    "date": r"\d{4}-\d{2}-\d{2}",
 }

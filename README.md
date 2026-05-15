@@ -335,12 +335,15 @@ schema = ar.Schema({
     "id": ar.Int64(nullable=False, unique=True),
     "email": ar.Email(nullable=False),
     "revenue": ar.Float64(nullable=True, min=0),
+    "created_at": ar.Date(nullable=False),
 })
 
 result = ar.validate(frame, schema)
 if not result.passed:
     print(result.to_pandas())
 ```
+
+Date fields use the `YYYY-MM-DD` format and reject invalid calendar dates.
 
 For low-risk automatic cleanup:
 
