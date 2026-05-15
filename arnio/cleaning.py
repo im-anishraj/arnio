@@ -428,10 +428,30 @@ def filter_rows(frame, column, op, value):
 def make_column_names_unique(
     frame: ArFrame,
 ) -> ArFrame:
-    """Make duplicates column names unique by adding suffixes.
+    """Make duplicate column names unique by adding suffixes.
 
     Duplicate names are made unique by appending "_1", "_2", etc.
-    The first occurence is kept the same.
+    The first occurrence is kept the same.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input data frame.
+
+    Returns
+    -------
+    ArFrame
+        New frame with unique column names.
+
+    Examples
+    --------
+    >>> frame = ar.read_csv("data.csv")
+    >>> unique = ar.make_column_names_unique(frame)
+    """
+    result = _make_column_names_unique(frame._frame)
+    return ArFrame(result)
+
+
 def round_numeric_columns(
     frame,
     *,
@@ -498,12 +518,8 @@ def safe_divide_columns(
 
     Parameters
     ----------
-    frame : ArFrame
+    frame : ArFrame or pd.DataFrame
         Input data frame.
-    Returns
-    -------
-    ArFrame
-        New frame with unique column names.
     numerator : str
         Column name to use as the numerator.
     denominator : str
@@ -517,15 +533,12 @@ def safe_divide_columns(
 
     Returns
     -------
-    ArFrame
+    ArFrame or pd.DataFrame
+        New frame with the result column added.
 
     Examples
     --------
     >>> frame = ar.read_csv("data.csv")
-    >>> unique = ar.make_column_names_unique(frame)
-    """
-    result = _make_column_names_unique(frame._frame)
-    return ArFrame(result)
     >>> result = ar.safe_divide_columns(frame, numerator="revenue", denominator="cost", output_column="ratio")
     """
     import pandas as pd

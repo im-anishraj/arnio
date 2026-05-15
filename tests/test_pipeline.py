@@ -150,8 +150,11 @@ class TestPipeline:
         except ValueError as e:
             assert "Expected a dict" in str(e)
 
-    def test_pipeline_make_column_names_unique(self, csv_with_duplicate_columns):
-        frame = ar.read_csv(csv_with_duplicate_columns)
+    def test_pipeline_make_column_names_unique(self):
+        import pandas as pd
+
+        df = pd.DataFrame([[1, 2, 3]], columns=["col", "col", "age"])
+        frame = ar.frompandas(df)
         result = ar.pipeline(frame, [("make_column_names_unique",)])
         assert result.columns == ["col", "col_1", "age"]
 
