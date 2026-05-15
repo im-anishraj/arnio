@@ -114,7 +114,7 @@ This roundtrip involves memory re-allocation.
 
 - `to_pandas()` creates a DataFrame representation.
 
-- `from_pandas()` re-infers types to re-populate the C++ structures.
+- `from_pandas()` re-infers types to re-populate the internal data structures.
 
 Core cleaning primitives should ideally be implemented in C++ to bypass this overhead.
 
@@ -152,7 +152,7 @@ Most cleaning operations do not modify the existing `Frame` in-place; instead, t
 
 ## 8. Error Handling & Translation
 
-Arnio uses a unified exception hierarchy to bridge the C++/Python boundary via pybind11.
+Arnio uses a unified exception hierarchy to bridge the C++/Python boundary.
 
 ### Base Exception
 
@@ -164,4 +164,4 @@ Arnio uses a unified exception hierarchy to bridge the C++/Python boundary via p
 - `UnknownStepError`
 - `TypeCastError`
 
-Exceptions raised within the core are translated by the binding layer into standard Python exceptions to ensure the interpreter remains stable.
+When supported by the specific implementation, exceptions raised within the core are translated into standard Python exceptions to maintain interpreter stability.
