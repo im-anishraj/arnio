@@ -299,7 +299,7 @@ Most operations below run natively in C++. The current `filter_rows` step uses t
 | `normalize_case` | Force lower/upper/title case | `ar.normalize_case(frame, case_type="title")` |
 | `rename_columns` | Rename columns via mapping | `ar.rename_columns(frame, {"old": "new"})` |
 | `cast_types` | Cast column types | `ar.cast_types(frame, {"age": "int64"})` |
-| `round_numeric_columns` | Round numeric columns to decimal places | `ar.round_numeric_columns(frame, decimals=2)` |
+| `round_numeric_columns` | Round numeric columns (non-numeric columns in subset ignored safely) | `ar.round_numeric_columns(frame, decimals=2)` |
 | `clean` | Convenience shorthand | `ar.clean(frame, drop_nulls=True)` |
 
 Or compose them all into a **pipeline**:

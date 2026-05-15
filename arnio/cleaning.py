@@ -316,6 +316,8 @@ def round_numeric_columns(
 ):
     """Round numeric columns to specified decimal places.
 
+    Non-numeric columns included in subset are ignored safely.
+
     Parameters
     ----------
     frame : ArFrame or pd.DataFrame
@@ -341,7 +343,7 @@ def round_numeric_columns(
 
     if subset is not None and not isinstance(subset, list):
         raise TypeError("subset must be a list of column names")
-    if not isinstance(decimals, int):
+    if isinstance(decimals, bool) or not isinstance(decimals, int):
         raise TypeError("decimals must be an integer")
 
     is_arframe = not isinstance(frame, pd.DataFrame)
@@ -350,7 +352,7 @@ def round_numeric_columns(
     if subset is not None:
         missing = [col for col in subset if col not in df.columns]
         if missing:
-            raise KeyError(f"Columns not found in dataframe: {missing}")
+            raise IndexError(f"Column not found: {missing[0]}")
         cols_to_round = subset
     else:
         cols_to_round = df.select_dtypes(include=["number"]).columns
