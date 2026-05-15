@@ -619,17 +619,22 @@ The biggest performance wins are in:
 
 # Clone the repository
 git clone https://github.com/im-anishraj/arnio.git
-cd arnio    
+cd arnio
+
+# Ensure Python 3.12+ is installed
+python --version
 
 # Create and activate a virtual environment
 python -m venv venv
 source venv/bin/activate   # On Windows: venv\Scripts\activate
 
-# Install dependencies
-pip install -r requirements.txt
+# Install dependencies in editable mode
+pip install -U pip
+pip install -e .
 
 # Run tests
 pytest
+
 
 
 For GSSoC contributors, please read **[GSSOC_GUIDE.md](GSSOC_GUIDE.md)** before asking to be assigned. It explains issue claiming, contribution levels, review expectations, and what maintainers look for in a strong PR. If you want a quick onboarding refresher, see the [GSSoC FAQ](GSSOC_GUIDE.md#gssoc-faq).
