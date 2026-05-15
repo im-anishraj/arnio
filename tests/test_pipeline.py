@@ -127,6 +127,11 @@ class TestPipeline:
         except ValueError as e:
             assert "Expected a dict" in str(e)
 
+    def test_pipeline_make_column_names_unique(self, csv_with_duplicate_columns):
+        frame = ar.read_csv(csv_with_duplicate_columns)
+        result = ar.pipeline(frame, [("make_column_names_unique",)])
+        assert result.columns == ["col", "col_1", "age"]
+
 
 def test_filter_rows_greater_than():
     import pandas as pd

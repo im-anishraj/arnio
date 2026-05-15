@@ -53,6 +53,15 @@ def csv_no_header(tmp_path):
 
 
 @pytest.fixture
+def csv_with_duplicate_columns(tmp_path):
+    """CSV with duplicate column names."""
+    csv_content = "col,col,age\n1,2,3\n4,5,6\n"
+    path = tmp_path / "duplicate_cols.csv"
+    path.write_text(csv_content)
+    return str(path)
+
+
+@pytest.fixture
 def large_csv(tmp_path):
     """Generate a larger CSV for performance sanity checks."""
     lines = ["id,value,label"]

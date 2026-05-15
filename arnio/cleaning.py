@@ -12,6 +12,7 @@ from ._core import (
     _drop_duplicates,
     _drop_nulls,
     _fill_nulls,
+    _make_column_names_unique,
     _normalize_case,
     _rename_columns,
     _strip_whitespace,
