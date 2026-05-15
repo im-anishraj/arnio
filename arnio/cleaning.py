@@ -315,6 +315,43 @@ def rename_columns(
     return ArFrame(result)
 
 
+# changes done to trim white spaces.
+def trim_column_names(frame: ArFrame) -> ArFrame:
+    """Strip leading and trailing whitespace from column names.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input data frame.
+
+    Returns
+    -------
+    ArFrame
+        New frame with trimmed column names.
+
+    Raises
+    ------
+    ValueError
+        If trimming would create duplicate column names.
+
+    Examples
+    --------
+    >>> frame = ar.read_csv("data.csv")  # columns: [" name ", " age "]
+    >>> clean = ar.trim_column_names(frame)  # columns: ["name", "age"]
+    """
+    from .convert import from_pandas, to_pandas
+
+    df = to_pandas(frame)
+    trimmed = [col.strip() for col in df.columns]
+
+    if len(trimmed) != len(set(trimmed)):
+        raise ValueError(f"Trimming column names would create duplicates: {trimmed}")
+
+    df = df.copy()
+    df.columns = trimmed
+    return from_pandas(df)
+
+
 def cast_types(
     frame: ArFrame,
     mapping: dict[str, str],

@@ -4,6 +4,7 @@ import pandas as pd
 import pytest
 
 import arnio as ar
+from arnio import from_pandas, to_pandas
 
 
 class TestDropNulls:
@@ -299,6 +300,38 @@ class TestRenameColumns:
         assert "full_name" in result.columns
         assert "years" in result.columns
         assert "name" not in result.columns
+
+
+class TestTrimColumnNames:
+    def test_trim_column_names_basic(self):
+        df = pd.DataFrame({" name ": [1], " age ": [2]})
+        frame = from_pandas(df)
+        result = ar.trim_column_names(frame)
+        assert to_pandas(result).columns.tolist() == ["name", "age"]
+
+    def test_trim_column_names_already_clean(self):
+        df = pd.DataFrame({"name": [1], "age": [2]})
+        frame = from_pandas(df)
+        result = ar.trim_column_names(frame)
+        assert to_pandas(result).columns.tolist() == ["name", "age"]
+
+    def test_trim_column_names_mixed(self):
+        df = pd.DataFrame({" name": [1], "age ": [2], "score": [3]})
+        frame = from_pandas(df)
+        result = ar.trim_column_names(frame)
+        assert to_pandas(result).columns.tolist() == ["name", "age", "score"]
+
+    def test_trim_column_names_preserves_order(self):
+        df = pd.DataFrame({" c ": [1], " b ": [2], " a ": [3]})
+        frame = from_pandas(df)
+        result = ar.trim_column_names(frame)
+        assert to_pandas(result).columns.tolist() == ["c", "b", "a"]
+
+    def test_trim_column_names_duplicate_raises(self):
+        df = pd.DataFrame({" name": [1], "name ": [2]})
+        frame = from_pandas(df)
+        with pytest.raises(ValueError, match="duplicates"):
+            ar.trim_column_names(frame)
 
 
 class TestCastTypes:
