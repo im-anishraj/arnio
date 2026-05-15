@@ -321,3 +321,103 @@ def test_safe_divide_columns_pipeline():
     assert result_df["ratio"].iloc[0] == 2.0
     assert result_df["ratio"].iloc[1] == 0.0  # division by zero → fill_value
     assert result_df["ratio"].iloc[2] == 0.0  # zero numerator
+
+
+def test_replace_values_simple():
+    import pandas as pd
+
+    import arnio as ar
+
+    df = pd.DataFrame({"status": ["active", "inactive", "active"]})
+
+    frame = ar.from_pandas(df)
+
+    result = ar.pipeline(
+        frame,
+        [
+            (
+                "replace_values",
+                {"mapping": {"active": "A", "inactive": "I"}, "column": "status"},
+            )
+        ],
+    )
+
+    result_df = ar.to_pandas(result)
+
+    assert list(result_df["status"]) == ["A", "I", "A"]
+
+
+def test_replace_values_none():
+    import numpy as np
+    import pandas as pd
+
+    import arnio as ar
+
+    df = pd.DataFrame({"status": ["active", None, np.nan, "inactive"]})
+
+    frame = ar.from_pandas(df)
+
+    result = ar.pipeline(
+        frame,
+        [
+            (
+                "replace_values",
+                {
+                    "mapping": {None: "MISSING", "active": "A", "inactive": "I"},
+                    "column": "status",
+                },
+            )
+        ],
+    )
+
+    result_df = ar.to_pandas(result)
+
+    assert list(result_df["status"]) == ["A", "MISSING", "MISSING", "I"]
+
+
+def test_replace_values_no_column():
+    import pandas as pd
+
+    import arnio as ar
+
+    df = pd.DataFrame(
+        {
+            "status": ["active", None, "inactive"],
+            "flag": [None, "active", "inactive"],
+        }
+    )
+
+    frame = ar.from_pandas(df)
+
+    result = ar.pipeline(
+        frame,
+        [
+            (
+                "replace_values",
+                {"mapping": {None: "MISSING", "active": "A", "inactive": "I"}},
+            ),
+        ],
+    )
+
+    result_df = ar.to_pandas(result)
+
+    assert list(result_df["status"]) == ["A", "MISSING", "I"]
+    assert list(result_df["flag"]) == ["MISSING", "A", "I"]
+
+
+def test_replace_values_direct_api():
+    import pandas as pd
+
+    import arnio as ar
+
+    df = pd.DataFrame({"status": ["active", "inactive", "active"]})
+
+    frame = ar.from_pandas(df)
+
+    result = ar.replace_values(
+        frame, mapping={"active": "A", "inactive": "I"}, column="status"
+    )
+
+    result_df = ar.to_pandas(result)
+
+    assert list(result_df["status"]) == ["A", "I", "A"]

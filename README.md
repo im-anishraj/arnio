@@ -383,7 +383,7 @@ Small differences are expected across CPUs, operating systems, compilers, Python
 
 ## 🧰 Cleaning primitives
 
-Most operations below run natively in C++. The current `filter_rows` step uses the Python pipeline backend and may be optimized in C++ later.
+Most operations below run natively in C++. The current `filter_rows` and `replace_values` step uses the Python pipeline backend and may be optimized in C++ later.
 
 | Primitive | What it does | Example |
 |:---|:---|:---|
@@ -413,6 +413,33 @@ clean = ar.pipeline(frame, [
     ("drop_duplicates", {"keep": "first"}),
 ])
 ```
+
+### 🔁 Replace values
+
+Use `replace_values` to substitute values using a mapping. It works as a pipeline step (Python backend) and can operate on a single column or the whole frame when `column` is omitted. It also understands null semantics: using `None` (or `np.nan`) as a mapping key targets existing nulls, and mapping a value to `None` creates real nulls.
+
+Column-specific example:
+
+```python
+clean = ar.pipeline(frame, [
+    ("replace_values", {"mapping": {"active": "A", "inactive": "I"}, "column": "status"}),
+])
+```
+
+Whole-frame example (no `column`):
+
+```python
+clean = ar.pipeline(frame, [
+    ("replace_values", {"mapping": {None: "MISSING" , "active": "A", "inactive" : "I"}}),
+])
+```
+
+Direct API:
+
+```python
+frame2 = ar.replace_values(frame, {"active": "A", "inactive": "I"})
+```
+
 ### 🔎 Filter rows inside pipelines
 
 Use `filter_rows` to keep only rows matching a condition.
