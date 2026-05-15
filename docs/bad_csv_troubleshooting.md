@@ -93,7 +93,7 @@ john,23,chennai
 
 ## 4. Missing Headers
 
-### Bad CSV
+### Bad CSV 
 
 ```csv
 john,23,chennai
@@ -163,4 +163,5 @@ Verify the file opens correctly in a text editor before using `read_csv()`.
 - Avoid malformed quotes
 - Use proper delimiters
 - Always include headers
+
 
