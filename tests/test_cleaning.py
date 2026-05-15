@@ -103,6 +103,22 @@ class TestNormalizeCase:
         df = ar.to_pandas(result)
         assert df["name"].iloc[0] == "Alice"
 
+class TestNormalizeUnicode:
+    def test_normalize_unicode(self):
+        import pandas as pd
+
+    df = pd.DataFrame({
+        "text": ["café"]
+    })
+
+    frame = ar.from_pandas(df)
+
+    result = ar.normalize_unicode(frame)
+
+    result_df = ar.to_pandas(result)
+
+    assert result_df["text"].iloc[0] == "café"
+
 
 class TestRenameColumns:
     def test_rename(self, sample_csv):
