@@ -94,6 +94,7 @@ class TestPipeline:
 
         assert list(df.columns) == ["name", "age"]
 
+
 def test_pipeline_clip_numeric(self):
     import pandas as pd
 
