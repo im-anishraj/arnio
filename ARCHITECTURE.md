@@ -12,7 +12,7 @@ Data preprocessing often involves operations that are inherently slow in Python 
 
 1. **Loading data directly into C++ memory structures.**
 
-2. **Performing all cleaning operations natively in C++ without Python GIL contention.**
+2. **Prioritizing native C++ execution for core cleaning operations to avoid Python GIL contention, while seamlessly supporting Python-backed and custom steps.**
 
 3. **Translating the final dataset to a `pandas.DataFrame` via a boundary that aims to minimize unnecessary copies.**
 
@@ -95,17 +95,19 @@ These may require conversion.
 
 The `pipeline()` function orchestrates data flow by prioritizing C++ efficiency while allowing Python extensibility.
 
+Arnio supports a mix of C++-backed steps, Python-backed built-ins, and custom pipeline steps.
+
 When a step is invoked, the system follows a priority-based dispatch model:
 
 ### Built-in Step Path
 
 The system first queries `_STEP_REGISTRY`.
 
-This built-in registry contains optimized primitives that typically call directly into the `Frame` / C++ core, though it may also house other built-in helper logic.
+This built-in registry routes operations to highly optimized C++-backed steps (executing directly within the `Frame` / C++ core), while also housing Python-backed built-ins.
 
-### User-Defined Fallback
+### Custom Pipeline Steps
 
-If the name is absent from the built-in registry, it searches `_PYTHON_STEP_REGISTRY`.
+If the name is absent from the built-in registries, it searches `_PYTHON_STEP_REGISTRY` for custom, user-defined Python fallbacks.
 
 ### The Conversion Penalty
 
@@ -123,7 +125,7 @@ This roundtrip involves memory re-allocation.
 
 - `from_pandas()` re-infers types to re-populate the internal data structures.
 
-Core cleaning primitives should ideally be implemented as built-ins to bypass this overhead.
+Core cleaning primitives should ideally be implemented as C++ built-ins to bypass this overhead.
 
 ---
 
