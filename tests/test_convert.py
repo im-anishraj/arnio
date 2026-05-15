@@ -108,3 +108,56 @@ class TestFromPandas:
         assert frame._frame.column_by_name("created_at").to_python_list() == [
             str(timestamp)
         ]
+
+    def test_from_pandas_preserves_column_order(self):
+        df = pd.DataFrame(
+            {
+                "name": ["Alice"],
+                "age": [20],
+                "city": ["Delhi"],
+            }
+        )
+
+        frame = ar.from_pandas(df)
+        result = ar.to_pandas(frame)
+
+        assert list(result.columns) == ["name", "age", "city"]
+
+    def test_cleaning_preserves_column_order(self):
+        df = pd.DataFrame(
+            {
+                "name": [" Alice "],
+                "age": [20],
+                "city": ["Delhi"],
+            }
+        )
+
+        frame = ar.from_pandas(df)
+
+        result = ar.strip_whitespace(frame)
+        result_df = ar.to_pandas(result)
+
+        assert list(result_df.columns) == ["name", "age", "city"]
+
+    def test_pipeline_preserves_column_order(self):
+        df = pd.DataFrame(
+            {
+                "name": [" Alice "],
+                "age": [20],
+                "city": ["Delhi"],
+            }
+        )
+
+        frame = ar.from_pandas(df)
+
+        result = ar.pipeline(
+            frame,
+            [
+                ("strip_whitespace",),
+                ("normalize_case", {"case_type": "lower"}),
+            ],
+        )
+
+        result_df = ar.to_pandas(result)
+
+        assert list(result_df.columns) == ["name", "age", "city"]
