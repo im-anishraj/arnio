@@ -74,6 +74,24 @@ class ArFrame:
         rows, cols = self.shape
         return f"ArFrame({rows} rows × {cols} cols)"
 
+    def _repr_html_(self) -> str:
+        """Notebook-friendly HTML representation."""
+        rows, cols = self.shape
+
+        columns_html = "".join(
+          f"<li><b>{col}</b>: {dtype}</li>"
+         for col, dtype in self.dtypes.items()
+         )
+
+        return f"""
+    <div>
+        <h3>ArFrame Preview</h3>
+        <p><b>Shape:</b> {rows} rows × {cols} columns</p>
+        <ul>
+            {columns_html}
+        </ul>
+    </div>
+    """
     def __str__(self) -> str:
         """Return a detailed string summary of the ArFrame."""
         lines = [f"ArFrame: {self.shape[0]} rows × {self.shape[1]} columns"]
