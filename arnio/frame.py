@@ -4,6 +4,7 @@ ArFrame — the core data container wrapping the C++ Frame.
 """
 
 from __future__ import annotations
+from email.policy import strict
 
 from ._core import _Frame
 
@@ -81,3 +82,14 @@ class ArFrame:
         lines.append(f"DTypes:  {self.dtypes}")
         lines.append(f"Memory:  {self.memory_usage()} bytes")
         return "\n".join(lines)
+def compare_schema(self, other: "ArFrame", strict: bool = False) -> bool:
+#Compare column names and types b/w frame
+    if not isinstance(other, ArFrame):
+        return False
+
+    if strict:
+            # Order must match exactly
+         return list(self.columns) == list(other.columns) and self.dtypes == other.dtypes
+        
+        # Order doesn't matter
+    return set(self.columns) == set(other.columns) and self.dtypes == other.dtypes
