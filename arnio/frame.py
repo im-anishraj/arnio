@@ -76,20 +76,30 @@ class ArFrame:
 
     def _repr_html_(self) -> str:
         """Notebook-friendly HTML representation."""
+        import html
+
         rows, cols = self.shape
 
+        preview_columns = self.columns[:5]
+
         columns_html = "".join(
-          f"<li><b>{col}</b>: {dtype}</li>"
-         for col, dtype in self.dtypes.items()
-         )
+          f"<li><b>{html.escape(col)}</b>: "
+          f"{html.escape(str(self.dtypes.get(col, 'unknown')))}</li>"
+          for col in preview_columns
+          )
+
+        extra = ""
+        if len(self.columns) > 5:
+           extra = f"<p>... and {len(self.columns) - 5} more columns</p>"
 
         return f"""
-    <div>
+    <div style="padding:10px;border:1px solid #ccc;border-radius:6px;">
         <h3>ArFrame Preview</h3>
         <p><b>Shape:</b> {rows} rows × {cols} columns</p>
         <ul>
             {columns_html}
         </ul>
+        {extra}
     </div>
     """
     def __str__(self) -> str:
