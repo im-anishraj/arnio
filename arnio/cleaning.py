@@ -113,6 +113,31 @@ def drop_duplicates(
     return ArFrame(result)
 
 
+def drop_empty_columns(frame: ArFrame) -> ArFrame:
+    """Remove columns that contain only null/empty values.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input data frame.
+
+    Returns
+    -------
+    ArFrame
+        New frame with fully empty columns removed.
+
+    Examples
+    --------
+    >>> frame = ar.read_csv("data.csv")
+    >>> clean = ar.drop_empty_columns(frame)
+    """
+    from .convert import from_pandas, to_pandas
+
+    df = to_pandas(frame)
+    result = df.dropna(axis=1, how="all")
+    return from_pandas(result)
+
+
 def drop_constant_columns(frame: ArFrame) -> ArFrame:
     """Remove columns with exactly one unique value.
 

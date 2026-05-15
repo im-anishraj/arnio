@@ -70,6 +70,35 @@ class TestDropDuplicates:
         assert result.shape[0] == 3
 
 
+class TestDropEmptyColumns:
+    def test_drop_empty_columns_all_empty(self, csv_with_empty_columns):
+        frame = ar.read_csv(csv_with_empty_columns)
+        result = ar.drop_empty_columns(frame)
+        assert "empty_num" not in result.columns
+        assert "empty_text" not in result.columns
+        assert "name" in result.columns
+        assert "age" in result.columns
+    
+    def test_drop_empty_columns_no_empty(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        result = ar.drop_empty_columns(frame)
+        assert result.columns == frame.columns
+        assert result.shape == frame.shape
+
+    def test_drop_empty_columns_partially_empty(self, tmp_path):
+        path = tmp_path / "mixed.csv"
+        path.write_text("id,value,mixed\n1,10,\n2,20,data\n3,30,\n")
+        frame = ar.read_csv(path)
+        result = ar.drop_empty_columns(frame)
+        assert "mixed" in result.columns
+
+    def test_drop_empty_columns_pipeline(self, csv_with_empty_columns):
+        frame = ar.read_csv(csv_with_empty_columns)
+        result = ar.pipeline(frame,[("drop_empty_columns",)],)
+        assert "empty_num" not in result.columns
+        assert "empty_text" not in result.columns
+
+
 class TestDropConstantColumns:
     def test_drop_constant_columns_removes_constant_columns(self):
         frame = ar.from_pandas(

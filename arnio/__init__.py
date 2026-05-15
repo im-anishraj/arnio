@@ -22,6 +22,7 @@ from .cleaning import (
     normalize_case,
     rename_columns,
     strip_whitespace,
+    drop_empty_columns,
 )
 from .convert import from_pandas, to_pandas
 from .exceptions import ArnioError, CsvReadError, TypeCastError, UnknownStepError
@@ -60,6 +61,7 @@ __all__ = [
     "fill_nulls",
     "filter_rows",
     "drop_duplicates",
+    "drop_empty_columns",
     "drop_constant_columns",
     "strip_whitespace",
     "normalize_case",

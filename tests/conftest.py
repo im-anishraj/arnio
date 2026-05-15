@@ -61,3 +61,11 @@ def large_csv(tmp_path):
     path = tmp_path / "large.csv"
     path.write_text("\n".join(lines))
     return str(path)
+
+@pytest.fixture
+def csv_with_empty_columns(tmp_path):
+    """CSV with some columns that are completely empty."""
+    csv_content = "name,age,empty_num,empty_text\nAlice,30,,\nBob,25,,\nCharlie,35,,\n"
+    path = tmp_path / "empty_columns.csv"
+    path.write_text(csv_content)
+    return str(path)
