@@ -38,12 +38,13 @@ class TestToNumpy:
         assert result.dtype == np.bool_
 
     def test_mixed_numeric_frame(self):
-        """Int and float columns together should work fine."""
+        """Int and float columns together — NumPy promotes to float64."""
         frame = ar.from_pandas(
             pd.DataFrame({"a": [1, 2, 3], "b": [1.1, 2.2, 3.3]})
         )
         result = frame.to_numpy()
         assert result.shape == (3, 2)
+        assert result.dtype == np.float64  # int promoted to float64
 
     def test_returns_correct_values(self):
         frame = ar.from_pandas(pd.DataFrame({"a": [10, 20], "b": [30, 40]}))
@@ -82,9 +83,7 @@ class TestToNumpy:
         assert result[1, 0] == 0
 
     def test_fill_value_does_not_affect_non_null(self):
-        frame = ar.from_pandas(
-            pd.DataFrame({"a": [1, None, 3]}, dtype=object)
-        )
+        frame = ar.from_pandas(pd.DataFrame({"a": [1, None, 3]}, dtype=object))
         result = frame.to_numpy(fill_value=99)
         assert result[0, 0] == 1
         assert result[2, 0] == 3
@@ -99,9 +98,7 @@ class TestToNumpy:
             frame.to_numpy()
 
     def test_all_string_frame_raises(self):
-        frame = ar.from_pandas(
-            pd.DataFrame({"a": ["x", "y"], "b": ["p", "q"]})
-        )
+        frame = ar.from_pandas(pd.DataFrame({"a": ["x", "y"], "b": ["p", "q"]}))
         with pytest.raises(TypeError, match="to_numpy()"):
             frame.to_numpy()
 
@@ -114,9 +111,7 @@ class TestToNumpy:
             frame.to_numpy()
 
     def test_error_message_contains_column_name(self):
-        frame = ar.from_pandas(
-            pd.DataFrame({"score": [1, 2], "label": ["a", "b"]})
-        )
+        frame = ar.from_pandas(pd.DataFrame({"score": [1, 2], "label": ["a", "b"]}))
         with pytest.raises(TypeError, match="label"):
             frame.to_numpy()
 
@@ -131,8 +126,9 @@ class TestToNumpy:
 
     def test_zero_row_frame(self):
         """Zero rows but n cols → shape (0, n_cols)."""
-        df = pd.DataFrame({"a": pd.Series([], dtype=int),
-                           "b": pd.Series([], dtype=float)})
+        df = pd.DataFrame(
+            {"a": pd.Series([], dtype=int), "b": pd.Series([], dtype=float)}
+        )
         frame = ar.from_pandas(df)
         result = frame.to_numpy()
         assert result.shape == (0, 2)

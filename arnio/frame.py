@@ -81,8 +81,10 @@ class ArFrame:
         -------
         numpy.ndarray
             2D array of shape ``(n_rows, n_cols)`` in column order.
-            dtype is preserved: int columns return int64, float columns
-            return float64, bool columns return bool.
+            dtype is preserved when all columns share the same type
+            (e.g. all int64, all float64, or all bool). When columns
+            have mixed types (e.g. int and float together), NumPy
+            promotes to a common dtype (typically float64).
             A zero-row frame returns shape ``(0, n_cols)``.
 
         Raises
