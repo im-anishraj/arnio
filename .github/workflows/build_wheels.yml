@@ -49,6 +49,14 @@ jobs:
           CIBW_TEST_COMMAND: >-
             python -c "import pathlib, sys, pytest; sys.path.append(str(pathlib.Path(r'{project}'))); raise SystemExit(pytest.main([str(pathlib.Path(r'{project}') / 'tests'), '-v', '--tb=short', '-x']))"
 
+      - name: Set up Python for wheel smoke test
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Smoke test wheel install
+        run: python tests/smoke_wheel_install.py --wheelhouse wheelhouse
+
       - name: Upload wheels as artifacts
         uses: actions/upload-artifact@v4
         with:
