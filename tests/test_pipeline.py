@@ -72,27 +72,27 @@ class TestPipeline:
         assert list(df.columns) == ["value"]
         assert list(df["value"]) == [1, 2, 1]
 
-def test_pipeline_trim_column_names(self):
-    import pandas as pd
+    def test_pipeline_trim_column_names(self):
+        import pandas as pd
 
-    frame = ar.from_pandas(
-        pd.DataFrame(
-            {
-                " name ": ["Alice"],
-                " age ": [30],
-            }
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    " name ": ["Alice"],
+                    " age ": [30],
+                }
+            )
         )
-    )
 
-    result = ar.pipeline(
-        frame,
-        [
-            ("trim_column_names",),
-        ],
-    )
-    df = ar.to_pandas(result)
+        result = ar.pipeline(
+            frame,
+            [
+                ("trim_column_names",),
+            ],
+        )
+        df = ar.to_pandas(result)
 
-    assert list(df.columns) == ["name", "age"]
+        assert list(df.columns) == ["name", "age"]
 
 def test_pipeline_clip_numeric(self):
     import pandas as pd
