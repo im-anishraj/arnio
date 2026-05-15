@@ -40,6 +40,33 @@ class TestFillNulls:
             ar.fill_nulls(frame, "bad", subset=["x"])
 
 
+class TestValidateColumnsExist:
+    def test_returns_original_frame_when_columns_exist(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        result = ar.validate_columns_exist(frame, ["name", "age"])
+
+        assert result is frame
+
+    def test_raises_clear_error_for_missing_columns(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(KeyError, match="Missing columns for test_op"):
+            ar.validate_columns_exist(frame, ["missing"], operation="test_op")
+
+    def test_drop_nulls_rejects_missing_subset_column(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(KeyError, match="Missing columns for drop_nulls"):
+            ar.drop_nulls(frame, subset=["missing"])
+
+    def test_rename_rejects_missing_mapping_column(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(KeyError, match="Missing columns for rename_columns"):
+            ar.rename_columns(frame, {"missing": "new_name"})
+
+
 class TestDropDuplicates:
     def test_drop_dupes_first(self, csv_with_duplicates):
         frame = ar.read_csv(csv_with_duplicates)

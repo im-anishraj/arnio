@@ -20,6 +20,43 @@ from .exceptions import TypeCastError
 from .frame import ArFrame
 
 
+def validate_columns_exist(
+    frame: ArFrame,
+    columns: list[str] | tuple[str, ...],
+    *,
+    operation: str | None = None,
+) -> ArFrame:
+    """Validate that all requested columns exist in a frame.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input data frame.
+    columns : list[str] or tuple[str, ...]
+        Column names that must exist.
+    operation : str, optional
+        Operation name to include in the error message.
+
+    Returns
+    -------
+    ArFrame
+        The original frame, unchanged. This makes the helper pipeline-friendly.
+
+    Raises
+    ------
+    KeyError
+        If any requested column is missing.
+    """
+    missing = [column for column in columns if column not in frame.columns]
+    if missing:
+        available = ", ".join(frame.columns) or "<none>"
+        context = f" for {operation}" if operation else ""
+        raise KeyError(
+            f"Missing columns{context}: {missing}. Available columns: {available}"
+        )
+    return frame
+
+
 def drop_nulls(
     frame: ArFrame,
     *,
@@ -45,6 +82,8 @@ def drop_nulls(
     >>> frame = ar.read_csv("data.csv")
     >>> clean = ar.drop_nulls(frame, subset=["age", "name"])
     """
+    if subset is not None:
+        validate_columns_exist(frame, subset, operation="drop_nulls")
     result = _drop_nulls(frame._frame, subset=subset)
     return ArFrame(result)
 
@@ -76,6 +115,8 @@ def fill_nulls(
     >>> frame = ar.read_csv("data.csv")
     >>> filled = ar.fill_nulls(frame, 0, subset=["age"])
     """
+    if subset is not None:
+        validate_columns_exist(frame, subset, operation="fill_nulls")
     result = _fill_nulls(frame._frame, value, subset=subset)
     return ArFrame(result)
 
@@ -108,6 +149,8 @@ def drop_duplicates(
     >>> frame = ar.read_csv("data.csv")
     >>> unique = ar.drop_duplicates(frame, subset=["name"], keep="first")
     """
+    if subset is not None:
+        validate_columns_exist(frame, subset, operation="drop_duplicates")
     keep_arg = "none" if keep is False else keep
     result = _drop_duplicates(frame._frame, subset=subset, keep=keep_arg)
     return ArFrame(result)
@@ -137,6 +180,8 @@ def strip_whitespace(
     >>> frame = ar.read_csv("data.csv")
     >>> clean = ar.strip_whitespace(frame, subset=["name"])
     """
+    if subset is not None:
+        validate_columns_exist(frame, subset, operation="strip_whitespace")
     result = _strip_whitespace(frame._frame, subset=subset)
     return ArFrame(result)
 
@@ -168,6 +213,8 @@ def normalize_case(
     >>> frame = ar.read_csv("data.csv")
     >>> lower = ar.normalize_case(frame, case_type="lower")
     """
+    if subset is not None:
+        validate_columns_exist(frame, subset, operation="normalize_case")
     result = _normalize_case(frame._frame, subset=subset, case_type=case_type)
     return ArFrame(result)
 
@@ -195,6 +242,7 @@ def rename_columns(
     >>> frame = ar.read_csv("data.csv")
     >>> renamed = ar.rename_columns(frame, {"old_name": "new_name"})
     """
+    validate_columns_exist(frame, list(mapping), operation="rename_columns")
     result = _rename_columns(frame._frame, mapping)
     return ArFrame(result)
 
@@ -222,6 +270,7 @@ def cast_types(
     >>> frame = ar.read_csv("data.csv")
     >>> casted = ar.cast_types(frame, {"age": "int64", "score": "float64"})
     """
+    validate_columns_exist(frame, list(mapping), operation="cast_types")
     try:
         result = _cast_types(frame._frame, mapping)
     except ValueError as e:

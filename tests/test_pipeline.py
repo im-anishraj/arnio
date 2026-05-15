@@ -75,6 +75,18 @@ class TestPipeline:
         assert result.dtypes["years"] == "float64"
         assert "age" not in result.columns
 
+    def test_pipeline_validate_columns_exist(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        result = ar.pipeline(
+            frame,
+            [
+                ("validate_columns_exist", {"columns": ["name", "age"]}),
+                ("strip_whitespace", {"subset": ["name"]}),
+            ],
+        )
+
+        assert result.shape == frame.shape
+
     def test_empty_pipeline(self, sample_csv):
         frame = ar.read_csv(sample_csv)
         result = ar.pipeline(frame, [])
