@@ -25,6 +25,7 @@ from .cleaning import (
     round_numeric_columns,
     safe_divide_columns,
     strip_whitespace,
+    validate_columns_exist,
 )
 from .convert import from_pandas, to_pandas
 from .exceptions import ArnioError, CsvReadError, TypeCastError, UnknownStepError
@@ -61,6 +62,7 @@ __all__ = [
     # Cleaning
     "drop_nulls",
     "fill_nulls",
+    "validate_columns_exist",
     "filter_rows",
     "drop_duplicates",
     "drop_constant_columns",
