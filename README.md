@@ -89,7 +89,7 @@ Useful for exploring datasets before committing memory.
 </details>
 
 <details>
-<summary><b>👀 Preview rows without loading everything</b></summary>
+<summary><b>👀 Preview rows without pandas conversion or full-column Python list materialization</b></summary>
 <br>
 
 `preview()` reads only the first `n` rows directly from the C++ frame — no pandas conversion triggered.
