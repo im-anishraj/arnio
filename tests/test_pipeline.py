@@ -49,6 +49,29 @@ class TestPipeline:
         )
         assert result.shape[0] == 3
 
+    def test_pipeline_drop_constant_columns(self):
+        import pandas as pd
+
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "constant": [1, 1, 1],
+                    "value": [1, 2, 1],
+                }
+            )
+        )
+
+        result = ar.pipeline(
+            frame,
+            [
+                ("drop_constant_columns",),
+            ],
+        )
+        df = ar.to_pandas(result)
+
+        assert list(df.columns) == ["value"]
+        assert list(df["value"]) == [1, 2, 1]
+
     def test_pipeline_mapping_shorthand(self, sample_csv):
         frame = ar.read_csv(sample_csv)
         result = ar.pipeline(
