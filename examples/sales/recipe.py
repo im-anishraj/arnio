@@ -12,7 +12,7 @@ Common issues in this dataset:
 
 Run:
     pip install arnio
-    python sales_recipe.py
+    python recipe.py
 """
 
 import arnio as ar

@@ -13,7 +13,7 @@ Common issues in this dataset:
 
 Run:
     pip install arnio
-    python finance_recipe.py
+    python recipe.py
 
 """
 

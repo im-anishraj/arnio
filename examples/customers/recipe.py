@@ -13,7 +13,7 @@ Common issues in this dataset:
 
 Run:
     pip install arnio
-    python customers_recipe.py
+    python recipe.py
 """
 
 import arnio as ar
@@ -28,7 +28,7 @@ for name, kwargs in suggestions:
     print(f"  • {name}: {kwargs}")
 print()
 
-# Pipelinne
+# Pipeline
 clean_frame = ar.pipeline(
     frame,
     [

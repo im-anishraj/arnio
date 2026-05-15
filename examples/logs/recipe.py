@@ -11,7 +11,7 @@ Common issues in this dataset:
 
 Run:
     pip install arnio
-    python logs_recipe.py
+    python recipe.py
 """
 
 import arnio as ar

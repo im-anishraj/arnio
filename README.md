@@ -453,7 +453,7 @@ arnio/
 │   └── exceptions.py        # ArnioError, UnknownStepError, CsvReadError, TypeCastError
 ├── tests/                   # pytest suite — CSV, cleaning, pipeline, conversions
 ├── benchmarks/              # Reproducible arnio vs pandas benchmark
-├── examples/                # ready-to-run recipes for sales, customers, survey, logs, finance
+├── examples/                # basic_usage.py, auto_clean_tutorial.py, custom_step.py and ready to run recipes for sales, customers, survey, logs, finance
 └── website/                 # Project website — arnio.vercel.app
 ```
 
