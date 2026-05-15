@@ -5,8 +5,8 @@ Chained cleaning pipeline.
 
 from __future__ import annotations
 
+from threading import Lock
 from typing import Callable
-from threading import Lock 
 
 from . import cleaning
 from .frame import ArFrame

@@ -1,12 +1,15 @@
 """Tests for the pipeline function."""
 
-import arnio as ar
-from concurrent.futures import ThreadPoolExecutor
 import importlib
 import threading
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
+
+import arnio as ar
+
 pipeline_module = importlib.import_module("arnio.pipeline")
+
 
 @pytest.fixture(autouse=True)
 def restore_python_step_registry():
@@ -24,6 +27,7 @@ def restore_python_step_registry():
     with pipeline_module._REGISTRY_LOCK:
         pipeline_module._PYTHON_STEP_REGISTRY.clear()
         pipeline_module._PYTHON_STEP_REGISTRY.update(original_registry)
+
 
 class TestPipeline:
     def test_single_step(self, csv_with_nulls):
@@ -187,7 +191,7 @@ class TestPipeline:
         frame = ar.read_csv(sample_csv)
         result = ar.pipeline(frame, [])
         assert result.shape == frame.shape
-    
+
     def test_register_python_step(self, sample_csv):
         frame = ar.read_csv(sample_csv)
 
@@ -207,7 +211,7 @@ class TestPipeline:
         df = ar.to_pandas(result)
         assert "marker" in df.columns
         assert set(df["marker"]) == {"done"}
-    
+
     def test_concurrent_step_registration(self, sample_csv):
         frame = ar.read_csv(sample_csv)
 
@@ -233,7 +237,7 @@ class TestPipeline:
         for name in step_names:
             assert name in df.columns
             assert set(df[name]) == {name}
-    
+
     def test_pipeline_uses_stable_registry_snapshot_during_execution(self, sample_csv):
         frame = ar.read_csv(sample_csv)
 
