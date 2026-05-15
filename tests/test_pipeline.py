@@ -75,6 +75,46 @@ class TestPipeline:
         assert result.dtypes["years"] == "float64"
         assert "age" not in result.columns
 
+
+    def test_split_column_step(self, tmp_path):
+        path = tmp_path / "names.csv"
+        path.write_text("name\nAda Lovelace\nGrace Hopper\n")
+        frame = ar.read_csv(path)
+
+        result = ar.pipeline(
+            frame,
+            [
+                (
+                    "split_column",
+                    {
+                        "column": "name",
+                        "into": ["first", "last"],
+                        "sep": " ",
+                        "drop": True,
+                    },
+                ),
+            ],
+        )
+
+        df = ar.to_pandas(result)
+        assert "name" not in df.columns
+        assert df["first"].tolist() == ["Ada", "Grace"]
+        assert df["last"].tolist() == ["Lovelace", "Hopper"]
+
+    def test_split_column_rejects_existing_output_column(self, tmp_path):
+        path = tmp_path / "names.csv"
+        path.write_text("name,first\nAda Lovelace,Ada\n")
+        frame = ar.read_csv(path)
+
+        try:
+            ar.pipeline(
+                frame,
+                [("split_column", {"column": "name", "into": ["first"], "sep": " "})],
+            )
+            assert False, "Should have raised ValueError"
+        except ValueError as e:
+            assert "Output column already exists" in str(e)
+
     def test_empty_pipeline(self, sample_csv):
         frame = ar.read_csv(sample_csv)
         result = ar.pipeline(frame, [])
