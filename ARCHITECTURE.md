@@ -60,27 +60,32 @@ The `to_pandas()` function is the most critical boundary. It uses the NumPy C-AP
 
 ## 6. Data Quality and Schema Validation
 
-All four functions `profile()`, `suggest_cleaning()`, `auto_clean()`, and `validate()` are implemented in Python on top of the C++ core. Each function converts `ArFrame` to a pandas DataFrame via `to_pandas()` before performing its work.
-
 Arnio is split into two layers:
 
 - The **C++ layer** handles parsing CSVs, storing data in memory, and cleaning operations such as `drop_nulls()` and `strip_whitespace()`. These execute through pybind11 directly in C++.
-- The **Python/pandas layer** handles data quality: profiling, validation, and schema checks. These functions convert `ArFrame` to a pandas DataFrame via `to_pandas()` and then operate in Python.
+- The **Python/pandas layer** handles data quality: profiling, validation, and schema checks.
+
+Each function in the quality layer behaves as follows:
+- `profile()` and `validate()` convert an `ArFrame` to pandas for analysis/validation.
+- `suggest_cleaning()` can inspect an existing `DataQualityReport` directly, or call `profile()` when given an `ArFrame`.
+- `auto_clean()` calls `profile()` first, then applies selected cleaning helpers/pipeline steps to the original frame flow.
 
 ### What each function does
 
-1. `profile()`: converts `ArFrame` to a pandas DataFrame, then computes per-column statistics including null counts, duplicate rows, data types, and unique value ratios. Returns a `DataQualityReport` object.
-2. `suggest_cleaning()`: runs `profile()` and inspects the resulting `DataQualityReport` to return a list of cleaning steps such as `strip_whitespace` or `drop_nulls` that can be passed directly to `pipeline()`.
-3. `auto_clean()`: runs `profile()`, derives safe cleaning steps from the report, and passes them to `pipeline()`. The pipeline dispatches native steps to C++ and Python-registered steps through pandas.
-4. `validate()`: converts `ArFrame` to a pandas DataFrame, then evaluates each column against rules defined in a `Schema` including nullability, dtype, range, pattern, and semantic constraints. Returns a `ValidationResult` containing all detected issues.
+1. `profile()`: converts `ArFrame` to a pandas DataFrame internally, then computes per-column statistics including null counts, duplicate rows, data types, and unique value ratios. Returns a `DataQualityReport`.
+2. `suggest_cleaning()`: accepts an `ArFrame` or an existing `DataQualityReport`. If given an `ArFrame`, it calls `profile()` first. Returns a list of cleaning steps that can be passed to `pipeline()`.
+3. `auto_clean()`: accepts an `ArFrame`, calls `profile()` internally, then applies suggested cleaning steps directly to the original `ArFrame`. Returns a cleaned `ArFrame`.
+4. `validate()`: converts `ArFrame` to a pandas DataFrame internally, then evaluates each column against rules defined in a `Schema` including nullability, dtype, range, pattern, and semantic constraints. Returns a `ValidationResult`.
 
 ```mermaid
 graph TD
-    A[ArFrame] --> B[profile]
+    A[ArFrame] -->|or| D[suggest_cleaning]
+    A --> B[profile]
     A --> C[auto_clean]
-    A --> D[suggest_cleaning]
+    A --> H[validate]
     B --> E[DataQualityReport]
-    E --> D
+    E -->|or| D
     D --> F[step list]
     C --> G[cleaned ArFrame]
+    H --> I[ValidationResult]
 ```
