@@ -9,7 +9,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "arnio"
-version = "1.1.1"
+version = "1.2.0"
 description = "C++ accelerated CSV preprocessing and data cleaning for pandas"
 readme = "README.md"
 license = { text = "MIT" }
