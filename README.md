@@ -631,6 +631,7 @@ schema = ar.Schema({
     "country": ar.CountryCode(nullable=False),
     "username": ar.String(min_length=3, max_length=20),
     "revenue": ar.Float64(nullable=True, min=0),
+    "created_at": ar.Timestamp(nullable=False, format="%Y-%m-%d"),
 })
 
 result = ar.validate(frame, schema)

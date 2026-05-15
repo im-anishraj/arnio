@@ -464,3 +464,45 @@ def test_schema_composite_unique_empty_columns(tmp_path):
     issues = [i for i in result.issues if i.rule == "composite_unique"]
     assert len(issues) == 1
     assert "cannot be empty" in issues[0].message
+
+
+def test_datetime_validation(tmp_path):
+    path = tmp_path / "timestamps.csv"
+    path.write_text(
+        "ts\n"
+        "2026-01-01T12:00:00\n"
+        "2026-12-31T23:59:59\n"
+        "\n"
+        "invalid-date\n"
+    )
+    frame = ar.read_csv(path)
+    schema = ar.Schema(
+        {
+            "ts": ar.DateTime(
+                nullable=False,
+                format="%Y-%m-%dT%H:%M:%S",
+                min="2026-01-01",
+                max="2026-12-31T23:59:59",
+            )
+        }
+    )
+
+    result = ar.validate(frame, schema)
+    rules = [issue.rule for issue in result.issues]
+
+    assert not result.passed
+    assert "format" in rules
+    assert "nullable" in rules
+
+    path2 = tmp_path / "boundary.csv"
+    path2.write_text(
+        "ts\n"
+        "2025-12-31T23:59:59\n"
+        "2027-01-01T00:00:00\n"
+    )
+    frame2 = ar.read_csv(path2)
+    result2 = ar.validate(frame2, schema)
+    rules2 = [issue.rule for issue in result2.issues]
+
+    assert "min" in rules2
+    assert "max" in rules2
