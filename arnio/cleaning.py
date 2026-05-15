@@ -66,7 +66,7 @@ def _validate_column_sequence(
     *,
     argument_name: str,
 ) -> list[str]:
-    if isinstance(columns, str | bytes):
+    if isinstance(columns, (str, bytes)):
         raise TypeError(
             f"{argument_name} must be a sequence of column names, not a string"
         )
