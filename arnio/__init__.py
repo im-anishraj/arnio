@@ -30,6 +30,7 @@ from .cleaning import (
 from .convert import from_pandas, to_pandas
 from .exceptions import ArnioError, CsvReadError, TypeCastError, UnknownStepError
 from .frame import ArFrame
+from .integrations import ArnioPandasAccessor
 from .io import read_csv, scan_csv
 from .pipeline import pipeline, register_step
 from .quality import (
@@ -77,6 +78,8 @@ __all__ = [
     # Conversion
     "to_pandas",
     "from_pandas",
+    # Integrations
+    "ArnioPandasAccessor",
     # Pipeline
     "pipeline",
     "register_step",

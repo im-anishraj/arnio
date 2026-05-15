@@ -9,14 +9,14 @@
 
 <br><br>
 
-### Your CSV hits C++ before Python even wakes up.
+### Fast data preparation for the Python data stack.
 
 <br>
 
-**Arnio** is a compiled C++ data cleaning engine that slots in _before_ pandas.<br>
-It parses, infers types, strips whitespace, deduplicates, and normalizes —<br>
-all natively, in columnar memory — then hands you a pristine `DataFrame`.<br>
-No `.apply()`. No lambda chains. No spaghetti.
+**Arnio** is a compiled C++ data preparation engine for messy CSV and pandas workflows.<br>
+It parses, infers types, strips whitespace, deduplicates, validates, and profiles data —<br>
+then hands clean results back to the tools you already use.<br>
+Use Arnio _before_ and _alongside_ pandas, NumPy, scikit-learn, DuckDB, and Arrow.
 
 <br>
 
@@ -37,7 +37,7 @@ pip install arnio
 
 <br>
 
-<a href="#-quickstart">Quickstart</a>&ensp;·&ensp;<a href="#-why-arnio-exists">Why Arnio</a>&ensp;·&ensp;<a href="#%EF%B8%8F-architecture">Architecture</a>&ensp;·&ensp;<a href="#-benchmarks">Benchmarks</a>&ensp;·&ensp;<a href="#-community">Community</a>&ensp;·&ensp;<a href="#-contribute">Contribute</a>
+<a href="#-quickstart">Quickstart</a>&ensp;·&ensp;<a href="#-integrations">Integrations</a>&ensp;·&ensp;<a href="#-why-arnio-exists">Why Arnio</a>&ensp;·&ensp;<a href="#%EF%B8%8F-architecture">Architecture</a>&ensp;·&ensp;<a href="#-benchmarks">Benchmarks</a>&ensp;·&ensp;<a href="#-community">Community</a>&ensp;·&ensp;<a href="#-contribute">Contribute</a>
 
 </div>
 
@@ -69,6 +69,25 @@ clean = ar.pipeline(frame, [
 # Out comes a standard pandas DataFrame — use it like you always have
 df = ar.to_pandas(clean)
 ```
+
+Already have a pandas `DataFrame`? Use Arnio in-place in your existing pandas
+workflow:
+
+```python
+import pandas as pd
+import arnio as ar
+
+df = pd.read_csv("messy_sales_data.csv")
+
+clean_df = df.arnio.clean([
+    ("strip_whitespace",),
+    ("normalize_case", {"case_type": "lower"}),
+    ("drop_duplicates",),
+])
+
+report = clean_df.arnio.profile()
+```
+
 ### Select specific columns
 
 Use `select_columns()` to create a new `ArFrame` with only the required columns before converting to pandas.
@@ -144,6 +163,43 @@ Custom steps run through a pandas↔ArFrame conversion bridge. Prototype in Pyth
 
 <br>
 
+## 🔗 Integrations
+
+Arnio is designed to make the rest of the Python data stack more productive,
+not to replace it.
+
+| Workflow | How Arnio helps |
+|:---|:---|
+| **pandas** | Clean, validate, and profile messy `DataFrame`s through `df.arnio`. |
+| **NumPy** | Prepare typed numeric data before array/modeling workflows. |
+| **scikit-learn** | Use Arnio cleaning as a preprocessing layer before model training. |
+| **DuckDB / Arrow** | Validate and prepare data before analytics and columnar exchange. |
+| **notebooks** | Inspect quality issues and cleaning suggestions before analysis. |
+
+### Pandas accessor
+
+```python
+df = pd.read_csv("raw_customers.csv")
+
+clean_df = df.arnio.clean(drop_duplicates=True)
+quality = clean_df.arnio.profile()
+validation = clean_df.arnio.validate({
+    "email": ar.Email(nullable=False),
+    "age": ar.Int64(nullable=True, min=0),
+})
+```
+
+This keeps pandas as the analysis tool while Arnio handles the preparation,
+quality, and validation layer.
+
+> Product direction: **[PROJECT_DIRECTION.md](PROJECT_DIRECTION.md)**
+
+<br>
+
+---
+
+<br>
+
 ## 🔍 Why Arnio exists
 
 Every data project starts the same way:
@@ -159,7 +215,7 @@ df = df.drop_duplicates()                  # Another pass
 
 Six lines. Four full-data passes. All in interpreted Python. This is fine for a Jupyter demo — but it doesn't scale, it doesn't compose, and it definitely doesn't belong in production.
 
-**Arnio intercepts this entire pattern.** It moves the heavy lifting to C++, replaces imperative chains with a declarative pipeline, and gives you a clean `DataFrame` in one shot.
+**Arnio intercepts this entire pattern.** It moves the preparation layer into a predictable pipeline, accelerates supported operations in C++, and gives you clean data for pandas, NumPy, scikit-learn, DuckDB, or notebooks.
 
 <table>
 <tr>
