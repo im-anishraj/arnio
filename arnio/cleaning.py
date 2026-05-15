@@ -22,6 +22,7 @@ from ._core import (
     _fill_nulls,
     _Frame,
     _normalize_case,
+    _remove_control_characters,
     _rename_columns,
     _safe_divide_columns,
     _strip_whitespace,
@@ -1362,6 +1363,34 @@ def parse_bool_strings(
         )
 
     return from_pandas(df)
+
+
+def remove_control_characters(
+    frame: ArFrame,
+    *,
+    subset: list[str] | None = None,
+) -> ArFrame:
+    """Remove control characters from string columns.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input data frame.
+    subset : list[str], optional
+        Column names to strip whitespace from. If None, applies to all string columns.
+
+    Returns
+    -------
+    ArFrame
+        New frame with whitespace trimmed from string columns.
+
+    Examples
+    --------
+    >>> frame = ar.read_csv("data.csv")
+    >>> clean = ar.remove_control_characters(frame, subset=["name"])
+    """
+    result = _remove_control_characters(frame._frame, subset=subset)
+    return ArFrame(result)
 
 
 def normalize_case(

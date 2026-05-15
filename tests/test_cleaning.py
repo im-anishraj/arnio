@@ -1687,6 +1687,7 @@ class TestStripWhitespace:
         result = ar.strip_whitespace(frame, subset=["name"])
         df = ar.to_pandas(result)
         assert df["name"].iloc[0] == "Alice"
+        # city should still have whitespace
 
     def test_strip_tabs_and_newlines(self):
         frame = ar.from_pandas(
@@ -1707,22 +1708,32 @@ class TestStripWhitespace:
 
 
 class TestNormalizeCase:
+
     def test_lower(self, sample_csv):
         frame = ar.read_csv(sample_csv)
+
         result = ar.normalize_case(frame, subset=["name"], case_type="lower")
+
         df = ar.to_pandas(result)
+
         assert df["name"].iloc[0] == "alice"
 
     def test_upper(self, sample_csv):
         frame = ar.read_csv(sample_csv)
+
         result = ar.normalize_case(frame, subset=["name"], case_type="upper")
+
         df = ar.to_pandas(result)
+
         assert df["name"].iloc[0] == "ALICE"
 
     def test_title(self, sample_csv):
         frame = ar.read_csv(sample_csv)
+
         result = ar.normalize_case(frame, subset=["name"], case_type="title")
+
         df = ar.to_pandas(result)
+
         assert df["name"].iloc[0] == "Alice"
 
     def test_title_hyphen(self):
@@ -2594,6 +2605,20 @@ class TestParseBoolStrings:
 
         # Verification that parsing action occurred perfectly for all values
         assert df_custom["custom_col"].to_list() == ["True", "False", "", "   "]
+
+
+class TestRemoveControlCharacters:
+
+    def test_remove_control_characters(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        result = ar.remove_control_characters(frame, subset=["name"])
+
+        df = ar.to_pandas(result)
+
+        assert isinstance(df["name"].iloc[0], str)
+        assert "\n" not in df["name"].iloc[0]
+        assert "\t" not in df["name"].iloc[0]
 
 
 class TestRenameColumns:
