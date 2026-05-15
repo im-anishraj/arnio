@@ -62,8 +62,8 @@ class ArFrame:
             Memory usage in bytes.
         """
         return self._frame.memory_usage()
-    
-    def select_columns(self, columns: list[str]) -> "ArFrame":
+
+    def select_columns(self, columns: list[str]) -> ArFrame:
         """Return a new ArFrame with only the selected columns.
 
         Parameters
@@ -78,12 +78,24 @@ class ArFrame:
 
         Raises
         ------
+        TypeError
+            If columns is not a valid sequence of strings.
+
         ValueError
             If the selection is empty, contains duplicates,
             or includes unknown columns.
         """
+        if isinstance(columns, str):
+            raise TypeError("columns must be a sequence of column names, not a string.")
+
+        if not isinstance(columns, list | tuple):
+            raise TypeError("columns must be a list or tuple of column names.")
+
         if not columns:
             raise ValueError("Column selection cannot be empty.")
+
+        if any(not isinstance(col, str) for col in columns):
+            raise TypeError("All column names must be strings.")
 
         if len(columns) != len(set(columns)):
             raise ValueError("Duplicate column names are not allowed.")
