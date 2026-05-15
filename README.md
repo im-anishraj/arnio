@@ -455,7 +455,10 @@ schema = ar.Schema({
 result = ar.validate(frame, schema)
 if not result.passed:
     print(result.to_pandas())
+    print(result.to_markdown(max_issues=10))
 ```
+
+`ValidationResult.to_markdown()` is useful in CI logs, GitHub comments, or data quality reports because it renders a compact validation summary plus a GitHub-friendly issue table.
 
 For low-risk automatic cleanup:
 
