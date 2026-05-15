@@ -76,6 +76,8 @@ def to_pandas(frame: ArFrame) -> pd.DataFrame:
     -------
     pd.DataFrame
         Equivalent pandas DataFrame with proper dtypes and null handling.
+        If the ArFrame was created via ``from_pandas()``, any ``attrs``
+        metadata from the original DataFrame is restored on the result.
 
     Examples
     --------
@@ -113,7 +115,10 @@ def to_pandas(frame: ArFrame) -> pd.DataFrame:
             series[mask] = pd.NA
             data[name] = series
 
-    return pd.DataFrame(data)
+    result = pd.DataFrame(data)
+    if frame._attrs:
+        result.attrs = frame._attrs.copy()
+    return result
 
 
 def from_pandas(df: pd.DataFrame) -> ArFrame:
@@ -146,4 +151,4 @@ def from_pandas(df: pd.DataFrame) -> ArFrame:
         columns[str(col_name)] = _series_to_python_values(series, col_name)
 
     cpp_frame = _Frame.from_dict(columns)
-    return ArFrame(cpp_frame)
+    return ArFrame(cpp_frame, attrs=df.attrs.copy())
