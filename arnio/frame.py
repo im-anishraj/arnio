@@ -5,6 +5,8 @@ ArFrame — the core data container wrapping the C++ Frame.
 
 from __future__ import annotations
 
+import numpy as np
+
 from ._core import _DType, _Frame
 
 
@@ -63,7 +65,7 @@ class ArFrame:
         """
         return self._frame.memory_usage()
 
-    def to_numpy(self, fill_value: object = None) -> "np.ndarray":
+    def to_numpy(self, fill_value: object = None) -> np.ndarray:
         """Convert a numeric/bool-only ArFrame to a 2D NumPy array.
 
         Provides a direct export path without routing through pandas,
@@ -101,7 +103,6 @@ class ArFrame:
         >>> arr = frame.to_numpy()
         >>> arr = frame.to_numpy(fill_value=0)
         """
-        import numpy as np
 
         SUPPORTED_DTYPES = {_DType.INT64, _DType.FLOAT64, _DType.BOOL}
 

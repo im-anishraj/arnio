@@ -39,9 +39,7 @@ class TestToNumpy:
 
     def test_mixed_numeric_frame(self):
         """Int and float columns together — NumPy promotes to float64."""
-        frame = ar.from_pandas(
-            pd.DataFrame({"a": [1, 2, 3], "b": [1.1, 2.2, 3.3]})
-        )
+        frame = ar.from_pandas(pd.DataFrame({"a": [1, 2, 3], "b": [1.1, 2.2, 3.3]}))
         result = frame.to_numpy()
         assert result.shape == (3, 2)
         assert result.dtype == np.float64  # int promoted to float64

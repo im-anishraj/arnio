@@ -346,11 +346,10 @@ Works with:
 ---
 
 <br>
-## Converting to NumPy
 
+## 🔢 Converting to NumPy
 
 Use `to_numpy()` for a direct, pandas-free export of numeric/bool frames:
-
 ```python
 import arnio as ar
 
