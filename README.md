@@ -302,6 +302,13 @@ Most operations below run natively in C++. The current `filter_rows` and `parse_
 | `cast_types` | Cast column types | `ar.cast_types(frame, {"age": "int64"})` |
 | `clean` | Convenience shorthand | `ar.clean(frame, drop_nulls=True)` |
 
+`parse_numeric_strings` removes common currency symbols (`$`, `€`, `£`, `¥`,
+`₹`), thousands separators, and surrounding whitespace before parsing. Values
+wrapped in parentheses are treated as negatives, so `(300)` becomes `-300`.
+Percent values are divided by 100, so `45%` becomes `0.45`. With
+`errors="coerce"`, invalid non-empty values become nulls; with
+`errors="raise"`, the first invalid values are reported in a `ValueError`.
+
 Or compose them all into a **pipeline**:
 
 ```python

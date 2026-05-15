@@ -171,6 +171,25 @@ class TestParseNumericStrings:
         with pytest.raises(ValueError, match="contains non-numeric values"):
             ar.parse_numeric_strings(frame, errors="raise")
 
+    def test_parse_invalid_values_coerce_to_null(self):
+        import pandas as pd
+
+        frame = ar.from_pandas(pd.DataFrame({"amount": ["$10", "n/a", "25%"]}))
+
+        result = ar.parse_numeric_strings(frame, errors="coerce")
+        df = ar.to_pandas(result)
+
+        assert list(df["amount"].dropna()) == [10.0, 0.25]
+        assert df["amount"].isna().iloc[1]
+
+    def test_parse_rejects_unknown_subset_column(self):
+        import pandas as pd
+
+        frame = ar.from_pandas(pd.DataFrame({"amount": ["$10"]}))
+
+        with pytest.raises(KeyError, match="Unknown columns"):
+            ar.parse_numeric_strings(frame, subset=["missing"])
+
     def test_parse_rejects_unknown_error_mode(self, sample_csv):
         frame = ar.read_csv(sample_csv)
 

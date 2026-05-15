@@ -288,9 +288,7 @@ def parse_numeric_strings(
         invalid = parsed.isna() & ~empty
         if errors == "raise" and invalid.any():
             values = result.loc[invalid, column].astype(str).head(3).tolist()
-            raise ValueError(
-                f"Column {column!r} contains non-numeric values: {values}"
-            )
+            raise ValueError(f"Column {column!r} contains non-numeric values: {values}")
 
         result[column] = parsed
 
