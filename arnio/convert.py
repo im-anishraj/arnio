@@ -124,6 +124,12 @@ def to_pandas(frame: ArFrame) -> pd.DataFrame:
     return result
 
 
+def _pandas_dtype_to_arnio(dtype: object) -> _DType | None:
+    if dtype == pd.Int64Dtype():
+        return _DType.INT64
+    return None
+
+
 def from_pandas(df: pd.DataFrame) -> ArFrame:
     """Convert pandas.DataFrame to ArFrame.
 
@@ -149,10 +155,18 @@ def from_pandas(df: pd.DataFrame) -> ArFrame:
     >>> frame = ar.from_pandas(df)
     """
     columns = {}
+    dtype_hints = {}
+
     for col_name in df.columns:
         series = df[col_name]
-        columns[str(col_name)] = _series_to_python_values(series, col_name)
+        name = str(col_name)
 
-    cpp_frame = _Frame.from_dict(columns)
+        columns[name] = _series_to_python_values(series, col_name)
 
+        dtype_hint = _pandas_dtype_to_arnio(series.dtype)
+        if dtype_hint is not None:
+            dtype_hints[name] = dtype_hint
+
+    cpp_frame = _Frame.from_dict(columns, dtype_hints)
     return ArFrame(cpp_frame, attrs=copy.deepcopy(df.attrs))
+
