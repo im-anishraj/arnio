@@ -16,6 +16,7 @@ struct CsvConfig {
     std::optional<std::vector<std::string>> usecols = std::nullopt;
     std::optional<size_t> nrows = std::nullopt;
     std::string encoding = "utf-8";  // Currently only utf-8 supported
+    bool trim_headers = true;        // for implementing the trim_headers option
 };
 
 class CsvReader {
