@@ -670,7 +670,7 @@ python -m pip install -U pip
 python -m pip install arnio
 printf 'name,revenue\n Ada,10\n' > /tmp/arnio-smoke.csv
 python - <<'PY'
-import arnio as ar      
+import arnio as ar
 print(ar.__version__)
 print(ar.scan_csv("/tmp/arnio-smoke.csv"))
 PY
