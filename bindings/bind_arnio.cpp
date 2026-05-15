@@ -154,49 +154,62 @@ PYBIND11_MODULE(_arnio_cpp, m) {
             py::return_value_policy::reference_internal)
         .def("add_column", &Frame::add_column)
         .def("clone", &Frame::clone)
-        .def_static("from_dict", [](py::dict cols_dict) {
-            Frame frame;
-            for (auto item : cols_dict) {
-                std::string name = py::cast<std::string>(item.first);
-                py::list values = py::cast<py::list>(item.second);
+        .def_static("from_dict",
+                    [](py::dict cols_dict, py::dict dtype_hints) {
+                        Frame frame;
 
-                DType dtype = DType::STRING;
-                for (auto val : values) {
-                    if (val.is_none()) continue;
-                    if (py::isinstance<py::bool_>(val)) {
-                        dtype = DType::BOOL;
-                        break;
-                    }
-                    if (py::isinstance<py::int_>(val)) {
-                        dtype = DType::INT64;
-                        break;
-                    }
-                    if (py::isinstance<py::float_>(val)) {
-                        dtype = DType::FLOAT64;
-                        break;
-                    }
-                    break;
-                }
+                        for (auto item : cols_dict) {
+                            std::string name = py::cast<std::string>(item.first);
+                            py::list values = py::cast<py::list>(item.second);
 
-                Column col(name, dtype);
-                for (auto val : values) {
-                    if (val.is_none()) {
-                        col.push_null();
-                        continue;
-                    }
-                    if (dtype == DType::BOOL)
-                        col.push_back(val.cast<bool>());
-                    else if (dtype == DType::INT64)
-                        col.push_back(val.cast<int64_t>());
-                    else if (dtype == DType::FLOAT64)
-                        col.push_back(val.cast<double>());
-                    else
-                        col.push_back(py::str(val).cast<std::string>());
-                }
-                frame.add_column(col);
-            }
-            return frame;
-        });
+                            DType dtype = DType::STRING;
+                            py::str py_name(name);
+
+                            if (dtype_hints.contains(py_name)) {
+                                dtype = dtype_hints[py_name].cast<DType>();
+                            } else {
+                                for (auto val : values) {
+                                    if (val.is_none()) continue;
+                                    if (py::isinstance<py::bool_>(val)) {
+                                        dtype = DType::BOOL;
+                                        break;
+                                    }
+                                    if (py::isinstance<py::int_>(val)) {
+                                        dtype = DType::INT64;
+                                        break;
+                                    }
+                                    if (py::isinstance<py::float_>(val)) {
+                                        dtype = DType::FLOAT64;
+                                        break;
+                                    }
+                                    break;
+                                }
+                            }
+
+                            Column col(name, dtype);
+                            for (auto val : values) {
+                                if (val.is_none()) {
+                                    col.push_null();
+                                    continue;
+                                }
+
+                                if (dtype == DType::BOOL)
+                                    col.push_back(val.cast<bool>());
+                                else if (dtype == DType::INT64)
+                                    col.push_back(val.cast<int64_t>());
+                                else if (dtype == DType::FLOAT64)
+                                    col.push_back(val.cast<double>());
+                                else
+                                    col.push_back(py::str(val).cast<std::string>());
+                            }
+
+                            frame.add_column(col);
+                        }
+
+                        return frame;
+                    },
+                    py::arg("cols_dict"),
+                    py::arg("dtype_hints") = py::dict());
 
     // --- CsvReader ---
     py::class_<CsvConfig>(m, "CsvConfig")
