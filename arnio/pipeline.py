@@ -19,6 +19,7 @@ _STEP_REGISTRY: dict[str, Callable] = {
     "normalize_case": cleaning.normalize_case,
     "rename_columns": cleaning.rename_columns,
     "cast_types": cleaning.cast_types,
+    "round_numeric_columns": cleaning.round_numeric_columns,
 }
 
 

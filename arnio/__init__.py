@@ -20,6 +20,7 @@ from .cleaning import (
     filter_rows,
     normalize_case,
     rename_columns,
+    round_numeric_columns,
     strip_whitespace,
 )
 from .convert import from_pandas, to_pandas
@@ -62,6 +63,7 @@ __all__ = [
     "strip_whitespace",
     "normalize_case",
     "rename_columns",
+    "round_numeric_columns",
     "cast_types",
     "clean",
     # Conversion

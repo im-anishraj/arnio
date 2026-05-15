@@ -306,3 +306,57 @@ def filter_rows(frame, column, op, value):
     filtered = df[getattr(df[column], ops[op])(value)]
 
     return from_pandas(filtered) if is_arframe else filtered
+
+
+def round_numeric_columns(
+    frame,
+    *,
+    subset: list[str] | None = None,
+    decimals: int = 0,
+):
+    """Round numeric columns to specified decimal places.
+
+    Parameters
+    ----------
+    frame : ArFrame or pd.DataFrame
+        Input data frame.
+    subset : list[str], optional
+        Column names to round. If None, applies to all numeric columns.
+    decimals : int, default 0
+        Number of decimal places to round to.
+
+    Returns
+    -------
+    ArFrame or pd.DataFrame
+        New frame with numeric columns rounded.
+
+    Examples
+    --------
+    >>> frame = ar.read_csv("data.csv")
+    >>> rounded = ar.round_numeric_columns(frame, decimals=2)
+    """
+    import pandas as pd
+
+    from .convert import from_pandas, to_pandas
+
+    if subset is not None and not isinstance(subset, list):
+        raise TypeError("subset must be a list of column names")
+    if not isinstance(decimals, int):
+        raise TypeError("decimals must be an integer")
+
+    is_arframe = not isinstance(frame, pd.DataFrame)
+    df = to_pandas(frame) if is_arframe else frame.copy()
+
+    if subset is not None:
+        missing = [col for col in subset if col not in df.columns]
+        if missing:
+            raise KeyError(f"Columns not found in dataframe: {missing}")
+        cols_to_round = subset
+    else:
+        cols_to_round = df.select_dtypes(include=["number"]).columns
+
+    for col in cols_to_round:
+        if pd.api.types.is_numeric_dtype(df[col]):
+            df[col] = df[col].round(decimals)
+
+    return from_pandas(df) if is_arframe else df
