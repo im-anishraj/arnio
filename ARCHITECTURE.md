@@ -70,11 +70,8 @@ Arnio is split into two layers:
 ### What each function does
 
 1. `profile()`: converts `ArFrame` to a pandas DataFrame, then computes per-column statistics including null counts, duplicate rows, data types, and unique value ratios. Returns a `DataQualityReport` object.
-
 2. `suggest_cleaning()`: runs `profile()` and inspects the resulting `DataQualityReport` to return a list of cleaning steps such as `strip_whitespace` or `drop_nulls` that can be passed directly to `pipeline()`.
-
 3. `auto_clean()`: runs `profile()`, derives safe cleaning steps from the report, and passes them to `pipeline()`. The pipeline dispatches native steps to C++ and Python-registered steps through pandas.
-
 4. `validate()`: converts `ArFrame` to a pandas DataFrame, then evaluates each column against rules defined in a `Schema` including nullability, dtype, range, pattern, and semantic constraints. Returns a `ValidationResult` containing all detected issues.
 
 ```mermaid
@@ -82,8 +79,6 @@ graph TD
     A[ArFrame] --> B[profile]
     A --> C[auto_clean]
     A --> D[suggest_cleaning]
-
-    
     B --> E[DataQualityReport]
     E --> D
     D --> F[step list]
