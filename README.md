@@ -295,6 +295,7 @@ Most operations below run natively in C++. The current `filter_rows` step uses t
 | `filter_rows` | Filter rows using comparison operators | `ar.filter_rows(frame, column="age", op=">", value=18)` |
 | `fill_nulls` | Replace nulls with a scalar | `ar.fill_nulls(frame, 0, subset=["revenue"])` |
 | `drop_duplicates` | Deduplicate rows (first/last/none) | `ar.drop_duplicates(frame, keep="first")` |
+| `drop_constant_columns` | Remove columns with only one unique value | `ar.drop_constant_columns(frame)` |
 | `strip_whitespace` | Trim leading/trailing spaces from strings | `ar.strip_whitespace(frame)` |
 | `normalize_case` | Force lower/upper/title case | `ar.normalize_case(frame, case_type="title")` |
 | `rename_columns` | Rename columns via mapping | `ar.rename_columns(frame, {"old": "new"})` |
@@ -347,6 +348,37 @@ Works with:
 
 <br>
 
+## 📊 Pandas Dtype Support Matrix
+
+This table helps users understand which pandas dtypes and workflows are fully supported, partially supported, unsupported, or planned.
+
+If a dtype is partially supported, users may need conversion before processing. Unsupported dtypes should raise clear errors where applicable.
+
+| Pandas Dtype | Support Status | Notes |
+|---|---|---|
+| `int64` | ✅ Supported | Fully supported with native C++ columnar storage |
+| `float64` | ✅ Supported | Fully supported with zero-copy conversion where possible |
+| `bool` | ✅ Supported | Native supported boolean type |
+| `string` | ✅ Supported | Recommended over `object` dtype for text workflows |
+| `datetime64[ns]` | ❌ Unsupported | No native datetime parsing or conversion support yet |
+| `category` | ⚠️ Limited | Converted to string/object during processing |
+| `object` (mixed columns) | ⚠️ Limited | Mixed object columns may coerce to string and reduce type inference reliability |
+| nullable pandas dtypes (`Int64`, `boolean`) | ⚠️ Limited | Supported through pandas extension dtypes with null-mask handling |
+| `timedelta64[ns]` | ❌ Unsupported | Not currently supported |
+
+### Notes
+
+- Numeric and boolean columns are optimized for zero-copy conversion between C++ and pandas.
+- String columns require Python string object creation during `to_pandas()` conversion.
+- Mixed `object` columns may reduce type inference accuracy and may require preprocessing.
+- Unsupported dtypes should raise clear user-facing errors instead of silent failures.
+
+<br>
+
+---
+
+<br>
+
 ## 🧠 Data quality engine
 
 Arnio now includes built-in dataset understanding before you analyze in pandas.
@@ -382,6 +414,62 @@ clean, report = ar.auto_clean(frame, mode="strict", return_report=True)
 This is the layer pandas does not try to own: profiling, data contracts, row-level validation issues, and safe cleaning suggestions for messy incoming datasets.
 
 <br>
+
+### Beginner-friendly auto-clean tutorial
+
+Use this workflow when you receive a small messy dataset and want to inspect what Arnio will change before applying it.
+
+```python
+import arnio as ar
+import pandas as pd
+
+raw = pd.DataFrame(
+    {
+        "order_id": [1001, 1002, 1002, 1003, 1004],
+        "customer": [" Ishan ", " Prasoon ", " Prasoon ", " Pranay ", " Dhruv "],
+        "city": [" Paris ", "London", "London", " New York ", " Tokyo "],
+    }
+)
+
+frame = ar.from_pandas(raw)
+
+report = ar.profile(frame)
+summary = report.summary()
+print(summary)
+
+suggestions = ar.suggest_cleaning(frame)
+print(suggestions)
+# [('strip_whitespace', {'subset': ['customer', 'city']}), ('drop_duplicates', {'keep': 'first'})]
+
+safe = ar.auto_clean(frame)
+strict = ar.auto_clean(frame, mode="strict")
+```
+
+Messy input:
+
+| order_id | customer | city |
+|:--|:--|:--|
+| 1001 | ` Ishan ` | ` Paris ` |
+| 1002 | ` Prasoon ` | `London` |
+| 1002 | ` Prasoon ` | `London` |
+| 1003 | ` Pranay ` | ` New York ` |
+| 1004 | ` Dhruv ` | ` Tokyo ` |
+
+Expected cleaned output with `mode="strict"`:
+
+| order_id | customer | city |
+|:--|:--|:--|
+| 1001 | Ishan | Paris |
+| 1002 | Prasoon | London |
+| 1003 | Pranay | New York |
+| 1004 | Dhruv | Tokyo |
+
+`mode="safe"` only trims whitespace. Use `mode="strict"` when you also want deterministic built-in cleanup such as exact duplicate removal.
+
+See [examples/auto_clean_tutorial.py](examples/auto_clean_tutorial.py) for a runnable version of this walkthrough.
+
+<br>
+
 ## Data Quality Reports
 
 Arnio provides detailed profiling for datasets via `ar.profile()`. To generate the report shown in these examples, the following code was used:
@@ -611,7 +699,7 @@ arnio/
 │   └── exceptions.py        # ArnioError, UnknownStepError, CsvReadError, TypeCastError
 ├── tests/                   # pytest suite — CSV, cleaning, pipeline, conversions
 ├── benchmarks/              # Reproducible arnio vs pandas benchmark
-├── examples/                # basic_usage.py, custom_step.py
+├── examples/                # basic_usage.py, auto_clean_tutorial.py, custom_step.py
 └── website/                 # Project website — arnio.vercel.app
 ```
 
