@@ -62,6 +62,43 @@ class ArFrame:
             Memory usage in bytes.
         """
         return self._frame.memory_usage()
+    
+    def select_columns(self, columns: list[str]) -> "ArFrame":
+        """Return a new ArFrame with only the selected columns.
+
+        Parameters
+        ----------
+        columns : list[str]
+            List of column names to select.
+
+        Returns
+        -------
+        ArFrame
+            New ArFrame containing only the selected columns.
+
+        Raises
+        ------
+        ValueError
+            If the selection is empty, contains duplicates,
+            or includes unknown columns.
+        """
+        if not columns:
+            raise ValueError("Column selection cannot be empty.")
+
+        if len(columns) != len(set(columns)):
+            raise ValueError("Duplicate column names are not allowed.")
+
+        missing = [col for col in columns if col not in self.columns]
+
+        if missing:
+            raise ValueError(f"Unknown columns: {missing}")
+
+        from .convert import from_pandas, to_pandas
+
+        df = to_pandas(self)
+        selected_df = df[columns]
+
+        return from_pandas(selected_df)
 
     # --- Dunder methods ---
 
