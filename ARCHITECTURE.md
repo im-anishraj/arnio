@@ -92,17 +92,19 @@ The `pipeline()` function orchestrates data flow by prioritizing C++ efficiency 
 
 When a step is invoked, the system follows a priority-based dispatch model:
 
-### C++ Fast Path
+### Built-in Step Path
 
-The system first queries `_STEP_REGISTRY`. If the step name is found, it executes the operation directly within the `Frame` / C++ core.
+The system first queries `_STEP_REGISTRY`.
 
-### Python Fallback
+This built-in registry contains optimized primitives that typically call directly into the `Frame` / C++ core, though it may also house other built-in helper logic.
 
-If the name is absent from the C++ registry, it searches `_PYTHON_STEP_REGISTRY`.
+### User-Defined Fallback
+
+If the name is absent from the built-in registry, it searches `_PYTHON_STEP_REGISTRY`.
 
 ### The Conversion Penalty
 
-Because Python steps expect a `pandas.DataFrame`, the system performs a roundtrip:
+Because Python-based steps expect a `pandas.DataFrame`, the system performs a roundtrip:
 
 ```text
 Frame → to_pandas() → from_pandas() → Frame
@@ -116,7 +118,7 @@ This roundtrip involves memory re-allocation.
 
 - `from_pandas()` re-infers types to re-populate the internal data structures.
 
-Core cleaning primitives should ideally be implemented in C++ to bypass this overhead.
+Core cleaning primitives should ideally be implemented as built-ins to bypass this overhead.
 
 ---
 
