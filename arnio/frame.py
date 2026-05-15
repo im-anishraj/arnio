@@ -130,3 +130,71 @@ class ArFrame:
         lines.append(f"DTypes:  {self.dtypes}")
         lines.append(f"Memory:  {self.memory_usage()} bytes")
         return "\n".join(lines)
+
+    def preview(self, n: int = 5) -> str:
+        """Return a lightweight string preview of the first ``n`` rows.
+
+        Reads only the first ``n`` rows directly from the C++ frame without
+        triggering a full pandas conversion, making it safe to call on very
+        large frames from the CLI or a notebook.
+
+        Parameters
+        ----------
+        n : int, optional
+            Number of rows to preview. Must be a positive integer.
+            Defaults to 5.
+
+        Returns
+        -------
+        str
+            A formatted string table showing the first ``n`` rows.
+
+        Raises
+        ------
+        ValueError
+            If ``n`` is not a positive integer.
+
+        Examples
+        --------
+        >>> frame = ar.read_csv("data.csv")
+        >>> print(frame.preview())       # first 5 rows
+        >>> print(frame.preview(n=10))   # first 10 rows
+        """
+        if isinstance(n, bool) or not isinstance(n, int) or n < 1:
+            raise ValueError(f"`n` must be a positive integer, got {n!r}")
+
+        num_rows, num_cols = self.shape
+
+        if num_rows == 0:
+            return "ArFrame preview: (empty frame)"
+
+        actual_n = min(n, num_rows)
+
+        # Pull only the first `actual_n` values per column — no full conversion
+        col_names = self.columns
+        col_data = [
+            [self._frame.column_by_index(i).at(r) for r in range(actual_n)]
+            for i in range(num_cols)
+        ]
+
+        # Calculate column widths for alignment
+        col_widths = [
+            max(
+                len(col_names[i]),
+                max((len(str(col_data[i][r])) for r in range(actual_n)), default=0),
+            )
+            for i in range(num_cols)
+        ]
+
+        # Build header and separator
+        header = "  ".join(col_names[i].ljust(col_widths[i]) for i in range(num_cols))
+        separator = "  ".join("-" * col_widths[i] for i in range(num_cols))
+
+        # Build rows
+        rows = [
+            "  ".join(str(col_data[i][r]).ljust(col_widths[i]) for i in range(num_cols))
+            for r in range(actual_n)
+        ]
+
+        label = f"ArFrame preview (showing {actual_n} of {num_rows} rows):"
+        return "\n".join([label, header, separator] + rows)

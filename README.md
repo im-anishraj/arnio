@@ -100,6 +100,22 @@ Useful for exploring datasets before committing memory.
 </details>
 
 <details>
+<summary><b>👀 Preview rows without pandas conversion or full-column Python list materialization</b></summary>
+<br>
+
+`preview()` reads only the first `n` rows directly from the C++ frame — no pandas conversion triggered.
+
+```python
+frame = ar.read_csv("huge_file.csv")
+
+print(frame.preview())      # first 5 rows (default)
+print(frame.preview(n=10))  # first 10 rows
+```
+
+Raises `ValueError` for invalid `n` (zero, negative, or non-integer).
+</details>
+
+<details>
 <summary><b>🧩 Add custom steps without touching C++</b></summary>
 <br>
 
