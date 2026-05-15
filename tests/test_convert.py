@@ -72,6 +72,36 @@ class TestFromPandas:
         assert "y" in frame.columns
         assert "z" in frame.columns
 
+    def test_nullable_int64_roundtrip_mixed_values(self):
+        df = pd.DataFrame(
+            {"id": pd.Series([1, pd.NA, 3], dtype=pd.Int64Dtype())}
+        )
+
+        result = ar.to_pandas(ar.from_pandas(df))
+
+        pd.testing.assert_series_equal(result["id"], df["id"])
+
+    def test_nullable_int64_roundtrip_all_nulls(self):
+        df = pd.DataFrame(
+            {"id": pd.Series([pd.NA, pd.NA], dtype=pd.Int64Dtype())}
+        )
+
+        frame = ar.from_pandas(df)
+        result = ar.to_pandas(frame)
+
+        assert frame.dtypes["id"] == "int64"
+        assert str(result["id"].dtype) == "Int64"
+        assert result["id"].isna().tolist() == [True, True]
+
+    def test_nullable_int64_roundtrip_without_nulls(self):
+        df = pd.DataFrame(
+            {"id": pd.Series([1, 2, 3], dtype=pd.Int64Dtype())}
+        )
+
+        result = ar.to_pandas(ar.from_pandas(df))
+
+        pd.testing.assert_series_equal(result["id"], df["id"])
+
     def test_roundtrip_values(self):
         df = pd.DataFrame(
             {
@@ -244,3 +274,4 @@ class TestAttrsPreservation:
         result = ar.to_pandas(frame)
         # stored copy must be unaffected
         assert result.attrs["meta"]["tags"] == ["a", "b"]
+
