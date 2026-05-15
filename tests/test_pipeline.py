@@ -72,28 +72,50 @@ class TestPipeline:
         assert list(df.columns) == ["value"]
         assert list(df["value"]) == [1, 2, 1]
 
-    def test_pipeline_clip_numeric(self):
-        import pandas as pd
+def test_pipeline_trim_column_names(self):
+    import pandas as pd
 
-        frame = ar.from_pandas(
-            pd.DataFrame(
-                {
-                    "value": [-5, 2, 10],
-                    "label": ["a", "b", "c"],
-                }
-            )
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                " name ": ["Alice"],
+                " age ": [30],
+            }
         )
+    )
 
-        result = ar.pipeline(
-            frame,
-            [
-                ("clip_numeric", {"lower": 0, "upper": 5}),
-            ],
+    result = ar.pipeline(
+        frame,
+        [
+            ("trim_column_names",),
+        ],
+    )
+    df = ar.to_pandas(result)
+
+    assert list(df.columns) == ["name", "age"]
+
+def test_pipeline_clip_numeric(self):
+    import pandas as pd
+
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "value": [-5, 2, 10],
+                "label": ["a", "b", "c"],
+            }
         )
-        df = ar.to_pandas(result)
+    )
 
-        assert list(df["value"]) == [0, 2, 5]
-        assert list(df["label"]) == ["a", "b", "c"]
+    result = ar.pipeline(
+        frame,
+        [
+            ("clip_numeric", {"lower": 0, "upper": 5}),
+        ],
+    )
+    df = ar.to_pandas(result)
+
+    assert list(df["value"]) == [0, 2, 5]
+    assert list(df["label"]) == ["a", "b", "c"]
 
     def test_pipeline_mapping_shorthand(self, sample_csv):
         frame = ar.read_csv(sample_csv)

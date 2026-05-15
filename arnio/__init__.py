@@ -27,6 +27,7 @@ from .cleaning import (
     safe_divide_columns,
     strip_whitespace,
     validate_columns_exist,
+    trim_column_names,
 )
 from .convert import from_pandas, to_pandas
 from .exceptions import ArnioError, CsvReadError, TypeCastError, UnknownStepError
@@ -77,6 +78,7 @@ __all__ = [
     "cast_types",
     "clean",
     "safe_divide_columns",
+    "trim_column_names",
     # Conversion
     "to_pandas",
     "from_pandas",
