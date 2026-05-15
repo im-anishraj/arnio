@@ -190,3 +190,32 @@ def test_filter_rows_direct_api():
     result_df = ar.to_pandas(result)
 
     assert list(result_df["age"]) == [30, 40]
+
+
+def test_safe_divide_columns_pipeline():
+    import pandas as pd
+
+    import arnio as ar
+
+    df = pd.DataFrame({"revenue": [100.0, 200.0, 0.0], "cost": [50.0, 0.0, 30.0]})
+
+    frame = ar.from_pandas(df)
+
+    result = ar.pipeline(
+        frame,
+        [
+            (
+                "safe_divide_columns",
+                {
+                    "numerator": "revenue",
+                    "denominator": "cost",
+                    "output_column": "ratio",
+                },
+            )
+        ],
+    )
+
+    result_df = ar.to_pandas(result)
+    assert result_df["ratio"].iloc[0] == 2.0
+    assert result_df["ratio"].iloc[1] == 0.0  # division by zero → fill_value
+    assert result_df["ratio"].iloc[2] == 0.0  # zero numerator

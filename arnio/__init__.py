@@ -20,10 +20,9 @@ from .cleaning import (
     filter_rows,
     normalize_case,
     rename_columns,
-    strip_whitespace,
     safe_divide_columns,
+    strip_whitespace,
 )
-
 from .convert import from_pandas, to_pandas
 from .exceptions import ArnioError, CsvReadError, TypeCastError, UnknownStepError
 from .frame import ArFrame

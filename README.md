@@ -300,6 +300,7 @@ Most operations below run natively in C++. The current `filter_rows` step uses t
 | `rename_columns` | Rename columns via mapping | `ar.rename_columns(frame, {"old": "new"})` |
 | `cast_types` | Cast column types | `ar.cast_types(frame, {"age": "int64"})` |
 | `clean` | Convenience shorthand | `ar.clean(frame, drop_nulls=True)` |
+| `safe_divide_columns` | Divide one column by another, handling zero/null denominators | `ar.safe_divide_columns(frame, numerator="revenue", denominator="cost", output_column="ratio")` |
 
 Or compose them all into a **pipeline**:
 
@@ -342,6 +343,21 @@ Works with:
 - booleans
 
 <br>
+### 🔢 Safe column division
+
+Divide one column by another while handling division by zero and null denominators explicitly:
+
+```python
+result = ar.safe_divide_columns(
+    frame,
+    numerator="revenue",
+    denominator="cost",
+    output_column="ratio",
+    fill_value=0.0,  # used when denominator is zero or null
+)
+```
+
+> When the denominator is **zero or null**, the result is replaced with `fill_value` (default `0.0`) instead of raising an error or producing `NaN`/`Inf`.
 
 ---
 

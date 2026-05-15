@@ -308,7 +308,9 @@ def filter_rows(frame, column, op, value):
     return from_pandas(filtered) if is_arframe else filtered
 
 
-def safe_divide_columns(frame, numerator: str, denominator: str, output_column: str, fill_value: float = 0.0):
+def safe_divide_columns(
+    frame, numerator: str, denominator: str, output_column: str, fill_value: float = 0.0
+):
     """Divide one column by another, handling division by zero and nulls explicitly.
 
     When the denominator is zero or null, the result is replaced with
@@ -347,6 +349,14 @@ def safe_divide_columns(frame, numerator: str, denominator: str, output_column: 
         raise ValueError(f"Numerator column '{numerator}' not found in frame.")
     if denominator not in df.columns:
         raise ValueError(f"Denominator column '{denominator}' not found in frame.")
+    if output_column in df.columns:
+        import warnings
+
+        warnings.warn(
+            f"Output column '{output_column}' already exists and will be overwritten.",
+            UserWarning,
+            stacklevel=2,
+        )
 
     safe_denom = df[denominator].replace(0, float("nan"))
     result = df[numerator] / safe_denom
@@ -354,4 +364,3 @@ def safe_divide_columns(frame, numerator: str, denominator: str, output_column: 
     df[output_column] = result.fillna(fill_value)
 
     return from_pandas(df) if is_arframe else df
-
