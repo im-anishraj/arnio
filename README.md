@@ -296,6 +296,7 @@ Most operations below run natively in C++. The current `filter_rows` step uses t
 | `fill_nulls` | Replace nulls with a scalar | `ar.fill_nulls(frame, 0, subset=["revenue"])` |
 | `drop_duplicates` | Deduplicate rows (first/last/none) | `ar.drop_duplicates(frame, keep="first")` |
 | `drop_constant_columns` | Remove columns with only one unique value | `ar.drop_constant_columns(frame)` |
+| `clip_numeric` | Clip numeric values to lower and/or upper bounds | `ar.clip_numeric(frame, lower=0, upper=100)` |
 | `strip_whitespace` | Trim leading/trailing spaces from strings | `ar.strip_whitespace(frame)` |
 | `normalize_case` | Force lower/upper/title case | `ar.normalize_case(frame, case_type="title")` |
 | `rename_columns` | Rename columns via mapping | `ar.rename_columns(frame, {"old": "new"})` |
