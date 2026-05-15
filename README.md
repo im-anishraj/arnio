@@ -526,22 +526,24 @@ The biggest performance wins are in:
 - **`strip_whitespace`** — converting from copy-on-write to in-place mutation
 - **Parallel column processing** — `std::thread` across independent columns
 
+
 ### Getting started
 
 ```bash
-# macOS / Linux
-git clone https://github.com/im-anishraj/arnio.git && cd arnio
-make install   # pip install -e ".[dev]" + pre-commit
-make test      # pytest with coverage
-make lint      # ruff + black
+# Clone the repository
+git clone https://github.com/im-anishraj/arnio.git
+cd arnio
 
-# Windows
-pip install -e ".[dev]"
-pre-commit install
-pytest tests/ -v
-```
+# Create and activate a virtual environment
+python -m venv venv
+source venv/bin/activate   # On Windows: venv\Scripts\activate
 
-> **PR titles must follow [Conventional Commits](https://www.conventionalcommits.org/)** — `feat:`, `fix:`, `docs:`, `chore:`. Our release pipeline auto-generates changelogs from these.
+# Install dependencies
+pip install -r requirements.txt
+
+# Run tests
+pytest
+.
 
 For GSSoC contributors, please read **[GSSOC_GUIDE.md](GSSOC_GUIDE.md)** before asking to be assigned. It explains issue claiming, contribution levels, review expectations, and what maintainers look for in a strong PR. If you want a quick onboarding refresher, see the [GSSoC FAQ](GSSOC_GUIDE.md#gssoc-faq).
 If you are new to Arnio terms, see the [contributor glossary](.github/CONTRIBUTING.md#contributor-glossary).
@@ -576,7 +578,7 @@ python -m pip install -U pip
 python -m pip install arnio
 printf 'name,revenue\n Ada,10\n' > /tmp/arnio-smoke.csv
 python - <<'PY'
-import arnio as ar
+import arnio as ar      
 print(ar.__version__)
 print(ar.scan_csv("/tmp/arnio-smoke.csv"))
 PY
@@ -645,21 +647,3 @@ arnio/
 <sub>Built with C++ and pybind11 · Licensed under MIT · Maintained by <a href="https://github.com/im-anishraj">@im-anishraj</a></sub>
 
 </div>
-<<<<<<< HEAD
-## 🚀 Installation & Setup (For Contributors)
-
-<<<<<<< HEAD
-This project is a Python/C++ package. It does NOT run as a Node.js app.
-=======
-This project is a Python + C++ package.
-
----
->>>>>>> f8f4810 (docs: improve installation instructions)
-
-### 1. Clone the repository
-
-```bash
-git clone https://github.com/im-anishraj/arnio.git
-cd arnio
-=======
->>>>>>> da685f2 (docs: add contributor setup instructions)
