@@ -29,21 +29,26 @@ for name, kwargs in suggestions:
 print()
 
 # Pipelinne
-clean_frame = ar.pipeline(frame, [
-    ("strip_whitespace",),                                       
-    ("normalize_case", {"case_type": "title"}),                 
-    ("drop_duplicates",),                                        
-    ("fill_nulls", {"value": "Unknown", "subset": ["city"]}),   
-    ("drop_nulls", {"subset": ["name", "email"]}),              
-])
+clean_frame = ar.pipeline(
+    frame,
+    [
+        ("strip_whitespace",),
+        ("normalize_case", {"case_type": "title"}),
+        ("drop_duplicates",),
+        ("fill_nulls", {"value": "Unknown", "subset": ["city"]}),
+        ("drop_nulls", {"subset": ["name", "email"]}),
+    ],
+)
 
 # validate the cleaned data against a schema
-schema = ar.Schema({
-    "customer_id": ar.Int64(nullable=False, unique=True),
-    "name":        ar.String(nullable=False),
-    "email":       ar.Email(nullable=False, unique=True),
-    "age":         ar.Int64(nullable=True, min=0, max=120),
-})
+schema = ar.Schema(
+    {
+        "customer_id": ar.Int64(nullable=False, unique=True),
+        "name": ar.String(nullable=False),
+        "email": ar.Email(nullable=False, unique=True),
+        "age": ar.Int64(nullable=True, min=0, max=120),
+    }
+)
 result = ar.validate(clean_frame, schema)
 print("Validation Result:")
 if result.passed:
@@ -52,7 +57,7 @@ else:
     for issue in result.issues:
         print(f"  [{issue.column}] {issue.message}")
 
-#Export to pandas for display purposes
+# Export to pandas for display purposes
 df = ar.to_pandas(clean_frame)
 print(f"\n--Cleaned Data ({df.shape[0]} rows) --")
 print(df.to_string())

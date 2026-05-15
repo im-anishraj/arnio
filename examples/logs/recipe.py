@@ -28,13 +28,16 @@ frame = ar.read_csv("messy_logs.csv")
 print(f"Loaded: {frame.shape[0]} rows × {frame.shape[1]} columns\n")
 
 # Profile the raw data to identify quality issues
-clean_frame = ar.pipeline(frame, [
-    ("strip_whitespace",),                                       
-    ("normalize_case", {"case_type": "lower"}),                  
-    ("drop_duplicates",),                                         
-    ("fill_nulls", {"value": "unknown", "subset": ["level"]}),
-    ("drop_nulls", {"subset": ["timestamp", "service"]}),        
-])
+clean_frame = ar.pipeline(
+    frame,
+    [
+        ("strip_whitespace",),
+        ("normalize_case", {"case_type": "lower"}),
+        ("drop_duplicates",),
+        ("fill_nulls", {"value": "unknown", "subset": ["level"]}),
+        ("drop_nulls", {"subset": ["timestamp", "service"]}),
+    ],
+)
 
 # Clean Result
 report = ar.profile(clean_frame)
@@ -45,12 +48,16 @@ for col, p in report.columns.items():
 print()
 
 # Validate the cleaned data against a schema
-schema = ar.Schema({
-    "log_id":    ar.Int64(nullable=False),
-    "level":     ar.String(nullable=False, allowed={"info", "warn", "error", "debug", "unknown"}),
-    "service":   ar.String(nullable=False),
-    "message":   ar.String(nullable=True),
-})
+schema = ar.Schema(
+    {
+        "log_id": ar.Int64(nullable=False),
+        "level": ar.String(
+            nullable=False, allowed={"info", "warn", "error", "debug", "unknown"}
+        ),
+        "service": ar.String(nullable=False),
+        "message": ar.String(nullable=True),
+    }
+)
 result = ar.validate(clean_frame, schema)
 print(" Validation Result:")
 if result.passed:

@@ -31,24 +31,38 @@ for col, p in report.columns.items():
 print()
 
 # Pipeline — clean step by step
-clean_frame = ar.pipeline(frame, [
-    ("strip_whitespace",),                                            # trim " no comment "
-    ("normalize_case", {"case_type": "lower"}),                      # unify satisfaction labels
-    ("drop_duplicates",),                                             # remove duplicate response_id 2
-    ("fill_nulls", {"value": "no response", "subset": ["comments"]}),# tag blank comments
-    ("drop_nulls", {"subset": ["respondent"]}),                      # drop anonymous rows
-])
+clean_frame = ar.pipeline(
+    frame,
+    [
+        ("strip_whitespace",),  # trim " no comment "
+        ("normalize_case", {"case_type": "lower"}),  # unify satisfaction labels
+        ("drop_duplicates",),  # remove duplicate response_id 2
+        (
+            "fill_nulls",
+            {"value": "no response", "subset": ["comments"]},
+        ),  # tag blank comments
+        ("drop_nulls", {"subset": ["respondent"]}),  # drop anonymous rows
+    ],
+)
 
 # validate the cleaned data against a schema
-schema = ar.Schema({
-    "response_id":  ar.Int64(nullable=False, unique=True),
-    "respondent":   ar.String(nullable=False),
-    "nps_score":    ar.Int64(nullable=True, min=0, max=10),
-    "satisfaction": ar.String(nullable=True, allowed={
-        "very satisfied", "satisfied", "neutral",
-        "dissatisfied", "very dissatisfied",
-    }),
-})
+schema = ar.Schema(
+    {
+        "response_id": ar.Int64(nullable=False, unique=True),
+        "respondent": ar.String(nullable=False),
+        "nps_score": ar.Int64(nullable=True, min=0, max=10),
+        "satisfaction": ar.String(
+            nullable=True,
+            allowed={
+                "very satisfied",
+                "satisfied",
+                "neutral",
+                "dissatisfied",
+                "very dissatisfied",
+            },
+        ),
+    }
+)
 result = ar.validate(clean_frame, schema)
 print("Validation Result:")
 if result.passed:
