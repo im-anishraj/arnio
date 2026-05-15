@@ -47,7 +47,6 @@ def _series_to_python_values(series: pd.Series, col_name: object) -> list[object
                 f"of type '{type(raw).__name__}' at value {raw!r}. "
                 "Convert nested objects to strings or flatten them first."
             )
-        
 
         value = _normalize_scalar(raw)
         values.append(value)
