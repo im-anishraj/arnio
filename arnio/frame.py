@@ -2,7 +2,6 @@
 arnio.frame
 ArFrame — the core data container wrapping the C++ Frame.
 """
-
 from __future__ import annotations
 
 from ._core import _Frame
@@ -50,7 +49,7 @@ class ArFrame:
             Mapping of column names to their data types.
         """
         return self._frame.dtypes()
-    
+
     @property
     def is_empty(self) -> bool:
         """Check if frame has zero rows.
@@ -98,7 +97,6 @@ class ArFrame:
         ------
         TypeError
             If columns is not a valid sequence of strings.
-
         ValueError
             If the selection is empty, contains duplicates,
             or includes unknown columns.
