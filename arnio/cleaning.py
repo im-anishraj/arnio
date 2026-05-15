@@ -152,6 +152,83 @@ def drop_constant_columns(frame: ArFrame) -> ArFrame:
     return from_pandas(df.drop(columns=constant_columns))
 
 
+def clip_numeric(
+    frame: ArFrame,
+    *,
+    lower: int | float | None = None,
+    upper: int | float | None = None,
+    subset: list[str] | None = None,
+) -> ArFrame:
+    """Clip numeric columns to lower and/or upper bounds.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input data frame.
+    lower : int or float, optional
+        Lower bound. Values below this are raised to the bound.
+    upper : int or float, optional
+        Upper bound. Values above this are lowered to the bound.
+    subset : list[str], optional
+        Numeric columns to clip. If None, applies to all numeric columns except bools.
+
+    Returns
+    -------
+    ArFrame
+        New frame with clipped numeric values.
+
+    Raises
+    ------
+    ValueError
+        If no bounds are provided, bounds are inverted, subset contains unknown
+        columns, or subset contains non-numeric columns.
+
+    Examples
+    --------
+    >>> frame = ar.read_csv("data.csv")
+    >>> clipped = ar.clip_numeric(frame, lower=0, upper=100)
+    """
+    from pandas.api.types import is_bool_dtype, is_numeric_dtype
+
+    from .convert import from_pandas, to_pandas
+
+    if lower is None and upper is None:
+        raise ValueError("At least one of 'lower' or 'upper' must be provided")
+    if lower is not None and upper is not None and lower > upper:
+        raise ValueError("lower cannot be greater than upper")
+
+    df = to_pandas(frame)
+
+    def _is_supported_numeric(column_name: str) -> bool:
+        series = df[column_name]
+        return is_numeric_dtype(series) and not is_bool_dtype(series)
+
+    if subset is None:
+        target_columns = [
+            column for column in df.columns if _is_supported_numeric(column)
+        ]
+    else:
+        unknown_columns = [column for column in subset if column not in df.columns]
+        if unknown_columns:
+            raise ValueError(f"Unknown columns in subset: {unknown_columns}")
+
+        non_numeric_columns = [
+            column for column in subset if not _is_supported_numeric(column)
+        ]
+        if non_numeric_columns:
+            raise ValueError(
+                "clip_numeric only supports numeric columns: " f"{non_numeric_columns}"
+            )
+        target_columns = subset
+
+    if not target_columns:
+        return frame
+
+    clipped = df.copy()
+    clipped[target_columns] = clipped[target_columns].clip(lower=lower, upper=upper)
+    return from_pandas(clipped)
+
+
 def strip_whitespace(
     frame: ArFrame,
     *,

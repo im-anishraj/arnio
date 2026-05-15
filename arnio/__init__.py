@@ -14,6 +14,7 @@ except Exception:
 from .cleaning import (
     cast_types,
     clean,
+    clip_numeric,
     drop_constant_columns,
     drop_duplicates,
     drop_nulls,
@@ -61,6 +62,7 @@ __all__ = [
     "filter_rows",
     "drop_duplicates",
     "drop_constant_columns",
+    "clip_numeric",
     "strip_whitespace",
     "normalize_case",
     "rename_columns",

@@ -158,6 +158,105 @@ class TestDropConstantColumns:
         assert result.shape[1] == 0
 
 
+class TestClipNumeric:
+    def test_clip_numeric_lower_only(self):
+        frame = ar.from_pandas(pd.DataFrame({"value": [-5, 0, 10]}))
+
+        result = ar.clip_numeric(frame, lower=1)
+        df = ar.to_pandas(result)
+
+        assert list(df["value"]) == [1, 1, 10]
+
+    def test_clip_numeric_upper_only(self):
+        frame = ar.from_pandas(pd.DataFrame({"value": [-5, 0, 10]}))
+
+        result = ar.clip_numeric(frame, upper=3)
+        df = ar.to_pandas(result)
+
+        assert list(df["value"]) == [-5, 0, 3]
+
+    def test_clip_numeric_both_bounds(self):
+        frame = ar.from_pandas(pd.DataFrame({"value": [-5, 2, 10]}))
+
+        result = ar.clip_numeric(frame, lower=0, upper=5)
+        df = ar.to_pandas(result)
+
+        assert list(df["value"]) == [0, 2, 5]
+
+    def test_clip_numeric_all_numeric_subset_skips_non_numeric_columns(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "value": [-5, 5, 20],
+                    "label": ["low", "ok", "high"],
+                }
+            )
+        )
+
+        result = ar.clip_numeric(frame, lower=0, upper=10)
+        df = ar.to_pandas(result)
+
+        assert list(df["value"]) == [0, 5, 10]
+        assert list(df["label"]) == ["low", "ok", "high"]
+
+    def test_clip_numeric_subset_only_requested_numeric_columns(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "a": [-5, 0, 10],
+                    "b": [-10, 5, 20],
+                    "label": ["x", "y", "z"],
+                }
+            )
+        )
+
+        result = ar.clip_numeric(frame, lower=0, upper=8, subset=["b"])
+        df = ar.to_pandas(result)
+
+        assert list(df["a"]) == [-5, 0, 10]
+        assert list(df["b"]) == [0, 5, 8]
+        assert list(df["label"]) == ["x", "y", "z"]
+
+    def test_clip_numeric_keeps_missing_values(self):
+        frame = ar.from_pandas(pd.DataFrame({"value": [None, -5.0, 10.0]}))
+
+        result = ar.clip_numeric(frame, lower=0, upper=5)
+        df = ar.to_pandas(result)
+
+        assert pd.isna(df["value"].iloc[0])
+        assert list(df["value"].iloc[1:]) == [0.0, 5.0]
+
+    def test_clip_numeric_unknown_subset_column_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"value": [1, 2, 3]}))
+
+        with pytest.raises(ValueError, match="Unknown columns in subset"):
+            ar.clip_numeric(frame, lower=0, subset=["missing"])
+
+    def test_clip_numeric_non_numeric_subset_column_raises(self):
+        frame = ar.from_pandas(
+            pd.DataFrame({"value": [1, 2, 3], "label": ["x", "y", "z"]})
+        )
+
+        with pytest.raises(
+            ValueError, match="clip_numeric only supports numeric columns"
+        ):
+            ar.clip_numeric(frame, lower=0, subset=["label"])
+
+    def test_clip_numeric_no_bounds_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"value": [1, 2, 3]}))
+
+        with pytest.raises(
+            ValueError, match="At least one of 'lower' or 'upper' must be provided"
+        ):
+            ar.clip_numeric(frame)
+
+    def test_clip_numeric_inverted_bounds_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"value": [1, 2, 3]}))
+
+        with pytest.raises(ValueError, match="lower cannot be greater than upper"):
+            ar.clip_numeric(frame, lower=5, upper=1)
+
+
 class TestStripWhitespace:
     def test_strip(self, csv_with_whitespace):
         frame = ar.read_csv(csv_with_whitespace)
