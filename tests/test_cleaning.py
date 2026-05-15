@@ -148,3 +148,42 @@ class TestCleanAPI:
         # Drop nulls
         result = ar.clean(frame, strip_whitespace=False, drop_nulls=True)
         assert len(result) < len(frame)
+
+class TestRemoveSpecialChars:
+    def test_default_all_string_columns(self):
+        import pandas as pd
+        df = pd.DataFrame({"name": ["Alice@", "Bob#"], "age": [25, 30]})
+        frame = ar.from_pandas(df)
+        result = ar.to_pandas(ar.remove_special_chars(frame))
+        assert result["name"].tolist() == ["Alice", "Bob"]
+        assert result["age"].tolist() == [25, 30]  # int col untouched
+
+    def test_subset_only_touches_specified_columns(self):
+        import pandas as pd
+        df = pd.DataFrame({"name": ["Alice@"], "city": ["NY#"]})
+        frame = ar.from_pandas(df)
+        result = ar.to_pandas(ar.remove_special_chars(frame, subset=["name"]))
+        assert result["name"].tolist() == ["Alice"]
+        assert result["city"].tolist() == ["NY#"]  # untouched
+
+    def test_no_special_chars_no_change(self):
+        import pandas as pd
+        df = pd.DataFrame({"name": ["Alice", "Bob"]})
+        frame = ar.from_pandas(df)
+        result = ar.to_pandas(ar.remove_special_chars(frame))
+        assert result["name"].tolist() == ["Alice", "Bob"]
+
+    def test_unknown_column_raises_value_error(self):
+        import pandas as pd
+        df = pd.DataFrame({"name": ["Alice@"]})
+        frame = ar.from_pandas(df)
+        with pytest.raises(ValueError, match="unknown columns in subset"):
+            ar.remove_special_chars(frame, subset=["nonexistent"])
+
+    def test_works_inside_pipeline(self):
+        import pandas as pd
+        df = pd.DataFrame({"name": ["Alice@", "Bob#"]})
+        frame = ar.from_pandas(df)
+        clean = ar.pipeline(frame, [("remove_special_chars",)])
+        result = ar.to_pandas(clean)
+        assert result["name"].tolist() == ["Alice", "Bob"]

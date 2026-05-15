@@ -3,7 +3,6 @@ arnio — Fast CSV processing and data cleaning companion for pandas.
 
 import arnio as ar
 """
-
 try:
     from importlib.metadata import version
 
@@ -21,6 +20,7 @@ from .cleaning import (
     normalize_case,
     rename_columns,
     strip_whitespace,
+    remove_special_chars,
 )
 from .convert import from_pandas, to_pandas
 from .exceptions import ArnioError, CsvReadError, TypeCastError, UnknownStepError
@@ -63,7 +63,9 @@ __all__ = [
     "normalize_case",
     "rename_columns",
     "cast_types",
+    "remove_special_chars",
     "clean",
+    
     # Conversion
     "to_pandas",
     "from_pandas",

@@ -4,7 +4,7 @@ Data cleaning functions.
 """
 
 from __future__ import annotations
-
+from .convert import to_pandas, from_pandas
 from typing import Any
 
 from ._core import (
@@ -306,3 +306,42 @@ def filter_rows(frame, column, op, value):
     filtered = df[getattr(df[column], ops[op])(value)]
 
     return from_pandas(filtered) if is_arframe else filtered
+
+def remove_special_chars(frame: ArFrame, *, subset: list[str] | None = None) -> ArFrame:
+    """
+    Remove special characters from string columns.
+    Keeps only alphanumeric characters and whitespace.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input data frame.
+    subset : list of str, optional
+        Column names to apply cleaning on.
+        If None, applies to all string/object columns automatically.
+
+    Returns
+    -------
+    ArFrame
+        New frame with special characters removed from string columns.
+    """
+    df = to_pandas(frame)
+
+    target_cols = subset if subset is not None else \
+        df.select_dtypes(include=["object", "string"]).columns.tolist()
+
+    missing = [c for c in target_cols if c not in df.columns]
+    if missing:
+        raise ValueError(
+            f"remove_special_chars: unknown columns in subset: {missing}"
+        )
+
+    df = df.copy()
+
+    for col in target_cols:
+        if df[col].dtype == object or str(df[col].dtype) == "string":
+            df[col] = df[col].str.replace(
+                r"[^a-zA-Z0-9\s]", "", regex=True
+            )
+
+    return from_pandas(df)
