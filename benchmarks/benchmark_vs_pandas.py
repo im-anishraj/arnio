@@ -91,8 +91,8 @@ def run_case(case):
     pd_rams, ar_rams = [], []
 
     for i in range(RUNS):
-        pt, pr = benchmark_pandas(CSV_FILE)
-        at, ar_r = benchmark_arnio(CSV_FILE)
+        pt, pr = benchmark_pandas(case.path)
+        at, ar_r = benchmark_arnio(case.path)
         pd_times.append(pt)
         ar_times.append(at)
         pd_rams.append(pr)

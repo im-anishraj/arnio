@@ -4,6 +4,7 @@ import pandas as pd
 import pytest
 
 import arnio as ar
+from benchmarks import benchmark_vs_pandas
 from benchmarks.generate_data import generate, generate_wide
 
 
@@ -51,3 +52,21 @@ def test_generate_wide_rejects_too_few_columns(tmp_path):
 
     with pytest.raises(ValueError, match="at least 4 columns"):
         generate_wide(rows=4, columns=3, path=csv_path)
+
+
+def test_run_case_benchmarks_the_selected_case_path(monkeypatch):
+    seen_paths = []
+
+    def fake_benchmark(path):
+        seen_paths.append(path)
+        return 1.0, 1.0
+
+    monkeypatch.setattr(benchmark_vs_pandas, "RUNS", 2)
+    monkeypatch.setattr(benchmark_vs_pandas, "benchmark_pandas", fake_benchmark)
+    monkeypatch.setattr(benchmark_vs_pandas, "benchmark_arnio", fake_benchmark)
+
+    benchmark_vs_pandas.run_case(
+        benchmark_vs_pandas.BenchmarkCase("Wide fixture", "wide.csv")
+    )
+
+    assert seen_paths == ["wide.csv", "wide.csv", "wide.csv", "wide.csv"]
