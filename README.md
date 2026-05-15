@@ -322,7 +322,7 @@ Small differences are expected across CPUs, operating systems, compilers, Python
 
 ## 🧰 Cleaning primitives
 
-Most operations below run natively in C++. The current `filter_rows` step uses the Python pipeline backend and may be optimized in C++ later.
+Most operations below run natively in C++. The current `filter_rows` and `parse_numeric_strings` steps use the Python pipeline backend and may be optimized in C++ later.
 
 | Primitive | What it does | Example |
 |:---|:---|:---|
@@ -334,11 +334,19 @@ Most operations below run natively in C++. The current `filter_rows` step uses t
 | `clip_numeric` | Clip numeric values to lower and/or upper bounds | `ar.clip_numeric(frame, lower=0, upper=100)` |
 | `strip_whitespace` | Trim leading/trailing spaces from strings | `ar.strip_whitespace(frame)` |
 | `normalize_case` | Force lower/upper/title case | `ar.normalize_case(frame, case_type="title")` |
+| `parse_numeric_strings` | Convert messy numeric strings such as `$1,234` or `45%` | `ar.parse_numeric_strings(frame, subset=["revenue"])` |
 | `rename_columns` | Rename columns via mapping | `ar.rename_columns(frame, {"old": "new"})` |
 | `cast_types` | Cast column types | `ar.cast_types(frame, {"age": "int64"})` |
 | `round_numeric_columns` | Round numeric columns (non-numeric columns in subset ignored safely) | `ar.round_numeric_columns(frame, decimals=2)` |
 | `clean` | Convenience shorthand | `ar.clean(frame, drop_nulls=True)` |
 | `safe_divide_columns` | Divide one column by another, handling zero/null denominators | `ar.safe_divide_columns(frame, numerator="revenue", denominator="cost", output_column="ratio")` |
+
+`parse_numeric_strings` removes common currency symbols (`$`, `€`, `£`, `¥`,
+`₹`), thousands separators, and surrounding whitespace before parsing. Values
+wrapped in parentheses are treated as negatives, so `(300)` becomes `-300`.
+Percent values are divided by 100, so `45%` becomes `0.45`. With
+`errors="coerce"`, invalid non-empty values become nulls; with
+`errors="raise"`, the first invalid values are reported in a `ValueError`.
 
 Or compose them all into a **pipeline**:
 
@@ -347,6 +355,7 @@ clean = ar.pipeline(frame, [
     ("strip_whitespace",),
     ("normalize_case", {"case_type": "lower"}),
     ("fill_nulls", {"value": "unknown", "subset": ["city"]}),
+    ("parse_numeric_strings", {"subset": ["revenue"]}),
     ("drop_duplicates", {"keep": "first"}),
 ])
 ```
