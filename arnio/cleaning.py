@@ -369,5 +369,5 @@ def make_column_names_unique(
     >>> frame = ar.read_csv("data.csv")
     >>> unique = ar.make_column_names_unique(frame)
     """
-    result = make_column_names_unique(frame._frame)
+    result = _make_column_names_unique(frame._frame)
     return ArFrame(result)
