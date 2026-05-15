@@ -315,7 +315,7 @@ def rename_columns(
     return ArFrame(result)
 
 
-# changes done to trim white spaces.
+
 def trim_column_names(frame: ArFrame) -> ArFrame:
     """Strip leading and trailing whitespace from column names.
 
