@@ -231,13 +231,10 @@ class TestRoundNumericColumns:
     def test_round_subset_with_non_numeric(self):
         import pandas as pd
 
-        df = pd.DataFrame({
-            "name": ["john"],
-            "score": [98.765]
-        })
+        df = pd.DataFrame({"name": ["john"], "score": [98.765]})
         frame = ar.from_pandas(df)
         result = ar.round_numeric_columns(frame, subset=["name", "score"], decimals=1)
         result_df = ar.to_pandas(result)
-        
+
         assert list(result_df["name"]) == ["john"]
         assert list(result_df["score"]) == [98.8]
