@@ -49,6 +49,52 @@ class TestPipeline:
         )
         assert result.shape[0] == 3
 
+    def test_pipeline_drop_constant_columns(self):
+        import pandas as pd
+
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "constant": [1, 1, 1],
+                    "value": [1, 2, 1],
+                }
+            )
+        )
+
+        result = ar.pipeline(
+            frame,
+            [
+                ("drop_constant_columns",),
+            ],
+        )
+        df = ar.to_pandas(result)
+
+        assert list(df.columns) == ["value"]
+        assert list(df["value"]) == [1, 2, 1]
+
+    def test_pipeline_clip_numeric(self):
+        import pandas as pd
+
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "value": [-5, 2, 10],
+                    "label": ["a", "b", "c"],
+                }
+            )
+        )
+
+        result = ar.pipeline(
+            frame,
+            [
+                ("clip_numeric", {"lower": 0, "upper": 5}),
+            ],
+        )
+        df = ar.to_pandas(result)
+
+        assert list(df["value"]) == [0, 2, 5]
+        assert list(df["label"]) == ["a", "b", "c"]
+
     def test_pipeline_mapping_shorthand(self, sample_csv):
         frame = ar.read_csv(sample_csv)
         result = ar.pipeline(
@@ -190,3 +236,48 @@ def test_filter_rows_direct_api():
     result_df = ar.to_pandas(result)
 
     assert list(result_df["age"]) == [30, 40]
+
+
+def test_round_numeric_columns_pipeline():
+    import pandas as pd
+
+    import arnio as ar
+
+    df = pd.DataFrame({"price": [10.555, 20.123]})
+    frame = ar.from_pandas(df)
+
+    result = ar.pipeline(
+        frame, [("round_numeric_columns", {"subset": ["price"], "decimals": 2})]
+    )
+
+    result_df = ar.to_pandas(result)
+    assert list(result_df["price"]) == [10.56, 20.12]
+
+
+def test_safe_divide_columns_pipeline():
+    import pandas as pd
+
+    import arnio as ar
+
+    df = pd.DataFrame({"revenue": [100.0, 200.0, 0.0], "cost": [50.0, 0.0, 30.0]})
+
+    frame = ar.from_pandas(df)
+
+    result = ar.pipeline(
+        frame,
+        [
+            (
+                "safe_divide_columns",
+                {
+                    "numerator": "revenue",
+                    "denominator": "cost",
+                    "output_column": "ratio",
+                },
+            )
+        ],
+    )
+
+    result_df = ar.to_pandas(result)
+    assert result_df["ratio"].iloc[0] == 2.0
+    assert result_df["ratio"].iloc[1] == 0.0  # division by zero → fill_value
+    assert result_df["ratio"].iloc[2] == 0.0  # zero numerator
