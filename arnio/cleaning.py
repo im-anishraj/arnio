@@ -138,6 +138,8 @@ def keep_rows_with_nulls(
 
     Raises
     ------
+    TypeError
+        If subset is passed as a string instead of a list.
     ValueError
         If any column in subset does not exist in the frame.
 
@@ -147,6 +149,13 @@ def keep_rows_with_nulls(
     >>> nulls = ar.keep_rows_with_nulls(frame)
     >>> nulls_age = ar.keep_rows_with_nulls(frame, subset=["age"])
     """
+
+    if isinstance(subset, str):
+        raise TypeError(
+            f"keep_rows_with_nulls: 'subset' must be a list of column names, "
+            f"not a string. Did you mean subset=['{subset}']?"
+        )
+
     import pandas as pd
 
     from .convert import from_pandas, to_pandas
