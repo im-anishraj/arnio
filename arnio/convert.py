@@ -43,8 +43,9 @@ def _series_to_python_values(series: pd.Series, col_name: object) -> list[object
     for raw in series.tolist():
         if _is_nested(raw):
             raise TypeError(
-                f"Unsupported nested/complex type in column '{col_name}': "
-                f"{type(raw).__name__}"
+                f"Column '{col_name}' contains unsupported nested value "
+                f"of type '{type(raw).__name__}' at value {raw!r}. "
+                "Convert nested objects to strings or flatten them first."
             )
 
         value = _normalize_scalar(raw)
