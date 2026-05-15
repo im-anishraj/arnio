@@ -113,6 +113,37 @@ def drop_duplicates(
     return ArFrame(result)
 
 
+def drop_constant_columns(frame: ArFrame) -> ArFrame:
+    """Remove columns with only one unique value.
+
+    Nulls are counted as values when determining whether a column is constant.
+    This means columns like ``[None, None]`` are dropped, while columns like
+    ``[1, 1, None]`` are kept.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input data frame.
+
+    Returns
+    -------
+    ArFrame
+        New frame without constant columns.
+
+    Examples
+    --------
+    >>> frame = ar.read_csv("data.csv")
+    >>> reduced = ar.drop_constant_columns(frame)
+    """
+    from .convert import from_pandas, to_pandas
+
+    df = to_pandas(frame)
+    constant_columns = [
+        column for column in df.columns if df[column].nunique(dropna=False) <= 1
+    ]
+    return from_pandas(df.drop(columns=constant_columns))
+
+
 def strip_whitespace(
     frame: ArFrame,
     *,

@@ -1,5 +1,6 @@
 """Tests for data cleaning functions."""
 
+import pandas as pd
 import pytest
 
 import arnio as ar
@@ -67,6 +68,78 @@ class TestDropDuplicates:
         frame = ar.read_csv(csv_with_duplicates)
         result = ar.drop_duplicates(frame, subset=["name"])
         assert result.shape[0] == 3
+
+
+class TestDropConstantColumns:
+    def test_drop_constant_columns_removes_constant_columns(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "value": [1, 2, 3],
+                    "constant_num": [7, 7, 7],
+                    "constant_text": ["x", "x", "x"],
+                }
+            )
+        )
+
+        result = ar.drop_constant_columns(frame)
+        df = ar.to_pandas(result)
+
+        assert list(df.columns) == ["value"]
+        assert list(df["value"]) == [1, 2, 3]
+
+    def test_drop_constant_columns_keeps_non_constant_columns(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "a": [1, 2, 1],
+                    "b": ["x", "y", "x"],
+                }
+            )
+        )
+
+        result = ar.drop_constant_columns(frame)
+
+        assert result.columns == frame.columns
+        assert result.shape == frame.shape
+
+    def test_drop_constant_columns_drops_all_null_column(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "all_null": [None, None],
+                    "value": [1, 2],
+                }
+            )
+        )
+
+        result = ar.drop_constant_columns(frame)
+
+        assert result.columns == ["value"]
+
+    def test_drop_constant_columns_keeps_value_plus_null_column(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "maybe_constant": [1, 1, None],
+                    "constant": [2, 2, 2],
+                }
+            )
+        )
+
+        result = ar.drop_constant_columns(frame)
+        df = ar.to_pandas(result)
+
+        assert list(df.columns) == ["maybe_constant"]
+        assert df.shape == (3, 1)
+
+    def test_drop_constant_columns_single_row_drops_all_columns(self):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1], "b": ["x"], "c": [None]}))
+
+        result = ar.drop_constant_columns(frame)
+
+        assert result.columns == []
+        assert result.shape[1] == 0
 
 
 class TestStripWhitespace:
