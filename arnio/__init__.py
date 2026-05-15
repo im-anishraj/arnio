@@ -22,6 +22,7 @@ from .cleaning import (
     filter_rows,
     normalize_case,
     rename_columns,
+    round_numeric_columns,
     safe_divide_columns,
     strip_whitespace,
 )
@@ -67,6 +68,7 @@ __all__ = [
     "strip_whitespace",
     "normalize_case",
     "rename_columns",
+    "round_numeric_columns",
     "cast_types",
     "clean",
     "safe_divide_columns",
