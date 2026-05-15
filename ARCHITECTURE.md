@@ -68,8 +68,11 @@ Arnio supports a focused set of pandas dtypes directly through its native C++ co
 ### Fully Supported
 
 - `int64`
+
 - `float64`
+
 - `bool`
+
 - `string`
 
 These allow efficient parsing and cleaning operations within the C++ core.
@@ -77,7 +80,9 @@ These allow efficient parsing and cleaning operations within the C++ core.
 ### Limited/Unsupported Support
 
 - `category`
+
 - Mixed `object` columns
+
 - Nullable pandas dtypes (e.g., `Int64`)
 
 These may require conversion.
@@ -142,7 +147,7 @@ To ensure consistency, the C++ core utilizes internal helper functions:
 
 - `select_rows`: A utility that takes a list of row indices and constructs a new `Frame`.
 
-- `row_key`: Generates a deterministic string hash for a row to facilitate duplicate detection.
+- `row_key`: Generates a deterministic string serialization key for a row to facilitate duplicate detection.
 
 ### Copy-Always Semantics
 
@@ -163,7 +168,9 @@ Arnio uses a unified exception hierarchy to bridge the C++/Python boundary.
 ### Specialized Exceptions
 
 - `CsvReadError`
+
 - `UnknownStepError`
+
 - `TypeCastError`
 
 When supported by the specific implementation, exceptions raised within the core are translated into standard Python exceptions to maintain interpreter stability.
