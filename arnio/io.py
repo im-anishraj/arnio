@@ -60,6 +60,7 @@ def read_csv(
     usecols: list[str] | None = None,
     nrows: int | None = None,
     encoding: str = "utf-8",
+    null_values: set[str] | None = None,
 ) -> ArFrame:
     """Read a CSV file into an ArFrame via C++ backend.
 
@@ -77,6 +78,11 @@ def read_csv(
         Number of rows to read. If None, reads all rows.
     encoding : str, default "utf-8"
         File encoding.
+    null_values : set[str], optional
+        Set of strings to treat as null/missing values.
+        Defaults to pandas-compatible set:
+        {"NA", "N/A", "null", "None", "NaN", "nan", "#N/A", "-"}.
+        Pass an empty set to disable null sentinel recognition.
 
     Returns
     -------
@@ -120,6 +126,9 @@ def read_csv(
     config.has_header = has_header
     config.encoding = encoding
 
+    if null_values is not None:
+        config.null_values = null_values
+
     if usecols is not None:
         config.usecols = usecols
     if nrows is not None:
@@ -143,6 +152,7 @@ def scan_csv(
     *,
     delimiter: str = ",",
     encoding: str = "utf-8",
+    null_values: set[str] | None = None,
 ) -> dict[str, str]:
     """Return schema (column names + inferred types) without loading data.
 
@@ -154,6 +164,10 @@ def scan_csv(
         Field delimiter character.
     encoding : str, default "utf-8"
         File encoding. Non-UTF-8 inputs are transcoded before native scanning.
+    null_values : set[str], optional
+        Set of strings to treat as null/missing values.
+        Defaults to pandas-compatible set:
+        {"NA", "N/A", "null", "None", "NaN", "nan", "#N/A", "-"}.
 
     Returns
     -------
@@ -197,6 +211,10 @@ def scan_csv(
     config = _CsvConfig()
     config.delimiter = delimiter
     config.encoding = encoding
+
+    if null_values is not None:
+        config.null_values = null_values
+
     reader = _CsvReader(config)
     try:
         with _utf8_csv_path(path, encoding) as native_path:

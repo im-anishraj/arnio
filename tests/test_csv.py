@@ -160,6 +160,70 @@ class TestReadCsv:
             ar.read_csv(csv_path)
 
 
+    def test_na_sentinel_recognition(self, tmp_path):
+        """Values like NA, N/A, null, None, NaN should be treated as null."""
+        csv_content = (
+            "name,score,grade\n"
+            "Alice,95,A\n"
+            "Bob,NA,B\n"
+            "Charlie,N/A,C\n"
+            "Diana,null,D\n"
+            "Eve,None,A\n"
+            "Frank,NaN,B\n"
+            "Grace,,C\n"
+        )
+        csv_path = tmp_path / "na_sentinels.csv"
+        csv_path.write_text(csv_content)
+
+        frame = ar.read_csv(csv_path)
+        df = ar.to_pandas(frame)
+
+        # Alice should have score 95.0
+        assert df.loc[0, "score"] == 95.0
+        # NA sentinels should all be null
+        for row_idx in [1, 2, 3, 4, 5, 6]:
+            assert pd.isna(df.loc[row_idx, "score"]), \
+                f"Row {row_idx}: expected null for '{csv_content.split(chr(10))[row_idx+1].split(',')[1]}'"
+
+        # Grade should still be string (not affected)
+        assert df.loc[0, "grade"] == "A"
+        assert df.loc[1, "grade"] == "B"
+
+    def test_null_values_param(self, tmp_path):
+        """Custom null_values parameter should override defaults."""
+        csv_content = "name,status\nAlice,OK\nBob,UNKNOWN\nCharlie,OK\n"
+        csv_path = tmp_path / "custom_nulls.csv"
+        csv_path.write_text(csv_content)
+
+        # With custom null_values, "UNKNOWN" should be null
+        frame = ar.read_csv(csv_path, null_values={"UNKNOWN"})
+        df = ar.to_pandas(frame)
+        assert pd.isna(df.loc[1, "status"])
+        assert df.loc[0, "status"] == "OK"
+
+    def test_disable_null_sentinels(self, tmp_path):
+        """Empty set should disable null sentinel recognition."""
+        csv_content = "name,value\nAlice,NA\nBob,N/A\n"
+        csv_path = tmp_path / "disable_nulls.csv"
+        csv_path.write_text(csv_content)
+
+        # With empty null_values, "NA" and "N/A" should be strings
+        frame = ar.read_csv(csv_path, null_values=set())
+        df = ar.to_pandas(frame)
+        assert df.loc[0, "value"] == "NA"
+        assert df.loc[1, "value"] == "N/A"
+
+    def test_scan_schema_with_na(self, tmp_path):
+        """scan_csv should also recognize NA sentinels."""
+        csv_content = "name,score\nAlice,95\nBob,NA\nCharlie,100\n"
+        csv_path = tmp_path / "scan_na.csv"
+        csv_path.write_text(csv_content)
+
+        schema = ar.scan_csv(csv_path)
+        # "NA" is treated as null, so remaining values (95, 100) → int64
+        assert schema["score"] == "int64"
+
+
 class TestScanCsv:
     def test_scan_schema(self, sample_csv):
         schema = ar.scan_csv(sample_csv)
