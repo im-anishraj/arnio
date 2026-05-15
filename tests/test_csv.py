@@ -159,6 +159,66 @@ class TestReadCsv:
         with pytest.raises(ar.CsvReadError, match="Duplicate column name: a"):
             ar.read_csv(csv_path)
 
+    def test_na_sentinel_values(self, tmp_path):
+        """Test that standard NA sentinel values are recognized as null."""
+        csv_path = tmp_path / "na_values.csv"
+        csv_path.write_text(
+            "name,score,active\n"
+            "Alice,10,true\n"
+            "NA,NA,NA\n"
+            "N/A,N/A,N/A\n"
+            "null,null,null\n"
+            "None,None,None\n"
+            "NaN,NaN,NaN\n"
+            "-, -, -\n"
+            "Bob,20,false\n"
+        )
+
+        frame = ar.read_csv(str(csv_path))
+        df = ar.to_pandas(frame)
+
+        # Verify shape
+        assert frame.shape == (8, 3)
+
+        # Check that sentinel rows are all null
+        sentinel_rows = [1, 2, 3, 4, 5, 6]
+        for row_idx in sentinel_rows:
+            assert pd.isna(df.loc[row_idx, "name"]), f"Row {row_idx} name should be null"
+            assert pd.isna(df.loc[row_idx, "score"]), f"Row {row_idx} score should be null"
+            assert pd.isna(df.loc[row_idx, "active"]), f"Row {row_idx} active should be null"
+
+        # Check valid rows
+        assert df.loc[0, "name"] == "Alice"
+        assert df.loc[0, "score"] == 10
+        assert df.loc[0, "active"] == True
+        assert df.loc[7, "name"] == "Bob"
+        assert df.loc[7, "score"] == 20
+        assert df.loc[7, "active"] == False
+
+    def test_na_sentinels_type_inference(self, tmp_path):
+        """Test that NA sentinels don't force numeric columns to string."""
+        csv_path = tmp_path / "na_inference.csv"
+        csv_path.write_text(
+            "id,value\n"
+            "1,100.5\n"
+            "2,NA\n"
+            "3,200.0\n"
+            "4,None\n"
+        )
+
+        frame = ar.read_csv(str(csv_path))
+        dtypes = frame.dtypes
+
+        # id should be int64, value should be float64 (not string)
+        assert dtypes["id"] == "int64", f"Expected int64, got {dtypes['id']}"
+        assert dtypes["value"] == "float64", f"Expected float64, got {dtypes['value']}"
+
+        df = ar.to_pandas(frame)
+        assert pd.isna(df.loc[1, "value"])
+        assert pd.isna(df.loc[3, "value"])
+        assert df.loc[0, "value"] == 100.5
+        assert df.loc[2, "value"] == 200.0
+
 
 class TestScanCsv:
     def test_scan_schema(self, sample_csv):
