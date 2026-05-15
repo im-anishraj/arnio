@@ -13,7 +13,7 @@ Data preprocessing often involves operations that are inherently slow in Python 
 
 ## 2. Python ↔ C++ Boundary
 
-The boundary is managed using [`pybind11`](https://github.com/pybind/pybind11). 
+The boundary is managed using [`pybind11`](https://github.com/pybind/pybind11).
 
 The C++ core is compiled into a Python extension module (`_arnio_cpp`). The Python API (in `arnio/`) serves as a lightweight, type-hinted wrapper around this compiled extension.
 
@@ -21,13 +21,13 @@ The C++ core is compiled into a Python extension module (`_arnio_cpp`). The Pyth
 graph TD
     A[Python User Code] --> B[Arnio Python API]
     B -->|pybind11| C[C++ Core _arnio_cpp]
-    
+
     subgraph C++ Runtime
         C --> D[CsvReader]
         C --> E[Frame / Column]
         C --> F[Cleaning Primitives]
     end
-    
+
     F -->|Return| E
     E -->|to_pandas| A
 ```
@@ -47,7 +47,7 @@ A `Frame` is an ordered collection of `Column` objects, representing a 2D datase
 
 ## 4. Pipeline Execution
 
-The `pipeline()` function in Python accepts a list of declarative steps. 
+The `pipeline()` function in Python accepts a list of declarative steps.
 
 1. **Step Registry**: Arnio maintains a registry mapping string names (e.g., `"strip_whitespace"`) to function pointers.
 2. **C++ Execution**: For natively supported operations, the Python wrapper calls the C++ function directly, passing the `Frame` pointer. The operation modifies the data or returns a new `Frame` entirely within C++.
@@ -60,33 +60,34 @@ The `to_pandas()` function is the most critical boundary. It uses the NumPy C-AP
 
 ## 6. Data Quality and Schema Validation
 
+All four functions `profile()`, `suggest_cleaning()`, `auto_clean()`, and `validate()` are implemented in Python on top of the C++ core. Each function converts `ArFrame` to a pandas DataFrame via `to_pandas()` before performing its work.
 
-All four functions profile, suggest_cleaning, auto_clean, and validate are Python/pandas based. They convert ArFrame to a pandas DataFrame via to_pandas() first, then do their work in Python.
+Arnio is split into two layers:
 
-What each function does
+- The **C++ layer** handles parsing CSVs, storing data in memory, and cleaning operations such as `drop_nulls()` and `strip_whitespace()`. These execute through pybind11 directly in C++.
+- The **Python/pandas layer** handles data quality: profiling, validation, and schema checks. These functions convert `ArFrame` to a pandas DataFrame via `to_pandas()` and then operate in Python.
 
-1. profile: converts ArFrame to pandas, then checks each column for things like null values, duplicate rows, data types, and unique value counts. Returns a DataQualityReport object.
+### What each function does
 
-2. suggest_cleaning: runs profile first, looks at the results, and returns a list of cleaning steps like strip_whitespace or drop_nulls that you can pass directly to pipeline.
+1. `profile()`: converts `ArFrame` to a pandas DataFrame, then computes per-column statistics including null counts, duplicate rows, data types, and unique value ratios. Returns a `DataQualityReport` object.
 
-3. auto_clean: does the same as suggest_cleaning but also runs those steps automatically through pipeline. The pipeline then sends native steps to C++ and Python-only steps through pandas.
+2. `suggest_cleaning()`: runs `profile()` and inspects the resulting `DataQualityReport` to return a list of cleaning steps such as `strip_whitespace` or `drop_nulls` that can be passed directly to `pipeline()`.
 
-4. validate: converts ArFrame to pandas, then checks each column against rules you define in a Schema. Things like "this column can't be null" or "this column must have valid email addresses". Returns a ValidationResult with any issues found.
+3. `auto_clean()`: runs `profile()`, derives safe cleaning steps from the report, and passes them to `pipeline()`. The pipeline dispatches native steps to C++ and Python-registered steps through pandas.
+
+4. `validate()`: converts `ArFrame` to a pandas DataFrame, then evaluates each column against rules defined in a `Schema` including nullability, dtype, range, pattern, and semantic constraints. Returns a `ValidationResult` containing all detected issues.
 
 ```mermaid
 graph TD
-    A[ArFrame C++ Frame] -->|to_pandas| B[pandas DataFrame]
+    A[ArFrame] -->|to_pandas| B[pandas DataFrame]
     B --> C[profile]
     B --> D[validate]
-    B --> E[auto_clean]
     C --> F[DataQualityReport]
     F --> G[suggest_cleaning]
+    F --> E[auto_clean]
     G --> H[pipeline]
     E --> H
     H -->|native steps| A
     H -->|custom steps| B
     D --> I[ValidationResult]
 ```
-Arnio is split into two layers.
-- The C++ layer handles the heavy work: parsing CSVs, storing data, and cleaning operations like drop_nulls and strip_whitespace. These run fast because they go through pybind11 directly into C++. 
-- The Python/pandas layer handles data quality: profiling, validation, and schema checks. These functions first convert the ArFrame to pandas using to_pandas() and then do their work in normal Python.
