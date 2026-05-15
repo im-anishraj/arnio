@@ -645,8 +645,11 @@ arnio/
 <sub>Built with C++ and pybind11 · Licensed under MIT · Maintained by <a href="https://github.com/im-anishraj">@im-anishraj</a></sub>
 
 </div>
-## 🚀 Installation & Setup
+## 🚀 Installation & Setup (For Contributors)
+
+This project is a Python/C++ package. It does NOT run as a Node.js app.
 
 ### 1. Clone the repository
 ```bash
 git clone https://github.com/im-anishraj/arnio.git
+cd arnio
