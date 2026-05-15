@@ -16,10 +16,10 @@ import pytest
 
 import arnio as ar
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def make_frame_int():
     return ar.from_pandas(pd.DataFrame({"a": [1, 2, 3], "b": [10, 20, 30]}))
@@ -58,6 +58,7 @@ def make_frame_empty():
 # ---------------------------------------------------------------------------
 # INT64 lifetime tests
 # ---------------------------------------------------------------------------
+
 
 class TestIntLifetime:
     def test_int_values_survive_frame_deletion(self):
@@ -101,6 +102,7 @@ class TestIntLifetime:
 # FLOAT64 lifetime tests
 # ---------------------------------------------------------------------------
 
+
 class TestFloatLifetime:
     def test_float_values_survive_frame_deletion(self):
         """FLOAT64 column values remain correct after ArFrame is GC'd."""
@@ -131,6 +133,7 @@ class TestFloatLifetime:
 # BOOL lifetime tests
 # ---------------------------------------------------------------------------
 
+
 class TestBoolLifetime:
     def test_bool_values_survive_frame_deletion(self):
         """BOOL column values remain correct after ArFrame is GC'd."""
@@ -160,6 +163,7 @@ class TestBoolLifetime:
 # ---------------------------------------------------------------------------
 # Null mask lifetime tests
 # ---------------------------------------------------------------------------
+
 
 class TestNullMaskLifetime:
     def test_null_mask_int_survives_gc(self):
@@ -206,6 +210,7 @@ class TestNullMaskLifetime:
 # ---------------------------------------------------------------------------
 # Edge case lifetime tests
 # ---------------------------------------------------------------------------
+
 
 class TestEdgeCaseLifetime:
     def test_single_row_int_survives_gc(self):
