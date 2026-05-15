@@ -287,7 +287,7 @@ Small differences are expected across CPUs, operating systems, compilers, Python
 
 ## 🧰 Cleaning primitives
 
-Most operations below run natively in C++. The current `filter_rows` step uses the Python pipeline backend and may be optimized in C++ later.
+Most operations below run natively in C++. The current `filter_rows` and `parse_numeric_strings` steps use the Python pipeline backend and may be optimized in C++ later.
 
 | Primitive | What it does | Example |
 |:---|:---|:---|
@@ -297,6 +297,7 @@ Most operations below run natively in C++. The current `filter_rows` step uses t
 | `drop_duplicates` | Deduplicate rows (first/last/none) | `ar.drop_duplicates(frame, keep="first")` |
 | `strip_whitespace` | Trim leading/trailing spaces from strings | `ar.strip_whitespace(frame)` |
 | `normalize_case` | Force lower/upper/title case | `ar.normalize_case(frame, case_type="title")` |
+| `parse_numeric_strings` | Convert messy numeric strings such as `$1,234` or `45%` | `ar.parse_numeric_strings(frame, subset=["revenue"])` |
 | `rename_columns` | Rename columns via mapping | `ar.rename_columns(frame, {"old": "new"})` |
 | `cast_types` | Cast column types | `ar.cast_types(frame, {"age": "int64"})` |
 | `clean` | Convenience shorthand | `ar.clean(frame, drop_nulls=True)` |
@@ -308,6 +309,7 @@ clean = ar.pipeline(frame, [
     ("strip_whitespace",),
     ("normalize_case", {"case_type": "lower"}),
     ("fill_nulls", {"value": "unknown", "subset": ["city"]}),
+    ("parse_numeric_strings", {"subset": ["revenue"]}),
     ("drop_duplicates", {"keep": "first"}),
 ])
 ```

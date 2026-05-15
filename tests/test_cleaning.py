@@ -131,6 +131,53 @@ class TestCastTypes:
             ar.cast_types(frame, {"age": "decimal"})
 
 
+class TestParseNumericStrings:
+    def test_parse_currency_percent_and_parentheses(self):
+        import pandas as pd
+
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "revenue": ["$1,234.50", "€2 500", "(300)"],
+                    "margin": ["45%", "12.5%", ""],
+                    "label": ["a", "b", "c"],
+                }
+            )
+        )
+
+        result = ar.parse_numeric_strings(frame, subset=["revenue", "margin"])
+        df = ar.to_pandas(result)
+
+        assert list(df["revenue"]) == [1234.5, 2500.0, -300.0]
+        assert list(df["margin"].dropna()) == [0.45, 0.125]
+        assert list(df["label"]) == ["a", "b", "c"]
+
+    def test_parse_all_string_columns_by_default(self):
+        import pandas as pd
+
+        frame = ar.from_pandas(pd.DataFrame({"amount": ["1", "2.5"], "count": [1, 2]}))
+
+        result = ar.parse_numeric_strings(frame)
+        df = ar.to_pandas(result)
+
+        assert list(df["amount"]) == [1, 2.5]
+        assert list(df["count"]) == [1, 2]
+
+    def test_parse_invalid_values_can_raise(self):
+        import pandas as pd
+
+        frame = ar.from_pandas(pd.DataFrame({"amount": ["$10", "n/a"]}))
+
+        with pytest.raises(ValueError, match="contains non-numeric values"):
+            ar.parse_numeric_strings(frame, errors="raise")
+
+    def test_parse_rejects_unknown_error_mode(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(ValueError, match="errors must be"):
+            ar.parse_numeric_strings(frame, errors="ignore")
+
+
 class TestCleanAPI:
     def test_clean_defaults(self, csv_with_whitespace):
         frame = ar.read_csv(csv_with_whitespace)

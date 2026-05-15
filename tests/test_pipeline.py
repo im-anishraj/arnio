@@ -75,6 +75,19 @@ class TestPipeline:
         assert result.dtypes["years"] == "float64"
         assert "age" not in result.columns
 
+    def test_pipeline_parse_numeric_strings(self):
+        import pandas as pd
+
+        frame = ar.from_pandas(pd.DataFrame({"amount": ["$1,000", "25%"]}))
+        result = ar.pipeline(
+            frame,
+            [
+                ("parse_numeric_strings", {"subset": ["amount"]}),
+            ],
+        )
+
+        assert list(ar.to_pandas(result)["amount"]) == [1000.0, 0.25]
+
     def test_empty_pipeline(self, sample_csv):
         frame = ar.read_csv(sample_csv)
         result = ar.pipeline(frame, [])

@@ -229,6 +229,74 @@ def cast_types(
     return ArFrame(result)
 
 
+def parse_numeric_strings(
+    frame: ArFrame,
+    *,
+    subset: list[str] | None = None,
+    errors: str = "coerce",
+) -> ArFrame:
+    """Convert messy number-like strings into numeric columns.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input data frame.
+    subset : list[str], optional
+        Column names to parse. If None, applies to all object/string columns.
+    errors : {"coerce", "raise"}, default "coerce"
+        How to handle non-empty values that cannot be parsed. ``"coerce"``
+        converts invalid values to nulls. ``"raise"`` raises ``ValueError``.
+
+    Returns
+    -------
+    ArFrame
+        New frame with selected columns parsed as numeric data.
+
+    Examples
+    --------
+    >>> frame = ar.read_csv("sales.csv")
+    >>> clean = ar.parse_numeric_strings(frame, subset=["revenue", "margin"])
+    """
+    if errors not in {"coerce", "raise"}:
+        raise ValueError("errors must be either 'coerce' or 'raise'")
+
+    import pandas as pd
+
+    from .convert import from_pandas, to_pandas
+
+    df = to_pandas(frame)
+    columns = subset or list(df.select_dtypes(include=["object", "string"]).columns)
+
+    missing = [column for column in columns if column not in df.columns]
+    if missing:
+        raise KeyError(f"Unknown columns for numeric parsing: {missing}")
+
+    result = df.copy()
+    for column in columns:
+        text = result[column].astype("string").str.strip()
+        empty = text.isna() | text.eq("")
+        percent = text.str.endswith("%", na=False)
+        normalized = (
+            text.str.replace(r"^\((.*)\)$", r"-\1", regex=True)
+            .str.replace(r"[%,$€£¥₹]", "", regex=True)
+            .str.replace(",", "", regex=False)
+            .str.replace(r"\s+", "", regex=True)
+        )
+        parsed = pd.to_numeric(normalized, errors="coerce").astype("Float64")
+        parsed = parsed.mask(percent, parsed / 100)
+
+        invalid = parsed.isna() & ~empty
+        if errors == "raise" and invalid.any():
+            values = result.loc[invalid, column].astype(str).head(3).tolist()
+            raise ValueError(
+                f"Column {column!r} contains non-numeric values: {values}"
+            )
+
+        result[column] = parsed
+
+    return from_pandas(result)
+
+
 def clean(
     frame: ArFrame,
     *,

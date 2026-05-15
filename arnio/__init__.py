@@ -19,6 +19,7 @@ from .cleaning import (
     fill_nulls,
     filter_rows,
     normalize_case,
+    parse_numeric_strings,
     rename_columns,
     strip_whitespace,
 )
@@ -61,6 +62,7 @@ __all__ = [
     "drop_duplicates",
     "strip_whitespace",
     "normalize_case",
+    "parse_numeric_strings",
     "rename_columns",
     "cast_types",
     "clean",
