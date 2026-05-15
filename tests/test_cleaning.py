@@ -48,11 +48,36 @@ class TestValidateColumnsExist:
 
         assert result is frame
 
+    def test_allows_empty_column_list(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        result = ar.validate_columns_exist(frame, [])
+
+        assert result is frame
+
     def test_raises_clear_error_for_missing_columns(self, sample_csv):
         frame = ar.read_csv(sample_csv)
 
         with pytest.raises(KeyError, match="Missing columns for test_op"):
             ar.validate_columns_exist(frame, ["missing"], operation="test_op")
+
+    def test_rejects_string_columns_argument(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(TypeError, match="not a string"):
+            ar.validate_columns_exist(frame, "name")
+
+    def test_rejects_non_string_column_items(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(TypeError, match="only string column names"):
+            ar.validate_columns_exist(frame, ["name", 1])
+
+    def test_drop_nulls_rejects_string_subset(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(TypeError, match="subset must be a sequence"):
+            ar.drop_nulls(frame, subset="name")
 
     def test_drop_nulls_rejects_missing_subset_column(self, sample_csv):
         frame = ar.read_csv(sample_csv)

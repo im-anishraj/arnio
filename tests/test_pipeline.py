@@ -87,6 +87,34 @@ class TestPipeline:
 
         assert result.shape == frame.shape
 
+    def test_pipeline_validate_columns_exist_allows_empty_columns(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        result = ar.pipeline(frame, [("validate_columns_exist", {"columns": []})])
+
+        assert result is frame
+
+    def test_pipeline_validate_columns_exist_rejects_missing_columns(self, sample_csv):
+        import pytest
+
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(KeyError, match="Missing columns"):
+            ar.pipeline(
+                frame,
+                [("validate_columns_exist", {"columns": ["missing"]})],
+            )
+
+    def test_pipeline_subset_step_rejects_missing_columns(self, sample_csv):
+        import pytest
+
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(KeyError, match="Missing columns for strip_whitespace"):
+            ar.pipeline(
+                frame,
+                [("strip_whitespace", {"subset": ["missing"]})],
+            )
+
     def test_empty_pipeline(self, sample_csv):
         frame = ar.read_csv(sample_csv)
         result = ar.pipeline(frame, [])

@@ -5,6 +5,7 @@ Data cleaning functions.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any
 
 from ._core import (
@@ -22,7 +23,7 @@ from .frame import ArFrame
 
 def validate_columns_exist(
     frame: ArFrame,
-    columns: list[str] | tuple[str, ...],
+    columns: Sequence[str],
     *,
     operation: str | None = None,
 ) -> ArFrame:
@@ -32,7 +33,7 @@ def validate_columns_exist(
     ----------
     frame : ArFrame
         Input data frame.
-    columns : list[str] or tuple[str, ...]
+    columns : sequence of str
         Column names that must exist.
     operation : str, optional
         Operation name to include in the error message.
@@ -44,10 +45,13 @@ def validate_columns_exist(
 
     Raises
     ------
+    TypeError
+        If columns is a string/bytes value or contains non-string items.
     KeyError
         If any requested column is missing.
     """
-    missing = [column for column in columns if column not in frame.columns]
+    requested_columns = _validate_column_sequence(columns, argument_name="columns")
+    missing = [column for column in requested_columns if column not in frame.columns]
     if missing:
         available = ", ".join(frame.columns) or "<none>"
         context = f" for {operation}" if operation else ""
@@ -55,6 +59,26 @@ def validate_columns_exist(
             f"Missing columns{context}: {missing}. Available columns: {available}"
         )
     return frame
+
+
+def _validate_column_sequence(
+    columns: Sequence[str],
+    *,
+    argument_name: str,
+) -> list[str]:
+    if isinstance(columns, str | bytes):
+        raise TypeError(
+            f"{argument_name} must be a sequence of column names, not a string"
+        )
+    if not isinstance(columns, Sequence):
+        raise TypeError(f"{argument_name} must be a sequence of column names")
+
+    normalized = list(columns)
+    invalid_columns = [column for column in normalized if not isinstance(column, str)]
+    if invalid_columns:
+        raise TypeError(f"{argument_name} must contain only string column names")
+
+    return normalized
 
 
 def drop_nulls(
@@ -83,7 +107,11 @@ def drop_nulls(
     >>> clean = ar.drop_nulls(frame, subset=["age", "name"])
     """
     if subset is not None:
-        validate_columns_exist(frame, subset, operation="drop_nulls")
+        validate_columns_exist(
+            frame,
+            _validate_column_sequence(subset, argument_name="subset"),
+            operation="drop_nulls",
+        )
     result = _drop_nulls(frame._frame, subset=subset)
     return ArFrame(result)
 
@@ -116,7 +144,11 @@ def fill_nulls(
     >>> filled = ar.fill_nulls(frame, 0, subset=["age"])
     """
     if subset is not None:
-        validate_columns_exist(frame, subset, operation="fill_nulls")
+        validate_columns_exist(
+            frame,
+            _validate_column_sequence(subset, argument_name="subset"),
+            operation="fill_nulls",
+        )
     result = _fill_nulls(frame._frame, value, subset=subset)
     return ArFrame(result)
 
@@ -150,7 +182,11 @@ def drop_duplicates(
     >>> unique = ar.drop_duplicates(frame, subset=["name"], keep="first")
     """
     if subset is not None:
-        validate_columns_exist(frame, subset, operation="drop_duplicates")
+        validate_columns_exist(
+            frame,
+            _validate_column_sequence(subset, argument_name="subset"),
+            operation="drop_duplicates",
+        )
     keep_arg = "none" if keep is False else keep
     result = _drop_duplicates(frame._frame, subset=subset, keep=keep_arg)
     return ArFrame(result)
@@ -181,7 +217,11 @@ def strip_whitespace(
     >>> clean = ar.strip_whitespace(frame, subset=["name"])
     """
     if subset is not None:
-        validate_columns_exist(frame, subset, operation="strip_whitespace")
+        validate_columns_exist(
+            frame,
+            _validate_column_sequence(subset, argument_name="subset"),
+            operation="strip_whitespace",
+        )
     result = _strip_whitespace(frame._frame, subset=subset)
     return ArFrame(result)
 
@@ -214,7 +254,11 @@ def normalize_case(
     >>> lower = ar.normalize_case(frame, case_type="lower")
     """
     if subset is not None:
-        validate_columns_exist(frame, subset, operation="normalize_case")
+        validate_columns_exist(
+            frame,
+            _validate_column_sequence(subset, argument_name="subset"),
+            operation="normalize_case",
+        )
     result = _normalize_case(frame._frame, subset=subset, case_type=case_type)
     return ArFrame(result)
 
@@ -242,7 +286,11 @@ def rename_columns(
     >>> frame = ar.read_csv("data.csv")
     >>> renamed = ar.rename_columns(frame, {"old_name": "new_name"})
     """
-    validate_columns_exist(frame, list(mapping), operation="rename_columns")
+    validate_columns_exist(
+        frame,
+        _validate_column_sequence(list(mapping), argument_name="mapping keys"),
+        operation="rename_columns",
+    )
     result = _rename_columns(frame._frame, mapping)
     return ArFrame(result)
 
@@ -270,7 +318,11 @@ def cast_types(
     >>> frame = ar.read_csv("data.csv")
     >>> casted = ar.cast_types(frame, {"age": "int64", "score": "float64"})
     """
-    validate_columns_exist(frame, list(mapping), operation="cast_types")
+    validate_columns_exist(
+        frame,
+        _validate_column_sequence(list(mapping), argument_name="mapping keys"),
+        operation="cast_types",
+    )
     try:
         result = _cast_types(frame._frame, mapping)
     except ValueError as e:
