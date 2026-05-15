@@ -14,6 +14,7 @@ except Exception:
 from .cleaning import (
     cast_types,
     clean,
+    clip_numeric,
     drop_constant_columns,
     drop_duplicates,
     drop_nulls,
@@ -22,6 +23,8 @@ from .cleaning import (
     make_column_names_unique,
     normalize_case,
     rename_columns,
+    round_numeric_columns,
+    safe_divide_columns,
     strip_whitespace,
 )
 from .convert import from_pandas, to_pandas
@@ -62,12 +65,15 @@ __all__ = [
     "filter_rows",
     "drop_duplicates",
     "drop_constant_columns",
+    "clip_numeric",
     "strip_whitespace",
     "normalize_case",
     "rename_columns",
+    "round_numeric_columns",
     "cast_types",
     "make_column_names_unique",
     "clean",
+    "safe_divide_columns",
     # Conversion
     "to_pandas",
     "from_pandas",
