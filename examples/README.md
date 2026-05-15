@@ -20,7 +20,7 @@ Each folder contains a small synthetic CSV with realistic data quality issues an
 pip install arnio
 
 cd examples/sales
-python recipe.py
+python sales_recipe.py
 ```
 
 ## arnio API Features Demonstrated
