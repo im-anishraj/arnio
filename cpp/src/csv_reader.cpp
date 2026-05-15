@@ -113,8 +113,11 @@ std::vector<std::string> CsvReader::parse_line(const std::string& line) const {
     return fields;
 }
 
-DType CsvReader::infer_type(const std::string& value) {
+DType CsvReader::infer_type(const std::string& value) const {
     if (value.empty()) return DType::NULL_TYPE;
+
+    // Check configurable null sentinel values (pandas-compatible defaults)
+    if (config_.null_values.count(value)) return DType::NULL_TYPE;
 
     // Try bool
     std::string lower = value;
@@ -158,7 +161,7 @@ DType CsvReader::promote_type(DType current, DType incoming) {
 }
 
 CellValue CsvReader::parse_value(const std::string& raw, DType dtype) {
-    if (raw.empty()) return std::monostate{};
+    if (raw.empty() || config_.null_values.count(raw)) return std::monostate{};
 
     switch (dtype) {
         case DType::BOOL: {

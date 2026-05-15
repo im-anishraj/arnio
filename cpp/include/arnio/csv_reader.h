@@ -16,6 +16,9 @@ struct CsvConfig {
     std::optional<std::vector<std::string>> usecols = std::nullopt;
     std::optional<size_t> nrows = std::nullopt;
     std::string encoding = "utf-8";  // Currently only utf-8 supported
+    std::unordered_set<std::string> null_values = {
+        "NA", "N/A", "null", "None", "NaN", "nan", "#N/A", "-"
+    };
 };
 
 class CsvReader {
@@ -35,7 +38,7 @@ class CsvReader {
     std::vector<std::string> parse_line(const std::string& line) const;
 
     // Infer DType from a string value
-    static DType infer_type(const std::string& value);
+    DType infer_type(const std::string& value) const;
 
     // Promote dtype when merging inferences
     static DType promote_type(DType current, DType incoming);
