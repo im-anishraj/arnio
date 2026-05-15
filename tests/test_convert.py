@@ -161,3 +161,19 @@ class TestFromPandas:
         result_df = ar.to_pandas(result)
 
         assert list(result_df.columns) == ["name", "age", "city"]
+
+    def test_nullable_boolean_roundtrip(self):
+        df = pd.DataFrame(
+            {
+                "active": pd.Series(
+                    [True, False, pd.NA],
+                    dtype="boolean",
+                )
+            }
+        )
+
+        frame = ar.from_pandas(df)
+        result = ar.to_pandas(frame)
+
+        assert str(result["active"].dtype) == "boolean"
+        assert list(result["active"]) == [True, False, pd.NA]
