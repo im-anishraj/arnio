@@ -338,6 +338,96 @@ class TestCleanAPI:
         assert len(result) < len(frame)
 
 
+class TestRoundNumericColumns:
+    def test_round_all_numeric(self):
+        import pandas as pd
+
+        df = pd.DataFrame({"a": [1.123, 2.456], "b": [3.789, 4.0]})
+        frame = ar.from_pandas(df)
+        result = ar.round_numeric_columns(frame, decimals=1)
+        result_df = ar.to_pandas(result)
+        assert list(result_df["a"]) == [1.1, 2.5]
+        assert list(result_df["b"]) == [3.8, 4.0]
+
+    def test_round_subset(self):
+        import pandas as pd
+
+        df = pd.DataFrame({"a": [1.123, 2.456], "b": [3.789, 4.0]})
+        frame = ar.from_pandas(df)
+        result = ar.round_numeric_columns(frame, subset=["a"], decimals=1)
+        result_df = ar.to_pandas(result)
+        assert list(result_df["a"]) == [1.1, 2.5]
+        assert list(result_df["b"]) == [3.789, 4.0]
+
+    def test_round_mixed_types(self):
+        import pandas as pd
+
+        df = pd.DataFrame({"a": [1.123, 2.456], "c": ["str1", "str2"]})
+        frame = ar.from_pandas(df)
+        result = ar.round_numeric_columns(frame, decimals=1)
+        result_df = ar.to_pandas(result)
+        assert list(result_df["a"]) == [1.1, 2.5]
+        assert list(result_df["c"]) == ["str1", "str2"]
+
+    def test_missing_column(self):
+        import pandas as pd
+
+        df = pd.DataFrame({"a": [1.123]})
+        frame = ar.from_pandas(df)
+        with pytest.raises(IndexError, match="Column not found"):
+            ar.round_numeric_columns(frame, subset=["missing_col"])
+
+    def test_with_nulls(self):
+        import numpy as np
+        import pandas as pd
+
+        df = pd.DataFrame({"a": [1.123, np.nan, 2.456]})
+        frame = ar.from_pandas(df)
+        result = ar.round_numeric_columns(frame, decimals=1)
+        result_df = ar.to_pandas(result)
+        assert result_df["a"].isna().iloc[1]
+        assert result_df["a"].iloc[0] == 1.1
+        assert result_df["a"].iloc[2] == 2.5
+
+    def test_invalid_subset_type(self):
+        import pandas as pd
+        import pytest
+
+        df = pd.DataFrame({"a": [1.123]})
+        frame = ar.from_pandas(df)
+        with pytest.raises(TypeError, match="subset must be a list"):
+            ar.round_numeric_columns(frame, subset="a")
+
+    def test_invalid_decimals_type(self):
+        import pandas as pd
+        import pytest
+
+        df = pd.DataFrame({"a": [1.123]})
+        frame = ar.from_pandas(df)
+        with pytest.raises(TypeError, match="decimals must be an integer"):
+            ar.round_numeric_columns(frame, decimals="2")
+
+    def test_decimals_rejects_bool(self):
+        import pandas as pd
+        import pytest
+
+        df = pd.DataFrame({"a": [1.123]})
+        frame = ar.from_pandas(df)
+        with pytest.raises(TypeError, match="decimals must be an integer"):
+            ar.round_numeric_columns(frame, decimals=True)
+
+    def test_round_subset_with_non_numeric(self):
+        import pandas as pd
+
+        df = pd.DataFrame({"name": ["john"], "score": [98.765]})
+        frame = ar.from_pandas(df)
+        result = ar.round_numeric_columns(frame, subset=["name", "score"], decimals=1)
+        result_df = ar.to_pandas(result)
+
+        assert list(result_df["name"]) == ["john"]
+        assert list(result_df["score"]) == [98.8]
+
+
 class TestSafeDivideColumns:
     def test_normal_division(self, tmp_path):
         path = tmp_path / "data.csv"

@@ -238,6 +238,22 @@ def test_filter_rows_direct_api():
     assert list(result_df["age"]) == [30, 40]
 
 
+def test_round_numeric_columns_pipeline():
+    import pandas as pd
+
+    import arnio as ar
+
+    df = pd.DataFrame({"price": [10.555, 20.123]})
+    frame = ar.from_pandas(df)
+
+    result = ar.pipeline(
+        frame, [("round_numeric_columns", {"subset": ["price"], "decimals": 2})]
+    )
+
+    result_df = ar.to_pandas(result)
+    assert list(result_df["price"]) == [10.56, 20.12]
+
+
 def test_safe_divide_columns_pipeline():
     import pandas as pd
 
