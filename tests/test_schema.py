@@ -71,6 +71,79 @@ def test_validation_result_to_pandas(sample_csv):
     assert list(df["row_index"]) == [0, 1]
 
 
+def test_validation_result_to_markdown_for_success(sample_csv):
+    result = ar.validate(ar.read_csv(sample_csv), {"age": ar.Int64()})
+
+    markdown = result.to_markdown()
+
+    assert "## Validation Report" in markdown
+    assert "- Status: **passed**" in markdown
+    assert "- Issues found: 0" in markdown
+    assert "| Column | Rule | Row | Value | Message |" not in markdown
+
+
+def test_validation_result_to_markdown_includes_issue_table(sample_csv):
+    result = ar.validate(
+        ar.read_csv(sample_csv),
+        {"age": ar.Int64(min=31), "missing": ar.String()},
+    )
+
+    markdown = result.to_markdown()
+
+    assert "- Status: **failed**" in markdown
+    assert "- Issues found: 3" in markdown
+    assert "| Column | Rule | Row | Value | Message |" in markdown
+    assert "| age | min | 0 |" in markdown
+    assert (
+        "| missing | required_column |  |  | Missing required column: missing |"
+        in markdown
+    )
+
+
+def test_validation_result_to_markdown_limits_visible_issues(sample_csv):
+    result = ar.validate(ar.read_csv(sample_csv), {"age": ar.Int64(min=31)})
+
+    markdown = result.to_markdown(max_issues=1)
+
+    assert "| age | min | 0 |" in markdown
+    assert "| age | min | 1 |" not in markdown
+    assert "_Showing 1 of 2 issues._" in markdown
+
+
+def test_validation_result_to_markdown_escapes_table_cells():
+    result = ar.ValidationResult(
+        row_count=1,
+        issue_count=1,
+        issues=[
+            ar.ValidationIssue(
+                column="notes|raw",
+                rule="pattern",
+                row_index=0,
+                value="left|right\nnext",
+                message="Expected one|two\nlines",
+            )
+        ],
+        bad_rows=[0],
+    )
+
+    markdown = result.to_markdown()
+
+    assert "notes\\|raw" in markdown
+    assert "left\\|right<br>next" in markdown
+    assert "Expected one\\|two<br>lines" in markdown
+
+
+def test_validation_result_to_markdown_rejects_negative_max_issues(sample_csv):
+    result = ar.validate(ar.read_csv(sample_csv), {"age": ar.Int64(min=31)})
+
+    try:
+        result.to_markdown(max_issues=-1)
+    except ValueError as exc:
+        assert "max_issues" in str(exc)
+    else:
+        raise AssertionError("Expected max_issues validation to raise")
+
+
 def test_custom_pattern_validation(tmp_path):
     path = tmp_path / "codes.csv"
     path.write_text("code\nAA-123\nbad\n")
