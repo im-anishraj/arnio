@@ -224,8 +224,8 @@ Arnio is not a pandas wrapper. It's a separate runtime with its own data model.
 
 ## 🏎️ Benchmarks
 
-> **Reference environment**: Ubuntu, Python 3.12, 1M rows × 12 columns, synthetic messy CSV.<br>
-> **Reproduce**: `make benchmark` — generates the deterministic dataset and runs both engines.
+> **Reference environment**: Ubuntu, Python 3.12, synthetic messy CSV inputs.<br>
+> **Reproduce**: `make benchmark` — generates deterministic tall and wide datasets and runs both engines.
 
 To reproduce the published numbers from a fresh checkout:
 
@@ -238,16 +238,24 @@ python benchmarks/generate_data.py
 python benchmarks/benchmark_vs_pandas.py
 ```
 
-`benchmarks/generate_data.py` uses NumPy's `default_rng(42)`, so every run creates the same `benchmarks/benchmark_1m.csv` input. The benchmark then executes three pandas runs and three arnio runs, printing average wall-clock time from `time.perf_counter()` and peak Python allocation from `tracemalloc`. For cleaner comparisons, close other memory-heavy processes and run the script from the repository root after installing the same Python, pandas, NumPy, compiler, and arnio commit you want to compare.
+`benchmarks/generate_data.py` uses deterministic NumPy seeds, so every run creates the same `benchmarks/benchmark_1m.csv` tall input and `benchmarks/benchmark_wide.csv` wide input. The benchmark then executes three pandas runs and three arnio runs for each case, printing average wall-clock time from `time.perf_counter()` and peak Python allocation from `tracemalloc`. For cleaner comparisons, close other memory-heavy processes and run the script from the repository root after installing the same Python, pandas, NumPy, compiler, and arnio commit you want to compare.
 
 Expected output format:
 
 ```text
-                     pandas         arnio
+Tall CSV (1,000,000 rows x 12 columns)
+Metric                     pandas        arnio
 ────────────────────────────────────────────
 Exec Time (avg)       4.73s         5.75s
 Peak RAM               211MB         212MB
-API Clarity         Imperative    Declarative
+Speed: 0.8x | RAM: -1% reduction
+
+Wide CSV (5,000 rows x 256 columns)
+Metric                     pandas        arnio
+────────────────────────────────────────────
+Exec Time (avg)       ...s          ...s
+Peak RAM              ...MB         ...MB
+Speed: ...x | RAM: ...% reduction
 ```
 
 Small differences are expected across CPUs, operating systems, compilers, Python builds, and pandas/NumPy versions. If you share benchmark results in an issue or PR, include your OS, Python version, CPU model, pandas/NumPy versions, arnio commit, and the full command output so maintainers can compare like for like.
