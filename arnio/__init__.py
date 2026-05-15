@@ -19,6 +19,7 @@ from .cleaning import (
     drop_nulls,
     fill_nulls,
     filter_rows,
+    make_column_names_unique,
     normalize_case,
     rename_columns,
     strip_whitespace,
@@ -65,6 +66,7 @@ __all__ = [
     "normalize_case",
     "rename_columns",
     "cast_types",
+    "make_column_names_unique",
     "clean",
     # Conversion
     "to_pandas",

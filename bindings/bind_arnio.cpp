@@ -247,4 +247,6 @@ PYBIND11_MODULE(_arnio_cpp, m) {
     m.def("rename_columns", &rename_columns, py::arg("frame"), py::arg("mapping"));
 
     m.def("cast_types", &cast_types, py::arg("frame"), py::arg("mapping"));
+
+    m.def("make_column_names_unique", &make_column_names_unique, py::arg("frame"));
 }

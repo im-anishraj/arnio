@@ -345,3 +345,29 @@ def filter_rows(frame, column, op, value):
     filtered = df[getattr(df[column], ops[op])(value)]
 
     return from_pandas(filtered) if is_arframe else filtered
+
+
+def make_column_names_unique(
+    frame: ArFrame,
+) -> ArFrame:
+    """Make duplicates column names unique by adding suffixes.
+
+    Duplicate names are made unique by appending "_1", "_2", etc.
+    The first occurence is kept the same.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input data frame.
+    Returns
+    -------
+    ArFrame
+        New frame with unique column names.
+
+    Examples
+    --------
+    >>> frame = ar.read_csv("data.csv")
+    >>> unique = ar.make_column_names_unique(frame)
+    """
+    result = make_column_names_unique(frame._frame)
+    return ArFrame(result)

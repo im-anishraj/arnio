@@ -401,4 +401,38 @@ Frame cast_types(const Frame& frame, const std::unordered_map<std::string, std::
     return Frame(std::move(new_cols));
 }
 
+Frame make_column_names_unique(const Frame& frame) {
+    std::vector<Column> new_cols;
+    new_cols.reserve(frame.num_cols());
+
+    std::unordered_set<std::string> used_names;
+    std::unordered_map<std::string, int> suffix_counters;
+
+    for (size_t ci = 0; ci < frame.num_cols(); ++ci) {
+        Column col = frame.column(ci).clone();
+        std::string base_name = col.name();
+        std::string unique_name = base_name;
+
+        if (used_names.count(unique_name)) {
+            int suffix = suffix_counters[base_name] + 1;
+            while (true) {
+                std::string candidate = base_name + "_" + std::to_string(suffix);
+                if (!used_names.count(candidate)) {
+                    unique_name = candidate;
+                    suffix_counters[base_name] = suffix;
+                    break;
+                }
+                suffix += 1;
+            }
+        }
+
+        col.set_name(unique_name);
+        used_names.insert(unique_name);
+        if (!suffix_counters.count(base_name)) {
+            suffix_counters[base_name] = 0;
+        }
+        new_cols.push_back(std::move(col));
+    }
+    return Frame(std::move(new_cols));
+}
 }  // namespace arnio
