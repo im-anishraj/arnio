@@ -116,9 +116,17 @@ std::vector<std::string> CsvReader::parse_line(const std::string& line) const {
 DType CsvReader::infer_type(const std::string& value) {
     if (value.empty()) return DType::NULL_TYPE;
 
-    // Try bool
+    // Check for standard NA/null sentinel values (pandas-compatible)
     std::string lower = value;
+    trim_in_place(lower);
     std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+    static const std::unordered_set<std::string> na_sentinels = {
+        "na", "n/a", "null", "none", "nan", "-",
+        "nil", "n.a.", "n.a", "#n/a", "#na",
+    };
+    if (na_sentinels.count(lower)) return DType::NULL_TYPE;
+
+    // Try bool
     if (lower == "true" || lower == "false") return DType::BOOL;
 
     // Try int64
@@ -159,6 +167,16 @@ DType CsvReader::promote_type(DType current, DType incoming) {
 
 CellValue CsvReader::parse_value(const std::string& raw, DType dtype) {
     if (raw.empty()) return std::monostate{};
+
+    // Treat NA sentinel values as null regardless of target dtype
+    std::string lowered = raw;
+    trim_in_place(lowered);
+    std::transform(lowered.begin(), lowered.end(), lowered.begin(), ::tolower);
+    static const std::unordered_set<std::string> na_sentinels = {
+        "na", "n/a", "null", "none", "nan", "-",
+        "nil", "n.a.", "n.a", "#n/a", "#na",
+    };
+    if (na_sentinels.count(lowered)) return std::monostate{};
 
     switch (dtype) {
         case DType::BOOL: {
