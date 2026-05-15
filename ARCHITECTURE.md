@@ -56,3 +56,37 @@ The `pipeline()` function in Python accepts a list of declarative steps.
 ## 5. Converting to Pandas
 
 The `to_pandas()` function is the most critical boundary. It uses the NumPy C-API (via pybind11's buffer protocol) to expose the underlying C++ `std::vector` memory directly to pandas, avoiding expensive element-by-element copies where possible (zero-copy for numerics and booleans). String columns currently require instantiation of Python `str` objects.
+
+
+## 6. Data Quality and Schema Validation
+
+
+All four functions profile, suggest_cleaning, auto_clean, and validate are Python/pandas based. They convert ArFrame to a pandas DataFrame via to_pandas() first, then do their work in Python.
+
+What each function does
+
+1. profile: converts ArFrame to pandas, then checks each column for things like null values, duplicate rows, data types, and unique value counts. Returns a DataQualityReport object.
+
+2. suggest_cleaning: runs profile first, looks at the results, and returns a list of cleaning steps like strip_whitespace or drop_nulls that you can pass directly to pipeline.
+
+3. auto_clean: does the same as suggest_cleaning but also runs those steps automatically through pipeline. The pipeline then sends native steps to C++ and Python-only steps through pandas.
+
+4. validate: converts ArFrame to pandas, then checks each column against rules you define in a Schema. Things like "this column can't be null" or "this column must have valid email addresses". Returns a ValidationResult with any issues found.
+
+```mermaid
+graph TD
+    A[ArFrame C++ Frame] -->|to_pandas| B[pandas DataFrame]
+    B --> C[profile]
+    B --> D[validate]
+    B --> E[auto_clean]
+    C --> F[DataQualityReport]
+    F --> G[suggest_cleaning]
+    G --> H[pipeline]
+    E --> H
+    H -->|native steps| A
+    H -->|custom steps| B
+    D --> I[ValidationResult]
+```
+Arnio is split into two layers.
+- The C++ layer handles the heavy work: parsing CSVs, storing data, and cleaning operations like drop_nulls and strip_whitespace. These run fast because they go through pybind11 directly into C++. 
+- The Python/pandas layer handles data quality: profiling, validation, and schema checks. These functions first convert the ArFrame to pandas using to_pandas() and then do their work in normal Python.
