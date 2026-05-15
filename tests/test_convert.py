@@ -1,5 +1,6 @@
 """Tests for pandas conversion."""
 
+import pytest
 import pandas as pd
 
 import arnio as ar
@@ -48,6 +49,32 @@ class TestToPandas:
         ]
 
 
+class TestFromRecords:
+    def test_from_records_preserves_columns_and_values(self):
+        frame = ar.ArFrame.from_records(
+            [
+                {"name": "Alice", "score": 95},
+                {"score": 88, "active": True},
+            ]
+        )
+
+        assert frame.shape == (2, 3)
+        assert frame.columns == ["name", "score", "active"]
+        assert frame._frame.column_by_name("name").to_python_list() == ["Alice", None]
+        assert frame._frame.column_by_name("score").to_python_list() == [95, 88]
+        assert frame._frame.column_by_name("active").to_python_list() == [None, True]
+
+    def test_from_records_empty(self):
+        frame = ar.ArFrame.from_records([])
+
+        assert frame.shape == (0, 0)
+        assert frame.columns == []
+
+    def test_from_records_requires_dictionaries(self):
+        with pytest.raises(TypeError, match="list of dictionaries"):
+            ar.ArFrame.from_records([("name", "Alice")])
+
+
 class TestFromPandas:
     def test_basic_roundtrip(self, sample_csv):
         frame = ar.read_csv(sample_csv)
@@ -84,8 +111,6 @@ class TestFromPandas:
         assert list(df2["score"]) == [95.5, 87.0]
 
     def test_from_pandas_nested_data(self):
-        import pytest
-
         df_list = pd.DataFrame({"a": [[1, 2], [3, 4]]})
         with pytest.raises(TypeError, match="Unsupported nested/complex type"):
             ar.from_pandas(df_list)
