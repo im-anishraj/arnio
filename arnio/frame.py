@@ -50,6 +50,24 @@ class ArFrame:
             Mapping of column names to their data types.
         """
         return self._frame.dtypes()
+    
+    @property
+    def is_empty(self) -> bool:
+        """Check if frame has zero rows.
+
+        Returns
+        -------
+        bool
+            True if frame contains no rows, False otherwise.
+
+        Examples
+        --------
+        >>> frame = ar.read_csv("data.csv")
+        >>> if frame.is_empty:
+        ...     print("No data to process")
+        False
+        """
+        return len(self) == 0
 
     # --- Methods ---
 
