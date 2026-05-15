@@ -85,3 +85,13 @@ def large_csv(tmp_path):
 def unicode_csv():
     """CSV content for Unicode file path testing."""
     return "name,value\nAlice,1\nBob,2\n"
+
+
+@pytest.fixture
+def csv_with_empty_columns(tmp_path):
+    """CSV with some columns that are completely empty."""
+    csv_content = "name,age,empty_num,empty_text\nAlice,30,,\nBob,25,,\nCharlie,35,,\n"
+    path = tmp_path / "empty_columns.csv"
+    path.write_text(csv_content)
+    return str(path)
+
