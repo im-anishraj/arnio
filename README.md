@@ -69,6 +69,17 @@ clean = ar.pipeline(frame, [
 # Out comes a standard pandas DataFrame — use it like you always have
 df = ar.to_pandas(clean)
 ```
+### Select specific columns
+
+Use `select_columns()` to create a new `ArFrame` with only the required columns before converting to pandas.
+
+```python
+selected = frame.select_columns(["name", "revenue"])
+
+print(selected.columns)
+# ['name', 'revenue']
+```
+
 
 > Every step above executes in C++. Your Python code is a _configuration_ — not the execution engine.
 
