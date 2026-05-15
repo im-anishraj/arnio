@@ -241,6 +241,10 @@ PYBIND11_MODULE(_arnio_cpp, m) {
     m.def("strip_whitespace", &strip_whitespace, py::arg("frame"),
           py::arg("subset") = std::nullopt);
 
+    m.def("remove_control_characters", &remove_control_characters,
+          py::arg("frame"),
+          py::arg("subset") = std::nullopt);
+
     m.def("normalize_case", &normalize_case, py::arg("frame"), py::arg("subset") = std::nullopt,
           py::arg("case_type") = "lower");
 
