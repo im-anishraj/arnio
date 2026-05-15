@@ -645,6 +645,7 @@ arnio/
 <sub>Built with C++ and pybind11 · Licensed under MIT · Maintained by <a href="https://github.com/im-anishraj">@im-anishraj</a></sub>
 
 </div>
+<<<<<<< HEAD
 ## 🚀 Installation & Setup (For Contributors)
 
 <<<<<<< HEAD
@@ -660,3 +661,5 @@ This project is a Python + C++ package.
 ```bash
 git clone https://github.com/im-anishraj/arnio.git
 cd arnio
+=======
+>>>>>>> da685f2 (docs: add contributor setup instructions)
