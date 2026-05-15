@@ -115,7 +115,6 @@ def test_preview_invalid_n_none(sample_csv):
     with pytest.raises(ValueError):
         frame.preview(n=None)
 
-
 def test_select_columns_valid():
     df = pd.DataFrame(
         {
