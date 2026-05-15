@@ -21,7 +21,9 @@ from .cleaning import (
     normalize_case,
     rename_columns,
     strip_whitespace,
+    safe_divide_columns,
 )
+
 from .convert import from_pandas, to_pandas
 from .exceptions import ArnioError, CsvReadError, TypeCastError, UnknownStepError
 from .frame import ArFrame
@@ -64,6 +66,7 @@ __all__ = [
     "rename_columns",
     "cast_types",
     "clean",
+    "safe_divide_columns",
     # Conversion
     "to_pandas",
     "from_pandas",
