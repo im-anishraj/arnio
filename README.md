@@ -617,10 +617,9 @@ The biggest performance wins are in:
 
 ### Getting started
 
-```bash
 # Clone the repository
 git clone https://github.com/im-anishraj/arnio.git
-cd arnio
+cd arnio    
 
 # Create and activate a virtual environment
 python -m venv venv
@@ -631,7 +630,7 @@ pip install -r requirements.txt
 
 # Run tests
 pytest
-.
+
 
 For GSSoC contributors, please read **[GSSOC_GUIDE.md](GSSOC_GUIDE.md)** before asking to be assigned. It explains issue claiming, contribution levels, review expectations, and what maintainers look for in a strong PR. If you want a quick onboarding refresher, see the [GSSoC FAQ](GSSOC_GUIDE.md#gssoc-faq).
 If you are new to Arnio terms, see the [contributor glossary](.github/CONTRIBUTING.md#contributor-glossary).
