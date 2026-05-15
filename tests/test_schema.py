@@ -144,6 +144,18 @@ def test_validation_result_to_markdown_rejects_negative_max_issues(sample_csv):
         raise AssertionError("Expected max_issues validation to raise")
 
 
+def test_validation_result_to_markdown_rejects_non_integer_max_issues(sample_csv):
+    result = ar.validate(ar.read_csv(sample_csv), {"age": ar.Int64(min=31)})
+
+    for invalid in ("1", 1.5, True):
+        try:
+            result.to_markdown(max_issues=invalid)  # type: ignore[arg-type]
+        except TypeError as exc:
+            assert "max_issues must be an integer or None" in str(exc)
+        else:
+            raise AssertionError(f"Expected max_issues={invalid!r} to raise")
+
+
 def test_custom_pattern_validation(tmp_path):
     path = tmp_path / "codes.csv"
     path.write_text("code\nAA-123\nbad\n")

@@ -116,6 +116,10 @@ class ValidationResult:
             Maximum number of issues to include in the table. When omitted, all
             issues are shown.
         """
+        if max_issues is not None and (
+            not isinstance(max_issues, int) or isinstance(max_issues, bool)
+        ):
+            raise TypeError("max_issues must be an integer or None")
         if max_issues is not None and max_issues < 0:
             raise ValueError("max_issues must be non-negative")
 
