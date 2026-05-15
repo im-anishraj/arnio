@@ -528,6 +528,8 @@ pytest tests/ -v
 
 For GSSoC contributors, please read **[GSSOC_GUIDE.md](GSSOC_GUIDE.md)** before asking to be assigned. It explains issue claiming, contribution levels, review expectations, and what maintainers look for in a strong PR.
 
+- [Custom Pipeline Step Cookbook](docs/custom_pipeline_steps.md)
+
 <p align="center">
 <a href=".github/CONTRIBUTING.md"><b>📖 Full Contributing Guide</b></a>&ensp;·&ensp;
 <a href="GSSOC_GUIDE.md"><b>GSSoC Guide</b></a>&ensp;·&ensp;

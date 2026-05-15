@@ -1,502 +1,318 @@
-\# Custom Pipeline Step Cookbook
+# Custom Pipeline Step Cookbook
 
+This guide shows you how to write your own custom cleaning steps for arnio pipelines. No C++ required — custom steps are pure Python.
 
+Read this top-to-bottom the first time; afterwards use it as a copy-paste template.
 
-This guide shows you how to write your own custom cleaning steps for arnio pipelines.
+## Table of Contents
 
-No C++ required — custom steps are pure Python.
+1. [The Contract](#1-the-contract)
+2. [Safe Patterns](#2-safe-patterns)
+3. [Unsafe Patterns](#3-unsafe-patterns)
+4. [Full Example](#4-full-example--remove_outliers)
+5. [Testing Your Custom Step](#5-testing-your-custom-step)
+6. [Quick Reference](#6-quick-reference)
 
+## 1. The Contract
 
+Every custom step registered with `ar.register_step()` must follow this contract, or the pipeline will raise an error or silently corrupt data.
 
-\---
+| | Type |
+|---|---|
+| Input | `pd.DataFrame` (arnio converts `ArFrame` to `DataFrame` for you) |
+| Output | `pd.DataFrame` (arnio converts it back to `ArFrame`) |
+| Errors | Raise `ValueError` or `TypeError` with a clear message |
 
-
-
-\## What is a Custom Step?
-
-
-
-Arnio comes with built-in steps like `strip\_whitespace` and `drop\_nulls`.
-
-A custom step lets you add your own cleaning logic and use it inside `ar.pipeline()` just like any built-in step.
-
-
-
-\---
-
-
-
-\## The Basic Pattern
-
-
-
-Every custom step follows this shape:
-
-
+Minimal valid step signature:
 
 ```python
-
-import pandas as pd
-
-
-
-def my\_custom\_step(df: pd.DataFrame, \*\*kwargs) -> pd.DataFrame:
-
-&#x20;   # do something to df
-
-&#x20;   return df
-
+def my_step(df: pd.DataFrame, **kwargs) -> pd.DataFrame:
+    # your logic here
+    return df
 ```
 
+One input, one output, same type. That is it.
 
+## 2. Safe Patterns
 
-\*\*Rules:\*\*
+### Pattern 1 — Always work on a copy, never mutate the input
 
-\- Input is always a `pd.DataFrame`
-
-\- Output must always be a `pd.DataFrame`
-
-\- Never modify the original — work on a copy
-
-\- Always return the full DataFrame, not just one column
-
-
-
-\---
-
-
-
-\## Step 1: Write Your Function
-
-
+Mutating in place corrupts data for every step that runs after yours.
 
 ```python
-
-import pandas as pd
-
-
-
-def remove\_special\_chars(df: pd.DataFrame, columns=None) -> pd.DataFrame:
-
-&#x20;   """
-
-&#x20;   Removes special characters from string columns.
-
-&#x20;   Keeps only letters, numbers, and spaces.
-
-&#x20;   
-
-&#x20;   Args:
-
-&#x20;       df: Input DataFrame
-
-&#x20;       columns: List of columns to clean. If None, cleans all string columns.
-
-&#x20;   
-
-&#x20;   Returns:
-
-&#x20;       Cleaned DataFrame
-
-&#x20;   """
-
-&#x20;   df = df.copy()
-
-&#x20;   cols = columns or df.select\_dtypes("object").columns.tolist()
-
-&#x20;   for col in cols:
-
-&#x20;       df\[col] = df\[col].str.replace(r"\[^a-zA-Z0-9\\s]", "", regex=True)
-
-&#x20;   return df
-
+def safe_strip_prefix(df: pd.DataFrame, column: str, prefix: str) -> pd.DataFrame:
+    df = df.copy()
+    if column not in df.columns:
+        raise ValueError(
+            f"safe_strip_prefix: column '{column}' not found. "
+            f"Available columns: {list(df.columns)}"
+        )
+    df[column] = df[column].astype(str).str.removeprefix(prefix)
+    return df
 ```
 
+### Pattern 2 — Validate inputs before touching data
 
-
-\---
-
-
-
-\## Step 2: Register Your Step
-
-
+Check that required columns exist and that parameter values make sense.
 
 ```python
+def safe_clamp(
+    df: pd.DataFrame,
+    column: str,
+    min_val: float,
+    max_val: float,
+) -> pd.DataFrame:
+    df = df.copy()
+    if column not in df.columns:
+        raise ValueError(
+            f"safe_clamp: column '{column}' not found. "
+            f"Available columns: {list(df.columns)}"
+        )
+    if min_val > max_val:
+        raise ValueError(
+            f"safe_clamp: min_val ({min_val}) must be <= max_val ({max_val})."
+        )
+    if not pd.api.types.is_numeric_dtype(df[column]):
+        raise TypeError(
+            f"safe_clamp: column '{column}' must be numeric, "
+            f"got dtype '{df[column].dtype}'."
+        )
+    df[column] = df[column].clip(lower=min_val, upper=max_val)
+    return df
+```
 
+### Pattern 3 — Handle nulls explicitly
+
+Decide upfront: skip nulls, fill them, or raise. Document the choice.
+
+```python
+def safe_normalize_phone(df: pd.DataFrame, column: str) -> pd.DataFrame:
+    """Remove all non-digit characters from a phone number column.
+
+    Null values are left as-is (not dropped, not filled).
+    """
+    df = df.copy()
+    if column not in df.columns:
+        raise ValueError(
+            f"safe_normalize_phone: column '{column}' not found. "
+            f"Available columns: {list(df.columns)}"
+        )
+    mask = df[column].notna()
+    df.loc[mask, column] = (
+        df.loc[mask, column].astype(str).str.replace(r"\D", "", regex=True)
+    )
+    return df
+```
+
+## 3. Unsafe Patterns
+
+Do not do any of the following.
+
+**Mutates input in place:**
+
+```python
+def unsafe_mutate(df, column):
+    df[column] = df[column].str.lower()  # modifies the caller's DataFrame
+    return df
+```
+
+**Forgets to return the DataFrame:**
+
+```python
+def unsafe_no_return(df, column):
+    df = df.copy()
+    df[column] = df[column].str.lower()
+    # missing: return df — pipeline receives None and crashes
+```
+
+**Silently swallows errors:**
+
+```python
+def unsafe_silent(df, column):
+    try:
+        df = df.copy()
+        df[column] = df[column].str.lower()
+    except Exception:
+        pass  # hides bugs, returns wrong data
+    return df
+```
+
+**No column existence check:**
+
+```python
+def unsafe_no_check(df, column):
+    df = df.copy()
+    df[column] = df[column].str.lower()  # KeyError if column is missing
+    return df
+```
+
+## 4. Full Example — `remove_outliers`
+
+This is a complete, PR-ready custom step. Copy this pattern for any new step you contribute.
+
+```python
+import pandas as pd
 import arnio as ar
 
 
+def remove_outliers(
+    df: pd.DataFrame,
+    column: str,
+    threshold: float,
+    keep: str = "below",
+) -> pd.DataFrame:
+    """Remove rows where a numeric column exceeds (or falls below) a threshold.
 
-ar.register\_step("remove\_special\_chars", remove\_special\_chars)
+    Parameters
+    ----------
+    df        : Input DataFrame. Not modified in place.
+    column    : Name of the numeric column to filter on.
+    threshold : The cutoff value.
+    keep      : "below" keeps rows where column <= threshold (default).
+                "above" keeps rows where column >= threshold.
 
+    Returns
+    -------
+    pd.DataFrame
+        A new DataFrame with outlier rows removed.
+
+    Raises
+    ------
+    ValueError
+        If column is not in the DataFrame, or keep is not a valid option.
+    TypeError
+        If column is not numeric.
+
+    Examples
+    --------
+    >>> ar.register_step("remove_outliers", remove_outliers)
+    >>> frame = ar.from_pandas(pd.DataFrame({"revenue": [100, 999, 50, 10_000]}))
+    >>> clean = ar.pipeline(frame, [
+    ...     ("remove_outliers", {"column": "revenue", "threshold": 500}),
+    ... ])
+    >>> ar.to_pandas(clean)["revenue"].tolist()
+    [100, 50]
+    """
+    if column not in df.columns:
+        raise ValueError(
+            f"remove_outliers: column '{column}' not found. "
+            f"Available columns: {list(df.columns)}"
+        )
+    if not pd.api.types.is_numeric_dtype(df[column]):
+        raise TypeError(
+            f"remove_outliers: column '{column}' must be numeric, "
+            f"got dtype '{df[column].dtype}'."
+        )
+    if keep not in ("below", "above"):
+        raise ValueError(
+            f"remove_outliers: 'keep' must be 'below' or 'above', got '{keep}'."
+        )
+    df = df.copy()
+    if keep == "below":
+        return df[df[column] <= threshold]
+    return df[df[column] >= threshold]
+
+
+ar.register_step("remove_outliers", remove_outliers)
 ```
 
-
-
-Now arnio knows about your step by name.
-
-
-
-\---
-
-
-
-\## Step 3: Use It in a Pipeline
-
-
+Use it in a pipeline:
 
 ```python
-
-frame = ar.read\_csv("messy\_data.csv")
-
-
-
-clean = ar.pipeline(frame, \[
-
-&#x20;   ("strip\_whitespace",),
-
-&#x20;   ("remove\_special\_chars",),
-
-&#x20;   ("drop\_nulls",),
-
+frame = ar.from_pandas(pd.DataFrame({"revenue": [100, 999, 50, 10_000]}))
+clean = ar.pipeline(frame, [
+    ("remove_outliers", {"column": "revenue", "threshold": 500}),
 ])
-
-
-
-df = ar.to\_pandas(clean)
-
+df = ar.to_pandas(clean)
+# df["revenue"].tolist() -> [100, 50]
 ```
 
+Input and output:
 
+| revenue (before) | revenue (after) |
+|---|---|
+| 100 | 100 |
+| 999 | removed |
+| 50 | 50 |
+| 10000 | removed |
 
-\---
+## 5. Testing Your Custom Step
 
+Run tests with:
 
+```bash
+pytest examples/custom_step_with_tests.py -v
+```
 
-\## Practical Examples
+Every step needs three categories of tests.
 
+| Category | What to test |
+|---|---|
+| Normal cases | Expected inputs produce expected outputs |
+| Edge cases | Empty DataFrame, all nulls, single row, boundary values |
+| Invalid cases | Wrong column name, wrong type, bad parameters |
 
-
-\### Example 1: Remove Special Characters
-
-
-
-\*\*Use case:\*\* Your data has symbols like `@`, `#`, `!` in name or city columns.
-
-
+Normal case:
 
 ```python
-
-import pandas as pd
-
-import arnio as ar
-
-
-
-def remove\_special\_chars(df: pd.DataFrame, columns=None) -> pd.DataFrame:
-
-&#x20;   df = df.copy()
-
-&#x20;   cols = columns or df.select\_dtypes("object").columns.tolist()
-
-&#x20;   for col in cols:
-
-&#x20;       df\[col] = df\[col].str.replace(r"\[^a-zA-Z0-9\\s]", "", regex=True)
-
-&#x20;   return df
-
-
-
-ar.register\_step("remove\_special\_chars", remove\_special\_chars)
-
-
-
-\# Usage
-
-clean = ar.pipeline(frame, \[
-
-&#x20;   ("remove\_special\_chars",),
-
-])
-
+def test_keep_below_removes_high_values():
+    frame = make_frame({"revenue": [100, 999, 50, 10_000]})
+    result = ar.pipeline(frame, [
+        ("remove_outliers", {"column": "revenue", "threshold": 500}),
+    ])
+    assert to_list(result, "revenue") == [100, 50]
 ```
 
-
-
-\*\*Input:\*\*
-
-| name | city |
-
-|------|------|
-
-| John! | New@York |
-
-| Jane# | Los#Angeles |
-
-
-
-\*\*Output:\*\*
-
-| name | city |
-
-|------|------|
-
-| John | NewYork |
-
-| Jane | LosAngeles |
-
-
-
-\---
-
-
-
-\### Example 2: Capitalize First Letter of Each Word
-
-
-
-\*\*Use case:\*\* Names and cities stored in random case.
-
-
+Edge case:
 
 ```python
+def test_empty_dataframe_returns_empty():
+    frame = make_frame({"revenue": []})
+    result = ar.pipeline(frame, [
+        ("remove_outliers", {"column": "revenue", "threshold": 500}),
+    ])
+    assert ar.to_pandas(result).empty
 
-def title\_case\_columns(df: pd.DataFrame, columns=None) -> pd.DataFrame:
-
-&#x20;   df = df.copy()
-
-&#x20;   cols = columns or df.select\_dtypes("object").columns.tolist()
-
-&#x20;   for col in cols:
-
-&#x20;       df\[col] = df\[col].str.title()
-
-&#x20;   return df
-
-
-
-ar.register\_step("title\_case\_columns", title\_case\_columns)
-
-
-
-\# Usage
-
-clean = ar.pipeline(frame, \[
-
-&#x20;   ("title\_case\_columns",),
-
-])
-
+def test_does_not_mutate_input_frame():
+    df_original = pd.DataFrame({"revenue": [100, 9999]})
+    frame = ar.from_pandas(df_original.copy())
+    ar.pipeline(frame, [
+        ("remove_outliers", {"column": "revenue", "threshold": 500}),
+    ])
+    assert df_original["revenue"].tolist() == [100, 9999]
 ```
 
-
-
-\*\*Input:\*\*
-
-| name |
-
-|------|
-
-| john doe |
-
-| JANE SMITH |
-
-
-
-\*\*Output:\*\*
-
-| name |
-
-|------|
-
-| John Doe |
-
-| Jane Smith |
-
-
-
-\---
-
-
-
-\### Example 3: Clamp Numeric Values
-
-
-
-\*\*Use case:\*\* Remove outliers by capping values within a valid range.
-
-
+Invalid case:
 
 ```python
+def test_missing_column_raises_value_error():
+    frame = make_frame({"revenue": [100, 200]})
+    with pytest.raises(ValueError, match="column 'amount' not found"):
+        ar.pipeline(frame, [
+            ("remove_outliers", {"column": "amount", "threshold": 500}),
+        ])
 
-def clamp\_values(df: pd.DataFrame, column: str, min\_val: float, max\_val: float) -> pd.DataFrame:
-
-&#x20;   df = df.copy()
-
-&#x20;   df\[column] = df\[column].clip(lower=min\_val, upper=max\_val)
-
-&#x20;   return df
-
-
-
-ar.register\_step("clamp\_values", clamp\_values)
-
-
-
-\# Usage
-
-clean = ar.pipeline(frame, \[
-
-&#x20;   ("clamp\_values", {"column": "age", "min\_val": 0, "max\_val": 120}),
-
-])
-
+def test_non_numeric_column_raises_type_error():
+    frame = make_frame({"name": ["alice", "bob"]})
+    with pytest.raises(TypeError, match="must be numeric"):
+        ar.pipeline(frame, [
+            ("remove_outliers", {"column": "name", "threshold": 500}),
+        ])
 ```
 
-
-
-\*\*Input:\*\*
-
-| age |
-
-|-----|
-
-| 25 |
-
-| -5 |
-
-| 999 |
-
-
-
-\*\*Output:\*\*
-
-| age |
-
-|-----|
-
-| 25 |
-
-| 0 |
-
-| 120 |
-
-
-
-\---
-
-
-
-\## Testing Your Custom Step
-
-
-
-Always test your step before using it in a pipeline.
-
-
+## 6. Quick Reference
 
 ```python
+# 1. Write your function
+def my_step(df: pd.DataFrame, **kwargs) -> pd.DataFrame:
+    df = df.copy()
+    # validate inputs
+    # your logic here
+    return df
 
-import pandas as pd
+# 2. Register it
+ar.register_step("my_step", my_step)
 
-
-
-def test\_remove\_special\_chars():
-
-&#x20;   # Arrange
-
-&#x20;   df = pd.DataFrame({"name": \["John!", "Jane#"], "city": \["New@York", "LA"]})
-
-&#x20;   
-
-&#x20;   # Act
-
-&#x20;   result = remove\_special\_chars(df)
-
-&#x20;   
-
-&#x20;   # Assert
-
-&#x20;   assert result\["name"].tolist() == \["John", "Jane"]
-
-&#x20;   assert result\["city"].tolist() == \["NewYork", "LA"]
-
-&#x20;   print("All tests passed!")
-
-
-
-test\_remove\_special\_chars()
-
+# 3. Use it in a pipeline
+clean = ar.pipeline(frame, [("my_step",)])
 ```
-
-
-
-\*\*What to test:\*\*
-
-\- Normal input — does it work correctly?
-
-\- Empty DataFrame — does it return without errors?
-
-\- Columns with no string data — does it skip them safely?
-
-\- Original DataFrame — make sure it is not modified (always use `df.copy()`)
-
-
-
-\---
-
-
-
-\## Common Mistakes to Avoid
-
-
-
-| Mistake | Why it's a problem | Fix |
-
-|---|---|---|
-
-| Forgetting `df.copy()` | Modifies original data | Always copy first |
-
-| Returning a column instead of DataFrame | Pipeline breaks | Always return full `df` |
-
-| Hardcoding column names | Step won't work on other datasets | Accept `columns` as a parameter |
-
-| Not handling NaN values | Causes errors on empty cells | Use `.fillna()` or check first |
-
-
-
-\---
-
-
-
-\## Quick Reference
-
-
-
-```python
-
-\# 1. Write your function
-
-def my\_step(df: pd.DataFrame, \*\*kwargs) -> pd.DataFrame:
-
-&#x20;   df = df.copy()
-
-&#x20;   # your logic here
-
-&#x20;   return df
-
-
-
-\# 2. Register it
-
-ar.register\_step("my\_step", my\_step)
-
-
-
-\# 3. Use it
-
-clean = ar.pipeline(frame, \[("my\_step",)])
-
-```
-
