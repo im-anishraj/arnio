@@ -5,6 +5,8 @@ Pandas conversion functions.
 
 from __future__ import annotations
 
+import copy
+
 import numpy as np
 import pandas as pd
 
@@ -118,7 +120,7 @@ def to_pandas(frame: ArFrame) -> pd.DataFrame:
 
     result = pd.DataFrame(data)
     if frame._attrs:
-        result.attrs = frame._attrs.copy()
+        result.attrs = copy.deepcopy(frame._attrs)
     return result
 
 
@@ -152,4 +154,5 @@ def from_pandas(df: pd.DataFrame) -> ArFrame:
         columns[str(col_name)] = _series_to_python_values(series, col_name)
 
     cpp_frame = _Frame.from_dict(columns)
-    return ArFrame(cpp_frame, attrs=df.attrs.copy())
+
+    return ArFrame(cpp_frame, attrs=copy.deepcopy(df.attrs))
