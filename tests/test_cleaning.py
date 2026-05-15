@@ -133,12 +133,28 @@ class TestDropConstantColumns:
         assert list(df.columns) == ["maybe_constant"]
         assert df.shape == (3, 1)
 
-    def test_drop_constant_columns_single_row_drops_all_columns(self):
+    def test_drop_constant_columns_empty_frame_keeps_columns(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "empty_num": pd.Series(dtype="float64"),
+                    "empty_text": pd.Series(dtype="object"),
+                }
+            )
+        )
+
+        result = ar.drop_constant_columns(frame)
+
+        assert result.columns == ["empty_num", "empty_text"]
+        assert result.shape == frame.shape
+
+    def test_drop_constant_columns_all_columns_dropped_reports_zero_rows(self):
         frame = ar.from_pandas(pd.DataFrame({"a": [1], "b": ["x"], "c": [None]}))
 
         result = ar.drop_constant_columns(frame)
 
         assert result.columns == []
+        assert result.shape[0] == 0
         assert result.shape[1] == 0
 
 

@@ -114,11 +114,16 @@ def drop_duplicates(
 
 
 def drop_constant_columns(frame: ArFrame) -> ArFrame:
-    """Remove columns with only one unique value.
+    """Remove columns with exactly one unique value.
 
     Nulls are counted as values when determining whether a column is constant.
     This means columns like ``[None, None]`` are dropped, while columns like
-    ``[1, 1, None]`` are kept.
+    ``[1, 1, None]`` are kept. Empty columns in zero-row frames are also kept,
+    since they have zero unique values rather than one.
+
+    If every column is dropped, the zero-column pandas result is converted back
+    to an ``ArFrame``. Arnio currently derives row count from stored columns, so
+    that converted frame may report zero rows.
 
     Parameters
     ----------
@@ -138,8 +143,11 @@ def drop_constant_columns(frame: ArFrame) -> ArFrame:
     from .convert import from_pandas, to_pandas
 
     df = to_pandas(frame)
+    if len(df.index) == 0:
+        return frame
+
     constant_columns = [
-        column for column in df.columns if df[column].nunique(dropna=False) <= 1
+        column for column in df.columns if df[column].nunique(dropna=False) == 1
     ]
     return from_pandas(df.drop(columns=constant_columns))
 
