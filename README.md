@@ -111,6 +111,17 @@ clean = ar.pipeline(frame, [
 Custom steps run through a pandas↔ArFrame conversion bridge. Prototype in Python, then optionally migrate hot paths to C++ for full speed.
 </details>
 
+### 🧾 ArFrame column helpers
+
+`ArFrame` includes lightweight helpers for safe column introspection:
+
+```python
+frame.has_column("revenue")        # True/False
+frame.get_column_dtype("revenue")  # e.g. "float64"
+```
+
+`get_column_dtype()` raises `KeyError` if the column does not exist.
+
 <br>
 
 ---

@@ -55,6 +55,20 @@ class TestReadCsv:
         frame = ar.read_csv(sample_csv)
         assert len(frame) == 3
 
+    def test_has_column(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        assert frame.has_column("name") is True
+        assert frame.has_column("missing") is False
+
+    def test_get_column_dtype(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        assert frame.get_column_dtype("age") == "int64"
+
+    def test_get_column_dtype_missing_raises_key_error(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        with pytest.raises(KeyError, match="Column not found: missing"):
+            frame.get_column_dtype("missing")
+
     def test_header_whitespace(self, tmp_path):
 
         csv_path = str(tmp_path / "whitespace.csv")
