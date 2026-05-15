@@ -192,6 +192,7 @@ class TestFromPandas:
         assert str(result["active"].dtype) == "boolean"
         assert list(result["active"]) == [True, False, pd.NA]
 
+
 class TestAttrsPreservation:
     def test_attrs_roundtrip(self):
         """attrs set on input DataFrame survive from_pandas -> to_pandas."""

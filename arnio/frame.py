@@ -14,8 +14,8 @@ class ArFrame:
     __slots__ = ("_frame", "_attrs")
 
     def __init__(self, cpp_frame: _Frame, attrs: dict | None = None) -> None:
-            self._frame = cpp_frame
-            self._attrs: dict = attrs if attrs is not None else {}
+        self._frame = cpp_frame
+        self._attrs: dict = attrs if attrs is not None else {}
 
     # --- Properties ---
 
