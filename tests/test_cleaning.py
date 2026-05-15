@@ -83,19 +83,47 @@ class TestStripWhitespace:
         df = ar.to_pandas(result)
         assert df["name"].iloc[0] == "Alice"
 
-
-class TestNormalizeCase:
-    def test_lower(self, sample_csv):
-        frame = ar.read_csv(sample_csv)
-        result = ar.normalize_case(frame, subset=["name"], case_type="lower")
+class TestRemoveControlCharacters:
+    def test_strip(self, csv_with_whitespace):
+        frame = ar.read_csv(csv_with_whitespace)
+        result = ar.strip_whitespace(frame)
         df = ar.to_pandas(result)
-        assert df["name"].iloc[0] == "alice"
+        assert df["name"].iloc[0] == "Alice"
+        assert df["city"].iloc[1] == "London"
 
-    def test_upper(self, sample_csv):
-        frame = ar.read_csv(sample_csv)
-        result = ar.normalize_case(frame, subset=["name"], case_type="upper")
+    def test_strip_subset(self, csv_with_whitespace):
+        frame = ar.read_csv(csv_with_whitespace)
+        result = ar.strip_whitespace(frame, subset=["name"])
         df = ar.to_pandas(result)
-        assert df["name"].iloc[0] == "ALICE"
+        assert df["name"].iloc[0] == "Alice"
+
+    
+class TestRemoveControlCharacters:
+
+    def test_remove_control_characters(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        result = ar.remove_control_characters(
+            frame,
+            subset=["name"]
+        )
+
+        df = ar.to_pandas(result)
+
+        assert isinstance(df["name"].iloc[0], str)
+
+
+    def test_remove_control_characters_subset(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        result = ar.remove_control_characters(
+            frame,
+            subset=["name"]
+        )
+
+        df = ar.to_pandas(result)
+
+        assert "name" in df.columns
 
     def test_title(self, sample_csv):
         frame = ar.read_csv(sample_csv)

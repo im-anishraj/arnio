@@ -21,6 +21,7 @@ from .cleaning import (
     normalize_case,
     rename_columns,
     strip_whitespace,
+    remove_control_characters,
 )
 from .convert import from_pandas, to_pandas
 from .exceptions import ArnioError, CsvReadError, TypeCastError, UnknownStepError
@@ -59,6 +60,7 @@ __all__ = [
     "fill_nulls",
     "filter_rows",
     "drop_duplicates",
+    "remove_control_characters",
     "strip_whitespace",
     "normalize_case",
     "rename_columns",

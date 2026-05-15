@@ -17,6 +17,7 @@ try:
         normalize_case as _normalize_case,  # noqa: F401
         rename_columns as _rename_columns,  # noqa: F401
         strip_whitespace as _strip_whitespace,  # noqa: F401
+        remove_control_characters as _remove_control_characters,  # noqa: F401
     )
 except ImportError as e:
     raise ImportError(

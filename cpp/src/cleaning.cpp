@@ -256,6 +256,58 @@ Frame strip_whitespace(const Frame& frame, const std::optional<std::vector<std::
     return Frame(std::move(new_cols));
 }
 
+Frame remove_control_characters(
+    const Frame& frame,
+    const std::optional<std::vector<std::string>>& subset) {
+
+    auto target_indices_set = resolve_subset(frame, subset);
+    std::unordered_set<size_t> targets(
+        target_indices_set.begin(),
+        target_indices_set.end());
+
+    std::vector<Column> new_cols;
+    new_cols.reserve(frame.num_cols());
+
+    for (size_t ci = 0; ci < frame.num_cols(); ++ci) {
+        const auto& src = frame.column(ci);
+
+        if (targets.count(ci) && src.dtype() == DType::STRING) {
+
+            Column col(src.name(), src.dtype());
+
+            for (size_t r = 0; r < src.size(); ++r) {
+
+                if (src.is_null(r)) {
+                    col.push_null();
+
+                } else {
+
+                    std::string val =
+                        std::get<std::string>(src.at(r));
+
+                    std::string cleaned;
+
+                    for (char c : val) {
+                        if (!std::iscntrl(
+                                static_cast<unsigned char>(c))) {
+                            cleaned += c;
+                        }
+                    }
+
+                    col.push_back(cleaned);
+                }
+            }
+
+            new_cols.push_back(std::move(col));
+
+        } else {
+
+            new_cols.push_back(src.clone());
+        }
+    }
+
+    return Frame(std::move(new_cols));
+}
 Frame normalize_case(const Frame& frame, const std::optional<std::vector<std::string>>& subset,
                      const std::string& case_type) {
     auto target_indices_set = resolve_subset(frame, subset);
