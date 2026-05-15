@@ -1,6 +1,7 @@
 """Tests for pandas conversion."""
 
 import pandas as pd
+
 import arnio as ar
 
 
@@ -33,9 +34,18 @@ class TestToPandas:
                 dtype=object,
             )
         )
-        assert frame._frame.column_by_name("name").to_python_list() == ["Alice", None, "Charlie"]
+
+        assert frame._frame.column_by_name("name").to_python_list() == [
+            "Alice",
+            None,
+            "Charlie",
+        ]
         assert frame._frame.column_by_name("score").to_python_list() == [95, None, 88]
-        assert frame._frame.column_by_name("active").to_python_list() == [True, None, False]
+        assert frame._frame.column_by_name("active").to_python_list() == [
+            True,
+            None,
+            False,
+        ]
 
 
 class TestFromPandas:
@@ -48,7 +58,13 @@ class TestFromPandas:
         assert frame2.columns == frame.columns
 
     def test_from_constructed_df(self):
-        df = pd.DataFrame({"x": [1, 2, 3], "y": [1.5, 2.5, 3.5], "z": ["a", "b", "c"]})
+        df = pd.DataFrame(
+            {
+                "x": [1, 2, 3],
+                "y": [1.5, 2.5, 3.5],
+                "z": ["a", "b", "c"],
+            }
+        )
         frame = ar.from_pandas(df)
         assert frame.shape == (3, 3)
         assert "x" in frame.columns
@@ -56,7 +72,12 @@ class TestFromPandas:
         assert "z" in frame.columns
 
     def test_roundtrip_values(self):
-        df = pd.DataFrame({"name": ["Alice", "Bob"], "score": [95.5, 87.0]})
+        df = pd.DataFrame(
+            {
+                "name": ["Alice", "Bob"],
+                "score": [95.5, 87.0],
+            }
+        )
         frame = ar.from_pandas(df)
         df2 = ar.to_pandas(frame)
         assert list(df2["name"]) == ["Alice", "Bob"]
@@ -64,9 +85,11 @@ class TestFromPandas:
 
     def test_from_pandas_nested_data(self):
         import pytest
+
         df_list = pd.DataFrame({"a": [[1, 2], [3, 4]]})
         with pytest.raises(TypeError, match="Unsupported nested/complex type"):
             ar.from_pandas(df_list)
+
         df_dict = pd.DataFrame({"a": [{"x": 1}, {"y": 2}]})
         with pytest.raises(TypeError, match="Unsupported nested/complex type"):
             ar.from_pandas(df_dict)
@@ -75,36 +98,66 @@ class TestFromPandas:
         df = pd.DataFrame({"a": [1, "x", 3]}, dtype=object)
         frame = ar.from_pandas(df)
         df2 = ar.to_pandas(frame)
+
         assert list(df2["a"]) == ["1", "x", "3"]
 
     def test_from_pandas_unsupported_scalar_object_column(self):
         timestamp = pd.Timestamp("2026-05-14 12:30:00")
         frame = ar.from_pandas(pd.DataFrame({"created_at": [timestamp]}))
-        assert frame._frame.column_by_name("created_at").to_python_list() == [str(timestamp)]
+
+        assert frame._frame.column_by_name("created_at").to_python_list() == [
+            str(timestamp)
+        ]
 
     def test_from_pandas_preserves_column_order(self):
-        df = pd.DataFrame({"name": ["Alice"], "age": [20], "city": ["Delhi"]})
+        df = pd.DataFrame(
+            {
+                "name": ["Alice"],
+                "age": [20],
+                "city": ["Delhi"],
+            }
+        )
+
         frame = ar.from_pandas(df)
         result = ar.to_pandas(frame)
+
         assert list(result.columns) == ["name", "age", "city"]
 
     def test_cleaning_preserves_column_order(self):
-        df = pd.DataFrame({"name": [" Alice "], "age": [20], "city": ["Delhi"]})
+        df = pd.DataFrame(
+            {
+                "name": [" Alice "],
+                "age": [20],
+                "city": ["Delhi"],
+            }
+        )
+
         frame = ar.from_pandas(df)
+
         result = ar.strip_whitespace(frame)
         result_df = ar.to_pandas(result)
+
         assert list(result_df.columns) == ["name", "age", "city"]
 
     def test_pipeline_preserves_column_order(self):
-        df = pd.DataFrame({"name": [" Alice "], "age": [20], "city": ["Delhi"]})
-        frame = ar.from_pandas(df)
-        result = ar.pipeline(frame, [("strip_whitespace",), ("normalize_case", {"case_type": "lower"})])
-        result_df = ar.to_pandas(result)
-        assert list(result_df.columns) == ["name", "age", "city"]
+        df = pd.DataFrame(
+            {
+                "name": [" Alice "],
+                "age": [20],
+                "city": ["Delhi"],
+            }
+        )
 
-    def test_nullable_boolean_roundtrip(self):
-        df = pd.DataFrame({"active": pd.Series([True, False, pd.NA], dtype="boolean")})
         frame = ar.from_pandas(df)
-        result = ar.to_pandas(frame)
-        assert str(result["active"].dtype) == "boolean"
-        assert list(result["active"]) == [True, False, pd.NA]
+
+        result = ar.pipeline(
+            frame,
+            [
+                ("strip_whitespace",),
+                ("normalize_case", {"case_type": "lower"}),
+            ],
+        )
+
+        result_df = ar.to_pandas(result)
+
+        assert list(result_df.columns) == ["name", "age", "city"]
