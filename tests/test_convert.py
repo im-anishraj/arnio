@@ -191,3 +191,56 @@ class TestFromPandas:
 
         assert str(result["active"].dtype) == "boolean"
         assert list(result["active"]) == [True, False, pd.NA]
+
+
+class TestAttrsPreservation:
+    def test_attrs_roundtrip(self):
+        """attrs set on input DataFrame survive from_pandas -> to_pandas."""
+        df = pd.DataFrame({"x": [1, 2, 3]})
+        df.attrs = {"source": "test_db", "version": 2}
+        frame = ar.from_pandas(df)
+        result = ar.to_pandas(frame)
+        assert result.attrs == {"source": "test_db", "version": 2}
+
+    def test_empty_attrs_roundtrip(self):
+        """Empty attrs stay empty — no pollution."""
+        df = pd.DataFrame({"x": [1, 2, 3]})
+        df.attrs = {}
+        frame = ar.from_pandas(df)
+        result = ar.to_pandas(frame)
+        assert result.attrs == {}
+
+    def test_attrs_not_shared(self):
+        """Mutating result.attrs must not affect the ArFrame's stored attrs."""
+        df = pd.DataFrame({"x": [1, 2]})
+        df.attrs = {"key": "original"}
+        frame = ar.from_pandas(df)
+        result = ar.to_pandas(frame)
+        result.attrs["key"] = "mutated"
+        # original frame attrs must be untouched
+        assert frame._attrs["key"] == "original"
+
+    def test_attrs_through_pipeline(self):
+        """attrs survive a direct round-trip — pipeline frames are out of scope."""
+        df = pd.DataFrame({"name": [" Alice ", " Bob "]})
+        df.attrs = {"owner": "data_team"}
+        frame = ar.from_pandas(df)
+        result = ar.to_pandas(frame)
+        assert result.attrs.get("owner") == "data_team"
+
+    def test_read_csv_has_no_attrs(self, sample_csv):
+        """ArFrames from read_csv start with empty attrs — no junk metadata."""
+        frame = ar.read_csv(sample_csv)
+        result = ar.to_pandas(frame)
+        assert result.attrs == {}
+
+    def test_nested_mutable_attrs_are_deep_copied(self):
+        """Nested mutable values in attrs are deep-copied, not shared."""
+        df = pd.DataFrame({"x": [1, 2]})
+        df.attrs = {"meta": {"version": 1, "tags": ["a", "b"]}}
+        frame = ar.from_pandas(df)
+        # mutate the original nested object
+        df.attrs["meta"]["tags"].append("c")
+        result = ar.to_pandas(frame)
+        # stored copy must be unaffected
+        assert result.attrs["meta"]["tags"] == ["a", "b"]
