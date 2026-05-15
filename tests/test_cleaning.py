@@ -193,3 +193,12 @@ class TestRemoveSpecialChars:
         clean = ar.pipeline(frame, [("remove_special_chars",)])
         result = ar.to_pandas(clean)
         assert result["name"].tolist() == ["Alice", "Bob"]
+
+    def test_non_string_column_in_subset_is_skipped(self):
+        import pandas as pd
+
+        df = pd.DataFrame({"name": ["Alice@"], "age": [25]})
+        frame = ar.from_pandas(df)
+        result = ar.to_pandas(ar.remove_special_chars(frame, subset=["name", "age"]))
+        assert result["name"].tolist() == ["Alice"]
+        assert result["age"].tolist() == [25]
