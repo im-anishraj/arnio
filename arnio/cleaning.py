@@ -321,11 +321,20 @@ def remove_special_chars(frame: ArFrame, *, subset: list[str] | None = None) -> 
     subset : list of str, optional
         Column names to apply cleaning on.
         If None, applies to all string/object columns automatically.
+        Non-string columns (e.g. int64, float64) passed via ``subset``
+        are silently skipped — only string and object columns are modified.
+        Pass an unknown column name to raise a ``ValueError``.
 
     Returns
     -------
     ArFrame
         New frame with special characters removed from string columns.
+
+    Examples
+    --------
+    >>> frame = ar.read_csv("data.csv")
+    >>> clean = ar.remove_special_chars(frame)
+    >>> clean = ar.remove_special_chars(frame, subset=["name", "city"])
     """
     df = to_pandas(frame)
 
