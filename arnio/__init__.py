@@ -29,7 +29,6 @@ from .cleaning import (
     round_numeric_columns,
     safe_divide_columns,
     strip_whitespace,
-    trim_column_names,
     validate_columns_exist,
 )
 from .convert import from_pandas, to_pandas
@@ -50,6 +49,7 @@ from .schema import (
     Bool,
     CountryCode,
     DateTime,
+    Date,
     Email,
     Field,
     Float64,
@@ -122,4 +122,5 @@ __all__ = [
     "TypeCastError",
     "normalize_unicode",
     "Regex",
+    "Date",
 ]
