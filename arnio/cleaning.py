@@ -518,8 +518,12 @@ def safe_divide_columns(
 
     Parameters
     ----------
-    frame : ArFrame or pd.DataFrame
+    frame : ArFrame
         Input data frame.
+    Returns
+    -------
+    ArFrame
+        New frame with unique column names.
     numerator : str
         Column name to use as the numerator.
     denominator : str
@@ -533,8 +537,8 @@ def safe_divide_columns(
 
     Returns
     -------
-    ArFrame or pd.DataFrame
-        New frame with the result column added.
+    ArFrame
+
 
     Examples
     --------
