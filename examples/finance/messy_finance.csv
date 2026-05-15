@@ -1,0 +1,9 @@
+txn_id,date,type,amount,currency,account,notes
+T001,2024-04-01,DEBIT,500.00,USD,ACC-1001,rent payment
+T002,2024-04-02,credit,1200.50,usd,ACC-1002,salary
+T003,2024-04-03,Debit,,USD,ACC-1001,groceries
+T004,2024-04-04,CREDIT,300.00,USD,,bonus
+T002,2024-04-02,credit,1200.50,usd,ACC-1002,salary
+T005,2024-04-05,debit,75.00,USD,ACC-1003,
+T006,2024-04-06,DEBIT,950.00,GBP,ACC-2001,equipment
+T007,2024-04-07,CREDIT,200.00,USD,ACC-1001,utilities refund
