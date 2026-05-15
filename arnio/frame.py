@@ -81,7 +81,7 @@ class ArFrame:
         lines.append(f"DTypes:  {self.dtypes}")
         lines.append(f"Memory:  {self.memory_usage()} bytes")
         return "\n".join(lines)
-    
+
     def preview(self, n: int = 5) -> str:
         """Return a lightweight string preview of the first ``n`` rows.
 
@@ -124,13 +124,16 @@ class ArFrame:
         # Pull only the first `actual_n` values per column — no full conversion
         col_names = self.columns
         col_data = [
-            self._frame.column_by_index(i).to_python_list()[:actual_n]
+            [self._frame.column_by_index(i).at(r) for r in range(actual_n)]
             for i in range(num_cols)
         ]
 
         # Calculate column widths for alignment
         col_widths = [
-            max(len(col_names[i]), max((len(str(col_data[i][r])) for r in range(actual_n)), default=0))
+            max(
+                len(col_names[i]),
+                max((len(str(col_data[i][r])) for r in range(actual_n)), default=0),
+            )
             for i in range(num_cols)
         ]
 
