@@ -605,14 +605,7 @@ def remove_special_chars(df, columns=None):
 ar.register_step("remove_special_chars", remove_special_chars)
 
 # 3. Write tests, open a PR. That's it.
-```
 
-### If you do know C++
-
-The biggest performance wins are in:
-- **`drop_duplicates`** — replacing `std::ostringstream` row serialization with proper hash-based comparisons
-- **`strip_whitespace`** — converting from copy-on-write to in-place mutation
-- **Parallel column processing** — `std::thread` across independent columns
 
 
 ### Getting started
@@ -670,7 +663,7 @@ python -m pip install -U pip
 python -m pip install arnio
 printf 'name,revenue\n Ada,10\n' > /tmp/arnio-smoke.csv
 python - <<'PY'
-import arnio as ar      
+import arnio as ar
 print(ar.__version__)
 print(ar.scan_csv("/tmp/arnio-smoke.csv"))
 PY
