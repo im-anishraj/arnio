@@ -325,7 +325,9 @@ def safe_divide_columns(
     denominator : str
         Column name to use as the denominator.
     output_column : str
-        Name of the new column to store the division result.
+        Name of the new column to store the division result. Must be a
+        non-empty string. If the column already exists, it will be
+        overwritten and a ``UserWarning`` is raised.
     fill_value : float, optional
         Value to use when denominator is zero or null. Defaults to 0.0.
 
@@ -349,6 +351,8 @@ def safe_divide_columns(
         raise ValueError(f"Numerator column '{numerator}' not found in frame.")
     if denominator not in df.columns:
         raise ValueError(f"Denominator column '{denominator}' not found in frame.")
+    if not isinstance(output_column, str) or not output_column.strip():
+        raise ValueError("output_column must be a non-empty string.")
     if output_column in df.columns:
         import warnings
 

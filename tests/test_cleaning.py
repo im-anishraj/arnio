@@ -208,3 +208,19 @@ class TestSafeDivideColumns:
                 denominator="nonexistent",
                 output_column="ratio",
             )
+
+    def test_output_column_already_exists(self, tmp_path):
+        import warnings
+
+        path = tmp_path / "data.csv"
+        path.write_text("revenue,cost,ratio\n100,50,99\n200,100,99\n")
+        frame = ar.read_csv(path)
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            result = ar.safe_divide_columns(
+                frame, numerator="revenue", denominator="cost", output_column="ratio"
+            )
+            assert len(w) == 1
+            assert "already exists" in str(w[0].message)
+        df = ar.to_pandas(result)
+        assert df["ratio"].iloc[0] == 2.0
