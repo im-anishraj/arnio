@@ -382,6 +382,62 @@ clean, report = ar.auto_clean(frame, mode="strict", return_report=True)
 This is the layer pandas does not try to own: profiling, data contracts, row-level validation issues, and safe cleaning suggestions for messy incoming datasets.
 
 <br>
+
+### Beginner-friendly auto-clean tutorial
+
+Use this workflow when you receive a small messy dataset and want to inspect what Arnio will change before applying it.
+
+```python
+import arnio as ar
+import pandas as pd
+
+raw = pd.DataFrame(
+    {
+        "order_id": [1001, 1002, 1002, 1003, 1004],
+        "customer": [" Ishan ", " Prasoon ", " Prasoon ", " Pranay ", " Dhruv "],
+        "city": [" Paris ", "London", "London", " New York ", " Tokyo "],
+    }
+)
+
+frame = ar.from_pandas(raw)
+
+report = ar.profile(frame)
+summary = report.summary()
+print(summary)
+
+suggestions = ar.suggest_cleaning(frame)
+print(suggestions)
+# [('strip_whitespace', {'subset': ['customer', 'city']}), ('drop_duplicates', {'keep': 'first'})]
+
+safe = ar.auto_clean(frame)
+strict = ar.auto_clean(frame, mode="strict")
+```
+
+Messy input:
+
+| order_id | customer | city |
+|:--|:--|:--|
+| 1001 | ` Ishan ` | ` Paris ` |
+| 1002 | ` Prasoon ` | `London` |
+| 1002 | ` Prasoon ` | `London` |
+| 1003 | ` Pranay ` | ` New York ` |
+| 1004 | ` Dhruv ` | ` Tokyo ` |
+
+Expected cleaned output with `mode="strict"`:
+
+| order_id | customer | city |
+|:--|:--|:--|
+| 1001 | Ishan | Paris |
+| 1002 | Prasoon | London |
+| 1003 | Pranay | New York |
+| 1004 | Dhruv | Tokyo |
+
+`mode="safe"` only trims whitespace. Use `mode="strict"` when you also want deterministic built-in cleanup such as exact duplicate removal.
+
+See [examples/auto_clean_tutorial.py](examples/auto_clean_tutorial.py) for a runnable version of this walkthrough.
+
+<br>
+
 ## Data Quality Reports
 
 Arnio provides detailed profiling for datasets via `ar.profile()`. To generate the report shown in these examples, the following code was used:
@@ -611,7 +667,7 @@ arnio/
 │   └── exceptions.py        # ArnioError, UnknownStepError, CsvReadError, TypeCastError
 ├── tests/                   # pytest suite — CSV, cleaning, pipeline, conversions
 ├── benchmarks/              # Reproducible arnio vs pandas benchmark
-├── examples/                # basic_usage.py, custom_step.py
+├── examples/                # basic_usage.py, auto_clean_tutorial.py, custom_step.py
 └── website/                 # Project website — arnio.vercel.app
 ```
 
