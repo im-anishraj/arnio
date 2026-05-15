@@ -61,6 +61,7 @@ __all__ = [
     "fill_nulls",
     "filter_rows",
     "drop_duplicates",
+    "drop_empty_columns",
     "drop_constant_columns",
     "strip_whitespace",
     "normalize_case",
