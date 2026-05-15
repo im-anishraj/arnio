@@ -336,3 +336,79 @@ class TestCleanAPI:
         # Drop nulls
         result = ar.clean(frame, strip_whitespace=False, drop_nulls=True)
         assert len(result) < len(frame)
+
+
+class TestSafeDivideColumns:
+    def test_normal_division(self, tmp_path):
+        path = tmp_path / "data.csv"
+        path.write_text("revenue,cost\n100,50\n200,100\n300,150\n")
+        frame = ar.read_csv(path)
+        result = ar.safe_divide_columns(
+            frame, numerator="revenue", denominator="cost", output_column="ratio"
+        )
+        df = ar.to_pandas(result)
+        assert df["ratio"].iloc[0] == 2.0
+        assert df["ratio"].iloc[1] == 2.0
+        assert df["ratio"].iloc[2] == 2.0
+
+    def test_division_by_zero(self, tmp_path):
+        path = tmp_path / "data.csv"
+        path.write_text("revenue,cost\n100,0\n200,100\n300,0\n")
+        frame = ar.read_csv(path)
+        result = ar.safe_divide_columns(
+            frame, numerator="revenue", denominator="cost", output_column="ratio"
+        )
+        df = ar.to_pandas(result)
+        assert df["ratio"].iloc[0] == 0.0
+        assert df["ratio"].iloc[2] == 0.0
+
+    def test_null_inputs(self, tmp_path):
+        path = tmp_path / "data.csv"
+        path.write_text("revenue,cost\n100,\n200,100\n300,\n")
+        frame = ar.read_csv(path)
+        result = ar.safe_divide_columns(
+            frame, numerator="revenue", denominator="cost", output_column="ratio"
+        )
+        df = ar.to_pandas(result)
+        assert df["ratio"].iloc[0] == 0.0
+        assert df["ratio"].iloc[2] == 0.0
+
+    def test_missing_numerator_column(self, tmp_path):
+        path = tmp_path / "data.csv"
+        path.write_text("revenue,cost\n100,50\n")
+        frame = ar.read_csv(path)
+        with pytest.raises(ValueError, match="Numerator column"):
+            ar.safe_divide_columns(
+                frame,
+                numerator="nonexistent",
+                denominator="cost",
+                output_column="ratio",
+            )
+
+    def test_missing_denominator_column(self, tmp_path):
+        path = tmp_path / "data.csv"
+        path.write_text("revenue,cost\n100,50\n")
+        frame = ar.read_csv(path)
+        with pytest.raises(ValueError, match="Denominator column"):
+            ar.safe_divide_columns(
+                frame,
+                numerator="revenue",
+                denominator="nonexistent",
+                output_column="ratio",
+            )
+
+    def test_output_column_already_exists(self, tmp_path):
+        import warnings
+
+        path = tmp_path / "data.csv"
+        path.write_text("revenue,cost,ratio\n100,50,99\n200,100,99\n")
+        frame = ar.read_csv(path)
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            result = ar.safe_divide_columns(
+                frame, numerator="revenue", denominator="cost", output_column="ratio"
+            )
+            assert len(w) == 1
+            assert "already exists" in str(w[0].message)
+        df = ar.to_pandas(result)
+        assert df["ratio"].iloc[0] == 2.0

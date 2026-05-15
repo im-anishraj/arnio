@@ -123,3 +123,5 @@ def pipeline(
 
 
 register_step("filter_rows", cleaning.filter_rows)
+
+register_step("safe_divide_columns", cleaning.safe_divide_columns)

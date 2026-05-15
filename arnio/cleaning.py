@@ -422,3 +422,65 @@ def filter_rows(frame, column, op, value):
     filtered = df[getattr(df[column], ops[op])(value)]
 
     return from_pandas(filtered) if is_arframe else filtered
+
+
+def safe_divide_columns(
+    frame, numerator: str, denominator: str, output_column: str, fill_value: float = 0.0
+):
+    """Divide one column by another, handling division by zero and nulls explicitly.
+
+    When the denominator is zero or null, the result is replaced with
+    fill_value instead of raising an error or producing NaN/Inf.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input data frame.
+    numerator : str
+        Column name to use as the numerator.
+    denominator : str
+        Column name to use as the denominator.
+    output_column : str
+        Name of the new column to store the division result. Must be a
+        non-empty string. If the column already exists, it will be
+        overwritten and a ``UserWarning`` is raised.
+    fill_value : float, optional
+        Value to use when denominator is zero or null. Defaults to 0.0.
+
+    Returns
+    -------
+    ArFrame
+
+    Examples
+    --------
+    >>> frame = ar.read_csv("data.csv")
+    >>> result = ar.safe_divide_columns(frame, numerator="revenue", denominator="cost", output_column="ratio")
+    """
+    import pandas as pd
+
+    from .convert import from_pandas, to_pandas
+
+    is_arframe = not isinstance(frame, pd.DataFrame)
+    df = to_pandas(frame) if is_arframe else frame
+
+    if numerator not in df.columns:
+        raise ValueError(f"Numerator column '{numerator}' not found in frame.")
+    if denominator not in df.columns:
+        raise ValueError(f"Denominator column '{denominator}' not found in frame.")
+    if not isinstance(output_column, str) or not output_column.strip():
+        raise ValueError("output_column must be a non-empty string.")
+    if output_column in df.columns:
+        import warnings
+
+        warnings.warn(
+            f"Output column '{output_column}' already exists and will be overwritten.",
+            UserWarning,
+            stacklevel=2,
+        )
+
+    safe_denom = df[denominator].replace(0, float("nan"))
+    result = df[numerator] / safe_denom
+    df = df.copy()
+    df[output_column] = result.fillna(fill_value)
+
+    return from_pandas(df) if is_arframe else df
