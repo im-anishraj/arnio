@@ -1,6 +1,7 @@
 """Tests for pandas conversion."""
 
 import pandas as pd
+import pytest
 
 import arnio as ar
 
@@ -84,14 +85,17 @@ class TestFromPandas:
         assert list(df2["score"]) == [95.5, 87.0]
 
     def test_from_pandas_nested_data(self):
-        import pytest
 
         df_list = pd.DataFrame({"a": [[1, 2], [3, 4]]})
-        with pytest.raises(TypeError, match="Unsupported nested/complex type"):
+        with pytest.raises(
+            TypeError, match="Column 'a' contains unsupported nested value"
+        ):
             ar.from_pandas(df_list)
 
         df_dict = pd.DataFrame({"a": [{"x": 1}, {"y": 2}]})
-        with pytest.raises(TypeError, match="Unsupported nested/complex type"):
+        with pytest.raises(
+            TypeError, match="Column 'a' contains unsupported nested value"
+        ):
             ar.from_pandas(df_dict)
 
     def test_from_pandas_mixed_object_column(self):
@@ -100,6 +104,16 @@ class TestFromPandas:
         df2 = ar.to_pandas(frame)
 
         assert list(df2["a"]) == ["1", "x", "3"]
+
+    def test_from_pandas_mixed_object_column_with_nested_value(self):
+
+        df = pd.DataFrame({"mixed": [1, "hello", {"a": 1}]}, dtype=object)
+
+        with pytest.raises(
+            TypeError,
+            match="Column 'mixed' contains unsupported nested value",
+        ):
+            ar.from_pandas(df)
 
     def test_from_pandas_unsupported_scalar_object_column(self):
         timestamp = pd.Timestamp("2026-05-14 12:30:00")
@@ -161,3 +175,19 @@ class TestFromPandas:
         result_df = ar.to_pandas(result)
 
         assert list(result_df.columns) == ["name", "age", "city"]
+
+    def test_nullable_boolean_roundtrip(self):
+        df = pd.DataFrame(
+            {
+                "active": pd.Series(
+                    [True, False, pd.NA],
+                    dtype="boolean",
+                )
+            }
+        )
+
+        frame = ar.from_pandas(df)
+        result = ar.to_pandas(frame)
+
+        assert str(result["active"].dtype) == "boolean"
+        assert list(result["active"]) == [True, False, pd.NA]

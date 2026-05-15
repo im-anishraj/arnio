@@ -113,6 +113,122 @@ def drop_duplicates(
     return ArFrame(result)
 
 
+def drop_constant_columns(frame: ArFrame) -> ArFrame:
+    """Remove columns with exactly one unique value.
+
+    Nulls are counted as values when determining whether a column is constant.
+    This means columns like ``[None, None]`` are dropped, while columns like
+    ``[1, 1, None]`` are kept. Empty columns in zero-row frames are also kept,
+    since they have zero unique values rather than one.
+
+    If every column is dropped, the zero-column pandas result is converted back
+    to an ``ArFrame``. Arnio currently derives row count from stored columns, so
+    that converted frame may report zero rows.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input data frame.
+
+    Returns
+    -------
+    ArFrame
+        New frame without constant columns.
+
+    Examples
+    --------
+    >>> frame = ar.read_csv("data.csv")
+    >>> reduced = ar.drop_constant_columns(frame)
+    """
+    from .convert import from_pandas, to_pandas
+
+    df = to_pandas(frame)
+    if len(df.index) == 0:
+        return frame
+
+    constant_columns = [
+        column for column in df.columns if df[column].nunique(dropna=False) == 1
+    ]
+    return from_pandas(df.drop(columns=constant_columns))
+
+
+def clip_numeric(
+    frame: ArFrame,
+    *,
+    lower: int | float | None = None,
+    upper: int | float | None = None,
+    subset: list[str] | None = None,
+) -> ArFrame:
+    """Clip numeric columns to lower and/or upper bounds.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input data frame.
+    lower : int or float, optional
+        Lower bound. Values below this are raised to the bound.
+    upper : int or float, optional
+        Upper bound. Values above this are lowered to the bound.
+    subset : list[str], optional
+        Numeric columns to clip. If None, applies to all numeric columns except bools.
+
+    Returns
+    -------
+    ArFrame
+        New frame with clipped numeric values.
+
+    Raises
+    ------
+    ValueError
+        If no bounds are provided, bounds are inverted, subset contains unknown
+        columns, or subset contains non-numeric columns.
+
+    Examples
+    --------
+    >>> frame = ar.read_csv("data.csv")
+    >>> clipped = ar.clip_numeric(frame, lower=0, upper=100)
+    """
+    from pandas.api.types import is_bool_dtype, is_numeric_dtype
+
+    from .convert import from_pandas, to_pandas
+
+    if lower is None and upper is None:
+        raise ValueError("At least one of 'lower' or 'upper' must be provided")
+    if lower is not None and upper is not None and lower > upper:
+        raise ValueError("lower cannot be greater than upper")
+
+    df = to_pandas(frame)
+
+    def _is_supported_numeric(column_name: str) -> bool:
+        series = df[column_name]
+        return is_numeric_dtype(series) and not is_bool_dtype(series)
+
+    if subset is None:
+        target_columns = [
+            column for column in df.columns if _is_supported_numeric(column)
+        ]
+    else:
+        unknown_columns = [column for column in subset if column not in df.columns]
+        if unknown_columns:
+            raise ValueError(f"Unknown columns in subset: {unknown_columns}")
+
+        non_numeric_columns = [
+            column for column in subset if not _is_supported_numeric(column)
+        ]
+        if non_numeric_columns:
+            raise ValueError(
+                "clip_numeric only supports numeric columns: " f"{non_numeric_columns}"
+            )
+        target_columns = subset
+
+    if not target_columns:
+        return frame
+
+    clipped = df.copy()
+    clipped[target_columns] = clipped[target_columns].clip(lower=lower, upper=upper)
+    return from_pandas(clipped)
+
+
 def strip_whitespace(
     frame: ArFrame,
     *,
@@ -360,5 +476,67 @@ def round_numeric_columns(
     for col in cols_to_round:
         if pd.api.types.is_numeric_dtype(df[col]):
             df[col] = df[col].round(decimals)
+
+    return from_pandas(df) if is_arframe else df
+
+
+def safe_divide_columns(
+    frame, numerator: str, denominator: str, output_column: str, fill_value: float = 0.0
+):
+    """Divide one column by another, handling division by zero and nulls explicitly.
+
+    When the denominator is zero or null, the result is replaced with
+    fill_value instead of raising an error or producing NaN/Inf.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input data frame.
+    numerator : str
+        Column name to use as the numerator.
+    denominator : str
+        Column name to use as the denominator.
+    output_column : str
+        Name of the new column to store the division result. Must be a
+        non-empty string. If the column already exists, it will be
+        overwritten and a ``UserWarning`` is raised.
+    fill_value : float, optional
+        Value to use when denominator is zero or null. Defaults to 0.0.
+
+    Returns
+    -------
+    ArFrame
+
+    Examples
+    --------
+    >>> frame = ar.read_csv("data.csv")
+    >>> result = ar.safe_divide_columns(frame, numerator="revenue", denominator="cost", output_column="ratio")
+    """
+    import pandas as pd
+
+    from .convert import from_pandas, to_pandas
+
+    is_arframe = not isinstance(frame, pd.DataFrame)
+    df = to_pandas(frame) if is_arframe else frame
+
+    if numerator not in df.columns:
+        raise ValueError(f"Numerator column '{numerator}' not found in frame.")
+    if denominator not in df.columns:
+        raise ValueError(f"Denominator column '{denominator}' not found in frame.")
+    if not isinstance(output_column, str) or not output_column.strip():
+        raise ValueError("output_column must be a non-empty string.")
+    if output_column in df.columns:
+        import warnings
+
+        warnings.warn(
+            f"Output column '{output_column}' already exists and will be overwritten.",
+            UserWarning,
+            stacklevel=2,
+        )
+
+    safe_denom = df[denominator].replace(0, float("nan"))
+    result = df[numerator] / safe_denom
+    df = df.copy()
+    df[output_column] = result.fillna(fill_value)
 
     return from_pandas(df) if is_arframe else df
