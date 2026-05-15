@@ -73,15 +73,17 @@ class ArFrame:
         ----------
         fill_value : scalar, optional
             Value used to replace null entries. Must be compatible with
-            the column dtype (e.g. 0 for int, 0.0 for float, False for
-            bool). If ``None`` and any null values are present,
+            the column dtype — use int/float for numeric columns, bool
+            for bool columns. If ``None`` and any null values are present,
             ``ValueError`` is raised.
 
         Returns
         -------
         numpy.ndarray
             2D array of shape ``(n_rows, n_cols)`` in column order.
-            An empty frame returns an array of shape ``(0, 0)``.
+            dtype is preserved: int columns return int64, float columns
+            return float64, bool columns return bool.
+            A zero-row frame returns shape ``(0, n_cols)``.
 
         Raises
         ------
@@ -103,9 +105,9 @@ class ArFrame:
 
         n_rows, n_cols = self.shape
 
-        # Empty frame — return immediately
-        if n_cols == 0 or n_rows == 0:
-            return np.empty((0, 0))
+        # Zero-column frame
+        if n_cols == 0:
+            return np.empty((n_rows, 0))
 
         # Validate dtypes and collect columns
         columns = []
@@ -119,21 +121,19 @@ class ArFrame:
                     f"Column '{col.name()}' has unsupported dtype '{dtype}'."
                 )
 
-            # Check for nulls
             mask = col.get_null_mask()
             has_nulls = mask.any()
 
-            if has_nulls:
-                if fill_value is None:
-                    raise ValueError(
-                        f"Column '{col.name()}' contains null values. "
-                        f"Provide fill_value=... to substitute nulls, "
-                        f"e.g. frame.to_numpy(fill_value=0)."
-                    )
+            if has_nulls and fill_value is None:
+                raise ValueError(
+                    f"Column '{col.name()}' contains null values. "
+                    f"Provide fill_value=... to substitute nulls, "
+                    f"e.g. frame.to_numpy(fill_value=0)."
+                )
 
-            # Extract raw array — no pandas routing
+            # Extract with correct dtype — no forced float conversion
             if dtype == _DType.INT64:
-                arr = col.to_numpy_int().astype(float)
+                arr = col.to_numpy_int().copy()
                 if has_nulls:
                     arr[mask] = fill_value
             elif dtype == _DType.FLOAT64:
@@ -141,13 +141,16 @@ class ArFrame:
                 if has_nulls:
                     arr[mask] = fill_value
             else:  # BOOL
-                arr = col.to_numpy_bool().astype(float)
+                arr = col.to_numpy_bool().copy()
                 if has_nulls:
                     arr[mask] = fill_value
 
             columns.append(arr)
 
-        # Stack columns into 2D array: shape (n_rows, n_cols)
+        # Zero-row frame — return correct shape (0, n_cols)
+        if n_rows == 0:
+            return np.empty((0, n_cols))
+
         return np.column_stack(columns)
 
     # --- Dunder methods ---

@@ -346,7 +346,27 @@ Works with:
 ---
 
 <br>
+## Converting to NumPy
 
+Use `to_numpy()` for a direct, pandas-free export of numeric/bool frames:
+
+```python
+import arnio as ar
+
+frame = ar.read_csv("data.csv")
+
+# Basic conversion — dtype preserved
+arr = frame.to_numpy()
+# int columns  → int64
+# float columns → float64
+# bool columns  → bool
+
+# Handle null values with fill_value
+arr = frame.to_numpy(fill_value=0)
+
+# Raises TypeError for string/mixed columns
+# Raises ValueError for nulls without fill_value
+```
 ## 🧠 Data quality engine
 
 Arnio now includes built-in dataset understanding before you analyze in pandas.
