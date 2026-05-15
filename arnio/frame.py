@@ -63,6 +63,55 @@ class ArFrame:
         """
         return self._frame.memory_usage()
 
+    def select_columns(self, columns: list[str]) -> ArFrame:
+        """Return a new ArFrame with only the selected columns.
+
+        Parameters
+        ----------
+        columns : list[str]
+            List of column names to select.
+
+        Returns
+        -------
+        ArFrame
+            New ArFrame containing only the selected columns.
+
+        Raises
+        ------
+        TypeError
+            If columns is not a valid sequence of strings.
+
+        ValueError
+            If the selection is empty, contains duplicates,
+            or includes unknown columns.
+        """
+        if isinstance(columns, str):
+            raise TypeError("columns must be a sequence of column names, not a string.")
+
+        if not isinstance(columns, (list, tuple)):
+            raise TypeError("columns must be a list or tuple of column names.")
+
+        if not columns:
+            raise ValueError("Column selection cannot be empty.")
+
+        if any(not isinstance(col, str) for col in columns):
+            raise TypeError("All column names must be strings.")
+
+        if len(columns) != len(set(columns)):
+            raise ValueError("Duplicate column names are not allowed.")
+
+        missing = [col for col in columns if col not in self.columns]
+
+        if missing:
+            raise ValueError(f"Unknown columns: {missing}")
+
+        from .convert import from_pandas, to_pandas
+
+        df = to_pandas(self)
+        selected_df = df[columns]
+
+        return from_pandas(selected_df)
+
     # --- Dunder methods ---
 
     def __len__(self) -> int:
