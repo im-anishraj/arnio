@@ -79,15 +79,13 @@ Arnio is split into two layers:
 
 ```mermaid
 graph TD
-    A[ArFrame] -->|to_pandas| B[pandas DataFrame]
-    B --> C[profile]
-    B --> D[validate]
-    C --> F[DataQualityReport]
-    F --> G[suggest_cleaning]
-    F --> E[auto_clean]
-    G --> H[pipeline]
-    E --> H
-    H -->|native steps| A
-    H -->|custom steps| B
-    D --> I[ValidationResult]
+    A[ArFrame] --> B[profile]
+    A --> C[auto_clean]
+    A --> D[suggest_cleaning]
+
+    
+    B --> E[DataQualityReport]
+    E --> D
+    D --> F[step list]
+    C --> G[cleaned ArFrame]
 ```
