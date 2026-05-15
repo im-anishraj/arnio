@@ -29,7 +29,6 @@ from .cleaning import (
     round_numeric_columns,
     safe_divide_columns,
     strip_whitespace,
-    trim_column_names,
     validate_columns_exist,
 )
 from .convert import from_pandas, to_pandas
@@ -48,8 +47,12 @@ from .quality import (
 from .schema import (
     URL,
     Bool,
+<<<<<<< HEAD
     CountryCode,
     DateTime,
+=======
+    Date,
+>>>>>>> 4c4832f (feat: add Date schema field)
     Email,
     Field,
     Float64,
@@ -119,5 +122,9 @@ __all__ = [
     "ArnioError",
     "CsvReadError",
     "TypeCastError",
+<<<<<<< HEAD
     "normalize_unicode",
+=======
+    "Date",
+>>>>>>> 4c4832f (feat: add Date schema field)
 ]
