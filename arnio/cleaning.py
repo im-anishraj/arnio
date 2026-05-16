@@ -643,7 +643,6 @@ def safe_divide_columns(
     return from_pandas(df) if is_arframe else df
 
 
-# ...existing code...
 def replace_values(frame, mapping, column=None):
     """Replace values based on a mapping dict.
 
@@ -676,8 +675,26 @@ def replace_values(frame, mapping, column=None):
 
     from .convert import from_pandas, to_pandas
 
+    if not isinstance(mapping, dict):
+        raise TypeError(
+            "mapping must be a dict-like mapping of {old_value: new_value}, "
+            f"not {type(mapping).__name__}."
+        )
+    if not mapping:
+        raise ValueError("mapping must not be empty")
+
     is_arframe = not isinstance(frame, pd.DataFrame)
-    df = to_pandas(frame) if is_arframe else frame
+    # Avoid mutating the caller's DataFrame in the direct pandas API path.
+    df = to_pandas(frame) if is_arframe else frame.copy()
+
+    if column is not None:
+        if not isinstance(column, str) or not column.strip():
+            raise TypeError("column must be a non-empty string when provided")
+        if column not in df.columns:
+            available = ", ".join(map(str, df.columns)) or "<none>"
+            raise KeyError(
+                f"Column '{column}' not found. Available columns: {available}"
+            )
 
     # Normalize mapping and separate null-key handling because NaN != NaN
     null_key_present = False

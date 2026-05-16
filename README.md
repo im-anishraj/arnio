@@ -383,7 +383,7 @@ Small differences are expected across CPUs, operating systems, compilers, Python
 
 ## 🧰 Cleaning primitives
 
-Most operations below run natively in C++. The current `filter_rows` and `replace_values` step uses the Python pipeline backend and may be optimized in C++ later.
+Most operations below run natively in C++. Currently, `filter_rows` and `replace_values` run via the Python (pandas) backend and may be optimized in C++ later.
 
 | Primitive | What it does | Example |
 |:---|:---|:---|
@@ -399,6 +399,7 @@ Most operations below run natively in C++. The current `filter_rows` and `replac
 | `rename_columns` | Rename columns via mapping | `ar.rename_columns(frame, {"old": "new"})` |
 | `cast_types` | Cast column types | `ar.cast_types(frame, {"age": "int64"})` |
 | `round_numeric_columns` | Round numeric columns (non-numeric columns in subset ignored safely) | `ar.round_numeric_columns(frame, decimals=2)` |
+| `replace_values` | Replace values using a mapping (column or whole-frame). Handles `None`/`NaN`. | `ar.replace_values(frame, {"active": "A", "inactive": "I"}, column="status")` |
 | `clean` | Convenience shorthand | `ar.clean(frame, drop_nulls=True)` |
 | `safe_divide_columns` | Divide one column by another, handling zero/null denominators | `ar.safe_divide_columns(frame, numerator="revenue", denominator="cost", output_column="ratio")` |
 
@@ -430,7 +431,7 @@ Whole-frame example (no `column`):
 
 ```python
 clean = ar.pipeline(frame, [
-    ("replace_values", {"mapping": {None: "MISSING" , "active": "A", "inactive" : "I"}}),
+    ("replace_values", {"mapping": {None: "MISSING", "active": "A", "inactive": "I"}}),
 ])
 ```
 
