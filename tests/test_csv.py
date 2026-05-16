@@ -190,6 +190,10 @@ class TestReadCsv:
         with pytest.raises(ar.CsvReadError, match="CSV file is empty"):
             ar.read_csv(str(csv_path))
 
+    def test_missing_file_passthrough(self, tmp_path):
+        with pytest.raises(ar.CsvReadError):
+            ar.read_csv(str(tmp_path / "nonexistent.csv"))
+
 
 class TestScanCsv:
     def test_scan_schema(self, sample_csv):
@@ -224,3 +228,7 @@ class TestScanCsv:
         csv_path.write_text("")
         with pytest.raises(ar.CsvReadError, match="CSV file is empty"):
             ar.scan_csv(str(csv_path))
+
+    def test_scan_missing_file_passthrough(self, tmp_path):
+        with pytest.raises(ar.CsvReadError):
+            ar.scan_csv(str(tmp_path / "nonexistent.csv"))
