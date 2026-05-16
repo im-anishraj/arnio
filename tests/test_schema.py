@@ -89,9 +89,7 @@ def test_string_min_length_boundary(tmp_path):
 
     result = ar.validate(
         ar.read_csv(path),
-        {
-            "name": ar.String(min_length=3)
-        },
+        {"name": ar.String(min_length=3)},
     )
 
     assert not result.passed
@@ -106,9 +104,7 @@ def test_string_max_length_boundary(tmp_path):
 
     result = ar.validate(
         ar.read_csv(path),
-        {
-            "name": ar.String(max_length=5)
-        },
+        {"name": ar.String(max_length=5)},
     )
 
     assert not result.passed
@@ -123,9 +119,7 @@ def test_null_values_skip_length_validation(tmp_path):
 
     result = ar.validate(
         ar.read_csv(path),
-        {
-            "name": ar.String(min_length=5)
-        },
+        {"name": ar.String(min_length=5)},
     )
 
     assert not result.passed
