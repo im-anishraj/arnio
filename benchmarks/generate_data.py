@@ -5,6 +5,7 @@ import pandas as pd
 
 DEFAULT_TALL_PATH = "benchmarks/benchmark_1m.csv"
 DEFAULT_WIDE_PATH = "benchmarks/benchmark_wide.csv"
+DEFAULT_SPARSE_NULL_PATH = "benchmarks/benchmark_sparse_null.csv"
 
 
 def generate(rows=1_000_000, path=DEFAULT_TALL_PATH):
@@ -72,6 +73,30 @@ def generate_wide(rows=5_000, columns=256, path=DEFAULT_WIDE_PATH):
     print(f"Generated {rows:,} row x {columns:,} column CSV -> {path}")
 
 
+def generate_sparse_null(rows=500_000, path=DEFAULT_SPARSE_NULL_PATH):
+    """Generates a deterministic dataset with highly concentrated missing values (95%+ nulls) to benchmark sparse null masks."""
+    rng = np.random.default_rng(999)
+    
+    df = pd.DataFrame(
+        {
+            "id": rng.integers(1, 999999, rows),
+            # 95% missing text values
+            "sparse_comment": np.where(rng.random(rows) > 0.95, "Flagged Workload Entry", None),
+            # 98% missing float numbers
+            "sparse_tax_rate": np.where(rng.random(rows) > 0.98, rng.uniform(5, 28, rows).round(2), None),
+            "age": rng.integers(1, 100, rows).astype(float),
+            # 97% missing binary choices
+            "sparse_verified": np.where(rng.random(rows) > 0.97, rng.choice(["TRUE", "FALSE"], rows), None),
+            "score": rng.uniform(0, 10, rows).round(2),
+            # 99% missing localized labels
+            "sparse_region_code": np.where(rng.random(rows) > 0.99, rng.choice(["LOC_A", "LOC_B"], rows), None),
+        }
+    )
+    df.to_csv(path, index=False, lineterminator="\n")
+    print(f"Generated {rows:,} row Sparse-Null CSV -> {path}")
+
+
 if __name__ == "__main__":
     generate()
     generate_wide()
+    generate_sparse_null()

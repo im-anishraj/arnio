@@ -14,6 +14,7 @@ import arnio as ar
 
 CSV_FILE = "benchmarks/benchmark_1m.csv"
 WIDE_CSV_FILE = "benchmarks/benchmark_wide.csv"
+SPARSE_NULL_CSV_FILE = "benchmarks/benchmark_sparse_null.csv"
 RUNS = 3
 
 
@@ -26,6 +27,7 @@ class BenchmarkCase:
 BENCHMARKS = (
     BenchmarkCase("Tall CSV (1,000,000 rows x 12 columns)", CSV_FILE),
     BenchmarkCase("Wide CSV (5,000 rows x 256 columns)", WIDE_CSV_FILE),
+    BenchmarkCase("Sparse-Null Mask CSV (500,000 rows x 7 columns)", SPARSE_NULL_CSV_FILE),
 )
 
 
