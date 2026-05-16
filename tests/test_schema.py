@@ -98,7 +98,7 @@ def test_string_min_length_boundary(tmp_path):
     assert result.issue_count == 1
     assert result.issues[0].rule == "min_length"
     assert result.issues[0].row_index == 0
-    
+
 
 def test_string_max_length_boundary(tmp_path):
     path = tmp_path / "names.csv"
@@ -115,8 +115,8 @@ def test_string_max_length_boundary(tmp_path):
     assert result.issue_count == 1
     assert result.issues[0].rule == "max_length"
     assert result.issues[0].row_index == 1
-    
-    
+
+
 def test_null_values_skip_length_validation(tmp_path):
     path = tmp_path / "names.csv"
     path.write_text("name\n\nabcd\n")
