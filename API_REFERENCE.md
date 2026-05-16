@@ -1,6 +1,6 @@
 # Arnio API Reference
 
-A guide to the classes and functions within the **Arnio** library.
+A technical reference guide to the public classes and functions within the **Arnio** library.
 
 ---
 
@@ -8,7 +8,7 @@ A guide to the classes and functions within the **Arnio** library.
 
 | Category | Components |
 | :--- | :--- |
-| **Core Class** | [**`ArFrame`**](#arframe) • Properties: [`shape`](#shape), [`columns`](#columns), [`dtypes`](#dtypes) • Methods: [`memory_usage`](#memory_usage), [`preview`](#preview), [`select_columns`](#select_columns) |
+| **Core Class** | [**`ArFrame`**](#arframe) • Properties: [`shape`](#shape), [`columns`](#columns), [`dtypes`](#dtypes) • [`is_empty`](#is_empty) • Methods: [`memory_usage`](#memory_usage), [`preview`](#preview), [`select_columns`](#select_columns) |
 | **I/O** | [`read_csv`](#read_csv) • [`scan_csv`](#scan_csv) |
 | **Cleaning** | [`cast_types`](#cast_types) • [`clean`](#clean) • [`clip_numeric`](#clip_numeric) • [`drop_constant_columns`](#drop_constant_columns) • [`drop_duplicates`](#drop_duplicates) • [`drop_nulls`](#drop_nulls) • [`fill_nulls`](#fill_nulls) • [`filter_rows`](#filter_rows) • [`normalize_case`](#normalize_case) • [`rename_columns`](#rename_columns) • [`round_numeric_columns`](#round_numeric_columns) • [`safe_divide_columns`](#safe_divide_columns) • [`strip_whitespace`](#strip_whitespace) • [`validate_columns_exist`](#validate_columns_exist)|
 | **Conversion** | [`from_pandas`](#from_pandas) • [`to_pandas`](#to_pandas) |
@@ -22,26 +22,21 @@ A guide to the classes and functions within the **Arnio** library.
 
 ## Documentation Details
 
-## Core Class
-
 ### ArFrame
-The `ArFrame` is the central data structure in Arnio. It acts as a lightweight, columnar container that wraps high-performance C++ logic, allowing for fast data manipulation within Python.
+Columnar container wrapping C++ backend structures for execution in Python.
 
 | Property | Type | Description |
 | :--- | :--- | :--- |
 | <a name="columns"></a>**columns** | `list[str]` | Returns the names of all columns in the dataset. |
 | <a name="dtypes"></a>**dtypes** | `dict[str, str]` | A mapping of column names to their detected data types. |
 | <a name="shape"></a>**shape** | `tuple[int, int]` | Returns a tuple representing the number of rows and columns `(rows, cols)`. |
+| <a name="is_empty"></a>**is_empty** | `bool` | Check if frame has zero rows. |
 
-#### Methods
 | Method | Return Type | Description |
 | :--- | :--- | :--- |
 | <a name="memory_usage"></a>**memory_usage()** | `int` | Returns the total bytes consumed by the object in memory. |
 | <a name="preview"></a>**preview()** | `str` | Return a lightweight string preview of the first ``n`` rows. |
 | <a name="select_columns"></a>**select_columns()** | `ArFrame` | Return a new ArFrame with only the selected columns. |
-
-#### Usage Example
-The following example demonstrates how to inspect an `ArFrame` after loading data.
 
 ```python
 df = arnio.read_csv("data.csv")
@@ -57,12 +52,6 @@ print(df.preview())
 
 ---
 
-## I/O (Input/Output)
-
-Functions for reading and inspecting data files using the high-performance C++ backend.
-
----
-
 ### read_csv
 Loads a CSV, TSV, or TXT file into an `ArFrame`.
 
@@ -71,17 +60,11 @@ Loads a CSV, TSV, or TXT file into an `ArFrame`.
 df = arnio.read_csv("data.tsv", delimiter="\t", usecols=["Name", "Age"])
 ```
 ### scan_csv
-Retrieves the **Schema** (column names and data types) of a file without loading the actual data into memory. This is highly efficient for large files where you only need to check the data structure.
+Return schema (column names + inferred types) without loading data.
 
 ```python
 schema = arnio.scan_csv("large_dataset.csv")
 ```
-
----
-
-## Cleaning
-
-Standard functions for tidying datasets and fixing structural inconsistencies.
 
 ---
 
@@ -92,7 +75,7 @@ df = arnio.cast_types(df, {"score": "float64"})
 ```
 
 ### clean
-A high-level wrapper that applies `strip_whitespace`, `drop_nulls`, and `drop_duplicates` in a single call. This is the fastest way to perform basic data cleaning.
+A high-level wrapper that applies `strip_whitespace`, `drop_nulls`, and `drop_duplicates` in a single call.
 ```python
 df = arnio.clean(df,drop_nulls=True)
 ```
@@ -116,19 +99,19 @@ df = arnio.drop_duplicates(df, keep="first")
 ```
 
 ### drop_nulls
-Deletes rows containing empty or "Null" values. You can provide a `subset` list to only check specific columns.
+Excludes rows containing empty or null fields
 ```python
 df = arnio.drop_nulls(df, subset=["email"])
 ```
 
 ### fill_nulls
-Replaces empty spots in your data with a fixed value (e.g., replacing missing scores with `0`).
+Replaces null entry values with a designated static value.
 ```python
 df = arnio.fill_nulls(df, 0, subset=["score"])
 ```
 
 ### filter_rows
-Selects rows based on a mathematical condition.
+Subsets rows matching an evaluation operator constraint.
 * **Supported Operators:** `>`, `<`, `>=`, `<=`, `==`, `!=`.
 ```python
 clean_df = arnio.filter_rows(df,column="age", op=">", value=18)
@@ -141,7 +124,7 @@ df = arnio.normalize_case(df, case_type="title")
 ```
 
 ### rename_columns
-Changes the names of your headers. Requires a dictionary: `{"old_name": "new_name"}`.
+Modifies headers using a translation dictionary mapping old names to new names.
 ```python
 df = arnio.rename_columns(df,{"old": "new"})
 ```
@@ -173,21 +156,12 @@ df = arnio.validate_columns_exist(df, ["age"])
 
 ---
 
-## Conversion
-
-Functions for interchanging data between Arnio and the **Pandas** library. This ensures compatibility with other data science tools.
-
----
-
 ### from_pandas()
 Converts a `pandas.DataFrame` into an Arnio `ArFrame`.
 
 ### to_pandas()
 Converts an `ArFrame` into a `pandas.DataFrame`
 
----
-
-#### Usage Example:
 ```python
 pdf = pd.DataFrame(data)
 
@@ -197,16 +171,8 @@ df = arnio.to_pandas(af)
 
 ---
 
-## Integration
-
 ### ArnioPandasAccessor
 Run Arnio preparation helpers from an existing pandas DataFrame.
-
----
-
-## Pipeline
-
-The Pipeline module allows you to chain multiple cleaning operations into a single, automated execution flow.
 
 ---
 
@@ -214,16 +180,14 @@ The Pipeline module allows you to chain multiple cleaning operations into a sing
 Applies a sequence of cleaning steps to an `ArFrame`.
 
 ```python
-clean_df = arnio.pipeline(
-        df,
-        [
-            ("strip_whitespace",),
-            ("normalize_case", {"case_type": "title"}),
-            ("fill_nulls", {"value": 0, "subset": ["age"]}),
-            ("fill_nulls", {"value": "Unknown", "subset": ["city"]}),
-            ("drop_duplicates",),
-        ],
-    )
+ops = [
+    ("strip_whitespace",),
+    ("normalize_case", {"case_type": "title"}),
+    ("fill_nulls", {"value": 0, "subset": ["revenue"]}),
+    ("fill_nulls", {"value": "Unknown", "subset": ["name"]}),
+    ("drop_duplicates",),
+]
+clean_df = arnio.pipeline(df, ops)
 ```
 
 ### register_step()
@@ -231,36 +195,27 @@ Extends the pipeline by adding your own custom Python functions.
 
 ```python
 def custom_func(df, column):
-    pass
+    pass
 arnio.register_step("custom_func", custom_func)
 ```
 
 ---
 
-## Data Quality
-
-Tools for inspecting the "health" of your dataset and automatically fixing common inconsistencies.
-
----
-
 ### profile()
-Analyzes an `ArFrame` and returns a comprehensive `DataQualityReport`.
+Analyzes an `ArFrame` and generates a structural `DataQualityReport`.
 
 ### suggest_cleaning()
 Examines a report or frame and returns a list of recommended cleaning steps.
 
 ### auto_clean()
-The "one-click" fix for data issues. It profiles the data and immediately applies repairs.
+It profiles the data and immediately applies repairs.
 
 ### DataQualityReport
-A full summary of the dataset's health.
+Summary of structural data quality metrics.
 
 ### ColumnProfile
 A detailed health check for a single column.
 
----
-
-#### Usage Example: Automatic Cleanup
 ```python
 report = arnio.profile(df)
 summary = report.summary()
@@ -272,14 +227,8 @@ print(arnio.to_pandas(safe))
 
 ---
 
-## Schema Validation
-
-Schema validation allows you to define "Data Contracts". It ensures that your dataset follows strict rules before you use it for analysis.
-
----
-
 #### Schema
-The top-level container for your validation rules.
+The top-level container for validation rules.
 
 #### Field
 Defines the specific constraints for a single column.
@@ -287,11 +236,11 @@ Defines the specific constraints for a single column.
 #### validate
 The primary function used to check an `ArFrame` against a `Schema`. It returns a `ValidationResult`.
 
-#### ValidationResult / ValidationIssue
+#### <a name="validationresult"></a>ValidationResult / <a name="validationissue"></a>ValidationIssue
 The objects returned after calling `validate()`. They provide details on whether the data passed or failed.
 
 #### Field Type Helpers
-Arnio provides shortcut functions to create specific types of fields quickly. Each helper maps to a specific data type rule.
+Shortcut functions to create specific types of fields quickly. Each helper maps to a specific data type rule.
 
 | Function | Description |
 | :--- | :--- |
@@ -304,24 +253,17 @@ Arnio provides shortcut functions to create specific types of fields quickly. Ea
 
 ---
 
-### Usage Example:
 ```python
 user_schema = arnio.Schema({
-    "user_id": arnio.Int64(unique=True, nullable=False),
-    "email": arnio.Email(nullable=False),
-    "age": arnio.Int64(min=18, max=100)
+    "id": arnio.Int64(unique=True, nullable=False),
+    "name": arnio.String(nullable=False),
+    "revenue": arnio.Float64(min=180, max=1000)
 })
-
-df = arnio.read_csv("users.csv")
 result = arnio.validate(df, user_schema)
 ```
 ---
 
-## Custom Exceptions
-
-These custom exceptions help you identify exactly where a data processing task failed.
-
----
+### Custom Exceptions
 
 | Error Name | Meaning |
 | :--- | :--- |

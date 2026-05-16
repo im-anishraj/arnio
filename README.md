@@ -35,6 +35,8 @@ Use Arnio _before_ and _alongside_ pandas, NumPy, scikit-learn, DuckDB, and Arro
 pip install arnio
 ```
 
+Colab install smoke test: **[COLAB_SMOKE_TEST.md](COLAB_SMOKE_TEST.md)**
+
 <br>
 
 <a href="#-quickstart">Quickstart</a>&ensp;·&ensp;<a href="#-integrations">Integrations</a>&ensp;·&ensp;<a href="#-why-arnio-exists">Why Arnio</a>&ensp;·&ensp;<a href="#%EF%B8%8F-architecture">Architecture</a>&ensp;·&ensp;<a href="#-benchmarks">Benchmarks</a>&ensp;·&ensp;<a href="#-community">Community</a>&ensp;·&ensp;<a href="#-contribute">Contribute</a>
@@ -101,8 +103,7 @@ print(selected.columns)
 
 
 > Every step above executes in C++. Your Python code is a _configuration_ — not the execution engine.
-### Explore the Full API :
-> Check out our API reference guide for all available functions, profiling tools, and validation rules. <br> 👉 **[Arnio API Reference](./API_REFERENCE.md)**
+
 
 <br>
 
@@ -459,6 +460,11 @@ result = ar.safe_divide_columns(
 
 ---
 
+### Explore the API reference guide :
+> Check out our API reference guide. <br> 👉 **[Arnio API Reference](./API_REFERENCE.md)**
+
+---
+
 <br>
 
 ## 📊 Pandas Dtype Support Matrix
@@ -601,7 +607,8 @@ data = {
     "score": [85.5, 90.0, None, 88.2]
 }
 df = ar.from_pandas(pd.DataFrame(data))
-report = ar.profile(df)
+# Bounded profiling for large datasets (controls how many sample values are kept)
+report = ar.profile(df, sample_size=5)
 ```
 
 ### 1. Terminal Representation (Simplified Example)
