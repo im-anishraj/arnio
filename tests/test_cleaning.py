@@ -345,7 +345,10 @@ class TestNormalizeCase:
 
     def test_title_hyphen(self):
         import pandas as pd
-        frame = ar.from_pandas(pd.DataFrame({"name": ["hello-world", "jean-luc picard"]}))
+
+        frame = ar.from_pandas(
+            pd.DataFrame({"name": ["hello-world", "jean-luc picard"]})
+        )
         result = ar.normalize_case(frame, subset=["name"], case_type="title")
         df = ar.to_pandas(result)
         assert df["name"].iloc[0] == "Hello-World"
@@ -353,6 +356,7 @@ class TestNormalizeCase:
 
     def test_title_underscore(self):
         import pandas as pd
+
         frame = ar.from_pandas(pd.DataFrame({"name": ["hello_world", "foo_bar_baz"]}))
         result = ar.normalize_case(frame, subset=["name"], case_type="title")
         df = ar.to_pandas(result)
@@ -361,6 +365,7 @@ class TestNormalizeCase:
 
     def test_title_period(self):
         import pandas as pd
+
         frame = ar.from_pandas(pd.DataFrame({"name": ["dr.strange", "mr.smith"]}))
         result = ar.normalize_case(frame, subset=["name"], case_type="title")
         df = ar.to_pandas(result)
@@ -369,6 +374,7 @@ class TestNormalizeCase:
 
     def test_title_slash(self):
         import pandas as pd
+
         frame = ar.from_pandas(pd.DataFrame({"name": ["hello/world", "foo/bar"]}))
         result = ar.normalize_case(frame, subset=["name"], case_type="title")
         df = ar.to_pandas(result)
