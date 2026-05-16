@@ -464,3 +464,181 @@ def test_schema_composite_unique_empty_columns(tmp_path):
     issues = [i for i in result.issues if i.rule == "composite_unique"]
     assert len(issues) == 1
     assert "cannot be empty" in issues[0].message
+def test_bootstrap_from_report_normal_case():
+    report = ar.DataQualityReport(
+        row_count=100,
+        column_count=4,
+        memory_usage=1024,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={
+            "id": ar.ColumnProfile(
+                name="id",
+                dtype="int64",
+                semantic_type="identifier",
+                row_count=100,
+                null_count=0,
+                null_ratio=0.0,
+                unique_count=100,
+                unique_ratio=1.0,
+            ),
+            "score": ar.ColumnProfile(
+                name="score",
+                dtype="float32",
+                semantic_type="numeric",
+                row_count=100,
+                null_count=0,
+                null_ratio=0.0,
+                unique_count=50,
+                unique_ratio=0.5,
+            ),
+            "is_active": ar.ColumnProfile(
+                name="is_active",
+                dtype="bool",
+                semantic_type="boolean",
+                row_count=100,
+                null_count=0,
+                null_ratio=0.0,
+                unique_count=2,
+                unique_ratio=0.02,
+            ),
+            "name": ar.ColumnProfile(
+                name="name",
+                dtype="object",
+                semantic_type="text",
+                row_count=100,
+                null_count=0,
+                null_ratio=0.0,
+                unique_count=90,
+                unique_ratio=0.9,
+            ),
+        },
+    )
+
+    schema = ar.Schema.bootstrap_from_report(report)
+
+    assert isinstance(schema, ar.Schema)
+    assert set(schema.fields.keys()) == {"id", "score", "is_active", "name"}
+    assert schema.fields["id"].dtype == "integer"
+    assert schema.fields["score"].dtype == "float"
+    assert schema.fields["is_active"].dtype == "boolean"
+    assert schema.fields["name"].dtype == "string"
+
+
+def test_bootstrap_from_report_nullable_columns():
+    report = ar.DataQualityReport(
+        row_count=100,
+        column_count=3,
+        memory_usage=1024,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={
+            "no_nulls": ar.ColumnProfile(
+                name="no_nulls",
+                dtype="int64",
+                semantic_type="numeric",
+                row_count=100,
+                null_count=0,
+                null_ratio=0.0,
+                unique_count=100,
+                unique_ratio=1.0,
+            ),
+            "some_nulls": ar.ColumnProfile(
+                name="some_nulls",
+                dtype="int64",
+                semantic_type="numeric",
+                row_count=100,
+                null_count=5,
+                null_ratio=0.05,
+                unique_count=90,
+                unique_ratio=0.9,
+            ),
+            "all_nulls": ar.ColumnProfile(
+                name="all_nulls",
+                dtype="float",
+                semantic_type="empty",
+                row_count=100,
+                null_count=100,
+                null_ratio=1.0,
+                unique_count=0,
+                unique_ratio=0.0,
+            ),
+        },
+    )
+
+    schema = ar.Schema.bootstrap_from_report(report)
+
+    assert schema.fields["no_nulls"].nullable is False
+    assert schema.fields["some_nulls"].nullable is True
+    assert schema.fields["all_nulls"].nullable is True
+
+
+def test_bootstrap_from_report_mixed_string_like_columns():
+    report = ar.DataQualityReport(
+        row_count=10,
+        column_count=2,
+        memory_usage=128,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={
+            "cat_col": ar.ColumnProfile(
+                name="cat_col",
+                dtype="category",
+                semantic_type="categorical",
+                row_count=10,
+                null_count=0,
+                null_ratio=0.0,
+                unique_count=3,
+                unique_ratio=0.3,
+            ),
+            "obj_col": ar.ColumnProfile(
+                name="obj_col",
+                dtype="object",
+                semantic_type="text",
+                row_count=10,
+                null_count=0,
+                null_ratio=0.0,
+                unique_count=10,
+                unique_ratio=1.0,
+            ),
+        },
+    )
+
+    schema = ar.Schema.bootstrap_from_report(report)
+
+    assert schema.fields["cat_col"].dtype == "string"
+    assert schema.fields["obj_col"].dtype == "string"
+
+
+def test_bootstrap_from_report_empty_malformed_inputs():
+    import pytest
+
+    with pytest.raises(TypeError, match="Expected DataQualityReport"):
+        ar.Schema.bootstrap_from_report(None)
+
+    with pytest.raises(TypeError, match="Expected DataQualityReport"):
+        ar.Schema.bootstrap_from_report({"columns": {}})
+
+    empty_report = ar.DataQualityReport(
+        row_count=0,
+        column_count=0,
+        memory_usage=0,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+    )
+    with pytest.raises(ValueError, match="empty"):
+        ar.Schema.bootstrap_from_report(empty_report)
+
+    report_missing_dtype = ar.DataQualityReport(
+        row_count=10,
+        column_count=1,
+        memory_usage=100,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={
+            "bad_col": {"null_count": 0}  # type: ignore
+        },
+    )
+    with pytest.raises(ValueError, match="dtype"):
+        ar.Schema.bootstrap_from_report(report_missing_dtype)

@@ -657,6 +657,16 @@ result = ar.validate(frame, schema)
 ```
 Severity counts are not included in `summary()` yet because `ValidationIssue` does not currently carry severity information.
 
+### Bootstrapping a Schema from a Data Quality Report
+
+```python
+report = ar.profile(frame)
+schema = ar.Schema.bootstrap_from_report(report)
+result = ar.validate(frame, schema)
+```
+
+Note: The inferred schema is a starting point and should be reviewed before production use.
+
 For low-risk automatic cleanup:
 
 ```python
