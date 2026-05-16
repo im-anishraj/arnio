@@ -202,12 +202,12 @@ class TestFromPandas:
 
     def test_nullable_boolean_roundtrip(self):
         df = pd.DataFrame(
-        {
-            "active": pd.Series(
-                [True, False, pd.NA],
-                dtype="boolean",
-            )
-        }
+            {
+                "active": pd.Series(
+                    [True, False, pd.NA],
+                    dtype="boolean",
+                )
+            }
         )
 
         frame = ar.from_pandas(df)
@@ -215,7 +215,6 @@ class TestFromPandas:
 
         assert str(result["active"].dtype) == "boolean"
         assert list(result["active"]) == [True, False, pd.NA]
-
 
     def test_bool_null_mask_roundtrip(self):
         df = pd.DataFrame(
