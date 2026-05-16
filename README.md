@@ -111,7 +111,8 @@ print(selected.columns)
 `scan_csv` reads only the header + a sample to infer the schema. Zero data loaded.
 
 ```python
-schema = ar.scan_csv("100GB_file.csv")
+# Pass sample_size to control how many rows are evaluated for type inference
+schema = ar.scan_csv("100GB_file.csv", sample_size=500)
 # {'id': 'int64', 'name': 'string', 'is_active': 'bool', 'revenue': 'float64'}
 ```
 

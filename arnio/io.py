@@ -210,7 +210,8 @@ def scan_csv(
     config.trim_headers = trim_headers
 
     if sample_size is not None:
-
+        if not isinstance(sample_size, int) or isinstance(sample_size, bool):
+            raise TypeError("sample_size must be an integer.")
         if sample_size <= 0:
             raise ValueError("sample_size must be a positive integer greater than 0.")
         config.sample_size = sample_size
