@@ -9,7 +9,7 @@ Frame::Frame(std::vector<Column> columns) : columns_(std::move(columns)) { rebui
 std::pair<size_t, size_t> Frame::shape() const { return {num_rows(), num_cols()}; }
 
 size_t Frame::num_rows() const {
-    if (columns_.empty()) return 0;
+    if (columns_.empty()) return row_count_;
     return columns_[0].size();
 }
 
