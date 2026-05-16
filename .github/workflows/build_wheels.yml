@@ -18,6 +18,13 @@ jobs:
           ref: ${{ inputs.tag_name || github.ref }}
       - name: Build sdist
         run: pipx run build --sdist
+      
+      - name: Install package from sdist
+        run: pip install dist/*.tar.gz
+
+      - name: Smoke test import
+        run: python -c "import arnio"
+
       - uses: actions/upload-artifact@v4
         with:
           name: sdist
