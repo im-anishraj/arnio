@@ -66,7 +66,8 @@ class ArFrame:
 
     def drop_columns(self, cols: list[str]) -> ArFrame:
         """Return a new ArFrame without the specified columns.
-         Parameters
+
+        Parameters
         ----------
         cols : list[str]
             Column names to drop. Pass an empty list to return a copy.
