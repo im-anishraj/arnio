@@ -554,3 +554,125 @@ class TestSafeDivideColumns:
             assert "already exists" in str(w[0].message)
         df = ar.to_pandas(result)
         assert df["ratio"].iloc[0] == 2.0
+class TestSlugifyColumnNames:
+    # ------------------------------------------------------------------
+    # Normal conversions
+    # ------------------------------------------------------------------
+    def test_spaces_become_underscores(self):
+        frame = ar.from_pandas(pd.DataFrame({"First Name": ["Alice"]}))
+        result = ar.slugify_column_names(frame)
+        assert result.columns == ["first_name"]
+
+    def test_mixed_case_lowercased(self):
+        frame = ar.from_pandas(pd.DataFrame({"UserID": [1]}))
+        result = ar.slugify_column_names(frame)
+        assert result.columns == ["userid"]
+
+    def test_special_chars_removed(self):
+        frame = ar.from_pandas(pd.DataFrame({"Revenue ($)": [100.0]}))
+        result = ar.slugify_column_names(frame)
+        assert result.columns == ["revenue"]
+
+    def test_hyphens_become_underscores(self):
+        frame = ar.from_pandas(pd.DataFrame({"order-id": [42]}))
+        result = ar.slugify_column_names(frame)
+        assert result.columns == ["order_id"]
+
+    def test_leading_trailing_whitespace_stripped(self):
+        frame = ar.from_pandas(pd.DataFrame({"  age  ": [30]}))
+        result = ar.slugify_column_names(frame)
+        assert result.columns == ["age"]
+
+    def test_repeated_separators_collapsed(self):
+        frame = ar.from_pandas(pd.DataFrame({"first__last": ["x"]}))
+        result = ar.slugify_column_names(frame)
+        assert result.columns == ["first_last"]
+
+    def test_multiple_columns_all_slugified(self):
+        frame = ar.from_pandas(
+            pd.DataFrame({"First Name": ["A"], "Revenue ($)": [1.0], "ID": [1]})
+        )
+        result = ar.slugify_column_names(frame)
+        assert result.columns == ["first_name", "revenue", "id"]
+
+    # ------------------------------------------------------------------
+    # Column order preserved
+    # ------------------------------------------------------------------
+    def test_column_order_preserved(self):
+        frame = ar.from_pandas(
+            pd.DataFrame({"Z Col": [1], "A Col": [2], "M Col": [3]})
+        )
+        result = ar.slugify_column_names(frame)
+        assert result.columns == ["z_col", "a_col", "m_col"]
+
+    # ------------------------------------------------------------------
+    # Already-clean names are a no-op
+    # ------------------------------------------------------------------
+    def test_already_clean_name_unchanged(self):
+        frame = ar.from_pandas(pd.DataFrame({"user_id": [1], "revenue": [9.9]}))
+        result = ar.slugify_column_names(frame)
+        assert result.columns == ["user_id", "revenue"]
+
+    def test_already_clean_data_unchanged(self):
+        df = pd.DataFrame({"score": [1, 2, 3]})
+        frame = ar.from_pandas(df)
+        result = ar.slugify_column_names(frame)
+        result_df = ar.to_pandas(result)
+        assert list(result_df["score"]) == [1, 2, 3]
+
+    # ------------------------------------------------------------------
+    # Duplicate-name behaviour
+    # ------------------------------------------------------------------
+    def test_duplicate_slug_raises_by_default(self):
+        # "Name" and "name" both slug to "name"
+        frame = ar.from_pandas(pd.DataFrame({"Name": ["A"], "name": ["B"]}))
+        with pytest.raises(ValueError, match="duplicate column names"):
+            ar.slugify_column_names(frame)
+
+    def test_duplicate_slug_ignore_keeps_first(self):
+        frame = ar.from_pandas(pd.DataFrame({"Name": ["A"], "name": ["B"]}))
+        result = ar.slugify_column_names(frame, duplicates="ignore")
+        result_df = ar.to_pandas(result)
+        assert result_df.columns.tolist() == ["name"]
+        # First column ("Name" → "A") is kept
+        assert result_df["name"].iloc[0] == "A"
+
+    def test_duplicate_slug_error_message_names_both_columns(self):
+        frame = ar.from_pandas(pd.DataFrame({"Revenue ($)": [1.0], "Revenue": [2.0]}))
+        with pytest.raises(ValueError, match="revenue"):
+            ar.slugify_column_names(frame)
+
+    def test_invalid_duplicates_value_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"col": [1]}))
+        with pytest.raises(ValueError, match="duplicates must be"):
+            ar.slugify_column_names(frame, duplicates="drop")
+
+    # ------------------------------------------------------------------
+    # Pipeline integration
+    # ------------------------------------------------------------------
+    def test_registered_as_pipeline_step(self):
+        frame = ar.from_pandas(
+            pd.DataFrame({"First Name": ["Alice"], "Revenue ($)": [100.0]})
+        )
+        result = ar.pipeline(frame, [("slugify_column_names",)])
+        assert result.columns == ["first_name", "revenue"]
+
+    def test_pipeline_step_with_duplicates_kwarg(self):
+        frame = ar.from_pandas(pd.DataFrame({"Name": ["A"], "name": ["B"]}))
+        result = ar.pipeline(
+            frame, [("slugify_column_names", {"duplicates": "ignore"})]
+        )
+        assert result.columns == ["name"]
+
+    # ------------------------------------------------------------------
+    # Edge cases
+    # ------------------------------------------------------------------
+    def test_empty_frame_no_columns(self):
+        frame = ar.from_pandas(pd.DataFrame())
+        result = ar.slugify_column_names(frame)
+        assert result.columns == []
+
+    def test_single_column(self):
+        frame = ar.from_pandas(pd.DataFrame({"  Revenue ($)  ": [1.0]}))
+        result = ar.slugify_column_names(frame)
+        assert result.columns == ["revenue"]

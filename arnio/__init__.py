@@ -24,6 +24,7 @@ from .cleaning import (
     rename_columns,
     round_numeric_columns,
     safe_divide_columns,
+    slugify_column_names, 
     strip_whitespace,
     validate_columns_exist,
 )
@@ -75,6 +76,7 @@ __all__ = [
     "cast_types",
     "clean",
     "safe_divide_columns",
+    "slugify_column_names",  
     # Conversion
     "to_pandas",
     "from_pandas",
