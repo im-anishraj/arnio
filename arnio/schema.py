@@ -291,6 +291,15 @@ def URL(*, nullable: bool = True, unique: bool = False) -> Field:
     """Create a URL schema field."""
     return Field(dtype="string", nullable=nullable, semantic="url", unique=unique)
 
+def CountryCode(*, nullable: bool = True, unique: bool = False) -> Field:
+    """Create an ISO alpha-2 country-code schema field."""
+    return Field(
+        dtype="string",
+        nullable=nullable,
+        semantic="country_code",
+        unique=unique,
+    )
+
 
 def _validate_column(
     series: pd.Series,
