@@ -184,6 +184,16 @@ class TestReadCsv:
         with pytest.raises(ar.CsvReadError, match="Duplicate column name: a"):
             ar.read_csv(csv_path)
 
+    def test_empty_file_raises(self, tmp_path):
+        csv_path = tmp_path / "empty.csv"
+        csv_path.write_text("")
+        with pytest.raises(ar.CsvReadError, match="CSV file is empty"):
+            ar.read_csv(str(csv_path))
+
+    def test_missing_file_passthrough(self, tmp_path):
+        with pytest.raises(ar.CsvReadError):
+            ar.read_csv(str(tmp_path / "nonexistent.csv"))
+
 
 class TestScanCsv:
     def test_scan_schema(self, sample_csv):
@@ -239,3 +249,13 @@ class TestScanCsv:
         res_explicit = ar.scan_csv(csv_path, sample_size=None)
 
         assert res_implicit == res_explicit
+
+    def test_scan_empty_file_raises(self, tmp_path):
+        csv_path = tmp_path / "empty.csv"
+        csv_path.write_text("")
+        with pytest.raises(ar.CsvReadError, match="CSV file is empty"):
+            ar.scan_csv(str(csv_path))
+
+    def test_scan_missing_file_passthrough(self, tmp_path):
+        with pytest.raises(ar.CsvReadError):
+            ar.scan_csv(str(tmp_path / "nonexistent.csv"))

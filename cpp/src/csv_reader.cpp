@@ -326,4 +326,3 @@ std::unordered_map<std::string, std::string> CsvReader::scan_schema(const std::s
 }
 
 }  // namespace arnio
-   // namespace arnio
