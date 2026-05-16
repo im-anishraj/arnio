@@ -222,10 +222,26 @@ class TestFromPandas:
         assert str(result["active"].dtype) == "boolean"
         assert list(result["active"]) == [True, False, pd.NA]
 
+        def test_from_pandas_preserves_string_dtype_roundtrip(self):
+            df = pd.DataFrame(
+                {
+                    "name": pd.Series(
+                        ["Alice", "Bob", pd.NA],
+                        dtype=pd.StringDtype(),
+                    )
+                }
+            )
+
+            frame = ar.from_pandas(df)
+            result = ar.to_pandas(frame)
+
+            assert str(result["name"].dtype) == "string"
+            assert list(result["name"]) == ["Alice", "Bob", pd.NA]
 
 class TestAttrsPreservation:
     def test_attrs_roundtrip(self):
-        """attrs set on input DataFrame survive from_pandas -> to_pandas."""
+        """attrs set on input DataFrame survive
+         -> to_pandas."""
         df = pd.DataFrame({"x": [1, 2, 3]})
         df.attrs = {"source": "test_db", "version": 2}
         frame = ar.from_pandas(df)
