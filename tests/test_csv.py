@@ -38,6 +38,48 @@ class TestReadCsv:
         assert dtypes["name"] == "string"
         assert dtypes["active"] == "bool"
 
+    def test_thousands_separator_comma(self, tmp_path):
+        csv_path = tmp_path / "comma_thousands.csv"
+        csv_path.write_text('value\n"1,234"\n')
+        frame = ar.read_csv(csv_path, thousands_separator=",")
+        df = ar.to_pandas(frame)
+        assert df["value"].iloc[0] == 1234
+
+    def test_thousands_separator_space(self, tmp_path):
+        csv_path = tmp_path / "space_thousands.csv"
+        csv_path.write_text("value\n1 234\n")
+        frame = ar.read_csv(csv_path, thousands_separator=" ")
+        df = ar.to_pandas(frame)
+        assert df["value"].iloc[0] == 1234
+
+    def test_default_behavior_without_thousands_separator(self, tmp_path):
+        csv_path = tmp_path / "default_behavior.csv"
+        csv_path.write_text('value\n"1,234"\n')
+        frame = ar.read_csv(csv_path)
+        df = ar.to_pandas(frame)
+        assert df["value"].iloc[0] == "1,234"
+
+    @pytest.mark.parametrize("separator", ["", "a", "3", "ab", "\n", '"'])
+    def test_invalid_thousands_separator(self, tmp_path, separator):
+        csv_path = tmp_path / "default_behavior.csv"
+        csv_path.write_text("value\n1234\n")
+        with pytest.raises(ValueError):
+            ar.read_csv(csv_path, thousands_separator=separator)
+
+    def test_thousands_separator_not_applied_to_strings(self, tmp_path):
+        csv_path = tmp_path / "string.csv"
+        csv_path.write_text('message\n"hello,world"\n')
+        frame = ar.read_csv(csv_path, thousands_separator=",")
+        df = ar.to_pandas(frame)
+        assert df["message"].iloc[0] == "hello,world"
+
+    def test_unquoted_comma_value_with_comma_delimeter(self, tmp_path):
+        csv_path = tmp_path / "delimiter_interaction.csv"
+        csv_path.write_text("value\n1,234\n")
+        frame = ar.read_csv(csv_path)
+        df = ar.to_pandas(frame)
+        assert df["value"].iloc[0] == 1
+
     def test_large_csv(self, large_csv):
         frame = ar.read_csv(large_csv)
         assert frame.shape == (1000, 3)
@@ -210,6 +252,12 @@ class TestScanCsv:
         schema = ar.scan_csv(csv_path, encoding="latin-1")
 
         assert schema == {"name": "string"}
+
+    def test_scan_csv_with_thousands_separator(self, tmp_path):
+        csv_path = tmp_path / "scan_thousands.csv"
+        csv_path.write_text('value\n"1,234"\n')
+        schema = ar.scan_csv(csv_path, thousands_separator=",")
+        assert schema["value"] == "int64"
 
     def test_scan_binary_file_rejection(self, tmp_path):
         file_path = str(tmp_path / "data.csv")

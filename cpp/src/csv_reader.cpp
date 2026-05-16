@@ -74,6 +74,16 @@ void validate_header(const std::vector<std::string>& header) {
         }
     }
 }
+
+std::string strip_thousands_separator(const std::string& value, const CsvConfig& config) {
+    if (!config.thousands_separator.has_value()) {
+        return value;
+    }
+    std::string cleaned = value;
+    cleaned.erase(std::remove(cleaned.begin(), cleaned.end(), config.thousands_separator.value()),
+                  cleaned.end());
+    return cleaned;
+}
 }  // namespace
 
 CsvReader::CsvReader(const CsvConfig& config) : config_(config) {}
@@ -113,7 +123,7 @@ std::vector<std::string> CsvReader::parse_line(const std::string& line) const {
     return fields;
 }
 
-DType CsvReader::infer_type(const std::string& value) {
+DType CsvReader::infer_type(const std::string& value) const {
     if (value.empty()) return DType::NULL_TYPE;
 
     // Try bool
@@ -121,9 +131,11 @@ DType CsvReader::infer_type(const std::string& value) {
     std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
     if (lower == "true" || lower == "false") return DType::BOOL;
 
+    std::string cleaned = strip_thousands_separator(value, config_);
+
     // Try int64
     {
-        const char* start = value.c_str();
+        const char* start = cleaned.c_str();
         char* end = nullptr;
         long long val = std::strtoll(start, &end, 10);
         (void)val;
@@ -132,7 +144,7 @@ DType CsvReader::infer_type(const std::string& value) {
 
     // Try float64
     {
-        const char* start = value.c_str();
+        const char* start = cleaned.c_str();
         char* end = nullptr;
         double val = std::strtod(start, &end);
         (void)val;
@@ -157,7 +169,7 @@ DType CsvReader::promote_type(DType current, DType incoming) {
     return DType::STRING;
 }
 
-CellValue CsvReader::parse_value(const std::string& raw, DType dtype) {
+CellValue CsvReader::parse_value(const std::string& raw, DType dtype) const {
     if (raw.empty()) return std::monostate{};
 
     switch (dtype) {
@@ -168,14 +180,16 @@ CellValue CsvReader::parse_value(const std::string& raw, DType dtype) {
         }
         case DType::INT64: {
             try {
-                return static_cast<int64_t>(std::stoll(raw));
+                std::string cleaned = strip_thousands_separator(raw, config_);
+                return static_cast<int64_t>(std::stoll(cleaned));
             } catch (...) {
                 return std::monostate{};
             }
         }
         case DType::FLOAT64: {
             try {
-                return std::stod(raw);
+                std::string cleaned = strip_thousands_separator(raw, config_);
+                return std::stod(cleaned);
             } catch (...) {
                 return std::monostate{};
             }

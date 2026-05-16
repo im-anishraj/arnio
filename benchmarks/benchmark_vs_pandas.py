@@ -101,7 +101,7 @@ def run_case(case):
     print(f"{'Exec Time (avg)':<20} {avg(pd_times):>11.2f}s {avg(ar_times):>11.2f}s")
     print(f"{'Peak RAM':<20} {avg(pd_rams):>10.0f}MB {avg(ar_rams):>10.0f}MB")
     print(
-        f"\nSpeed: {avg(pd_times)/avg(ar_times):.1f}x | RAM: {(1 - avg(ar_rams)/avg(pd_rams))*100:.0f}% reduction"
+        f"\nSpeed: {avg(pd_times) / avg(ar_times):.1f}x | RAM: {(1 - avg(ar_rams) / avg(pd_rams)) * 100:.0f}% reduction"
     )
     print()
 

@@ -17,6 +17,7 @@ struct CsvConfig {
     std::optional<size_t> nrows = std::nullopt;
     std::string encoding = "utf-8";  // Currently only utf-8 supported
     bool trim_headers = true;        // for implementing the trim_headers option
+    std::optional<char> thousands_separator = std::nullopt;
 };
 
 class CsvReader {
@@ -36,13 +37,13 @@ class CsvReader {
     std::vector<std::string> parse_line(const std::string& line) const;
 
     // Infer DType from a string value
-    static DType infer_type(const std::string& value);
+    DType infer_type(const std::string& value) const;
 
     // Promote dtype when merging inferences
     static DType promote_type(DType current, DType incoming);
 
     // Parse a string value into a CellValue given a target dtype
-    static CellValue parse_value(const std::string& raw, DType dtype);
+    CellValue parse_value(const std::string& raw, DType dtype) const;
 };
 
 }  // namespace arnio
