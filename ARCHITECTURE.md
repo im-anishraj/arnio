@@ -139,7 +139,59 @@ String columns currently require instantiation of Python `str` objects.
 
 ---
 
-## 7. Cleaning Module Architecture
+## 7. Data Quality and Schema Validation
+
+Arnio is split into two layers:
+
+- The C++ layer handles parsing CSVs, storing data in memory, and cleaning operations such as `drop_nulls()` and `strip_whitespace()`. These execute through pybind11 directly in C++.
+
+- The Python/pandas layer handles data quality: profiling, validation, and schema checks.
+
+Each function in the quality layer behaves as follows:
+
+### `profile()`
+
+- Converts an `ArFrame` to a pandas DataFrame internally.
+- Computes per-column statistics including null counts, duplicate rows, data types, and unique value ratios.
+- Returns a `DataQualityReport`.
+
+### `suggest_cleaning()`
+
+- Accepts an `ArFrame` or an existing `DataQualityReport`.
+- If given an `ArFrame`, it calls `profile()` first.
+- Returns a list of cleaning steps that can be passed to `pipeline()`.
+
+### `auto_clean()`
+
+- Accepts an `ArFrame`.
+- Calls `profile()` internally.
+- Applies suggested cleaning steps directly to the original `ArFrame`.
+- Returns a cleaned `ArFrame`.
+
+### `validate()`
+
+- Converts `ArFrame` to a pandas DataFrame internally.
+- Evaluates each column against rules defined in a `Schema` including nullability, dtype, range, pattern, and semantic constraints.
+- Returns a `ValidationResult`.
+
+### Flow Diagram
+
+```mermaid
+graph TD
+    A[ArFrame] -->|or| D[suggest_cleaning]
+    A --> B[profile]
+    A --> C[auto_clean]
+    A --> H[validate]
+    B --> E[DataQualityReport]
+    E -->|or| D
+    D --> F[step list]
+    C --> G[cleaned ArFrame]
+    H --> I[ValidationResult]
+```
+
+---
+
+## 8. Cleaning Module Architecture
 
 The cleaning module is designed around immutable semantics to ensure data integrity across pipeline steps.
 
@@ -159,7 +211,7 @@ Most cleaning operations do not modify the existing `Frame` in-place; instead, t
 
 ---
 
-## 8. Error Handling & Translation
+## 9. Error Handling & Translation
 
 Arnio uses a unified exception hierarchy to bridge the C++/Python boundary.
 
