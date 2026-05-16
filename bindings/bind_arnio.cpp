@@ -30,7 +30,7 @@ PYBIND11_MODULE(_arnio_cpp, m) {
         .def("dtype", &Column::dtype)
         .def("size", &Column::size)
         .def("is_null", &Column::is_null)
-        .def("memory_usage", &Column::memory_usage)
+        .def("memory_usage", &Column::memory_usage, py::arg("deep") = false)
         .def("push_null", &Column::push_null)
         .def("push_back",
              [](Column& col, py::object value) {
@@ -142,7 +142,7 @@ PYBIND11_MODULE(_arnio_cpp, m) {
         .def("num_cols", &Frame::num_cols)
         .def("column_names", &Frame::column_names)
         .def("dtypes", &Frame::dtypes)
-        .def("memory_usage", &Frame::memory_usage)
+        .def("memory_usage", &Frame::memory_usage, py::arg("deep") = false)
         .def("has_column", &Frame::has_column)
         .def(
             "column_by_index",

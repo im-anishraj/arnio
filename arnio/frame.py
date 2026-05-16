@@ -53,15 +53,38 @@ class ArFrame:
 
     # --- Methods ---
 
-    def memory_usage(self) -> int:
+    def memory_usage(self, deep: bool = False) -> int:
         """Total bytes consumed in memory.
+
+        Parameters
+        ----------
+        deep : bool, optional
+            If False (default), counts only the fixed struct overhead for
+            each column (e.g. ``sizeof(std::string) * capacity`` for string
+            columns).  This is a fast, lower-bound estimate.
+
+            If True, also iterates every string element and adds its actual
+            character byte count (``s.size()``), giving a precise total
+            that includes heap-allocated string data.
+
+            For numeric columns (int64, float64, bool) the result is the
+            same regardless of *deep*, because those types store all data
+            inline.
 
         Returns
         -------
         int
-            Memory usage in bytes.
+            Total memory usage in bytes.
+
+        Examples
+        --------
+        >>> frame = ar.read_csv("data.csv")
+        >>> frame.memory_usage()          # fast shallow estimate
+        1024
+        >>> frame.memory_usage(deep=True) # precise, includes string chars
+        3072
         """
-        return self._frame.memory_usage()
+        return self._frame.memory_usage(deep)
 
     # --- Dunder methods ---
 
