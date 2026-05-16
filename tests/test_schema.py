@@ -131,3 +131,5 @@ def test_compare_schema_method(sample_csv, tmp_path):
     # Requirement E: Invalid object class input safe rejection handling
     with pytest.raises(TypeError):
         df_base.compare_schema(["not", "an", "ArFrame", "object"])
+
+        
