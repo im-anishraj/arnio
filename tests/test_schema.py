@@ -83,6 +83,7 @@ def test_custom_pattern_validation(tmp_path):
     assert result.issues[0].rule == "pattern"
     assert result.issues[0].row_index == 1
 
+
 def test_compare_schema_method(sample_csv, tmp_path):
     # 1. Base Frame and Matching Frame Setup
     df_base = ar.read_csv(sample_csv)
