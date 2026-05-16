@@ -631,7 +631,7 @@ def _row_issues(
             column=column,
             rule=rule,
             message=message,
-            row_index=int(index),
+            row_index=int(index)+1,
             value=value,
         )
         for index, value in invalid.items()
