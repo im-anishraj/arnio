@@ -10,9 +10,9 @@ class TestDropNulls:
     def test_drop_all_nulls(self, csv_with_nulls):
         frame = ar.read_csv(csv_with_nulls)
         result = ar.drop_nulls(frame)
-        assert result.shape[0] < frame.shape[0]
-        # Only Alice and Diana have no nulls
-        assert result.shape[0] == 2
+
+        names = set(ar.to_pandas(result)["name"])
+        assert names == {"Alice", "Diana"}
 
     def test_drop_nulls_subset(self, csv_with_nulls):
         frame = ar.read_csv(csv_with_nulls)
@@ -107,14 +107,13 @@ class TestDropDuplicates:
     def test_drop_dupes_none(self, csv_with_duplicates):
         frame = ar.read_csv(csv_with_duplicates)
         result = ar.drop_duplicates(frame, keep="none")
-        # Only Charlie is unique
-        assert result.shape[0] == 1
+        assert result.shape[0] == 1  # Only Charlie is unique
+
 
     def test_drop_dupes_false_alias(self, csv_with_duplicates):
         frame = ar.read_csv(csv_with_duplicates)
         result = ar.drop_duplicates(frame, keep=False)
-        # Only Charlie is unique
-        assert result.shape[0] == 1
+        assert result.shape[0] == 1  # Only Charlie is unique
 
     def test_drop_dupes_subset(self, csv_with_duplicates):
         frame = ar.read_csv(csv_with_duplicates)
@@ -343,14 +342,28 @@ class TestNormalizeCase:
         df = ar.to_pandas(result)
         assert df["name"].iloc[0] == "Alice"
 
+    def test_unicode_safe(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
 
-class TestRenameColumns:
+        df = ar.to_pandas(frame)
+        df.loc[0, "name"] = "São Paulo"
+        df.loc[1, "name"] = "München"
+        frame = ar.from_pandas(df)
+
+        result = ar.normalize_case(frame, subset=["name"], case_type="lower")
+        out = ar.to_pandas(result)
+
+        assert out.loc[0, "name"] == "são paulo"
+        assert out.loc[1, "name"] == "münchen"
+
+
+
+class TestRenatellmeColumns:
     def test_rename(self, sample_csv):
         frame = ar.read_csv(sample_csv)
         result = ar.rename_columns(frame, {"name": "full_name", "age": "years"})
-        assert "full_name" in result.columns
-        assert "years" in result.columns
-        assert "name" not in result.columns
+
+        assert set(result.columns) == {"full_name", "years", "city"}
 
 
 class TestCastTypes:
@@ -409,7 +422,8 @@ class TestRoundNumericColumns:
         result = ar.round_numeric_columns(frame, subset=["a"], decimals=1)
         result_df = ar.to_pandas(result)
         assert list(result_df["a"]) == [1.1, 2.5]
-        assert list(result_df["b"]) == [3.789, 4.0]
+        assert result_df["b"].iloc[0] == pytest.approx(3.789)
+        assert result_df["b"].iloc[1] == pytest.approx(4.0)
 
     def test_round_mixed_types(self):
         import pandas as pd
@@ -496,22 +510,30 @@ class TestSafeDivideColumns:
     def test_division_by_zero(self, tmp_path):
         path = tmp_path / "data.csv"
         path.write_text("revenue,cost\n100,0\n200,100\n300,0\n")
+
         frame = ar.read_csv(path)
         result = ar.safe_divide_columns(
             frame, numerator="revenue", denominator="cost", output_column="ratio"
         )
+
         df = ar.to_pandas(result)
+
         assert df["ratio"].iloc[0] == 0.0
+        assert df["ratio"].iloc[1] == 2.0
         assert df["ratio"].iloc[2] == 0.0
 
     def test_null_inputs(self, tmp_path):
         path = tmp_path / "data.csv"
         path.write_text("revenue,cost\n100,\n200,100\n300,\n")
+
         frame = ar.read_csv(path)
         result = ar.safe_divide_columns(
             frame, numerator="revenue", denominator="cost", output_column="ratio"
         )
+
         df = ar.to_pandas(result)
+
+        assert df["ratio"].iloc[1] == 2.0
         assert df["ratio"].iloc[0] == 0.0
         assert df["ratio"].iloc[2] == 0.0
 

@@ -19,6 +19,7 @@ from ._core import (
 )
 from .exceptions import TypeCastError
 from .frame import ArFrame
+from .convert import from_pandas, to_pandas
 
 
 def validate_columns_exist(
@@ -379,36 +380,17 @@ def normalize_case(
     return ArFrame(result)
 
 
-def rename_columns(
-    frame: ArFrame,
-    mapping: dict[str, str],
-) -> ArFrame:
-    """Rename columns via a {old: new} dict.
-
-    Parameters
-    ----------
-    frame : ArFrame
-        Input data frame.
-    mapping : dict[str, str]
-        Dictionary mapping old column names to new names.
-
-    Returns
-    -------
-    ArFrame
-        New frame with columns renamed.
-
-    Examples
-    --------
-    >>> frame = ar.read_csv("data.csv")
-    >>> renamed = ar.rename_columns(frame, {"old_name": "new_name"})
-    """
+def rename_columns(frame: ArFrame, mapping: dict[str, str]) -> ArFrame:
     validate_columns_exist(
         frame,
-        _validate_column_sequence(list(mapping), argument_name="mapping keys"),
+        _validate_column_sequence(list(mapping.keys()), argument_name="mapping keys"),
         operation="rename_columns",
     )
-    result = _rename_columns(frame._frame, mapping)
-    return ArFrame(result)
+
+    df = to_pandas(frame)  # IMPORTANT: use input frame only
+    df = df.rename(columns=mapping)
+
+    return from_pandas(df)
 
 
 def cast_types(

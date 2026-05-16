@@ -6,6 +6,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <unordered_set>
+#include <unordered_map>
 
 namespace arnio {
 
@@ -265,13 +266,24 @@ Frame normalize_case(const Frame& frame, const std::optional<std::vector<std::st
     if (case_type == "lower") {
         transform_fn = [](const std::string& s) {
             std::string result = s;
-            std::transform(result.begin(), result.end(), result.begin(), ::tolower);
+            for (auto& c : result) {
+                unsigned char uc = static_cast<unsigned char>(c);
+                if (uc <= 127) {
+                    c = static_cast<char>(std::tolower(uc));
+                }
+            }
             return result;
         };
-    } else if (case_type == "upper") {
+    } 
+    else if (case_type == "upper") {
         transform_fn = [](const std::string& s) {
             std::string result = s;
-            std::transform(result.begin(), result.end(), result.begin(), ::toupper);
+            for (auto& c : result) {
+                unsigned char uc = static_cast<unsigned char>(c);
+                if (uc <= 127) {
+                    c = static_cast<char>(std::toupper(uc));
+                }
+            }
             return result;
         };
     } else if (case_type == "title") {
@@ -279,13 +291,24 @@ Frame normalize_case(const Frame& frame, const std::optional<std::vector<std::st
             std::string result = s;
             bool next_upper = true;
             for (auto& c : result) {
-                if (std::isspace(static_cast<unsigned char>(c))) {
+                unsigned char uc = static_cast<unsigned char>(c);
+
+                if (std::isspace(uc)) {
                     next_upper = true;
-                } else if (next_upper) {
-                    c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+                    continue;
+                }
+
+                // skip UTF-8 / non-ASCII bytes safely
+                if (uc > 127) {
+                    next_upper = false;
+                    continue;
+                }
+
+                if (next_upper) {
+                    c = static_cast<char>(std::toupper(uc));
                     next_upper = false;
                 } else {
-                    c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                    c = static_cast<char>(std::tolower(uc));
                 }
             }
             return result;
