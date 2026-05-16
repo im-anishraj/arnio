@@ -14,6 +14,7 @@ import arnio as ar
 
 CSV_FILE = "benchmarks/benchmark_1m.csv"
 WIDE_CSV_FILE = "benchmarks/benchmark_wide.csv"
+MULTILINE_CSV_FILE = "benchmarks/benchmark_multiline.csv"
 RUNS = 3
 
 
@@ -22,20 +23,27 @@ class BenchmarkCase:
     name: str
     path: str
 
-
 BENCHMARKS = (
-    BenchmarkCase("Tall CSV (1,000,000 rows x 12 columns)", CSV_FILE),
-    BenchmarkCase("Wide CSV (5,000 rows x 256 columns)", WIDE_CSV_FILE),
+    BenchmarkCase(
+        "Tall CSV (1,000,000 rows x 12 columns)",
+        CSV_FILE,
+    ),
+    BenchmarkCase(
+        "Wide CSV (5,000 rows x 256 columns)",
+        WIDE_CSV_FILE,
+    ),
+    BenchmarkCase(
+        "Quoted Multiline CSV",
+        MULTILINE_CSV_FILE,
+    ),
 )
-
 
 def ensure_dataset_exists(path):
     if not Path(path).exists():
         raise FileNotFoundError(
-            f"Missing benchmark dataset: {path}. "
-            "Run `python benchmarks/generate_data.py` first."
+            f"Missing benchmark dataset: {path}\n"
+            "Run: python benchmarks/generate_data.py"
         )
-
 
 def benchmark_pandas(path):
     ensure_dataset_exists(path)
@@ -56,6 +64,7 @@ def benchmark_pandas(path):
 
 
 def benchmark_arnio(path):
+    
     ensure_dataset_exists(path)
     tracemalloc.start()
     t0 = time.perf_counter()
