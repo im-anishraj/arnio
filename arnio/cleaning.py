@@ -497,6 +497,38 @@ def clean(
     return pipeline(frame, steps)
 
 
+def drop_columns_matching(frame, pattern):
+    """Drop columns whose names match a given pattern.
+
+    ------
+    TypeError
+        If pattern is not a string.
+    re.error
+        If pattern is not a valid regex.
+
+    """
+    import re
+
+    import pandas as pd
+
+    from .convert import from_pandas, to_pandas
+
+    if not isinstance(pattern, str):
+        raise TypeError(f"pattern must be a string, got {type(pattern).__name__}")
+    try:
+        re.compile(pattern)
+    except re.error as e:
+        raise re.error(f"Invalid regex pattern: {pattern!r}") from e
+
+    is_arframe = not isinstance(frame, pd.DataFrame)
+    df = to_pandas(frame) if is_arframe else frame
+
+    cols_to_drop = [col for col in df.columns if re.search(pattern, col)]
+    result = df.drop(columns=cols_to_drop)
+
+    return from_pandas(result) if is_arframe else result
+
+
 def filter_rows(frame, column, op, value):
     """Filter rows based on a column condition."""
 
