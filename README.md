@@ -521,11 +521,16 @@ schema = ar.Schema({
 
 result = ar.validate(frame, schema)
 if not result.passed:
+    summary = result.summary()
+    print(summary["issues_by_rule"])
+    print(summary["issues_by_column"])
+    print(summary["issues_by_column_and_rule"])
     print(result.to_pandas())
     print(result.to_markdown(max_issues=10))
 ```
 
 `ValidationResult.to_markdown()` is useful in CI logs, GitHub comments, or data quality reports because it renders a compact validation summary plus a GitHub-friendly issue table.
+Severity counts are not included in `summary()` yet because `ValidationIssue` does not currently carry severity information.
 
 For low-risk automatic cleanup:
 
