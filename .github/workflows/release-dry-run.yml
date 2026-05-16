@@ -1,0 +1,205 @@
+name: Release Dry-Run Checklist
+
+on:
+  workflow_dispatch:
+    inputs:
+      python-version:
+        description: "Python version to use for validation"
+        required: false
+        default: "3.11"
+  push:
+    branches:
+      - release/**
+
+jobs:
+  # ── 1. Validate version in pyproject.toml ─────────────────────────────────
+  validate-version:
+    name: "✅ Validate pyproject.toml version"
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get-version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract and validate version
+        id: get-version
+        run: |
+          python - <<'EOF'
+          import tomllib, re, sys
+          with open("pyproject.toml", "rb") as f:
+              data = tomllib.load(f)
+          version = data["project"]["version"]
+          if not re.match(r"^\d+\.\d+\.\d+", version):
+              print(f"❌ Invalid version format: {version}", file=sys.stderr)
+              sys.exit(1)
+          print(f"✅ Version looks valid: {version}")
+          EOF
+          VERSION=$(python -c "import tomllib; f=open('pyproject.toml','rb'); d=tomllib.load(f); print(d['project']['version'])")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+  # ── 2. Build wheel + sdist in a clean environment ─────────────────────────
+  build:
+    name: "🔨 Build wheel & sdist"
+    runs-on: ubuntu-latest
+    needs: validate-version
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ github.event.inputs.python-version || '3.11' }}
+
+      - name: Install build dependencies
+        run: pip install build
+
+      - name: Build distributions
+        run: python -m build
+
+      - name: List artifacts
+        run: ls -lh dist/
+
+      - name: Upload dist artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-artifacts
+          path: dist/
+          retention-days: 3
+
+  # ── 3. Metadata check with twine ──────────────────────────────────────────
+  twine-check:
+    name: "📦 Twine metadata check"
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ github.event.inputs.python-version || '3.11' }}
+
+      - name: Download dist artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-artifacts
+          path: dist/
+
+      - name: Install twine
+        run: pip install twine
+
+      - name: Run twine check
+        run: |
+          twine check dist/* && echo "✅ Twine check passed" || { echo "❌ Twine check failed"; exit 1; }
+
+  # ── 4. Run existing test suite ────────────────────────────────────────────
+  run-tests:
+    name: "🧪 Run pytest suite"
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ github.event.inputs.python-version || '3.11' }}
+
+      - name: Install package with dev extras
+        run: pip install -e ".[dev]"
+
+      - name: Run tests
+        run: pytest tests/ -v --tb=short
+
+  # ── 5. Smoke-test install from built wheel ─────────────────────────────────
+  smoke-test:
+    name: "💨 Smoke test wheel install"
+    runs-on: ${{ matrix.os }}
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ github.event.inputs.python-version || '3.11' }}
+
+      - name: Download dist artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-artifacts
+          path: dist/
+
+      - name: Install wheel in a fresh venv
+        shell: bash
+        run: |
+          python -m venv smoke_env
+          source smoke_env/bin/activate 2>/dev/null || smoke_env\\Scripts\\activate
+          WHEEL=$(ls dist/*.whl | head -n 1)
+          pip install "$WHEEL"
+          echo "✅ Wheel installed: $WHEEL"
+
+      - name: Import smoke test
+        shell: bash
+        run: |
+          source smoke_env/bin/activate 2>/dev/null || smoke_env\\Scripts\\activate
+          python -c "
+          import sys
+          # Replace 'arnio' with your actual package name
+          try:
+              import arnio
+              print(f'✅ Import succeeded. Version: {arnio.__version__}')
+          except ImportError as e:
+              print(f'❌ Import failed: {e}', file=sys.stderr)
+              sys.exit(1)
+          "
+
+      - name: Check for binary extension artifacts
+        shell: bash
+        run: |
+          WHEEL=$(ls dist/*.whl | head -n 1)
+          python -c "
+          import zipfile, sys
+          wheel = '$WHEEL'
+          with zipfile.ZipFile(wheel) as z:
+              names = z.namelist()
+          exts = [n for n in names if n.endswith(('.so', '.pyd'))]
+          if exts:
+              print('✅ Binary extensions found:')
+              for e in exts: print(f'   {e}')
+          else:
+              print('⚠️  No .so/.pyd found — expected for a pure-Python package, review if C++ bindings are expected.')
+          "
+
+  # ── 6. Summary report ─────────────────────────────────────────────────────
+  summary:
+    name: "📋 Dry-Run Summary"
+    runs-on: ubuntu-latest
+    needs: [validate-version, build, twine-check, run-tests, smoke-test]
+    if: always()
+    steps:
+      - name: Write step summary
+        run: |
+          echo "## 🚀 Release Dry-Run Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Version validation | ${{ needs.validate-version.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build (wheel + sdist) | ${{ needs.build.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Twine metadata check | ${{ needs.twine-check.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Pytest suite | ${{ needs.run-tests.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Smoke test (multi-OS) | ${{ needs.smoke-test.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Package version:** ${{ needs.validate-version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [[ "${{ needs.validate-version.result }}" == "success" && \
+                "${{ needs.build.result }}" == "success" && \
+                "${{ needs.twine-check.result }}" == "success" && \
+                "${{ needs.run-tests.result }}" == "success" && \
+                "${{ needs.smoke-test.result }}" == "success" ]]; then
+            echo "### ✅ All checks passed — safe to publish to PyPI." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### ❌ One or more checks failed — do NOT publish yet." >> $GITHUB_STEP_SUMMARY
+          fi
