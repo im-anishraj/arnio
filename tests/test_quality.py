@@ -75,3 +75,46 @@ def test_auto_clean_rejects_unknown_mode(sample_csv):
         assert False, "Expected ValueError"
     except ValueError as exc:
         assert "mode must be" in str(exc)
+
+
+def test_profile_sample_size(tmp_path):
+    path = tmp_path / "sample.csv"
+    path.write_text("id\n1\n2\n3\n4\n5\n6\n7\n")
+    frame = ar.read_csv(path)
+
+    report_default = ar.profile(frame)
+    assert len(report_default.columns["id"].sample_values) == 5
+
+    report_custom = ar.profile(frame, sample_size=3)
+    assert len(report_custom.columns["id"].sample_values) == 3
+
+    report_zero = ar.profile(frame, sample_size=0)
+    assert len(report_zero.columns["id"].sample_values) == 0
+
+
+def test_profile_sample_size_small_dataset_and_nulls(tmp_path):
+    path = tmp_path / "sample.csv"
+    path.write_text("id\n1\n\n3\n")
+    frame = ar.read_csv(path)
+
+    report = ar.profile(frame, sample_size=5)
+    assert len(report.columns["id"].sample_values) == 2
+    assert report.columns["id"].sample_values == [1.0, 3.0]
+
+
+def test_profile_sample_size_validation(tmp_path):
+    path = tmp_path / "sample.csv"
+    path.write_text("id\n1\n")
+    frame = ar.read_csv(path)
+
+    try:
+        ar.profile(frame, sample_size=-1)
+        assert False, "Expected ValueError"
+    except ValueError as exc:
+        assert "sample_size must be non-negative" in str(exc)
+
+    try:
+        ar.profile(frame, sample_size="5")
+        assert False, "Expected TypeError"
+    except TypeError as exc:
+        assert "sample_size must be an integer" in str(exc)

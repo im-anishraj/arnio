@@ -149,9 +149,14 @@ def profile(frame: ArFrame, *, sample_size: int = 5) -> DataQualityReport:
     Examples
     --------
     >>> frame = ar.read_csv("raw.csv")
-    >>> report = ar.profile(frame)
+    >>> report = ar.profile(frame, sample_size=3)
     >>> report.summary()
     """
+    if not isinstance(sample_size, int) or isinstance(sample_size, bool):
+        raise TypeError("sample_size must be an integer")
+    if sample_size < 0:
+        raise ValueError("sample_size must be non-negative")
+
     df = to_pandas(frame)
     row_count, column_count = frame.shape
     duplicate_rows = int(df.duplicated().sum()) if row_count else 0
