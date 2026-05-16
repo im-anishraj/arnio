@@ -12,7 +12,7 @@ A technical reference guide to the public classes and functions within the **Arn
 | **I/O** | [`read_csv`](#read_csv) • [`scan_csv`](#scan_csv) |
 | **Cleaning** | [`cast_types`](#cast_types) • [`clean`](#clean) • [`clip_numeric`](#clip_numeric) • [`drop_constant_columns`](#drop_constant_columns) • [`drop_duplicates`](#drop_duplicates) • [`drop_nulls`](#drop_nulls) • [`fill_nulls`](#fill_nulls) • [`filter_rows`](#filter_rows) • [`normalize_case`](#normalize_case) • [`rename_columns`](#rename_columns) • [`round_numeric_columns`](#round_numeric_columns) • [`safe_divide_columns`](#safe_divide_columns) • [`strip_whitespace`](#strip_whitespace) • [`validate_columns_exist`](#validate_columns_exist)|
 | **Conversion** | [`from_pandas`](#from_pandas) • [`to_pandas`](#to_pandas) |
-| **Integration** | [`ArnioPandasAccessor`](#arniopandasaccessor) |
+| **Integration** | [`ArnioPandasAccessor`](#ArnioPandasAccessor) |
 | **Pipeline** | [`pipeline`](#pipeline) • [`register_step`](#register_step) |
 | **Data Quality** | [`profile`](#profile) • [`suggest_cleaning`](#suggest_cleaning) • [`auto_clean`](#auto_clean) • [`DataQualityReport`](#dataqualityreport) • [`ColumnProfile`](#columnprofile) |
 | **Schema Validation** | [`Schema`](#schema) • [`Field`](#field) • [`validate`](#validate) • [`ValidationResult`](#validationresult) • [`ValidationIssue`](#validationissue) • [`Int64`](#int64) • [`Float64`](#float64) • [`String`](#string) • [`Bool`](#bool) • [`Email`](#email) • [`URL`](#url) |
@@ -39,8 +39,6 @@ Columnar container wrapping C++ backend structures for execution in Python.
 | <a name="select_columns"></a>**select_columns()** | `ArFrame` | Return a new ArFrame with only the selected columns. |
 
 ```python
-import arnio
-
 df = arnio.read_csv("data.csv")
 
 # Inspecting properties
@@ -48,7 +46,7 @@ print(f"Dataset Shape: {df.shape}")
 print(f"Column Names: {df.columns}")
 print(f"Data Types: {df.dtypes}")
 print(f"Memory: {df.memory_usage()} bytes")
-df = df.select_columns(["id", "name"])
+df_cols = df.select_columns(columns = ["id","name"])
 print(df.preview())
 ```
 
@@ -79,11 +77,10 @@ df = arnio.cast_types(df, {"score": "float64"})
 ### clean
 A high-level wrapper that applies `strip_whitespace`, `drop_nulls`, and `drop_duplicates` in a single call.
 ```python
-df = arnio.clean(df, drop_nulls=True)
+df = arnio.clean(df,drop_nulls=True)
 ```
-
 ### clip_numeric
-Clip numeric values to lower and/or upper bounds.
+Clip numeric values to lower and/or upper bounds
 ```python
 df = arnio.clip_numeric(df, lower=0, upper=100)
 ```
@@ -102,7 +99,7 @@ df = arnio.drop_duplicates(df, keep="first")
 ```
 
 ### drop_nulls
-Excludes rows containing empty or null fields.
+Excludes rows containing empty or null fields
 ```python
 df = arnio.drop_nulls(df, subset=["email"])
 ```
@@ -117,7 +114,7 @@ df = arnio.fill_nulls(df, 0, subset=["score"])
 Subsets rows matching an evaluation operator constraint.
 * **Supported Operators:** `>`, `<`, `>=`, `<=`, `==`, `!=`.
 ```python
-clean_df = arnio.filter_rows(df, column="age", op=">", value=18)
+clean_df = arnio.filter_rows(df,column="age", op=">", value=18)
 ```
 
 ### normalize_case
@@ -129,11 +126,11 @@ df = arnio.normalize_case(df, case_type="title")
 ### rename_columns
 Modifies headers using a translation dictionary mapping old names to new names.
 ```python
-df = arnio.rename_columns(df, {"old": "new"})
+df = arnio.rename_columns(df,{"old": "new"})
 ```
 
 ### round_numeric_columns
-Round numeric columns (non-numeric columns in subset ignored safely).
+Round numeric columns (non-numeric columns in subset ignored safely)
 ```python
 df = arnio.round_numeric_columns(df, decimals=2)
 ```
@@ -141,12 +138,7 @@ df = arnio.round_numeric_columns(df, decimals=2)
 ### safe_divide_columns
 Divide one column by another, handles zero/null denominators.
 ```python
-df = arnio.safe_divide_columns(
-    df,
-    numerator="revenue",
-    denominator="cost",
-    output_column="ratio"
-)
+df = arnio.safe_divide_columns(df,numerator="revenue", denominator="cost", output_column="ratio")
 ```
 
 ### strip_whitespace
@@ -168,12 +160,9 @@ df = arnio.validate_columns_exist(df, ["age"])
 Converts a `pandas.DataFrame` into an Arnio `ArFrame`.
 
 ### to_pandas()
-Converts an `ArFrame` into a `pandas.DataFrame`.
+Converts an `ArFrame` into a `pandas.DataFrame`
 
 ```python
-import pandas as pd
-import arnio
-
 pdf = pd.DataFrame(data)
 
 af = arnio.from_pandas(pdf)
@@ -207,7 +196,6 @@ Extends the pipeline by adding your own custom Python functions.
 ```python
 def custom_func(df, column):
     pass
-
 arnio.register_step("custom_func", custom_func)
 ```
 
@@ -273,7 +261,6 @@ user_schema = arnio.Schema({
 })
 result = arnio.validate(df, user_schema)
 ```
-
 ---
 
 ### Custom Exceptions
@@ -283,4 +270,6 @@ result = arnio.validate(df, user_schema)
 | <a name="arnioerror"></a>[**ArnioError**](#arnioerror) | Base exception for all Arnio errors. |
 | <a name="csvreaderror"></a>[**CsvReadError**](#csvreaderror) | Triggered when a CSV file cannot be read. |
 | <a name="typecasterror"></a>[**TypeCastError**](#typecasterror) | Raised when cast_types encounters an incompatible type. |
-| <a name="unknownsteperror"></a>[**UnknownStepError**](#unknownsteperror) | Triggered when a pipeline step name is not registered. |
+| <a name="unknownsteperror"></a>[**UnknownStepError**](#unknownsteperror) | Triggered when a pipeline step name is not registered|
+
+---
