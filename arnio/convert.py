@@ -75,9 +75,10 @@ def to_pandas(frame: ArFrame, *, copy: bool = False) -> pd.DataFrame:
     frame : ArFrame
         Input ArFrame to convert.
     copy : bool, default False
-        When False, use zero-copy buffers for supported numeric and boolean
-        columns where possible. When True, return defensive copies of
-        supported column buffers.
+        When False, preserve the fast zero-copy path where supported. Some
+        columns still require copies because of null-mask handling, Python
+        object creation, or binding limitations. When True, return defensive
+        pandas-owned copies of supported column buffers.
 
     Returns
     -------

@@ -1,5 +1,6 @@
 """Tests for pandas conversion."""
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -45,6 +46,57 @@ class TestToPandas:
         df = ar.to_pandas(frame, copy=True)
 
         assert df.isna().any().any()
+
+    def test_copy_option_isolates_integer_buffers(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        zero_copy = ar.to_pandas(frame)
+        defensive = ar.to_pandas(frame, copy=True)
+        original_age = zero_copy.loc[0, "age"]
+
+        assert not np.shares_memory(
+            zero_copy["age"].to_numpy(copy=False),
+            defensive["age"].to_numpy(copy=False),
+        )
+
+        defensive.loc[0, "age"] = 99
+
+        assert zero_copy.loc[0, "age"] == original_age
+        assert ar.to_pandas(frame).loc[0, "age"] == original_age
+
+    def test_copy_option_isolates_float_buffers(self, tmp_path):
+        csv_path = tmp_path / "floats.csv"
+        csv_path.write_text("score\n1.5\n2.5\n3.5\n")
+        frame = ar.read_csv(csv_path)
+
+        zero_copy = ar.to_pandas(frame)
+        defensive = ar.to_pandas(frame, copy=True)
+
+        assert not np.shares_memory(
+            zero_copy["score"].to_numpy(copy=False),
+            defensive["score"].to_numpy(copy=False),
+        )
+
+        defensive.loc[0, "score"] = 99.5
+
+        assert zero_copy.loc[0, "score"] == 1.5
+        assert ar.to_pandas(frame).loc[0, "score"] == 1.5
+
+    def test_boolean_conversion_is_already_isolated(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        first = ar.to_pandas(frame)
+        second = ar.to_pandas(frame)
+
+        assert not np.shares_memory(
+            first["active"].to_numpy(copy=False),
+            second["active"].to_numpy(copy=False),
+        )
+
+        second.loc[0, "active"] = False
+
+        assert first.loc[0, "active"] is np.True_
+        assert ar.to_pandas(frame).loc[0, "active"] is np.True_
 
     def test_to_python_list_with_nulls(self):
         frame = ar.from_pandas(

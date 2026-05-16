@@ -299,7 +299,7 @@ Arnio is not a pandas wrapper. It's a separate runtime with its own data model.
 | **Columnar storage** | Data lives in typed `std::vector`s — `vector<int64_t>`, `vector<double>`, `vector<string>` — not rows of variants. Cache-friendly and SIMD-ready. |
 | **Boolean null masks** | Nulls are tracked in a separate `vector<bool>`, keeping data vectors dense. No sentinel values, no NaN tricks. |
 | **Two-pass CSV read** | Pass 1 infers types across all rows. Pass 2 parses values directly into the correct typed column. No string→object→cast overhead. |
-| **Zero-copy bridge** | `to_pandas()` exposes C++ memory directly via NumPy's buffer protocol. Numeric and boolean columns cross the boundary without copying unless `copy=True` is requested. |
+| **Zero-copy bridge** | `to_pandas()` exposes C++ memory directly via NumPy's buffer protocol where supported. Numeric columns preserve the fast zero-copy path by default, while `copy=True` requests defensive pandas-owned buffers. |
 | **Step registry** | Pipeline steps map to C++ function pointers. Adding a new cleaning primitive is a single function + one registry entry. |
 
 > Full architecture documentation: **[ARCHITECTURE.md](ARCHITECTURE.md)**
@@ -484,8 +484,10 @@ If a dtype is partially supported, users may need conversion before processing. 
 
 ### Notes
 
-- Numeric and boolean columns are optimized for zero-copy conversion between C++ and pandas.
-- Pass `copy=True` to `to_pandas()` when downstream pandas code needs defensive column buffers.
+- Numeric columns are optimized for zero-copy conversion between C++ and pandas where supported.
+- Pass `copy=True` to `to_pandas()` when downstream pandas code needs defensive pandas-owned column buffers.
+- Boolean conversion is already copied by the binding because `std::vector<bool>` cannot be exposed as a zero-copy NumPy buffer in the current implementation.
+- Columns with null masks may require copies so pandas can apply nullable values safely.
 - String columns require Python string object creation during `to_pandas()` conversion.
 - Mixed `object` columns may reduce type inference accuracy and may require preprocessing.
 - Unsupported dtypes should raise clear user-facing errors instead of silent failures.
