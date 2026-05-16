@@ -35,6 +35,7 @@ Use Arnio _before_ and _alongside_ pandas, NumPy, scikit-learn, DuckDB, and Arro
 pip install arnio
 ```
 
+API reference guide :**[Arnio API Reference](./API_REFERENCE.md)**
 Colab install smoke test: **[COLAB_SMOKE_TEST.md](COLAB_SMOKE_TEST.md)**
 
 <br>
