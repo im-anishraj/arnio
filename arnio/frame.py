@@ -79,12 +79,32 @@ class ArFrame:
 
         Raises
         ------
+        TypeError
+            If cols is not a valid sequence of strings.
+
+        ValueError
+            If attempting to drop all columns from the frame.
+
         KeyError
-            If any column in cols does not exist in the frame."""
+            If any column in cols does not exist in the frame.
+        """
+        if isinstance(cols, str):
+            raise TypeError("cols must be a sequence of column names, not a string.")
+
+        if not isinstance(cols, (list, tuple)):
+            raise TypeError("cols must be a list or tuple of column names.")
+
+        if any(not isinstance(col, str) for col in cols):
+            raise TypeError("All column names must be strings.")
+
         if not cols:
             return ArFrame(self._frame.clone())
 
         current_cols = self.columns
+
+        if set(cols) == set(current_cols):
+            raise ValueError("Cannot drop all columns from the frame.")
+
         missing = [c for c in cols if c not in current_cols]
         if missing:
             raise KeyError(
