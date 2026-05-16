@@ -25,7 +25,8 @@ Use Arnio _before_ and _alongside_ pandas, NumPy, scikit-learn, DuckDB, and Arro
 <a href="https://github.com/im-anishraj/arnio/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/im-anishraj/arnio/ci.yml?branch=main&label=CI&style=flat-square&logo=github&labelColor=0d1117&color=2ea44f" alt="CI"></a>&nbsp;
 <a href="https://codecov.io/gh/im-anishraj/arnio"><img src="https://img.shields.io/codecov/c/github/im-anishraj/arnio?style=flat-square&logo=codecov&labelColor=0d1117&color=2ea44f" alt="Coverage"></a>&nbsp;
 <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square&labelColor=0d1117" alt="MIT"></a>&nbsp;
-<a href="https://gssoc.girlscript.tech/"><img src="https://img.shields.io/badge/GSSoC-2026-ff6b35?style=flat-square&labelColor=0d1117" alt="GSSoC 2026"></a>
+<a href="https://gssoc.girlscript.tech/"><img src="https://img.shields.io/badge/GSSoC-2026-ff6b35?style=flat-square&labelColor=0d1117" alt="GSSoC 2026"></a>&nbsp;
+<a href="https://discord.gg/xsEw7r78M"><img src="https://img.shields.io/badge/Discord-Join%20Community-5865F2?style=flat-square&logo=discord&logoColor=white&labelColor=0d1117" alt="Join Discord"></a>
 [![PyPI Downloads](https://static.pepy.tech/personalized-badge/arnio?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads)](https://pepy.tech/projects/arnio)
 
 <br><br>
@@ -419,7 +420,7 @@ Total avg (Read+Strict)       0.077             4.52
 
 ## 🧰 Cleaning primitives
 
-Every operation below runs natively in C++. No Python loops.
+Most operations below run natively in C++. The current `filter_rows` step uses the Python pipeline backend and may be optimized in C++ later.
 
 | Primitive | What it does | Example |
 |:---|:---|:---|
@@ -627,7 +628,7 @@ This is the layer pandas does not try to own: profiling, data contracts, row-lev
 
 <br>
 
----
+### Beginner-friendly auto-clean tutorial
 
 Use this workflow when you receive a small messy dataset and want to inspect what Arnio will change before applying it.
 
@@ -771,9 +772,26 @@ DataQualityReport(
 | Version | Focus | Status |
 |:---:|:---|:---:|
 | **v1.0** | Stable release · cross-platform wheels · CI/CD · PyPI publishing · Google Colab support | ✅ Shipped |
-| **v0.2** | C++ pipeline optimization · speed parity with pandas · hash-based deduplication | 🔨 Active |
-| **v0.3** | Chunked / streaming processing · Parquet & JSON readers | 📋 Planned |
-| **v0.4** | Parallel column processing · SIMD string operations | 💭 Exploring |
+| **v1.1** | Production readiness · release hardening · docs/tooling | ✅ Shipped |
+| **v1.2** | C++ pipeline optimization · speed parity with pandas · hash-based deduplication | 🔨 Active |
+| **v1.3** | Chunked / streaming processing · Parquet & JSON readers | 📋 Planned |
+| **v1.4** | Parallel column processing · SIMD string operations | 💭 Exploring |
+
+<br>
+
+---
+
+<br>
+
+## 💬 Community
+
+Join the **[Arnio Discord Community](https://discord.gg/xsEw7r78M)** for quick setup help, contributor onboarding, GSSoC 2026 coordination, feature discussion, and community updates.
+
+Discord is for fast conversation and support. GitHub remains the source of truth for issue assignment, PR reviews, bugs, roadmap decisions, and releases.
+
+<p align="center">
+<a href="https://discord.gg/xsEw7r78M"><img src="https://img.shields.io/badge/Join%20Arnio%20Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Join Arnio Discord"></a>
+</p>
 
 <br>
 
@@ -827,14 +845,48 @@ pytest tests/ -v
 
 > **PR titles must follow [Conventional Commits](https://www.conventionalcommits.org/)** — `feat:`, `fix:`, `docs:`, `chore:`. Our release pipeline auto-generates changelogs from these.
 
-For GSSoC contributors, please read **[GSSOC_GUIDE.md](GSSOC_GUIDE.md)** before asking to be assigned. It explains issue claiming, contribution levels, review expectations, and what maintainers look for in a strong PR.
+For GSSoC contributors, please read **[GSSOC_GUIDE.md](GSSOC_GUIDE.md)** before asking to be assigned. It explains issue claiming, contribution levels, review expectations, and what maintainers look for in a strong PR. If you want a quick onboarding refresher, see the [GSSoC FAQ](GSSOC_GUIDE.md#gssoc-faq).
+If you are new to Arnio terms, see the [contributor glossary](.github/CONTRIBUTING.md#contributor-glossary).
 
 <p align="center">
 <a href=".github/CONTRIBUTING.md"><b>📖 Full Contributing Guide</b></a>&ensp;·&ensp;
 <a href="GSSOC_GUIDE.md"><b>GSSoC Guide</b></a>&ensp;·&ensp;
 <a href="https://github.com/im-anishraj/arnio/issues"><b>🐛 Open Issues</b></a>&ensp;·&ensp;
-<a href="https://github.com/im-anishraj/arnio/discussions"><b>💬 Discussions</b></a>
+<a href="https://github.com/im-anishraj/arnio/discussions"><b>💬 Discussions</b></a>&ensp;·&ensp;
+<a href="https://discord.gg/xsEw7r78M"><b>Discord</b></a>
 </p>
+
+<br>
+
+---
+
+<br>
+
+## 🚢 Release process
+
+Arnio releases are automated through Release Please and GitHub Actions.
+
+1. Merge user-facing changes with Conventional Commit PR titles (`feat:`, `fix:`, `docs:`, or `chore:`) so Release Please can choose the version bump and changelog entries.
+2. Review and merge the Release Please PR on `main`; this updates release metadata and creates the GitHub release and tag.
+3. Confirm the `Build & Publish Wheels` workflow succeeds for the release tag. It builds the sdist and wheels, then publishes to PyPI through Trusted Publishing.
+4. Smoke test the published package in a clean environment:
+
+```bash
+python -m venv /tmp/arnio-smoke
+source /tmp/arnio-smoke/bin/activate
+python -m pip install -U pip
+python -m pip install arnio
+printf 'name,revenue\n Ada,10\n' > /tmp/arnio-smoke.csv
+python - <<'PY'
+import arnio as ar
+print(ar.__version__)
+print(ar.scan_csv("/tmp/arnio-smoke.csv"))
+PY
+```
+
+5. Verify the GitHub release, PyPI project page, and install command all show the expected version before announcing the release.
+
+If any publish or smoke-test step fails, leave the failed tag and GitHub release in place until maintainers agree on the recovery plan.
 
 <br>
 
@@ -861,7 +913,7 @@ arnio/
 │   └── exceptions.py        # ArnioError, UnknownStepError, CsvReadError, TypeCastError
 ├── tests/                   # pytest suite — CSV, cleaning, pipeline, conversions
 ├── benchmarks/              # Reproducible arnio vs pandas benchmark
-├── examples/                # basic_usage.py, custom_step.py
+├── examples/                # basic_usage.py, auto_clean_tutorial.py, custom_step.py
 └── website/                 # Project website — arnio.vercel.app
 ```
 
@@ -887,7 +939,8 @@ arnio/
 <a href="https://pypi.org/project/arnio/"><img src="https://img.shields.io/pypi/dm/arnio?style=flat-square&logo=pypi&logoColor=white&labelColor=0d1117&color=3572A5&label=installs" alt="Downloads"></a>&ensp;
 <a href="https://github.com/im-anishraj/arnio/stargazers"><img src="https://img.shields.io/github/stars/im-anishraj/arnio?style=flat-square&logo=github&labelColor=0d1117&color=e3b341&label=stars" alt="Stars"></a>&ensp;
 <a href="https://github.com/im-anishraj/arnio/network/members"><img src="https://img.shields.io/github/forks/im-anishraj/arnio?style=flat-square&logo=github&labelColor=0d1117&color=8b949e&label=forks" alt="Forks"></a>&ensp;
-<a href="https://arnio.vercel.app/"><img src="https://img.shields.io/badge/website-arnio.vercel.app-blue?style=flat-square&labelColor=0d1117" alt="Website"></a>
+<a href="https://arnio.vercel.app/"><img src="https://img.shields.io/badge/website-arnio.vercel.app-blue?style=flat-square&labelColor=0d1117" alt="Website"></a>&ensp;
+<a href="https://discord.gg/xsEw7r78M"><img src="https://img.shields.io/badge/community-Discord-5865F2?style=flat-square&logo=discord&logoColor=white&labelColor=0d1117" alt="Discord"></a>
 
 <br>
 
