@@ -39,6 +39,7 @@ class Frame {
 
    private:
     std::vector<Column> columns_;
+    size_t row_count_ = 0;
     std::unordered_map<std::string, size_t> name_index_;
     void rebuild_index();
 };
