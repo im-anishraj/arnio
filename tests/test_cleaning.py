@@ -389,10 +389,12 @@ class TestCleanAPI:
         result = ar.clean(frame, strip_whitespace=False, drop_nulls=True)
         assert len(result) < len(frame)
 
+
 class TestWinsorizeOutliers:
     def test_winsorize_actual_values_capped(self):
         """Verify values are actually capped, not just type-checked."""
         import pandas as pd
+
         df = pd.DataFrame({"price": [10.0, 20.0, 30.0, 40.0, 1000.0]})
         frame = ar.from_pandas(df)
         clean = ar.winsorize_outliers(frame, lower=0.05, upper=0.95)
@@ -402,6 +404,7 @@ class TestWinsorizeOutliers:
     def test_winsorize_identical_values(self):
         """Frame where all values are identical should not crash."""
         import pandas as pd
+
         df = pd.DataFrame({"score": [5.0, 5.0, 5.0, 5.0]})
         frame = ar.from_pandas(df)
         clean = ar.winsorize_outliers(frame, lower=0.05, upper=0.95)
@@ -410,6 +413,7 @@ class TestWinsorizeOutliers:
     def test_winsorize_single_row(self):
         """Single row frame should not crash."""
         import pandas as pd
+
         df = pd.DataFrame({"score": [42.0]})
         frame = ar.from_pandas(df)
         clean = ar.winsorize_outliers(frame, lower=0.05, upper=0.95)
@@ -418,11 +422,12 @@ class TestWinsorizeOutliers:
     def test_winsorize_unknown_subset_column_raises(self):
         """Unknown column in subset should raise ValueError."""
         import pandas as pd
+
         df = pd.DataFrame({"age": [25, 30, 35]})
         frame = ar.from_pandas(df)
         with pytest.raises(ValueError, match="Unknown columns in subset"):
             ar.winsorize_outliers(frame, subset=["nonexistent"])
-            
+
     def test_winsorize_caps_upper_outlier(self, sample_csv):
         frame = ar.read_csv(sample_csv)
         clean = ar.winsorize_outliers(frame, lower=0.05, upper=0.95)
@@ -445,10 +450,13 @@ class TestWinsorizeOutliers:
 
     def test_winsorize_in_pipeline(self, sample_csv):
         frame = ar.read_csv(sample_csv)
-        clean = ar.pipeline(frame, [
-            ("strip_whitespace",),
-            ("winsorize_outliers", {"lower": 0.05, "upper": 0.95}),
-        ])
+        clean = ar.pipeline(
+            frame,
+            [
+                ("strip_whitespace",),
+                ("winsorize_outliers", {"lower": 0.05, "upper": 0.95}),
+            ],
+        )
         assert isinstance(clean, ar.ArFrame)
 
     def test_winsorize_invalid_lower_greater_than_upper(self, sample_csv):
@@ -465,7 +473,7 @@ class TestWinsorizeOutliers:
         frame = ar.read_csv(sample_csv)
         with pytest.raises(ValueError):
             ar.winsorize_outliers(frame, lower=-0.1, upper=1.5)
- 
+
 
 class TestRoundNumericColumns:
     def test_round_all_numeric(self):

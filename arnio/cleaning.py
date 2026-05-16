@@ -595,7 +595,7 @@ def winsorize_outliers(
         unknown = [col for col in subset if col not in df.columns]
         if unknown:
             raise ValueError(f"Unknown columns in subset: {unknown}")
-        
+
     for col in cols_to_process:
         if col not in df.columns:
             continue
