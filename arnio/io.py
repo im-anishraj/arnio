@@ -118,6 +118,12 @@ def read_csv(
     except FileNotFoundError:
         pass  # Let C++ backend handle or raise standard error
 
+    try:
+        if os.path.getsize(path) == 0:
+            raise CsvReadError(f"CSV file is empty: {path!r}")
+    except FileNotFoundError:
+        pass  # Let C++ backend handle or raise standard error
+
     config = _CsvConfig()
     config.delimiter = delimiter
     config.has_header = has_header
@@ -198,6 +204,12 @@ def scan_csv(
                 raise CsvReadError(
                     "CSV input contains NUL bytes and appears to be binary or corrupted"
                 )
+    except FileNotFoundError:
+        pass  # Let C++ backend handle or raise standard error
+    try:
+        if os.path.getsize(path) == 0:
+            raise CsvReadError(f"CSV file is empty: {path!r}")
+
     except FileNotFoundError:
         pass
 
