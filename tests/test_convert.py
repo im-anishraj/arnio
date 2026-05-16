@@ -24,6 +24,28 @@ class TestToPandas:
         df = ar.to_pandas(frame)
         assert df.isna().any().any()  # Should have some NaN/NA values
 
+    def test_copy_option_returns_equivalent_dataframe(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        zero_copy = ar.to_pandas(frame)
+        defensive = ar.to_pandas(frame, copy=True)
+
+        pd.testing.assert_frame_equal(defensive, zero_copy)
+        assert defensive is not zero_copy
+
+    def test_copy_option_rejects_non_bool(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(TypeError, match="copy must be a bool"):
+            ar.to_pandas(frame, copy="yes")
+
+    def test_copy_option_preserves_null_masks(self, csv_with_nulls):
+        frame = ar.read_csv(csv_with_nulls)
+
+        df = ar.to_pandas(frame, copy=True)
+
+        assert df.isna().any().any()
+
     def test_to_python_list_with_nulls(self):
         frame = ar.from_pandas(
             pd.DataFrame(
