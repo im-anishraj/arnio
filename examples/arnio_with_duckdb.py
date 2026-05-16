@@ -1,85 +1,73 @@
 """
-Arnio + DuckDB example
+Arnio + DuckDB: Clean/validate data before querying.
+----------------------------------------------------
+This example shows how to use Arnio to clean messy data and
+then load it into DuckDB for SQL-based analytics.
 
-Goal:
-Clean data using Arnio, then query it using DuckDB's
-in-memory SQL engine.
+Run:
+    python examples/arnio_with_duckdb.py
+
+Requires:
+    pip install duckdb
 """
 
-try:
-    import arnio as ar
-except ImportError as e:
-    raise ImportError(
-        "Arnio is required for this example. Install it with: pip install arnio"
-    ) from e
+import io
 
 try:
     import duckdb
-except ImportError as e:
-    raise ImportError(
-        'DuckDB is required for this example. Install it with: pip install "arnio[duckdb]" '
-        "or install DuckDB directly with: pip install duckdb"
-    ) from e
-try:
-    import pandas as pd
-except ImportError as e:
-    raise ImportError(
-        "pandas is required for this example. Install it with: pip install pandas"
-    ) from e
+except ImportError:
+    print("DuckDB is not installed. Run: pip install duckdb")
+    raise SystemExit(0)
+
+import arnio as ar
 
 
 def main():
-    # --------------------------------------------------
-    # Step 1: Create messy dataset
-    # --------------------------------------------------
-    df = pd.DataFrame(
-        {
-            "product": [" Apple ", "Banana", "CHERRY", None],
-            "price": ["1.5", "0.75", "bad", "2.0"],
-            "quantity": ["100", "200", "150", None],
-        }
+    # 1. Synthetic messy CSV: sales records
+    raw_csv = (
+        "order_id,product,quantity,unit_price,region\n"
+        "O1, Widget A ,10,5.99, North \n"
+        "O2,Widget B,,3.49,South\n"   # missing quantity
+        "O3, Gadget C ,5,12.00,EAST\n"
+        "O1, Widget A ,10,5.99,North\n"  # duplicate
+        "O4,Gadget D,2,,West\n"          # missing unit_price
+        "O5,Widget E,7,8.50,South\n"
     )
 
-    print("Original Data:")
-    print(df)
-    print("-" * 40)
-
-    # --------------------------------------------------
-    # Step 2: Clean data using Arnio pipeline
-    # --------------------------------------------------
-    frame = ar.from_pandas(df)
-
-    cleaned = ar.pipeline(
+    # 2. Load and clean with Arnio
+    frame = ar.read_csv(io.StringIO(raw_csv))
+    clean_frame = ar.pipeline(
         frame,
         [
-            ("drop_nulls",),
             ("strip_whitespace",),
-            ("normalize_case", {"case_type": "lower"}),
+            ("normalize_case", {"case_type": "title"}),
+            ("fill_nulls", {"value": 0.0, "subset": ["quantity", "unit_price"]}),
+            ("drop_duplicates",),
         ],
     )
+    df = ar.to_pandas(clean_frame)
+    print("--- Cleaned Data ---")
+    print(df)
 
-    clean_df = ar.to_pandas(cleaned)
+    # 3. Register the cleaned DataFrame with DuckDB and run SQL queries
+    con = duckdb.connect()
+    con.register("sales", df)
 
-    # coerce non-numeric strings to NaN and drop them
-    clean_df["price"] = pd.to_numeric(clean_df["price"], errors="coerce")
-    clean_df["quantity"] = pd.to_numeric(clean_df["quantity"], errors="coerce")
-    clean_df = clean_df.dropna()
-
-    print("Cleaned Data:")
-    print(clean_df)
-    print("-" * 40)
-
-    # --------------------------------------------------
-    # Step 3: Query with DuckDB
-    # --------------------------------------------------
-    result = duckdb.query(
-        "SELECT product, price, quantity, price * quantity AS total_value "
-        "FROM clean_df "
-        "ORDER BY total_value DESC"
+    print("\n--- Total Revenue by Region ---")
+    result = con.execute(
+        "SELECT region, ROUND(SUM(quantity * unit_price), 2) AS total_revenue "
+        "FROM sales GROUP BY region ORDER BY total_revenue DESC"
     ).df()
-
-    print("DuckDB Query Result (sorted by total value):")
     print(result)
+
+    print("\n--- Top Products by Quantity Sold ---")
+    result2 = con.execute(
+        "SELECT product, SUM(quantity) AS total_qty "
+        "FROM sales GROUP BY product ORDER BY total_qty DESC LIMIT 5"
+    ).df()
+    print(result2)
+
+    con.close()
 
 
 if __name__ == "__main__":

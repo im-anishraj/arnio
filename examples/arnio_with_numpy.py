@@ -1,76 +1,57 @@
 """
-Arnio + NumPy example
+Arnio + NumPy: Prepare numeric arrays safely.
+---------------------------------------------
+This example shows how to use Arnio to clean numeric columns
+and export them as NumPy arrays for further computation.
 
-Goal:
-Clean numeric data using Arnio, then perform computations with NumPy.
+Run:
+    python examples/arnio_with_numpy.py
 """
 
-try:
-    import arnio as ar
-except ImportError as e:
-    raise ImportError(
-        "Arnio is required for this example. Install it with: pip install arnio"
-    ) from e
-
-try:
-    import numpy as np
-except ImportError as e:
-    raise ImportError(
-        "NumPy is required for this example. Install it with: pip install numpy"
-    ) from e
-
-try:
-    import pandas as pd
-except ImportError as e:
-    raise ImportError(
-        "pandas is required for this example. Install it with: pip install pandas"
-    ) from e
+import io
+import arnio as ar
+import numpy as np
 
 
 def main():
-    # --------------------------------------------------
-    # Step 1: Create messy numeric data
-    # --------------------------------------------------
-    df = pd.DataFrame({"values": ["10", "20", "bad", "30", None, "1000"]})
+    # 1. Synthetic CSV with messy numeric data
+    raw_csv = (
+        "sensor_id,temperature,humidity\n"
+        "S1, 22.5 ,60.0\n"
+        "S2,,55.0\n"         # missing temperature
+        "S3,19.0, 80.0 \n"
+        "S4,150.0,70.0\n"    # outlier temperature (will be clipped)
+        "S5,21.0,\n"         # missing humidity
+    )
 
-    print("Original Data:\n", df)
-    print("-" * 40)
+    # 2. Load through Arnio's C++ core
+    frame = ar.read_csv(io.StringIO(raw_csv))
+    print("--- Raw Data ---")
+    print(ar.to_pandas(frame))
 
-    # --------------------------------------------------
-    # Step 2: Clean data using Arnio pipeline
-    # --------------------------------------------------
-    frame = ar.from_pandas(df)
-
-    cleaned = ar.pipeline(
+    # 3. Clean: fill missing values, clip outliers, strip whitespace
+    clean_frame = ar.pipeline(
         frame,
         [
-            ("drop_nulls",),
             ("strip_whitespace",),
+            ("fill_nulls", {"value": 0.0, "subset": ["temperature", "humidity"]}),
+            ("clip_numeric", {"column": "temperature", "min": -40.0, "max": 100.0}),
         ],
     )
 
-    clean_df = ar.to_pandas(cleaned)
+    # 4. Convert to pandas then extract NumPy arrays
+    df = ar.to_pandas(clean_frame)
+    print("\n--- Cleaned DataFrame ---")
+    print(df)
 
-    # Convert values to numeric and drop invalid entries
-    clean_df["values"] = pd.to_numeric(clean_df["values"], errors="coerce")
-    clean_df = clean_df.dropna()
+    temps = df["temperature"].to_numpy(dtype=np.float64)
+    humidity = df["humidity"].to_numpy(dtype=np.float64)
 
-    # Use Arnio's built-in clip_numeric helper
-    frame = ar.from_pandas(clean_df)
-    frame = ar.clip_numeric(frame, lower=0, upper=100)
-    clean_df = ar.to_pandas(frame)
-
-    print("Cleaned Data:\n", clean_df)
-    print("-" * 40)
-
-    # --------------------------------------------------
-    # Step 3: NumPy computation
-    # --------------------------------------------------
-    arr = clean_df["values"].to_numpy(dtype=float)
-
-    print("NumPy Array:", arr)
-    print("Mean:", np.mean(arr))
-    print("Std Dev:", np.std(arr))
+    # 5. NumPy analysis
+    print("\n--- NumPy Statistics ---")
+    print(f"Temperature  -> mean: {np.mean(temps):.2f}, std: {np.std(temps):.2f}")
+    print(f"Humidity     -> mean: {np.mean(humidity):.2f}, std: {np.std(humidity):.2f}")
+    print(f"Correlation  -> {np.corrcoef(temps, humidity)[0, 1]:.4f}")
 
 
 if __name__ == "__main__":

@@ -1,77 +1,53 @@
 """
-Arnio + pandas interoperability example
+Arnio + pandas: Clean a messy CSV, then analyze with pandas.
+-------------------------------------------------------------
+This example shows how to use Arnio to clean raw data and then
+hand the result off to pandas for analysis.
 
-This example demonstrates how to:
-1. Start with messy data in pandas
-2. Clean and normalize it using Arnio's pipeline
-3. Convert it back to pandas for analysis
-
-Key idea:
-Arnio is used for cleaning/validation, while pandas is used for analysis.
+Run:
+    python examples/arnio_with_pandas.py
 """
 
-try:
-    import arnio as ar
-except ImportError as e:
-    raise ImportError(
-        "Arnio is required for this example. Install it with: pip install arnio"
-    ) from e
-
-try:
-    import pandas as pd
-except ImportError as e:
-    raise ImportError(
-        "pandas is required for this example. Install it with: pip install pandas"
-    ) from e
+import io
+import arnio as ar
 
 
 def main():
-    # --------------------------------------------------
-    # Step 1: Create messy dataset (pandas)
-    # --------------------------------------------------
-    df = pd.DataFrame(
-        {
-            "name": [" Alice ", "Bob", "CHARLIE", None],
-            "age": ["25", "30", None, "40"],
-        }
+    # 1. Synthetic messy CSV (inline, no external file needed)
+    raw_csv = (
+        "product,price,category\n"
+        " Widget A ,12.5,electronics\n"
+        "Widget B,,electronics\n"   # missing price
+        " Widget A ,12.5,electronics\n"  # duplicate
+        "Gadget C,8.0, TOOLS \n"
+        "Gadget D,0.0,tools\n"  # zero price (valid)
     )
 
-    print("Original Data:")
-    print(df)
-    print("-" * 40)
+    # 2. Load raw data through Arnio's C++ core
+    frame = ar.read_csv(io.StringIO(raw_csv))
+    print("--- Raw Data ---")
+    print(ar.to_pandas(frame))
 
-    # --------------------------------------------------
-    # Step 2: Convert pandas → Arnio
-    # --------------------------------------------------
-    frame = ar.from_pandas(df)
-
-    # --------------------------------------------------
-    # Step 3: Clean data using Arnio pipeline
-    # --------------------------------------------------
-    cleaned = ar.pipeline(
+    # 3. Clean with an Arnio pipeline
+    clean_frame = ar.pipeline(
         frame,
         [
-            ("drop_nulls",),
             ("strip_whitespace",),
-            ("normalize_case", {"case_type": "lower"}),
-            ("cast_types", {"mapping": {"age": "int64"}}),
+            ("normalize_case", {"case_type": "title"}),
+            ("fill_nulls", {"value": 0.0, "subset": ["price"]}),
+            ("drop_duplicates",),
         ],
     )
 
-    # --------------------------------------------------
-    # Step 4: Convert Arnio → pandas
-    # --------------------------------------------------
-    clean_df = ar.to_pandas(cleaned)
+    # 4. Convert to pandas for analysis
+    df = ar.to_pandas(clean_frame)
+    print("\n--- Cleaned DataFrame ---")
+    print(df)
 
-    print("Cleaned Data:")
-    print(clean_df)
-    print("-" * 40)
-
-    # --------------------------------------------------
-    # Step 5: Use pandas for analysis
-    # --------------------------------------------------
-    print("Summary Statistics (pandas):")
-    print(clean_df.describe())
+    # 5. Analyze with pandas
+    print("\n--- Average price by category ---")
+    summary = df.groupby("category")["price"].mean().reset_index()
+    print(summary)
 
 
 if __name__ == "__main__":
