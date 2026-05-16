@@ -316,5 +316,3 @@ ar.register_step("my_step", my_step)
 # 3. Use it in a pipeline
 clean = ar.pipeline(frame, [("my_step",)])
 ```
- 
- 
