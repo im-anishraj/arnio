@@ -21,6 +21,7 @@ from .cleaning import (
     normalize_case,
     rename_columns,
     strip_whitespace,
+    winsorize_outliers,
 )
 from .convert import from_pandas, to_pandas
 from .exceptions import ArnioError, CsvReadError, TypeCastError, UnknownStepError
@@ -64,6 +65,7 @@ __all__ = [
     "rename_columns",
     "cast_types",
     "clean",
+    "winsorize_outliers",
     # Conversion
     "to_pandas",
     "from_pandas",

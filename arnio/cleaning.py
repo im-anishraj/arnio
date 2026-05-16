@@ -306,3 +306,87 @@ def filter_rows(frame, column, op, value):
     filtered = df[getattr(df[column], ops[op])(value)]
 
     return from_pandas(filtered) if is_arframe else filtered
+
+
+def winsorize_outliers(
+    frame: ArFrame,
+    *,
+    lower: float = 0.05,
+    upper: float = 0.95,
+    subset: list[str] | None = None,
+) -> ArFrame:
+    """Cap extreme outlier values at the given percentile boundaries.
+
+    Values below the ``lower`` percentile are raised to that percentile value.
+    Values above the ``upper`` percentile are lowered to that percentile value.
+    Only numeric columns are affected; string columns are left unchanged.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input data frame.
+    lower : float, default 0.05
+        Lower percentile boundary (between 0 and 1). Values below this
+        percentile are capped up to this boundary.
+    upper : float, default 0.95
+        Upper percentile boundary (between 0 and 1). Values above this
+        percentile are capped down to this boundary.
+    subset : list[str], optional
+        Column names to apply winsorizing to. If None, applies to all
+        numeric columns. Non-numeric columns in subset are silently skipped.
+
+    Returns
+    -------
+    ArFrame
+        New frame with outlier values capped at the given percentile bounds.
+
+    Raises
+    ------
+    ValueError
+        If ``lower`` or ``upper`` are not between 0 and 1, or if
+        ``lower`` is greater than or equal to ``upper``.
+
+    Notes
+    -----
+    Winsorizing works best on large datasets. On small datasets the
+    percentile boundaries may still appear extreme because they are
+    computed from the data itself. For example, with only 5 rows,
+    the 95th percentile may still be close to the outlier value.
+
+    Examples
+    --------
+    >>> frame = ar.read_csv("data.csv")
+    >>> clean = ar.winsorize_outliers(frame, lower=0.05, upper=0.95)
+    >>> clean = ar.winsorize_outliers(frame, lower=0.1, upper=0.9, subset=["price"])
+    """
+    if not (0 <= lower < upper <= 1):
+        raise ValueError(
+            f"`lower` must be less than `upper` and both must be between 0 and 1, "
+            f"got lower={lower!r}, upper={upper!r}"
+        )
+
+    import pandas as pd
+
+    from .convert import from_pandas, to_pandas
+
+    # Handle both ArFrame and DataFrame (when called from pipeline)
+    is_arframe = isinstance(frame, ArFrame)
+    df = to_pandas(frame) if is_arframe else frame
+
+    cols_to_process = subset if subset is not None else df.columns.tolist()
+
+    for col in cols_to_process:
+        if col not in df.columns:
+            continue
+        if not pd.api.types.is_numeric_dtype(df[col]):
+            continue
+
+        # Cast to float64 before clipping so percentile
+        # values (which are floats) can be assigned back without TypeError
+        df[col] = df[col].astype("float64")
+
+        lower_bound = df[col].quantile(lower)
+        upper_bound = df[col].quantile(upper)
+        df[col] = df[col].clip(lower=lower_bound, upper=upper_bound)
+
+    return from_pandas(df) if is_arframe else df

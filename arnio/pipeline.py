@@ -121,3 +121,4 @@ def pipeline(
 
 
 register_step("filter_rows", cleaning.filter_rows)
+register_step("winsorize_outliers", cleaning.winsorize_outliers)

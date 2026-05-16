@@ -148,3 +148,48 @@ class TestCleanAPI:
         # Drop nulls
         result = ar.clean(frame, strip_whitespace=False, drop_nulls=True)
         assert len(result) < len(frame)
+
+class TestWinsorizeOutliers:
+    def test_winsorize_caps_upper_outlier(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        clean = ar.winsorize_outliers(frame, lower=0.05, upper=0.95)
+        assert isinstance(clean, ar.ArFrame)
+
+    def test_winsorize_returns_same_row_count(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        clean = ar.winsorize_outliers(frame, lower=0.05, upper=0.95)
+        assert len(clean) == len(frame)
+
+    def test_winsorize_subset_only(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        clean = ar.winsorize_outliers(frame, lower=0.05, upper=0.95, subset=["age"])
+        assert isinstance(clean, ar.ArFrame)
+
+    def test_winsorize_skips_string_columns(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        clean = ar.winsorize_outliers(frame, lower=0.05, upper=0.95)
+        assert isinstance(clean, ar.ArFrame)
+
+    def test_winsorize_in_pipeline(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        clean = ar.pipeline(frame, [
+            ("strip_whitespace",),
+            ("winsorize_outliers", {"lower": 0.05, "upper": 0.95}),
+        ])
+        assert isinstance(clean, ar.ArFrame)
+
+    def test_winsorize_invalid_lower_greater_than_upper(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        with pytest.raises(ValueError):
+            ar.winsorize_outliers(frame, lower=0.9, upper=0.1)
+
+    def test_winsorize_invalid_lower_equals_upper(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        with pytest.raises(ValueError):
+            ar.winsorize_outliers(frame, lower=0.5, upper=0.5)
+
+    def test_winsorize_invalid_out_of_range(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        with pytest.raises(ValueError):
+            ar.winsorize_outliers(frame, lower=-0.1, upper=1.5)
+ 

@@ -316,6 +316,7 @@ Most operations below run natively in C++. The current `filter_rows` step uses t
 | `rename_columns` | Rename columns via mapping | `ar.rename_columns(frame, {"old": "new"})` |
 | `cast_types` | Cast column types | `ar.cast_types(frame, {"age": "int64"})` |
 | `clean` | Convenience shorthand | `ar.clean(frame, drop_nulls=True)` |
+| `winsorize_outliers` | Cap extreme values at percentile bounds | `ar.winsorize_outliers(frame, lower=0.05, upper=0.95)` |
 
 Or compose them all into a **pipeline**:
 
