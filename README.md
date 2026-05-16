@@ -764,6 +764,16 @@ If you are new to Arnio terms, see the [contributor glossary](.github/CONTRIBUTI
 <a href="https://discord.gg/xsEw7r78M"><b>Discord</b></a>
 </p>
 
+### 💖 Contributors
+
+Thanks to all the amazing people who contribute to **Arnio** 🚀
+
+<p align="center">
+  <a href="https://github.com/im-anishraj/arnio/graphs/contributors">
+    <img src="https://contrib.rocks/image?repo=im-anishraj/arnio" alt="Contributors"/>
+  </a>
+</p>
+
 <br>
 
 ---
