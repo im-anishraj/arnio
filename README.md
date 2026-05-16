@@ -44,7 +44,7 @@ Colab install smoke test: **[COLAB_SMOKE_TEST.md](COLAB_SMOKE_TEST.md)**
 
 </div>
 
-** System Architecture
+### System Architecture
 
 The following diagram illustrates the internal workflow and architecture of Arnio.
 
