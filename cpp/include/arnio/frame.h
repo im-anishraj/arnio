@@ -12,7 +12,7 @@ namespace arnio {
 class Frame {
    public:
     Frame() = default;
-    explicit Frame(std::vector<Column> columns);
+    explicit Frame(std::vector<Column> columns, size_t row_count = 0);
 
     // Accessors
     std::pair<size_t, size_t> shape() const;
