@@ -238,3 +238,15 @@ def test_select_dtypes_error_message_shows_valid_dtypes(mixed_csv):
     msg = str(exc_info.value)
     assert "int64" in msg
     assert "float64" in msg
+
+
+def test_select_dtypes_non_string_item_in_list_raises_type_error(mixed_csv):
+    frame = ar.read_csv(mixed_csv)
+    with pytest.raises(TypeError, match="must contain only strings"):
+        frame.select_dtypes(include=[123])
+
+
+def test_select_dtypes_non_string_item_in_exclude_raises_type_error(mixed_csv):
+    frame = ar.read_csv(mixed_csv)
+    with pytest.raises(TypeError, match="must contain only strings"):
+        frame.select_dtypes(exclude=[None, "int64"])
