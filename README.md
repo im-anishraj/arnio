@@ -599,7 +599,8 @@ data = {
     "score": [85.5, 90.0, None, 88.2]
 }
 df = ar.from_pandas(pd.DataFrame(data))
-report = ar.profile(df)
+# Bounded profiling for large datasets (controls how many sample values are kept)
+report = ar.profile(df, sample_size=5)
 ```
 
 ### 1. Terminal Representation (Simplified Example)
