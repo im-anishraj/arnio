@@ -7,6 +7,9 @@ from __future__ import annotations
 
 from ._core import _Frame
 
+#: Dtype strings recognised by ArFrame.select_dtypes().
+_VALID_DTYPES: frozenset[str] = frozenset({"int64", "float64", "string", "bool", "null"})
+
 
 class ArFrame:
     """Lightweight columnar data container backed by C++."""
@@ -129,6 +132,103 @@ class ArFrame:
         selected_df = df[columns]
 
         return from_pandas(selected_df)
+
+    def select_dtypes(
+        self,
+        include: str | list[str] | tuple[str, ...] | None = None,
+        exclude: str | list[str] | tuple[str, ...] | None = None,
+    ) -> ArFrame:
+        """Return a new ArFrame containing only columns whose dtype matches the filter.
+
+        At least one of *include* or *exclude* must be provided.
+
+        Parameters
+        ----------
+        include : str, list[str], or tuple[str, ...], optional
+            One or more dtype strings to keep.
+            Accepted values: ``"int64"``, ``"float64"``, ``"string"``,
+            ``"bool"``, ``"null"``.
+        exclude : str, list[str], or tuple[str, ...], optional
+            One or more dtype strings to drop. Applied after *include*.
+
+        Returns
+        -------
+        ArFrame
+            New ArFrame containing only the matched columns, in original
+            column order.
+
+        Raises
+        ------
+        ValueError
+            If neither *include* nor *exclude* is provided, if *include*
+            and *exclude* overlap, if an unrecognised dtype string is
+            passed, or if no columns match the filter.
+        TypeError
+            If *include* or *exclude* is not a string, list, or tuple of
+            strings.
+
+        Examples
+        --------
+        >>> frame = ar.read_csv("data.csv")
+        >>> numeric = frame.select_dtypes(include=["int64", "float64"])
+        >>> without_strings = frame.select_dtypes(exclude="string")
+        """
+        if include is None and exclude is None:
+            raise ValueError(
+                "select_dtypes() requires at least one of 'include' or 'exclude'."
+            )
+
+        def _parse(
+            arg: str | list[str] | tuple[str, ...] | None,
+            name: str,
+        ) -> frozenset[str] | None:
+            if arg is None:
+                return None
+            if isinstance(arg, str):
+                values = [arg]
+            elif isinstance(arg, (list, tuple)):
+                values = list(arg)
+            else:
+                raise TypeError(
+                    f"'{name}' must be a string, list, or tuple of strings, "
+                    f"got {type(arg).__name__!r}."
+                )
+            unknown = [v for v in values if v not in _VALID_DTYPES]
+            if unknown:
+                raise ValueError(
+                    f"Unrecognised dtype(s) in '{name}': {unknown}. "
+                    f"Valid dtypes are: {sorted(_VALID_DTYPES)}."
+                )
+            return frozenset(values)
+
+        include_set = _parse(include, "include")
+        exclude_set = _parse(exclude, "exclude")
+
+        if include_set is not None and exclude_set is not None:
+            overlap = include_set & exclude_set
+            if overlap:
+                raise ValueError(
+                    f"'include' and 'exclude' overlap: {sorted(overlap)}. "
+                    "A dtype cannot be both included and excluded."
+                )
+
+        col_dtypes = self.dtypes
+        matched: list[str] = []
+        for col in self.columns:  # iterate columns to preserve original order
+            dtype = col_dtypes[col]
+            if include_set is not None and dtype not in include_set:
+                continue
+            if exclude_set is not None and dtype in exclude_set:
+                continue
+            matched.append(col)
+
+        if not matched:
+            raise ValueError(
+                "No columns match the dtype selection. "
+                f"Frame dtypes: {col_dtypes}."
+            )
+
+        return self.select_columns(matched)
 
     # --- Dunder methods ---
 

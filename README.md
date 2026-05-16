@@ -70,9 +70,6 @@ clean = ar.pipeline(frame, [
 
 # Out comes a standard pandas DataFrame — use it like you always have
 df = ar.to_pandas(clean)
-
-# Use copy=True when you need defensive pandas-owned buffers
-safe_df = ar.to_pandas(clean, copy=True)
 ```
 
 Already have a pandas `DataFrame`? Use Arnio in-place in your existing pandas
@@ -299,7 +296,7 @@ Arnio is not a pandas wrapper. It's a separate runtime with its own data model.
 | **Columnar storage** | Data lives in typed `std::vector`s — `vector<int64_t>`, `vector<double>`, `vector<string>` — not rows of variants. Cache-friendly and SIMD-ready. |
 | **Boolean null masks** | Nulls are tracked in a separate `vector<bool>`, keeping data vectors dense. No sentinel values, no NaN tricks. |
 | **Two-pass CSV read** | Pass 1 infers types across all rows. Pass 2 parses values directly into the correct typed column. No string→object→cast overhead. |
-| **Zero-copy bridge** | `to_pandas()` exposes C++ memory directly via NumPy's buffer protocol where supported. Numeric columns preserve the fast zero-copy path by default, while `copy=True` requests defensive pandas-owned buffers. |
+| **Zero-copy bridge** | `to_pandas()` exposes C++ memory directly via NumPy's buffer protocol. Numeric and boolean columns cross the boundary without copying. |
 | **Step registry** | Pipeline steps map to C++ function pointers. Adding a new cleaning primitive is a single function + one registry entry. |
 
 > Full architecture documentation: **[ARCHITECTURE.md](ARCHITECTURE.md)**
@@ -402,6 +399,28 @@ Most operations below run natively in C++. The current `filter_rows` step uses t
 | `clean` | Convenience shorthand | `ar.clean(frame, drop_nulls=True)` |
 | `safe_divide_columns` | Divide one column by another, handling zero/null denominators | `ar.safe_divide_columns(frame, numerator="revenue", denominator="cost", output_column="ratio")` |
 
+#### `ArFrame.select_dtypes` — type-based column selection
+
+Returns a **new `ArFrame`** containing only the columns whose dtype matches the filter. Raises `ValueError` if no columns match.
+
+```python
+frame = ar.read_csv("data.csv")
+
+# Keep only numeric columns
+numeric = frame.select_dtypes(include=["int64", "float64"])
+
+# Drop string columns
+without_strings = frame.select_dtypes(exclude="string")
+```
+
+**Valid dtype strings:** `"int64"`, `"float64"`, `"string"`, `"bool"`, `"null"`
+
+- At least one of `include` or `exclude` must be given — raises `ValueError` otherwise.
+- `include` and `exclude` must not overlap — raises `ValueError` if they share a dtype.
+- Unknown dtype strings raise `ValueError` with a list of valid options.
+- Raises `ValueError` when no columns match (never returns an empty frame silently).
+- Column order in the result always matches the original frame.
+
 Or compose them all into a **pipeline**:
 
 ```python
@@ -484,10 +503,7 @@ If a dtype is partially supported, users may need conversion before processing. 
 
 ### Notes
 
-- Numeric columns are optimized for zero-copy conversion between C++ and pandas where supported.
-- Pass `copy=True` to `to_pandas()` when downstream pandas code needs defensive pandas-owned column buffers.
-- Boolean conversion is already copied by the binding because `std::vector<bool>` cannot be exposed as a zero-copy NumPy buffer in the current implementation.
-- Columns with null masks may require copies so pandas can apply nullable values safely.
+- Numeric and boolean columns are optimized for zero-copy conversion between C++ and pandas.
 - String columns require Python string object creation during `to_pandas()` conversion.
 - Mixed `object` columns may reduce type inference accuracy and may require preprocessing.
 - Unsupported dtypes should raise clear user-facing errors instead of silent failures.
@@ -516,22 +532,16 @@ For production data contracts:
 schema = ar.Schema({
     "id": ar.Int64(nullable=False, unique=True),
     "email": ar.Email(nullable=False),
-    "username": ar.String(min_length=3, max_length=20),
     "revenue": ar.Float64(nullable=True, min=0),
 })
 
 result = ar.validate(frame, schema)
 if not result.passed:
-    summary = result.summary()
-    print(summary["issues_by_rule"])
-    print(summary["issues_by_column"])
-    print(summary["issues_by_column_and_rule"])
     print(result.to_pandas())
     print(result.to_markdown(max_issues=10))
 ```
 
 `ValidationResult.to_markdown()` is useful in CI logs, GitHub comments, or data quality reports because it renders a compact validation summary plus a GitHub-friendly issue table.
-Severity counts are not included in `summary()` yet because `ValidationIssue` does not currently carry severity information.
 
 For low-risk automatic cleanup:
 
