@@ -341,6 +341,12 @@ class TestFromPandas:
         assert list(result["flag"]) == [True, False, pd.NA]
 
 
+    def test_dataframe_index_is_dropped(self):
+        """pandas index is not preserved during from_pandas conversion."""
+        df = pd.DataFrame({"a": [1, 2, 3]}, index=["x", "y", "z"])
+        frame = ar.from_pandas(df)
+        result = ar.to_pandas(frame)
+        assert isinstance(result.index, pd.RangeIndex)
 class TestAttrsPreservation:
     def test_attrs_roundtrip(self):
         """attrs set on input DataFrame survive from_pandas -> to_pandas."""
