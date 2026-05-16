@@ -428,6 +428,28 @@ class TestCleanAPI:
         assert len(result) < len(frame)
 
 
+class TestFilterRows:
+    def test_filter_rows_missing_column_raises_clear_error(self):
+        df = pd.DataFrame({"age": [20, 30]})
+
+        with pytest.raises(ValueError, match="Unknown column: missing"):
+            ar.filter_rows(df, "missing", ">", 10)
+
+    def test_filter_rows_missing_column_raises_clear_error_for_arframe(self):
+        frame = ar.from_pandas(pd.DataFrame({"age": [20, 30]}))
+
+        with pytest.raises(ValueError, match="Unknown column: missing"):
+            ar.filter_rows(frame, "missing", ">", 10)
+
+    def test_filter_rows_valid_column_still_works(self):
+        df = pd.DataFrame({"age": [20, 30]})
+
+        result = ar.filter_rows(df, "age", ">", 20)
+
+        assert len(result) == 1
+        assert result.iloc[0]["age"] == 30
+
+
 class TestRoundNumericColumns:
     def test_round_all_numeric(self):
         import pandas as pd
