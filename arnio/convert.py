@@ -127,6 +127,10 @@ def to_pandas(frame: ArFrame) -> pd.DataFrame:
 def _pandas_dtype_to_arnio(dtype: object) -> _DType | None:
     if dtype == pd.Int64Dtype():
         return _DType.INT64
+
+    if dtype == pd.StringDtype():
+        return _DType.STRING
+
     return None
 
 
