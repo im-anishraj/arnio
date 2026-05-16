@@ -9,14 +9,14 @@
 
 <br><br>
 
-### Your CSV hits C++ before Python even wakes up.
+### Fast data preparation for the Python data stack.
 
 <br>
 
-**Arnio** is a compiled C++ data cleaning engine that slots in _before_ pandas.<br>
-It parses, infers types, strips whitespace, deduplicates, and normalizes —<br>
-all natively, in columnar memory — then hands you a pristine `DataFrame`.<br>
-No `.apply()`. No lambda chains. No spaghetti.
+**Arnio** is a compiled C++ data preparation engine for messy CSV and pandas workflows.<br>
+It parses, infers types, strips whitespace, deduplicates, validates, and profiles data —<br>
+then hands clean results back to the tools you already use.<br>
+Use Arnio _before_ and _alongside_ pandas, NumPy, scikit-learn, DuckDB, and Arrow.
 
 <br>
 
@@ -37,7 +37,7 @@ pip install arnio
 
 <br>
 
-<a href="#-quickstart">Quickstart</a>&ensp;·&ensp;<a href="#-why-arnio-exists">Why Arnio</a>&ensp;·&ensp;<a href="#%EF%B8%8F-architecture">Architecture</a>&ensp;·&ensp;<a href="#-benchmarks">Benchmarks</a>&ensp;·&ensp;<a href="#-community">Community</a>&ensp;·&ensp;<a href="#-contribute">Contribute</a>
+<a href="#-quickstart">Quickstart</a>&ensp;·&ensp;<a href="#-integrations">Integrations</a>&ensp;·&ensp;<a href="#-why-arnio-exists">Why Arnio</a>&ensp;·&ensp;<a href="#%EF%B8%8F-architecture">Architecture</a>&ensp;·&ensp;<a href="#-benchmarks">Benchmarks</a>&ensp;·&ensp;<a href="#-community">Community</a>&ensp;·&ensp;<a href="#-contribute">Contribute</a>
 
 </div>
 
@@ -70,6 +70,36 @@ clean = ar.pipeline(frame, [
 df = ar.to_pandas(clean)
 ```
 
+Already have a pandas `DataFrame`? Use Arnio in-place in your existing pandas
+workflow:
+
+```python
+import pandas as pd
+import arnio as ar
+
+df = pd.read_csv("messy_sales_data.csv")
+
+clean_df = df.arnio.clean([
+    ("strip_whitespace",),
+    ("normalize_case", {"case_type": "lower"}),
+    ("drop_duplicates",),
+])
+
+report = clean_df.arnio.profile()
+```
+
+### Select specific columns
+
+Use `select_columns()` to create a new `ArFrame` with only the required columns before converting to pandas.
+
+```python
+selected = frame.select_columns(["name", "revenue"])
+
+print(selected.columns)
+# ['name', 'revenue']
+```
+
+
 > Every step above executes in C++. Your Python code is a _configuration_ — not the execution engine.
 
 <br>
@@ -86,6 +116,22 @@ schema = ar.scan_csv("100GB_file.csv")
 ```
 
 Useful for exploring datasets before committing memory.
+</details>
+
+<details>
+<summary><b>👀 Preview rows without pandas conversion or full-column Python list materialization</b></summary>
+<br>
+
+`preview()` reads only the first `n` rows directly from the C++ frame — no pandas conversion triggered.
+
+```python
+frame = ar.read_csv("huge_file.csv")
+
+print(frame.preview())      # first 5 rows (default)
+print(frame.preview(n=10))  # first 10 rows
+```
+
+Raises `ValueError` for invalid `n` (zero, negative, or non-integer).
 </details>
 
 <details>
@@ -117,6 +163,43 @@ Custom steps run through a pandas↔ArFrame conversion bridge. Prototype in Pyth
 
 <br>
 
+## 🔗 Integrations
+
+Arnio is designed to make the rest of the Python data stack more productive,
+not to replace it.
+
+| Workflow | How Arnio helps |
+|:---|:---|
+| **pandas** | Clean, validate, and profile messy `DataFrame`s through `df.arnio`. |
+| **NumPy** | Prepare typed numeric data before array/modeling workflows. |
+| **scikit-learn** | Use Arnio cleaning as a preprocessing layer before model training. |
+| **DuckDB / Arrow** | Validate and prepare data before analytics and columnar exchange. |
+| **notebooks** | Inspect quality issues and cleaning suggestions before analysis. |
+
+### Pandas accessor
+
+```python
+df = pd.read_csv("raw_customers.csv")
+
+clean_df = df.arnio.clean(drop_duplicates=True)
+quality = clean_df.arnio.profile()
+validation = clean_df.arnio.validate({
+    "email": ar.Email(nullable=False),
+    "age": ar.Int64(nullable=True, min=0),
+})
+```
+
+This keeps pandas as the analysis tool while Arnio handles the preparation,
+quality, and validation layer.
+
+> Product direction: **[PROJECT_DIRECTION.md](PROJECT_DIRECTION.md)**
+
+<br>
+
+---
+
+<br>
+
 ## 🔍 Why Arnio exists
 
 Every data project starts the same way:
@@ -132,7 +215,7 @@ df = df.drop_duplicates()                  # Another pass
 
 Six lines. Four full-data passes. All in interpreted Python. This is fine for a Jupyter demo — but it doesn't scale, it doesn't compose, and it definitely doesn't belong in production.
 
-**Arnio intercepts this entire pattern.** It moves the heavy lifting to C++, replaces imperative chains with a declarative pipeline, and gives you a clean `DataFrame` in one shot.
+**Arnio intercepts this entire pattern.** It moves the preparation layer into a predictable pipeline, accelerates supported operations in C++, and gives you clean data for pandas, NumPy, scikit-learn, DuckDB, or notebooks.
 
 <table>
 <tr>
@@ -224,8 +307,8 @@ Arnio is not a pandas wrapper. It's a separate runtime with its own data model.
 
 ## 🏎️ Benchmarks
 
-> **Reference environment**: Ubuntu, Python 3.12, 1M rows × 12 columns, synthetic messy CSV.<br>
-> **Reproduce**: `make benchmark` — generates the deterministic dataset and runs both engines.
+> **Reference environment**: Ubuntu, Python 3.12, synthetic messy CSV inputs.<br>
+> **Reproduce**: `make benchmark` — generates deterministic tall and wide datasets and runs both engines.
 
 To reproduce the published numbers from a fresh checkout:
 
@@ -238,16 +321,24 @@ python benchmarks/generate_data.py
 python benchmarks/benchmark_vs_pandas.py
 ```
 
-`benchmarks/generate_data.py` uses NumPy's `default_rng(42)`, so every run creates the same `benchmarks/benchmark_1m.csv` input. The benchmark then executes three pandas runs and three arnio runs, printing average wall-clock time from `time.perf_counter()` and peak Python allocation from `tracemalloc`. For cleaner comparisons, close other memory-heavy processes and run the script from the repository root after installing the same Python, pandas, NumPy, compiler, and arnio commit you want to compare.
+`benchmarks/generate_data.py` uses deterministic NumPy seeds, so every run creates the same `benchmarks/benchmark_1m.csv` tall input and `benchmarks/benchmark_wide.csv` wide input. The benchmark then executes three pandas runs and three arnio runs for each case, printing average wall-clock time from `time.perf_counter()` and peak Python allocation from `tracemalloc`. For cleaner comparisons, close other memory-heavy processes and run the script from the repository root after installing the same Python, pandas, NumPy, compiler, and arnio commit you want to compare.
 
 Expected output format:
 
 ```text
-                     pandas         arnio
+Tall CSV (1,000,000 rows x 12 columns)
+Metric                     pandas        arnio
 ────────────────────────────────────────────
 Exec Time (avg)       4.73s         5.75s
 Peak RAM               211MB         212MB
-API Clarity         Imperative    Declarative
+Speed: 0.8x | RAM: -1% reduction
+
+Wide CSV (5,000 rows x 256 columns)
+Metric                     pandas        arnio
+────────────────────────────────────────────
+Exec Time (avg)       ...s          ...s
+Peak RAM              ...MB         ...MB
+Speed: ...x | RAM: ...% reduction
 ```
 
 Small differences are expected across CPUs, operating systems, compilers, Python builds, and pandas/NumPy versions. If you share benchmark results in an issue or PR, include your OS, Python version, CPU model, pandas/NumPy versions, arnio commit, and the full command output so maintainers can compare like for like.
@@ -292,20 +383,25 @@ Most operations below run natively in C++. The current `filter_rows` step uses t
 | Primitive | What it does | Example |
 |:---|:---|:---|
 | `drop_nulls` | Remove rows with null/empty values | `ar.drop_nulls(frame, subset=["age"])` |
+| `validate_columns_exist` | Fail early when required columns are missing | `ar.validate_columns_exist(frame, ["age"])` |
 | `filter_rows` | Filter rows using comparison operators | `ar.filter_rows(frame, column="age", op=">", value=18)` |
 | `fill_nulls` | Replace nulls with a scalar | `ar.fill_nulls(frame, 0, subset=["revenue"])` |
 | `drop_duplicates` | Deduplicate rows (first/last/none) | `ar.drop_duplicates(frame, keep="first")` |
 | `drop_constant_columns` | Remove columns with only one unique value | `ar.drop_constant_columns(frame)` |
+| `clip_numeric` | Clip numeric values to lower and/or upper bounds | `ar.clip_numeric(frame, lower=0, upper=100)` |
 | `strip_whitespace` | Trim leading/trailing spaces from strings | `ar.strip_whitespace(frame)` |
 | `normalize_case` | Force lower/upper/title case | `ar.normalize_case(frame, case_type="title")` |
 | `rename_columns` | Rename columns via mapping | `ar.rename_columns(frame, {"old": "new"})` |
 | `cast_types` | Cast column types | `ar.cast_types(frame, {"age": "int64"})` |
+| `round_numeric_columns` | Round numeric columns (non-numeric columns in subset ignored safely) | `ar.round_numeric_columns(frame, decimals=2)` |
 | `clean` | Convenience shorthand | `ar.clean(frame, drop_nulls=True)` |
+| `safe_divide_columns` | Divide one column by another, handling zero/null denominators | `ar.safe_divide_columns(frame, numerator="revenue", denominator="cost", output_column="ratio")` |
 
 Or compose them all into a **pipeline**:
 
 ```python
 clean = ar.pipeline(frame, [
+    ("validate_columns_exist", {"columns": ["name", "city", "revenue"]}),
     ("strip_whitespace",),
     ("normalize_case", {"case_type": "lower"}),
     ("fill_nulls", {"value": "unknown", "subset": ["city"]}),
@@ -343,6 +439,21 @@ Works with:
 - booleans
 
 <br>
+### 🔢 Safe column division
+
+Divide one column by another while handling division by zero and null denominators explicitly:
+
+```python
+result = ar.safe_divide_columns(
+    frame,
+    numerator="revenue",
+    denominator="cost",
+    output_column="ratio",
+    fill_value=0.0,  # used when denominator is zero or null
+)
+```
+
+> When the denominator is **zero or null**, the result is replaced with `fill_value` (default `0.0`) instead of raising an error or producing `NaN`/`Inf`.
 
 ---
 
@@ -403,7 +514,10 @@ schema = ar.Schema({
 result = ar.validate(frame, schema)
 if not result.passed:
     print(result.to_pandas())
+    print(result.to_markdown(max_issues=10))
 ```
+
+`ValidationResult.to_markdown()` is useful in CI logs, GitHub comments, or data quality reports because it renders a compact validation summary plus a GitHub-friendly issue table.
 
 For low-risk automatic cleanup:
 
