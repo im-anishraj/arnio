@@ -20,6 +20,7 @@ Use Arnio _before_ and _alongside_ pandas, NumPy, scikit-learn, DuckDB, and Arro
 
 <br>
 
+
 <a href="https://pypi.org/project/arnio/"><img src="https://img.shields.io/pypi/v/arnio?style=flat-square&logo=pypi&logoColor=white&labelColor=0d1117&color=3572A5" alt="PyPI"></a>&nbsp;
 <a href="https://pypi.org/project/arnio/"><img src="https://img.shields.io/pypi/pyversions/arnio?style=flat-square&logo=python&logoColor=white&labelColor=0d1117&color=3572A5" alt="Python"></a>&nbsp;
 <a href="https://github.com/im-anishraj/arnio/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/im-anishraj/arnio/ci.yml?branch=main&label=CI&style=flat-square&logo=github&labelColor=0d1117&color=2ea44f" alt="CI"></a>&nbsp;
@@ -43,6 +44,11 @@ Colab install smoke test: **[COLAB_SMOKE_TEST.md](COLAB_SMOKE_TEST.md)**
 
 </div>
 
+### System Architecture
+
+The following diagram illustrates the internal workflow and architecture of Arnio.
+
+![Arnio Architecture](tests/images/arnio-architecture.png)
 <br>
 
 ---
