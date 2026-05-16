@@ -41,6 +41,58 @@ class TestFillNulls:
             ar.fill_nulls(frame, "bad", subset=["x"])
 
 
+class TestValidateColumnsExist:
+    def test_returns_original_frame_when_columns_exist(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        result = ar.validate_columns_exist(frame, ["name", "age"])
+
+        assert result is frame
+
+    def test_allows_empty_column_list(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        result = ar.validate_columns_exist(frame, [])
+
+        assert result is frame
+
+    def test_raises_clear_error_for_missing_columns(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(KeyError, match="Missing columns for test_op"):
+            ar.validate_columns_exist(frame, ["missing"], operation="test_op")
+
+    def test_rejects_string_columns_argument(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(TypeError, match="not a string"):
+            ar.validate_columns_exist(frame, "name")
+
+    def test_rejects_non_string_column_items(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(TypeError, match="only string column names"):
+            ar.validate_columns_exist(frame, ["name", 1])
+
+    def test_drop_nulls_rejects_string_subset(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(TypeError, match="subset must be a sequence"):
+            ar.drop_nulls(frame, subset="name")
+
+    def test_drop_nulls_rejects_missing_subset_column(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(KeyError, match="Missing columns for drop_nulls"):
+            ar.drop_nulls(frame, subset=["missing"])
+
+    def test_rename_rejects_missing_mapping_column(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(KeyError, match="Missing columns for rename_columns"):
+            ar.rename_columns(frame, {"missing": "new_name"})
+
+
 class TestDropDuplicates:
     def test_drop_dupes_first(self, csv_with_duplicates):
         frame = ar.read_csv(csv_with_duplicates)
@@ -336,6 +388,96 @@ class TestCleanAPI:
         # Drop nulls
         result = ar.clean(frame, strip_whitespace=False, drop_nulls=True)
         assert len(result) < len(frame)
+
+
+class TestRoundNumericColumns:
+    def test_round_all_numeric(self):
+        import pandas as pd
+
+        df = pd.DataFrame({"a": [1.123, 2.456], "b": [3.789, 4.0]})
+        frame = ar.from_pandas(df)
+        result = ar.round_numeric_columns(frame, decimals=1)
+        result_df = ar.to_pandas(result)
+        assert list(result_df["a"]) == [1.1, 2.5]
+        assert list(result_df["b"]) == [3.8, 4.0]
+
+    def test_round_subset(self):
+        import pandas as pd
+
+        df = pd.DataFrame({"a": [1.123, 2.456], "b": [3.789, 4.0]})
+        frame = ar.from_pandas(df)
+        result = ar.round_numeric_columns(frame, subset=["a"], decimals=1)
+        result_df = ar.to_pandas(result)
+        assert list(result_df["a"]) == [1.1, 2.5]
+        assert list(result_df["b"]) == [3.789, 4.0]
+
+    def test_round_mixed_types(self):
+        import pandas as pd
+
+        df = pd.DataFrame({"a": [1.123, 2.456], "c": ["str1", "str2"]})
+        frame = ar.from_pandas(df)
+        result = ar.round_numeric_columns(frame, decimals=1)
+        result_df = ar.to_pandas(result)
+        assert list(result_df["a"]) == [1.1, 2.5]
+        assert list(result_df["c"]) == ["str1", "str2"]
+
+    def test_missing_column(self):
+        import pandas as pd
+
+        df = pd.DataFrame({"a": [1.123]})
+        frame = ar.from_pandas(df)
+        with pytest.raises(IndexError, match="Column not found"):
+            ar.round_numeric_columns(frame, subset=["missing_col"])
+
+    def test_with_nulls(self):
+        import numpy as np
+        import pandas as pd
+
+        df = pd.DataFrame({"a": [1.123, np.nan, 2.456]})
+        frame = ar.from_pandas(df)
+        result = ar.round_numeric_columns(frame, decimals=1)
+        result_df = ar.to_pandas(result)
+        assert result_df["a"].isna().iloc[1]
+        assert result_df["a"].iloc[0] == 1.1
+        assert result_df["a"].iloc[2] == 2.5
+
+    def test_invalid_subset_type(self):
+        import pandas as pd
+        import pytest
+
+        df = pd.DataFrame({"a": [1.123]})
+        frame = ar.from_pandas(df)
+        with pytest.raises(TypeError, match="subset must be a list"):
+            ar.round_numeric_columns(frame, subset="a")
+
+    def test_invalid_decimals_type(self):
+        import pandas as pd
+        import pytest
+
+        df = pd.DataFrame({"a": [1.123]})
+        frame = ar.from_pandas(df)
+        with pytest.raises(TypeError, match="decimals must be an integer"):
+            ar.round_numeric_columns(frame, decimals="2")
+
+    def test_decimals_rejects_bool(self):
+        import pandas as pd
+        import pytest
+
+        df = pd.DataFrame({"a": [1.123]})
+        frame = ar.from_pandas(df)
+        with pytest.raises(TypeError, match="decimals must be an integer"):
+            ar.round_numeric_columns(frame, decimals=True)
+
+    def test_round_subset_with_non_numeric(self):
+        import pandas as pd
+
+        df = pd.DataFrame({"name": ["john"], "score": [98.765]})
+        frame = ar.from_pandas(df)
+        result = ar.round_numeric_columns(frame, subset=["name", "score"], decimals=1)
+        result_df = ar.to_pandas(result)
+
+        assert list(result_df["name"]) == ["john"]
+        assert list(result_df["score"]) == [98.8]
 
 
 class TestSafeDivideColumns:

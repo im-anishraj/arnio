@@ -6,6 +6,7 @@ This roadmap is a maintainer-level guide for contributors. It is intentionally p
 
 - Make CSV parsing and cleaning behavior predictable across platforms.
 - Expand the data quality and schema validation layer.
+- Make Arnio useful inside existing pandas and Python data-stack workflows.
 - Improve contributor onboarding for GSSoC 2026.
 - Increase unit, integration, packaging, and benchmark coverage.
 - Keep PyPI releases reliable and easy to verify.
@@ -15,6 +16,7 @@ This roadmap is a maintainer-level guide for contributors. It is intentionally p
 - Harden CSV edge cases: row width validation, comments, encodings, malformed quotes, delimiter detection, and better diagnostics.
 - Make `ArFrame` easier to inspect and test with row previews, column access, equality, and copy behavior.
 - Expand pipeline ergonomics with validation, registry introspection, and safer custom step execution.
+- Add focused interoperability features, starting with the pandas `df.arnio` accessor.
 - Add more schema validators for real-world data contracts.
 - Build reproducible performance baselines and regression checks.
 
@@ -23,6 +25,7 @@ This roadmap is a maintainer-level guide for contributors. It is intentionally p
 - Chunked and streaming processing for datasets that do not fit comfortably in memory.
 - Native writers for CSV and other common export formats.
 - Better pandas interoperability for datetime, categorical, nullable, and timedelta types.
+- Add scikit-learn, Arrow, DuckDB, and NumPy integration paths where they make existing workflows easier.
 - More automatic data quality suggestions with confidence levels and explainable actions.
 - Documentation site with API reference, tutorials, recipes, and contribution tracks.
 
@@ -36,4 +39,6 @@ This roadmap is a maintainer-level guide for contributors. It is intentionally p
 
 ## Product Direction
 
-Arnio should become the fast, explicit preparation layer before pandas: inspect messy data, clean it predictably, validate it against contracts, and hand a trustworthy DataFrame to the rest of the Python ecosystem.
+Arnio should become the fast, explicit preparation layer for the Python data ecosystem: inspect messy data, clean it predictably, validate it against contracts, and hand trustworthy results to pandas, NumPy, scikit-learn, DuckDB, Arrow, and notebooks.
+
+For the full positioning, see [PROJECT_DIRECTION.md](PROJECT_DIRECTION.md).
