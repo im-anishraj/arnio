@@ -15,6 +15,11 @@ from .exceptions import CsvReadError
 from .frame import ArFrame
 
 
+def _is_utf8_encoding(encoding: str) -> bool:
+    """Return whether the encoding should be treated as raw UTF-8 input."""
+    return encoding.lower().replace("_", "-") in {"utf-8", "utf8"}
+
+
 @contextmanager
 def _utf8_csv_path(path: str, encoding: str) -> Iterator[str]:
     """Return a UTF-8 file path for the C++ reader.
@@ -23,7 +28,7 @@ def _utf8_csv_path(path: str, encoding: str) -> Iterator[str]:
     transcode through a temporary UTF-8 file so the public encoding parameter is
     honored without leaking platform-specific decoding behavior through pybind.
     """
-    if encoding.lower().replace("_", "-") in {"utf-8", "utf8"}:
+    if _is_utf8_encoding(encoding):
         yield path
         return
 
@@ -109,14 +114,15 @@ def read_csv(
             f"Unsupported file format: {path}. Only .csv, .txt, and .tsv are supported."
         )
 
-    try:
-        with open(path, "rb") as f:
-            if b"\0" in f.read(1024):
-                raise CsvReadError(
-                    "CSV input contains NUL bytes and appears to be binary or corrupted"
-                )
-    except FileNotFoundError:
-        pass  # Let C++ backend handle or raise standard error
+    if _is_utf8_encoding(encoding):
+        try:
+            with open(path, "rb") as f:
+                if b"\0" in f.read(1024):
+                    raise CsvReadError(
+                        "CSV input contains NUL bytes and appears to be binary or corrupted"
+                    )
+        except FileNotFoundError:
+            pass  # Let C++ backend handle or raise standard error
 
     try:
         if os.path.getsize(path) == 0:
@@ -198,14 +204,15 @@ def scan_csv(
             f"Unsupported file format: {path}. Only .csv, .txt, and .tsv are supported."
         )
 
-    try:
-        with open(path, "rb") as f:
-            if b"\0" in f.read(1024):
-                raise CsvReadError(
-                    "CSV input contains NUL bytes and appears to be binary or corrupted"
-                )
-    except FileNotFoundError:
-        pass  # Let C++ backend handle or raise standard error
+    if _is_utf8_encoding(encoding):
+        try:
+            with open(path, "rb") as f:
+                if b"\0" in f.read(1024):
+                    raise CsvReadError(
+                        "CSV input contains NUL bytes and appears to be binary or corrupted"
+                    )
+        except FileNotFoundError:
+            pass  # Let C++ backend handle or raise standard error
     try:
         if os.path.getsize(path) == 0:
             raise CsvReadError(f"CSV file is empty: {path!r}")
