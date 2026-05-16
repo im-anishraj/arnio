@@ -31,6 +31,7 @@ from .cleaning import (
     strip_whitespace,
     validate_columns_exist,
 )
+
 from .convert import from_pandas, to_pandas
 from .exceptions import ArnioError, CsvReadError, TypeCastError, UnknownStepError
 from .frame import ArFrame
@@ -47,12 +48,9 @@ from .quality import (
 from .schema import (
     URL,
     Bool,
-<<<<<<< HEAD
     CountryCode,
     DateTime,
-=======
     Date,
->>>>>>> 4c4832f (feat: add Date schema field)
     Email,
     Field,
     Float64,
@@ -122,9 +120,6 @@ __all__ = [
     "ArnioError",
     "CsvReadError",
     "TypeCastError",
-<<<<<<< HEAD
     "normalize_unicode",
-=======
     "Date",
->>>>>>> 4c4832f (feat: add Date schema field)
 ]
