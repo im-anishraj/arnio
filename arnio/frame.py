@@ -63,7 +63,7 @@ class ArFrame:
             Memory usage in bytes.
         """
         return self._frame.memory_usage()
-    
+
     def drop_columns(self, cols: list[str]) -> "ArFrame":
         """Return a new ArFrame without the specified columns.
          Parameters
@@ -96,7 +96,7 @@ class ArFrame:
         for col in keep:
             result.add_column(self._frame.column_by_name(col))
         return ArFrame(result)
-   
+
 
     def select_columns(self, columns: list[str]) -> ArFrame:
         """Return a new ArFrame with only the selected columns.
