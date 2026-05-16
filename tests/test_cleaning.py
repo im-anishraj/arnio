@@ -342,7 +342,7 @@ class TestNormalizeCase:
         result = ar.normalize_case(frame, subset=["name"], case_type="title")
         df = ar.to_pandas(result)
         assert df["name"].iloc[0] == "Alice"
-    
+
     def test_title_hyphen(self):
         frame = ar.DataFrame({"name": ["hello-world", "jean-luc picard"]})
         result = ar.normalize_case(frame, subset=["name"], case_type="title")
