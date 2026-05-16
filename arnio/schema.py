@@ -88,19 +88,27 @@ class ValidationResult:
         }
 
     def summary(self) -> dict[str, Any]:
-        """Return a compact validation summary."""
+        """Return a compact validation summary.
+
+        Severity counts are not included because ``ValidationIssue`` does not
+        currently carry severity information.
+        """
         by_rule: dict[str, int] = {}
         by_column: dict[str, int] = {}
+        by_column_and_rule: dict[str, dict[str, int]] = {}
         for issue in self.issues:
             by_rule[issue.rule] = by_rule.get(issue.rule, 0) + 1
             if issue.column is not None:
                 by_column[issue.column] = by_column.get(issue.column, 0) + 1
+                column_rules = by_column_and_rule.setdefault(issue.column, {})
+                column_rules[issue.rule] = column_rules.get(issue.rule, 0) + 1
         return {
             "passed": self.passed,
             "issue_count": self.issue_count,
             "bad_row_count": len(self.bad_rows),
             "issues_by_rule": by_rule,
             "issues_by_column": by_column,
+            "issues_by_column_and_rule": by_column_and_rule,
         }
 
     def to_pandas(self) -> pd.DataFrame:
