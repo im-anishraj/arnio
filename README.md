@@ -105,7 +105,6 @@ print(selected.columns)
 
 > Every step above executes in C++. Your Python code is a _configuration_ — not the execution engine.
 
-
 <br>
 
 <details>
@@ -458,11 +457,6 @@ result = ar.safe_divide_columns(
 ```
 
 > When the denominator is **zero or null**, the result is replaced with `fill_value` (default `0.0`) instead of raising an error or producing `NaN`/`Inf`.
-
----
-
-### Explore the API reference guide :
-> Check out our API reference guide. <br> 👉 **[Arnio API Reference](./API_REFERENCE.md)**
 
 ---
 
