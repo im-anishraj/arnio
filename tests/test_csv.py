@@ -184,6 +184,12 @@ class TestReadCsv:
         with pytest.raises(ar.CsvReadError, match="Duplicate column name: a"):
             ar.read_csv(csv_path)
 
+    def test_empty_file_raises(self, tmp_path):
+        csv_path = tmp_path / "empty.csv"
+        csv_path.write_text("")
+        with pytest.raises(ar.CsvReadError, match="CSV file is empty"):
+            ar.read_csv(str(csv_path))
+
 
 class TestScanCsv:
     def test_scan_schema(self, sample_csv):
@@ -212,3 +218,9 @@ class TestScanCsv:
             match="CSV input contains NUL bytes and appears to be binary or corrupted",
         ):
             ar.scan_csv(file_path)
+
+    def test_scan_empty_file_raises(self, tmp_path):
+        csv_path = tmp_path / "empty.csv"
+        csv_path.write_text("")
+        with pytest.raises(ar.CsvReadError, match="CSV file is empty"):
+            ar.scan_csv(str(csv_path))

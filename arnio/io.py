@@ -117,6 +117,8 @@ def read_csv(
                 )
     except FileNotFoundError:
         pass  # Let C++ backend handle or raise standard error
+    if os.path.getsize(path) == 0:
+        raise CsvReadError(f"CSV file is empty: {path!r}")
 
     config = _CsvConfig()
     config.delimiter = delimiter
@@ -200,6 +202,8 @@ def scan_csv(
                 )
     except FileNotFoundError:
         pass
+    if os.path.getsize(path) == 0:
+        raise CsvReadError(f"CSV file is empty: {path!r}")
 
     config = _CsvConfig()
     config.delimiter = delimiter
