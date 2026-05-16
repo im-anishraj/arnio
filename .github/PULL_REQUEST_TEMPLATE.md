@@ -1,6 +1,8 @@
 ## Summary
 <!-- What changed and why? Keep this short but specific. -->
 
+<!-- Need quick setup or contribution help? Join Discord: https://discord.gg/xsEw7r78M -->
+
 ## Linked issue
 <!-- Use "Fixes #123" when the PR fully resolves an issue. Use "Refs #123" for partial work. -->
 
@@ -29,6 +31,12 @@
 - [ ] `make test`
 - [ ] `make lint`
 - [ ] Other:
+
+## Screenshots / Media
+<!-- If this PR changes the UI, README visuals, or terminal output, add a screenshot or GIF. -->
+
+## Performance Impact
+<!-- If this PR affects speed or memory, paste a snippet from `make benchmark` or other tools. -->
 
 ## Contributor checklist
 - [ ] I read the contributing guide.

@@ -5,6 +5,8 @@ Pandas conversion functions.
 
 from __future__ import annotations
 
+import copy
+
 import numpy as np
 import pandas as pd
 
@@ -43,8 +45,9 @@ def _series_to_python_values(series: pd.Series, col_name: object) -> list[object
     for raw in series.tolist():
         if _is_nested(raw):
             raise TypeError(
-                f"Unsupported nested/complex type in column '{col_name}': "
-                f"{type(raw).__name__}"
+                f"Column '{col_name}' contains unsupported nested value "
+                f"of type '{type(raw).__name__}' at value {raw!r}. "
+                "Convert nested objects to strings or flatten them first."
             )
 
         value = _normalize_scalar(raw)
@@ -76,6 +79,8 @@ def to_pandas(frame: ArFrame) -> pd.DataFrame:
     -------
     pd.DataFrame
         Equivalent pandas DataFrame with proper dtypes and null handling.
+        If the ArFrame was created via ``from_pandas()``, any ``attrs``
+        metadata from the original DataFrame is restored on the result.
 
     Examples
     --------
@@ -113,7 +118,16 @@ def to_pandas(frame: ArFrame) -> pd.DataFrame:
             series[mask] = pd.NA
             data[name] = series
 
-    return pd.DataFrame(data)
+    result = pd.DataFrame(data)
+    if frame._attrs:
+        result.attrs = copy.deepcopy(frame._attrs)
+    return result
+
+
+def _pandas_dtype_to_arnio(dtype: object) -> _DType | None:
+    if dtype == pd.Int64Dtype():
+        return _DType.INT64
+    return None
 
 
 def from_pandas(df: pd.DataFrame) -> ArFrame:
@@ -141,9 +155,18 @@ def from_pandas(df: pd.DataFrame) -> ArFrame:
     >>> frame = ar.from_pandas(df)
     """
     columns = {}
+    dtype_hints = {}
+
     for col_name in df.columns:
         series = df[col_name]
-        columns[str(col_name)] = _series_to_python_values(series, col_name)
+        name = str(col_name)
 
-    cpp_frame = _Frame.from_dict(columns)
-    return ArFrame(cpp_frame)
+        columns[name] = _series_to_python_values(series, col_name)
+
+        dtype_hint = _pandas_dtype_to_arnio(series.dtype)
+        if dtype_hint is not None:
+            dtype_hints[name] = dtype_hint
+
+    cpp_frame = _Frame.from_dict(columns, dtype_hints)
+    return ArFrame(cpp_frame, attrs=copy.deepcopy(df.attrs))
+

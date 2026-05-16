@@ -64,6 +64,31 @@ class TestReadCsv:
         frame = ar.read_csv(csv_path)
         assert frame.columns == ["name", "age"]
 
+    def test_trim_headers_true_is_default(self, tmp_path):
+        csv_path = str(tmp_path / "trim.csv")
+        with open(csv_path, "w") as f:
+            f.write(" name ,  age \nAlice,30\n")
+
+        frame = ar.read_csv(csv_path)
+        assert frame.columns == ["name", "age"]
+
+    def test_trim_headers_false_preserves_spaces(self, tmp_path):
+        csv_path = str(tmp_path / "notrim.csv")
+        with open(csv_path, "w") as f:
+            f.write(" name ,  age \nAlice,30\n")
+
+        frame = ar.read_csv(csv_path, trim_headers=False)
+        assert frame.columns == [" name ", "  age "]
+
+    def test_trim_headers_false_scan_csv(self, tmp_path):
+        csv_path = str(tmp_path / "scan_notrim.csv")
+        with open(csv_path, "w") as f:
+            f.write(" score , active \n95,true\n")
+
+        schema = ar.scan_csv(csv_path, trim_headers=False)
+        assert " score " in schema
+        assert " active " in schema
+
     def test_unsupported_extension(self, tmp_path):
         import pytest
 
@@ -75,13 +100,14 @@ class TestReadCsv:
             ar.read_csv(file_path)
 
     def test_binary_file_rejection(self, tmp_path):
-        import pytest
-
         file_path = str(tmp_path / "data.csv")
         with open(file_path, "wb") as f:
             f.write(b"col1,col2\n\0binary\0,data\n")
 
-        with pytest.raises(ValueError, match="File appears to be binary"):
+        with pytest.raises(
+            ar.CsvReadError,
+            match="CSV input contains NUL bytes and appears to be binary or corrupted",
+        ):
             ar.read_csv(file_path)
 
     def test_read_with_nulls(self, csv_with_nulls):
@@ -133,6 +159,18 @@ class TestReadCsv:
 
         assert df["name"].iloc[0] == "André"
 
+    def test_utf16_encoding_with_nul_bytes_reads_successfully(self, tmp_path):
+        csv_path = tmp_path / "utf16.csv"
+        csv_path.write_text("name,age\nAlice,30\n", encoding="utf-16")
+
+        frame = ar.read_csv(csv_path, encoding="utf-16")
+        df = ar.to_pandas(frame)
+
+        assert frame.columns == ["name", "age"]
+        assert frame.shape == (1, 2)
+        assert df["name"].iloc[0] == "Alice"
+        assert df["age"].iloc[0] == 30
+
     def test_quoted_newline_record(self, tmp_path):
         csv_path = tmp_path / "quoted_newline.csv"
         csv_path.write_text('id,text\n1,"hello\nworld"\n2,ok\n')
@@ -158,6 +196,16 @@ class TestReadCsv:
         with pytest.raises(ar.CsvReadError, match="Duplicate column name: a"):
             ar.read_csv(csv_path)
 
+    def test_empty_file_raises(self, tmp_path):
+        csv_path = tmp_path / "empty.csv"
+        csv_path.write_text("")
+        with pytest.raises(ar.CsvReadError, match="CSV file is empty"):
+            ar.read_csv(str(csv_path))
+
+    def test_missing_file_passthrough(self, tmp_path):
+        with pytest.raises(ar.CsvReadError):
+            ar.read_csv(str(tmp_path / "nonexistent.csv"))
+
 
 class TestScanCsv:
     def test_scan_schema(self, sample_csv):
@@ -174,3 +222,33 @@ class TestScanCsv:
         schema = ar.scan_csv(csv_path, encoding="latin-1")
 
         assert schema == {"name": "string"}
+
+    def test_scan_utf16_encoding_with_nul_bytes_reads_successfully(self, tmp_path):
+        csv_path = tmp_path / "utf16.csv"
+        csv_path.write_text("name,age\nAlice,30\n", encoding="utf-16")
+
+        schema = ar.scan_csv(csv_path, encoding="utf-16")
+
+        assert schema == {"name": "string", "age": "int64"}
+
+    def test_scan_binary_file_rejection(self, tmp_path):
+        file_path = str(tmp_path / "data.csv")
+
+        with open(file_path, "wb") as f:
+            f.write(b"col1,col2\n\0binary\0,data\n")
+
+        with pytest.raises(
+            ar.CsvReadError,
+            match="CSV input contains NUL bytes and appears to be binary or corrupted",
+        ):
+            ar.scan_csv(file_path)
+
+    def test_scan_empty_file_raises(self, tmp_path):
+        csv_path = tmp_path / "empty.csv"
+        csv_path.write_text("")
+        with pytest.raises(ar.CsvReadError, match="CSV file is empty"):
+            ar.scan_csv(str(csv_path))
+
+    def test_scan_missing_file_passthrough(self, tmp_path):
+        with pytest.raises(ar.CsvReadError):
+            ar.scan_csv(str(tmp_path / "nonexistent.csv"))
