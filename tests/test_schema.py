@@ -156,6 +156,49 @@ def test_validation_result_to_markdown_rejects_non_integer_max_issues(sample_csv
             raise AssertionError(f"Expected max_issues={invalid!r} to raise")
 
 
+class TestSchemaToJson:
+    def test_roundtrip(self):
+        schema = ar.Schema({
+            "age": ar.Int64(nullable=False, min=0, max=120),
+            "name": ar.String(nullable=True, min_length=1),
+            "email": ar.Email(nullable=False),
+            "active": ar.Bool(),
+        }, strict=True)
+
+        restored = ar.Schema.from_json(schema.to_json())
+
+        assert restored.strict == schema.strict
+        for name in schema.fields:
+            original = schema.fields[name]
+            restored_field = restored.fields[name]
+            assert original.dtype == restored_field.dtype
+            assert original.nullable == restored_field.nullable
+            assert original.min == restored_field.min
+            assert original.max == restored_field.max
+
+    def test_roundtrip_minimal(self):
+        schema = ar.Schema({"x": ar.Int64()})
+        restored = ar.Schema.from_json(schema.to_json(indent=None))
+        assert restored.fields["x"].dtype == "int64"
+
+    def test_roundtrip_allowed_set(self):
+        schema = ar.Schema({"status": ar.String(allowed={"a", "b", "c"})})
+        restored = ar.Schema.from_json(schema.to_json())
+        assert restored.fields["status"].allowed == {"a", "b", "c"}
+
+    def test_invalid_json_raises(self):
+        import pytest
+
+        with pytest.raises(ValueError, match="Invalid schema JSON"):
+            ar.Schema.from_json("not json")
+
+    def test_missing_fields_key_raises(self):
+        import pytest
+
+        with pytest.raises(ValueError, match="fields"):
+            ar.Schema.from_json('{"strict": false}')
+
+
 def test_custom_pattern_validation(tmp_path):
     path = tmp_path / "codes.csv"
     path.write_text("code\nAA-123\nbad\n")
