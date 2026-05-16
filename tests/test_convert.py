@@ -266,7 +266,7 @@ class TestFromPandas:
 
         assert list(result["flag"]) == [True, False, pd.NA]
 
-    # class TestAttrsPreservation:
+class TestAttrsPreservation:
     def test_attrs_roundtrip(self):
         """attrs set on input DataFrame survive from_pandas -> to_pandas."""
         df = pd.DataFrame({"x": [1, 2, 3]})
