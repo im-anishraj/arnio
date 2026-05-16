@@ -14,12 +14,16 @@ from .frame import ArFrame
 _STEP_REGISTRY: dict[str, Callable] = {
     "drop_nulls": cleaning.drop_nulls,
     "fill_nulls": cleaning.fill_nulls,
+    "validate_columns_exist": cleaning.validate_columns_exist,
     "drop_duplicates": cleaning.drop_duplicates,
+    "drop_constant_columns": cleaning.drop_constant_columns,
+    "clip_numeric": cleaning.clip_numeric,
     "strip_whitespace": cleaning.strip_whitespace,
     "normalize_case": cleaning.normalize_case,
     "normalize_unicode": cleaning.normalize_unicode,
     "rename_columns": cleaning.rename_columns,
     "cast_types": cleaning.cast_types,
+    "round_numeric_columns": cleaning.round_numeric_columns,
 }
 
 
@@ -122,3 +126,5 @@ def pipeline(
 
 
 register_step("filter_rows", cleaning.filter_rows)
+
+register_step("safe_divide_columns", cleaning.safe_divide_columns)

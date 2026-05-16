@@ -32,6 +32,12 @@
 - [ ] `make lint`
 - [ ] Other:
 
+## Screenshots / Media
+<!-- If this PR changes the UI, README visuals, or terminal output, add a screenshot or GIF. -->
+
+## Performance Impact
+<!-- If this PR affects speed or memory, paste a snippet from `make benchmark` or other tools. -->
+
 ## Contributor checklist
 - [ ] I read the contributing guide.
 - [ ] I kept the PR focused on one issue or one logical change.
