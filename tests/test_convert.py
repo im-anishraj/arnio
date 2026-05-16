@@ -22,7 +22,7 @@ class TestToPandas:
     def test_nulls_converted(self, csv_with_nulls):
         frame = ar.read_csv(csv_with_nulls)
         df = ar.to_pandas(frame)
-        assert df.isna().any().any()  # Should have some NaN/NA values
+        assert df.isna().any().any()
 
     def test_to_python_list_with_nulls(self):
         frame = ar.from_pandas(
@@ -73,18 +73,14 @@ class TestFromPandas:
         assert "z" in frame.columns
 
     def test_nullable_int64_roundtrip_mixed_values(self):
-        df = pd.DataFrame(
-            {"id": pd.Series([1, pd.NA, 3], dtype=pd.Int64Dtype())}
-        )
+        df = pd.DataFrame({"id": pd.Series([1, pd.NA, 3], dtype=pd.Int64Dtype())})
 
         result = ar.to_pandas(ar.from_pandas(df))
 
         pd.testing.assert_series_equal(result["id"], df["id"])
 
     def test_nullable_int64_roundtrip_all_nulls(self):
-        df = pd.DataFrame(
-            {"id": pd.Series([pd.NA, pd.NA], dtype=pd.Int64Dtype())}
-        )
+        df = pd.DataFrame({"id": pd.Series([pd.NA, pd.NA], dtype=pd.Int64Dtype())})
 
         frame = ar.from_pandas(df)
         result = ar.to_pandas(frame)
@@ -94,9 +90,7 @@ class TestFromPandas:
         assert result["id"].isna().tolist() == [True, True]
 
     def test_nullable_int64_roundtrip_without_nulls(self):
-        df = pd.DataFrame(
-            {"id": pd.Series([1, 2, 3], dtype=pd.Int64Dtype())}
-        )
+        df = pd.DataFrame({"id": pd.Series([1, 2, 3], dtype=pd.Int64Dtype())})
 
         result = ar.to_pandas(ar.from_pandas(df))
 
@@ -115,7 +109,6 @@ class TestFromPandas:
         assert list(df2["score"]) == [95.5, 87.0]
 
     def test_from_pandas_nested_data(self):
-
         df_list = pd.DataFrame({"a": [[1, 2], [3, 4]]})
         with pytest.raises(
             TypeError, match="Column 'a' contains unsupported nested value"
@@ -136,7 +129,6 @@ class TestFromPandas:
         assert list(df2["a"]) == ["1", "x", "3"]
 
     def test_from_pandas_mixed_object_column_with_nested_value(self):
-
         df = pd.DataFrame({"mixed": [1, "hello", {"a": 1}]}, dtype=object)
 
         with pytest.raises(
@@ -222,26 +214,47 @@ class TestFromPandas:
         assert str(result["active"].dtype) == "boolean"
         assert list(result["active"]) == [True, False, pd.NA]
 
-        def test_from_pandas_preserves_string_dtype_roundtrip(self):
-            df = pd.DataFrame(
-                {
-                    "name": pd.Series(
-                        ["Alice", "Bob", pd.NA],
-                        dtype=pd.StringDtype(),
-                    )
-                }
-            )
+    def test_string_dtype_roundtrip_with_missing_value(self):
+        df = pd.DataFrame(
+            {
+                "name": pd.Series(
+                    ["a", pd.NA],
+                    dtype=pd.StringDtype(),
+                )
+            }
+        )
 
-            frame = ar.from_pandas(df)
-            result = ar.to_pandas(frame)
+        result = ar.to_pandas(ar.from_pandas(df))
 
-            assert str(result["name"].dtype) == "string"
-            assert list(result["name"]) == ["Alice", "Bob", pd.NA]
+        assert str(result["name"].dtype) == "string"
+        assert list(result["name"]) == ["a", pd.NA]
+
+    def test_string_dtype_roundtrip_all_nulls(self):
+        df = pd.DataFrame(
+            {
+                "name": pd.Series(
+                    [pd.NA, pd.NA],
+                    dtype=pd.StringDtype(),
+                )
+            }
+        )
+
+        result = ar.to_pandas(ar.from_pandas(df))
+
+        assert str(result["name"].dtype) == "string"
+        assert result["name"].isna().tolist() == [True, True]
+
+    def test_mixed_object_column_behavior_unchanged(self):
+        df = pd.DataFrame({"a": [1, "x", 3]}, dtype=object)
+
+        result = ar.to_pandas(ar.from_pandas(df))
+
+        assert list(result["a"]) == ["1", "x", "3"]
+
 
 class TestAttrsPreservation:
     def test_attrs_roundtrip(self):
-        """attrs set on input DataFrame survive
-         -> to_pandas."""
+        """attrs set on input DataFrame survive -> to_pandas."""
         df = pd.DataFrame({"x": [1, 2, 3]})
         df.attrs = {"source": "test_db", "version": 2}
         frame = ar.from_pandas(df)
@@ -263,7 +276,6 @@ class TestAttrsPreservation:
         frame = ar.from_pandas(df)
         result = ar.to_pandas(frame)
         result.attrs["key"] = "mutated"
-        # original frame attrs must be untouched
         assert frame._attrs["key"] == "original"
 
     def test_attrs_through_pipeline(self):
@@ -285,9 +297,6 @@ class TestAttrsPreservation:
         df = pd.DataFrame({"x": [1, 2]})
         df.attrs = {"meta": {"version": 1, "tags": ["a", "b"]}}
         frame = ar.from_pandas(df)
-        # mutate the original nested object
         df.attrs["meta"]["tags"].append("c")
         result = ar.to_pandas(frame)
-        # stored copy must be unaffected
         assert result.attrs["meta"]["tags"] == ["a", "b"]
-
