@@ -342,6 +342,34 @@ class TestNormalizeCase:
         result = ar.normalize_case(frame, subset=["name"], case_type="title")
         df = ar.to_pandas(result)
         assert df["name"].iloc[0] == "Alice"
+    
+    def test_title_hyphen(self):
+        frame = ar.DataFrame({"name": ["hello-world", "jean-luc picard"]})
+        result = ar.normalize_case(frame, subset=["name"], case_type="title")
+        df = ar.to_pandas(result)
+        assert df["name"].iloc[0] == "Hello-World"
+        assert df["name"].iloc[1] == "Jean-Luc Picard"
+
+    def test_title_underscore(self):
+        frame = ar.DataFrame({"name": ["hello_world", "foo_bar_baz"]})
+        result = ar.normalize_case(frame, subset=["name"], case_type="title")
+        df = ar.to_pandas(result)
+        assert df["name"].iloc[0] == "Hello_World"
+        assert df["name"].iloc[1] == "Foo_Bar_Baz"
+
+    def test_title_period(self):
+        frame = ar.DataFrame({"name": ["dr.strange", "mr.smith"]})
+        result = ar.normalize_case(frame, subset=["name"], case_type="title")
+        df = ar.to_pandas(result)
+        assert df["name"].iloc[0] == "Dr.Strange"
+        assert df["name"].iloc[1] == "Mr.Smith"
+
+    def test_title_slash(self):
+        frame = ar.DataFrame({"name": ["hello/world", "foo/bar"]})
+        result = ar.normalize_case(frame, subset=["name"], case_type="title")
+        df = ar.to_pandas(result)
+        assert df["name"].iloc[0] == "Hello/World"
+        assert df["name"].iloc[1] == "Foo/Bar"
 
 
 class TestRenameColumns:
