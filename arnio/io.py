@@ -148,6 +148,7 @@ def scan_csv(
     delimiter: str = ",",
     encoding: str = "utf-8",
     trim_headers: bool = True,
+    sample_size: int | None = None,
 ) -> dict[str, str]:
     """Return schema (column names + inferred types) without loading data.
 
@@ -161,6 +162,8 @@ def scan_csv(
         File encoding. Non-UTF-8 inputs are transcoded before native scanning.
     trim_headers : bool, default True
         Strip leading/trailing whitespace from column names.
+    sample_size : int, optional
+        Number of rows to read for type inference. If None, defaults to 100 rows.
 
     Returns
     -------
@@ -205,6 +208,13 @@ def scan_csv(
     config.delimiter = delimiter
     config.encoding = encoding
     config.trim_headers = trim_headers
+
+    if sample_size is not None:
+
+        if sample_size <= 0:
+            raise ValueError("sample_size must be a positive integer greater than 0.")
+        config.sample_size = sample_size
+
     reader = _CsvReader(config)
     try:
         with _utf8_csv_path(path, encoding) as native_path:
