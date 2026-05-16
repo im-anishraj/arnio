@@ -580,6 +580,70 @@ def round_numeric_columns(
 
     return from_pandas(df) if is_arframe else df
 
+def combine_columns(
+        frame,
+        *,
+        subset: list[str] | None = None,
+        seperator: str = " ",
+        output_column: str = "combined"
+):
+    """Combine multiple columns into a single output column.
+
+    Parameters
+    ----------
+    frame : ArFrame or pd.DataFrame
+        Input data frame.
+    subset : list[str], optional
+        Columns to combine. If None, all columns are used.
+    seperator : str
+        String used to separate values in the output column.
+    output_column : str
+        Name of the new column to store combined values.
+
+    Returns
+    -------
+    ArFrame or pd.DataFrame
+        Frame with the combined output column appended.
+    """
+    import pandas as pd
+
+    from .convert import from_pandas, to_pandas
+
+    if not isinstance(seperator, str):
+        raise TypeError("seperator must be a string")
+    if not isinstance(output_column, str) or not output_column.strip():
+        raise ValueError("output_column must be a non-empty string")
+
+    is_arframe = not isinstance(frame, pd.DataFrame)
+    df = to_pandas(frame) if is_arframe else frame.copy()
+
+    if subset is None:
+        subset_columns = list(df.columns)
+    else:
+        subset_columns = _validate_column_sequence(subset, argument_name="subset")
+        missing = [column for column in subset_columns if column not in df.columns]
+        if missing:
+            available = ", ".join(df.columns) or "<none>"
+            raise KeyError(
+                f"Missing columns for combine_columns: {missing}. Available columns: {available}"
+            )
+
+    if not subset_columns:
+        raise ValueError("subset must contain at least one column")
+
+    if output_column in df.columns:
+
+        raise ValueError(f"Output column '{output_column}' already exists.")
+
+    combined = df[subset_columns].astype("string").fillna("").agg(seperator.join, axis=1)
+    null_mask = df[subset_columns].isna().all(axis=1)
+    combined = combined.mask(null_mask, pd.NA)
+
+    df = df.copy()
+    df[output_column] = combined
+
+    return from_pandas(df) if is_arframe else df
+
 
 def safe_divide_columns(
     frame, numerator: str, denominator: str, output_column: str, fill_value: float = 0.0

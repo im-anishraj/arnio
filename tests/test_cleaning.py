@@ -480,6 +480,88 @@ class TestRoundNumericColumns:
         assert list(result_df["score"]) == [98.8]
 
 
+class TestCombineColumns:
+    def test_combines_columns_with_separator(self):
+        import pandas as pd
+
+        df = pd.DataFrame(
+            {"first": ["Alice", "Bob"], "last": ["Smith", "Jones"]}
+        )
+        frame = ar.from_pandas(df)
+
+        result = ar.combine_columns(
+            frame,
+            subset=["first", "last"],
+            seperator=" ",
+            output_column="full_name",
+        )
+        result_df = ar.to_pandas(result)
+
+        assert list(result_df["full_name"]) == ["Alice Smith", "Bob Jones"]
+
+    def test_combines_all_columns_by_default(self):
+        import pandas as pd
+
+        df = pd.DataFrame({"a": [1, 2], "b": ["x", "y"]})
+        frame = ar.from_pandas(df)
+
+        result = ar.combine_columns(
+            frame,
+            seperator=",",
+            output_column="combined",
+        )
+        result_df = ar.to_pandas(result)
+
+        assert list(result_df["combined"]) == ["1,x", "2,y"]
+
+    def test_preserves_null_rows(self):
+        import numpy as np
+        import pandas as pd
+
+        df = pd.DataFrame(
+            {"a": [None, "hello"], "b": [None, "world"]}
+        )
+        frame = ar.from_pandas(df)
+
+        result = ar.combine_columns(
+            frame,
+            subset=["a", "b"],
+            seperator=" ",
+            output_column="combined",
+        )
+        result_df = ar.to_pandas(result)
+
+        assert pd.isna(result_df["combined"]).iloc[0]
+        assert result_df["combined"].iloc[1] == "hello world"
+
+    def test_missing_subset_column_raises(self):
+        import pandas as pd
+
+        df = pd.DataFrame({"a": [1]})
+        frame = ar.from_pandas(df)
+
+        with pytest.raises(KeyError, match="Missing columns for combine_columns"):
+            ar.combine_columns(
+                frame,
+                subset=["a", "missing"],
+                seperator="-",
+                output_column="combined",
+            )
+
+    def test_output_column_already_exists_warns(self):
+        import pandas as pd
+
+        df = pd.DataFrame({"a": [1], "combined": ["old"]})
+        frame = ar.from_pandas(df)
+
+        with pytest.raises(ValueError, match="Output column 'combined' already exists"):
+            ar.combine_columns(
+                frame,
+                subset=["a"],
+                seperator="-",
+                output_column="combined",
+            )
+
 class TestSafeDivideColumns:
     def test_normal_division(self, tmp_path):
         path = tmp_path / "data.csv"
