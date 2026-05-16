@@ -73,18 +73,14 @@ class TestFromPandas:
         assert "z" in frame.columns
 
     def test_nullable_int64_roundtrip_mixed_values(self):
-        df = pd.DataFrame(
-            {"id": pd.Series([1, pd.NA, 3], dtype=pd.Int64Dtype())}
-        )
+        df = pd.DataFrame({"id": pd.Series([1, pd.NA, 3], dtype=pd.Int64Dtype())})
 
         result = ar.to_pandas(ar.from_pandas(df))
 
         pd.testing.assert_series_equal(result["id"], df["id"])
 
     def test_nullable_int64_roundtrip_all_nulls(self):
-        df = pd.DataFrame(
-            {"id": pd.Series([pd.NA, pd.NA], dtype=pd.Int64Dtype())}
-        )
+        df = pd.DataFrame({"id": pd.Series([pd.NA, pd.NA], dtype=pd.Int64Dtype())})
 
         frame = ar.from_pandas(df)
         result = ar.to_pandas(frame)
@@ -94,9 +90,7 @@ class TestFromPandas:
         assert result["id"].isna().tolist() == [True, True]
 
     def test_nullable_int64_roundtrip_without_nulls(self):
-        df = pd.DataFrame(
-            {"id": pd.Series([1, 2, 3], dtype=pd.Int64Dtype())}
-        )
+        df = pd.DataFrame({"id": pd.Series([1, 2, 3], dtype=pd.Int64Dtype())})
 
         result = ar.to_pandas(ar.from_pandas(df))
 
@@ -222,6 +216,42 @@ class TestFromPandas:
         assert str(result["active"].dtype) == "boolean"
         assert list(result["active"]) == [True, False, pd.NA]
 
+    def test_nullable_string_roundtrip(self):
+        df = pd.DataFrame(
+            {
+                "name": pd.Series(
+                    ["Alice", pd.NA, "Bob"],
+                    dtype="string",
+                )
+            }
+        )
+
+        result = ar.to_pandas(ar.from_pandas(df))
+
+        assert str(result["name"].dtype) == "string"
+
+        pd.testing.assert_series_equal(
+            result["name"],
+            df["name"],
+        )
+
+    def test_nullable_float_roundtrip(self):
+        df = pd.DataFrame(
+            {
+                "score": pd.Series(
+                    [1.5, pd.NA, 3.7],
+                    dtype="Float64",
+                )
+            }
+        )
+
+        result = ar.to_pandas(ar.from_pandas(df))
+
+        assert str(result["score"].dtype) == "float64"
+        assert result["score"].tolist()[0] == 1.5
+        assert pd.isna(result["score"].tolist()[1])
+        assert result["score"].tolist()[2] == 3.7
+
 
 class TestAttrsPreservation:
     def test_attrs_roundtrip(self):
@@ -274,4 +304,3 @@ class TestAttrsPreservation:
         result = ar.to_pandas(frame)
         # stored copy must be unaffected
         assert result.attrs["meta"]["tags"] == ["a", "b"]
-
