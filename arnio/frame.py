@@ -188,6 +188,12 @@ class ArFrame:
                 values = [arg]
             elif isinstance(arg, (list, tuple)):
                 values = list(arg)
+                non_strings = [v for v in values if not isinstance(v, str)]
+                if non_strings:
+                    raise TypeError(
+                        f"'{name}' must contain only strings, "
+                        f"got {[type(v).__name__ for v in non_strings]}."
+                    )
             else:
                 raise TypeError(
                     f"'{name}' must be a string, list, or tuple of strings, "
