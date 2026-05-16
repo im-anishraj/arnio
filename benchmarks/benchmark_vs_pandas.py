@@ -23,7 +23,6 @@ import arnio as ar
 CSV_FILE = "benchmarks/benchmark_1m.csv"
 WIDE_CSV_FILE = "benchmarks/benchmark_wide.csv"
 MULTILINE_CSV_FILE = "benchmarks/benchmark_multiline.csv"
-
 RUNS = 3
 
 ENVIRONMENT_NOTES = """
@@ -41,7 +40,6 @@ Benchmark Environment:
 class BenchmarkCase:
     name: str
     path: str
-
 
 BENCHMARKS = (
     BenchmarkCase(
@@ -64,7 +62,6 @@ def ensure_dataset_exists(path):
             f"Missing benchmark dataset: {path}\n"
             "Run: python benchmarks/generate_data.py"
         )
-
 
 def benchmark_pandas(path):
     ensure_dataset_exists(path)
@@ -91,6 +88,7 @@ def benchmark_pandas(path):
 
 
 def benchmark_arnio(path):
+    
     ensure_dataset_exists(path)
 
     tracemalloc.start()
