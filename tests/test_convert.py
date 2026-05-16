@@ -1,6 +1,7 @@
 """Tests for pandas conversion."""
 
 import pandas as pd
+import pytest
 
 import arnio as ar
 
@@ -71,6 +72,36 @@ class TestFromPandas:
         assert "y" in frame.columns
         assert "z" in frame.columns
 
+    def test_nullable_int64_roundtrip_mixed_values(self):
+        df = pd.DataFrame(
+            {"id": pd.Series([1, pd.NA, 3], dtype=pd.Int64Dtype())}
+        )
+
+        result = ar.to_pandas(ar.from_pandas(df))
+
+        pd.testing.assert_series_equal(result["id"], df["id"])
+
+    def test_nullable_int64_roundtrip_all_nulls(self):
+        df = pd.DataFrame(
+            {"id": pd.Series([pd.NA, pd.NA], dtype=pd.Int64Dtype())}
+        )
+
+        frame = ar.from_pandas(df)
+        result = ar.to_pandas(frame)
+
+        assert frame.dtypes["id"] == "int64"
+        assert str(result["id"].dtype) == "Int64"
+        assert result["id"].isna().tolist() == [True, True]
+
+    def test_nullable_int64_roundtrip_without_nulls(self):
+        df = pd.DataFrame(
+            {"id": pd.Series([1, 2, 3], dtype=pd.Int64Dtype())}
+        )
+
+        result = ar.to_pandas(ar.from_pandas(df))
+
+        pd.testing.assert_series_equal(result["id"], df["id"])
+
     def test_roundtrip_values(self):
         df = pd.DataFrame(
             {
@@ -84,14 +115,17 @@ class TestFromPandas:
         assert list(df2["score"]) == [95.5, 87.0]
 
     def test_from_pandas_nested_data(self):
-        import pytest
 
         df_list = pd.DataFrame({"a": [[1, 2], [3, 4]]})
-        with pytest.raises(TypeError, match="Unsupported nested/complex type"):
+        with pytest.raises(
+            TypeError, match="Column 'a' contains unsupported nested value"
+        ):
             ar.from_pandas(df_list)
 
         df_dict = pd.DataFrame({"a": [{"x": 1}, {"y": 2}]})
-        with pytest.raises(TypeError, match="Unsupported nested/complex type"):
+        with pytest.raises(
+            TypeError, match="Column 'a' contains unsupported nested value"
+        ):
             ar.from_pandas(df_dict)
 
     def test_from_pandas_mixed_object_column(self):
@@ -100,6 +134,16 @@ class TestFromPandas:
         df2 = ar.to_pandas(frame)
 
         assert list(df2["a"]) == ["1", "x", "3"]
+
+    def test_from_pandas_mixed_object_column_with_nested_value(self):
+
+        df = pd.DataFrame({"mixed": [1, "hello", {"a": 1}]}, dtype=object)
+
+        with pytest.raises(
+            TypeError,
+            match="Column 'mixed' contains unsupported nested value",
+        ):
+            ar.from_pandas(df)
 
     def test_from_pandas_unsupported_scalar_object_column(self):
         timestamp = pd.Timestamp("2026-05-14 12:30:00")
@@ -161,3 +205,73 @@ class TestFromPandas:
         result_df = ar.to_pandas(result)
 
         assert list(result_df.columns) == ["name", "age", "city"]
+
+    def test_nullable_boolean_roundtrip(self):
+        df = pd.DataFrame(
+            {
+                "active": pd.Series(
+                    [True, False, pd.NA],
+                    dtype="boolean",
+                )
+            }
+        )
+
+        frame = ar.from_pandas(df)
+        result = ar.to_pandas(frame)
+
+        assert str(result["active"].dtype) == "boolean"
+        assert list(result["active"]) == [True, False, pd.NA]
+
+
+class TestAttrsPreservation:
+    def test_attrs_roundtrip(self):
+        """attrs set on input DataFrame survive from_pandas -> to_pandas."""
+        df = pd.DataFrame({"x": [1, 2, 3]})
+        df.attrs = {"source": "test_db", "version": 2}
+        frame = ar.from_pandas(df)
+        result = ar.to_pandas(frame)
+        assert result.attrs == {"source": "test_db", "version": 2}
+
+    def test_empty_attrs_roundtrip(self):
+        """Empty attrs stay empty — no pollution."""
+        df = pd.DataFrame({"x": [1, 2, 3]})
+        df.attrs = {}
+        frame = ar.from_pandas(df)
+        result = ar.to_pandas(frame)
+        assert result.attrs == {}
+
+    def test_attrs_not_shared(self):
+        """Mutating result.attrs must not affect the ArFrame's stored attrs."""
+        df = pd.DataFrame({"x": [1, 2]})
+        df.attrs = {"key": "original"}
+        frame = ar.from_pandas(df)
+        result = ar.to_pandas(frame)
+        result.attrs["key"] = "mutated"
+        # original frame attrs must be untouched
+        assert frame._attrs["key"] == "original"
+
+    def test_attrs_through_pipeline(self):
+        """attrs survive a direct round-trip — pipeline frames are out of scope."""
+        df = pd.DataFrame({"name": [" Alice ", " Bob "]})
+        df.attrs = {"owner": "data_team"}
+        frame = ar.from_pandas(df)
+        result = ar.to_pandas(frame)
+        assert result.attrs.get("owner") == "data_team"
+
+    def test_read_csv_has_no_attrs(self, sample_csv):
+        """ArFrames from read_csv start with empty attrs — no junk metadata."""
+        frame = ar.read_csv(sample_csv)
+        result = ar.to_pandas(frame)
+        assert result.attrs == {}
+
+    def test_nested_mutable_attrs_are_deep_copied(self):
+        """Nested mutable values in attrs are deep-copied, not shared."""
+        df = pd.DataFrame({"x": [1, 2]})
+        df.attrs = {"meta": {"version": 1, "tags": ["a", "b"]}}
+        frame = ar.from_pandas(df)
+        # mutate the original nested object
+        df.attrs["meta"]["tags"].append("c")
+        result = ar.to_pandas(frame)
+        # stored copy must be unaffected
+        assert result.attrs["meta"]["tags"] == ["a", "b"]
+
