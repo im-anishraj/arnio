@@ -346,17 +346,19 @@ class TestNormalizeCase:
 
 class TestNormalizeUnicode:
     def test_normalize_unicode(self):
-        pass
+        import pandas as pd
 
-    df = pd.DataFrame({"text": ["café"]})
+        import arnio as ar
 
-    frame = ar.from_pandas(df)
+        df = pd.DataFrame({"text": ["café"]})
 
-    result = ar.normalize_unicode(frame)
+        frame = ar.from_pandas(df)
 
-    result_df = ar.to_pandas(result)
+        result = ar.normalize_unicode(frame)
 
-    assert result_df["text"].iloc[0] == "café"
+        result_df = ar.to_pandas(result)
+
+        assert result_df["text"].iloc[0] == "café"
 
 
 class TestRenameColumns:
