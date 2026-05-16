@@ -149,7 +149,6 @@ class ArFrame:
         lines.append(f"DTypes:  {self.dtypes}")
         lines.append(f"Memory:  {self.memory_usage()} bytes")
         return "\n".join(lines)
-    
 
     def compare_schema(self, other: "ArFrame", strict: bool = False) -> bool:
         """Compare the schema (columns and data types) with another ArFrame.
@@ -179,8 +178,6 @@ class ArFrame:
 
         # 4. Non-Strict Mode (Step B): Map columns to verify their values share identical data types
         return all(self.dtypes[col] == other.dtypes[col] for col in self.columns)
-    
-    
 
     def preview(self, n: int = 5) -> str:
         """Return a lightweight string preview of the first ``n`` rows.

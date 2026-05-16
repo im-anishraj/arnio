@@ -257,8 +257,8 @@ def test_validation_result_to_markdown_rejects_non_integer_max_issues(sample_csv
             assert "max_issues must be an integer or None" in str(exc)
         else:
             raise AssertionError(f"Expected max_issues={invalid!r} to raise")
-        
-        
+
+
 def test_custom_pattern_validation(tmp_path):
     path = tmp_path / "codes.csv"
     path.write_text("code\nAA-123\nbad\n")
@@ -269,7 +269,7 @@ def test_custom_pattern_validation(tmp_path):
     assert not result.passed
     assert result.issues[0].rule == "pattern"
     assert result.issues[0].row_index == 1
-    
+
 
 def test_string_min_length_boundary(tmp_path):
     path = tmp_path / "names.csv"
@@ -330,10 +330,7 @@ def test_compare_schema_order_difference(sample_csv, tmp_path):
     df_base = ar.read_csv(sample_csv)
 
     shuffled_path = tmp_path / "shuffled.csv"
-    shuffled_path.write_text(
-        "age,name,email,active\n"
-        "30,Alice,alice@test.com,True\n"
-    )
+    shuffled_path.write_text("age,name,email,active\n" "30,Alice,alice@test.com,True\n")
     df_shuffled = ar.read_csv(shuffled_path)
 
     assert df_base.compare_schema(df_shuffled, strict=True) is False
@@ -346,8 +343,7 @@ def test_compare_schema_dtype_mismatch(sample_csv, tmp_path):
 
     wrong_dtype_path = tmp_path / "wrong_dtype.csv"
     wrong_dtype_path.write_text(
-        "name,age,email,active\n"
-        "Alice,30.5,alice@test.com,True\n"
+        "name,age,email,active\n" "Alice,30.5,alice@test.com,True\n"
     )
     df_wrong_dtype = ar.read_csv(wrong_dtype_path)
 
@@ -360,8 +356,7 @@ def test_compare_schema_column_mismatch(sample_csv, tmp_path):
 
     wrong_cols_path = tmp_path / "wrong_cols.csv"
     wrong_cols_path.write_text(
-        "name,age,email,status\n"
-        "Alice,30,alice@test.com,active\n"
+        "name,age,email,status\n" "Alice,30,alice@test.com,active\n"
     )
     df_wrong_cols = ar.read_csv(wrong_cols_path)
 
