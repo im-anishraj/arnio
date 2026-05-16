@@ -281,6 +281,8 @@ def test_filter_rows_direct_api():
 def test_pipeline_normalize_unicode():
     import pandas as pd
 
+    import arnio as ar
+
     df = pd.DataFrame({"text": ["café"]})
 def test_round_numeric_columns_pipeline():
     import pandas as pd
