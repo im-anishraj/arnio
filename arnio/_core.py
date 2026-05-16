@@ -14,6 +14,7 @@ try:
         drop_duplicates as _drop_duplicates,  # noqa: F401
         drop_nulls as _drop_nulls,  # noqa: F401
         fill_nulls as _fill_nulls,  # noqa: F401
+        make_column_names_unique as _make_column_names_unique,  # noqa: F401
         normalize_case as _normalize_case,  # noqa: F401
         rename_columns as _rename_columns,  # noqa: F401
         strip_whitespace as _strip_whitespace,  # noqa: F401

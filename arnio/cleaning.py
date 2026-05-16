@@ -13,6 +13,7 @@ from ._core import (
     _drop_duplicates,
     _drop_nulls,
     _fill_nulls,
+    _make_column_names_unique,
     _normalize_case,
     _rename_columns,
     _strip_whitespace,
@@ -525,6 +526,33 @@ def filter_rows(frame, column, op, value):
     return from_pandas(filtered) if is_arframe else filtered
 
 
+def make_column_names_unique(
+    frame: ArFrame,
+) -> ArFrame:
+    """Make duplicate column names unique by adding suffixes.
+
+    Duplicate names are made unique by appending "_1", "_2", etc.
+    The first occurrence is kept the same.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input data frame.
+
+    Returns
+    -------
+    ArFrame
+        New frame with unique column names.
+
+    Examples
+    --------
+    >>> frame = ar.read_csv("data.csv")
+    >>> unique = ar.make_column_names_unique(frame)
+    """
+    result = _make_column_names_unique(frame._frame)
+    return ArFrame(result)
+
+
 def round_numeric_columns(
     frame,
     *,
@@ -593,6 +621,10 @@ def safe_divide_columns(
     ----------
     frame : ArFrame
         Input data frame.
+    Returns
+    -------
+    ArFrame
+        New frame with unique column names.
     numerator : str
         Column name to use as the numerator.
     denominator : str
@@ -607,6 +639,7 @@ def safe_divide_columns(
     Returns
     -------
     ArFrame
+
 
     Examples
     --------

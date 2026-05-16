@@ -64,6 +64,7 @@ clean = ar.pipeline(frame, [
     ("strip_whitespace",),
     ("normalize_case", {"case_type": "lower"}),
     ("fill_nulls", {"value": 0.0, "subset": ["revenue"]}),
+    ("make_column_names_unique",),
     ("drop_nulls",),
     ("drop_duplicates",),
 ])

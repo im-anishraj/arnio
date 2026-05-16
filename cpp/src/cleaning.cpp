@@ -405,4 +405,71 @@ Frame cast_types(const Frame& frame, const std::unordered_map<std::string, std::
     return Frame(std::move(new_cols));
 }
 
+Frame make_column_names_unique(const Frame& frame) {
+    std::vector<Column> new_cols;
+    new_cols.reserve(frame.num_cols());
+
+    std::unordered_set<std::string> used_names;
+    std::unordered_map<std::string, int> suffix_counters;
+
+    for (size_t ci = 0; ci < frame.num_cols(); ++ci) {
+        Column col = frame.column(ci).clone();
+        std::string orig_name = col.name();
+        std::string unique_name = orig_name;
+
+        // Detect existing numeric suffix of the form "base_N" and update counters
+        std::string base_key = orig_name;
+        size_t pos = orig_name.find_last_of('_');
+        if (pos != std::string::npos && pos + 1 < orig_name.size()) {
+            bool all_digits = true;
+            for (size_t i = pos + 1; i < orig_name.size(); ++i) {
+                if (!std::isdigit(static_cast<unsigned char>(orig_name[i]))) {
+                    all_digits = false;
+                    break;
+                }
+            }
+            if (all_digits) {
+                std::string parsed_base = orig_name.substr(0, pos);
+                if (!parsed_base.empty()) {
+                    int parsed_suffix = 0;
+                    try {
+                        parsed_suffix = std::stoi(orig_name.substr(pos + 1));
+                    } catch (...) {
+                        parsed_suffix = 0;
+                    }
+                    base_key = parsed_base;
+                    auto it = suffix_counters.find(base_key);
+                    if (it == suffix_counters.end() || it->second < parsed_suffix) {
+                        suffix_counters[base_key] = parsed_suffix;
+                    }
+                }
+            }
+        }
+
+        if (used_names.count(unique_name)) {
+            int suffix = 0;
+            if (suffix_counters.count(base_key))
+                suffix = suffix_counters[base_key] + 1;
+            else
+                suffix = 1;
+            while (true) {
+                std::string candidate = base_key + "_" + std::to_string(suffix);
+                if (!used_names.count(candidate)) {
+                    unique_name = candidate;
+                    suffix_counters[base_key] = suffix;
+                    break;
+                }
+                suffix += 1;
+            }
+        }
+
+        col.set_name(unique_name);
+        used_names.insert(unique_name);
+        if (!suffix_counters.count(base_key)) {
+            suffix_counters[base_key] = 0;
+        }
+        new_cols.push_back(std::move(col));
+    }
+    return Frame(std::move(new_cols));
+}
 }  // namespace arnio

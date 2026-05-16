@@ -20,6 +20,7 @@ from .cleaning import (
     drop_nulls,
     fill_nulls,
     filter_rows,
+    make_column_names_unique,
     normalize_case,
     rename_columns,
     round_numeric_columns,
@@ -73,6 +74,7 @@ __all__ = [
     "rename_columns",
     "round_numeric_columns",
     "cast_types",
+    "make_column_names_unique",
     "clean",
     "safe_divide_columns",
     # Conversion

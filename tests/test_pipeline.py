@@ -190,6 +190,48 @@ class TestPipeline:
         except ValueError as e:
             assert "Expected a dict" in str(e)
 
+    def test_pipeline_make_column_names_unique(self, csv_with_duplicate_columns):
+        # Construct a frame with duplicate column names using the C++ bindings
+        from arnio._core import (
+            _Column as _CColumn,
+        )
+        from arnio._core import (
+            _DType as _CDType,
+        )
+        from arnio._core import (
+            _Frame as _CFrame,
+        )
+
+        c1 = _CColumn("col", _CDType.STRING)
+        c1.push_back("1")
+        c1.push_back("4")
+
+        c2 = _CColumn("col", _CDType.STRING)
+        c2.push_back("2")
+        c2.push_back("5")
+
+        c3 = _CColumn("age", _CDType.INT64)
+        c3.push_back(3)
+        c3.push_back(6)
+
+        cpp_frame = _CFrame()
+        cpp_frame.add_column(c1)
+        cpp_frame.add_column(c2)
+        cpp_frame.add_column(c3)
+
+        frame = ar.ArFrame(cpp_frame)
+
+        result = ar.pipeline(frame, [("make_column_names_unique",)])
+
+        assert result.columns == ["col", "col_1", "age"]
+
+    def test_pipeline_make_column_names_unique_already_unique(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        result = ar.pipeline(frame, [("make_column_names_unique",)])
+
+        assert result.columns == frame.columns
+
 
 def test_filter_rows_greater_than():
     import pandas as pd
