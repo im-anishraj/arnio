@@ -390,6 +390,13 @@ def normalize_unicode(
 
     from .convert import from_pandas, to_pandas
 
+    if subset is not None:
+        validate_columns_exist(
+            frame,
+            _validate_column_sequence(subset, argument_name="subset"),
+            operation="normalize_unicode",
+        )
+
     df = to_pandas(frame).copy()
 
     columns = (

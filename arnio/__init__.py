@@ -26,6 +26,7 @@ from .cleaning import (
     safe_divide_columns,
     strip_whitespace,
     validate_columns_exist,
+    normalize_unicode,
 )
 from .convert import from_pandas, to_pandas
 from .exceptions import ArnioError, CsvReadError, TypeCastError, UnknownStepError
@@ -106,4 +107,5 @@ __all__ = [
     "ArnioError",
     "CsvReadError",
     "TypeCastError",
+    "normalize_unicode",
 ]
