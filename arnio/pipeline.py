@@ -14,6 +14,7 @@ from .frame import ArFrame
 _STEP_REGISTRY: dict[str, Callable] = {
     "drop_nulls": cleaning.drop_nulls,
     "fill_nulls": cleaning.fill_nulls,
+    "validate_columns_exist": cleaning.validate_columns_exist,
     "drop_duplicates": cleaning.drop_duplicates,
     "drop_constant_columns": cleaning.drop_constant_columns,
     "clip_numeric": cleaning.clip_numeric,
