@@ -728,22 +728,28 @@ The biggest performance wins are in:
 - **`strip_whitespace`** — converting from copy-on-write to in-place mutation
 - **Parallel column processing** — `std::thread` across independent columns
 
+
 ### Getting started
 
-```bash
-# macOS / Linux
-git clone https://github.com/im-anishraj/arnio.git && cd arnio
-make install   # pip install -e ".[dev]" + pre-commit
-make test      # pytest with coverage
-make lint      # ruff + black
+# Clone the repository
+git clone https://github.com/im-anishraj/arnio.git
+cd arnio
 
-# Windows
-pip install -e ".[dev]"
-pre-commit install
-pytest tests/ -v
-```
+# Ensure Python 3.12+ is installed
+python --version
 
-> **PR titles must follow [Conventional Commits](https://www.conventionalcommits.org/)** — `feat:`, `fix:`, `docs:`, `chore:`. Our release pipeline auto-generates changelogs from these.
+# Create and activate a virtual environment
+python -m venv venv
+source venv/bin/activate   # On Windows: venv\Scripts\activate
+
+# Install dependencies in editable mode
+pip install -U pip
+pip install -e .
+
+# Run tests
+pytest
+
+
 
 For GSSoC contributors, please read **[GSSOC_GUIDE.md](GSSOC_GUIDE.md)** before asking to be assigned. It explains issue claiming, contribution levels, review expectations, and what maintainers look for in a strong PR. If you want a quick onboarding refresher, see the [GSSoC FAQ](GSSOC_GUIDE.md#gssoc-faq).
 If you are new to Arnio terms, see the [contributor glossary](.github/CONTRIBUTING.md#contributor-glossary).

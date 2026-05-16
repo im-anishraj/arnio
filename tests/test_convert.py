@@ -205,7 +205,6 @@ class TestFromPandas:
         result_df = ar.to_pandas(result)
 
         assert list(result_df.columns) == ["name", "age", "city"]
-
     def test_nullable_boolean_roundtrip(self):
         df = pd.DataFrame(
             {
