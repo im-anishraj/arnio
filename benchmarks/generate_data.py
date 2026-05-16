@@ -7,6 +7,7 @@ DEFAULT_TALL_PATH = "benchmarks/benchmark_1m.csv"
 DEFAULT_WIDE_PATH = "benchmarks/benchmark_wide.csv"
 DEFAULT_MULTILINE_PATH = "benchmarks/benchmark_multiline.csv"
 
+
 def generate(rows=1_000_000, path=DEFAULT_TALL_PATH):
     rng = np.random.default_rng(42)
     df = pd.DataFrame(
@@ -70,19 +71,21 @@ def generate_wide(rows=5_000, columns=256, path=DEFAULT_WIDE_PATH):
     df = pd.DataFrame(data)
     df.to_csv(path, index=False, lineterminator="\n")
     print(f"Generated {rows:,} row x {columns:,} column CSV -> {path}")
-
 def generate_multiline(
     rows=100_000,
     path=DEFAULT_MULTILINE_PATH,
     multiline_ratio=0.3,
 ):
     """
-    Generate deterministic CSV containing quoted multiline fields.
-    Used for benchmarking multiline CSV parsing performance.
+    Generate deterministic multiline benchmark CSV.
+
+    Used for benchmarking quoted multiline CSV parsing.
     """
 
     if rows < 1:
-        raise ValueError("multiline benchmark requires at least 1 row")
+        raise ValueError(
+            "multiline benchmark requires at least 1 row"
+        )
 
     rng = np.random.default_rng(512)
 
@@ -99,30 +102,33 @@ def generate_multiline(
         "benchmark row",
         "plain csv value",
         "single line content",
-        "normal parser row",
     ]
 
     descriptions = []
 
     for _ in range(rows):
         if rng.random() < multiline_ratio:
-            descriptions.append(rng.choice(multiline_templates))
+            descriptions.append(
+                rng.choice(multiline_templates)
+            )
         else:
-            descriptions.append(rng.choice(singleline_templates))
+            descriptions.append(
+                rng.choice(singleline_templates)
+            )
 
     df = pd.DataFrame(
         {
             "id": np.arange(rows),
-            "name": rng.choice(
-                ["Alice", "Bob", "Charlie", "Diana"],
-                rows,
-            ),
             "description": descriptions,
-            "score": rng.uniform(0, 100, rows).round(4),
-            "active": rng.choice(
-                ["true", "false", "TRUE", "FALSE"],
+            "category": rng.choice(
+                ["A", "B", "C"],
                 rows,
             ),
+            "value": rng.uniform(
+                0,
+                1000,
+                rows,
+            ).round(2),
         }
     )
 
@@ -130,12 +136,10 @@ def generate_multiline(
         path,
         index=False,
         lineterminator="\n",
-        quoting=1,  # csv.QUOTE_ALL
     )
 
     print(
-        f"Generated multiline benchmark CSV "
-        f"({rows:,} rows, ratio={multiline_ratio:.0%}) -> {path}"
+        f"Generated multiline benchmark CSV -> {path}"
     )
 if __name__ == "__main__":
     import argparse
