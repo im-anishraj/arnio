@@ -52,6 +52,21 @@ def _utf8_csv_path(path: str, encoding: str) -> Iterator[str]:
                 pass
 
 
+def _validate_thousands_separator(
+    thousands_separator: str | None,
+) -> None:
+    if thousands_separator is None:
+        return
+    if not isinstance(thousands_separator, str):
+        raise TypeError("thousands_separator must be a string or None")
+    if len(thousands_separator) != 1:
+        raise ValueError("thousands_separator must be a single character")
+    if thousands_separator.isalnum() or thousands_separator in {'"', "\n", "\r"}:
+        raise ValueError(
+            "thousands_separator must be a single non-alphanumeric character"
+        )
+
+
 def read_csv(
     path: str | os.PathLike[str],
     *,
@@ -136,15 +151,7 @@ def read_csv(
     except FileNotFoundError:
         pass  # Let C++ backend handle or raise standard error
 
-    if thousands_separator is not None:
-        if not isinstance(thousands_separator, str):
-            raise TypeError("thousands_separator must be a string or None")
-        if len(thousands_separator) != 1:
-            raise ValueError("thousands_separator must be a single character")
-        if thousands_separator.isalnum() or thousands_separator in ['"', "\n", "\r"]:
-            raise ValueError(
-                "thousands_separator must be a single non-alphanumeric character excluding quotes and newlines"
-            )
+    _validate_thousands_separator(thousands_separator)
 
     config = _CsvConfig()
     config.delimiter = delimiter
@@ -248,21 +255,14 @@ def scan_csv(
     except FileNotFoundError:
         pass
 
-    if thousands_separator is not None:
-        if not isinstance(thousands_separator, str):
-            raise TypeError("thousands_separator must be a string or None")
-        if len(thousands_separator) != 1:
-            raise ValueError("thousands_separator must be a single character")
-        if thousands_separator.isalnum() or thousands_separator in ['"', "\n", "\r"]:
-            raise ValueError(
-                "thousands_separator must be a single non-alphanumeric character excluding quotes and newlines"
-            )
+    _validate_thousands_separator(thousands_separator)
 
     config = _CsvConfig()
     config.delimiter = delimiter
     config.encoding = encoding
     config.trim_headers = trim_headers
     config.thousands_separator = thousands_separator
+
     reader = _CsvReader(config)
     try:
         with _utf8_csv_path(path, encoding) as native_path:

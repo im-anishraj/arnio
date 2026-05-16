@@ -66,6 +66,15 @@ class TestReadCsv:
         with pytest.raises(ValueError):
             ar.read_csv(csv_path, thousands_separator=separator)
 
+    @pytest.mark.parametrize("separator", [1, 1.5, True, [], {}])
+    def test_invalid_non_string_thousands_separator(self, tmp_path, separator):
+        csv_path = tmp_path / "test.csv"
+        csv_path.write_text("value\n1234\n")
+        with pytest.raises(TypeError):
+            ar.read_csv(csv_path, thousands_separator=separator)
+        with pytest.raises(TypeError):
+            ar.scan_csv(csv_path, thousands_separator=separator)
+
     def test_thousands_separator_not_applied_to_strings(self, tmp_path):
         csv_path = tmp_path / "string.csv"
         csv_path.write_text('message\n"hello,world"\n')
@@ -73,7 +82,7 @@ class TestReadCsv:
         df = ar.to_pandas(frame)
         assert df["message"].iloc[0] == "hello,world"
 
-    def test_unquoted_comma_value_with_comma_delimeter(self, tmp_path):
+    def test_unquoted_comma_value_with_comma_delimiter(self, tmp_path):
         csv_path = tmp_path / "delimiter_interaction.csv"
         csv_path.write_text("value\n1,234\n")
         frame = ar.read_csv(csv_path)
