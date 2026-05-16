@@ -48,6 +48,24 @@ def register_step(name: str, fn: Callable):
     _PYTHON_STEP_REGISTRY[name] = fn
 
 
+def list_steps() -> list[str]:
+    """List all registered pipeline step names.
+
+    Returns built-in C++ backed steps and custom Python-registered steps.
+
+    Returns
+    -------
+    list[str]
+        Sorted list of all registered step names.
+
+    Examples
+    --------
+    >>> ar.list_steps()
+    ['cast_types', 'clip_numeric', 'drop_constant_columns', ...]
+    """
+    return sorted(set(_STEP_REGISTRY.keys()) | set(_PYTHON_STEP_REGISTRY.keys()))
+
+
 def pipeline(
     frame: ArFrame,
     steps: list[tuple],
