@@ -52,6 +52,24 @@ class ArFrame:
         """
         return self._frame.dtypes()
 
+    @property
+    def is_empty(self) -> bool:
+        """Check if frame has zero rows.
+
+        Returns
+        -------
+        bool
+            True if frame contains no rows, False otherwise.
+
+        Examples
+        --------
+        >>> frame = ar.read_csv("data.csv")
+        >>> if frame.is_empty:
+        ...     print("No data to process")
+        False
+        """
+        return len(self) == 0
+
     # --- Methods ---
 
     def memory_usage(self) -> int:
@@ -81,7 +99,6 @@ class ArFrame:
         ------
         TypeError
             If columns is not a valid sequence of strings.
-
         ValueError
             If the selection is empty, contains duplicates,
             or includes unknown columns.
