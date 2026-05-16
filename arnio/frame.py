@@ -11,10 +11,11 @@ from ._core import _Frame
 class ArFrame:
     """Lightweight columnar data container backed by C++."""
 
-    __slots__ = ("_frame",)
+    __slots__ = ("_frame", "_attrs")
 
-    def __init__(self, cpp_frame: _Frame) -> None:
+    def __init__(self, cpp_frame: _Frame, attrs: dict | None = None) -> None:
         self._frame = cpp_frame
+        self._attrs: dict = attrs if attrs is not None else {}
 
     # --- Properties ---
 
@@ -51,6 +52,24 @@ class ArFrame:
         """
         return self._frame.dtypes()
 
+    @property
+    def is_empty(self) -> bool:
+        """Check if frame has zero rows.
+
+        Returns
+        -------
+        bool
+            True if frame contains no rows, False otherwise.
+
+        Examples
+        --------
+        >>> frame = ar.read_csv("data.csv")
+        >>> if frame.is_empty:
+        ...     print("No data to process")
+        False
+        """
+        return len(self) == 0
+
     # --- Methods ---
 
     def memory_usage(self) -> int:
@@ -62,6 +81,54 @@ class ArFrame:
             Memory usage in bytes.
         """
         return self._frame.memory_usage()
+
+    def select_columns(self, columns: list[str]) -> ArFrame:
+        """Return a new ArFrame with only the selected columns.
+
+        Parameters
+        ----------
+        columns : list[str]
+            List of column names to select.
+
+        Returns
+        -------
+        ArFrame
+            New ArFrame containing only the selected columns.
+
+        Raises
+        ------
+        TypeError
+            If columns is not a valid sequence of strings.
+        ValueError
+            If the selection is empty, contains duplicates,
+            or includes unknown columns.
+        """
+        if isinstance(columns, str):
+            raise TypeError("columns must be a sequence of column names, not a string.")
+
+        if not isinstance(columns, (list, tuple)):
+            raise TypeError("columns must be a list or tuple of column names.")
+
+        if not columns:
+            raise ValueError("Column selection cannot be empty.")
+
+        if any(not isinstance(col, str) for col in columns):
+            raise TypeError("All column names must be strings.")
+
+        if len(columns) != len(set(columns)):
+            raise ValueError("Duplicate column names are not allowed.")
+
+        missing = [col for col in columns if col not in self.columns]
+
+        if missing:
+            raise ValueError(f"Unknown columns: {missing}")
+
+        from .convert import from_pandas, to_pandas
+
+        df = to_pandas(self)
+        selected_df = df[columns]
+
+        return from_pandas(selected_df)
 
     # --- Dunder methods ---
 
