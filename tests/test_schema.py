@@ -46,7 +46,7 @@ def test_schema_validation_collects_row_level_issues(tmp_path):
     rules = {issue.rule for issue in result.issues}
 
     assert not result.passed
-    assert result.bad_rows == [1, 2]
+    assert result.bad_rows == [2, 3]
     assert {"nullable", "max", "min", "email", "allowed"} <= rules
     assert result.summary()["issues_by_column"]["age"] == 2
 
@@ -184,6 +184,16 @@ def test_validation_result_summary_counts_no_issue_result():
     assert summary["issues_by_column_and_rule"] == {}
 
 
+def test_validation_result_to_pandas(sample_csv):
+    result = ar.validate(
+        ar.read_csv(sample_csv),
+        {"age": ar.Int64(min=31)},
+    )
+    df = result.to_pandas()
+    assert list(df["rule"]) == ["min", "min"]
+    assert list(df["row_index"]) == [1, 2]
+
+
 def test_validation_result_to_markdown_for_success(sample_csv):
     result = ar.validate(ar.read_csv(sample_csv), {"age": ar.Int64()})
 
@@ -206,7 +216,7 @@ def test_validation_result_to_markdown_includes_issue_table(sample_csv):
     assert "- Status: **failed**" in markdown
     assert "- Issues found: 3" in markdown
     assert "| Column | Rule | Row | Value | Message |" in markdown
-    assert "| age | min | 0 |" in markdown
+    assert "| age | min | 1 |" in markdown
     assert (
         "| missing | required_column |  |  | Missing required column: missing |"
         in markdown
@@ -218,8 +228,8 @@ def test_validation_result_to_markdown_limits_visible_issues(sample_csv):
 
     markdown = result.to_markdown(max_issues=1)
 
-    assert "| age | min | 0 |" in markdown
-    assert "| age | min | 1 |" not in markdown
+    assert "| age | min | 1 |" in markdown
+    assert "| age | min | 2 |" not in markdown
     assert "_Showing 1 of 2 issues._" in markdown
 
 
@@ -278,6 +288,17 @@ def test_custom_pattern_validation(tmp_path):
 
     assert not result.passed
     assert result.issues[0].rule == "pattern"
+    assert result.issues[0].row_index == 2
+
+
+def test_row_index_is_one_based_for_first_row(tmp_path):
+    path = tmp_path / "codes.csv"
+    path.write_text("age\n-1\n30\n25\n")
+    frame = ar.read_csv(path)
+    result = ar.validate(frame, {"age": ar.Int64(min=0)})
+
+    assert not result.passed
+    assert len(result.issues) == 1
     assert result.issues[0].row_index == 1
 
 
@@ -306,7 +327,7 @@ def test_country_code_validation_rejects_invalid_codes(tmp_path):
     assert not result.passed
     assert result.issue_count == 6
 
-    assert [issue.row_index for issue in result.issues] == [0, 1, 2, 3, 4, 5]
+    assert [issue.row_index for issue in result.issues] == [1, 2, 3, 4, 5, 6]
     assert {issue.rule for issue in result.issues} == {"country_code"}
 
 
@@ -322,7 +343,7 @@ def test_string_min_length_boundary(tmp_path):
     assert not result.passed
     assert result.issue_count == 1
     assert result.issues[0].rule == "min_length"
-    assert result.issues[0].row_index == 0
+    assert result.issues[0].row_index == 1
 
 
 def test_string_max_length_boundary(tmp_path):
@@ -337,7 +358,7 @@ def test_string_max_length_boundary(tmp_path):
     assert not result.passed
     assert result.issue_count == 1
     assert result.issues[0].rule == "max_length"
-    assert result.issues[0].row_index == 1
+    assert result.issues[0].row_index == 2
 
 
 def test_null_values_skip_length_validation(tmp_path):
@@ -352,7 +373,7 @@ def test_null_values_skip_length_validation(tmp_path):
     assert not result.passed
     assert result.issue_count == 1
     assert result.issues[0].rule == "min_length"
-    assert result.issues[0].row_index == 0
+    assert result.issues[0].row_index == 1
 
 
 def test_int64_rejects_impossible_bounds():
@@ -545,3 +566,46 @@ def test_datetime_validation(tmp_path):
 
     assert "min" in rules2
     assert "max" in rules2
+
+
+def test_row_index_is_one_based_for_middle_row(tmp_path):
+    path = tmp_path / "codes.csv"
+    path.write_text("age\n30\n-5\n25\n")
+    frame = ar.read_csv(path)
+    result = ar.validate(frame, {"age": ar.Int64(min=0)})
+
+    assert not result.passed
+    assert len(result.issues) == 1
+    assert result.issues[0].row_index == 2
+
+
+def test_row_index_is_one_based_for_last_row(tmp_path):
+    path = tmp_path / "codes.csv"
+    path.write_text("age\n30\n25\n-1\n")
+    frame = ar.read_csv(path)
+    result = ar.validate(frame, {"age": ar.Int64(min=0)})
+
+    assert not result.passed
+    assert len(result.issues) == 1
+    assert result.issues[0].row_index == 3
+
+
+def test_row_index_multiple_invalid_rows(tmp_path):
+    path = tmp_path / "codes.csv"
+    path.write_text("age\n-1\n30\n-5\n25\n-9\n")
+    frame = ar.read_csv(path)
+    result = ar.validate(frame, {"age": ar.Int64(min=0)})
+
+    assert not result.passed
+    row_indexes = [issue.row_index for issue in result.issues]
+    assert row_indexes == [1, 3, 5]
+
+
+def test_bad_rows_reflects_one_based_indexes(tmp_path):
+    """bad_rows should contain 1-based row numbers."""
+    path = tmp_path / "codes.csv"
+    path.write_text("age\n-1\n30\n-5\n")
+    frame = ar.read_csv(path)
+    result = ar.validate(frame, {"age": ar.Int64(min=0)})
+
+    assert result.bad_rows == [1, 3]
