@@ -14,6 +14,7 @@ except Exception:
 from .cleaning import (
     cast_types,
     clean,
+    clip_numeric,
     drop_constant_columns,
     drop_duplicates,
     drop_nulls,
@@ -21,11 +22,15 @@ from .cleaning import (
     filter_rows,
     normalize_case,
     rename_columns,
+    round_numeric_columns,
+    safe_divide_columns,
     strip_whitespace,
+    validate_columns_exist,
 )
 from .convert import from_pandas, to_pandas
 from .exceptions import ArnioError, CsvReadError, TypeCastError, UnknownStepError
 from .frame import ArFrame
+from .integrations import ArnioPandasAccessor
 from .io import read_csv, scan_csv
 from .pipeline import pipeline, register_step
 from .quality import (
@@ -58,17 +63,23 @@ __all__ = [
     # Cleaning
     "drop_nulls",
     "fill_nulls",
+    "validate_columns_exist",
     "filter_rows",
     "drop_duplicates",
     "drop_constant_columns",
+    "clip_numeric",
     "strip_whitespace",
     "normalize_case",
     "rename_columns",
+    "round_numeric_columns",
     "cast_types",
     "clean",
+    "safe_divide_columns",
     # Conversion
     "to_pandas",
     "from_pandas",
+    # Integrations
+    "ArnioPandasAccessor",
     # Pipeline
     "pipeline",
     "register_step",
