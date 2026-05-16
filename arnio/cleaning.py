@@ -567,8 +567,14 @@ def winsorize_outliers(
     -----
     Winsorizing works best on large datasets. On small datasets the
     percentile boundaries may still appear extreme because they are
-    computed from the data itself. For example, with only 5 rows,
+     computed from the data itself. For example, with only 5 rows,
     the 95th percentile may still be close to the outlier value.
+
+    Examples
+    --------
+    >>> frame = ar.read_csv("data.csv")
+    >>> clean = ar.winsorize_outliers(frame, lower=0.05, upper=0.95)
+    """
 def round_numeric_columns(
     frame,
     *,
@@ -664,8 +670,8 @@ def safe_divide_columns(
             f"got lower={lower!r}, upper={upper!r}"
         )
 
-    >>> result = ar.safe_divide_columns(frame, numerator="revenue", denominator="cost", output_column="ratio")
-    """
+    result = ar.safe_divide_columns(frame, numerator="revenue", denominator="cost", output_column="ratio")
+    
     import pandas as pd
 
     from .convert import from_pandas, to_pandas
