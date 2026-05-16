@@ -225,7 +225,6 @@ class TestFromPandas:
                 )
             }
         )
-
         result = ar.to_pandas(ar.from_pandas(df))
 
         assert str(result["name"].dtype) == "string"
@@ -252,8 +251,22 @@ class TestFromPandas:
         assert pd.isna(result["score"].tolist()[1])
         assert result["score"].tolist()[2] == 3.7
 
+    def test_bool_null_mask_roundtrip(self):
+        df = pd.DataFrame(
+            {
+                "flag": pd.Series(
+                    [True, False, pd.NA],
+                    dtype="boolean",
+                )
+            }
+        )
 
-class TestAttrsPreservation:
+        frame = ar.from_pandas(df)
+        result = ar.to_pandas(frame)
+
+        assert list(result["flag"]) == [True, False, pd.NA]
+
+    # class TestAttrsPreservation:
     def test_attrs_roundtrip(self):
         """attrs set on input DataFrame survive from_pandas -> to_pandas."""
         df = pd.DataFrame({"x": [1, 2, 3]})
