@@ -64,6 +64,40 @@ class ArFrame:
         """
         return self._frame.memory_usage()
 
+    def drop_columns(self, cols: list[str]) -> "ArFrame":
+        """Return a new ArFrame without the specified columns.
+         Parameters
+        ----------
+        cols : list[str]
+            Column names to drop. Pass an empty list to return a copy.
+
+        Returns
+        -------
+        ArFrame
+            A new frame with the specified columns removed.
+
+        Raises
+        ------
+        KeyError
+            If any column in cols does not exist in the frame."""
+        if not cols:
+            return ArFrame(self._frame.clone())
+
+        current_cols = self.columns
+        missing = [c for c in cols if c not in current_cols]
+        if missing:
+            raise KeyError(
+                f"Column(s) not found: {missing}. "
+                f"Available columns: {current_cols}"
+            )
+
+        keep = [c for c in current_cols if c not in cols]
+        result = _Frame()
+        for col in keep:
+            result.add_column(self._frame.column_by_name(col))
+        return ArFrame(result)
+
+
     def select_columns(self, columns: list[str]) -> ArFrame:
         """Return a new ArFrame with only the selected columns.
 
