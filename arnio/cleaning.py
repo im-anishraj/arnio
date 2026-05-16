@@ -587,10 +587,15 @@ def winsorize_outliers(
     from .convert import from_pandas, to_pandas
 
     is_arframe = isinstance(frame, ArFrame)
-    df = to_pandas(frame) if is_arframe else frame
+    df = to_pandas(frame) if is_arframe else frame.copy()
 
     cols_to_process = subset if subset is not None else df.columns.tolist()
 
+    if subset is not None:
+        unknown = [col for col in subset if col not in df.columns]
+        if unknown:
+            raise ValueError(f"Unknown columns in subset: {unknown}")
+        
     for col in cols_to_process:
         if col not in df.columns:
             continue
@@ -661,11 +666,7 @@ def round_numeric_columns(
 
 
 def safe_divide_columns(
-    frame,
-    numerator: str,
-    denominator: str,
-    output_column: str,
-    fill_value: float = 0.0,
+    frame, numerator: str, denominator: str, output_column: str, fill_value: float = 0.0
 ):
     """Divide one column by another, handling division by zero and nulls explicitly.
 
@@ -690,17 +691,12 @@ def safe_divide_columns(
     Returns
     -------
     ArFrame
-        New frame with the division result added as a new column.
 
     Examples
     --------
     >>> frame = ar.read_csv("data.csv")
-    >>> result = ar.safe_divide_columns(
-    ...     frame, numerator="revenue", denominator="cost", output_column="ratio"
-    ... )
+    >>> result = ar.safe_divide_columns(frame, numerator="revenue", denominator="cost", output_column="ratio")
     """
-    import warnings
-
     import pandas as pd
 
     from .convert import from_pandas, to_pandas
@@ -715,6 +711,8 @@ def safe_divide_columns(
     if not isinstance(output_column, str) or not output_column.strip():
         raise ValueError("output_column must be a non-empty string.")
     if output_column in df.columns:
+        import warnings
+
         warnings.warn(
             f"Output column '{output_column}' already exists and will be overwritten.",
             UserWarning,
