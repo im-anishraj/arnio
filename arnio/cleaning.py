@@ -422,7 +422,8 @@ def cast_types(
     frame : ArFrame
         Input data frame.
     mapping : dict[str, str]
-        Dictionary mapping column names to target type strings (e.g., "int64", "float64", "bool", "string").
+        Dictionary mapping column names to target type strings
+        (e.g., "int64", "float64", "bool", "string").
 
     Returns
     -------
@@ -505,7 +506,6 @@ def filter_rows(frame, column, op, value):
     from .convert import from_pandas, to_pandas
 
     is_arframe = not isinstance(frame, pd.DataFrame)
-
     df = to_pandas(frame) if is_arframe else frame
 
     ops = {
@@ -567,14 +567,43 @@ def winsorize_outliers(
     -----
     Winsorizing works best on large datasets. On small datasets the
     percentile boundaries may still appear extreme because they are
-     computed from the data itself. For example, with only 5 rows,
+    computed from the data itself. For example, with only 5 rows,
     the 95th percentile may still be close to the outlier value.
 
     Examples
     --------
     >>> frame = ar.read_csv("data.csv")
     >>> clean = ar.winsorize_outliers(frame, lower=0.05, upper=0.95)
+    >>> clean = ar.winsorize_outliers(frame, lower=0.1, upper=0.9, subset=["price"])
     """
+    if not (0 <= lower < upper <= 1):
+        raise ValueError(
+            f"`lower` must be less than `upper` and both must be between 0 and 1, "
+            f"got lower={lower!r}, upper={upper!r}"
+        )
+
+    import pandas as pd
+
+    from .convert import from_pandas, to_pandas
+
+    is_arframe = isinstance(frame, ArFrame)
+    df = to_pandas(frame) if is_arframe else frame
+
+    cols_to_process = subset if subset is not None else df.columns.tolist()
+
+    for col in cols_to_process:
+        if col not in df.columns:
+            continue
+        if not pd.api.types.is_numeric_dtype(df[col]):
+            continue
+        df[col] = df[col].astype("float64")
+        lower_bound = df[col].quantile(lower)
+        upper_bound = df[col].quantile(upper)
+        df[col] = df[col].clip(lower=lower_bound, upper=upper_bound)
+
+    return from_pandas(df) if is_arframe else df
+
+
 def round_numeric_columns(
     frame,
     *,
@@ -632,7 +661,11 @@ def round_numeric_columns(
 
 
 def safe_divide_columns(
-    frame, numerator: str, denominator: str, output_column: str, fill_value: float = 0.0
+    frame,
+    numerator: str,
+    denominator: str,
+    output_column: str,
+    fill_value: float = 0.0,
 ):
     """Divide one column by another, handling division by zero and nulls explicitly.
 
@@ -657,44 +690,21 @@ def safe_divide_columns(
     Returns
     -------
     ArFrame
+        New frame with the division result added as a new column.
 
     Examples
     --------
     >>> frame = ar.read_csv("data.csv")
-    >>> clean = ar.winsorize_outliers(frame, lower=0.05, upper=0.95)
-    >>> clean = ar.winsorize_outliers(frame, lower=0.1, upper=0.9, subset=["price"])
+    >>> result = ar.safe_divide_columns(
+    ...     frame, numerator="revenue", denominator="cost", output_column="ratio"
+    ... )
     """
-    if not (0 <= lower < upper <= 1):
-        raise ValueError(
-            f"`lower` must be less than `upper` and both must be between 0 and 1, "
-            f"got lower={lower!r}, upper={upper!r}"
-        )
+    import warnings
 
-    result = ar.safe_divide_columns(frame, numerator="revenue", denominator="cost", output_column="ratio")
-    
     import pandas as pd
 
     from .convert import from_pandas, to_pandas
 
-    # Handle both ArFrame and DataFrame (when called from pipeline)
-    is_arframe = isinstance(frame, ArFrame)
-    df = to_pandas(frame) if is_arframe else frame
-
-    cols_to_process = subset if subset is not None else df.columns.tolist()
-
-    for col in cols_to_process:
-        if col not in df.columns:
-            continue
-        if not pd.api.types.is_numeric_dtype(df[col]):
-            continue
-
-        # Cast to float64 before clipping so percentile
-        # values (which are floats) can be assigned back without TypeError
-        df[col] = df[col].astype("float64")
-
-        lower_bound = df[col].quantile(lower)
-        upper_bound = df[col].quantile(upper)
-        df[col] = df[col].clip(lower=lower_bound, upper=upper_bound)
     is_arframe = not isinstance(frame, pd.DataFrame)
     df = to_pandas(frame) if is_arframe else frame
 
@@ -705,8 +715,6 @@ def safe_divide_columns(
     if not isinstance(output_column, str) or not output_column.strip():
         raise ValueError("output_column must be a non-empty string.")
     if output_column in df.columns:
-        import warnings
-
         warnings.warn(
             f"Output column '{output_column}' already exists and will be overwritten.",
             UserWarning,
