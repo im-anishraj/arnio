@@ -85,7 +85,7 @@ class TestIntLifetime:
         df1 = ar.to_pandas(frame)
         df2 = ar.to_pandas(frame)
         # mutate df1 in place
-        df1.loc[0, "a"] = 999
+        df1["a"].iloc[0] = 999
         # df2 must be unaffected
         assert df2["a"].iloc[0] == 1
 
@@ -117,7 +117,7 @@ class TestFloatLifetime:
         frame = make_frame_float()
         df1 = ar.to_pandas(frame)
         df2 = ar.to_pandas(frame)
-        df1.loc[0, "x"] = -999.0
+        df1["x"].iloc[0] = -999.0
         assert pytest.approx(df2["x"].iloc[0]) == 1.1
 
     def test_float_values_survive_multiple_gc_cycles(self):
@@ -237,7 +237,7 @@ class TestEdgeCaseLifetime:
         del frame
         gc.collect()
         # mutate first, rest untouched
-        dfs[0].loc[0, "a"] = 999
+        dfs[0]["a"].iloc[0] = 999
         assert dfs[1]["a"].iloc[0] == 1
         assert dfs[2]["a"].iloc[0] == 1
 

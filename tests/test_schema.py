@@ -352,7 +352,6 @@ def test_null_values_skip_length_validation(tmp_path):
     assert result.issues[0].rule == "min_length"
     assert result.issues[0].row_index == 0
 
-
 def test_int64_rejects_impossible_bounds():
     try:
         ar.Int64(min=10, max=1)
@@ -464,6 +463,29 @@ def test_schema_composite_unique_empty_columns(tmp_path):
     issues = [i for i in result.issues if i.rule == "composite_unique"]
     assert len(issues) == 1
     assert "cannot be empty" in issues[0].message
+
+
+def test_datetime_validation_passes_for_valid_column(tmp_path):
+    path = tmp_path / "valid_datetimes.csv"
+    path.write_text(
+        "ts\n" "2026-01-01T12:00:00\n" "2026-06-15T08:30:00\n" "2026-12-31T23:59:59\n"
+    )
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {
+            "ts": ar.DateTime(
+                nullable=False,
+                format="%Y-%m-%dT%H:%M:%S",
+                min="2026-01-01",
+                max="2026-12-31T23:59:59",
+            )
+        },
+    )
+
+    assert result.passed
+    assert result.issue_count == 0
+    assert result.bad_rows == []
 
 
 def test_datetime_validation(tmp_path):
