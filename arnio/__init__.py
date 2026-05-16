@@ -19,14 +19,15 @@ from .cleaning import (
     drop_duplicates,
     drop_nulls,
     fill_nulls,
+    filter_rows,
     normalize_case,
     rename_columns,
     round_numeric_columns,
     safe_divide_columns,
     strip_whitespace,
     validate_columns_exist,
-    filter_rows,
 )
+
 from .convert import from_pandas, to_pandas
 from .exceptions import ArnioError, CsvReadError, TypeCastError, UnknownStepError
 from .frame import ArFrame
