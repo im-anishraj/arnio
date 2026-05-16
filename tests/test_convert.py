@@ -251,6 +251,21 @@ class TestFromPandas:
 
         assert list(result["a"]) == ["1", "x", "3"]
 
+    def test_bool_null_mask_roundtrip(self):
+        df = pd.DataFrame(
+            {
+                "flag": pd.Series(
+                    [True, False, pd.NA],
+                    dtype="boolean",
+                )
+            }
+        )
+
+        frame = ar.from_pandas(df)
+        result = ar.to_pandas(frame)
+
+        assert list(result["flag"]) == [True, False, pd.NA]
+
 
 class TestAttrsPreservation:
     def test_attrs_roundtrip(self):
@@ -299,4 +314,6 @@ class TestAttrsPreservation:
         frame = ar.from_pandas(df)
         df.attrs["meta"]["tags"].append("c")
         result = ar.to_pandas(frame)
+        assert result.attrs["meta"]["tags"] == ["a", "b"]
+        # stored copy must be unaffected
         assert result.attrs["meta"]["tags"] == ["a", "b"]
