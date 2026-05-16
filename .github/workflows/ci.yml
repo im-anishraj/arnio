@@ -21,7 +21,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install lint dependencies
-        run: pip install black==24.3.0 ruff==0.4.1
+        run: pip install "black>=24.0" "ruff>=0.4.0"
 
       - name: Black (check-only)
         run: black --check --diff .
