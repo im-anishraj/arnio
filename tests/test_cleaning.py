@@ -696,3 +696,27 @@ class TestSafeDivideColumns:
             assert "already exists" in str(w[0].message)
         df = ar.to_pandas(result)
         assert df["ratio"].iloc[0] == 2.0
+
+
+def test_drop_columns_matching_normal():
+    df = pd.DataFrame({"temp_a": [1], "temp_b": [2], "keep_c": [3]})
+    result = ar.drop_columns_matching(df, "^temp_")
+    assert list(result.columns) == ["keep_c"]
+
+
+def test_drop_columns_matching_no_match():
+    df = pd.DataFrame({"a": [1], "b": [2]})
+    result = ar.drop_columns_matching(df, "^temp_")
+    assert list(result.columns) == ["a", "b"]
+
+
+def test_drop_columns_matching_invalid_regex():
+    df = pd.DataFrame({"a": [1]})
+    with pytest.raises(Exception):
+        ar.drop_columns_matching(df, "[invalid")
+
+
+def test_drop_columns_matching_non_string_pattern():
+    df = pd.DataFrame({"a": [1]})
+    with pytest.raises(TypeError):
+        ar.drop_columns_matching(df, 123)

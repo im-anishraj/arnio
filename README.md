@@ -439,6 +439,7 @@ Most operations below run natively in C++. The current `filter_rows` step uses t
 | `round_numeric_columns` | Round numeric columns (non-numeric columns in subset ignored safely) | `ar.round_numeric_columns(frame, decimals=2)` |
 | `clean` | Convenience shorthand | `ar.clean(frame, drop_nulls=True)` |
 | `safe_divide_columns` | Divide one column by another, handling zero/null denominators | `ar.safe_divide_columns(frame, numerator="revenue", denominator="cost", output_column="ratio")` |
+<<<<<<< HEAD
 | `trim_column_names` | Strip leading/trailing whitespace from column names | `ar.trim_column_names(frame)` |
 
 #### `ArFrame.select_dtypes` — type-based column selection
@@ -462,6 +463,9 @@ without_strings = frame.select_dtypes(exclude="string")
 - Unknown dtype strings raise `ValueError` with a list of valid options.
 - Raises `ValueError` when no columns match (never returns an empty frame silently).
 - Column order in the result always matches the original frame.
+=======
+| `drop_columns_matching` | Drop columns whose names match a regex pattern | `ar.drop_columns_matching(frame, pattern="^temp_")` |
+>>>>>>> 4f52979 (feat: add drop_columns_matching cleaning step)
 
 Or compose them all into a **pipeline**:
 
@@ -526,6 +530,21 @@ result = ar.pipeline(frame, [
 Useful for data auditing — inspect what's missing before deciding how to fill or drop.
 
 <br>
+### 🗑️ Drop columns by pattern
+
+Remove columns matching a regex pattern — useful for dropping boilerplate or repeated export columns:
+
+```python
+# Drop all columns starting with "temp_"
+result = ar.drop_columns_matching(frame, pattern="^temp_")
+
+# Use in a pipeline
+clean = ar.pipeline(frame, [
+    ("drop_columns_matching", {"pattern": "^temp_"}),
+    ("drop_nulls",),
+])
+```
+
 ### 🔢 Safe column division
 
 Divide one column by another while handling division by zero and null denominators explicitly:
