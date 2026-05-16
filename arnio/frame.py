@@ -2,6 +2,7 @@
 arnio.frame
 ArFrame — the core data container wrapping the C++ Frame.
 """
+
 from __future__ import annotations
 
 from ._core import _Frame
