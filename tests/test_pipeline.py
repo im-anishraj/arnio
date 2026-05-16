@@ -195,18 +195,16 @@ def test_filter_rows_direct_api():
 def test_pipeline_normalize_unicode():
     import pandas as pd
 
-    df = pd.DataFrame({
-        "text": ["café"]
-})
+    df = pd.DataFrame({"text": ["café"]})
 
     frame = ar.from_pandas(df)
 
     result = ar.pipeline(
-    frame,
-    [
-        ("normalize_unicode",),
-    ],
-)
+        frame,
+        [
+            ("normalize_unicode",),
+        ],
+    )
 
     result_df = ar.to_pandas(result)
 

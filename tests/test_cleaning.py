@@ -1,5 +1,6 @@
 """Tests for data cleaning functions."""
 
+import pandas as pd
 import pytest
 
 import arnio as ar
@@ -103,13 +104,12 @@ class TestNormalizeCase:
         df = ar.to_pandas(result)
         assert df["name"].iloc[0] == "Alice"
 
+
 class TestNormalizeUnicode:
     def test_normalize_unicode(self):
-        import pandas as pd
+        pass
 
-    df = pd.DataFrame({
-        "text": ["café"]
-    })
+    df = pd.DataFrame({"text": ["café"]})
 
     frame = ar.from_pandas(df)
 
