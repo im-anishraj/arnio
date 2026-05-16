@@ -101,8 +101,8 @@ print(selected.columns)
 
 
 > Every step above executes in C++. Your Python code is a _configuration_ — not the execution engine.
-#### Explore the Full API :
-> Check out our comprehensive guide for all available functions, profiling tools, and validation rules. <br> 👉 **[Arnio API Reference](./API_REFERENCE.md)**
+### Explore the Full API :
+> Check out our API reference guide for all available functions, profiling tools, and validation rules. <br> 👉 **[Arnio API Reference](./API_REFERENCE.md)**
 
 <br>
 

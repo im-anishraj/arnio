@@ -8,10 +8,11 @@ A guide to the classes and functions within the **Arnio** library.
 
 | Category | Components |
 | :--- | :--- |
-| **Core Class** | [**`ArFrame`**](#arframe)  |
+| **Core Class** | [**`ArFrame`**](#arframe) • Properties: [`shape`](#shape), [`columns`](#columns), [`dtypes`](#dtypes) • Methods: [`memory_usage`](#memory_usage), [`preview`](#preview), [`select_columns`](#select_columns) |
 | **I/O** | [`read_csv`](#read_csv) • [`scan_csv`](#scan_csv) |
-| **Cleaning** | [`cast_types`](#cast_types) • [`clean`](#clean) • [`clip_numeric`](#clip_numeric) • [`drop_constant_columns`](#drop_constant_columns) • [`drop_duplicates`](#drop_duplicates) • [`drop_nulls`](#drop_nulls) • [`fill_nulls`](#fill_nulls) • [`filter_rows`](#filter_rows) • [`normalize_case`](#normalize_case) • [`rename_columns`](#rename_columns) • [`round_numeric_columns`](#round_numeric_columns) • [`safe_divide_columns`](#safe_divide_columns) • [`strip_whitespace`](#strip_whitespace) |
+| **Cleaning** | [`cast_types`](#cast_types) • [`clean`](#clean) • [`clip_numeric`](#clip_numeric) • [`drop_constant_columns`](#drop_constant_columns) • [`drop_duplicates`](#drop_duplicates) • [`drop_nulls`](#drop_nulls) • [`fill_nulls`](#fill_nulls) • [`filter_rows`](#filter_rows) • [`normalize_case`](#normalize_case) • [`rename_columns`](#rename_columns) • [`round_numeric_columns`](#round_numeric_columns) • [`safe_divide_columns`](#safe_divide_columns) • [`strip_whitespace`](#strip_whitespace) • [`validate_columns_exist`](#validate_columns_exist)|
 | **Conversion** | [`from_pandas`](#from_pandas) • [`to_pandas`](#to_pandas) |
+| **Integration** | [`ArnioPandasAccessor`](#ArnioPandasAccessor) |
 | **Pipeline** | [`pipeline`](#pipeline) • [`register_step`](#register_step) |
 | **Data Quality** | [`profile`](#profile) • [`suggest_cleaning`](#suggest_cleaning) • [`auto_clean`](#auto_clean) • [`DataQualityReport`](#dataqualityreport) • [`ColumnProfile`](#columnprofile) |
 | **Schema Validation** | [`Schema`](#schema) • [`Field`](#field) • [`validate`](#validate) • [`ValidationResult`](#validationresult) • [`ValidationIssue`](#validationissue) • [`Int64`](#int64) • [`Float64`](#float64) • [`String`](#string) • [`Bool`](#bool) • [`Email`](#email) • [`URL`](#url) |
@@ -26,6 +27,19 @@ A guide to the classes and functions within the **Arnio** library.
 ### ArFrame
 The `ArFrame` is the central data structure in Arnio. It acts as a lightweight, columnar container that wraps high-performance C++ logic, allowing for fast data manipulation within Python.
 
+| Property | Type | Description |
+| :--- | :--- | :--- |
+| <a name="columns"></a>**columns** | `list[str]` | Returns the names of all columns in the dataset. |
+| <a name="dtypes"></a>**dtypes** | `dict[str, str]` | A mapping of column names to their detected data types. |
+| <a name="shape"></a>**shape** | `tuple[int, int]` | Returns a tuple representing the number of rows and columns `(rows, cols)`. |
+
+#### Methods
+| Method | Return Type | Description |
+| :--- | :--- | :--- |
+| <a name="memory_usage"></a>**memory_usage()** | `int` | Returns the total bytes consumed by the object in memory. |
+| <a name="preview"></a>**preview()** | `str` | Return a lightweight string preview of the first ``n`` rows. |
+| <a name="select_columns"></a>**select_columns()** | `ArFrame` | Return a new ArFrame with only the selected columns. |
+
 #### Usage Example
 The following example demonstrates how to inspect an `ArFrame` after loading data.
 
@@ -37,10 +51,16 @@ print(f"Dataset Shape: {df.shape}")
 print(f"Column Names: {df.columns}")
 print(f"Data Types: {df.dtypes}")
 print(f"Memory: {df.memory_usage()} bytes")
+df_cols = df.select_columns(columns = ["id","name"])
+print(df.preview())
 ```
+
+---
+
 ## I/O (Input/Output)
 
-#### Functions for reading and inspecting data files using the high-performance C++ backend.
+Functions for reading and inspecting data files using the high-performance C++ backend.
+
 ---
 
 ### read_csv
@@ -48,10 +68,8 @@ Loads a CSV, TSV, or TXT file into an `ArFrame`.
 
 ```python
 # Reading specific columns from a tab-separated file
-df = ar.read_csv("data.tsv", delimiter="\t", usecols=["Name", "Age"])
+df = arnio.read_csv("data.tsv", delimiter="\t", usecols=["Name", "Age"])
 ```
----
-
 ### scan_csv
 Retrieves the **Schema** (column names and data types) of a file without loading the actual data into memory. This is highly efficient for large files where you only need to check the data structure.
 
@@ -67,84 +85,90 @@ Standard functions for tidying datasets and fixing structural inconsistencies.
 
 ---
 
-### <a name="cast_types"></a>cast_types()
+### cast_types
 Converts specific columns to a new data type using a mapping dictionary.
 ```python
 df = arnio.cast_types(df, {"score": "float64"})
 ```
 
-### <a name="clean"></a>clean()
-A high-level wrapper that applies `strip_whitespace`, `drop_nulls`, and `drop_duplicates` in a single call. This is the fastest way to perform basic data hygiene.
+### clean
+A high-level wrapper that applies `strip_whitespace`, `drop_nulls`, and `drop_duplicates` in a single call. This is the fastest way to perform basic data cleaning.
 ```python
-df = arnio.clean(df)
+df = arnio.clean(df,drop_nulls=True)
 ```
-### <a name="clip_numeric"></a>clip_numeric()
+### clip_numeric
 Clip numeric values to lower and/or upper bounds
 ```python
 df = arnio.clip_numeric(df, lower=0, upper=100)
 ```
 
-### <a name="drop_constant_columns"></a>drop_constant_columns()
+### drop_constant_columns
 Removes columns with only one unique value.
 ```python
 df = arnio.drop_constant_columns(df)
 ```
 
-### <a name="drop_duplicates"></a>drop_duplicates()
+### drop_duplicates
 Removes identical rows from the dataset.
 * **Options:** Use `keep="first"` or `"last"`. Set `keep=False` to remove all instances of a duplicate.
 ```python
 df = arnio.drop_duplicates(df, keep="first")
 ```
 
-### <a name="drop_nulls"></a>drop_nulls()
+### drop_nulls
 Deletes rows containing empty or "Null" values. You can provide a `subset` list to only check specific columns.
 ```python
 df = arnio.drop_nulls(df, subset=["email"])
 ```
 
-### <a name="fill_nulls"></a>fill_nulls()
+### fill_nulls
 Replaces empty spots in your data with a fixed value (e.g., replacing missing scores with `0`).
 ```python
-df = arnio.fill_nulls(df, value=0, subset=["score"])
+df = arnio.fill_nulls(df, 0, subset=["score"])
 ```
 
-### <a name="filter_rows"></a>filter_rows()
+### filter_rows
 Selects rows based on a mathematical condition.
 * **Supported Operators:** `>`, `<`, `>=`, `<=`, `==`, `!=`.
 ```python
-clean_df = arnio.filter_rows(df, "score", ">", 50.0)
+clean_df = arnio.filter_rows(df,column="age", op=">", value=18)
 ```
 
-### <a name="normalize_case"></a>normalize_case()
+### normalize_case
 Adjusts text casing for consistency. Options include `"lower"`, `"upper"`, or `"title"`.
 ```python
-df = arnio.normalize_case(df, column="city", mode="upper")
+df = arnio.normalize_case(df, case_type="title")
 ```
 
-### <a name="rename_columns"></a>rename_columns()
+### rename_columns
 Changes the names of your headers. Requires a dictionary: `{"old_name": "new_name"}`.
 ```python
-df = arnio.rename_columns(df, {"USER_ID": "user_id"})
+df = arnio.rename_columns(df,{"old": "new"})
 ```
 
-### <a name="round_numeric_columns"></a>round_numeric_columns()
+### round_numeric_columns
 Round numeric columns (non-numeric columns in subset ignored safely)
 ```python
 df = arnio.round_numeric_columns(df, decimals=2)
 ```
 
-### <a name="safe_divide_columns"></a>safe_divide_columns()
+### safe_divide_columns
 Divide one column by another, handles zero/null denominators.
 ```python
-df = arnio.safe_divide_columns(df, "total_cost", "quantity", target="unit_price")
+df = arnio.safe_divide_columns(df,numerator="revenue", denominator="cost", output_column="ratio")
 ```
 
-### <a name="strip_whitespace"></a>strip_whitespace()
+### strip_whitespace
 Trims extra spaces from the beginning and end of text entries.
 * **Note:** This is often the first step in cleaning raw CSV data.
 ```python
 df = arnio.strip_whitespace(df)
+```
+
+### validate_columns_exist
+Fail early when required columns are missing.
+```python
+df = arnio.validate_columns_exist(df, ["age"])
 ```
 
 ---
@@ -155,10 +179,10 @@ Functions for interchanging data between Arnio and the **Pandas** library. This 
 
 ---
 
-### <a name="from_pandas"></a>from_pandas()
+### from_pandas()
 Converts a `pandas.DataFrame` into an Arnio `ArFrame`.
 
-### <a name="to_pandas"></a>to_pandas()
+### to_pandas()
 Converts an `ArFrame` into a `pandas.DataFrame`
 
 ---
@@ -173,30 +197,41 @@ df = arnio.to_pandas(af)
 
 ---
 
+## Integration
+
+### ArnioPandasAccessor
+Run Arnio preparation helpers from an existing pandas DataFrame.
+
+---
+
 ## Pipeline
 
 The Pipeline module allows you to chain multiple cleaning operations into a single, automated execution flow.
 
 ---
 
-### <a name="pipeline"></a>pipeline()
+### pipeline()
 Applies a sequence of cleaning steps to an `ArFrame`.
 
 ```python
-steps = [
-    {"step": "strip_whitespace"},
-    {"step": "drop_nulls", "subset": ["email"]},
-    {"step": "normalize_case", "column": "city", "mode": "upper"}
-]
-df = arnio.pipeline(df, steps)
+clean_df = arnio.pipeline(
+        df,
+        [
+            ("strip_whitespace",),
+            ("normalize_case", {"case_type": "title"}),
+            ("fill_nulls", {"value": 0, "subset": ["age"]}),
+            ("fill_nulls", {"value": "Unknown", "subset": ["city"]}),
+            ("drop_duplicates",),
+        ],
+    )
 ```
 
-### <a name="register_step"></a>register_step()
+### register_step()
 Extends the pipeline by adding your own custom Python functions.
 
 ```python
 def custom_func(df, column):
-    pass
+    pass
 arnio.register_step("custom_func", custom_func)
 ```
 
@@ -208,19 +243,19 @@ Tools for inspecting the "health" of your dataset and automatically fixing commo
 
 ---
 
-### <a name="profile"></a>profile()
+### profile()
 Analyzes an `ArFrame` and returns a comprehensive `DataQualityReport`.
 
-### <a name="suggest_cleaning"></a>suggest_cleaning()
+### suggest_cleaning()
 Examines a report or frame and returns a list of recommended cleaning steps.
 
-### <a name="auto_clean"></a>auto_clean()
+### auto_clean()
 The "one-click" fix for data issues. It profiles the data and immediately applies repairs.
 
-### <a name="dataqualityreport"></a>DataQualityReport
+### DataQualityReport
 A full summary of the dataset's health.
 
-### <a name="columnprofile"></a>ColumnProfile
+### ColumnProfile
 A detailed health check for a single column.
 
 ---
@@ -228,9 +263,11 @@ A detailed health check for a single column.
 #### Usage Example: Automatic Cleanup
 ```python
 report = arnio.profile(df)
-print(report.summary())
+summary = report.summary()
+suggestions = arnio.suggest_cleaning(df)
 
-clean_df = arnio.auto_clean(df, mode="strict")
+safe = arnio.auto_clean(df)
+print(arnio.to_pandas(safe))
 ```
 
 ---
@@ -241,25 +278,17 @@ Schema validation allows you to define "Data Contracts". It ensures that your da
 
 ---
 
-#### <a name="schema"></a>Schema
+#### Schema
 The top-level container for your validation rules.
 
----
-
-#### <a name="field"></a>Field
+#### Field
 Defines the specific constraints for a single column.
 
----
-
-#### <a name="validate"></a>validate
+#### validate
 The primary function used to check an `ArFrame` against a `Schema`. It returns a `ValidationResult`.
 
----
-
-#### <a name="validationresult"></a>ValidationResult / <a name="validationissue"></a>ValidationIssue
+#### ValidationResult / ValidationIssue
 The objects returned after calling `validate()`. They provide details on whether the data passed or failed.
-
----
 
 #### Field Type Helpers
 Arnio provides shortcut functions to create specific types of fields quickly. Each helper maps to a specific data type rule.
@@ -278,9 +307,9 @@ Arnio provides shortcut functions to create specific types of fields quickly. Ea
 ### Usage Example:
 ```python
 user_schema = arnio.Schema({
-    "user_id": arnio.Int64(unique=True, nullable=False),
-    "email": arnio.Email(nullable=False),
-    "age": arnio.Int64(min=18, max=100)
+    "user_id": arnio.Int64(unique=True, nullable=False),
+    "email": arnio.Email(nullable=False),
+    "age": arnio.Int64(min=18, max=100)
 })
 
 df = arnio.read_csv("users.csv")
