@@ -467,7 +467,7 @@ def test_schema_composite_unique_empty_columns(tmp_path):
 
 
 def test_datetime_validation(tmp_path):
-    path = tmp_path / "timestamps.csv"
+    path = tmp_path / "datetimes.csv"
     path.write_text(
         "ts,note\n"
         "2026-01-01T12:00:00,start\n"

@@ -559,7 +559,6 @@ def _validate_column(
 
     return issues
 
-
 def _validate_datetime(
     non_null: pd.Series,
     name: str,
@@ -659,47 +658,3 @@ _SEMANTIC_PATTERNS = {
     "phone": r"\+?[0-9][0-9 .()\-]{6,}[0-9]",
     "country_code": r"[A-Z]{2}",
 }
-
-
-def _validate_timestamp(
-    non_null: pd.Series,
-    name: str,
-    field_def: Field,
-) -> list[ValidationIssue]:
-    issues: list[ValidationIssue] = []
-    parsed = pd.to_datetime(non_null, format=field_def.format, errors="coerce")
-
-    invalid_format = non_null[parsed.isna()]
-    issues.extend(
-        _row_issues(
-            invalid_format,
-            column=name,
-            rule="format",
-            message=f"Column {name!r} does not match the required timestamp format",
-        )
-    )
-
-    valid_mask = parsed.notna()
-    valid_non_null = non_null[valid_mask]
-    valid_parsed = parsed[valid_mask]
-
-    if field_def.min is not None:
-        issues.extend(
-            _row_issues(
-                valid_non_null[valid_parsed < field_def.min],
-                column=name,
-                rule="min",
-                message=f"Column {name!r} has values below {field_def.min}",
-            )
-        )
-    if field_def.max is not None:
-        issues.extend(
-            _row_issues(
-                valid_non_null[valid_parsed > field_def.max],
-                column=name,
-                rule="max",
-                message=f"Column {name!r} has values above {field_def.max}",
-            )
-        )
-
-    return issues
