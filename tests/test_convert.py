@@ -247,6 +247,14 @@ class TestFromPandas:
         assert str(result["name"].dtype) == "string"
         assert result["name"].isna().tolist() == [True, True]
 
+    def test_plain_object_string_column_behavior_unchanged(self):
+        df = pd.DataFrame({"name": ["a", "b"]}, dtype=object)
+
+        result = ar.to_pandas(ar.from_pandas(df))
+
+        assert list(result["name"]) == ["a", "b"]
+        assert str(result["name"].dtype) == "string"
+
     def test_mixed_object_column_behavior_unchanged(self):
         df = pd.DataFrame({"a": [1, "x", 3]}, dtype=object)
 
