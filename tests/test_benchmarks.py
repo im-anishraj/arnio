@@ -44,7 +44,7 @@ def test_generate_wide_benchmark_csv_round_trips_through_arnio(tmp_path):
     assert frame.shape == (4, 9)
     assert arnio_df.shape == (4, 9)
     assert arnio_df.columns.tolist() == pandas_df.columns.tolist()
-    assert ar.scan_csv(csv_path).keys() == set(pandas_df.columns)
+    assert list(ar.scan_csv(csv_path).keys()) == list(pandas_df.columns)
 
 
 def test_generate_wide_rejects_too_few_columns(tmp_path):

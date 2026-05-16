@@ -252,3 +252,19 @@ class TestScanCsv:
     def test_scan_missing_file_passthrough(self, tmp_path):
         with pytest.raises(ar.CsvReadError):
             ar.scan_csv(str(tmp_path / "nonexistent.csv"))
+
+    def test_scan_schema_preserves_column_order(self, tmp_path):
+        csv_path = tmp_path / "order_test.csv"
+        csv_path.write_text("z,a,m\n1,2,3\n")
+
+        schema = ar.scan_csv(str(csv_path))
+        frame = ar.read_csv(str(csv_path))
+
+        assert list(schema.keys()) == ["z", "a", "m"]
+        assert list(frame.columns) == ["z", "a", "m"]
+
+    def test_scan_schema_order_matches_read_csv(self, sample_csv):
+        schema = ar.scan_csv(sample_csv)
+        frame = ar.read_csv(sample_csv)
+
+        assert list(schema.keys()) == list(frame.columns)
