@@ -15,6 +15,11 @@ from .exceptions import CsvReadError
 from .frame import ArFrame
 
 
+def _is_utf8_encoding(encoding: str) -> bool:
+    """Return whether the encoding should be treated as raw UTF-8 input."""
+    return encoding.lower().replace("_", "-") in {"utf-8", "utf8"}
+
+
 @contextmanager
 def _utf8_csv_path(path: str, encoding: str) -> Iterator[str]:
     """Return a UTF-8 file path for the C++ reader.
@@ -23,7 +28,7 @@ def _utf8_csv_path(path: str, encoding: str) -> Iterator[str]:
     transcode through a temporary UTF-8 file so the public encoding parameter is
     honored without leaking platform-specific decoding behavior through pybind.
     """
-    if encoding.lower().replace("_", "-") in {"utf-8", "utf8"}:
+    if _is_utf8_encoding(encoding):
         yield path
         return
 
@@ -60,6 +65,7 @@ def read_csv(
     usecols: list[str] | None = None,
     nrows: int | None = None,
     encoding: str = "utf-8",
+    trim_headers: bool = True,
 ) -> ArFrame:
     """Read a CSV file into an ArFrame via C++ backend.
 
@@ -77,6 +83,8 @@ def read_csv(
         Number of rows to read. If None, reads all rows.
     encoding : str, default "utf-8"
         File encoding.
+    trim_headers : bool, default True
+        Strip leading/trailing whitespace from column names.
 
     Returns
     -------
@@ -106,12 +114,19 @@ def read_csv(
             f"Unsupported file format: {path}. Only .csv, .txt, and .tsv are supported."
         )
 
+    if _is_utf8_encoding(encoding):
+        try:
+            with open(path, "rb") as f:
+                if b"\0" in f.read(1024):
+                    raise CsvReadError(
+                        "CSV input contains NUL bytes and appears to be binary or corrupted"
+                    )
+        except FileNotFoundError:
+            pass  # Let C++ backend handle or raise standard error
+
     try:
-        with open(path, "rb") as f:
-            if b"\0" in f.read(1024):
-                raise CsvReadError(
-                    "CSV input contains NUL bytes and appears to be binary or corrupted"
-                )
+        if os.path.getsize(path) == 0:
+            raise CsvReadError(f"CSV file is empty: {path!r}")
     except FileNotFoundError:
         pass  # Let C++ backend handle or raise standard error
 
@@ -119,6 +134,7 @@ def read_csv(
     config.delimiter = delimiter
     config.has_header = has_header
     config.encoding = encoding
+    config.trim_headers = trim_headers
 
     if usecols is not None:
         config.usecols = usecols
@@ -143,6 +159,7 @@ def scan_csv(
     *,
     delimiter: str = ",",
     encoding: str = "utf-8",
+    trim_headers: bool = True,
 ) -> dict[str, str]:
     """Return schema (column names + inferred types) without loading data.
 
@@ -154,6 +171,8 @@ def scan_csv(
         Field delimiter character.
     encoding : str, default "utf-8"
         File encoding. Non-UTF-8 inputs are transcoded before native scanning.
+    trim_headers : bool, default True
+        Strip leading/trailing whitespace from column names.
 
     Returns
     -------
@@ -185,18 +204,26 @@ def scan_csv(
             f"Unsupported file format: {path}. Only .csv, .txt, and .tsv are supported."
         )
 
+    if _is_utf8_encoding(encoding):
+        try:
+            with open(path, "rb") as f:
+                if b"\0" in f.read(1024):
+                    raise CsvReadError(
+                        "CSV input contains NUL bytes and appears to be binary or corrupted"
+                    )
+        except FileNotFoundError:
+            pass  # Let C++ backend handle or raise standard error
     try:
-        with open(path, "rb") as f:
-            if b"\0" in f.read(1024):
-                raise CsvReadError(
-                    "CSV input contains NUL bytes and appears to be binary or corrupted"
-                )
+        if os.path.getsize(path) == 0:
+            raise CsvReadError(f"CSV file is empty: {path!r}")
+
     except FileNotFoundError:
         pass
 
     config = _CsvConfig()
     config.delimiter = delimiter
     config.encoding = encoding
+    config.trim_headers = trim_headers
     reader = _CsvReader(config)
     try:
         with _utf8_csv_path(path, encoding) as native_path:

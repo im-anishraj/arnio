@@ -1,10 +1,13 @@
-"""Generate synthetic benchmark CSV — run this before benchmarking."""
+"""Generate deterministic benchmark CSV files before benchmarking."""
 
 import numpy as np
 import pandas as pd
 
+DEFAULT_TALL_PATH = "benchmarks/benchmark_1m.csv"
+DEFAULT_WIDE_PATH = "benchmarks/benchmark_wide.csv"
 
-def generate(rows=1_000_000, path="benchmarks/benchmark_1m.csv"):
+
+def generate(rows=1_000_000, path=DEFAULT_TALL_PATH):
     rng = np.random.default_rng(42)
     df = pd.DataFrame(
         {
@@ -32,5 +35,43 @@ def generate(rows=1_000_000, path="benchmarks/benchmark_1m.csv"):
     print(f"Generated {rows:,} row CSV -> {path}")
 
 
+def generate_wide(rows=5_000, columns=256, path=DEFAULT_WIDE_PATH):
+    if rows < 1:
+        raise ValueError("wide benchmark requires at least 1 row")
+    if columns < 4:
+        raise ValueError("wide benchmark requires at least 4 columns")
+
+    rng = np.random.default_rng(252)
+    data = {"row_id": np.arange(rows)}
+
+    for index in range(columns - 1):
+        column_id = f"{index:03d}"
+        kind = index % 4
+
+        if kind == 0:
+            data[f"metric_{column_id}"] = rng.normal(1_000, 250, rows).round(4)
+        elif kind == 1:
+            values = rng.choice(
+                ["  alpha", "BETA  ", " gamma", "DELTA ", None],
+                rows,
+            )
+            values[0] = "  alpha"
+            data[f"label_{column_id}"] = values
+        elif kind == 2:
+            values = rng.choice(
+                ["true", "false", "TRUE", "FALSE", None],
+                rows,
+            )
+            values[0] = "true"
+            data[f"flag_{column_id}"] = values
+        else:
+            data[f"amount_{column_id}"] = rng.uniform(0, 10_000, rows).round(2)
+
+    df = pd.DataFrame(data)
+    df.to_csv(path, index=False, lineterminator="\n")
+    print(f"Generated {rows:,} row x {columns:,} column CSV -> {path}")
+
+
 if __name__ == "__main__":
     generate()
+    generate_wide()
