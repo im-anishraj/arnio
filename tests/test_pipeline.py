@@ -1,5 +1,7 @@
 """Tests for the pipeline function."""
 
+import pytest
+
 import arnio as ar
 
 
@@ -189,6 +191,34 @@ class TestPipeline:
             assert False, "Should have raised ValueError"
         except ValueError as e:
             assert "Expected a dict" in str(e)
+
+
+class TestUnregisterStep:
+    def test_unregister_custom_step(self):
+        def dummy(df, **kwargs):
+            return df
+
+        ar.register_step("temp_step", dummy)
+        assert "temp_step" in ar.list_steps()
+        ar.unregister_step("temp_step")
+        assert "temp_step" not in ar.list_steps()
+
+    def test_unregister_nonexistent_raises(self):
+        with pytest.raises(ar.UnknownStepError):
+            ar.unregister_step("does_not_exist")
+
+    def test_unregister_builtin_raises(self):
+        with pytest.raises(ValueError, match="Cannot unregister built-in"):
+            ar.unregister_step("drop_nulls")
+
+    def test_unregister_is_idempotent_after_register(self):
+        def dummy(df, **kwargs):
+            return df
+
+        ar.register_step("temp_idempotent", dummy)
+        ar.unregister_step("temp_idempotent")
+        with pytest.raises(ar.UnknownStepError):
+            ar.unregister_step("temp_idempotent")
 
 
 def test_filter_rows_greater_than():

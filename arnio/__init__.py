@@ -32,7 +32,7 @@ from .exceptions import ArnioError, CsvReadError, TypeCastError, UnknownStepErro
 from .frame import ArFrame
 from .integrations import ArnioPandasAccessor
 from .io import read_csv, scan_csv
-from .pipeline import pipeline, register_step
+from .pipeline import pipeline, register_step, unregister_step
 from .quality import (
     ColumnProfile,
     DataQualityReport,
@@ -83,6 +83,7 @@ __all__ = [
     # Pipeline
     "pipeline",
     "register_step",
+    "unregister_step",
     # Data quality
     "profile",
     "suggest_cleaning",
