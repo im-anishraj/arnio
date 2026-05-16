@@ -1,5 +1,6 @@
 """Tests for schema validation."""
 
+import pytest
 import arnio as ar
 
 
@@ -166,3 +167,47 @@ def test_custom_pattern_validation(tmp_path):
     assert not result.passed
     assert result.issues[0].rule == "pattern"
     assert result.issues[0].row_index == 1
+
+
+def test_raise_for_errors_passes(sample_csv):
+    frame = ar.read_csv(sample_csv)
+    schema = ar.Schema({"name": ar.String(nullable=False)})
+
+    result = ar.validate(frame, schema)
+
+    assert result.passed
+    assert result.raise_for_errors() is None
+
+
+def test_raise_for_errors_single_issue(tmp_path):
+    path = tmp_path / "single.csv"
+    path.write_text("a,b\n1,2\n")
+
+    frame = ar.read_csv(path)
+    schema = ar.Schema({"c": ar.String()})
+
+    result = ar.validate(frame, schema)
+
+    with pytest.raises(ar.ArnioError) as exc:
+        result.raise_for_errors()
+
+    assert "Missing required column" in str(exc.value)
+
+
+def test_raise_for_errors_multiple_issues(tmp_path):
+    path = tmp_path / "ages.csv"
+    path.write_text("age\n1\n2\n")
+
+    frame = ar.read_csv(path)
+    schema = ar.Schema({"age": ar.Int64(min=3)})
+
+    result = ar.validate(frame, schema)
+
+    assert result.issue_count == 2
+
+    with pytest.raises(ar.ArnioError) as exc:
+        result.raise_for_errors()
+
+    msg = str(exc.value)
+    assert "below 3" in msg
+    assert "row 0" in msg and "row 1" in msg

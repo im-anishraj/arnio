@@ -12,6 +12,7 @@ import pandas as pd
 
 from .convert import to_pandas
 from .frame import ArFrame
+from .exceptions import ArnioError
 
 
 @dataclass(frozen=True)
@@ -165,6 +166,26 @@ class ValidationResult:
             )
 
         return "\n".join(lines)
+
+    def raise_for_errors(self) -> None:
+        """Raise an ArnioError when validation failed.
+
+        Returns None when validation passed.
+        The raised exception message summarizes all validation issues.
+        """
+        if self.passed:
+            return None
+
+        parts: list[str] = []
+        parts.append(
+            f"Schema validation failed: {self.issue_count} issue(s) across {len(self.bad_rows)} bad row(s)"
+        )
+        for issue in self.issues:
+            col = issue.column if issue.column is not None else ""
+            row = "" if issue.row_index is None else f"row {issue.row_index}"
+            parts.append(f"- {col} | {issue.rule} | {row} | {issue.message}")
+
+        raise ArnioError("\n".join(parts))
 
 
 def validate(frame: ArFrame, schema: Schema | dict[str, Field]) -> ValidationResult:
