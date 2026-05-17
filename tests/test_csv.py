@@ -243,6 +243,33 @@ class TestScanCsv:
         ):
             ar.scan_csv(file_path)
 
+    def test_scan_sample_size(self, tmp_path):
+        csv_path = tmp_path / "sample.csv"
+        csv_path.write_text("id,value\n1,10\n2,20\n3,30\n4,hello\n")
+
+        schema_early = ar.scan_csv(csv_path, sample_size=2)
+        assert schema_early["value"] == "int64"
+
+        schema_full = ar.scan_csv(csv_path, sample_size=10)
+        assert schema_full["value"] == "string"
+
+    def test_scan_sample_size_invalid(self, sample_csv):
+
+        with pytest.raises(ValueError, match="sample_size must be a positive integer"):
+            ar.scan_csv(sample_csv, sample_size=0)
+
+        with pytest.raises(ValueError, match="sample_size must be a positive integer"):
+            ar.scan_csv(sample_csv, sample_size=-5)
+
+    def test_scan_sample_size_none_preserves_default(self, tmp_path):
+        csv_path = tmp_path / "sample_default.csv"
+        csv_path.write_text("id,val\n1,a\n2,b\n3,c\n")
+
+        res_implicit = ar.scan_csv(csv_path)
+        res_explicit = ar.scan_csv(csv_path, sample_size=None)
+
+        assert res_implicit == res_explicit
+
     def test_scan_empty_file_raises(self, tmp_path):
         csv_path = tmp_path / "empty.csv"
         csv_path.write_text("")
