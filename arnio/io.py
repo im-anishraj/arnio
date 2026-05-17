@@ -6,6 +6,7 @@ CSV reading functions.
 from __future__ import annotations
 
 import os
+import shutil
 import tempfile
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -21,7 +22,12 @@ def _is_utf8_encoding(encoding: str) -> bool:
 
 
 @contextmanager
-def _utf8_csv_path(path: str, encoding: str, sample_rows: int | None = None) -> Iterator[str]:
+def _utf8_csv_path(
+    path: str,
+    encoding: str,
+    delimiter: str = ",",
+    sample_rows: int | None = None,
+) -> Iterator[str]:
     """Return a UTF-8 file path for the C++ reader.
 
     The native reader currently consumes UTF-8 bytes. For other encodings,
@@ -39,12 +45,16 @@ def _utf8_csv_path(path: str, encoding: str, sample_rows: int | None = None) -> 
                 "w", encoding="utf-8", newline="", suffix=".csv", delete=False
             ) as tmp:
                 if sample_rows is not None:
-                    for i, line in enumerate(src):
-                        if i >= sample_rows:
-                            break
+                    in_quote = False
+                    row_count = 0
+                    for line in src:
                         tmp.write(line)
+                        in_quote ^= line.count('"') % 2 == 1
+                        if not in_quote:
+                            row_count += 1
+                            if row_count >= sample_rows:
+                                break
                 else:
-                    import shutil
                     shutil.copyfileobj(src, tmp)
                 tmp_name = tmp.name
         yield tmp_name
@@ -150,7 +160,9 @@ def read_csv(
 
     reader = _CsvReader(config)
     try:
-        with _utf8_csv_path(path, encoding) as native_path:
+        with _utf8_csv_path(
+            path, encoding, delimiter=delimiter
+        ) as native_path:
             cpp_frame = reader.read(native_path)
     except ValueError:
         raise
@@ -158,6 +170,7 @@ def read_csv(
         raise
     except RuntimeError as e:
         raise CsvReadError(str(e)) from e
+
     return ArFrame(cpp_frame)
 
 
@@ -223,7 +236,6 @@ def scan_csv(
     try:
         if os.path.getsize(path) == 0:
             raise CsvReadError(f"CSV file is empty: {path!r}")
-
     except FileNotFoundError:
         pass
 
@@ -234,7 +246,9 @@ def scan_csv(
     reader = _CsvReader(config)
     try:
         # Schema inference only needs a sample, avoiding full-file transcode
-        with _utf8_csv_path(path, encoding, sample_rows=10000) as native_path:
+        with _utf8_csv_path(
+            path, encoding, delimiter=delimiter, sample_rows=10000
+        ) as native_path:
             return reader.scan_schema(native_path)
     except RuntimeError as e:
         raise CsvReadError(str(e)) from e
