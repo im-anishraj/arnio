@@ -5,6 +5,8 @@ Production data contracts and validation.
 
 from __future__ import annotations
 
+import json
+
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -40,6 +42,73 @@ class Schema:
     def validate(self, frame: ArFrame) -> ValidationResult:
         """Validate a frame against this schema."""
         return validate(frame, self)
+
+    def to_json(self, *, indent: int | None = 2) -> str:
+        """Serialize this schema to a JSON string.
+
+        Parameters
+        ----------
+        indent : int, optional
+            JSON indentation level. Defaults to 2. Pass None for compact output.
+
+        Returns
+        -------
+        str
+            JSON representation of the schema.
+        """
+        data = {
+            "fields": {
+                name: field_to_dict(f) for name, f in self.fields.items()
+            },
+            "strict": self.strict,
+        }
+        return json.dumps(data, indent=indent)
+
+    @classmethod
+    def from_json(cls, value: str) -> Schema:
+        """Create a Schema from a JSON string.
+
+        Parameters
+        ----------
+        value : str
+            JSON string produced by ``to_json()``.
+
+        Returns
+        -------
+        Schema
+            Deserialized schema.
+
+        Raises
+        ------
+        ValueError
+            If the JSON is invalid or missing required keys.
+        """
+        try:
+            data = json.loads(value)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid schema JSON: {e}") from e
+
+        if not isinstance(data, dict) or "fields" not in data:
+            raise ValueError("Schema JSON must contain a 'fields' key")
+
+        fields = {}
+        for name, fd in data["fields"].items():
+            if not isinstance(fd, dict):
+                raise ValueError(f"Invalid field definition for {name!r}: expected a dict")
+            fields[name] = Field(
+                dtype=fd.get("dtype"),
+                nullable=fd.get("nullable", True),
+                min=fd.get("min"),
+                max=fd.get("max"),
+                pattern=fd.get("pattern"),
+                semantic=fd.get("semantic"),
+                allowed=set(fd["allowed"]) if "allowed" in fd else None,
+                unique=fd.get("unique", False),
+                min_length=fd.get("min_length"),
+                max_length=fd.get("max_length"),
+            )
+
+        return cls(fields=fields, strict=data.get("strict", False))
 
 
 @dataclass(frozen=True)
@@ -441,6 +510,28 @@ def _validate_column(
         )
 
     return issues
+
+
+def field_to_dict(field: Field) -> dict[str, Any]:
+    """Convert a Field to a JSON-friendly dict."""
+    d: dict[str, Any] = {"dtype": field.dtype, "nullable": field.nullable}
+    if field.min is not None:
+        d["min"] = field.min
+    if field.max is not None:
+        d["max"] = field.max
+    if field.pattern is not None:
+        d["pattern"] = field.pattern
+    if field.semantic is not None:
+        d["semantic"] = field.semantic
+    if field.allowed is not None:
+        d["allowed"] = sorted(field.allowed)
+    if field.unique:
+        d["unique"] = True
+    if field.min_length is not None:
+        d["min_length"] = field.min_length
+    if field.max_length is not None:
+        d["max_length"] = field.max_length
+    return d
 
 
 def _row_issues(
