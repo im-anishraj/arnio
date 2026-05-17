@@ -5,6 +5,7 @@ Data cleaning functions.
 
 from __future__ import annotations
 
+import unicodedata
 from collections.abc import Sequence
 from typing import Any
 
@@ -442,6 +443,44 @@ def normalize_case(
     return ArFrame(result)
 
 
+def normalize_unicode(
+    frame: ArFrame,
+    *,
+    subset: list[str] | None = None,
+    form: str = "NFC",
+) -> ArFrame:
+    """Normalize Unicode text columns."""
+
+    from .convert import from_pandas, to_pandas
+
+    valid_forms = {"NFC", "NFD", "NFKC", "NFKD"}
+
+    if form not in valid_forms:
+        raise ValueError(f"Unsupported Unicode normalization form: {form}")
+
+    if subset is not None:
+        validate_columns_exist(
+            frame,
+            _validate_column_sequence(subset, argument_name="subset"),
+            operation="normalize_unicode",
+        )
+
+    df = to_pandas(frame).copy()
+
+    columns = (
+        subset
+        if subset is not None
+        else df.select_dtypes(include=["object", "string"]).columns
+    )
+
+    for col in columns:
+        df[col] = df[col].apply(
+            lambda x: unicodedata.normalize(form, x) if isinstance(x, str) else x
+        )
+
+    return from_pandas(df)
+
+
 def rename_columns(
     frame: ArFrame,
     mapping: dict[str, str],
@@ -679,6 +718,73 @@ def round_numeric_columns(
     for col in cols_to_round:
         if pd.api.types.is_numeric_dtype(df[col]):
             df[col] = df[col].round(decimals)
+
+    return from_pandas(df) if is_arframe else df
+
+
+def combine_columns(
+    frame,
+    *,
+    subset: list[str] | None = None,
+    separator: str = " ",
+    output_column: str = "combined",
+):
+    """Combine multiple columns into a single output column.
+
+    Parameters
+    ----------
+    frame : ArFrame or pd.DataFrame
+        Input data frame.
+    subset : list[str], optional
+        Columns to combine. If None, all columns are used.
+    separator : str
+        String used to separate values in the output column.
+    output_column : str
+        Name of the new column to store combined values.
+
+    Returns
+    -------
+    ArFrame or pd.DataFrame
+        Frame with the combined output column appended.
+    """
+    import pandas as pd
+
+    from .convert import from_pandas, to_pandas
+
+    if not isinstance(separator, str):
+        raise TypeError("separator must be a string")
+    if not isinstance(output_column, str) or not output_column.strip():
+        raise ValueError("output_column must be a non-empty string")
+
+    is_arframe = not isinstance(frame, pd.DataFrame)
+    df = to_pandas(frame) if is_arframe else frame.copy()
+
+    if subset is None:
+        subset_columns = list(df.columns)
+    else:
+        subset_columns = _validate_column_sequence(subset, argument_name="subset")
+        missing = [column for column in subset_columns if column not in df.columns]
+        if missing:
+            available = ", ".join(df.columns) or "<none>"
+            raise KeyError(
+                f"Missing columns for combine_columns: {missing}. Available columns: {available}"
+            )
+
+    if not subset_columns:
+        raise ValueError("subset must contain at least one column")
+
+    if output_column in df.columns:
+
+        raise ValueError(f"Output column '{output_column}' already exists.")
+
+    combined = (
+        df[subset_columns].astype("string").fillna("").agg(separator.join, axis=1)
+    )
+    null_mask = df[subset_columns].isna().all(axis=1)
+    combined = combined.mask(null_mask, pd.NA)
+
+    df = df.copy()
+    df[output_column] = combined
 
     return from_pandas(df) if is_arframe else df
 

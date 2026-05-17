@@ -36,6 +36,9 @@ class Field:
     unique: bool = False
     min_length: int | None = None
     max_length: int | None = None
+    format: str | None = None
+    _datetime_min: pd.Timestamp | None = None
+    _datetime_max: pd.Timestamp | None = None
 
 
 @dataclass(frozen=True)
@@ -383,6 +386,33 @@ def CountryCode(*, nullable: bool = True, unique: bool = False) -> Field:
     )
 
 
+def DateTime(
+    *,
+    nullable: bool = True,
+    min: Any = None,
+    max: Any = None,
+    unique: bool = False,
+    format: str | None = None,
+) -> Field:
+    """Create a datetime schema field for validating string timestamps."""
+    if format is not None and not isinstance(format, str):
+        raise TypeError("DateTime format must be a string or None")
+
+    min_val = _parse_datetime_bound(min, "min")
+    max_val = _parse_datetime_bound(max, "max")
+    if min_val is not None and max_val is not None and min_val > max_val:
+        raise ValueError("DateTime min must be less than or equal to max")
+
+    return Field(
+        dtype="datetime",
+        nullable=nullable,
+        unique=unique,
+        format=format,
+        _datetime_min=min_val,
+        _datetime_max=max_val,
+    )
+
+
 def _validate_column(
     series: pd.Series,
     actual_dtype: str | None,
@@ -392,16 +422,17 @@ def _validate_column(
     issues: list[ValidationIssue] = []
 
     if field_def.dtype is not None and actual_dtype != field_def.dtype:
-        issues.append(
-            ValidationIssue(
-                column=name,
-                rule="dtype",
-                message=(
-                    f"Column {name!r} has dtype {actual_dtype!r}; "
-                    f"expected {field_def.dtype!r}"
-                ),
+        if not (field_def.dtype == "datetime" and actual_dtype == "string"):
+            issues.append(
+                ValidationIssue(
+                    column=name,
+                    rule="dtype",
+                    message=(
+                        f"Column {name!r} has dtype {actual_dtype!r}; "
+                        f"expected {field_def.dtype!r}"
+                    ),
+                )
             )
-        )
 
     if not field_def.nullable:
         issues.extend(
@@ -437,7 +468,10 @@ def _validate_column(
             )
         )
 
-    if field_def.min is not None or field_def.max is not None:
+    if field_def.dtype == "datetime":
+        issues.extend(_validate_datetime(non_null, name, field_def))
+
+    elif field_def.min is not None or field_def.max is not None:
         numeric = pd.to_numeric(non_null, errors="coerce")
         invalid_numeric = non_null[numeric.isna()]
         issues.extend(
@@ -526,6 +560,65 @@ def _validate_column(
     return issues
 
 
+def _validate_datetime(
+    non_null: pd.Series,
+    name: str,
+    field_def: Field,
+) -> list[ValidationIssue]:
+    issues: list[ValidationIssue] = []
+    parsed = pd.to_datetime(non_null, format=field_def.format, errors="coerce")
+
+    invalid_format = non_null[parsed.isna()]
+    issues.extend(
+        _row_issues(
+            invalid_format,
+            column=name,
+            rule="format",
+            message=f"Column {name!r} does not match the required datetime format",
+        )
+    )
+
+    valid_mask = parsed.notna()
+    valid_non_null = non_null[valid_mask]
+    valid_parsed = parsed[valid_mask]
+
+    if field_def._datetime_min is not None:
+        issues.extend(
+            _row_issues(
+                valid_non_null[valid_parsed < field_def._datetime_min],
+                column=name,
+                rule="min",
+                message=f"Column {name!r} has values below {field_def._datetime_min}",
+            )
+        )
+    if field_def._datetime_max is not None:
+        issues.extend(
+            _row_issues(
+                valid_non_null[valid_parsed > field_def._datetime_max],
+                column=name,
+                rule="max",
+                message=f"Column {name!r} has values above {field_def._datetime_max}",
+            )
+        )
+
+    return issues
+
+
+def _parse_datetime_bound(value: Any, name: str) -> pd.Timestamp | None:
+    if value is None:
+        return None
+    try:
+        parsed = pd.to_datetime(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"DateTime {name} must be a parseable datetime scalar"
+        ) from exc
+
+    if not isinstance(parsed, pd.Timestamp) or pd.isna(parsed):
+        raise ValueError(f"DateTime {name} must be a parseable datetime scalar")
+    return parsed
+
+
 def _row_issues(
     invalid: pd.Series,
     *,
@@ -538,7 +631,7 @@ def _row_issues(
             column=column,
             rule=rule,
             message=message,
-            row_index=int(index),
+            row_index=int(index) + 1,
             value=value,
         )
         for index, value in invalid.items()
