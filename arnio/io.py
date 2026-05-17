@@ -9,7 +9,7 @@ import csv
 import os
 import shutil
 import tempfile
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 
 from ._core import _CsvConfig, _CsvReader
@@ -74,6 +74,46 @@ def _utf8_csv_path(
                 os.unlink(tmp_name)
             except OSError:
                 pass
+
+
+def _validate_delimiter(delimiter: str) -> str:
+    """Validate CSV delimiter."""
+    if not isinstance(delimiter, str):
+        raise TypeError("delimiter must be a string")
+
+    if len(delimiter) != 1:
+        raise ValueError("delimiter must be exactly one character")
+
+    return delimiter
+
+
+def _validate_usecols(usecols: Sequence[str]) -> list[str]:
+    """Validate usecols parameter."""
+    if isinstance(usecols, str):
+        raise TypeError("usecols must be a sequence of column names, not a string")
+
+    if not isinstance(usecols, Sequence):
+        raise TypeError("usecols must be a sequence of strings")
+
+    for col in usecols:
+        if not isinstance(col, str):
+            raise TypeError("usecols must contain only strings")
+
+    if len(set(usecols)) != len(usecols):
+        raise ValueError("usecols must not contain duplicate column names")
+
+    return list(usecols)
+
+
+def _validate_nrows(nrows: int) -> int:
+    """Validate nrows parameter."""
+    if isinstance(nrows, bool) or not isinstance(nrows, int):
+        raise TypeError("nrows must be an integer")
+
+    if nrows < 0:
+        raise ValueError("nrows must be non-negative")
+
+    return nrows
 
 
 def read_csv(
@@ -149,6 +189,8 @@ def read_csv(
     except FileNotFoundError:
         pass  # Let C++ backend handle or raise standard error
 
+    delimiter = _validate_delimiter(delimiter)
+
     config = _CsvConfig()
     config.delimiter = delimiter
     config.has_header = has_header
@@ -156,9 +198,10 @@ def read_csv(
     config.trim_headers = trim_headers
 
     if usecols is not None:
-        config.usecols = usecols
+        config.usecols = _validate_usecols(usecols)
+
     if nrows is not None:
-        config.nrows = nrows
+        config.nrows = _validate_nrows(nrows)
 
     reader = _CsvReader(config)
     try:
@@ -240,6 +283,8 @@ def scan_csv(
             raise CsvReadError(f"CSV file is empty: {path!r}")
     except FileNotFoundError:
         pass
+
+    delimiter = _validate_delimiter(delimiter)
 
     config = _CsvConfig()
     config.delimiter = delimiter
