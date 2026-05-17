@@ -201,6 +201,28 @@ quality, and validation layer.
 
 > Product direction: **[PROJECT_DIRECTION.md](PROJECT_DIRECTION.md)**
 
+## 📘 Examples
+
+These examples demonstrate how Arnio integrates with the Python data ecosystem.
+
+They follow a simple workflow:
+
+**clean/validate data with Arnio → analyze with other tools**
+
+### 🔹 Interoperability Examples
+
+- **Arnio + pandas**  
+  Clean and normalize messy tabular data using Arnio, then analyze it using pandas.  
+  Run:
+  ```bash
+  python examples/arnio_pandas_example.py
+
+- **Arnio + NumPy**
+Prepare numeric data safely using Arnio, then perform computations using NumPy.
+Run:
+'''bash
+python examples/arnio_numpy_example.py
+
 <br>
 
 ---
