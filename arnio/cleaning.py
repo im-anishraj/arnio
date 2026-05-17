@@ -663,6 +663,15 @@ def slugify_column_names(
     Already-clean names (e.g. ``revenue``, ``user_id``) pass through unchanged,
     so this step is safe to include in every pipeline.
 
+    A column whose name contains only special characters (e.g. ``"!!!"``) will
+    produce an empty slug after transformation. Such columns are rejected with a
+    ``ValueError`` regardless of the *duplicates* setting, because an empty
+    column name is not a valid Python identifier.
+
+    Passing ``duplicates="ignore"`` silently drops any column whose slug
+    collides with an earlier one. This is a deliberate data-loss operation —
+    use it only when you have confirmed that the dropped columns are redundant.
+
     Parameters
     ----------
     frame : ArFrame
@@ -672,7 +681,7 @@ def slugify_column_names(
 
         * ``"raise"``  — raise ``ValueError`` listing the collision.
         * ``"ignore"`` — keep the first occurrence of each slug and drop the
-          later columns that collide.
+          later columns that collide. **Data in the dropped columns is lost.**
 
     Returns
     -------
@@ -682,8 +691,9 @@ def slugify_column_names(
     Raises
     ------
     ValueError
-        If *duplicates* is ``"raise"`` and a slug collision is detected, or if
-        an unrecognised *duplicates* value is passed.
+        If any column name slugifies to an empty string, if *duplicates* is
+        ``"raise"`` and a slug collision is detected, or if an unrecognised
+        *duplicates* value is passed.
 
     Examples
     --------
@@ -704,18 +714,13 @@ def slugify_column_names(
     from .convert import from_pandas, to_pandas
 
     if duplicates not in ("raise", "ignore"):
-        raise ValueError(
-            f"duplicates must be 'raise' or 'ignore', got {duplicates!r}"
-        )
+        raise ValueError(f"duplicates must be 'raise' or 'ignore', got {duplicates!r}")
+
     def _slugify(name: str) -> str:
         name = name.strip()
-        # Replace whitespace and hyphens with underscores
         name = re.sub(r"[\s\-]+", "_", name)
-        # Remove anything that is not alphanumeric or underscore
         name = re.sub(r"[^\w]", "", name)
-        # Collapse multiple underscores
         name = re.sub(r"_+", "_", name)
-        # Strip leading/trailing underscores
         name = name.strip("_")
         return name.lower()
 
@@ -723,8 +728,19 @@ def slugify_column_names(
     original_columns = list(df.columns)
     slugs = [_slugify(col) for col in original_columns]
 
+    # Reject columns that produce an empty slug (e.g. "!!!")
+    empty_slug_columns = [
+        original for original, slug in zip(original_columns, slugs) if slug == ""
+    ]
+    if empty_slug_columns:
+        raise ValueError(
+            "slugify_column_names produced an empty slug for columns: "
+            + str(empty_slug_columns)
+            + ". Rename these columns before slugifying."
+        )
+
     # Detect collisions
-    seen: dict[str, str] = {}       # slug -> first original name
+    seen: dict[str, str] = {}
     collisions: list[str] = []
     drop_indices: list[int] = []
 
@@ -734,7 +750,7 @@ def slugify_column_names(
                 collisions.append(
                     f"  {original!r} and {seen[slug]!r} both map to {slug!r}"
                 )
-            else:  # "ignore" — drop the later duplicate
+            else:
                 drop_indices.append(idx)
         else:
             seen[slug] = original
@@ -745,18 +761,16 @@ def slugify_column_names(
             + "\n".join(collisions)
         )
 
-    # Build the rename mapping (only columns that survive)
     surviving = [
         (orig, slug)
         for idx, (orig, slug) in enumerate(zip(original_columns, slugs))
         if idx not in drop_indices
     ]
 
-    result_df = df.drop(
-        columns=[original_columns[i] for i in drop_indices]
-    ).rename(columns=dict(surviving))
+    result_df = df.drop(columns=[original_columns[i] for i in drop_indices]).rename(
+        columns=dict(surviving)
+    )
 
-    # Preserve original column order (minus any dropped duplicates)
     result_df = result_df[[slug for _, slug in surviving]]
 
     return from_pandas(result_df)

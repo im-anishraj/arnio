@@ -554,6 +554,8 @@ class TestSafeDivideColumns:
             assert "already exists" in str(w[0].message)
         df = ar.to_pandas(result)
         assert df["ratio"].iloc[0] == 2.0
+
+
 class TestSlugifyColumnNames:
     # ------------------------------------------------------------------
     # Normal conversions
@@ -599,9 +601,7 @@ class TestSlugifyColumnNames:
     # Column order preserved
     # ------------------------------------------------------------------
     def test_column_order_preserved(self):
-        frame = ar.from_pandas(
-            pd.DataFrame({"Z Col": [1], "A Col": [2], "M Col": [3]})
-        )
+        frame = ar.from_pandas(pd.DataFrame({"Z Col": [1], "A Col": [2], "M Col": [3]}))
         result = ar.slugify_column_names(frame)
         assert result.columns == ["z_col", "a_col", "m_col"]
 
@@ -621,10 +621,23 @@ class TestSlugifyColumnNames:
         assert list(result_df["score"]) == [1, 2, 3]
 
     # ------------------------------------------------------------------
+    # Empty slug edge case
+    # ------------------------------------------------------------------
+    def test_empty_slug_raises(self):
+        # A column name made entirely of special chars produces an empty slug
+        frame = ar.from_pandas(pd.DataFrame({"!!!": [1], "name": ["Alice"]}))
+        with pytest.raises(ValueError, match="empty slug"):
+            ar.slugify_column_names(frame)
+
+    def test_empty_slug_error_names_the_column(self):
+        frame = ar.from_pandas(pd.DataFrame({"???": [1]}))
+        with pytest.raises(ValueError, match=r"\?\?\?"):
+            ar.slugify_column_names(frame)
+
+    # ------------------------------------------------------------------
     # Duplicate-name behaviour
     # ------------------------------------------------------------------
     def test_duplicate_slug_raises_by_default(self):
-        # "Name" and "name" both slug to "name"
         frame = ar.from_pandas(pd.DataFrame({"Name": ["A"], "name": ["B"]}))
         with pytest.raises(ValueError, match="duplicate column names"):
             ar.slugify_column_names(frame)
@@ -634,8 +647,16 @@ class TestSlugifyColumnNames:
         result = ar.slugify_column_names(frame, duplicates="ignore")
         result_df = ar.to_pandas(result)
         assert result_df.columns.tolist() == ["name"]
-        # First column ("Name" → "A") is kept
         assert result_df["name"].iloc[0] == "A"
+
+    def test_duplicate_slug_ignore_drops_later_column_data(self):
+        # Explicit test that documents the data-loss behaviour of duplicates="ignore"
+        frame = ar.from_pandas(pd.DataFrame({"Revenue ($)": [999.0], "Revenue": [1.0]}))
+        result = ar.slugify_column_names(frame, duplicates="ignore")
+        result_df = ar.to_pandas(result)
+        # Only one column survives; it holds the FIRST column's data (999.0)
+        assert result_df.columns.tolist() == ["revenue"]
+        assert result_df["revenue"].iloc[0] == 999.0
 
     def test_duplicate_slug_error_message_names_both_columns(self):
         frame = ar.from_pandas(pd.DataFrame({"Revenue ($)": [1.0], "Revenue": [2.0]}))
