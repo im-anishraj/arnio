@@ -77,9 +77,9 @@ def test_random_delim_tab_separated(tmp_path):
 
 def test_random_delim_unusual(tmp_path):
     """Test semicolon, pipe, tilde as delimiters."""
-    for sep in [";", "|", "~"]:
-        csv_path = tmp_path / f"test_{sep}.csv"
-        csv_path.write_text(f"id{sep}text\n1{sep}ok")
+    for i, sep in enumerate([";", "|", "~"]):
+        csv_path = tmp_path / f"test_delim_{i}.csv"
+        csv_path.write_text(f"id{sep}text\n1{sep}ok", encoding="utf-8")
         frame = ar.read_csv(csv_path, delimiter=sep)
         assert frame.shape == (1, 2)
 
@@ -159,7 +159,7 @@ def test_corrupt_extremely_long_row(tmp_path):
 def test_corrupt_unicode_emoji(tmp_path):
     """Test Unicode and emoji in fields."""
     csv_path = tmp_path / "test.csv"
-    csv_path.write_text("a,b\n1,🚀\n2,ñ")
+    csv_path.write_text("a,b\n1,🚀\n2,ñ", encoding="utf-8")
     frame = ar.read_csv(csv_path)
     df = ar.to_pandas(frame)
     assert df.loc[0, "b"] == "🚀"
