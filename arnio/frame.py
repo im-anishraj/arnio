@@ -8,7 +8,9 @@ from __future__ import annotations
 from ._core import _Frame
 
 #: Dtype strings recognised by ArFrame.select_dtypes().
-_VALID_DTYPES: frozenset[str] = frozenset({"int64", "float64", "string", "bool", "null"})
+_VALID_DTYPES: frozenset[str] = frozenset(
+    {"int64", "float64", "string", "bool", "null"}
+)
 
 
 class ArFrame:
@@ -230,8 +232,7 @@ class ArFrame:
 
         if not matched:
             raise ValueError(
-                "No columns match the dtype selection. "
-                f"Frame dtypes: {col_dtypes}."
+                "No columns match the dtype selection. " f"Frame dtypes: {col_dtypes}."
             )
 
         return self.select_columns(matched)
