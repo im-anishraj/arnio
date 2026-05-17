@@ -47,6 +47,7 @@ from .schema import (
     URL,
     Bool,
     CountryCode,
+    Date,
     Email,
     Field,
     Float64,
@@ -114,4 +115,5 @@ __all__ = [
     "ArnioError",
     "CsvReadError",
     "TypeCastError",
+    "Date",
 ]

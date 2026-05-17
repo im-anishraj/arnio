@@ -631,6 +631,7 @@ schema = ar.Schema({
     "country": ar.CountryCode(nullable=False),
     "username": ar.String(min_length=3, max_length=20),
     "revenue": ar.Float64(nullable=True, min=0),
+    "created_at": ar.Date(nullable=False),
 })
 
 result = ar.validate(frame, schema)
@@ -656,6 +657,8 @@ schema = ar.Schema({
 result = ar.validate(frame, schema)
 ```
 Severity counts are not included in `summary()` yet because `ValidationIssue` does not currently carry severity information.
+
+Date fields use the `YYYY-MM-DD` format and reject invalid calendar dates.
 
 For low-risk automatic cleanup:
 
