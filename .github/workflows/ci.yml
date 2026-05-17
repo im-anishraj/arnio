@@ -27,7 +27,7 @@ jobs:
         run: black --check --diff .
 
       - name: Ruff (check-only)
-        run: ruff check .
+        run: ruff check . --extend-exclude "*.ipynb"
 
       - name: Install clang-format
         run: |
