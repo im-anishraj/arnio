@@ -443,6 +443,15 @@ Works with:
 - strings
 - booleans
 
+### Boolean string normalization
+
+```python
+parsed = ar.parse_bool_strings(frame)
+```
+
+This normalizes values such as "yes", "no", "true", "false", "y", "n", "1", and "0" while preserving unsupported values unchanged. Mixed-value columns may round-trip as strings due to ArFrame column typing semantics.
+
+
 <br>
 ### 🔢 Safe column division
 
