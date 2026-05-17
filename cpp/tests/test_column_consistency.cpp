@@ -1,10 +1,10 @@
-#include "arnio/column.h"
-
 #include <cstdlib>
 #include <iostream>
 #include <stdexcept>
 #include <string>
 #include <vector>
+
+#include "arnio/column.h"
 
 static int failures = 0;
 
@@ -20,8 +20,7 @@ int main() {
 
     // Construct an inconsistent column: dtype=INT64 but data holds strings.
     ColumnData bad_data = std::vector<std::string>{"hello"};
-    Column inconsistent("test", DType::INT64, std::move(bad_data),
-                        std::vector<bool>{false});
+    Column inconsistent("test", DType::INT64, std::move(bad_data), std::vector<bool>{false});
 
     // -- clone() ----------------------------------------------------------
     {
