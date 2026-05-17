@@ -270,7 +270,7 @@ class TestDropConstantColumns:
         result = ar.drop_constant_columns(frame)
 
         assert result.columns == []
-        assert result.shape[0] == 0
+        assert result.shape[0] == 1
         assert result.shape[1] == 0
 
 

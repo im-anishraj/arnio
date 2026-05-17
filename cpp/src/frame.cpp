@@ -4,12 +4,16 @@
 
 namespace arnio {
 
-Frame::Frame(std::vector<Column> columns) : columns_(std::move(columns)) { rebuild_index(); }
+Frame::Frame(std::vector<Column> columns, size_t row_count)
+    : columns_(std::move(columns)),
+      row_count_(columns_.empty() ? row_count : columns_[0].size()) {
+    rebuild_index();
+    }
 
 std::pair<size_t, size_t> Frame::shape() const { return {num_rows(), num_cols()}; }
 
 size_t Frame::num_rows() const {
-    if (columns_.empty()) return 0;
+    if (columns_.empty()) return row_count_;
     return columns_[0].size();
 }
 
@@ -70,6 +74,10 @@ size_t Frame::column_index(const std::string& name) const {
 void Frame::add_column(Column col) {
     name_index_[col.name()] = columns_.size();
     columns_.push_back(std::move(col));
+
+    if (columns_.size() == 1) {
+        row_count_ = columns_[0].size();
+    }
 }
 
 const std::vector<Column>& Frame::columns() const { return columns_; }
