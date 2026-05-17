@@ -401,11 +401,13 @@ Most operations below run natively in C++. The current `filter_rows` step uses t
 | `round_numeric_columns` | Round numeric columns (non-numeric columns in subset ignored safely) | `ar.round_numeric_columns(frame, decimals=2)` |
 | `clean` | Convenience shorthand | `ar.clean(frame, drop_nulls=True)` |
 | `safe_divide_columns` | Divide one column by another, handling zero/null denominators | `ar.safe_divide_columns(frame, numerator="revenue", denominator="cost", output_column="ratio")` |
+| `slugify_column_names` | Normalize column names to predictable snake_case | `ar.slugify_column_names(frame)` |
 
 Or compose them all into a **pipeline**:
 
 ```python
 clean = ar.pipeline(frame, [
+    ("slugify_column_names",),
     ("validate_columns_exist", {"columns": ["name", "city", "revenue"]}),
     ("strip_whitespace",),
     ("normalize_case", {"case_type": "lower"}),
@@ -413,6 +415,27 @@ clean = ar.pipeline(frame, [
     ("drop_duplicates", {"keep": "first"}),
 ])
 ```
+### 🐍 Predictable snake_case column names
+
+Normalize messy CSV headers into consistent identifiers before anything else runs:
+
+```python
+frame = ar.read_csv("messy.csv")  # columns: ["First Name", "Revenue ($)", "Order-ID"]
+
+clean = ar.pipeline(frame, [
+    ("slugify_column_names",),    # → first_name, revenue, order_id
+    ("strip_whitespace",),
+    ("drop_nulls",),
+])
+
+df = ar.to_pandas(clean)
+df["first_name"]   # safe Python attribute access
+```
+
+Columns that are already clean snake_case pass through unchanged. When two
+raw names would produce the same slug, `slugify_column_names` raises a clear
+error by default; pass `duplicates="ignore"` to keep the first and drop later
+collisions silently.
 ### 🔎 Filter rows inside pipelines
 
 Use `filter_rows` to keep only rows matching a condition.

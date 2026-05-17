@@ -644,3 +644,136 @@ def safe_divide_columns(
     df[output_column] = result.fillna(fill_value)
 
     return from_pandas(df) if is_arframe else df
+
+
+def slugify_column_names(
+    frame: ArFrame,
+    *,
+    duplicates: str = "raise",
+) -> ArFrame:
+    """Normalize column names to predictable snake_case.
+
+    Transforms every column name so that downstream Python workflows get
+    consistent, attribute-safe identifiers:
+
+    * Leading/trailing whitespace is stripped.
+    * Any run of whitespace or hyphens is collapsed to a single underscore.
+    * Special characters (anything not alphanumeric or underscore) are removed.
+    * Multiple consecutive underscores are collapsed to one.
+    * Leading/trailing underscores are stripped.
+    * The result is lowercased.
+
+    Already-clean names (e.g. ``revenue``, ``user_id``) pass through unchanged,
+    so this step is safe to include in every pipeline.
+
+    A column whose name contains only special characters (e.g. ``"!!!"``) will
+    produce an empty slug after transformation. Such columns are rejected with a
+    ``ValueError`` regardless of the *duplicates* setting, because an empty
+    column name is not a valid Python identifier.
+
+    Passing ``duplicates="ignore"`` silently drops any column whose slug
+    collides with an earlier one. This is a deliberate data-loss operation —
+    use it only when you have confirmed that the dropped columns are redundant.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input data frame.
+    duplicates : {"raise", "ignore"}, default "raise"
+        What to do when two or more columns map to the same slug.
+
+        * ``"raise"``  — raise ``ValueError`` listing the collision.
+        * ``"ignore"`` — keep the first occurrence of each slug and drop the
+          later columns that collide. **Data in the dropped columns is lost.**
+
+    Returns
+    -------
+    ArFrame
+        New frame with slugified column names and identical column order.
+
+    Raises
+    ------
+    ValueError
+        If any column name slugifies to an empty string, if *duplicates* is
+        ``"raise"`` and a slug collision is detected, or if an unrecognised
+        *duplicates* value is passed.
+
+    Examples
+    --------
+    >>> frame = ar.read_csv("messy.csv")   # columns: ["First Name", "Revenue ($)", "ID"]
+    >>> clean = ar.slugify_column_names(frame)
+    >>> clean.columns
+    ['first_name', 'revenue', 'id']
+
+    Inside a pipeline:
+
+    >>> clean = ar.pipeline(frame, [
+    ...     ("slugify_column_names",),
+    ...     ("strip_whitespace",),
+    ... ])
+    """
+    import re
+
+    from .convert import from_pandas, to_pandas
+
+    if duplicates not in ("raise", "ignore"):
+        raise ValueError(f"duplicates must be 'raise' or 'ignore', got {duplicates!r}")
+
+    def _slugify(name: str) -> str:
+        name = name.strip()
+        name = re.sub(r"[\s\-]+", "_", name)
+        name = re.sub(r"[^\w]", "", name)
+        name = re.sub(r"_+", "_", name)
+        name = name.strip("_")
+        return name.lower()
+
+    df = to_pandas(frame)
+    original_columns = list(df.columns)
+    slugs = [_slugify(col) for col in original_columns]
+
+    # Reject columns that produce an empty slug (e.g. "!!!")
+    empty_slug_columns = [
+        original for original, slug in zip(original_columns, slugs) if slug == ""
+    ]
+    if empty_slug_columns:
+        raise ValueError(
+            "slugify_column_names produced an empty slug for columns: "
+            + str(empty_slug_columns)
+            + ". Rename these columns before slugifying."
+        )
+
+    # Detect collisions
+    seen: dict[str, str] = {}
+    collisions: list[str] = []
+    drop_indices: list[int] = []
+
+    for idx, (original, slug) in enumerate(zip(original_columns, slugs)):
+        if slug in seen:
+            if duplicates == "raise":
+                collisions.append(
+                    f"  {original!r} and {seen[slug]!r} both map to {slug!r}"
+                )
+            else:
+                drop_indices.append(idx)
+        else:
+            seen[slug] = original
+
+    if collisions:
+        raise ValueError(
+            "slugify_column_names produced duplicate column names:\n"
+            + "\n".join(collisions)
+        )
+
+    surviving = [
+        (orig, slug)
+        for idx, (orig, slug) in enumerate(zip(original_columns, slugs))
+        if idx not in drop_indices
+    ]
+
+    result_df = df.drop(columns=[original_columns[i] for i in drop_indices]).rename(
+        columns=dict(surviving)
+    )
+
+    result_df = result_df[[slug for _, slug in surviving]]
+
+    return from_pandas(result_df)
