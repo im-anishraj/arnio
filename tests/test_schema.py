@@ -1,5 +1,7 @@
 """Tests for schema validation."""
 
+import pytest
+
 import arnio as ar
 
 
@@ -271,7 +273,7 @@ def test_custom_pattern_validation(tmp_path):
     path = tmp_path / "codes.csv"
     path.write_text("code\nAA-123\nbad\n")
     result = ar.validate(
-        ar.read_csv(path), {"code": ar.String(pattern=r"[A-Z]{2}-\d{3}")}
+        ar.read_csv(path), {"code": ar.String(pattern=r"^[A-Z]{2}-\d{3}$")}
     )
 
     assert not result.passed
@@ -353,6 +355,59 @@ def test_null_values_skip_length_validation(tmp_path):
     assert result.issues[0].row_index == 0
 
 
+def test_compare_schema_matching(sample_csv):
+    """Test that identical schemas match under both strict and non-strict modes."""
+    df_base = ar.read_csv(sample_csv)
+    df_match = ar.read_csv(sample_csv)
+
+    assert df_base.compare_schema(df_match, strict=True) is True
+    assert df_base.compare_schema(df_match, strict=False) is True
+
+
+def test_compare_schema_order_difference(sample_csv, tmp_path):
+    """Test that column order differences fail strict mode but pass non-strict mode."""
+    df_base = ar.read_csv(sample_csv)
+
+    shuffled_path = tmp_path / "shuffled.csv"
+    shuffled_path.write_text("age,name,email,active\n" "30,Alice,alice@test.com,True\n")
+    df_shuffled = ar.read_csv(shuffled_path)
+
+    assert df_base.compare_schema(df_shuffled, strict=True) is False
+    assert df_base.compare_schema(df_shuffled, strict=False) is True
+
+
+def test_compare_schema_dtype_mismatch(sample_csv, tmp_path):
+    """Test that schema matching fails when column data types mismatch."""
+    df_base = ar.read_csv(sample_csv)
+
+    wrong_dtype_path = tmp_path / "wrong_dtype.csv"
+    wrong_dtype_path.write_text(
+        "name,age,email,active\n" "Alice,30.5,alice@test.com,True\n"
+    )
+    df_wrong_dtype = ar.read_csv(wrong_dtype_path)
+
+    assert df_base.compare_schema(df_wrong_dtype, strict=False) is False
+
+
+def test_compare_schema_column_mismatch(sample_csv, tmp_path):
+    """Test that schema matching fails when column names do not match."""
+    df_base = ar.read_csv(sample_csv)
+
+    wrong_cols_path = tmp_path / "wrong_cols.csv"
+    wrong_cols_path.write_text(
+        "name,age,email,status\n" "Alice,30,alice@test.com,active\n"
+    )
+    df_wrong_cols = ar.read_csv(wrong_cols_path)
+
+    assert df_base.compare_schema(df_wrong_cols, strict=False) is False
+
+
+def test_compare_schema_invalid_input(sample_csv):
+    """Test that passing a non-ArFrame object correctly raises a TypeError."""
+    df_base = ar.read_csv(sample_csv)
+
+    with pytest.raises(TypeError):
+        df_base.compare_schema(["not", "an", "ArFrame", "object"])
 def test_int64_rejects_impossible_bounds():
     try:
         ar.Int64(min=10, max=1)
