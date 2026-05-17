@@ -225,7 +225,7 @@ def _calculate_quality_score(
         return 100.0, {}
 
     duplicate_penalty = round(min(duplicate_ratio * 100.0, 20.0), 2)
-    
+
     null_ratios = [c.null_ratio for c in columns.values()]
     avg_null_ratio = sum(null_ratios) / len(null_ratios) if null_ratios else 0.0
     null_penalty = round(min(avg_null_ratio * 100.0, 40.0), 2)
