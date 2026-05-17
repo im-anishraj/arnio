@@ -173,4 +173,3 @@ def from_pandas(df: pd.DataFrame) -> ArFrame:
 
     cpp_frame = _Frame.from_dict(columns, dtype_hints)
     return ArFrame(cpp_frame, attrs=copy.deepcopy(df.attrs))
-
