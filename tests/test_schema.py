@@ -360,7 +360,7 @@ def test_url_allowed_schemes_rejects_empty():
         assert "allowed_schemes" in str(exc)
     else:
         raise AssertionError("Expected ValueError")
-    
+
 
 def test_url_allowed_schemes_requires_strings():
     try:
