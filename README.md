@@ -439,6 +439,7 @@ Most operations below run natively in C++. The current `filter_rows` step uses t
 | `round_numeric_columns` | Round numeric columns (non-numeric columns in subset ignored safely) | `ar.round_numeric_columns(frame, decimals=2)` |
 | `clean` | Convenience shorthand | `ar.clean(frame, drop_nulls=True)` |
 | `safe_divide_columns` | Divide one column by another, handling zero/null denominators | `ar.safe_divide_columns(frame, numerator="revenue", denominator="cost", output_column="ratio")` |
+| `trim_column_names` | Strip leading/trailing whitespace from column names | `ar.trim_column_names(frame)` |
 
 Or compose them all into a **pipeline**:
 

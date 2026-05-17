@@ -26,6 +26,7 @@ from .cleaning import (
     round_numeric_columns,
     safe_divide_columns,
     strip_whitespace,
+    trim_column_names,
     validate_columns_exist,
 )
 from .convert import from_pandas, to_pandas
@@ -77,6 +78,7 @@ __all__ = [
     "cast_types",
     "clean",
     "safe_divide_columns",
+    "trim_column_names",
     # Conversion
     "to_pandas",
     "from_pandas",
