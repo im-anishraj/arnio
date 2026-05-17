@@ -21,13 +21,13 @@ ISSUE_COLUMNS = [
     "value",
 ]
 _DTYPE_MAP = {
-    "int": "integer",
-    "int64": "integer",
-    "int32": "integer",
-    "float": "float",
-    "float64": "float",
-    "float32": "float",
-    "bool": "boolean",
+    "int": "int64",
+    "int64": "int64",
+    "int32": "int64",
+    "float": "float64",
+    "float64": "float64",
+    "float32": "float64",
+    "bool": "bool",
     "object": "string",
     "string": "string",
     "str": "string",
@@ -82,7 +82,9 @@ class Schema:
         if not isinstance(report, DataQualityReport):
             raise TypeError(f"Expected DataQualityReport, got {type(report).__name__}")
         if not report.columns:
-            raise ValueError("Cannot bootstrap schema from an empty report (no columns).")
+            raise ValueError(
+                "Cannot bootstrap schema from an empty report (no columns)."
+            )
 
         fields = {}
         for col_name, profile in report.columns.items():
@@ -94,7 +96,9 @@ class Schema:
                 null_count = getattr(profile, "null_count", 0)
 
             if not dtype_val:
-                raise ValueError(f"Column profile for {col_name!r} is missing 'dtype' key.")
+                raise ValueError(
+                    f"Column profile for {col_name!r} is missing 'dtype' key."
+                )
 
             arnio_dtype = _DTYPE_MAP.get(dtype_val, "string")
             fields[col_name] = Field(dtype=arnio_dtype, nullable=null_count > 0)

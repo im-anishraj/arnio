@@ -465,64 +465,29 @@ def test_schema_composite_unique_empty_columns(tmp_path):
     assert len(issues) == 1
     assert "cannot be empty" in issues[0].message
 def test_bootstrap_from_report_normal_case():
-    report = ar.DataQualityReport(
-        row_count=100,
-        column_count=4,
-        memory_usage=1024,
-        duplicate_rows=0,
-        duplicate_ratio=0.0,
-        columns={
-            "id": ar.ColumnProfile(
-                name="id",
-                dtype="int64",
-                semantic_type="identifier",
-                row_count=100,
-                null_count=0,
-                null_ratio=0.0,
-                unique_count=100,
-                unique_ratio=1.0,
-            ),
-            "score": ar.ColumnProfile(
-                name="score",
-                dtype="float32",
-                semantic_type="numeric",
-                row_count=100,
-                null_count=0,
-                null_ratio=0.0,
-                unique_count=50,
-                unique_ratio=0.5,
-            ),
-            "is_active": ar.ColumnProfile(
-                name="is_active",
-                dtype="bool",
-                semantic_type="boolean",
-                row_count=100,
-                null_count=0,
-                null_ratio=0.0,
-                unique_count=2,
-                unique_ratio=0.02,
-            ),
-            "name": ar.ColumnProfile(
-                name="name",
-                dtype="object",
-                semantic_type="text",
-                row_count=100,
-                null_count=0,
-                null_ratio=0.0,
-                unique_count=90,
-                unique_ratio=0.9,
-            ),
-        },
-    )
+    import pandas as pd
 
+    df = pd.DataFrame(
+        {
+            "id": [1, 2, 3],
+            "score": [1.1, 2.2, 3.3],
+            "is_active": [True, False, True],
+            "name": ["a", "b", "c"],
+        }
+    )
+    report = ar.profile(df)
     schema = ar.Schema.bootstrap_from_report(report)
 
     assert isinstance(schema, ar.Schema)
     assert set(schema.fields.keys()) == {"id", "score", "is_active", "name"}
-    assert schema.fields["id"].dtype == "integer"
-    assert schema.fields["score"].dtype == "float"
-    assert schema.fields["is_active"].dtype == "boolean"
+    assert schema.fields["id"].dtype == "int64"
+    assert schema.fields["score"].dtype == "float64"
+    assert schema.fields["is_active"].dtype == "bool"
     assert schema.fields["name"].dtype == "string"
+
+    result = ar.validate(df, schema=schema)
+    assert result.passed is True
+    assert result.issue_count == 0
 
 
 def test_bootstrap_from_report_nullable_columns():
@@ -636,9 +601,7 @@ def test_bootstrap_from_report_empty_malformed_inputs():
         memory_usage=100,
         duplicate_rows=0,
         duplicate_ratio=0.0,
-        columns={
-            "bad_col": {"null_count": 0}  # type: ignore
-        },
+        columns={"bad_col": {"null_count": 0}},  # type: ignore
     )
     with pytest.raises(ValueError, match="dtype"):
         ar.Schema.bootstrap_from_report(report_missing_dtype)
