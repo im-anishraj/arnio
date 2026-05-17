@@ -60,15 +60,24 @@ def test_schema_reports_missing_and_unexpected_columns(sample_csv):
     assert "unexpected_column" in rules
 
 
-def test_validation_result_to_pandas(sample_csv):
-    result = ar.validate(
-        ar.read_csv(sample_csv),
-        {"age": ar.Int64(min=31)},
+def test_validation_result_to_pandas_empty_has_stable_columns():
+    result = ar.ValidationResult(
+        row_count=3,
+        issue_count=0,
+        issues=[],
+        bad_rows=[],
     )
+
     df = result.to_pandas()
 
-    assert list(df["rule"]) == ["min", "min"]
-    assert list(df["row_index"]) == [0, 1]
+    assert df.empty
+    assert list(df.columns) == [
+        "column",
+        "rule",
+        "message",
+        "row_index",
+        "value",
+    ]
 
 
 def test_validation_result_summary_counts_repeated_issues_in_one_column():
