@@ -173,7 +173,7 @@ class TestReadCsv:
 
     def test_quoted_newline_record(self, tmp_path):
         csv_path = tmp_path / "quoted_newline.csv"
-        csv_path.write_text('id,text\n1,"hello\nworld"\n2,ok\n')
+        csv_path.write_bytes(b'id,text\n1,"hello\nworld"\n2,ok\n')
 
         frame = ar.read_csv(csv_path)
         df = ar.to_pandas(frame)
@@ -268,3 +268,38 @@ class TestScanCsv:
         frame = ar.read_csv(sample_csv)
 
         assert list(schema.keys()) == list(frame.columns)
+
+
+# --- Issue #115: quoted multiline round-trip across line endings ---
+
+def test_quoted_field_with_embedded_lf(tmp_path):
+    """LF inside quotes must be preserved as field content."""
+    csv_file = tmp_path / "test.csv"
+    csv_file.write_bytes(b'name,note\nAlice,"line1\nline2"\n')
+    df = ar.to_pandas(ar.read_csv(str(csv_file)))
+    assert len(df) == 1
+    assert df["note"][0] == "line1\nline2"
+
+def test_quoted_field_with_embedded_crlf(tmp_path):
+    """CRLF inside quotes must be preserved, not treated as row delimiter."""
+    csv_file = tmp_path / "test.csv"
+    csv_file.write_bytes(b'name,note\r\nAlice,"line1\r\nline2"\r\n')
+    df = ar.to_pandas(ar.read_csv(str(csv_file)))
+    assert len(df) == 1
+    assert df["note"][0] == "line1\r\nline2"
+
+def test_quoted_field_with_embedded_cr(tmp_path):
+    """CR-only inside quotes must be preserved as field content."""
+    csv_file = tmp_path / "test.csv"
+    csv_file.write_bytes(b'name,note\nAlice,"line1\rline2"\n')
+    df = ar.to_pandas(ar.read_csv(str(csv_file)))
+    assert len(df) == 1
+    assert df["note"][0] == "line1\rline2"
+
+def test_row_split_crlf_outside_quotes(tmp_path):
+    """CRLF outside quotes must correctly split into separate rows."""
+    csv_file = tmp_path / "test.csv"
+    csv_file.write_bytes(b'a,b\r\n1,2\r\n3,4\r\n')
+    df = ar.to_pandas(ar.read_csv(str(csv_file)))
+    assert len(df) == 2
+    assert list(df["a"]) == [1, 3]
