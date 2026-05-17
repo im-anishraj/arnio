@@ -484,15 +484,13 @@ class TestCombineColumns:
     def test_combines_columns_with_separator(self):
         import pandas as pd
 
-        df = pd.DataFrame(
-            {"first": ["Alice", "Bob"], "last": ["Smith", "Jones"]}
-        )
+        df = pd.DataFrame({"first": ["Alice", "Bob"], "last": ["Smith", "Jones"]})
         frame = ar.from_pandas(df)
 
         result = ar.combine_columns(
             frame,
             subset=["first", "last"],
-            seperator=" ",
+            separator=" ",
             output_column="full_name",
         )
         result_df = ar.to_pandas(result)
@@ -507,7 +505,7 @@ class TestCombineColumns:
 
         result = ar.combine_columns(
             frame,
-            seperator=",",
+            separator=",",
             output_column="combined",
         )
         result_df = ar.to_pandas(result)
@@ -515,18 +513,15 @@ class TestCombineColumns:
         assert list(result_df["combined"]) == ["1,x", "2,y"]
 
     def test_preserves_null_rows(self):
-        import numpy as np
         import pandas as pd
 
-        df = pd.DataFrame(
-            {"a": [None, "hello"], "b": [None, "world"]}
-        )
+        df = pd.DataFrame({"a": [None, "hello"], "b": [None, "world"]})
         frame = ar.from_pandas(df)
 
         result = ar.combine_columns(
             frame,
             subset=["a", "b"],
-            seperator=" ",
+            separator=" ",
             output_column="combined",
         )
         result_df = ar.to_pandas(result)
@@ -544,7 +539,7 @@ class TestCombineColumns:
             ar.combine_columns(
                 frame,
                 subset=["a", "missing"],
-                seperator="-",
+                separator="-",
                 output_column="combined",
             )
 
@@ -558,9 +553,10 @@ class TestCombineColumns:
             ar.combine_columns(
                 frame,
                 subset=["a"],
-                seperator="-",
+                separator="-",
                 output_column="combined",
             )
+
 
 class TestSafeDivideColumns:
     def test_normal_division(self, tmp_path):
