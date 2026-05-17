@@ -721,12 +721,13 @@ def round_numeric_columns(
 
     return from_pandas(df) if is_arframe else df
 
+
 def combine_columns(
-        frame,
-        *,
-        subset: list[str] | None = None,
-        seperator: str = " ",
-        output_column: str = "combined"
+    frame,
+    *,
+    subset: list[str] | None = None,
+    separator: str = " ",
+    output_column: str = "combined",
 ):
     """Combine multiple columns into a single output column.
 
@@ -736,7 +737,7 @@ def combine_columns(
         Input data frame.
     subset : list[str], optional
         Columns to combine. If None, all columns are used.
-    seperator : str
+    separator : str
         String used to separate values in the output column.
     output_column : str
         Name of the new column to store combined values.
@@ -750,8 +751,8 @@ def combine_columns(
 
     from .convert import from_pandas, to_pandas
 
-    if not isinstance(seperator, str):
-        raise TypeError("seperator must be a string")
+    if not isinstance(separator, str):
+        raise TypeError("separator must be a string")
     if not isinstance(output_column, str) or not output_column.strip():
         raise ValueError("output_column must be a non-empty string")
 
@@ -776,7 +777,9 @@ def combine_columns(
 
         raise ValueError(f"Output column '{output_column}' already exists.")
 
-    combined = df[subset_columns].astype("string").fillna("").agg(seperator.join, axis=1)
+    combined = (
+        df[subset_columns].astype("string").fillna("").agg(separator.join, axis=1)
+    )
     null_mask = df[subset_columns].isna().all(axis=1)
     combined = combined.mask(null_mask, pd.NA)
 
@@ -844,7 +847,6 @@ def safe_divide_columns(
     result = df[numerator] / safe_denom
     df = df.copy()
     df[output_column] = result.fillna(fill_value)
-
 
     return from_pandas(df) if is_arframe else df
 
