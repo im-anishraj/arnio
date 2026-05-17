@@ -5,9 +5,11 @@ CSV reading functions.
 
 from __future__ import annotations
 
+import csv
 import os
+import shutil
 import tempfile
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 
 from ._core import _CsvConfig, _CsvReader
@@ -21,7 +23,12 @@ def _is_utf8_encoding(encoding: str) -> bool:
 
 
 @contextmanager
-def _utf8_csv_path(path: str, encoding: str) -> Iterator[str]:
+def _utf8_csv_path(
+    path: str,
+    encoding: str,
+    delimiter: str = ",",
+    sample_rows: int | None = None,
+) -> Iterator[str]:
     """Return a UTF-8 file path for the C++ reader.
 
     The native reader currently consumes UTF-8 bytes. For other encodings,
@@ -38,7 +45,19 @@ def _utf8_csv_path(path: str, encoding: str) -> Iterator[str]:
             with tempfile.NamedTemporaryFile(
                 "w", encoding="utf-8", newline="", suffix=".csv", delete=False
             ) as tmp:
-                tmp.write(src.read())
+                if sample_rows is not None:
+                    # Use csv.reader so we advance through complete CSV records
+                    # rather than raw physical lines. This prevents a quoted
+                    # multiline field from being split at the sampling boundary,
+                    # which would produce an invalid partial CSV for scan_schema.
+                    reader = csv.reader(src, delimiter=delimiter)
+                    writer = csv.writer(tmp, delimiter=delimiter)
+                    for row_count, row in enumerate(reader):
+                        writer.writerow(row)
+                        if row_count >= sample_rows:
+                            break
+                else:
+                    shutil.copyfileobj(src, tmp)
                 tmp_name = tmp.name
         yield tmp_name
     except LookupError as e:
@@ -70,6 +89,46 @@ def _validate_thousands_separator(
         raise ValueError(
             "thousands_separator must be a single non-alphanumeric character"
         )
+
+
+def _validate_delimiter(delimiter: str) -> str:
+    """Validate CSV delimiter."""
+    if not isinstance(delimiter, str):
+        raise TypeError("delimiter must be a string")
+
+    if len(delimiter) != 1:
+        raise ValueError("delimiter must be exactly one character")
+
+    return delimiter
+
+
+def _validate_usecols(usecols: Sequence[str]) -> list[str]:
+    """Validate usecols parameter."""
+    if isinstance(usecols, str):
+        raise TypeError("usecols must be a sequence of column names, not a string")
+
+    if not isinstance(usecols, Sequence):
+        raise TypeError("usecols must be a sequence of strings")
+
+    for col in usecols:
+        if not isinstance(col, str):
+            raise TypeError("usecols must contain only strings")
+
+    if len(set(usecols)) != len(usecols):
+        raise ValueError("usecols must not contain duplicate column names")
+
+    return list(usecols)
+
+
+def _validate_nrows(nrows: int) -> int:
+    """Validate nrows parameter."""
+    if isinstance(nrows, bool) or not isinstance(nrows, int):
+        raise TypeError("nrows must be an integer")
+
+    if nrows < 0:
+        raise ValueError("nrows must be non-negative")
+
+    return nrows
 
 
 def read_csv(
@@ -158,6 +217,7 @@ def read_csv(
         pass  # Let C++ backend handle or raise standard error
 
     _validate_thousands_separator(thousands_separator)
+    delimiter = _validate_delimiter(delimiter)
 
     config = _CsvConfig()
     config.delimiter = delimiter
@@ -167,13 +227,14 @@ def read_csv(
     config.thousands_separator = thousands_separator
 
     if usecols is not None:
-        config.usecols = usecols
+        config.usecols = _validate_usecols(usecols)
+
     if nrows is not None:
-        config.nrows = nrows
+        config.nrows = _validate_nrows(nrows)
 
     reader = _CsvReader(config)
     try:
-        with _utf8_csv_path(path, encoding) as native_path:
+        with _utf8_csv_path(path, encoding, delimiter=delimiter) as native_path:
             cpp_frame = reader.read(native_path)
     except ValueError:
         raise
@@ -181,6 +242,7 @@ def read_csv(
         raise
     except RuntimeError as e:
         raise CsvReadError(str(e)) from e
+
     return ArFrame(cpp_frame)
 
 
@@ -201,7 +263,8 @@ def scan_csv(
     delimiter : str, default ","
         Field delimiter character.
     encoding : str, default "utf-8"
-        File encoding. Non-UTF-8 inputs are transcoded before native scanning.
+        File encoding. For non-UTF-8 inputs, a sample of the file is
+        transcoded to infer the schema.
     trim_headers : bool, default True
         Strip leading/trailing whitespace from column names.
     thousands_separator : str, optional
@@ -255,14 +318,15 @@ def scan_csv(
                     )
         except FileNotFoundError:
             pass  # Let C++ backend handle or raise standard error
+
     try:
         if os.path.getsize(path) == 0:
             raise CsvReadError(f"CSV file is empty: {path!r}")
-
     except FileNotFoundError:
         pass
 
     _validate_thousands_separator(thousands_separator)
+    delimiter = _validate_delimiter(delimiter)
 
     config = _CsvConfig()
     config.delimiter = delimiter
@@ -272,7 +336,16 @@ def scan_csv(
 
     reader = _CsvReader(config)
     try:
-        with _utf8_csv_path(path, encoding) as native_path:
+        # Schema inference only needs a sample, avoiding full-file transcode.
+        # sample_rows is passed so _utf8_csv_path uses record-aware sampling
+        # via csv.reader, which correctly handles quoted multiline fields that
+        # straddle the boundary.
+        with _utf8_csv_path(
+            path,
+            encoding,
+            delimiter=delimiter,
+            sample_rows=10000,
+        ) as native_path:
             return reader.scan_schema(native_path)
     except RuntimeError as e:
         raise CsvReadError(str(e)) from e

@@ -306,14 +306,87 @@ def test_round_numeric_columns_pipeline():
     import arnio as ar
 
     df = pd.DataFrame({"price": [10.555, 20.123]})
+
     frame = ar.from_pandas(df)
 
     result = ar.pipeline(
-        frame, [("round_numeric_columns", {"subset": ["price"], "decimals": 2})]
+        frame,
+        [("round_numeric_columns", {"subset": ["price"], "decimals": 2})],
     )
 
     result_df = ar.to_pandas(result)
+
     assert list(result_df["price"]) == [10.56, 20.12]
+
+
+def test_pipeline_normalize_unicode():
+    import pandas as pd
+
+    import arnio as ar
+
+    df = pd.DataFrame({"text": ["cafe\u0301"]})
+
+    frame = ar.from_pandas(df)
+
+    result = ar.pipeline(
+        frame,
+        [
+            ("normalize_unicode",),
+        ],
+    )
+
+    result_df = ar.to_pandas(result)
+
+    assert result_df["text"].iloc[0] == "café"
+
+
+def test_normalize_unicode_invalid_form():
+    import pandas as pd
+    import pytest
+
+    import arnio as ar
+
+    df = pd.DataFrame({"text": ["cafe\u0301"]})
+
+    frame = ar.from_pandas(df)
+
+    with pytest.raises(ValueError):
+        ar.normalize_unicode(frame, form="INVALID")
+
+
+def test_normalize_unicode_subset():
+    import pandas as pd
+
+    import arnio as ar
+
+    df = pd.DataFrame(
+        {
+            "text": ["cafe\u0301"],
+            "other": ["test"],
+        }
+    )
+
+    frame = ar.from_pandas(df)
+
+    result = ar.normalize_unicode(frame, subset=["text"])
+
+    result_df = ar.to_pandas(result)
+
+    assert result_df["text"].iloc[0] == "café"
+
+
+def test_normalize_unicode_unknown_subset():
+    import pandas as pd
+    import pytest
+
+    import arnio as ar
+
+    df = pd.DataFrame({"text": ["cafe\u0301"]})
+
+    frame = ar.from_pandas(df)
+
+    with pytest.raises(KeyError):
+        ar.normalize_unicode(frame, subset=["missing"])
 
 
 def test_safe_divide_columns_pipeline():
@@ -335,11 +408,217 @@ def test_safe_divide_columns_pipeline():
                     "denominator": "cost",
                     "output_column": "ratio",
                 },
+            ),
+        ],
+    )
+
+    result_df = ar.to_pandas(result)
+
+    assert result_df["ratio"].iloc[0] == 2.0
+    assert result_df["ratio"].iloc[1] == 0.0  # division by zero → fill_value
+    assert result_df["ratio"].iloc[2] == 0.0  # zero numerator
+
+
+def test_pipeline_combine_columns():
+    import pandas as pd
+
+    import arnio as ar
+
+    df = pd.DataFrame({"first": ["Alice", "Bob"], "last": ["Smith", "Jones"]})
+
+    frame = ar.from_pandas(df)
+
+    result = ar.pipeline(
+        frame,
+        [
+            (
+                "combine_columns",
+                {
+                    "subset": ["first", "last"],
+                    "separator": " ",
+                    "output_column": "full_name",
+                },
             )
         ],
     )
 
     result_df = ar.to_pandas(result)
-    assert result_df["ratio"].iloc[0] == 2.0
-    assert result_df["ratio"].iloc[1] == 0.0  # division by zero → fill_value
-    assert result_df["ratio"].iloc[2] == 0.0  # zero numerator
+
+    assert list(result_df["full_name"]) == ["Alice Smith", "Bob Jones"]
+
+
+def test_replace_values_simple():
+    import pandas as pd
+
+    import arnio as ar
+
+    df = pd.DataFrame({"status": ["active", "inactive", "active"]})
+
+    frame = ar.from_pandas(df)
+
+    result = ar.pipeline(
+        frame,
+        [
+            (
+                "replace_values",
+                {"mapping": {"active": "A", "inactive": "I"}, "column": "status"},
+            )
+        ],
+    )
+
+    result_df = ar.to_pandas(result)
+
+    assert list(result_df["status"]) == ["A", "I", "A"]
+
+
+def test_replace_values_none():
+    import numpy as np
+    import pandas as pd
+
+    import arnio as ar
+
+    df = pd.DataFrame({"status": ["active", None, np.nan, "inactive"]})
+
+    frame = ar.from_pandas(df)
+
+    result = ar.pipeline(
+        frame,
+        [
+            (
+                "replace_values",
+                {
+                    "mapping": {None: "MISSING", "active": "A", "inactive": "I"},
+                    "column": "status",
+                },
+            )
+        ],
+    )
+
+    result_df = ar.to_pandas(result)
+
+    assert list(result_df["status"]) == ["A", "MISSING", "MISSING", "I"]
+
+
+def test_replace_values_no_column():
+    import pandas as pd
+
+    import arnio as ar
+
+    df = pd.DataFrame(
+        {
+            "status": ["active", None, "inactive"],
+            "flag": [None, "active", "inactive"],
+        }
+    )
+
+    frame = ar.from_pandas(df)
+
+    result = ar.pipeline(
+        frame,
+        [
+            (
+                "replace_values",
+                {"mapping": {None: "MISSING", "active": "A", "inactive": "I"}},
+            ),
+        ],
+    )
+
+    result_df = ar.to_pandas(result)
+
+    assert list(result_df["status"]) == ["A", "MISSING", "I"]
+    assert list(result_df["flag"]) == ["MISSING", "A", "I"]
+
+
+def test_replace_values_direct_api():
+    import pandas as pd
+
+    import arnio as ar
+
+    df = pd.DataFrame({"status": ["active", "inactive", "active"]})
+
+    frame = ar.from_pandas(df)
+
+    result = ar.replace_values(
+        frame, mapping={"active": "A", "inactive": "I"}, column="status"
+    )
+
+    result_df = ar.to_pandas(result)
+
+    assert list(result_df["status"]) == ["A", "I", "A"]
+
+
+def test_replace_values_missing_column_raises_clear_error():
+    import pandas as pd
+    import pytest
+
+    import arnio as ar
+
+    frame = ar.from_pandas(pd.DataFrame({"status": ["active", "inactive"]}))
+
+    with pytest.raises(KeyError, match="Column 'missing' not found"):
+        ar.pipeline(
+            frame,
+            [
+                (
+                    "replace_values",
+                    {"mapping": {"active": "A"}, "column": "missing"},
+                ),
+            ],
+        )
+
+
+def test_replace_values_invalid_mapping_type_raises_clear_error():
+    import pandas as pd
+    import pytest
+
+    import arnio as ar
+
+    frame = ar.from_pandas(pd.DataFrame({"status": ["active"]}))
+
+    with pytest.raises(TypeError, match="mapping must be a dict-like mapping"):
+        ar.replace_values(frame, mapping=[("active", "A")], column="status")
+
+
+def test_replace_values_empty_mapping_rejected():
+    import pandas as pd
+    import pytest
+
+    import arnio as ar
+
+    frame = ar.from_pandas(pd.DataFrame({"status": ["active"]}))
+
+    with pytest.raises(ValueError, match="mapping must not be empty"):
+        ar.replace_values(frame, mapping={}, column="status")
+
+
+def test_replace_values_mapping_value_to_none():
+    import pandas as pd
+
+    import arnio as ar
+
+    df = pd.DataFrame({"status": ["active", "inactive"]})
+    frame = ar.from_pandas(df)
+
+    result = ar.replace_values(
+        frame,
+        mapping={"inactive": None},
+        column="status",
+    )
+
+    result_df = ar.to_pandas(result)
+    assert pd.isna(result_df["status"].iloc[1])
+
+
+def test_replace_values_direct_pandas_does_not_mutate_input():
+    import pandas as pd
+
+    import arnio as ar
+
+    df = pd.DataFrame({"status": ["active", "inactive"]})
+
+    out = ar.replace_values(df, mapping={"active": "A"}, column="status")
+
+    # original should be untouched
+    assert list(df["status"]) == ["active", "inactive"]
+    # output should be replaced
+    assert list(out["status"]) == ["A", "inactive"]

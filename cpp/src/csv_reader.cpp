@@ -348,7 +348,8 @@ Frame CsvReader::read(const std::string& path) const {
     return Frame(std::move(columns));
 }
 
-std::vector<std::pair<std::string, std::string>> CsvReader::scan_schema(const std::string& path) const {
+std::vector<std::pair<std::string, std::string>> CsvReader::scan_schema(
+    const std::string& path) const {
     std::ifstream file(path);
     if (!file.is_open()) {
         throw std::runtime_error("Cannot open file: " + path);
