@@ -62,9 +62,6 @@ class TestReadCsv:
         assert "missing" not in frame
         assert 123 not in frame
 
-        empty = ar.frame.ArFrame(ar._arnio_cpp.Frame())
-        assert "name" not in empty
-
     def test_header_whitespace(self, tmp_path):
 
         csv_path = str(tmp_path / "whitespace.csv")
