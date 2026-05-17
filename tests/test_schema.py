@@ -1,6 +1,7 @@
 """Tests for schema validation."""
 
 import pytest
+
 import arnio as ar
 
 
