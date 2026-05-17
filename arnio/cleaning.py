@@ -827,3 +827,41 @@ def replace_values(frame, mapping, column=None):
             df = df.fillna(null_replacement)
 
     return from_pandas(df) if is_arframe else df
+
+
+
+# This is the solution of Feature: Add remove_special_chars as an official pipeline step #345
+import re
+import pandas as pd
+
+def remove_special_chars(df, columns=None):
+    """
+    Remove special characters from string columns.
+
+    Parameters:
+        df (pd.DataFrame): Input dataframe
+        columns (list, optional): Columns to clean. If None, all string columns are used.
+
+    Returns:
+        pd.DataFrame: Cleaned dataframe (copy)
+    """
+
+    df_copy = df.copy()
+
+    # Auto-detect string columns if not provided
+    if columns is None:
+        columns = df_copy.select_dtypes(include=["object", "string"]).columns.tolist()
+
+    # Validate columns
+    for col in columns:
+        if col not in df_copy.columns:
+            raise ValueError(f"Column '{col}' does not exist in dataframe")
+
+    # Apply cleaning
+    for col in columns:
+        if pd.api.types.is_string_dtype(df_copy[col]):
+            df_copy[col] = df_copy[col].astype(str).apply(
+                lambda x: re.sub(r"[^a-zA-Z0-9\s]", "", x)
+            )
+
+    return df_copy
