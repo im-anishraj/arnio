@@ -11,8 +11,8 @@ from typing import Any
 import pandas as pd
 
 from .convert import to_pandas
-from .frame import ArFrame
 from .exceptions import ArnioError
+from .frame import ArFrame
 
 
 @dataclass(frozen=True)
