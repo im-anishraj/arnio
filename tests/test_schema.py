@@ -313,3 +313,59 @@ def test_null_values_skip_length_validation(tmp_path):
     assert result.issue_count == 1
     assert result.issues[0].rule == "min_length"
     assert result.issues[0].row_index == 0
+
+
+def test_url_allowed_schemes_accepts_valid_scheme(tmp_path):
+    path = tmp_path / "urls.csv"
+    path.write_text("website\nhttps://example.com\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"website": ar.URL(allowed_schemes=["https"])},
+    )
+
+    assert result.passed
+
+
+def test_url_allowed_schemes_rejects_invalid_scheme(tmp_path):
+    path = tmp_path / "urls.csv"
+    path.write_text("website\nftp://example.com\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"website": ar.URL(allowed_schemes=["https"])},
+    )
+
+    assert not result.passed
+    assert result.issue_count == 1
+    assert result.issues[0].rule == "allowed_schemes"
+
+
+def test_url_allowed_schemes_is_case_insensitive(tmp_path):
+    path = tmp_path / "urls.csv"
+    path.write_text("website\nHTTPS://example.com\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"website": ar.URL(allowed_schemes=["https"])},
+    )
+
+    assert result.passed
+
+
+def test_url_allowed_schemes_rejects_empty():
+    try:
+        ar.URL(allowed_schemes=[])
+    except ValueError as exc:
+        assert "allowed_schemes" in str(exc)
+    else:
+        raise AssertionError("Expected ValueError")
+    
+
+def test_url_allowed_schemes_requires_strings():
+    try:
+        ar.URL(allowed_schemes=["https", 123])  # type: ignore[list-item]
+    except TypeError as exc:
+        assert "allowed_schemes" in str(exc)
+    else:
+        raise AssertionError("Expected TypeError")

@@ -25,6 +25,7 @@ class Field:
     pattern: str | None = None
     semantic: str | None = None
     allowed: set[Any] | None = None
+    allowed_schemes: set[str] | None = None
     unique: bool = False
     min_length: int | None = None
     max_length: int | None = None
@@ -295,9 +296,33 @@ def Email(*, nullable: bool = True, unique: bool = False) -> Field:
     )
 
 
-def URL(*, nullable: bool = True, unique: bool = False) -> Field:
+def URL(
+    *,
+    nullable: bool = True,
+    unique: bool = False,
+    allowed_schemes: set[str] | list[str] | tuple[str, ...] | None = None,
+) -> Field:
     """Create a URL schema field."""
-    return Field(dtype="string", nullable=nullable, semantic="url", unique=unique)
+
+    if allowed_schemes is not None:
+        if not allowed_schemes:
+            raise ValueError("allowed_schemes must not be empty")
+
+        if not all(isinstance(scheme, str) for scheme in allowed_schemes):
+            raise TypeError("allowed_schemes must contain only strings")
+
+
+    return Field(
+        dtype="string",
+        nullable=nullable,
+        semantic="url",
+        unique=unique,
+        allowed_schemes=(
+            {scheme.lower() for scheme in allowed_schemes}
+            if allowed_schemes is not None
+            else None
+        ),
+    )
 
 
 def _validate_column(
@@ -397,6 +422,7 @@ def _validate_column(
             )
         )
 
+
     if field_def.semantic is not None:
         pattern = _SEMANTIC_PATTERNS.get(field_def.semantic)
         if pattern is None:
@@ -417,6 +443,31 @@ def _validate_column(
                     message=f"Column {name!r} contains invalid {field_def.semantic} values",
                 )
             )
+     
+    if (
+        field_def.semantic == "url"
+        and field_def.allowed_schemes is not None
+    ):
+        invalid_scheme = non_null[
+            ~text.str.lower().str.startswith(
+                tuple(
+                    f"{scheme}://"
+                    for scheme in field_def.allowed_schemes
+                )
+            )
+        ]
+
+        issues.extend(
+            _row_issues(
+                invalid_scheme,
+                column=name,
+                rule="allowed_schemes",
+                message=(
+                    f"Column {name!r} contains URLs with disallowed schemes"
+                ),
+            )
+        )
+
 
     if field_def.min_length is not None:
         invalid = non_null[text.str.len() < field_def.min_length]
@@ -479,6 +530,6 @@ def _markdown_cell(value: Any) -> str:
 
 _SEMANTIC_PATTERNS = {
     "email": r"[^@\s]+@[^@\s]+\.[^@\s]+",
-    "url": r"https?://[^\s]+",
+    "url": r"[a-zA-Z][a-zA-Z0-9+.-]*://[^\s]+",
     "phone": r"\+?[0-9][0-9 .()\-]{6,}[0-9]",
 }
