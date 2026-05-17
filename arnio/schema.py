@@ -376,40 +376,41 @@ def URL(*, nullable: bool = True, unique: bool = False) -> Field:
     return Field(dtype="string", nullable=nullable, semantic="url", unique=unique)
 
 
-def CountryCode(*, nullable: bool = True, unique: bool = False) -> Field:
-    """Create an uppercase ISO alpha-2 country-code schema field."""
+def Regex(
+    pattern: str,
+    *,
+    nullable: bool = True,
+    unique: bool = False,
+) -> Field:
+    """Create a regex-validated string schema field.
+
+    The pattern is compiled at call time so invalid expressions raise
+    ``re.error`` immediately rather than at validation time.
+
+    Parameters
+    ----------
+    pattern : str
+        Regular expression that every non-null value must fully match.
+    nullable : bool, default True
+        Whether null values are allowed.
+    unique : bool, default False
+        Whether all non-null values must be unique.
+
+    Examples
+    --------
+    >>> schema = ar.Schema({
+    ...     "user_id": ar.Regex(r"^USR-\\d{4}$", nullable=False),
+    ...     "zip_code": ar.Regex(r"^\\d{5}(-\\d{4})?$", nullable=True),
+    ... })
+    """
+    import re
+
+    re.compile(pattern)  # fail fast on invalid pattern
     return Field(
         dtype="string",
         nullable=nullable,
-        semantic="country_code",
+        pattern=pattern,
         unique=unique,
-    )
-
-
-def DateTime(
-    *,
-    nullable: bool = True,
-    min: Any = None,
-    max: Any = None,
-    unique: bool = False,
-    format: str | None = None,
-) -> Field:
-    """Create a datetime schema field for validating string timestamps."""
-    if format is not None and not isinstance(format, str):
-        raise TypeError("DateTime format must be a string or None")
-
-    min_val = _parse_datetime_bound(min, "min")
-    max_val = _parse_datetime_bound(max, "max")
-    if min_val is not None and max_val is not None and min_val > max_val:
-        raise ValueError("DateTime min must be less than or equal to max")
-
-    return Field(
-        dtype="datetime",
-        nullable=nullable,
-        unique=unique,
-        format=format,
-        _datetime_min=min_val,
-        _datetime_max=max_val,
     )
 
 
@@ -657,5 +658,6 @@ _SEMANTIC_PATTERNS = {
     "email": r"[^@\s]+@[^@\s]+\.[^@\s]+",
     "url": r"https?://[^\s]+",
     "phone": r"\+?[0-9][0-9 .()\-]{6,}[0-9]",
+}
     "country_code": r"[A-Z]{2}",
 }

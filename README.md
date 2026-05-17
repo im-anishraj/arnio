@@ -192,6 +192,7 @@ clean_df = df.arnio.clean(drop_duplicates=True)
 quality = clean_df.arnio.profile()
 validation = clean_df.arnio.validate({
     "email": ar.Email(nullable=False),
+    "user_code": ar.Regex(r"^USR-\d{4}$", nullable=False),
     "age": ar.Int64(nullable=True, min=0),
 })
 ```
@@ -632,6 +633,7 @@ schema = ar.Schema({
     # CountryCode expects uppercase ISO alpha-2 values, for example IN, US, GB.
     "country": ar.CountryCode(nullable=False),
     "username": ar.String(min_length=3, max_length=20),
+    "user_code": ar.Regex(r"^USR-\d{4}$", nullable=False),
     "revenue": ar.Float64(nullable=True, min=0),
     "created_at": ar.DateTime(nullable=False, format="%Y-%m-%d"),
 })
