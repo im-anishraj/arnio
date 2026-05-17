@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import pandas as pd
+import json
 
 from .cleaning import cast_types, drop_duplicates, strip_whitespace
 from .convert import to_pandas
@@ -95,7 +96,11 @@ class DataQualityReport:
                 for step, kwargs in self.suggestions
             ],
         }
-
+         
+    def to_json(self, **kwargs: Any) -> str:
+        """Return a JSON string representation of the report."""
+        return json.dumps(self.to_dict(), **kwargs)
+    
     def summary(self) -> dict[str, Any]:
         """Return the highest-signal report fields."""
         return {
