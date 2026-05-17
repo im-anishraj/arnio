@@ -6,7 +6,9 @@ Pandas conversion functions.
 from __future__ import annotations
 
 import copy
-
+import decimal
+import math
+from typing import Any
 import numpy as np
 import pandas as pd
 
@@ -18,11 +20,49 @@ def _is_nested(value: object) -> bool:
     return isinstance(value, (list, dict, tuple, set, np.ndarray))
 
 
+def to_binding_safe(value: Any) -> Any:
+    """
+    Prepares financial and standard Python types for the C++ binding layer.
+    
+    Parameters
+    ----------
+    value : Any
+        Input value to convert.
+    
+    Returns
+    -------
+    Any
+        Value safe for C++ binding (Decimal → float, validation for edge cases).
+    
+    Raises
+    ------
+    ValueError
+        If the value is an infinite floating-point number.
+    """
+    # Handle Decimal values: reject NaN/Infinite, otherwise return float
+    if isinstance(value, decimal.Decimal):
+        # decimal.Decimal provides is_nan() and is_infinite()
+        if value.is_nan() or value.is_infinite():
+            raise ValueError("Invalid financial value: NaN or Infinity.")
+        return float(value)
+
+    # Handle native floats: reject NaN/Infinite, otherwise return float
+    if isinstance(value, float):
+        if math.isnan(value) or math.isinf(value):
+            raise ValueError("Invalid financial value: NaN or Infinity.")
+        return float(value)
+
+    return value
+
+
 def _normalize_scalar(value: object) -> object:
     if pd.isna(value):
         return None
     if isinstance(value, np.generic):
         return value.item()
+    # Handle Decimal before generic type check
+    if isinstance(value, decimal.Decimal):
+        return to_binding_safe(value)
     if not isinstance(value, (bool, int, float, str)):
         return str(value)
     return value
