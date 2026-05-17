@@ -387,7 +387,6 @@ def URL(
         if not all(isinstance(scheme, str) for scheme in allowed_schemes):
             raise TypeError("allowed_schemes must contain only strings")
 
-
     return Field(
         dtype="string",
         nullable=nullable,
@@ -539,7 +538,6 @@ def _validate_column(
             )
         )
 
-
     if field_def.semantic is not None:
         pattern = _SEMANTIC_PATTERNS.get(field_def.semantic)
         if pattern is None:
@@ -586,12 +584,9 @@ def _validate_column(
                 invalid_scheme,
                 column=name,
                 rule="allowed_schemes",
-                message=(
-                    f"Column {name!r} contains URLs with disallowed schemes"
-                ),
+                message=(f"Column {name!r} contains URLs with disallowed schemes"),
             )
         )
-
 
     if field_def.min_length is not None:
         invalid = non_null[text.str.len() < field_def.min_length]
