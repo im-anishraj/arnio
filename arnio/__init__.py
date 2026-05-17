@@ -1,8 +1,10 @@
-"""
-arnio — Fast CSV processing and data cleaning companion for pandas.
+"""arnio — Fast CSV processing and data cleaning companion for pandas.
 
 import arnio as ar
 """
+
+import importlib
+from typing import Any
 
 try:
     from importlib.metadata import version
@@ -11,111 +13,81 @@ try:
 except Exception:
     __version__ = "unknown"
 
-from .cleaning import (
-    cast_types,
-    clean,
-    clip_numeric,
-    drop_constant_columns,
-    drop_duplicates,
-    drop_nulls,
-    fill_nulls,
-    filter_rows,
-    keep_rows_with_nulls,
-    normalize_case,
-    normalize_unicode,
-    rename_columns,
-    replace_values,
-    round_numeric_columns,
-    safe_divide_columns,
-    strip_whitespace,
-    trim_column_names,
-    validate_columns_exist,
-)
-from .convert import from_pandas, to_pandas
-from .exceptions import ArnioError, CsvReadError, TypeCastError, UnknownStepError
-from .frame import ArFrame
-from .integrations import ArnioPandasAccessor
-from .io import read_csv, scan_csv
-from .pipeline import pipeline, register_step
-from .quality import (
-    ColumnProfile,
-    DataQualityReport,
-    auto_clean,
-    profile,
-    suggest_cleaning,
-)
-from .schema import (
-    URL,
-    Bool,
-    CountryCode,
-    DateTime,
-    Email,
-    Field,
-    Float64,
-    Int64,
-    Schema,
-    String,
-    ValidationIssue,
-    ValidationResult,
-    validate,
-)
-
-__all__ = [
+# 1. Map public names to their target submodules for lazy loading
+_LAZY_MAPPING = {
     # Core class
-    "ArFrame",
+    "ArFrame": ".frame",
     # I/O
-    "read_csv",
-    "scan_csv",
+    "read_csv": ".io",
+    "scan_csv": ".io",
     # Cleaning
-    "drop_nulls",
-    "keep_rows_with_nulls",
-    "fill_nulls",
-    "validate_columns_exist",
-    "filter_rows",
-    "replace_values",
-    "drop_duplicates",
-    "drop_constant_columns",
-    "clip_numeric",
-    "strip_whitespace",
-    "normalize_case",
-    "rename_columns",
-    "round_numeric_columns",
-    "cast_types",
-    "clean",
-    "safe_divide_columns",
-    "trim_column_names",
+    "drop_nulls": ".cleaning",
+    "keep_rows_with_nulls": ".cleaning",
+    "fill_nulls": ".cleaning",
+    "validate_columns_exist": ".cleaning",
+    "filter_rows": ".cleaning",
+    "replace_values": ".cleaning",
+    "drop_duplicates": ".cleaning",
+    "drop_constant_columns": ".cleaning",
+    "clip_numeric": ".cleaning",
+    "strip_whitespace": ".cleaning",
+    "normalize_case": ".cleaning",
+    "rename_columns": ".cleaning",
+    "round_numeric_columns": ".cleaning",
+    "cast_types": ".cleaning",
+    "clean": ".cleaning",
+    "safe_divide_columns": ".cleaning",
+    "trim_column_names": ".cleaning",
     # Conversion
-    "to_pandas",
-    "from_pandas",
+    "to_pandas": ".convert",
+    "from_pandas": ".convert",
     # Integrations
-    "ArnioPandasAccessor",
+    "ArnioPandasAccessor": ".integrations",
     # Pipeline
-    "pipeline",
-    "register_step",
+    "pipeline": ".pipeline",
+    "register_step": ".pipeline",
     # Data quality
-    "profile",
-    "suggest_cleaning",
-    "auto_clean",
-    "ColumnProfile",
-    "DataQualityReport",
+    "profile": ".quality",
+    "suggest_cleaning": ".quality",
+    "auto_clean": ".quality",
+    "ColumnProfile": ".quality",
+    "DataQualityReport": ".quality",
     # Schema validation
-    "Schema",
-    "Field",
-    "ValidationIssue",
-    "ValidationResult",
-    "validate",
-    "Int64",
-    "Float64",
-    "String",
-    "CountryCode",
-    "Bool",
-    "Email",
-    "URL",
-    "DateTime",
+    "Schema": ".schema",
+    "Field": ".schema",
+    "ValidationIssue": ".schema",
+    "ValidationResult": ".schema",
+    "validate": ".schema",
+    "Int64": ".schema",
+    "Float64": ".schema",
+    "String": ".schema",
+    "CountryCode": ".schema",
+    "Bool": ".schema",
+    "Email": ".schema",
+    "URL": ".schema",
     # Exceptions
-    "UnknownStepError",
-    "ArnioError",
-    "CsvReadError",
-    "TypeCastError",
-    "normalize_unicode",
-]
+    "UnknownStepError": ".exceptions",
+    "ArnioError": ".exceptions",
+    "CsvReadError": ".exceptions",
+    "TypeCastError": ".exceptions",
+}
+
+
+def __getattr__(name: str) -> Any:
+    """Dynamically import submodules when an attribute is accessed."""
+    if name in _LAZY_MAPPING:
+        submodule_name = _LAZY_MAPPING[name]
+        submodule = importlib.import_module(submodule_name, __name__)
+        attribute = getattr(submodule, name)
+        # Cache the attribute on the module level to avoid re-importing it next time
+        globals()[name] = attribute
+        return attribute
+    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
+
+
+def __dir__() -> list[str]:
+    """Ensure autocomplete options work cleanly in notebooks and IDEs."""
+    return sorted(list(globals().keys()) + list(_LAZY_MAPPING.keys()))
+
+
+__all__ = list(_LAZY_MAPPING.keys()) + ["__version__"]
