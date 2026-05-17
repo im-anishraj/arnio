@@ -452,7 +452,6 @@ class TestFilterRows:
 
 class TestRoundNumericColumns:
     def test_round_all_numeric(self):
-        import pandas as pd
 
         df = pd.DataFrame({"a": [1.123, 2.456], "b": [3.789, 4.0]})
         frame = ar.from_pandas(df)
@@ -462,7 +461,6 @@ class TestRoundNumericColumns:
         assert list(result_df["b"]) == [3.8, 4.0]
 
     def test_round_subset(self):
-        import pandas as pd
 
         df = pd.DataFrame({"a": [1.123, 2.456], "b": [3.789, 4.0]})
         frame = ar.from_pandas(df)
@@ -472,7 +470,6 @@ class TestRoundNumericColumns:
         assert list(result_df["b"]) == [3.789, 4.0]
 
     def test_round_mixed_types(self):
-        import pandas as pd
 
         df = pd.DataFrame({"a": [1.123, 2.456], "c": ["str1", "str2"]})
         frame = ar.from_pandas(df)
@@ -482,7 +479,6 @@ class TestRoundNumericColumns:
         assert list(result_df["c"]) == ["str1", "str2"]
 
     def test_missing_column(self):
-        import pandas as pd
 
         df = pd.DataFrame({"a": [1.123]})
         frame = ar.from_pandas(df)
@@ -491,7 +487,6 @@ class TestRoundNumericColumns:
 
     def test_with_nulls(self):
         import numpy as np
-        import pandas as pd
 
         df = pd.DataFrame({"a": [1.123, np.nan, 2.456]})
         frame = ar.from_pandas(df)
@@ -502,8 +497,6 @@ class TestRoundNumericColumns:
         assert result_df["a"].iloc[2] == 2.5
 
     def test_invalid_subset_type(self):
-        import pandas as pd
-        import pytest
 
         df = pd.DataFrame({"a": [1.123]})
         frame = ar.from_pandas(df)
@@ -511,25 +504,18 @@ class TestRoundNumericColumns:
             ar.round_numeric_columns(frame, subset="a")
 
     def test_invalid_decimals_type(self):
-        import pandas as pd
-        import pytest
-
         df = pd.DataFrame({"a": [1.123]})
         frame = ar.from_pandas(df)
         with pytest.raises(TypeError, match="decimals must be an integer"):
             ar.round_numeric_columns(frame, decimals="2")
 
     def test_decimals_rejects_bool(self):
-        import pandas as pd
-        import pytest
-
         df = pd.DataFrame({"a": [1.123]})
         frame = ar.from_pandas(df)
         with pytest.raises(TypeError, match="decimals must be an integer"):
             ar.round_numeric_columns(frame, decimals=True)
 
     def test_round_subset_with_non_numeric(self):
-        import pandas as pd
 
         df = pd.DataFrame({"name": ["john"], "score": [98.765]})
         frame = ar.from_pandas(df)
@@ -614,3 +600,33 @@ class TestSafeDivideColumns:
             assert "already exists" in str(w[0].message)
         df = ar.to_pandas(result)
         assert df["ratio"].iloc[0] == 2.0
+
+
+def test_drop_columns_matching_normal():
+    df = pd.DataFrame({"temp_a": [1], "temp_b": [2], "keep_c": [3]})
+    result = ar.drop_columns_matching(df, "^temp_")
+    assert list(result.columns) == ["keep_c"]
+
+
+def test_drop_columns_matching_no_match():
+    df = pd.DataFrame({"a": [1], "b": [2]})
+    result = ar.drop_columns_matching(df, "^temp_")
+    assert list(result.columns) == ["a", "b"]
+
+
+def test_drop_columns_matching_invalid_regex():
+    df = pd.DataFrame({"a": [1]})
+    with pytest.raises(Exception):
+        ar.drop_columns_matching(df, "[invalid")
+
+
+def test_drop_columns_matching_non_string_pattern():
+    df = pd.DataFrame({"a": [1]})
+    with pytest.raises(TypeError):
+        ar.drop_columns_matching(df, 123)
+
+
+def test_drop_columns_matching_all_columns():
+    df = pd.DataFrame({"a": [1, 2], "b": [3, 4]})
+    with pytest.raises(ValueError, match="Pattern matches all columns"):
+        ar.drop_columns_matching(df, ".*")

@@ -1,5 +1,8 @@
 """Tests for the pipeline function."""
 
+import pandas as pd
+import pytest
+
 import arnio as ar
 
 
@@ -321,3 +324,18 @@ def test_safe_divide_columns_pipeline():
     assert result_df["ratio"].iloc[0] == 2.0
     assert result_df["ratio"].iloc[1] == 0.0  # division by zero → fill_value
     assert result_df["ratio"].iloc[2] == 0.0  # zero numerator
+
+
+def test_pipeline_drop_columns_matching():
+    df = pd.DataFrame({"temp_a": [1], "temp_b": [2], "keep_c": [3]})
+    frame = ar.from_pandas(df)
+    result = ar.pipeline(frame, [("drop_columns_matching", {"pattern": "^temp_"})])
+    result_df = ar.to_pandas(result)
+    assert list(result_df.columns) == ["keep_c"]
+
+
+def test_pipeline_drop_columns_matching_all_columns():
+    df = pd.DataFrame({"a": [1, 2], "b": [3, 4]})
+    frame = ar.from_pandas(df)
+    with pytest.raises(ValueError, match="Pattern matches all columns"):
+        ar.pipeline(frame, [("drop_columns_matching", {"pattern": ".*"})])
