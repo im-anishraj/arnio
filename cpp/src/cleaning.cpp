@@ -278,8 +278,12 @@ Frame normalize_case(const Frame& frame, const std::optional<std::vector<std::st
         transform_fn = [](const std::string& s) {
             std::string result = s;
             bool next_upper = true;
+            auto is_word_boundary = [](char c) -> bool {
+                return std::isspace(static_cast<unsigned char>(c)) ||
+                       c == '-' || c == '_' || c == '.' || c == '/';
+            };
             for (auto& c : result) {
-                if (std::isspace(static_cast<unsigned char>(c))) {
+                if (is_word_boundary(c)) {
                     next_upper = true;
                 } else if (next_upper) {
                     c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));

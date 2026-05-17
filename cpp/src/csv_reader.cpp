@@ -202,7 +202,7 @@ Frame CsvReader::read(const std::string& path) const {
         strip_utf8_bom(line);
         header = parse_line(line);
         for (auto& h : header) {
-            trim_in_place(h);
+            if (config_.trim_headers) trim_in_place(h);
         }
         validate_header(header);
     }
@@ -277,7 +277,7 @@ Frame CsvReader::read(const std::string& path) const {
     return Frame(std::move(columns));
 }
 
-std::unordered_map<std::string, std::string> CsvReader::scan_schema(const std::string& path) const {
+std::vector<std::pair<std::string, std::string>> CsvReader::scan_schema(const std::string& path) const {
     std::ifstream file(path);
     if (!file.is_open()) {
         throw std::runtime_error("Cannot open file: " + path);
@@ -290,7 +290,7 @@ std::unordered_map<std::string, std::string> CsvReader::scan_schema(const std::s
         strip_utf8_bom(line);
         header = parse_line(line);
         for (auto& h : header) {
-            trim_in_place(h);
+            if (config_.trim_headers) trim_in_place(h);
         }
         validate_header(header);
     }
@@ -313,9 +313,10 @@ std::unordered_map<std::string, std::string> CsvReader::scan_schema(const std::s
         if (dt == DType::NULL_TYPE) dt = DType::STRING;
     }
 
-    std::unordered_map<std::string, std::string> schema;
+    std::vector<std::pair<std::string, std::string>> schema;
+    schema.reserve(num_cols);
     for (size_t i = 0; i < num_cols; ++i) {
-        schema[header[i]] = dtype_to_string(col_types[i]);
+        schema.emplace_back(header[i], dtype_to_string(col_types[i]));
     }
     return schema;
 }

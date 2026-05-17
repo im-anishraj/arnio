@@ -1,6 +1,7 @@
 """Tests for data quality profiling and smart cleaning."""
 
 import pandas as pd
+import pytest
 
 import arnio as ar
 
@@ -75,3 +76,134 @@ def test_auto_clean_rejects_unknown_mode(sample_csv):
         assert False, "Expected ValueError"
     except ValueError as exc:
         assert "mode must be" in str(exc)
+
+
+def test_profile_sample_size(tmp_path):
+    path = tmp_path / "sample.csv"
+    path.write_text("id\n1\n2\n3\n4\n5\n6\n7\n")
+    frame = ar.read_csv(path)
+
+    report_default = ar.profile(frame)
+    assert len(report_default.columns["id"].sample_values) == 5
+
+    report_custom = ar.profile(frame, sample_size=3)
+    assert len(report_custom.columns["id"].sample_values) == 3
+
+    report_zero = ar.profile(frame, sample_size=0)
+    assert len(report_zero.columns["id"].sample_values) == 0
+
+
+def test_profile_sample_size_small_dataset_and_nulls(tmp_path):
+    path = tmp_path / "sample.csv"
+    path.write_text("id\n1\n\n3\n")
+    frame = ar.read_csv(path)
+
+    report = ar.profile(frame, sample_size=5)
+    assert len(report.columns["id"].sample_values) == 2
+    assert report.columns["id"].sample_values == [1.0, 3.0]
+
+
+def test_profile_sample_size_validation(tmp_path):
+    path = tmp_path / "sample.csv"
+    path.write_text("id\n1\n")
+    frame = ar.read_csv(path)
+
+    try:
+        ar.profile(frame, sample_size=-1)
+        assert False, "Expected ValueError"
+    except ValueError as exc:
+        assert "sample_size must be non-negative" in str(exc)
+
+    try:
+        ar.profile(frame, sample_size="5")
+        assert False, "Expected TypeError"
+    except TypeError as exc:
+        assert "sample_size must be an integer" in str(exc)
+
+
+# ── top_values tests ──────────────────────────────────────────────────────────
+
+
+def test_top_values_correct_order_and_ratio(tmp_path):
+    path = tmp_path / "tv.csv"
+    path.write_text("city\nLondon\nLondon\nLondon\nParis\nParis\nTokyo\n")
+    report = ar.profile(ar.read_csv(path))
+    tv = report.columns["city"].top_values
+
+    assert tv is not None
+    assert tv[0][0] == "London"
+    assert tv[0][1] == 3
+    assert tv[0][2] == pytest.approx(0.5, rel=1e-3)
+    assert tv[1][0] == "Paris"
+    assert tv[1][1] == 2
+    assert tv[2][0] == "Tokyo"
+    assert tv[2][1] == 1
+
+
+def test_top_values_nulls_excluded(tmp_path):
+    path = tmp_path / "nulls.csv"
+    path.write_text("city\nLondon\nLondon\n\nParis\n")
+    report = ar.profile(ar.read_csv(path))
+    tv = report.columns["city"].top_values
+
+    assert tv is not None
+    total_counts = sum(c for _, c, _ in tv)
+    # null row excluded — only 3 non-null rows
+    assert total_counts == 3
+    # ratios sum to 1.0 over non-null total
+    assert sum(r for _, _, r in tv) == pytest.approx(1.0, rel=1e-3)
+
+
+def test_top_values_all_unique(tmp_path):
+    path = tmp_path / "unique.csv"
+    path.write_text("code\nA\nB\nC\nD\n")
+    report = ar.profile(ar.read_csv(path))
+    tv = report.columns["code"].top_values
+
+    assert tv is not None
+    assert len(tv) == 4
+    for _, count, ratio in tv:
+        assert count == 1
+        assert ratio == pytest.approx(0.25, rel=1e-3)
+
+
+def test_top_values_single_value(tmp_path):
+    path = tmp_path / "single.csv"
+    path.write_text("status\nactive\nactive\nactive\n")
+    report = ar.profile(ar.read_csv(path))
+    tv = report.columns["status"].top_values
+
+    assert tv is not None
+    assert len(tv) == 1
+    assert tv[0] == ("active", 3, pytest.approx(1.0, rel=1e-3))
+
+
+def test_top_values_not_computed_for_numeric(tmp_path):
+    path = tmp_path / "numeric.csv"
+    path.write_text("score\n1\n2\n3\n")
+    report = ar.profile(ar.read_csv(path))
+
+    assert report.columns["score"].top_values is None
+
+
+def test_top_values_empty_column(tmp_path):
+    path = tmp_path / "empty.csv"
+    path.write_text("name\n\n\n\n")
+    report = ar.profile(ar.read_csv(path))
+    tv = report.columns["name"].top_values
+
+    # arnio parses blank rows as empty strings, not nulls
+    # top_values should still return without crashing
+    assert tv is not None
+    assert isinstance(tv, list)
+
+
+def test_top_values_in_to_dict(tmp_path):
+    path = tmp_path / "dict.csv"
+    path.write_text("city\nLondon\nParis\nLondon\n")
+    report = ar.profile(ar.read_csv(path))
+    d = report.columns["city"].to_dict()
+
+    assert "top_values" in d
+    assert d["top_values"][0]["value"] == "London"
+    assert d["top_values"][0]["count"] == 2

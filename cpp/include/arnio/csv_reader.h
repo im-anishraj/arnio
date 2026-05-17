@@ -2,8 +2,7 @@
 
 #include <optional>
 #include <string>
-#include <unordered_map>
-#include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include "frame.h"
@@ -16,6 +15,7 @@ struct CsvConfig {
     std::optional<std::vector<std::string>> usecols = std::nullopt;
     std::optional<size_t> nrows = std::nullopt;
     std::string encoding = "utf-8";  // Currently only utf-8 supported
+    bool trim_headers = true;        // for implementing the trim_headers option
 };
 
 class CsvReader {
@@ -26,7 +26,7 @@ class CsvReader {
     Frame read(const std::string& path) const;
 
     // Scan schema only (column names + inferred types)
-    std::unordered_map<std::string, std::string> scan_schema(const std::string& path) const;
+    std::vector<std::pair<std::string, std::string>> scan_schema(const std::string& path) const;
 
    private:
     CsvConfig config_;

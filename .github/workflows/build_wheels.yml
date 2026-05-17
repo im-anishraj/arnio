@@ -6,7 +6,12 @@ on:
       tag_name:
         required: true
         type: string
-  workflow_dispatch:  # allows manual trigger for testing
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Git tag or ref to build and publish"
+        required: false
+        type: string
 
 jobs:
   build_sdist:
@@ -18,6 +23,24 @@ jobs:
           ref: ${{ inputs.tag_name || github.ref }}
       - name: Build sdist
         run: pipx run build --sdist
+      - name: Install package from sdist
+        run: pip install dist/*.tar.gz
+      - name: Smoke test import
+        run: |
+          python - <<'PY'
+          import os
+          import subprocess
+          import sys
+          import tempfile
+
+          with tempfile.TemporaryDirectory() as tmp:
+              subprocess.run(
+                  [sys.executable, "-c", "import arnio"],
+                  cwd=tmp,
+                  check=True,
+                  env={**os.environ, "PYTHONPATH": ""},
+              )
+          PY
       - uses: actions/upload-artifact@v4
         with:
           name: sdist
@@ -41,6 +64,16 @@ jobs:
         uses: pypa/cibuildwheel@v2.22
         env:
           CIBW_ARCHS_MACOS: "x86_64 arm64"
+          CIBW_TEST_COMMAND: >-
+            python -c "import pathlib, sys, pytest; sys.path.append(str(pathlib.Path(r'{project}'))); raise SystemExit(pytest.main([str(pathlib.Path(r'{project}') / 'tests'), '-v', '--tb=short', '-x']))"
+
+      - name: Set up Python for wheel smoke test
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Smoke test wheel install
+        run: python tests/smoke_wheel_install.py --wheelhouse wheelhouse
 
       - name: Upload wheels as artifacts
         uses: actions/upload-artifact@v4

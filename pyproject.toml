@@ -9,15 +9,15 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "arnio"
-version = "1.1.1"
-description = "C++ accelerated CSV preprocessing and data cleaning for pandas"
+version = "1.10.0"
+description = "C++ accelerated data preparation for pandas and the Python data stack"
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.9"
 authors = [
     { name = "Anish Raj", email = "anishrajyadav97@gmail.com" }
 ]
-keywords = ["pandas", "csv", "data-cleaning", "preprocessing", "c++", "performance"]
+keywords = ["pandas", "csv", "data-cleaning", "preprocessing", "data-quality", "schema-validation", "c++", "performance"]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
@@ -51,6 +51,7 @@ dev = [
     "black>=24.0",
     "ruff>=0.4.0",
     "pre-commit>=3.0",
+    "hypothesis>=6.0",
 ]
 
 [tool.setuptools.package-data]
@@ -83,6 +84,6 @@ addopts = "-v --tb=short"
 [tool.cibuildwheel]
 build = "cp39-* cp310-* cp311-* cp312-* cp313-*"
 skip = "*-win32 *-manylinux_i686 *-musllinux*"
-test-requires = ["pytest", "pandas>=1.5", "numpy>=1.23"]
+test-requires = ["pytest", "pandas>=1.5", "numpy>=1.23", "hypothesis>=6.0"]
 test-command = "pytest {project}/tests/ -v --tb=short -x"
 build-verbosity = 1
