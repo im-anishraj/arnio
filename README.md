@@ -9,14 +9,14 @@
 
 <br><br>
 
-### Your CSV hits C++ before Python even wakes up.
+### Fast data preparation for the Python data stack.
 
 <br>
 
-**Arnio** is a compiled C++ data cleaning engine that slots in _before_ pandas.<br>
-It parses, infers types, strips whitespace, deduplicates, and normalizes —<br>
-all natively, in columnar memory — then hands you a pristine `DataFrame`.<br>
-No `.apply()`. No lambda chains. No spaghetti.
+**Arnio** is a compiled C++ data preparation engine for messy CSV and pandas workflows.<br>
+It parses, infers types, strips whitespace, deduplicates, validates, and profiles data —<br>
+then hands clean results back to the tools you already use.<br>
+Use Arnio _before_ and _alongside_ pandas, NumPy, scikit-learn, DuckDB, and Arrow.
 
 <br>
 
@@ -35,9 +35,11 @@ No `.apply()`. No lambda chains. No spaghetti.
 pip install arnio
 ```
 
+Colab install smoke test: **[COLAB_SMOKE_TEST.md](COLAB_SMOKE_TEST.md)**
+
 <br>
 
-<a href="#-quickstart">Quickstart</a>&ensp;·&ensp;<a href="#-why-arnio-exists">Why Arnio</a>&ensp;·&ensp;<a href="#%EF%B8%8F-architecture">Architecture</a>&ensp;·&ensp;<a href="#-benchmarks">Benchmarks</a>&ensp;·&ensp;<a href="#-community">Community</a>&ensp;·&ensp;<a href="#-contribute">Contribute</a>
+<a href="#-quickstart">Quickstart</a>&ensp;·&ensp;<a href="#-integrations">Integrations</a>&ensp;·&ensp;<a href="#-why-arnio-exists">Why Arnio</a>&ensp;·&ensp;<a href="#%EF%B8%8F-architecture">Architecture</a>&ensp;·&ensp;<a href="#-benchmarks">Benchmarks</a>&ensp;·&ensp;<a href="#-community">Community</a>&ensp;·&ensp;<a href="#-contribute">Contribute</a>
 
 </div>
 
@@ -49,7 +51,9 @@ pip install arnio
 
 ## ⚡ Quickstart
 
-Three lines. That's the entire workflow.
+A simple workflow in just a few steps.
+
+> New to Arnio? Start with the pandas workflow example below before exploring advanced pipelines.
 
 ```python
 import arnio as ar
@@ -68,7 +72,29 @@ clean = ar.pipeline(frame, [
 
 # Out comes a standard pandas DataFrame — use it like you always have
 df = ar.to_pandas(clean)
+
+# Use copy=True when you need defensive pandas-owned buffers
+safe_df = ar.to_pandas(clean, copy=True)
 ```
+
+Already have a pandas `DataFrame`? Use Arnio in-place in your existing pandas
+workflow:
+
+```python
+import pandas as pd
+import arnio as ar
+
+df = pd.read_csv("messy_sales_data.csv")
+
+clean_df = df.arnio.clean([
+    ("strip_whitespace",),
+    ("normalize_case", {"case_type": "lower"}),
+    ("drop_duplicates",),
+])
+
+report = clean_df.arnio.profile()
+```
+
 ### Select specific columns
 
 Use `select_columns()` to create a new `ArFrame` with only the required columns before converting to pandas.
@@ -100,6 +126,22 @@ Useful for exploring datasets before committing memory.
 </details>
 
 <details>
+<summary><b>👀 Preview rows without pandas conversion or full-column Python list materialization</b></summary>
+<br>
+
+`preview()` reads only the first `n` rows directly from the C++ frame — no pandas conversion triggered.
+
+```python
+frame = ar.read_csv("huge_file.csv")
+
+print(frame.preview())      # first 5 rows (default)
+print(frame.preview(n=10))  # first 10 rows
+```
+
+Raises `ValueError` for invalid `n` (zero, negative, or non-integer).
+</details>
+
+<details>
 <summary><b>🧩 Add custom steps without touching C++</b></summary>
 <br>
 
@@ -128,6 +170,43 @@ Custom steps run through a pandas↔ArFrame conversion bridge. Prototype in Pyth
 
 <br>
 
+## 🔗 Integrations
+
+Arnio is designed to make the rest of the Python data stack more productive,
+not to replace it.
+
+| Workflow | How Arnio helps |
+|:---|:---|
+| **pandas** | Clean, validate, and profile messy `DataFrame`s through `df.arnio`. |
+| **NumPy** | Prepare typed numeric data before array/modeling workflows. |
+| **scikit-learn** | Use Arnio cleaning as a preprocessing layer before model training. |
+| **DuckDB / Arrow** | Validate and prepare data before analytics and columnar exchange. |
+| **notebooks** | Inspect quality issues and cleaning suggestions before analysis. |
+
+### Pandas accessor
+
+```python
+df = pd.read_csv("raw_customers.csv")
+
+clean_df = df.arnio.clean(drop_duplicates=True)
+quality = clean_df.arnio.profile()
+validation = clean_df.arnio.validate({
+    "email": ar.Email(nullable=False),
+    "age": ar.Int64(nullable=True, min=0),
+})
+```
+
+This keeps pandas as the analysis tool while Arnio handles the preparation,
+quality, and validation layer.
+
+> Product direction: **[PROJECT_DIRECTION.md](PROJECT_DIRECTION.md)**
+
+<br>
+
+---
+
+<br>
+
 ## 🔍 Why Arnio exists
 
 Every data project starts the same way:
@@ -143,7 +222,7 @@ df = df.drop_duplicates()                  # Another pass
 
 Six lines. Four full-data passes. All in interpreted Python. This is fine for a Jupyter demo — but it doesn't scale, it doesn't compose, and it definitely doesn't belong in production.
 
-**Arnio intercepts this entire pattern.** It moves the heavy lifting to C++, replaces imperative chains with a declarative pipeline, and gives you a clean `DataFrame` in one shot.
+**Arnio intercepts this entire pattern.** It moves the preparation layer into a predictable pipeline, accelerates supported operations in C++, and gives you clean data for pandas, NumPy, scikit-learn, DuckDB, or notebooks.
 
 <table>
 <tr>
@@ -222,7 +301,7 @@ Arnio is not a pandas wrapper. It's a separate runtime with its own data model.
 | **Columnar storage** | Data lives in typed `std::vector`s — `vector<int64_t>`, `vector<double>`, `vector<string>` — not rows of variants. Cache-friendly and SIMD-ready. |
 | **Boolean null masks** | Nulls are tracked in a separate `vector<bool>`, keeping data vectors dense. No sentinel values, no NaN tricks. |
 | **Two-pass CSV read** | Pass 1 infers types across all rows. Pass 2 parses values directly into the correct typed column. No string→object→cast overhead. |
-| **Zero-copy bridge** | `to_pandas()` exposes C++ memory directly via NumPy's buffer protocol. Numeric and boolean columns cross the boundary without copying. |
+| **Zero-copy bridge** | `to_pandas()` exposes C++ memory directly via NumPy's buffer protocol where supported. Numeric columns preserve the fast zero-copy path by default, while `copy=True` requests defensive pandas-owned buffers. |
 | **Step registry** | Pipeline steps map to C++ function pointers. Adding a new cleaning primitive is a single function + one registry entry. |
 
 > Full architecture documentation: **[ARCHITECTURE.md](ARCHITECTURE.md)**
@@ -300,17 +379,54 @@ Small differences are expected across CPUs, operating systems, compilers, Python
 
 <br>
 
+### 🧠 Auto Clean Memory Benchmark
+
+To measure the peak memory and execution time of the `auto_clean` pipeline using realistic dataset sizes:
+
+```bash
+python benchmarks/benchmark_auto_clean_memory.py --rows 100000
+```
+
+This script generates a reproducible synthetic dataset with mixed column types (strings, ints, floats, booleans, nulls, and duplicates) and measures:
+- `ar.read_csv` performance
+- `ar.auto_clean(mode="safe")` performance (low-risk cleanup like whitespace trimming)
+- `ar.auto_clean(mode="strict")` performance (includes type casting and deduplication)
+
+The dataset is regenerated deterministically unless `--reuse-file` is provided.
+Each `auto_clean` benchmark run reloads the dataset to avoid mutation or caching effects between runs.
+
+Options:
+- `--repeat N` runs each operation multiple times and reports average (and min/max range).
+- `--seed N` changes the deterministic dataset seed.
+- `--reuse-file` reuses an existing dataset file instead of regenerating it.
+- `--keep-file` keeps the generated CSV (otherwise it is removed at the end).
+
+Expected output format:
+
+```text
+Operation                    Time(s)     Peak Py(MiB)
+--------------------------------------------------------------------
+ar.read_csv           0.042 (0.041-0.044)    4.52 (4.50-4.60)
+ar.auto_clean(safe)   0.012 (0.011-0.013)    0.15 (0.14-0.16)
+ar.auto_clean(strict) 0.035 (0.034-0.036)    1.20 (1.18-1.22)
+--------------------------------------------------------------------
+Total avg (Read+Strict)       0.077             4.52
+```
+<br>
+
 ---
 
 <br>
 
 ## 🧰 Cleaning primitives
 
-Most operations below run natively in C++. The current `filter_rows` step uses the Python pipeline backend and may be optimized in C++ later.
+Most operations below run natively in C++. Currently, `filter_rows` and `replace_values` run via the Python (pandas) backend and may be optimized in C++ later.
 
 | Primitive | What it does | Example |
 |:---|:---|:---|
 | `drop_nulls` | Remove rows with null/empty values | `ar.drop_nulls(frame, subset=["age"])` |
+| `keep_rows_with_nulls` | Keep only rows that contain at least one null | `ar.keep_rows_with_nulls(frame, subset=["age"])` |
+| `validate_columns_exist` | Fail early when required columns are missing | `ar.validate_columns_exist(frame, ["age"])` |
 | `filter_rows` | Filter rows using comparison operators | `ar.filter_rows(frame, column="age", op=">", value=18)` |
 | `fill_nulls` | Replace nulls with a scalar | `ar.fill_nulls(frame, 0, subset=["revenue"])` |
 | `drop_duplicates` | Deduplicate rows (first/last/none) | `ar.drop_duplicates(frame, keep="first")` |
@@ -320,19 +436,72 @@ Most operations below run natively in C++. The current `filter_rows` step uses t
 | `normalize_case` | Force lower/upper/title case | `ar.normalize_case(frame, case_type="title")` |
 | `rename_columns` | Rename columns via mapping | `ar.rename_columns(frame, {"old": "new"})` |
 | `cast_types` | Cast column types | `ar.cast_types(frame, {"age": "int64"})` |
+| `round_numeric_columns` | Round numeric columns (non-numeric columns in subset ignored safely) | `ar.round_numeric_columns(frame, decimals=2)` |
+| `replace_values` | Replace values using a mapping (column or whole-frame). Handles `None`/`NaN`. | `ar.replace_values(frame, {"active": "A", "inactive": "I"}, column="status")` |
 | `clean` | Convenience shorthand | `ar.clean(frame, drop_nulls=True)` |
 | `safe_divide_columns` | Divide one column by another, handling zero/null denominators | `ar.safe_divide_columns(frame, numerator="revenue", denominator="cost", output_column="ratio")` |
+| `trim_column_names` | Strip leading/trailing whitespace from column names | `ar.trim_column_names(frame)` |
+
+#### `ArFrame.select_dtypes` — type-based column selection
+
+Returns a **new `ArFrame`** containing only the columns whose dtype matches the filter. Raises `ValueError` if no columns match.
+
+```python
+frame = ar.read_csv("data.csv")
+
+# Keep only numeric columns
+numeric = frame.select_dtypes(include=["int64", "float64"])
+
+# Drop string columns
+without_strings = frame.select_dtypes(exclude="string")
+```
+
+**Valid dtype strings:** `"int64"`, `"float64"`, `"string"`, `"bool"`, `"null"`
+
+- At least one of `include` or `exclude` must be given — raises `ValueError` otherwise.
+- `include` and `exclude` must not overlap — raises `ValueError` if they share a dtype.
+- Unknown dtype strings raise `ValueError` with a list of valid options.
+- Raises `ValueError` when no columns match (never returns an empty frame silently).
+- Column order in the result always matches the original frame.
 
 Or compose them all into a **pipeline**:
 
 ```python
 clean = ar.pipeline(frame, [
+    ("validate_columns_exist", {"columns": ["name", "city", "revenue"]}),
     ("strip_whitespace",),
     ("normalize_case", {"case_type": "lower"}),
     ("fill_nulls", {"value": "unknown", "subset": ["city"]}),
     ("drop_duplicates", {"keep": "first"}),
 ])
 ```
+
+### 🔁 Replace values
+
+Use `replace_values` to substitute values using a mapping. It works as a pipeline step (Python backend) and can operate on a single column or the whole frame when `column` is omitted. It also understands null semantics: using `None` (or `np.nan`) as a mapping key targets existing nulls, and mapping a value to `None` creates real nulls.
+
+Column-specific example:
+
+```python
+clean = ar.pipeline(frame, [
+    ("replace_values", {"mapping": {"active": "A", "inactive": "I"}, "column": "status"}),
+])
+```
+
+Whole-frame example (no `column`):
+
+```python
+clean = ar.pipeline(frame, [
+    ("replace_values", {"mapping": {None: "MISSING", "active": "A", "inactive": "I"}}),
+])
+```
+
+Direct API:
+
+```python
+frame2 = ar.replace_values(frame, {"active": "A", "inactive": "I"})
+```
+
 ### 🔎 Filter rows inside pipelines
 
 Use `filter_rows` to keep only rows matching a condition.
@@ -362,6 +531,27 @@ Works with:
 - floats
 - strings
 - booleans
+
+### 🔎 Isolate rows with null values
+
+Use `keep_rows_with_nulls` to audit incomplete data — keep only rows that have at least one null.
+
+```python
+frame = ar.read_csv("data.csv")
+
+# Keep all rows that have at least one null anywhere
+nulls = ar.keep_rows_with_nulls(frame)
+
+# Keep rows where specifically 'age' or 'score' is null
+nulls = ar.keep_rows_with_nulls(frame, subset=["age", "score"])
+
+# Works inside a pipeline too
+result = ar.pipeline(frame, [
+    ("keep_rows_with_nulls", {"subset": ["age"]}),
+])
+```
+
+Useful for data auditing — inspect what's missing before deciding how to fill or drop.
 
 <br>
 ### 🔢 Safe column division
@@ -404,10 +594,14 @@ If a dtype is partially supported, users may need conversion before processing. 
 
 ### Notes
 
-- Numeric and boolean columns are optimized for zero-copy conversion between C++ and pandas.
+- Numeric columns are optimized for zero-copy conversion between C++ and pandas where supported.
+- Pass `copy=True` to `to_pandas()` when downstream pandas code needs defensive pandas-owned column buffers.
+- Boolean conversion is already copied by the binding because `std::vector<bool>` cannot be exposed as a zero-copy NumPy buffer in the current implementation.
+- Columns with null masks may require copies so pandas can apply nullable values safely.
 - String columns require Python string object creation during `to_pandas()` conversion.
 - Mixed `object` columns may reduce type inference accuracy and may require preprocessing.
 - Unsupported dtypes should raise clear user-facing errors instead of silent failures.
+> **Note:** pandas DataFrame indexes are currently not preserved during `from_pandas()` conversion. Converted frames receive a default `RangeIndex` when converted back via `to_pandas()`.
 
 <br>
 
@@ -433,13 +627,35 @@ For production data contracts:
 schema = ar.Schema({
     "id": ar.Int64(nullable=False, unique=True),
     "email": ar.Email(nullable=False),
+    # CountryCode expects uppercase ISO alpha-2 values, for example IN, US, GB.
+    "country": ar.CountryCode(nullable=False),
+    "username": ar.String(min_length=3, max_length=20),
     "revenue": ar.Float64(nullable=True, min=0),
 })
 
 result = ar.validate(frame, schema)
 if not result.passed:
+    summary = result.summary()
+    print(summary["issues_by_rule"])
+    print(summary["issues_by_column"])
+    print(summary["issues_by_column_and_rule"])
     print(result.to_pandas())
+    print(result.to_markdown(max_issues=10))
 ```
+
+`ValidationResult.to_markdown()` is useful in CI logs, GitHub comments, or data quality reports because it renders a compact validation summary plus a GitHub-friendly issue table.
+
+For multi-column uniqueness (composite keys):
+
+```python
+schema = ar.Schema({
+    "user_id": ar.Int64(nullable=False),
+    "course_id": ar.Int64(nullable=False),
+}, unique=["user_id", "course_id"])
+
+result = ar.validate(frame, schema)
+```
+Severity counts are not included in `summary()` yet because `ValidationIssue` does not currently carry severity information.
 
 For low-risk automatic cleanup:
 
@@ -521,7 +737,8 @@ data = {
     "score": [85.5, 90.0, None, 88.2]
 }
 df = ar.from_pandas(pd.DataFrame(data))
-report = ar.profile(df)
+# Bounded profiling for large datasets (controls how many sample values are kept)
+report = ar.profile(df, sample_size=5)
 ```
 
 ### 1. Terminal Representation (Simplified Example)
@@ -678,7 +895,13 @@ If you are new to Arnio terms, see the [contributor glossary](.github/CONTRIBUTI
 <a href="https://discord.gg/xsEw7r78M"><b>Discord</b></a>
 </p>
 
-<br>
+### 💖 Contributors
+
+Thanks to everyone who contributes to Arnio and helps improve the project.
+
+- [View all contributors](https://github.com/im-anishraj/arnio/graphs/contributors)
+- [Contribution Guide](.github/CONTRIBUTING.md)
+- [GitHub Discussions](https://github.com/im-anishraj/arnio/discussions)
 
 ---
 

@@ -7,14 +7,20 @@ from __future__ import annotations
 
 from ._core import _Frame
 
+#: Dtype strings recognised by ArFrame.select_dtypes().
+_VALID_DTYPES: frozenset[str] = frozenset(
+    {"int64", "float64", "string", "bool", "null"}
+)
+
 
 class ArFrame:
     """Lightweight columnar data container backed by C++."""
 
-    __slots__ = ("_frame",)
+    __slots__ = ("_frame", "_attrs")
 
-    def __init__(self, cpp_frame: _Frame) -> None:
+    def __init__(self, cpp_frame: _Frame, attrs: dict | None = None) -> None:
         self._frame = cpp_frame
+        self._attrs: dict = attrs if attrs is not None else {}
 
     # --- Properties ---
 
@@ -51,6 +57,24 @@ class ArFrame:
         """
         return self._frame.dtypes()
 
+    @property
+    def is_empty(self) -> bool:
+        """Check if frame has zero rows.
+
+        Returns
+        -------
+        bool
+            True if frame contains no rows, False otherwise.
+
+        Examples
+        --------
+        >>> frame = ar.read_csv("data.csv")
+        >>> if frame.is_empty:
+        ...     print("No data to process")
+        False
+        """
+        return len(self) == 0
+
     # --- Methods ---
 
     def memory_usage(self) -> int:
@@ -80,7 +104,6 @@ class ArFrame:
         ------
         TypeError
             If columns is not a valid sequence of strings.
-
         ValueError
             If the selection is empty, contains duplicates,
             or includes unknown columns.
@@ -112,6 +135,108 @@ class ArFrame:
 
         return from_pandas(selected_df)
 
+    def select_dtypes(
+        self,
+        include: str | list[str] | tuple[str, ...] | None = None,
+        exclude: str | list[str] | tuple[str, ...] | None = None,
+    ) -> ArFrame:
+        """Return a new ArFrame containing only columns whose dtype matches the filter.
+
+        At least one of *include* or *exclude* must be provided.
+
+        Parameters
+        ----------
+        include : str, list[str], or tuple[str, ...], optional
+            One or more dtype strings to keep.
+            Accepted values: ``"int64"``, ``"float64"``, ``"string"``,
+            ``"bool"``, ``"null"``.
+        exclude : str, list[str], or tuple[str, ...], optional
+            One or more dtype strings to drop. Applied after *include*.
+
+        Returns
+        -------
+        ArFrame
+            New ArFrame containing only the matched columns, in original
+            column order.
+
+        Raises
+        ------
+        ValueError
+            If neither *include* nor *exclude* is provided, if *include*
+            and *exclude* overlap, if an unrecognised dtype string is
+            passed, or if no columns match the filter.
+        TypeError
+            If *include* or *exclude* is not a string, list, or tuple of
+            strings.
+
+        Examples
+        --------
+        >>> frame = ar.read_csv("data.csv")
+        >>> numeric = frame.select_dtypes(include=["int64", "float64"])
+        >>> without_strings = frame.select_dtypes(exclude="string")
+        """
+        if include is None and exclude is None:
+            raise ValueError(
+                "select_dtypes() requires at least one of 'include' or 'exclude'."
+            )
+
+        def _parse(
+            arg: str | list[str] | tuple[str, ...] | None,
+            name: str,
+        ) -> frozenset[str] | None:
+            if arg is None:
+                return None
+            if isinstance(arg, str):
+                values = [arg]
+            elif isinstance(arg, (list, tuple)):
+                values = list(arg)
+                non_strings = [v for v in values if not isinstance(v, str)]
+                if non_strings:
+                    raise TypeError(
+                        f"'{name}' must contain only strings, "
+                        f"got {[type(v).__name__ for v in non_strings]}."
+                    )
+            else:
+                raise TypeError(
+                    f"'{name}' must be a string, list, or tuple of strings, "
+                    f"got {type(arg).__name__!r}."
+                )
+            unknown = [v for v in values if v not in _VALID_DTYPES]
+            if unknown:
+                raise ValueError(
+                    f"Unrecognised dtype(s) in '{name}': {unknown}. "
+                    f"Valid dtypes are: {sorted(_VALID_DTYPES)}."
+                )
+            return frozenset(values)
+
+        include_set = _parse(include, "include")
+        exclude_set = _parse(exclude, "exclude")
+
+        if include_set is not None and exclude_set is not None:
+            overlap = include_set & exclude_set
+            if overlap:
+                raise ValueError(
+                    f"'include' and 'exclude' overlap: {sorted(overlap)}. "
+                    "A dtype cannot be both included and excluded."
+                )
+
+        col_dtypes = self.dtypes
+        matched: list[str] = []
+        for col in self.columns:  # iterate columns to preserve original order
+            dtype = col_dtypes[col]
+            if include_set is not None and dtype not in include_set:
+                continue
+            if exclude_set is not None and dtype in exclude_set:
+                continue
+            matched.append(col)
+
+        if not matched:
+            raise ValueError(
+                "No columns match the dtype selection. " f"Frame dtypes: {col_dtypes}."
+            )
+
+        return self.select_columns(matched)
+
     # --- Dunder methods ---
 
     def __len__(self) -> int:
@@ -130,3 +255,71 @@ class ArFrame:
         lines.append(f"DTypes:  {self.dtypes}")
         lines.append(f"Memory:  {self.memory_usage()} bytes")
         return "\n".join(lines)
+
+    def preview(self, n: int = 5) -> str:
+        """Return a lightweight string preview of the first ``n`` rows.
+
+        Reads only the first ``n`` rows directly from the C++ frame without
+        triggering a full pandas conversion, making it safe to call on very
+        large frames from the CLI or a notebook.
+
+        Parameters
+        ----------
+        n : int, optional
+            Number of rows to preview. Must be a positive integer.
+            Defaults to 5.
+
+        Returns
+        -------
+        str
+            A formatted string table showing the first ``n`` rows.
+
+        Raises
+        ------
+        ValueError
+            If ``n`` is not a positive integer.
+
+        Examples
+        --------
+        >>> frame = ar.read_csv("data.csv")
+        >>> print(frame.preview())       # first 5 rows
+        >>> print(frame.preview(n=10))   # first 10 rows
+        """
+        if isinstance(n, bool) or not isinstance(n, int) or n < 1:
+            raise ValueError(f"`n` must be a positive integer, got {n!r}")
+
+        num_rows, num_cols = self.shape
+
+        if num_rows == 0:
+            return "ArFrame preview: (empty frame)"
+
+        actual_n = min(n, num_rows)
+
+        # Pull only the first `actual_n` values per column — no full conversion
+        col_names = self.columns
+        col_data = [
+            [self._frame.column_by_index(i).at(r) for r in range(actual_n)]
+            for i in range(num_cols)
+        ]
+
+        # Calculate column widths for alignment
+        col_widths = [
+            max(
+                len(col_names[i]),
+                max((len(str(col_data[i][r])) for r in range(actual_n)), default=0),
+            )
+            for i in range(num_cols)
+        ]
+
+        # Build header and separator
+        header = "  ".join(col_names[i].ljust(col_widths[i]) for i in range(num_cols))
+        separator = "  ".join("-" * col_widths[i] for i in range(num_cols))
+
+        # Build rows
+        rows = [
+            "  ".join(str(col_data[i][r]).ljust(col_widths[i]) for i in range(num_cols))
+            for r in range(actual_n)
+        ]
+
+        label = f"ArFrame preview (showing {actual_n} of {num_rows} rows):"
+        return "\n".join([label, header, separator] + rows)

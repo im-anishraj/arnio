@@ -159,6 +159,18 @@ class TestReadCsv:
 
         assert df["name"].iloc[0] == "André"
 
+    def test_utf16_encoding_with_nul_bytes_reads_successfully(self, tmp_path):
+        csv_path = tmp_path / "utf16.csv"
+        csv_path.write_text("name,age\nAlice,30\n", encoding="utf-16")
+
+        frame = ar.read_csv(csv_path, encoding="utf-16")
+        df = ar.to_pandas(frame)
+
+        assert frame.columns == ["name", "age"]
+        assert frame.shape == (1, 2)
+        assert df["name"].iloc[0] == "Alice"
+        assert df["age"].iloc[0] == 30
+
     def test_quoted_newline_record(self, tmp_path):
         csv_path = tmp_path / "quoted_newline.csv"
         csv_path.write_text('id,text\n1,"hello\nworld"\n2,ok\n')
@@ -184,6 +196,16 @@ class TestReadCsv:
         with pytest.raises(ar.CsvReadError, match="Duplicate column name: a"):
             ar.read_csv(csv_path)
 
+    def test_empty_file_raises(self, tmp_path):
+        csv_path = tmp_path / "empty.csv"
+        csv_path.write_text("")
+        with pytest.raises(ar.CsvReadError, match="CSV file is empty"):
+            ar.read_csv(str(csv_path))
+
+    def test_missing_file_passthrough(self, tmp_path):
+        with pytest.raises(ar.CsvReadError):
+            ar.read_csv(str(tmp_path / "nonexistent.csv"))
+
 
 class TestScanCsv:
     def test_scan_schema(self, sample_csv):
@@ -201,6 +223,14 @@ class TestScanCsv:
 
         assert schema == {"name": "string"}
 
+    def test_scan_utf16_encoding_with_nul_bytes_reads_successfully(self, tmp_path):
+        csv_path = tmp_path / "utf16.csv"
+        csv_path.write_text("name,age\nAlice,30\n", encoding="utf-16")
+
+        schema = ar.scan_csv(csv_path, encoding="utf-16")
+
+        assert schema == {"name": "string", "age": "int64"}
+
     def test_scan_binary_file_rejection(self, tmp_path):
         file_path = str(tmp_path / "data.csv")
 
@@ -212,3 +242,29 @@ class TestScanCsv:
             match="CSV input contains NUL bytes and appears to be binary or corrupted",
         ):
             ar.scan_csv(file_path)
+
+    def test_scan_empty_file_raises(self, tmp_path):
+        csv_path = tmp_path / "empty.csv"
+        csv_path.write_text("")
+        with pytest.raises(ar.CsvReadError, match="CSV file is empty"):
+            ar.scan_csv(str(csv_path))
+
+    def test_scan_missing_file_passthrough(self, tmp_path):
+        with pytest.raises(ar.CsvReadError):
+            ar.scan_csv(str(tmp_path / "nonexistent.csv"))
+
+    def test_scan_schema_preserves_column_order(self, tmp_path):
+        csv_path = tmp_path / "order_test.csv"
+        csv_path.write_text("z,a,m\n1,2,3\n")
+
+        schema = ar.scan_csv(str(csv_path))
+        frame = ar.read_csv(str(csv_path))
+
+        assert list(schema.keys()) == ["z", "a", "m"]
+        assert list(frame.columns) == ["z", "a", "m"]
+
+    def test_scan_schema_order_matches_read_csv(self, sample_csv):
+        schema = ar.scan_csv(sample_csv)
+        frame = ar.read_csv(sample_csv)
+
+        assert list(schema.keys()) == list(frame.columns)

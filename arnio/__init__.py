@@ -20,14 +20,20 @@ from .cleaning import (
     drop_nulls,
     fill_nulls,
     filter_rows,
+    keep_rows_with_nulls,
     normalize_case,
     rename_columns,
+    replace_values,
+    round_numeric_columns,
     safe_divide_columns,
     strip_whitespace,
+    trim_column_names,
+    validate_columns_exist,
 )
 from .convert import from_pandas, to_pandas
 from .exceptions import ArnioError, CsvReadError, TypeCastError, UnknownStepError
 from .frame import ArFrame
+from .integrations import ArnioPandasAccessor
 from .io import read_csv, scan_csv
 from .pipeline import pipeline, register_step
 from .quality import (
@@ -40,6 +46,7 @@ from .quality import (
 from .schema import (
     URL,
     Bool,
+    CountryCode,
     Email,
     Field,
     Float64,
@@ -59,20 +66,27 @@ __all__ = [
     "scan_csv",
     # Cleaning
     "drop_nulls",
+    "keep_rows_with_nulls",
     "fill_nulls",
+    "validate_columns_exist",
     "filter_rows",
+    "replace_values",
     "drop_duplicates",
     "drop_constant_columns",
     "clip_numeric",
     "strip_whitespace",
     "normalize_case",
     "rename_columns",
+    "round_numeric_columns",
     "cast_types",
     "clean",
     "safe_divide_columns",
+    "trim_column_names",
     # Conversion
     "to_pandas",
     "from_pandas",
+    # Integrations
+    "ArnioPandasAccessor",
     # Pipeline
     "pipeline",
     "register_step",
@@ -91,6 +105,7 @@ __all__ = [
     "Int64",
     "Float64",
     "String",
+    "CountryCode",
     "Bool",
     "Email",
     "URL",
