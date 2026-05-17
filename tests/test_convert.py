@@ -183,7 +183,6 @@ class TestFromPandas:
         assert list(df2["score"]) == [95.5, 87.0]
 
     def test_from_pandas_nested_data(self):
-
         df_list = pd.DataFrame({"a": [[1, 2], [3, 4]]})
         with pytest.raises(
             TypeError, match="Column 'a' contains unsupported nested value"
@@ -204,7 +203,6 @@ class TestFromPandas:
         assert list(df2["a"]) == ["1", "x", "3"]
 
     def test_from_pandas_mixed_object_column_with_nested_value(self):
-
         df = pd.DataFrame({"mixed": [1, "hello", {"a": 1}]}, dtype=object)
 
         with pytest.raises(
@@ -215,11 +213,10 @@ class TestFromPandas:
 
     def test_from_pandas_unsupported_scalar_object_column(self):
         """datetime64 columns now raise a clear TypeError with a fix hint."""
-
-    timestamp = pd.Timestamp("2026-05-14 12:30:00")
-    df = pd.DataFrame({"created_at": [timestamp]})
-    with pytest.raises(TypeError, match="Column 'created_at'"):
-        ar.from_pandas(df)
+        timestamp = pd.Timestamp("2026-05-14 12:30:00")
+        df = pd.DataFrame({"created_at": [timestamp]})
+        with pytest.raises(TypeError, match="Column 'created_at'"):
+            ar.from_pandas(df)
 
     def test_from_pandas_preserves_column_order(self):
         df = pd.DataFrame(
