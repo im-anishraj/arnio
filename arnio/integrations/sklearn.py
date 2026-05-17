@@ -15,6 +15,7 @@ except ImportError:
 from arnio.convert import from_pandas, to_pandas
 from arnio.pipeline import pipeline as run_pipeline
 
+
 class ArnioCleaner(BaseEstimator, TransformerMixin):
     """
     A scikit-learn compatible transformer that wraps the Arnio C++ pipeline.
@@ -74,4 +75,3 @@ class ArnioCleaner(BaseEstimator, TransformerMixin):
             )
 
         return np.asarray(input_features, dtype=object)
-    
