@@ -66,11 +66,17 @@ size_t Column::memory_usage(bool deep) const {
 
     if (std::holds_alternative<std::vector<std::string>>(data_)) {
         const auto& vec = std::get<std::vector<std::string>>(data_);
-        // Shallow: only count the std::string struct overhead (stack portion).
+        // Shallow (deep=false): only count the std::string struct overhead.
+        // NOTE: This intentionally excludes heap-allocated string character
+        // storage to provide a fast O(1) lower-bound estimate. This is a
+        // deliberate change from the pre-deep API for the default path.
         usage += vec.capacity() * sizeof(std::string);
         if (deep) {
-            // Deep: also count the actual heap-allocated character bytes.
-            for (const auto& s : vec) usage += s.size();
+            // Deep: also count the heap-allocated buffer for each string.
+            // Uses capacity() (not size()) because capacity() is the actual
+            // number of bytes allocated by the OS, which may be larger than
+            // the number of characters currently stored.
+            for (const auto& s : vec) usage += s.capacity();
         }
     } else if (std::holds_alternative<std::vector<int64_t>>(data_)) {
         usage += std::get<std::vector<int64_t>>(data_).capacity() * sizeof(int64_t);

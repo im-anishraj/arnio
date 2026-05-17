@@ -202,7 +202,7 @@ Frame CsvReader::read(const std::string& path) const {
         strip_utf8_bom(line);
         header = parse_line(line);
         for (auto& h : header) {
-            trim_in_place(h);
+            if (config_.trim_headers) trim_in_place(h);
         }
         validate_header(header);
     }
@@ -290,7 +290,7 @@ std::unordered_map<std::string, std::string> CsvReader::scan_schema(const std::s
         strip_utf8_bom(line);
         header = parse_line(line);
         for (auto& h : header) {
-            trim_in_place(h);
+            if (config_.trim_headers) trim_in_place(h);
         }
         validate_header(header);
     }

@@ -11,10 +11,11 @@ from ._core import _Frame
 class ArFrame:
     """Lightweight columnar data container backed by C++."""
 
-    __slots__ = ("_frame",)
+    __slots__ = ("_frame", "_attrs")
 
-    def __init__(self, cpp_frame: _Frame) -> None:
+    def __init__(self, cpp_frame: _Frame, attrs: dict | None = None) -> None:
         self._frame = cpp_frame
+        self._attrs: dict = attrs if attrs is not None else {}
 
     # --- Properties ---
 
@@ -59,23 +60,28 @@ class ArFrame:
         Parameters
         ----------
         deep : bool, optional
-            If False (default), counts only the fixed struct overhead for
-            each column (e.g. ``sizeof(std::string) * capacity`` for string
-            columns). This is a fast, O(1) lower-bound estimate.
+            If ``False`` (default), counts only the fixed struct overhead for
+            each column — for string columns this is
+            ``sizeof(std::string) * capacity``, which excludes the
+            heap-allocated character buffers. This is a fast O(1)
+            lower-bound estimate.
 
             .. note::
-               **Behavior Change:** Previously, the default memory calculation
-               iterated through all strings to sum their capacities. To align
-               with pandas and provide fast O(1) estimates, `deep=False` now
-               strictly excludes string character heap storage.
+               **Intentional behavior change from pre-deep API:** The original
+               ``memory_usage()`` iterated each string and added
+               ``s.capacity()`` to the total. With ``deep=False`` that
+               per-string iteration is skipped, so the default result will be
+               smaller than the old API for string-heavy frames. This change
+               was made deliberately to make the default path O(1).
 
-            If True, also iterates every string element and adds its actual
-            character byte count (``s.size()``), giving a precise total
-            that includes heap-allocated string data.
+            If ``True``, iterates every string element and adds its allocated
+            buffer size (``s.capacity()``), which is the number of bytes the
+            OS actually reserved for that string — always ≥ the character
+            count. This gives a precise upper-bound of the heap footprint.
 
-            For numeric columns (int64, float64, bool) the result is the
-            same regardless of *deep*, because those types store all data
-            inline.
+            For numeric columns (``int64``, ``float64``, ``bool``) the result
+            is identical regardless of *deep* because those types store data
+            inline with no extra heap allocation.
 
         Returns
         -------
@@ -91,6 +97,55 @@ class ArFrame:
         3072
         """
         return self._frame.memory_usage(deep)
+
+    def select_columns(self, columns: list[str]) -> ArFrame:
+        """Return a new ArFrame with only the selected columns.
+
+        Parameters
+        ----------
+        columns : list[str]
+            List of column names to select.
+
+        Returns
+        -------
+        ArFrame
+            New ArFrame containing only the selected columns.
+
+        Raises
+        ------
+        TypeError
+            If columns is not a valid sequence of strings.
+
+        ValueError
+            If the selection is empty, contains duplicates,
+            or includes unknown columns.
+        """
+        if isinstance(columns, str):
+            raise TypeError("columns must be a sequence of column names, not a string.")
+
+        if not isinstance(columns, (list, tuple)):
+            raise TypeError("columns must be a list or tuple of column names.")
+
+        if not columns:
+            raise ValueError("Column selection cannot be empty.")
+
+        if any(not isinstance(col, str) for col in columns):
+            raise TypeError("All column names must be strings.")
+
+        if len(columns) != len(set(columns)):
+            raise ValueError("Duplicate column names are not allowed.")
+
+        missing = [col for col in columns if col not in self.columns]
+
+        if missing:
+            raise ValueError(f"Unknown columns: {missing}")
+
+        from .convert import from_pandas, to_pandas
+
+        df = to_pandas(self)
+        selected_df = df[columns]
+
+        return from_pandas(selected_df)
 
     # --- Dunder methods ---
 
@@ -110,3 +165,71 @@ class ArFrame:
         lines.append(f"DTypes:  {self.dtypes}")
         lines.append(f"Memory:  {self.memory_usage()} bytes")
         return "\n".join(lines)
+
+    def preview(self, n: int = 5) -> str:
+        """Return a lightweight string preview of the first ``n`` rows.
+
+        Reads only the first ``n`` rows directly from the C++ frame without
+        triggering a full pandas conversion, making it safe to call on very
+        large frames from the CLI or a notebook.
+
+        Parameters
+        ----------
+        n : int, optional
+            Number of rows to preview. Must be a positive integer.
+            Defaults to 5.
+
+        Returns
+        -------
+        str
+            A formatted string table showing the first ``n`` rows.
+
+        Raises
+        ------
+        ValueError
+            If ``n`` is not a positive integer.
+
+        Examples
+        --------
+        >>> frame = ar.read_csv("data.csv")
+        >>> print(frame.preview())       # first 5 rows
+        >>> print(frame.preview(n=10))   # first 10 rows
+        """
+        if isinstance(n, bool) or not isinstance(n, int) or n < 1:
+            raise ValueError(f"`n` must be a positive integer, got {n!r}")
+
+        num_rows, num_cols = self.shape
+
+        if num_rows == 0:
+            return "ArFrame preview: (empty frame)"
+
+        actual_n = min(n, num_rows)
+
+        # Pull only the first `actual_n` values per column — no full conversion
+        col_names = self.columns
+        col_data = [
+            [self._frame.column_by_index(i).at(r) for r in range(actual_n)]
+            for i in range(num_cols)
+        ]
+
+        # Calculate column widths for alignment
+        col_widths = [
+            max(
+                len(col_names[i]),
+                max((len(str(col_data[i][r])) for r in range(actual_n)), default=0),
+            )
+            for i in range(num_cols)
+        ]
+
+        # Build header and separator
+        header = "  ".join(col_names[i].ljust(col_widths[i]) for i in range(num_cols))
+        separator = "  ".join("-" * col_widths[i] for i in range(num_cols))
+
+        # Build rows
+        rows = [
+            "  ".join(str(col_data[i][r]).ljust(col_widths[i]) for i in range(num_cols))
+            for r in range(actual_n)
+        ]
+
+        label = f"ArFrame preview (showing {actual_n} of {num_rows} rows):"
+        return "\n".join([label, header, separator] + rows)
