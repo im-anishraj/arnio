@@ -85,13 +85,11 @@ def test_random_delim_unusual(tmp_path):
 
 
 def test_random_delim_multi_character(tmp_path):
-    """Test multi-character delimiters raise ValueError as they are unsupported by the native reader."""
+    """Test multi-character delimiters raise TypeError (pybind11 char constraint) or ValueError."""
     csv_path = tmp_path / "test.csv"
     csv_path.write_text("id||text\n1||ok")
-    try:
+    with pytest.raises((TypeError, ValueError, ar.CsvReadError)):
         ar.read_csv(csv_path, delimiter="||")
-    except (ar.CsvReadError, ValueError):
-        pass
 
 
 def test_random_delim_no_delimiter(tmp_path):
