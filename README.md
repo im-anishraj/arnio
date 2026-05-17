@@ -269,29 +269,23 @@ df = ar.to_pandas(ar.pipeline(frame, [
 
 Arnio is not a pandas wrapper. It's a separate runtime with its own data model.
 
-```text
-┌──────────────────────────────────────────────────────────────┐
-│  Your Python Code                                            │
-│  frame = ar.read_csv("data.csv")                             │
-│  clean = ar.pipeline(frame, [...])                           │
-│  df = ar.to_pandas(clean)                                    │
-└────────────────────────┬─────────────────────────────────────┘
-                         │  pybind11 boundary
-┌────────────────────────▼─────────────────────────────────────┐
-│  C++ Runtime  (_arnio_cpp)                                   │
-│                                                              │
-│  ┌─────────────┐  ┌─────────────────┐  ┌──────────────────┐ │
-│  │  CsvReader   │  │  Frame/Column   │  │  Cleaning Engine │ │
-│  │  • RFC 4180  │  │  • Columnar     │  │  • drop_nulls    │ │
-│  │  • BOM strip │  │  • std::variant │  │  • fill_nulls    │ │
-│  │  • Type      │  │  • Bool null    │  │  • drop_dupes    │ │
-│  │    inference │  │    masks        │  │  • strip_ws      │ │
-│  │  • Quoted    │  │  • O(1) column  │  │  • normalize     │ │
-│  │    fields    │  │    lookup       │  │  • rename/cast   │ │
-│  └─────────────┘  └─────────────────┘  └──────────────────┘ │
-│                                                              │
-│  to_pandas() ──→ zero-copy NumPy buffer (numerics/bools)     │
-└──────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+  subgraph python["Your Python Code"]
+    PY["frame = ar.read_csv('data.csv')\nclean = ar.pipeline(frame, [...])\ndf = ar.to_pandas(clean)"]
+  end
+
+  python -->|"pybind11 boundary"| cpp
+
+  subgraph cpp["C++ Runtime (_arnio_cpp)"]
+    direction TB
+    CSV["CsvReader\n• RFC 4180\n• BOM strip\n• Type inference\n• Quoted fields"]
+    FRAME["Frame / Column\n• Columnar\n• std::variant\n• Bool null masks\n• O(1) column lookup"]
+    CLEAN["Cleaning Engine\n• drop_nulls\n• fill_nulls\n• drop_dupes\n• strip_ws\n• normalize\n• rename/cast"]
+    CSV --> FRAME --> CLEAN
+  end
+
+  cpp -->|"to_pandas() → zero-copy NumPy buffer (numerics/bools)"| OUT["pandas DataFrame"]
 ```
 
 ### Design decisions that matter
