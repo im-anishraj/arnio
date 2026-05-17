@@ -55,7 +55,6 @@ BENCHMARKS = (
     ),
 )
 
-
 _PSUTIL_PROCESS = None
 _PSUTIL_PROBED = False
 
@@ -155,14 +154,12 @@ def benchmark_pandas(path):
     ).columns
 
     for column in object_columns:
-        normalized = (
+        df[column] = (
             df[column]
             .astype(str)
             .str.strip()
             .str.lower()
         )
-
-        df[column] = normalized
 
     rss = get_process_rss_mb()
 
