@@ -369,22 +369,6 @@ def test_date_validation_accepts_valid_dates(tmp_path):
     assert result.issue_count == 0
 
 
-def test_date_validation_rejects_non_zero_padded_dates(tmp_path):
-    path = tmp_path / "non_padded_dates.csv"
-    path.write_text("created_at\n" "2026-5-15\n" "2026-05-5\n" "2026-5-5\n")
-
-    result = ar.validate(
-        ar.read_csv(path),
-        {"created_at": ar.Date(nullable=False)},
-    )
-
-    assert not result.passed
-    assert result.issue_count == 3
-
-    rules = {issue.rule for issue in result.issues}
-    assert "date" in rules
-
-
 def test_date_validation_rejects_invalid_dates(tmp_path):
     path = tmp_path / "bad_dates.csv"
     path.write_text("created_at\n2026-99-99\nhello\n15/05/2026\n2026-02-30\n")
@@ -411,3 +395,19 @@ def test_date_validation_handles_nullable_values(tmp_path):
     )
 
     assert result.passed
+
+
+def test_date_validation_rejects_non_zero_padded_dates(tmp_path):
+    path = tmp_path / "non_padded_dates.csv"
+    path.write_text("created_at\n" "2026-5-15\n" "2026-05-5\n" "2026-5-5\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"created_at": ar.Date(nullable=False)},
+    )
+
+    assert not result.passed
+    assert result.issue_count == 3
+
+    rules = {issue.rule for issue in result.issues}
+    assert "date" in rules
