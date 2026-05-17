@@ -35,6 +35,7 @@ class ColumnProfile:
     mean: float | None = None
     sample_values: list[Any] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    top_values: list[tuple[Any, int, float]] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-friendly dictionary."""
@@ -55,6 +56,14 @@ class ColumnProfile:
             "mean": self.mean,
             "sample_values": [_clean_scalar(value) for value in self.sample_values],
             "warnings": list(self.warnings),
+            "top_values": (
+                [
+                    {"value": _clean_scalar(v), "count": c, "ratio": r}
+                    for v, c, r in self.top_values
+                ]
+                if self.top_values is not None
+                else None
+            ),
         }
 
 
@@ -302,11 +311,13 @@ def _profile_column(
 
     empty_string_count = 0
     whitespace_count = 0
+    top_values = None
     if dtype == "string" or pd.api.types.is_string_dtype(series.dtype):
         as_text = non_null.astype("string")
         stripped = as_text.str.strip()
         empty_string_count = int((stripped == "").sum())
         whitespace_count = int((as_text != stripped).sum())
+        top_values = _top_values(non_null)
 
     numeric = pd.to_numeric(series, errors="coerce")
     numeric_non_null = numeric.dropna()
@@ -343,6 +354,7 @@ def _profile_column(
         mean=mean,
         sample_values=sample_values,
         warnings=warnings,
+        top_values=top_values,
     )
 
 
@@ -449,6 +461,24 @@ def _clean_scalar(value: Any) -> Any:
     if hasattr(value, "item"):
         return value.item()
     return value
+
+
+def _top_values(
+    series: pd.Series,
+    n: int = 5,
+) -> list[tuple[Any, int, float]]:
+    """Return top-N value frequencies for a non-null series.
+
+    Nulls are excluded. Percentages are based on the non-null total.
+    """
+    if len(series) == 0:
+        return []
+    counts = series.value_counts(dropna=True)
+    total = int(counts.sum())
+    return [
+        (val, int(cnt), _ratio(int(cnt), total))
+        for val, cnt in counts.head(n).items()
+    ]
 
 
 _EMAIL_PATTERN = r"[^@\s]+@[^@\s]+\.[^@\s]+"
