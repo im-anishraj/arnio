@@ -343,6 +343,44 @@ class TestNormalizeCase:
         df = ar.to_pandas(result)
         assert df["name"].iloc[0] == "Alice"
 
+    def test_title_hyphen(self):
+        import pandas as pd
+
+        frame = ar.from_pandas(
+            pd.DataFrame({"name": ["hello-world", "jean-luc picard"]})
+        )
+        result = ar.normalize_case(frame, subset=["name"], case_type="title")
+        df = ar.to_pandas(result)
+        assert df["name"].iloc[0] == "Hello-World"
+        assert df["name"].iloc[1] == "Jean-Luc Picard"
+
+    def test_title_underscore(self):
+        import pandas as pd
+
+        frame = ar.from_pandas(pd.DataFrame({"name": ["hello_world", "foo_bar_baz"]}))
+        result = ar.normalize_case(frame, subset=["name"], case_type="title")
+        df = ar.to_pandas(result)
+        assert df["name"].iloc[0] == "Hello_World"
+        assert df["name"].iloc[1] == "Foo_Bar_Baz"
+
+    def test_title_period(self):
+        import pandas as pd
+
+        frame = ar.from_pandas(pd.DataFrame({"name": ["dr.strange", "mr.smith"]}))
+        result = ar.normalize_case(frame, subset=["name"], case_type="title")
+        df = ar.to_pandas(result)
+        assert df["name"].iloc[0] == "Dr.Strange"
+        assert df["name"].iloc[1] == "Mr.Smith"
+
+    def test_title_slash(self):
+        import pandas as pd
+
+        frame = ar.from_pandas(pd.DataFrame({"name": ["hello/world", "foo/bar"]}))
+        result = ar.normalize_case(frame, subset=["name"], case_type="title")
+        df = ar.to_pandas(result)
+        assert df["name"].iloc[0] == "Hello/World"
+        assert df["name"].iloc[1] == "Foo/Bar"
+
 
 class TestRenameColumns:
     def test_rename(self, sample_csv):
@@ -473,6 +511,26 @@ class TestWinsorizeOutliers:
         frame = ar.read_csv(sample_csv)
         with pytest.raises(ValueError):
             ar.winsorize_outliers(frame, lower=-0.1, upper=1.5)
+class TestFilterRows:
+    def test_filter_rows_missing_column_raises_clear_error(self):
+        df = pd.DataFrame({"age": [20, 30]})
+
+        with pytest.raises(ValueError, match="Unknown column: missing"):
+            ar.filter_rows(df, "missing", ">", 10)
+
+    def test_filter_rows_missing_column_raises_clear_error_for_arframe(self):
+        frame = ar.from_pandas(pd.DataFrame({"age": [20, 30]}))
+
+        with pytest.raises(ValueError, match="Unknown column: missing"):
+            ar.filter_rows(frame, "missing", ">", 10)
+
+    def test_filter_rows_valid_column_still_works(self):
+        df = pd.DataFrame({"age": [20, 30]})
+
+        result = ar.filter_rows(df, "age", ">", 20)
+
+        assert len(result) == 1
+        assert result.iloc[0]["age"] == 30
 
 
 class TestRoundNumericColumns:
