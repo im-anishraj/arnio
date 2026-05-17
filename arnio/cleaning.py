@@ -661,7 +661,9 @@ def filter_rows(frame, column, op, value):
     if column not in df.columns:
         raise ValueError(f"Unknown column: {column}")
 
-    filtered = df[getattr(df[column], ops[op])(value)]
+    mask = getattr(df[column], ops[op])(value)
+    mask = mask.fillna(False).astype(bool)
+    filtered = df[mask]
 
     return from_pandas(filtered) if is_arframe else filtered
 
