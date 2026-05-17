@@ -207,3 +207,39 @@ def test_top_values_in_to_dict(tmp_path):
     assert "top_values" in d
     assert d["top_values"][0]["value"] == "London"
     assert d["top_values"][0]["count"] == 2
+
+
+def test_identifier_numeric_cast_prevention():
+    df = pd.DataFrame(
+        {
+            "id": ["001", "002", "003"],
+            "customer_id": ["00123", "00456", "00789"],
+            "zip_code": ["01234", "02345", "03456"],
+            "price": ["10.50", "20.00", "30.75"],
+            "quantity": ["1", "2", "3"],
+        }
+    )
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+
+    assert report.columns["id"].semantic_type == "identifier"
+    assert report.columns["customer_id"].semantic_type == "identifier"
+    assert report.columns["zip_code"].semantic_type == "identifier"
+
+    suggestions_list = ar.suggest_cleaning(frame)
+    suggestions = {}
+    for step, kwargs in suggestions_list:
+        if step == "cast_types":
+            suggestions.update(kwargs)
+
+    assert "price" in suggestions
+    assert "quantity" in suggestions
+    assert "id" not in suggestions
+    assert "customer_id" not in suggestions
+    assert "zip_code" not in suggestions
+
+    cleaned = ar.auto_clean(frame, mode="strict")
+    result = ar.to_pandas(cleaned)
+    assert list(result["id"]) == ["001", "002", "003"]
+    assert list(result["customer_id"]) == ["00123", "00456", "00789"]
+    assert list(result["zip_code"]) == ["01234", "02345", "03456"]
