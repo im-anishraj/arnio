@@ -1,7 +1,8 @@
 """Tests for schema validation."""
 
-import arnio as ar
 import pytest
+
+import arnio as ar
 
 
 def test_schema_validation_passes_for_valid_frame(sample_csv):
@@ -46,7 +47,7 @@ def test_schema_validation_collects_row_level_issues(tmp_path):
 
     assert not result.passed
     assert result.bad_rows == [1, 2]
-    assert {"nullable", "max", "min", "email:light", "allowed"} <= rules
+    assert {"nullable", "max", "min", "email", "allowed"} <= rules
     assert result.summary()["issues_by_column"]["age"] == 2
 
 
@@ -339,6 +340,8 @@ def test_email_strict_validation_accepts_valid_emails(tmp_path):
     )
 
     assert result.passed
+
+
 def test_country_code_validation_accepts_iso_alpha_2_codes(tmp_path):
     path = tmp_path / "countries.csv"
     path.write_text("country\nIN\nUS\nGB\nFR\n")
@@ -524,3 +527,16 @@ def test_schema_composite_unique_empty_columns(tmp_path):
     issues = [i for i in result.issues if i.rule == "composite_unique"]
     assert len(issues) == 1
     assert "cannot be empty" in issues[0].message
+
+
+def test_email_default_keeps_backward_compatibility(sample_csv):
+    frame = ar.read_csv(sample_csv)
+
+    result = ar.validate(
+        frame,
+        {"email": ar.Email(nullable=False)},
+    )
+
+    assert all(
+        issue.rule == "email" for issue in result.issues if "email" in issue.rule
+    )

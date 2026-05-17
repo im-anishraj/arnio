@@ -370,7 +370,7 @@ def Email(
     return Field(
         dtype="string",
         nullable=nullable,
-        semantic=f"email:{validation}",
+        semantic="email" if validation == "light" else "email:strict",
         unique=unique,
     )
 
@@ -568,7 +568,7 @@ def _markdown_cell(value: Any) -> str:
 
 
 _SEMANTIC_PATTERNS = {
-    "email:light": r"[^@\s]+@[^@\s]+\.[^@\s]+",
+    "email": r"[^@\s]+@[^@\s]+\.[^@\s]+",
     "email:strict": (
         r"[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+"
         r"@"
