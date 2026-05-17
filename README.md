@@ -601,6 +601,7 @@ If a dtype is partially supported, users may need conversion before processing. 
 - String columns require Python string object creation during `to_pandas()` conversion.
 - Mixed `object` columns may reduce type inference accuracy and may require preprocessing.
 - Unsupported dtypes should raise clear user-facing errors instead of silent failures.
+> **Note:** pandas DataFrame indexes are currently not preserved during `from_pandas()` conversion. Converted frames receive a default `RangeIndex` when converted back via `to_pandas()`.
 
 <br>
 
