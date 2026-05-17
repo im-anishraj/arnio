@@ -290,6 +290,41 @@ class TestFromPandas:
         assert str(result["active"].dtype) == "boolean"
         assert list(result["active"]) == [True, False, pd.NA]
 
+    def test_nullable_string_roundtrip(self):
+        df = pd.DataFrame(
+            {
+                "name": pd.Series(
+                    ["Alice", pd.NA, "Bob"],
+                    dtype="string",
+                )
+            }
+        )
+        result = ar.to_pandas(ar.from_pandas(df))
+
+        assert str(result["name"].dtype) == "string"
+
+        pd.testing.assert_series_equal(
+            result["name"],
+            df["name"],
+        )
+
+    def test_nullable_float_roundtrip(self):
+        df = pd.DataFrame(
+            {
+                "score": pd.Series(
+                    [1.5, pd.NA, 3.7],
+                    dtype="Float64",
+                )
+            }
+        )
+
+        result = ar.to_pandas(ar.from_pandas(df))
+
+        assert str(result["score"].dtype) == "float64"
+        assert result["score"].tolist()[0] == 1.5
+        assert pd.isna(result["score"].tolist()[1])
+        assert result["score"].tolist()[2] == 3.7
+
     def test_bool_null_mask_roundtrip(self):
         df = pd.DataFrame(
             {
