@@ -710,3 +710,75 @@ class TestSafeDivideColumns:
             assert "already exists" in str(w[0].message)
         df = ar.to_pandas(result)
         assert df["ratio"].iloc[0] == 2.0
+
+# for the issue (#345)
+class TestRemoveSpecialChars:
+    def test_all_string_columns(self):
+        df = pd.DataFrame({
+            "name": ["An@shu#", "Jo!hn"],
+            "city": ["Kol!kata", "Del#hi"],
+            "age": [20, 25]
+        })
+
+        frame = ar.from_pandas(df)
+        result = ar.pipeline(frame, [("remove_special_chars",)])
+        cleaned = ar.to_pandas(result)
+
+        assert cleaned["name"].tolist() == ["Anshu", "John"]
+        assert cleaned["city"].tolist() == ["Kolkata", "Delhi"]
+        assert cleaned["age"].tolist() == [20, 25]
+
+
+    def test_subset_columns(self):
+        df = pd.DataFrame({
+            "name": ["An@shu#"],
+            "city": ["Kol!kata"]
+        })
+
+        frame = ar.from_pandas(df)
+        result = ar.pipeline(
+            frame,
+            [("remove_special_chars", {"columns": ["name"]})]
+        )
+        cleaned = ar.to_pandas(result)
+
+        assert cleaned["name"][0] == "Anshu"
+        assert cleaned["city"][0] == "Kol!kata"
+
+
+    def test_no_special_chars(self):
+        df = pd.DataFrame({
+            "name": ["Anshu"]
+        })
+
+        frame = ar.from_pandas(df)
+        result = ar.pipeline(frame, [("remove_special_chars",)])
+        cleaned = ar.to_pandas(result)
+
+        assert cleaned["name"][0] == "Anshu"
+
+
+    def test_non_string_columns_ignored(self):
+        df = pd.DataFrame({
+            "age": [10, 20]
+        })
+
+        frame = ar.from_pandas(df)
+        result = ar.pipeline(frame, [("remove_special_chars",)])
+        cleaned = ar.to_pandas(result)
+
+        assert cleaned["age"].tolist() == [10, 20]
+
+
+    def test_invalid_column_raises(self):
+        df = pd.DataFrame({
+            "name": ["Anshu"]
+        })
+
+        frame = ar.from_pandas(df)
+
+        with pytest.raises(ValueError):
+            ar.pipeline(
+                frame,
+                [("remove_special_chars", {"columns": ["wrong"]})]
+            )
