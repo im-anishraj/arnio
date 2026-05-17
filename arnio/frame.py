@@ -31,6 +31,28 @@ class ArFrame:
         return self._frame.shape()
 
     @property
+    def row_count(self) -> int:
+        """Number of rows.
+
+        Returns
+        -------
+        int
+            Number of rows.
+        """
+        return self.shape[0]
+
+    @property
+    def column_count(self) -> int:
+        """Number of columns.
+
+        Returns
+        -------
+        int
+            Number of columns.
+        """
+        return self.shape[1]
+
+    @property
     def columns(self) -> list[str]:
         """Column names.
 
