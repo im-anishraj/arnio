@@ -23,16 +23,20 @@ import arnio as ar
 CSV_FILE = "benchmarks/benchmark_1m.csv"
 WIDE_CSV_FILE = "benchmarks/benchmark_wide.csv"
 MULTILINE_CSV_FILE = "benchmarks/benchmark_multiline.csv"
+
 RUNS = 3
 
 ENVIRONMENT_NOTES = """
 Benchmark Environment:
-- Comparison: arnio vs pandas
-- Deterministic datasets with fixed RNG seeds
-- Same dataset shapes across runs
-- Recommended:
-    python benchmarks/generate_data.py
-    python benchmarks/benchmark_vs_pandas.py
+- Python benchmark comparison: arnio vs pandas
+- Deterministic datasets generated with fixed RNG seeds
+- Run benchmarks on same machine for fair comparison
+
+Dataset generation:
+python benchmarks/generate_data.py
+
+Benchmark execution:
+python benchmarks/benchmark_vs_pandas.py
 """
 
 
@@ -51,7 +55,7 @@ BENCHMARKS = (
         WIDE_CSV_FILE,
     ),
     BenchmarkCase(
-        "Quoted Multiline CSV",
+        "Quoted multiline CSV dataset",
         MULTILINE_CSV_FILE,
     ),
 )
@@ -76,10 +80,18 @@ def benchmark_pandas(path):
     df = df.dropna()
     df = df.drop_duplicates()
 
-    for col in df.select_dtypes(include=["object", "string"]).columns:
-        df[col] = df[col].astype(str).str.strip().str.lower()
+    for col in df.select_dtypes(
+        include=["object", "string"]
+    ).columns:
+        df[col] = (
+            df[col]
+            .astype(str)
+            .str.strip()
+            .str.lower()
+        )
 
-    elapsed = time.perf_counter() - start
+    elapsed = time.perf_counter() - t0
+
     _, peak = tracemalloc.get_traced_memory()
 
     tracemalloc.stop()
@@ -108,7 +120,8 @@ def benchmark_arnio(path):
 
     ar.to_pandas(clean)
 
-    elapsed = time.perf_counter() - start
+    elapsed = time.perf_counter() - t0
+
     _, peak = tracemalloc.get_traced_memory()
 
     tracemalloc.stop()
@@ -123,55 +136,46 @@ def avg(values):
 def run_case(case):
     print("=" * 72)
     print(case.name)
-    print("=" * 72)
 
-    print(f"{'Metric':<20} {'pandas':>12} {'arnio':>12}")
-    print("-" * 48)
+    print(
+        f"{'Metric':<20} {'pandas':>12} {'arnio':>12}"
+    )
 
-    pandas_times = []
-    arnio_times = []
+    print("-" * 46)
 
-    pandas_memory = []
-    arnio_memory = []
+    pd_times = []
+    ar_times = []
+
+    pd_rams = []
+    ar_rams = []
 
     for _ in range(RUNS):
-        pandas_time, pandas_ram = benchmark_pandas(case.path)
-        arnio_time, arnio_ram = benchmark_arnio(case.path)
+        pt, pr = benchmark_pandas(case.path)
+        at, ar_r = benchmark_arnio(case.path)
 
-        pandas_times.append(pandas_time)
-        arnio_times.append(arnio_time)
+        pd_times.append(pt)
+        ar_times.append(at)
 
-        pandas_memory.append(pandas_ram)
-        arnio_memory.append(arnio_ram)
-
-    avg_pandas_time = avg(pandas_times)
-    avg_arnio_time = avg(arnio_times)
-
-    avg_pandas_ram = avg(pandas_memory)
-    avg_arnio_ram = avg(arnio_memory)
+        pd_rams.append(pr)
+        ar_rams.append(ar_r)
 
     print(
-        f"{'Exec Time (avg)':<20}"
-        f"{avg_pandas_time:>11.2f}s"
-        f"{avg_arnio_time:>11.2f}s"
+        f"{'Exec Time (avg)':<20} "
+        f"{avg(pd_times):>11.2f}s "
+        f"{avg(ar_times):>11.2f}s"
     )
 
     print(
-        f"{'Peak RAM':<20}"
-        f"{avg_pandas_ram:>10.0f}MB"
-        f"{avg_arnio_ram:>10.0f}MB"
-    )
-
-    speedup = avg_pandas_time / avg_arnio_time
-    ram_reduction = (
-        (1 - (avg_arnio_ram / avg_pandas_ram)) * 100
-        if avg_pandas_ram
-        else 0
+        f"{'Peak RAM':<20} "
+        f"{avg(pd_rams):>10.0f}MB "
+        f"{avg(ar_rams):>10.0f}MB"
     )
 
     print(
-        f"\nSpeed: {speedup:.1f}x"
-        f" | RAM Reduction: {ram_reduction:.0f}%"
+        f"\nSpeed: "
+        f"{avg(pd_times)/avg(ar_times):.1f}x "
+        f"| RAM: "
+        f"{(1 - avg(ar_rams)/avg(pd_rams))*100:.0f}% reduction"
     )
 
     print()
