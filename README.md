@@ -613,6 +613,17 @@ if not result.passed:
 ```
 
 `ValidationResult.to_markdown()` is useful in CI logs, GitHub comments, or data quality reports because it renders a compact validation summary plus a GitHub-friendly issue table.
+
+For multi-column uniqueness (composite keys):
+
+```python
+schema = ar.Schema({
+    "user_id": ar.Int64(nullable=False),
+    "course_id": ar.Int64(nullable=False),
+}, unique=["user_id", "course_id"])
+
+result = ar.validate(frame, schema)
+```
 Severity counts are not included in `summary()` yet because `ValidationIssue` does not currently carry severity information.
 
 For low-risk automatic cleanup:

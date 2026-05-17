@@ -363,3 +363,75 @@ def test_equal_string_length_bounds_are_valid():
 
     assert field.min_length == 3
     assert field.max_length == 3
+
+
+def test_schema_composite_unique_passes(tmp_path):
+    path = tmp_path / "composite.csv"
+    path.write_text("user_id,course_id\n1,101\n1,102\n2,101\n")
+    frame = ar.read_csv(path)
+    schema = ar.Schema(
+        {
+            "user_id": ar.Int64(),
+            "course_id": ar.Int64(),
+        },
+        unique=["user_id", "course_id"],
+    )
+    result = schema.validate(frame)
+    assert result.passed
+    assert result.issue_count == 0
+
+
+def test_schema_composite_unique_fails(tmp_path):
+    path = tmp_path / "composite_bad.csv"
+    path.write_text("user_id,course_id\n1,101\n1,102\n1,101\n")
+    frame = ar.read_csv(path)
+    schema = ar.Schema(
+        {
+            "user_id": ar.Int64(),
+            "course_id": ar.Int64(),
+        },
+        unique=["user_id", "course_id"],
+    )
+    result = schema.validate(frame)
+    assert not result.passed
+    issues = [i for i in result.issues if i.rule == "composite_unique"]
+    assert len(issues) == 2
+    assert issues[0].row_index == 0
+    assert issues[1].row_index == 2
+    assert "['user_id', 'course_id']" in issues[0].message
+
+
+def test_schema_composite_unique_invalid_column(tmp_path):
+    path = tmp_path / "composite_invalid.csv"
+    path.write_text("user_id,course_id\n1,101\n")
+    frame = ar.read_csv(path)
+    schema = ar.Schema(
+        {
+            "user_id": ar.Int64(),
+            "course_id": ar.Int64(),
+        },
+        unique=["user_id", "bad_column"],
+    )
+    result = schema.validate(frame)
+    assert not result.passed
+    issues = [i for i in result.issues if i.rule == "missing_column"]
+    assert len(issues) == 1
+    assert issues[0].column == "bad_column"
+
+
+def test_schema_composite_unique_empty_columns(tmp_path):
+    path = tmp_path / "composite_empty.csv"
+    path.write_text("user_id,course_id\n1,101\n")
+    frame = ar.read_csv(path)
+    schema = ar.Schema(
+        {
+            "user_id": ar.Int64(),
+            "course_id": ar.Int64(),
+        },
+        unique=[],
+    )
+    result = schema.validate(frame)
+    assert not result.passed
+    issues = [i for i in result.issues if i.rule == "composite_unique"]
+    assert len(issues) == 1
+    assert "cannot be empty" in issues[0].message
