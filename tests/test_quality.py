@@ -243,3 +243,57 @@ def test_identifier_numeric_cast_prevention():
     assert list(result["id"]) == ["001", "002", "003"]
     assert list(result["customer_id"]) == ["00123", "00456", "00789"]
     assert list(result["zip_code"]) == ["01234", "02345", "03456"]
+
+
+# ── quality score tests ───────────────────────────────────────────────────────
+
+
+def test_quality_score_clean(tmp_path):
+    path = tmp_path / "clean.csv"
+    path.write_text("id,name\n1,Alice\n2,Bob\n3,Charlie\n")
+    report = ar.profile(ar.read_csv(path))
+
+    assert report.quality_score == 100.0
+    assert not report.score_components
+
+
+def test_quality_score_empty(tmp_path):
+    path = tmp_path / "empty.csv"
+    path.write_text("id,name\n")
+    report = ar.profile(ar.read_csv(path))
+
+    assert report.quality_score == 100.0
+    assert not report.score_components
+
+
+def test_quality_score_nulls(tmp_path):
+    path = tmp_path / "nulls.csv"
+    # id has 2 nulls, name has 1 null
+    path.write_text("id,name\n1,Alice\n,Bob\n,\n")
+    report = ar.profile(ar.read_csv(path))
+
+    # 3 rows. id null_ratio ~0.66, name null_ratio ~0.33
+    # avg null ratio ~0.5 => 50 points penalty => capped at -40.0
+    assert report.score_components["null_penalty"] == -40.0
+    assert report.quality_score == 60.0
+
+
+def test_quality_score_duplicates(tmp_path):
+    path = tmp_path / "dup.csv"
+    path.write_text("id,name\n1,Alice\n1,Alice\n1,Alice\n")
+    report = ar.profile(ar.read_csv(path))
+
+    # 3 rows, 2 duplicates. ratio = 0.66
+    # 0.66 * 100 = 66 points penalty => capped at -20.0
+    assert report.score_components["duplicate_penalty"] == -20.0
+
+
+def test_quality_score_type_mismatch(tmp_path):
+    path = tmp_path / "mismatch.csv"
+    # score column is read as string, but contains only numbers,
+    # which triggers a suggested_dtype of int64/float64.
+    path.write_text('id,score\n1,"10"\n2,"20"\n')
+    report = ar.profile(ar.read_csv(path))
+
+    # 2 columns. 1 has type mismatch. ratio = 0.5 => 50 points => capped at -40.0
+    assert report.score_components["type_mismatch_penalty"] == -40.0
