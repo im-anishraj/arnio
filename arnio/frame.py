@@ -324,8 +324,7 @@ class ArFrame:
 
         if not matched:
             raise ValueError(
-                "No columns match the dtype selection. "
-                f"Frame dtypes: {col_dtypes}."
+                "No columns match the dtype selection. " f"Frame dtypes: {col_dtypes}."
             )
 
         return self.select_columns(matched)
@@ -410,9 +409,7 @@ class ArFrame:
 
         # Build rows
         rows = [
-            "  ".join(
-                str(col_data[i][r]).ljust(col_widths[i]) for i in range(num_cols)
-            )
+            "  ".join(str(col_data[i][r]).ljust(col_widths[i]) for i in range(num_cols))
             for r in range(actual_n)
         ]
 
