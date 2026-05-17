@@ -439,6 +439,7 @@ Most operations below run natively in C++. Currently, `filter_rows` and `replace
 | `round_numeric_columns` | Round numeric columns (non-numeric columns in subset ignored safely) | `ar.round_numeric_columns(frame, decimals=2)` |
 | `replace_values` | Replace values using a mapping (column or whole-frame). Handles `None`/`NaN`. | `ar.replace_values(frame, {"active": "A", "inactive": "I"}, column="status")` |
 | `clean` | Convenience shorthand | `ar.clean(frame, drop_nulls=True)` |
+| `winsorize_outliers` | Cap extreme values at percentile bounds | `ar.winsorize_outliers(frame, lower=0.05, upper=0.95)` |
 | `safe_divide_columns` | Divide one column by another, handling zero/null denominators | `ar.safe_divide_columns(frame, numerator="revenue", denominator="cost", output_column="ratio")` |
 | `trim_column_names` | Strip leading/trailing whitespace from column names | `ar.trim_column_names(frame)` |
 

@@ -29,6 +29,7 @@ from .cleaning import (
     strip_whitespace,
     trim_column_names,
     validate_columns_exist,
+    winsorize_outliers,
 )
 from .convert import from_pandas, to_pandas
 from .exceptions import ArnioError, CsvReadError, TypeCastError, UnknownStepError
@@ -80,6 +81,7 @@ __all__ = [
     "round_numeric_columns",
     "cast_types",
     "clean",
+    "winsorize_outliers",
     "safe_divide_columns",
     "trim_column_names",
     # Conversion

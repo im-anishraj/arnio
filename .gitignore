@@ -231,3 +231,7 @@ _arnio_cpp*
 
 # csv
 /*.csv
+.DS_Store
+tests/.DS_Store
+.DS_Store
+tests/.DS_Store
