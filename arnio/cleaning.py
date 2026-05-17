@@ -933,3 +933,24 @@ def replace_values(frame, mapping, column=None):
             df = df.fillna(null_replacement)
 
     return from_pandas(df) if is_arframe else df
+def standardize_missing_tokens(df, tokens=None, subset=None):
+    """Converting missing tokens in the DataFrame to the standard form NaN"""
+
+    default_tokens = ["N/A", "NA", "n/a", "na", "-", "none", "nil", "null", "", "?"]
+
+    # check if the user has passed their own tokens or not
+    # Case 1 : when user does not pass a subset
+    if subset is None:
+        if tokens is None:
+            df = df.replace(default_tokens, float("nan"))
+        else:
+            df = df.replace(tokens, float("nan"))
+
+    # Case 2 : when user passes a subset
+    else:
+        if tokens is None:
+            df[subset] = df[subset].replace(default_tokens, float("nan"))
+        else:
+            df[subset] = df[subset].replace(tokens, float("nan"))
+
+    return df

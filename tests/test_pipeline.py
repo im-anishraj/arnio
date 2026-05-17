@@ -117,6 +117,21 @@ class TestPipeline:
         assert list(df["value"]) == [0, 2, 5]
         assert list(df["label"]) == ["a", "b", "c"]
 
+    def test_pipeline_standardize_missing_tokens(self):
+        import pandas as pd
+
+        frame = ar.from_pandas(pd.DataFrame({"value": [1, 2, "N/A"]}))
+
+        result = ar.pipeline(
+            frame,
+            [
+                ("standardize_missing_tokens",),
+            ],
+        )
+        df = ar.to_pandas(result)
+
+        assert pd.isna(df["value"].iloc[2])
+
     def test_pipeline_mapping_shorthand(self, sample_csv):
         frame = ar.read_csv(sample_csv)
         result = ar.pipeline(

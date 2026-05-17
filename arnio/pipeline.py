@@ -30,7 +30,9 @@ _STEP_REGISTRY: dict[str, Callable] = {
 }
 
 
-_PYTHON_STEP_REGISTRY: dict[str, Callable] = {}
+_PYTHON_STEP_REGISTRY: dict[str, Callable] = {
+    "standardize_missing_tokens": cleaning.standardize_missing_tokens
+}
 
 
 def register_step(name: str, fn: Callable):
