@@ -4,6 +4,7 @@ import pandas as pd
 import pytest
 
 import arnio as ar
+from arnio import from_pandas, to_pandas
 
 
 class TestDropNulls:
@@ -19,6 +20,69 @@ class TestDropNulls:
         result = ar.drop_nulls(frame, subset=["name"])
         # Only row 2 has null name
         assert result.shape[0] == 3
+
+
+class TestKeepRowsWithNulls:
+    def test_keeps_only_null_rows(self, csv_with_nulls):
+        # full frame has 4 rows, 2 have nulls (row1: null name+score, row2: null age)
+        frame = ar.read_csv(csv_with_nulls)
+        result = ar.keep_rows_with_nulls(frame)
+        assert result.shape[0] == 2
+
+    def test_no_nulls_returns_empty(self, sample_csv):
+        # sample_csv has no nulls — result should be empty
+        frame = ar.read_csv(sample_csv)
+        result = ar.keep_rows_with_nulls(frame)
+        assert result.shape[0] == 0
+
+    def test_all_nulls_returns_all_rows(self, tmp_path):
+        # every row has a null — all rows should be kept
+        path = tmp_path / "all_nulls.csv"
+        path.write_text("name,age\nAlice,\n,25\nCharlie,\n")
+        frame = ar.read_csv(path)
+        result = ar.keep_rows_with_nulls(frame)
+        assert result.shape[0] == frame.shape[0]
+
+    def test_subset_targets_specific_column(self, csv_with_nulls):
+        # only checking 'age' column — only Charlie has null age
+        frame = ar.read_csv(csv_with_nulls)
+        result = ar.keep_rows_with_nulls(frame, subset=["age"])
+        assert result.shape[0] == 1
+
+    def test_subset_unknown_column_raises(self, csv_with_nulls):
+        # passing a column that doesn't exist should raise ValueError
+        frame = ar.read_csv(csv_with_nulls)
+        with pytest.raises(ValueError, match="unknown column"):
+            ar.keep_rows_with_nulls(frame, subset=["nonexistent"])
+
+    def test_index_is_reset(self, csv_with_nulls):
+        # returned frame should have clean 0-based index
+        frame = ar.read_csv(csv_with_nulls)
+        result = ar.keep_rows_with_nulls(frame)
+        df = ar.to_pandas(result)
+        assert list(df.index) == list(range(len(df)))
+
+    def test_pipeline_usage(self, csv_with_nulls):
+        # function should work correctly when called via pipeline
+        frame = ar.read_csv(csv_with_nulls)
+        result = ar.pipeline(
+            frame,
+            [
+                ("keep_rows_with_nulls",),
+            ],
+        )
+        assert result.shape[0] == 2
+
+    def test_pipeline_subset(self, csv_with_nulls):
+        # pipeline with subset parameter
+        frame = ar.read_csv(csv_with_nulls)
+        result = ar.pipeline(
+            frame,
+            [
+                ("keep_rows_with_nulls", {"subset": ["age"]}),
+            ],
+        )
+        assert result.shape[0] == 1
 
 
 class TestFillNulls:
@@ -343,6 +407,44 @@ class TestNormalizeCase:
         df = ar.to_pandas(result)
         assert df["name"].iloc[0] == "Alice"
 
+    def test_title_hyphen(self):
+        import pandas as pd
+
+        frame = ar.from_pandas(
+            pd.DataFrame({"name": ["hello-world", "jean-luc picard"]})
+        )
+        result = ar.normalize_case(frame, subset=["name"], case_type="title")
+        df = ar.to_pandas(result)
+        assert df["name"].iloc[0] == "Hello-World"
+        assert df["name"].iloc[1] == "Jean-Luc Picard"
+
+    def test_title_underscore(self):
+        import pandas as pd
+
+        frame = ar.from_pandas(pd.DataFrame({"name": ["hello_world", "foo_bar_baz"]}))
+        result = ar.normalize_case(frame, subset=["name"], case_type="title")
+        df = ar.to_pandas(result)
+        assert df["name"].iloc[0] == "Hello_World"
+        assert df["name"].iloc[1] == "Foo_Bar_Baz"
+
+    def test_title_period(self):
+        import pandas as pd
+
+        frame = ar.from_pandas(pd.DataFrame({"name": ["dr.strange", "mr.smith"]}))
+        result = ar.normalize_case(frame, subset=["name"], case_type="title")
+        df = ar.to_pandas(result)
+        assert df["name"].iloc[0] == "Dr.Strange"
+        assert df["name"].iloc[1] == "Mr.Smith"
+
+    def test_title_slash(self):
+        import pandas as pd
+
+        frame = ar.from_pandas(pd.DataFrame({"name": ["hello/world", "foo/bar"]}))
+        result = ar.normalize_case(frame, subset=["name"], case_type="title")
+        df = ar.to_pandas(result)
+        assert df["name"].iloc[0] == "Hello/World"
+        assert df["name"].iloc[1] == "Foo/Bar"
+
 
 class TestRenameColumns:
     def test_rename(self, sample_csv):
@@ -351,6 +453,38 @@ class TestRenameColumns:
         assert "full_name" in result.columns
         assert "years" in result.columns
         assert "name" not in result.columns
+
+
+class TestTrimColumnNames:
+    def test_trim_column_names_basic(self):
+        df = pd.DataFrame({" name ": [1], " age ": [2]})
+        frame = from_pandas(df)
+        result = ar.trim_column_names(frame)
+        assert to_pandas(result).columns.tolist() == ["name", "age"]
+
+    def test_trim_column_names_already_clean(self):
+        df = pd.DataFrame({"name": [1], "age": [2]})
+        frame = from_pandas(df)
+        result = ar.trim_column_names(frame)
+        assert to_pandas(result).columns.tolist() == ["name", "age"]
+
+    def test_trim_column_names_mixed(self):
+        df = pd.DataFrame({" name": [1], "age ": [2], "score": [3]})
+        frame = from_pandas(df)
+        result = ar.trim_column_names(frame)
+        assert to_pandas(result).columns.tolist() == ["name", "age", "score"]
+
+    def test_trim_column_names_preserves_order(self):
+        df = pd.DataFrame({" c ": [1], " b ": [2], " a ": [3]})
+        frame = from_pandas(df)
+        result = ar.trim_column_names(frame)
+        assert to_pandas(result).columns.tolist() == ["c", "b", "a"]
+
+    def test_trim_column_names_duplicate_raises(self):
+        df = pd.DataFrame({" name": [1], "name ": [2]})
+        frame = from_pandas(df)
+        with pytest.raises(ValueError, match="duplicates"):
+            ar.trim_column_names(frame)
 
 
 class TestCastTypes:
@@ -388,6 +522,28 @@ class TestCleanAPI:
         # Drop nulls
         result = ar.clean(frame, strip_whitespace=False, drop_nulls=True)
         assert len(result) < len(frame)
+
+
+class TestFilterRows:
+    def test_filter_rows_missing_column_raises_clear_error(self):
+        df = pd.DataFrame({"age": [20, 30]})
+
+        with pytest.raises(ValueError, match="Unknown column: missing"):
+            ar.filter_rows(df, "missing", ">", 10)
+
+    def test_filter_rows_missing_column_raises_clear_error_for_arframe(self):
+        frame = ar.from_pandas(pd.DataFrame({"age": [20, 30]}))
+
+        with pytest.raises(ValueError, match="Unknown column: missing"):
+            ar.filter_rows(frame, "missing", ">", 10)
+
+    def test_filter_rows_valid_column_still_works(self):
+        df = pd.DataFrame({"age": [20, 30]})
+
+        result = ar.filter_rows(df, "age", ">", 20)
+
+        assert len(result) == 1
+        assert result.iloc[0]["age"] == 30
 
 
 class TestRoundNumericColumns:

@@ -71,6 +71,108 @@ def test_validation_result_to_pandas(sample_csv):
     assert list(df["row_index"]) == [0, 1]
 
 
+def test_validation_result_summary_counts_repeated_issues_in_one_column():
+    result = ar.ValidationResult(
+        row_count=3,
+        issue_count=3,
+        issues=[
+            ar.ValidationIssue(
+                column="age", rule="min", message="too small", row_index=0
+            ),
+            ar.ValidationIssue(
+                column="age", rule="min", message="too small", row_index=1
+            ),
+            ar.ValidationIssue(
+                column="age", rule="min", message="too small", row_index=2
+            ),
+        ],
+        bad_rows=[0, 1, 2],
+    )
+
+    summary = result.summary()
+
+    assert summary["issues_by_rule"] == {"min": 3}
+    assert summary["issues_by_column"] == {"age": 3}
+    assert summary["issues_by_column_and_rule"] == {"age": {"min": 3}}
+
+
+def test_validation_result_summary_counts_issues_across_multiple_columns():
+    result = ar.ValidationResult(
+        row_count=3,
+        issue_count=4,
+        issues=[
+            ar.ValidationIssue(
+                column="age", rule="min", message="too small", row_index=0
+            ),
+            ar.ValidationIssue(
+                column="status", rule="allowed", message="bad status", row_index=1
+            ),
+            ar.ValidationIssue(
+                column="email", rule="email", message="bad email", row_index=1
+            ),
+            ar.ValidationIssue(
+                column=None, rule="required_column", message="missing column"
+            ),
+        ],
+        bad_rows=[0, 1],
+    )
+
+    summary = result.summary()
+
+    assert summary["issues_by_rule"] == {
+        "min": 1,
+        "allowed": 1,
+        "email": 1,
+        "required_column": 1,
+    }
+    assert summary["issues_by_column"] == {"age": 1, "status": 1, "email": 1}
+    assert summary["issues_by_column_and_rule"] == {
+        "age": {"min": 1},
+        "status": {"allowed": 1},
+        "email": {"email": 1},
+    }
+
+
+def test_validation_result_summary_counts_grouped_rules_under_one_column():
+    result = ar.ValidationResult(
+        row_count=2,
+        issue_count=3,
+        issues=[
+            ar.ValidationIssue(
+                column="age", rule="min", message="too small", row_index=0
+            ),
+            ar.ValidationIssue(
+                column="age", rule="max", message="too large", row_index=1
+            ),
+            ar.ValidationIssue(
+                column="age", rule="numeric", message="not numeric", row_index=1
+            ),
+        ],
+        bad_rows=[0, 1],
+    )
+
+    summary = result.summary()
+
+    assert summary["issues_by_rule"] == {"min": 1, "max": 1, "numeric": 1}
+    assert summary["issues_by_column"] == {"age": 3}
+    assert summary["issues_by_column_and_rule"] == {
+        "age": {"min": 1, "max": 1, "numeric": 1}
+    }
+
+
+def test_validation_result_summary_counts_no_issue_result():
+    result = ar.ValidationResult(row_count=3, issue_count=0, issues=[], bad_rows=[])
+
+    summary = result.summary()
+
+    assert summary["passed"] is True
+    assert summary["issue_count"] == 0
+    assert summary["bad_row_count"] == 0
+    assert summary["issues_by_rule"] == {}
+    assert summary["issues_by_column"] == {}
+    assert summary["issues_by_column_and_rule"] == {}
+
+
 def test_validation_result_to_markdown_for_success(sample_csv):
     result = ar.validate(ar.read_csv(sample_csv), {"age": ar.Int64()})
 
@@ -167,9 +269,10 @@ def test_custom_pattern_validation(tmp_path):
     assert result.issues[0].rule == "pattern"
     assert result.issues[0].row_index == 1
 
+
 def test_country_code_validation_accepts_iso_alpha_2_codes(tmp_path):
     path = tmp_path / "countries.csv"
-    path.write_text("country\nIN\nUS\ngb\nFr\n")
+    path.write_text("country\nIN\nUS\nGB\nFR\n")
 
     result = ar.validate(
         ar.read_csv(path),
@@ -182,7 +285,7 @@ def test_country_code_validation_accepts_iso_alpha_2_codes(tmp_path):
 
 def test_country_code_validation_rejects_invalid_codes(tmp_path):
     path = tmp_path / "bad_countries.csv"
-    path.write_text("country\nIND\n1A\nA\nUSA\n\n")
+    path.write_text("country\nIND\n1A\nA\nUSA\ngb\nFr\n\n")
 
     result = ar.validate(
         ar.read_csv(path),
@@ -194,3 +297,90 @@ def test_country_code_validation_rejects_invalid_codes(tmp_path):
 
     rules = {issue.rule for issue in result.issues}
     assert "country_code" in rules or "nullable" in rules
+
+
+def test_string_min_length_boundary(tmp_path):
+    path = tmp_path / "names.csv"
+    path.write_text("name\nab\nabc\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"name": ar.String(min_length=3)},
+    )
+
+    assert not result.passed
+    assert result.issue_count == 1
+    assert result.issues[0].rule == "min_length"
+    assert result.issues[0].row_index == 0
+
+
+def test_string_max_length_boundary(tmp_path):
+    path = tmp_path / "names.csv"
+    path.write_text("name\nabcde\nabcdef\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"name": ar.String(max_length=5)},
+    )
+
+    assert not result.passed
+    assert result.issue_count == 1
+    assert result.issues[0].rule == "max_length"
+    assert result.issues[0].row_index == 1
+
+
+def test_null_values_skip_length_validation(tmp_path):
+    path = tmp_path / "names.csv"
+    path.write_text("name\n\nabcd\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"name": ar.String(min_length=5)},
+    )
+
+    assert not result.passed
+    assert result.issue_count == 1
+    assert result.issues[0].rule == "min_length"
+    assert result.issues[0].row_index == 0
+
+
+def test_int64_rejects_impossible_bounds():
+    try:
+        ar.Int64(min=10, max=1)
+    except ValueError as exc:
+        assert "min must be less than or equal to max" in str(exc)
+    else:
+        raise AssertionError("Expected invalid Int64 bounds to raise")
+
+
+def test_float64_rejects_impossible_bounds():
+    try:
+        ar.Float64(min=10.0, max=1.0)
+    except ValueError as exc:
+        assert "min must be less than or equal to max" in str(exc)
+    else:
+        raise AssertionError("Expected invalid Float64 bounds to raise")
+
+
+def test_string_rejects_impossible_length_bounds():
+    try:
+        ar.String(min_length=5, max_length=2)
+    except ValueError as exc:
+        assert "min_length must be less than or equal to max_length" in str(exc)
+    else:
+        raise AssertionError("Expected invalid String bounds to raise")
+
+
+def test_equal_numeric_bounds_are_valid():
+    field = ar.Int64(min=5, max=5)
+
+    assert field.min == 5
+    assert field.max == 5
+
+
+def test_equal_string_length_bounds_are_valid():
+    field = ar.String(min_length=3, max_length=3)
+
+    assert field.min_length == 3
+    assert field.max_length == 3
+

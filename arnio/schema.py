@@ -88,19 +88,27 @@ class ValidationResult:
         }
 
     def summary(self) -> dict[str, Any]:
-        """Return a compact validation summary."""
+        """Return a compact validation summary.
+
+        Severity counts are not included because ``ValidationIssue`` does not
+        currently carry severity information.
+        """
         by_rule: dict[str, int] = {}
         by_column: dict[str, int] = {}
+        by_column_and_rule: dict[str, dict[str, int]] = {}
         for issue in self.issues:
             by_rule[issue.rule] = by_rule.get(issue.rule, 0) + 1
             if issue.column is not None:
                 by_column[issue.column] = by_column.get(issue.column, 0) + 1
+                column_rules = by_column_and_rule.setdefault(issue.column, {})
+                column_rules[issue.rule] = column_rules.get(issue.rule, 0) + 1
         return {
             "passed": self.passed,
             "issue_count": self.issue_count,
             "bad_row_count": len(self.bad_rows),
             "issues_by_rule": by_rule,
             "issues_by_column": by_column,
+            "issues_by_column_and_rule": by_column_and_rule,
         }
 
     def to_pandas(self) -> pd.DataFrame:
@@ -236,7 +244,17 @@ def Int64(
     unique: bool = False,
 ) -> Field:
     """Create an int64 schema field."""
-    return Field(dtype="int64", nullable=nullable, min=min, max=max, unique=unique)
+
+    if min is not None and max is not None and min > max:
+        raise ValueError("min must be less than or equal to max")
+
+    return Field(
+        dtype="int64",
+        nullable=nullable,
+        min=min,
+        max=max,
+        unique=unique,
+    )
 
 
 def Float64(
@@ -247,7 +265,17 @@ def Float64(
     unique: bool = False,
 ) -> Field:
     """Create a float64 schema field."""
-    return Field(dtype="float64", nullable=nullable, min=min, max=max, unique=unique)
+
+    if min is not None and max is not None and min > max:
+        raise ValueError("min must be less than or equal to max")
+
+    return Field(
+        dtype="float64",
+        nullable=nullable,
+        min=min,
+        max=max,
+        unique=unique,
+    )
 
 
 def String(
@@ -260,7 +288,12 @@ def String(
     max_length: int | None = None,
 ) -> Field:
     """Create a string schema field."""
+
+    if min_length is not None and max_length is not None and min_length > max_length:
+        raise ValueError("min_length must be less than or equal to max_length")
+
     allowed_set = set(allowed) if allowed is not None else None
+
     return Field(
         dtype="string",
         nullable=nullable,
@@ -292,7 +325,7 @@ def URL(*, nullable: bool = True, unique: bool = False) -> Field:
     return Field(dtype="string", nullable=nullable, semantic="url", unique=unique)
 
 def CountryCode(*, nullable: bool = True, unique: bool = False) -> Field:
-    """Create an ISO alpha-2 country-code schema field."""
+    """Create an uppercase ISO alpha-2 country-code schema field."""
     return Field(
         dtype="string",
         nullable=nullable,
@@ -482,5 +515,5 @@ _SEMANTIC_PATTERNS = {
     "email": r"[^@\s]+@[^@\s]+\.[^@\s]+",
     "url": r"https?://[^\s]+",
     "phone": r"\+?[0-9][0-9 .()\-]{6,}[0-9]",
-    "country_code": r"[A-Za-z]{2}",
+    "country_code": r"[A-Z]{2}",
 }

@@ -20,11 +20,13 @@ from .cleaning import (
     drop_nulls,
     fill_nulls,
     filter_rows,
+    keep_rows_with_nulls,
     normalize_case,
     rename_columns,
     round_numeric_columns,
     safe_divide_columns,
     strip_whitespace,
+    trim_column_names,
     validate_columns_exist,
 )
 from .convert import from_pandas, to_pandas
@@ -63,6 +65,7 @@ __all__ = [
     "scan_csv",
     # Cleaning
     "drop_nulls",
+    "keep_rows_with_nulls",
     "fill_nulls",
     "validate_columns_exist",
     "filter_rows",
@@ -76,6 +79,7 @@ __all__ = [
     "cast_types",
     "clean",
     "safe_divide_columns",
+    "trim_column_names",
     # Conversion
     "to_pandas",
     "from_pandas",
