@@ -1,6 +1,32 @@
 """Tests for the pipeline function."""
 
+import importlib
+import threading
+from concurrent.futures import ThreadPoolExecutor
+
+import pytest
+
 import arnio as ar
+
+pipeline_module = importlib.import_module("arnio.pipeline")
+
+
+@pytest.fixture(autouse=True)
+def restore_python_step_registry():
+    """Restore custom pipeline steps after each test.
+
+    Tests may register temporary custom steps. This fixture prevents those
+    registrations from leaking into other tests while preserving any steps
+    that were already registered before the test started.
+    """
+    with pipeline_module._REGISTRY_LOCK:
+        original_registry = dict(pipeline_module._PYTHON_STEP_REGISTRY)
+
+    yield
+
+    with pipeline_module._REGISTRY_LOCK:
+        pipeline_module._PYTHON_STEP_REGISTRY.clear()
+        pipeline_module._PYTHON_STEP_REGISTRY.update(original_registry)
 
 
 class TestPipeline:
@@ -165,6 +191,98 @@ class TestPipeline:
         frame = ar.read_csv(sample_csv)
         result = ar.pipeline(frame, [])
         assert result.shape == frame.shape
+
+    def test_register_python_step(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        def add_marker(df, value="ok"):
+            df["marker"] = value
+            return df
+
+        ar.register_step("test_add_marker", add_marker)
+
+        result = ar.pipeline(
+            frame,
+            [
+                ("test_add_marker", {"value": "done"}),
+            ],
+        )
+
+        df = ar.to_pandas(result)
+        assert "marker" in df.columns
+        assert set(df["marker"]) == {"done"}
+
+    def test_concurrent_step_registration(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        def make_step(column_name):
+            def step(df):
+                df[column_name] = column_name
+                return df
+
+            return step
+
+        step_count = 25
+        step_names = [f"concurrent_step_{i}" for i in range(step_count)]
+
+        def register(name):
+            ar.register_step(name, make_step(name))
+
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            list(executor.map(register, step_names))
+
+        result = ar.pipeline(frame, [(name,) for name in step_names])
+        df = ar.to_pandas(result)
+
+        for name in step_names:
+            assert name in df.columns
+            assert set(df[name]) == {name}
+
+    def test_pipeline_uses_stable_registry_snapshot_during_execution(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        started = threading.Event()
+        continue_step = threading.Event()
+
+        def blocking_step(df):
+            started.set()
+            continue_step.wait(timeout=5)
+            df["blocking_step_done"] = True
+            return df
+
+        def late_step(df):
+            df["late_step_done"] = True
+            return df
+
+        ar.register_step("blocking_snapshot_step", blocking_step)
+
+        errors = []
+
+        def run_pipeline():
+            try:
+                ar.pipeline(
+                    frame,
+                    [
+                        ("blocking_snapshot_step",),
+                        ("late_snapshot_step",),
+                    ],
+                )
+            except Exception as exc:
+                errors.append(exc)
+
+        thread = threading.Thread(target=run_pipeline)
+        thread.start()
+
+        assert started.wait(timeout=5)
+
+        ar.register_step("late_snapshot_step", late_step)
+
+        continue_step.set()
+        thread.join(timeout=5)
+
+        assert len(errors) == 1
+        assert isinstance(errors[0], ar.UnknownStepError)
+        assert "late_snapshot_step" in str(errors[0])
 
     def test_invalid_step_name(self, sample_csv):
         frame = ar.read_csv(sample_csv)
