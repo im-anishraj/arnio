@@ -419,6 +419,34 @@ def test_safe_divide_columns_pipeline():
     assert result_df["ratio"].iloc[2] == 0.0  # zero numerator
 
 
+def test_pipeline_combine_columns():
+    import pandas as pd
+
+    import arnio as ar
+
+    df = pd.DataFrame({"first": ["Alice", "Bob"], "last": ["Smith", "Jones"]})
+
+    frame = ar.from_pandas(df)
+
+    result = ar.pipeline(
+        frame,
+        [
+            (
+                "combine_columns",
+                {
+                    "subset": ["first", "last"],
+                    "separator": " ",
+                    "output_column": "full_name",
+                },
+            )
+        ],
+    )
+
+    result_df = ar.to_pandas(result)
+
+    assert list(result_df["full_name"]) == ["Alice Smith", "Bob Jones"]
+
+
 def test_replace_values_simple():
     import pandas as pd
 
