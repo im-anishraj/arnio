@@ -305,6 +305,7 @@ Arnio is not a pandas wrapper. It's a separate runtime with its own data model.
 | **Step registry** | Pipeline steps map to C++ function pointers. Adding a new cleaning primitive is a single function + one registry entry. |
 
 > Full architecture documentation: **[ARCHITECTURE.md](ARCHITECTURE.md)**
+> API reference guide: **[Arnio API Reference](./API_REFERENCE.md)**
 
 <br>
 
