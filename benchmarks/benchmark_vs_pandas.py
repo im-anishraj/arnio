@@ -14,8 +14,17 @@ import arnio as ar
 
 CSV_FILE = "benchmarks/benchmark_1m.csv"
 WIDE_CSV_FILE = "benchmarks/benchmark_wide.csv"
+MULTILINE_CSV_FILE = "benchmarks/benchmark_multiline.csv"
 RUNS = 3
-
+ENVIRONMENT_NOTES = """
+Benchmark Environment:
+- Python benchmark comparison: arnio vs pandas
+- Deterministic datasets generated with fixed RNG seeds
+- Run benchmarks on the same machine for fair comparison
+- Recommended command:
+    python benchmarks/generate_data.py
+    python benchmarks/benchmark_vs_pandas.py
+"""
 
 @dataclass(frozen=True)
 class BenchmarkCase:
@@ -24,10 +33,19 @@ class BenchmarkCase:
 
 
 BENCHMARKS = (
-    BenchmarkCase("Tall CSV (1,000,000 rows x 12 columns)", CSV_FILE),
-    BenchmarkCase("Wide CSV (5,000 rows x 256 columns)", WIDE_CSV_FILE),
+    BenchmarkCase(
+        "Tall CSV (1,000,000 rows x 12 columns)",
+        CSV_FILE,
+    ),
+    BenchmarkCase(
+        "Wide CSV (5,000 rows x 256 columns)",
+        WIDE_CSV_FILE,
+    ),
+    BenchmarkCase(
+        "Quoted Multiline CSV (100,000 rows)",
+        MULTILINE_CSV_FILE,
+    ),
 )
-
 
 def ensure_dataset_exists(path):
     if not Path(path).exists():
@@ -43,6 +61,8 @@ def benchmark_pandas(path):
     t0 = time.perf_counter()
 
     df = pd.read_csv(path)
+    if "description" in df.columns:
+    multiline_rows = df["description"].astype(str).str.contains("\n").sum()
     df.columns = df.columns.str.strip()
     df = df.dropna()
     df = df.drop_duplicates()
@@ -61,6 +81,8 @@ def benchmark_arnio(path):
     t0 = time.perf_counter()
 
     frame = ar.read_csv(path)
+    if "description" in df.columns:
+    multiline_rows = df["description"].astype(str).str.contains("\n").sum()
     clean = ar.pipeline(
         frame,
         [
@@ -107,5 +129,7 @@ def run_case(case):
 
 
 if __name__ == "__main__":
+    print(ENVIRONMENT_NOTES)
+    print("=" * 60)
     for benchmark_case in BENCHMARKS:
         run_case(benchmark_case)
