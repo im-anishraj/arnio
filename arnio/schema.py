@@ -11,6 +11,8 @@ from typing import Any
 
 import pandas as pd
 
+import re
+
 from .convert import to_pandas
 from .frame import ArFrame
 
@@ -408,6 +410,7 @@ def _validate_column(
             )
         )
 
+
     if field_def.semantic is not None:
         pattern = _SEMANTIC_PATTERNS.get(field_def.semantic)
         if pattern is None:
@@ -423,8 +426,14 @@ def _validate_column(
                 invalid_values = []
 
                 for index, value in non_null.items():
+                    value_str = str(value)
+
+                    if not DATE_PATTERN.match(value_str):
+                        invalid_values.append((index, value))
+                        continue
+
                     try:
-                        datetime.strptime(str(value), "%Y-%m-%d")
+                        datetime.strptime(value_str, "%Y-%m-%d")
                     except ValueError:
                         invalid_values.append((index, value))
 
@@ -500,6 +509,7 @@ def _markdown_cell(value: Any) -> str:
     return text
 
 
+DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _SEMANTIC_PATTERNS = {
     "email": r"[^@\s]+@[^@\s]+\.[^@\s]+",
     "url": r"https?://[^\s]+",
