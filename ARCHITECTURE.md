@@ -4,12 +4,19 @@ Arnio is designed to provide high-performance, memory-efficient data ingestion a
 
 This document outlines the core architecture and the boundary between Python and C++.
 
+---
+
 ## 1. The Core Philosophy
 
 Data preprocessing often involves operations that are inherently slow in Python (e.g., string manipulation, repeated passes over data). Arnio solves this by:
+
 1. **Loading data directly into C++ memory structures.**
-2. **Performing all cleaning operations natively in C++ without Python GIL contention.**
-3. **Translating the final, pristine dataset to a pandas DataFrame via a zero-copy (or near zero-copy) boundary.**
+
+2. **Prioritizing native C++ execution for core cleaning operations to avoid Python GIL contention, while seamlessly supporting Python-backed and custom steps.**
+
+3. **Translating the final dataset to a `pandas.DataFrame` via a boundary that aims to minimize unnecessary copies.**
+
+---
 
 ## 2. Python ↔ C++ Boundary
 
@@ -32,92 +39,142 @@ graph TD
     E -->|to_pandas| A
 ```
 
+---
+
 ## 3. Data Model
 
 Arnio's data model is columnar, strongly resembling Apache Arrow or modern Pandas internals.
 
-### `Column`
-A `Column` represents a single 1D array of homogeneous data.
-- **Variant Storage**: Data is stored using `std::variant` over strongly-typed `std::vector`s (e.g., `std::vector<int64_t>`, `std::vector<std::string>`).
-- **Null Handling**: Nulls are tracked via a separate boolean mask (`std::vector<bool>`), allowing the underlying data vectors to remain dense and cache-friendly.
+### Column
 
-### `Frame`
-A `Frame` is an ordered collection of `Column` objects, representing a 2D dataset.
-- The `Frame` maintains an index mapping column names to their respective `Column` objects for `O(1)` access.
+A Column represents a single 1D array of homogeneous data.
+
+- **Variant Storage:** Data is stored using `std::variant` over strongly-typed `std::vector`s (e.g., `std::vector<int64_t>`, `std::vector<std::string>`).
+
+- **Null Handling:** Nulls are tracked via a separate boolean mask (`std::vector<bool>`), allowing the underlying data vectors to remain dense and cache-friendly.
+
+### Frame
+
+A Frame is an ordered collection of Column objects, representing a 2D dataset.
+
+The Frame maintains an index mapping column names to their respective Column objects for O(1) access.
+
+---
 
 ## 4. Pandas Dtype Compatibility
 
-Arnio supports a focused set of pandas dtypes directly through its native C++ columnar model. Some advanced pandas dtypes are currently handled through conversion or have limited support depending on the workflow.
-
-This section describes the current implementation status for each dtype category.
+Arnio supports a focused set of pandas dtypes directly through its native C++ columnar model.
 
 ### Fully Supported
 
-The following dtypes are natively supported and map efficiently to strongly typed C++ vectors:
-
 - `int64`
+
 - `float64`
+
 - `bool`
+
 - `string`
 
-These allow efficient parsing, cleaning operations, and zero-copy or near zero-copy conversion back to pandas where possible.
+These allow efficient parsing and cleaning operations within the C++ core.
 
-### Limited Support
-
-The following dtypes are not natively supported but may work through conversion or partial compatibility layers depending on the workflow:
+### Limited/Unsupported Support
 
 - `category`
-- mixed `object` columns
-- nullable pandas dtypes such as `Int64` and `boolean`
 
-Categorical columns may be converted to string/object representations during processing. Mixed object columns can reduce type inference reliability. Nullable pandas dtypes are partially supported through pandas extension dtypes and existing null-mask handling.
+- Mixed `object` columns
 
-### Unsupported
+- Nullable pandas dtypes (e.g., `Int64`)
 
-The following dtypes are currently unsupported in the native runtime:
+These may require conversion.
 
-- `datetime64[ns]`
-- `timedelta64[ns]`
+`datetime64[ns]` and `timedelta64[ns]` are currently unsupported in the native runtime.
 
-These require additional parsing and inference support in the C++ runtime and are not yet available.
+---
 
-### User-facing Behavior
+## 5. Pipeline Execution & Dispatch Flow
 
-When unsupported or partially supported dtypes are encountered, Arnio should provide clear user-facing errors instead of silent failures.
+The `pipeline()` function orchestrates data flow by prioritizing C++ efficiency while allowing Python extensibility.
 
-For best performance and compatibility, users are encouraged to prefer strongly typed columns such as `int64`, `float64`, `bool`, and `string`.
+Arnio supports a mix of C++-backed steps, Python-backed built-ins, and custom pipeline steps.
 
-## 5. Pipeline Execution
+When a step is invoked, the system follows a priority-based dispatch model:
 
-The `pipeline()` function in Python accepts a list of declarative steps.
+### Built-in Step Path
 
-1. **Step Registry**: Arnio maintains a registry mapping string names (e.g., `"strip_whitespace"`) to function pointers.
-2. **C++ Execution**: For natively supported operations, the Python wrapper calls the C++ function directly, passing the `Frame` pointer. The operation modifies the data or returns a new `Frame` entirely within C++.
-3. **Python Fallback**: If a step is registered via pure Python (`ar.register_step()`), the `Frame` is temporarily converted to a pandas DataFrame, the Python function executes, and the result is converted back. *(Note: This incurs a conversion penalty and is intended for prototyping or operations not yet supported in C++).*
+The system first queries `_STEP_REGISTRY`.
+
+This built-in registry routes operations to highly optimized C++-backed steps (executing directly within the `Frame` / C++ core), while also housing Python-backed built-ins.
+
+### Custom Pipeline Steps
+
+If the name is absent from the built-in registries, it searches `_PYTHON_STEP_REGISTRY` for custom, user-defined Python fallbacks.
+
+### The Conversion Penalty
+
+Because Python-based steps expect a `pandas.DataFrame`, the system performs a roundtrip:
+
+```text
+Frame → to_pandas() → from_pandas() → Frame
+```
+
+### Performance Note
+
+This roundtrip involves memory re-allocation.
+
+- `to_pandas()` creates a DataFrame representation.
+
+- `from_pandas()` re-infers types to re-populate the internal data structures.
+
+Core cleaning primitives should ideally be implemented as C++ built-ins to bypass this overhead.
+
+---
 
 ## 6. Converting to Pandas
 
-The `to_pandas()` function is the most critical boundary. It uses the NumPy C-API (via pybind11's buffer protocol) to expose the underlying C++ `std::vector` memory directly to pandas, avoiding expensive element-by-element copies where possible (zero-copy for numerics and booleans). String columns currently require instantiation of Python `str` objects.
+The `to_pandas()` function is a critical boundary.
 
+It uses the NumPy C-API (via pybind11's buffer protocol) to expose the underlying C++ `std::vector` memory to pandas, aiming to avoid element-by-element copies for numerics and booleans where supported.
 
-## 6. Data Quality and Schema Validation
+String columns currently require instantiation of Python `str` objects.
+
+---
+
+## 7. Data Quality and Schema Validation
 
 Arnio is split into two layers:
 
-- The **C++ layer** handles parsing CSVs, storing data in memory, and cleaning operations such as `drop_nulls()` and `strip_whitespace()`. These execute through pybind11 directly in C++.
-- The **Python/pandas layer** handles data quality: profiling, validation, and schema checks.
+- The C++ layer handles parsing CSVs, storing data in memory, and cleaning operations such as `drop_nulls()` and `strip_whitespace()`. These execute through pybind11 directly in C++.
+
+- The Python/pandas layer handles data quality: profiling, validation, and schema checks.
 
 Each function in the quality layer behaves as follows:
-- `profile()` and `validate()` convert an `ArFrame` to pandas for analysis/validation.
-- `suggest_cleaning()` can inspect an existing `DataQualityReport` directly, or call `profile()` when given an `ArFrame`.
-- `auto_clean()` calls `profile()` first, then applies selected cleaning helpers/pipeline steps to the original frame flow.
 
-### What each function does
+### `profile()`
 
-1. `profile()`: converts `ArFrame` to a pandas DataFrame internally, then computes per-column statistics including null counts, duplicate rows, data types, and unique value ratios. Returns a `DataQualityReport`.
-2. `suggest_cleaning()`: accepts an `ArFrame` or an existing `DataQualityReport`. If given an `ArFrame`, it calls `profile()` first. Returns a list of cleaning steps that can be passed to `pipeline()`.
-3. `auto_clean()`: accepts an `ArFrame`, calls `profile()` internally, then applies suggested cleaning steps directly to the original `ArFrame`. Returns a cleaned `ArFrame`.
-4. `validate()`: converts `ArFrame` to a pandas DataFrame internally, then evaluates each column against rules defined in a `Schema` including nullability, dtype, range, pattern, and semantic constraints. Returns a `ValidationResult`.
+- Converts an `ArFrame` to a pandas DataFrame internally.
+- Computes per-column statistics including null counts, duplicate rows, data types, and unique value ratios.
+- Returns a `DataQualityReport`.
+
+### `suggest_cleaning()`
+
+- Accepts an `ArFrame` or an existing `DataQualityReport`.
+- If given an `ArFrame`, it calls `profile()` first.
+- Returns a list of cleaning steps that can be passed to `pipeline()`.
+
+### `auto_clean()`
+
+- Accepts an `ArFrame`.
+- Calls `profile()` internally.
+- Applies suggested cleaning steps directly to the original `ArFrame`.
+- Returns a cleaned `ArFrame`.
+
+### `validate()`
+
+- Converts `ArFrame` to a pandas DataFrame internally.
+- Evaluates each column against rules defined in a `Schema` including nullability, dtype, range, pattern, and semantic constraints.
+- Returns a `ValidationResult`.
+
+### Flow Diagram
 
 ```mermaid
 graph TD
@@ -131,3 +188,43 @@ graph TD
     C --> G[cleaned ArFrame]
     H --> I[ValidationResult]
 ```
+
+---
+
+## 8. Cleaning Module Architecture
+
+The cleaning module is designed around immutable semantics to ensure data integrity across pipeline steps.
+
+To ensure consistency, the C++ core utilizes internal helper functions:
+
+- `resolve_subset`: Translates user-provided column names into integer indices.
+
+- `select_rows`: A utility that takes a list of row indices and constructs a new `Frame`.
+
+- `row_key`: Generates a deterministic string serialization key for a row to facilitate duplicate detection.
+
+### Copy-Always Semantics
+
+Arnio follows an immutable design pattern.
+
+Most cleaning operations do not modify the existing `Frame` in-place; instead, they produce a new `std::vector<Column>` and return a brand-new `Frame` instance, often utilizing `std::move` to transfer ownership efficiently.
+
+---
+
+## 9. Error Handling & Translation
+
+Arnio uses a unified exception hierarchy to bridge the C++/Python boundary.
+
+### Base Exception
+
+- `ArnioError`: The base exception class.
+
+### Specialized Exceptions
+
+- `CsvReadError`
+
+- `UnknownStepError`
+
+- `TypeCastError`
+
+When supported by the specific implementation, exceptions raised within the core are translated into standard Python exceptions to maintain interpreter stability.

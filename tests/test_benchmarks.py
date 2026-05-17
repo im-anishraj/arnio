@@ -44,7 +44,7 @@ def test_generate_wide_benchmark_csv_round_trips_through_arnio(tmp_path):
     assert frame.shape == (4, 9)
     assert arnio_df.shape == (4, 9)
     assert arnio_df.columns.tolist() == pandas_df.columns.tolist()
-    assert ar.scan_csv(csv_path).keys() == set(pandas_df.columns)
+    assert list(ar.scan_csv(csv_path).keys()) == list(pandas_df.columns)
 
 
 def test_generate_wide_rejects_too_few_columns(tmp_path):
@@ -55,18 +55,22 @@ def test_generate_wide_rejects_too_few_columns(tmp_path):
 
 
 def test_run_case_benchmarks_the_selected_case_path(monkeypatch):
-    seen_paths = []
+    seen_calls = []
 
-    def fake_benchmark(path):
-        seen_paths.append(path)
-        return 1.0, 1.0
+    def fake_run_subprocess(engine, path):
+        seen_calls.append((engine, path))
+        return {"elapsed": 1.0, "peak_trace_mb": 1.0, "peak_rss_mb": 2.0}
 
     monkeypatch.setattr(benchmark_vs_pandas, "RUNS", 2)
-    monkeypatch.setattr(benchmark_vs_pandas, "benchmark_pandas", fake_benchmark)
-    monkeypatch.setattr(benchmark_vs_pandas, "benchmark_arnio", fake_benchmark)
+    monkeypatch.setattr(benchmark_vs_pandas, "run_subprocess", fake_run_subprocess)
 
     benchmark_vs_pandas.run_case(
         benchmark_vs_pandas.BenchmarkCase("Wide fixture", "wide.csv")
     )
 
-    assert seen_paths == ["wide.csv", "wide.csv", "wide.csv", "wide.csv"]
+    assert seen_calls == [
+        ("pandas", "wide.csv"),
+        ("arnio", "wide.csv"),
+        ("pandas", "wide.csv"),
+        ("arnio", "wide.csv"),
+    ]
