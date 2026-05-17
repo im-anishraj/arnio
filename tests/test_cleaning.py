@@ -446,6 +446,23 @@ class TestNormalizeCase:
         assert df["name"].iloc[1] == "Foo/Bar"
 
 
+class TestNormalizeUnicode:
+    def test_normalize_unicode(self):
+        import pandas as pd
+
+        import arnio as ar
+
+        df = pd.DataFrame({"text": ["cafe\u0301"]})
+
+        frame = ar.from_pandas(df)
+
+        result = ar.normalize_unicode(frame)
+
+        result_df = ar.to_pandas(result)
+
+        assert result_df["text"].iloc[0] == "café"
+
+
 class TestRenameColumns:
     def test_rename(self, sample_csv):
         frame = ar.read_csv(sample_csv)
