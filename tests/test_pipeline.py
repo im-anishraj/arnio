@@ -1,6 +1,7 @@
 """Tests for the pipeline function."""
 
 import arnio as ar
+import pytest
 
 
 class TestPipeline:
@@ -212,6 +213,26 @@ class TestPipeline:
         except ValueError as e:
             assert "Expected a dict" in str(e)
 
+    def test_custom_step_exception_wrapping_and_chaining(self):
+        """Verify that exceptions thrown by custom Python steps are wrapped with context."""
+        def failing_step(df, **kwargs):
+            raise RuntimeError("Internal step crash")
+
+        ar.register_step("error_prone_step", failing_step)
+
+        try:
+            import pandas as pd
+
+            frame = ar.from_pandas(pd.DataFrame({"dummy": [1, 2, 3]}))
+        except Exception:
+            return
+
+        with pytest.raises(ar.PipelineStepError) as exc_info:
+            ar.pipeline(frame, [("error_prone_step",)])
+
+        assert "error_prone_step" in str(exc_info.value)
+        assert "Internal step crash" in str(exc_info.value)
+        assert isinstance(exc_info.value.__cause__, RuntimeError)
 
 def test_filter_rows_greater_than():
     import pandas as pd
