@@ -21,7 +21,7 @@ def _is_utf8_encoding(encoding: str) -> bool:
 
 
 @contextmanager
-def _utf8_csv_path(path: str, encoding: str) -> Iterator[str]:
+def _utf8_csv_path(path: str, encoding: str, sample_rows: int | None = None) -> Iterator[str]:
     """Return a UTF-8 file path for the C++ reader.
 
     The native reader currently consumes UTF-8 bytes. For other encodings,
@@ -38,7 +38,14 @@ def _utf8_csv_path(path: str, encoding: str) -> Iterator[str]:
             with tempfile.NamedTemporaryFile(
                 "w", encoding="utf-8", newline="", suffix=".csv", delete=False
             ) as tmp:
-                tmp.write(src.read())
+                if sample_rows is not None:
+                    for i, line in enumerate(src):
+                        if i >= sample_rows:
+                            break
+                        tmp.write(line)
+                else:
+                    import shutil
+                    shutil.copyfileobj(src, tmp)
                 tmp_name = tmp.name
         yield tmp_name
     except LookupError as e:
@@ -170,7 +177,7 @@ def scan_csv(
     delimiter : str, default ","
         Field delimiter character.
     encoding : str, default "utf-8"
-        File encoding. Non-UTF-8 inputs are transcoded before native scanning.
+        File encoding. For non-UTF-8 inputs, a sample of the file is transcoded to infer the schema.
     trim_headers : bool, default True
         Strip leading/trailing whitespace from column names.
 
@@ -226,7 +233,8 @@ def scan_csv(
     config.trim_headers = trim_headers
     reader = _CsvReader(config)
     try:
-        with _utf8_csv_path(path, encoding) as native_path:
+        # Schema inference only needs a sample, avoiding full-file transcode
+        with _utf8_csv_path(path, encoding, sample_rows=10000) as native_path:
             return reader.scan_schema(native_path)
     except RuntimeError as e:
         raise CsvReadError(str(e)) from e
