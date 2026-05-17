@@ -313,3 +313,84 @@ def test_null_values_skip_length_validation(tmp_path):
     assert result.issue_count == 1
     assert result.issues[0].rule == "min_length"
     assert result.issues[0].row_index == 0
+
+
+def test_regex_valid_match(tmp_path):
+    path = tmp_path / "ids.csv"
+    path.write_text("user_id\nUSR-1234\nUSR-5678\n")
+    result = ar.validate(
+        ar.read_csv(path),
+        {"user_id": ar.Regex(r"^USR-\d{4}$", nullable=False)},
+    )
+
+    assert result.passed
+    assert result.issue_count == 0
+
+
+def test_regex_mismatch_reports_pattern_rule(tmp_path):
+    path = tmp_path / "ids.csv"
+    path.write_text("user_id\nUSR-1234\nbadvalue\n")
+    result = ar.validate(
+        ar.read_csv(path),
+        {"user_id": ar.Regex(r"^USR-\d{4}$", nullable=False)},
+    )
+
+    assert not result.passed
+    assert result.issues[0].rule == "pattern"
+    assert result.issues[0].row_index == 1
+
+
+def test_regex_null_allowed(tmp_path):
+    path = tmp_path / "ids.csv"
+    path.write_text("user_id\nUSR-1234\n\n")
+    result = ar.validate(
+        ar.read_csv(path),
+        {"user_id": ar.Regex(r"^USR-\d{4}$", nullable=True)},
+    )
+
+    assert result.passed
+
+
+def test_regex_null_not_allowed(tmp_path):
+    path = tmp_path / "ids.csv"
+    path.write_text("user_id,other\nUSR-1234,a\n,b\n")  
+    result = ar.validate(
+        ar.read_csv(path),
+        {"user_id": ar.Regex(r"^USR-\d{4}$", nullable=False)},
+    )
+
+    assert not result.passed
+    assert result.issues[0].rule == "nullable"
+
+
+def test_regex_invalid_pattern_raises_at_construction():
+    try:
+        ar.Regex(r"[invalid")
+        assert False, "Expected re.error"
+    except Exception as exc:
+        assert (
+            "unterminated" in str(exc).lower() or "error" in type(exc).__name__.lower()
+        )
+
+
+def test_regex_numeric_column_coerces_to_string(tmp_path):
+    path = tmp_path / "codes.csv"
+    path.write_text("code\n123\n456\n")
+    result = ar.validate(
+        ar.read_csv(path),
+        {"code": ar.Regex(r"^\d+$")},
+    )
+
+    assert result.issues[0].rule == "dtype"
+
+
+def test_regex_fullmatch_not_partial(tmp_path):
+    path = tmp_path / "ids.csv"
+    path.write_text("user_id\nUSR-1234-EXTRA\n")
+    result = ar.validate(
+        ar.read_csv(path),
+        {"user_id": ar.Regex(r"^USR-\d{4}$")},
+    )
+
+    assert not result.passed
+    assert result.issues[0].rule == "pattern"

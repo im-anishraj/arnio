@@ -300,6 +300,44 @@ def URL(*, nullable: bool = True, unique: bool = False) -> Field:
     return Field(dtype="string", nullable=nullable, semantic="url", unique=unique)
 
 
+def Regex(
+    pattern: str,
+    *,
+    nullable: bool = True,
+    unique: bool = False,
+) -> Field:
+    """Create a regex-validated string schema field.
+
+    The pattern is compiled at call time so invalid expressions raise
+    ``re.error`` immediately rather than at validation time.
+
+    Parameters
+    ----------
+    pattern : str
+        Regular expression that every non-null value must fully match.
+    nullable : bool, default True
+        Whether null values are allowed.
+    unique : bool, default False
+        Whether all non-null values must be unique.
+
+    Examples
+    --------
+    >>> schema = ar.Schema({
+    ...     "user_id": ar.Regex(r"^USR-\\d{4}$", nullable=False),
+    ...     "zip_code": ar.Regex(r"^\\d{5}(-\\d{4})?$", nullable=True),
+    ... })
+    """
+    import re
+
+    re.compile(pattern)  # fail fast on invalid pattern
+    return Field(
+        dtype="string",
+        nullable=nullable,
+        pattern=pattern,
+        unique=unique,
+    )
+
+
 def _validate_column(
     series: pd.Series,
     actual_dtype: str | None,
