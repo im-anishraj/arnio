@@ -48,6 +48,7 @@ from .schema import (
     URL,
     Bool,
     CountryCode,
+    DateTime,
     Email,
     Field,
     Float64,
@@ -110,6 +111,7 @@ __all__ = [
     "Bool",
     "Email",
     "URL",
+    "DateTime",
     # Exceptions
     "UnknownStepError",
     "ArnioError",
