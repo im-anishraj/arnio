@@ -1,6 +1,7 @@
 """Tests for schema validation."""
 
 import arnio as ar
+import pytest
 
 
 def test_schema_validation_passes_for_valid_frame(sample_csv):
@@ -45,7 +46,7 @@ def test_schema_validation_collects_row_level_issues(tmp_path):
 
     assert not result.passed
     assert result.bad_rows == [1, 2]
-    assert {"nullable", "max", "min", "email", "allowed"} <= rules
+    assert {"nullable", "max", "min", "email:light", "allowed"} <= rules
     assert result.summary()["issues_by_column"]["age"] == 2
 
 
@@ -279,6 +280,65 @@ def test_custom_pattern_validation(tmp_path):
     assert result.issues[0].row_index == 1
 
 
+def test_email_validation_rejects_invalid_validation_mode():
+    with pytest.raises(ValueError):
+        ar.Email(validation="banana")
+
+
+def test_email_default_validation_mode_is_backward_compatible(tmp_path):
+    path = tmp_path / "emails.csv"
+    path.write_text("email\n" "simple@test.com\n")
+
+    frame = ar.read_csv(path)
+
+    result = ar.validate(
+        frame,
+        {"email": ar.Email(nullable=False)},
+    )
+
+    assert result.passed
+
+
+def test_email_strict_validation_rejects_invalid_emails(tmp_path):
+    path = tmp_path / "invalid_emails.csv"
+    path.write_text("email\n" "bad@@test.com\n" "user@localhost\n" "user@.com\n")
+
+    frame = ar.read_csv(path)
+
+    result = ar.validate(
+        frame,
+        {
+            "email": ar.Email(
+                nullable=False,
+                validation="strict",
+            )
+        },
+    )
+
+    assert not result.passed
+    assert result.issue_count == 3
+    assert all(issue.rule == "email:strict" for issue in result.issues)
+
+
+def test_email_strict_validation_accepts_valid_emails(tmp_path):
+    path = tmp_path / "valid_emails.csv"
+    path.write_text(
+        "email\n" "user@example.com\n" "first.last@test.co.uk\n" "hello+tag@gmail.com\n"
+    )
+
+    frame = ar.read_csv(path)
+
+    result = ar.validate(
+        frame,
+        {
+            "email": ar.Email(
+                nullable=False,
+                validation="strict",
+            )
+        },
+    )
+
+    assert result.passed
 def test_country_code_validation_accepts_iso_alpha_2_codes(tmp_path):
     path = tmp_path / "countries.csv"
     path.write_text("country\nIN\nUS\nGB\nFR\n")
