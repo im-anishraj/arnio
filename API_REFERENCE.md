@@ -4,17 +4,17 @@ A technical reference guide to the public classes and functions within the **Arn
 
 ## Arnio API Reference Index
 
-| Category              | Components                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| :-------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Core Class**        | [**`ArFrame`**](#arframe) • Properties: [`shape`](#shape), [`columns`](#columns), [`dtypes`](#dtypes) • [`is_empty`](#is_empty) • Methods: [`memory_usage`](#memory_usage), [`preview`](#preview), [`select_columns`](#select_columns), [`select_dtypes`](#select_dtypes)                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| **I/O**               | [`read_csv`](#read_csv) • [`scan_csv`](#scan_csv)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| **Cleaning**          | [`cast_types`](#cast_types) • [`clean`](#clean) • [`clip_numeric`](#clip_numeric) • [`drop_constant_columns`](#drop_constant_columns) • [`drop_duplicates`](#drop_duplicates) • [`drop_nulls`](#drop_nulls) • [`fill_nulls`](#fill_nulls) • [`filter_rows`](#filter_rows) • [`keep_rows_with_nulls`](#keep_rows_with_nulls) • [`normalize_case`](#normalize_case) • [`rename_columns`](#rename_columns) • [`replace_values`](#replace_values) • [`round_numeric_columns`](#round_numeric_columns) • [`safe_divide_columns`](#safe_divide_columns) • [`strip_whitespace`](#strip_whitespace) • [`trim_column_names`](#trim_column_names) • [`validate_columns_exist`](#validate_columns_exist) |
-| **Conversion**        | [`from_pandas`](#from_pandas) • [`to_pandas`](#to_pandas)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| **Integration**       | [`ArnioPandasAccessor`](#arniopandasaccessor)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| **Pipeline**          | [`pipeline`](#pipeline) • [`register_step`](#register_step)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| **Data Quality**      | [`profile`](#profile) • [`suggest_cleaning`](#suggest_cleaning) • [`auto_clean`](#auto_clean) • [`DataQualityReport`](#dataqualityreport) • [`ColumnProfile`](#columnprofile)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| **Schema Validation** | [`Schema`](#schema) • [`Field`](#field) • [`validate`](#validate) • [`ValidationResult`](#validationresult) • [`ValidationIssue`](#validationissue) • [`Int64`](#int64) • [`Float64`](#float64) • [`String`](#string) • [`Bool`](#bool) • [`Email`](#email) • [`URL`](#url)                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| **Custom Exceptions** | [`ArnioError`](#arnioerror) • [`CsvReadError`](#csvreaderror) • [`TypeCastError`](#typecasterror) • [`UnknownStepError`](#unknownsteperror)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| Category              | Components                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| :-------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Core Class**        | [**`ArFrame`**](#arframe) • Properties: [`shape`](#shape), [`columns`](#columns), [`dtypes`](#dtypes) • [`is_empty`](#is_empty) • Methods: [`memory_usage`](#memory_usage), [`preview`](#preview), [`select_columns`](#select_columns), [`select_dtypes`](#select_dtypes)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| **I/O**               | [`read_csv`](#read_csv) • [`scan_csv`](#scan_csv)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| **Cleaning**          | [`cast_types`](#cast_types) • [`clean`](#clean) • [`clip_numeric`](#clip_numeric) • [`combine_columns`](#combine_columns) • [`drop_constant_columns`](#drop_constant_columns) • [`drop_duplicates`](#drop_duplicates) • [`drop_nulls`](#drop_nulls) • [`fill_nulls`](#fill_nulls) • [`filter_rows`](#filter_rows) • [`keep_rows_with_nulls`](#keep_rows_with_nulls) • [`normalize_case`](#normalize_case) • [`normalize_unicode`](#normalize_unicode) • [`rename_columns`](#rename_columns) • [`replace_values`](#replace_values) • [`round_numeric_columns`](#round_numeric_columns) • [`safe_divide_columns`](#safe_divide_columns) • [`strip_whitespace`](#strip_whitespace) • [`trim_column_names`](#trim_column_names) • [`validate_columns_exist`](#validate_columns_exist) |
+| **Conversion**        | [`from_pandas`](#from_pandas) • [`to_pandas`](#to_pandas)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| **Integration**       | [`ArnioPandasAccessor`](#arniopandasaccessor)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| **Pipeline**          | [`pipeline`](#pipeline) • [`register_step`](#register_step)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| **Data Quality**      | [`profile`](#profile) • [`suggest_cleaning`](#suggest_cleaning) • [`auto_clean`](#auto_clean) • [`DataQualityReport`](#dataqualityreport) • [`ColumnProfile`](#columnprofile)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| **Schema Validation** | [`Schema`](#schema) • [`Field`](#field) • [`validate`](#validate) • [`ValidationResult`](#validationresult) • [`ValidationIssue`](#validationissue) • [`Int64`](#int64) • [`Float64`](#float64) • [`String`](#string) • [`Bool`](#bool) • [`Email`](#email) • [`URL`](#url) • [`CountryCode`](#countrycode) • [`DateTime`](#datetime)                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| **Custom Exceptions** | [`ArnioError`](#arnioerror) • [`CsvReadError`](#csvreaderror) • [`TypeCastError`](#typecasterror) • [`UnknownStepError`](#unknownsteperror)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 
 ---
 
@@ -90,10 +90,18 @@ df = ar.clean(df)
 
 ### clip_numeric
 
-Clip numeric values to lower and/or upper bounds
+Clip numeric values to lower and/or upper bounds.
 
 ```python
 df = ar.clip_numeric(df, lower=0, upper=100)
+```
+
+### combine_columns
+
+Combine multiple columns into a single output column.
+
+```python
+df = ar.combine_columns(df, separator=",", output_column="combined_col")
 ```
 
 ### drop_constant_columns
@@ -150,6 +158,14 @@ Adjusts text casing for consistency.
 
 ```python
 df = ar.normalize_case(df, case_type="title")
+```
+
+### normalize_unicode
+
+Normalize Unicode text columns.
+
+```python
+df = ar.normalize_unicode(df, subset=["uni_col"], form="NFC")
 ```
 
 ### rename_columns
@@ -215,11 +231,11 @@ df = ar.validate_columns_exist(df, ["age"])
 
 ---
 
-### from_pandas()
+### from_pandas
 
 Converts a `pandas.DataFrame` into an Arnio `ArFrame`.
 
-### to_pandas()
+### to_pandas
 
 Converts an `ArFrame` into a `pandas.DataFrame`
 
@@ -240,7 +256,7 @@ Run Arnio preparation helpers from an existing pandas DataFrame.
 
 ---
 
-### pipeline()
+### pipeline
 
 Apply a sequence of cleaning steps to an `ArFrame`.
 
@@ -255,7 +271,7 @@ ops = [
 df = ar.pipeline(df, ops)
 ```
 
-### register_step()
+### register_step
 
 Extend the pipeline by adding your own custom Python functions.
 
@@ -268,15 +284,15 @@ ar.register_step("custom_func", custom_func)
 
 ---
 
-### profile()
+### profile
 
 Analyze an `ArFrame` and get a structural `DataQualityReport`.
 
-### suggest_cleaning()
+### suggest_cleaning
 
 Examine a report or frame and get a list of recommended cleaning steps.
 
-### auto_clean()
+### auto_clean
 
 Profile the data and immediately apply repairs.
 
@@ -319,14 +335,16 @@ The objects returned after calling `validate()`.
 
 Each helper maps to a specific data type rule.
 
-| Function                          | Description                                     |
-| :-------------------------------- | :---------------------------------------------- |
-| <a name="int64"></a>**Int64**     | Validates whole numbers.                        |
-| <a name="float64"></a>**Float64** | Validates decimal numbers.                      |
-| <a name="string"></a>**String**   | Validates text.                                 |
-| <a name="bool"></a>**Bool**       | Validates True/False boolean values.            |
-| <a name="email"></a>**Email**     | Specialized String validator for email formats. |
-| <a name="url"></a>**URL**         | Specialized String validator for web links.     |
+| Function                                  | Description                                     |
+| :---------------------------------------- | :---------------------------------------------- |
+| <a name="int64"></a>**Int64**             | Validates whole numbers.                        |
+| <a name="float64"></a>**Float64**         | Validates decimal numbers.                      |
+| <a name="string"></a>**String**           | Validates text.                                 |
+| <a name="bool"></a>**Bool**               | Validates True/False boolean values.            |
+| <a name="email"></a>**Email**             | Specialized String validator for email formats. |
+| <a name="url"></a>**URL**                 | Specialized String validator for web links.     |
+| <a name="countrycode"></a>**CountryCode** | Validates uppercase ISO alpha-2 country-code.   |
+| <a name="datetime"></a>**DateTime**       | Validates string timestamps.                    |
 
 ---
 
