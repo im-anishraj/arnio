@@ -4,7 +4,7 @@ Tests for ArFrame.select_dtypes() — issue #222.
 - select_dtypes() returns an ArFrame, not a list.
 - No columns matched → raises ValueError("No columns match").
 - include/exclude overlap → raises ValueError("overlap").
-- No module-level ar.select_dtypes helper is added.
+
 """
 
 from __future__ import annotations
@@ -13,10 +13,10 @@ import pytest
 
 import arnio as ar
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def mixed_csv(tmp_path):
@@ -50,6 +50,7 @@ def single_col_csv(tmp_path):
 # ---------------------------------------------------------------------------
 # Normal behaviour — returns ArFrame
 # ---------------------------------------------------------------------------
+
 
 def test_select_dtypes_include_string_returns_arframe(mixed_csv):
     frame = ar.read_csv(mixed_csv)
@@ -131,6 +132,7 @@ def test_select_dtypes_on_sample_csv(sample_csv):
 # Edge cases
 # ---------------------------------------------------------------------------
 
+
 def test_select_dtypes_include_as_list_matches_string(mixed_csv):
     frame = ar.read_csv(mixed_csv)
     assert (
@@ -163,6 +165,7 @@ def test_select_dtypes_null_dtype_is_valid(mixed_csv):
 # Empty match → raises ValueError
 # ---------------------------------------------------------------------------
 
+
 def test_select_dtypes_no_match_raises_value_error(string_only_csv):
     frame = ar.read_csv(string_only_csv)
     with pytest.raises(ValueError, match="No columns match"):
@@ -179,6 +182,7 @@ def test_select_dtypes_exclude_all_raises_value_error(mixed_csv):
 # Overlap check → raises ValueError
 # ---------------------------------------------------------------------------
 
+
 def test_select_dtypes_include_exclude_overlap_raises(mixed_csv):
     frame = ar.read_csv(mixed_csv)
     with pytest.raises(ValueError, match="overlap"):
@@ -194,6 +198,7 @@ def test_select_dtypes_partial_overlap_raises(mixed_csv):
 # ---------------------------------------------------------------------------
 # Invalid input → raises errors
 # ---------------------------------------------------------------------------
+
 
 def test_select_dtypes_no_args_raises_value_error(mixed_csv):
     frame = ar.read_csv(mixed_csv)
