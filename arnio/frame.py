@@ -10,7 +10,9 @@ import json
 import math
 from typing import Any
 
-from ._core import _Frame
+import numpy as np
+
+from ._core import _DType, _Frame
 
 #: Dtype strings recognised by ArFrame.select_dtypes().
 _VALID_DTYPES: frozenset[str] = frozenset(
@@ -291,10 +293,279 @@ class ArFrame:
 
         from .convert import from_pandas, to_pandas
 
-        df = to_pandas(self)
-        selected_df = df[columns]
 
-        return from_pandas(selected_df)
+    def to_numpy(self, fill_value: object = None) -> np.ndarray:
+        """Convert a numeric/bool-only ArFrame to a 2D NumPy array.
+
+        Provides a direct export path without routing through pandas,
+        suitable for numeric workflows requiring fast array conversion.
+
+        Parameters
+        ----------
+        fill_value : scalar, optional
+            Value used to replace null entries. Must be compatible with
+            the column dtype — use int/float for numeric columns, bool
+            for bool columns. If ``None`` and any null values are present,
+            ``ValueError`` is raised.
+
+        Returns
+        -------
+        numpy.ndarray
+            2D array of shape ``(n_rows, n_cols)`` in column order.
+            dtype is preserved when all columns share the same type
+            (e.g. all int64, all float64, or all bool). When columns
+            have mixed types (e.g. int and float together), NumPy
+            promotes to a common dtype (typically float64).
+            A zero-row frame returns shape ``(0, n_cols)``.
+
+    def drop_columns(self, cols: list[str]) -> ArFrame:
+        """Return a new ArFrame with the specified columns removed.
+
+        Parameters
+        ----------
+        cols : list[str]
+            Column names to drop. Duplicates are silently ignored.
+            An empty list returns a copy of the frame unchanged.
+
+        Returns
+        -------
+        ArFrame
+            New ArFrame without the dropped columns. Original column
+            order is preserved.
+
+
+        Raises
+        ------
+        TypeError
+
+            If any column has a non-numeric, non-bool dtype (e.g. string).
+        ValueError
+            If any column contains null values and ``fill_value`` is not
+            provided.
+
+            If cols is not a list, or contains non-string elements.
+        ValueError
+            If any name in cols does not exist in the frame.
+
+
+        Examples
+        --------
+        >>> frame = ar.read_csv("data.csv")
+
+        >>> arr = frame.to_numpy()
+        >>> arr = frame.to_numpy(fill_value=0)
+        """
+        SUPPORTED_DTYPES = {_DType.INT64, _DType.FLOAT64, _DType.BOOL}
+
+        n_rows, n_cols = self.shape
+
+        if n_cols == 0:
+            return np.empty((n_rows, 0))
+
+        columns = []
+        for i in range(n_cols):
+            col = self._frame.column_by_index(i)
+            dtype = col.dtype()
+
+            if dtype not in SUPPORTED_DTYPES:
+                if n_rows == 0:
+                    return np.empty((0, n_cols), dtype=object)
+                raise TypeError(
+                    f"to_numpy() requires all columns to be numeric or bool. "
+                    f"Column '{col.name()}' has unsupported dtype '{dtype}'."
+                )
+
+            mask = col.get_null_mask()
+            has_nulls = mask.any()
+
+            if has_nulls and fill_value is None:
+                raise ValueError(
+                    f"Column '{col.name()}' contains null values. "
+                    f"Provide fill_value=... to substitute nulls, "
+                    f"e.g. frame.to_numpy(fill_value=0)."
+                )
+
+            if dtype == _DType.INT64:
+                arr = col.to_numpy_int().copy()
+                if has_nulls:
+                    arr[mask] = fill_value
+            elif dtype == _DType.FLOAT64:
+                arr = col.to_numpy_float().copy()
+                if has_nulls:
+                    arr[mask] = fill_value
+            else:
+                arr = col.to_numpy_bool().copy()
+                if has_nulls:
+                    arr[mask] = fill_value
+
+            columns.append(arr)
+
+        if n_rows == 0:
+            return np.empty((0, n_cols))
+
+        return np.column_stack(columns)
+
+        >>> smaller = frame.drop_columns(["col1", "col2"])
+        """
+        if not isinstance(cols, list):
+            raise TypeError(
+                f"cols must be a list of column names, got {type(cols).__name__!r}"
+            )
+
+        if any(not isinstance(col, str) for col in cols):
+            raise TypeError("All column names in cols must be strings.")
+
+        # Deduplicate while preserving order
+        seen: set[str] = set()
+        unique_cols: list[str] = []
+        for col in cols:
+            if col not in seen:
+                seen.add(col)
+                unique_cols.append(col)
+
+        # Validate all names exist
+        missing = [col for col in unique_cols if col not in self.columns]
+        if missing:
+            raise ValueError(
+                f"Unknown column(s): {missing}. " f"Available columns: {self.columns}"
+            )
+
+        # Empty input — return unchanged copy
+        if not unique_cols:
+            return ArFrame(self._frame.select_columns(self.columns))
+
+        # Preserve original order of remaining columns
+        drop_set = set(unique_cols)
+        remaining = [col for col in self.columns if col not in drop_set]
+
+        # Dropping all columns — preserve row count
+        if not remaining:
+            import pandas as pd
+
+            from .convert import from_pandas
+
+            return from_pandas(pd.DataFrame(index=range(len(self))))
+
+        return ArFrame(self._frame.select_columns(remaining))
+
+
+    def select_dtypes(
+        self,
+        include: str | list[str] | tuple[str, ...] | None = None,
+        exclude: str | list[str] | tuple[str, ...] | None = None,
+    ) -> ArFrame:
+        """Return a new ArFrame containing only columns whose dtype matches the filter.
+
+        At least one of *include* or *exclude* must be provided.
+
+        Parameters
+        ----------
+        include : str, list[str], or tuple[str, ...], optional
+            One or more dtype strings to keep.
+            Accepted values: ``"int64"``, ``"float64"``, ``"string"``,
+            ``"bool"``, ``"null"``.
+        exclude : str, list[str], or tuple[str, ...], optional
+            One or more dtype strings to drop. Applied after *include*.
+
+        Returns
+        -------
+        ArFrame
+            New ArFrame containing only the matched columns, in original
+            column order.
+
+        Raises
+        ------
+        ValueError
+            If neither *include* nor *exclude* is provided, if *include*
+            and *exclude* overlap, if an unrecognised dtype string is
+            passed, or if no columns match the filter.
+        TypeError
+            If *include* or *exclude* is not a string, list, or tuple of
+            strings.
+
+        Examples
+        --------
+        >>> frame = ar.read_csv("data.csv")
+        >>> numeric = frame.select_dtypes(include=["int64", "float64"])
+        >>> without_strings = frame.select_dtypes(exclude="string")
+        """
+        if include is None and exclude is None:
+            raise ValueError(
+                "select_dtypes() requires at least one of 'include' or 'exclude'."
+            )
+
+        def _parse(
+            arg: str | list[str] | tuple[str, ...] | None,
+            name: str,
+        ) -> frozenset[str] | None:
+            if arg is None:
+                return None
+            if isinstance(arg, str):
+                values = [arg]
+            elif isinstance(arg, (list, tuple)):
+                values = list(arg)
+                non_strings = [v for v in values if not isinstance(v, str)]
+                if non_strings:
+                    raise TypeError(
+                        f"'{name}' must contain only strings, "
+                        f"got {[type(v).__name__ for v in non_strings]}."
+                    )
+            else:
+                raise TypeError(
+                    f"'{name}' must be a string, list, or tuple of strings, "
+                    f"got {type(arg).__name__!r}."
+                )
+            unknown = [v for v in values if v not in _VALID_DTYPES]
+            if unknown:
+                raise ValueError(
+                    f"Unrecognised dtype(s) in '{name}': {unknown}. "
+                    f"Valid dtypes are: {sorted(_VALID_DTYPES)}."
+                )
+            return frozenset(values)
+
+        include_set = _parse(include, "include")
+        exclude_set = _parse(exclude, "exclude")
+
+        if include_set is not None and exclude_set is not None:
+            overlap = include_set & exclude_set
+            if overlap:
+                raise ValueError(
+                    f"'include' and 'exclude' overlap: {sorted(overlap)}. "
+                    "A dtype cannot be both included and excluded."
+                )
+
+        col_dtypes = self.dtypes
+        matched: list[str] = []
+        for col in self.columns:
+            dtype = col_dtypes[col]
+            if include_set is not None and dtype not in include_set:
+                continue
+            if exclude_set is not None and dtype in exclude_set:
+                continue
+            matched.append(col)
+
+        if not matched:
+            raise ValueError(
+                f"No columns match the dtype selection. Frame dtypes: {col_dtypes}."
+            )
+
+        return self.select_columns(matched)
+
+    def describe(self) -> dict[str, dict[str, float]]:
+        """Generate summary statistics for all numeric and string columns.
+
+        Returns
+        -------
+        dict[str, dict[str, float]]
+            A printable nested dictionary of metrics.
+        """
+        return StatsDict(self._frame.describe())
+
+    def _truncate_column_names(self, max_length=20):
+        return [
+            col[:max_length] + "..." if len(col) > max_length else col
+            for col in self.columns
+        ]
 
     # --- Dunder methods ---
 
