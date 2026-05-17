@@ -425,6 +425,7 @@ Most operations below run natively in C++. The current `filter_rows` step uses t
 | Primitive | What it does | Example |
 |:---|:---|:---|
 | `drop_nulls` | Remove rows with null/empty values | `ar.drop_nulls(frame, subset=["age"])` |
+| `keep_rows_with_nulls` | Keep only rows that contain at least one null | `ar.keep_rows_with_nulls(frame, subset=["age"])` |
 | `validate_columns_exist` | Fail early when required columns are missing | `ar.validate_columns_exist(frame, ["age"])` |
 | `filter_rows` | Filter rows using comparison operators | `ar.filter_rows(frame, column="age", op=">", value=18)` |
 | `fill_nulls` | Replace nulls with a scalar | `ar.fill_nulls(frame, 0, subset=["revenue"])` |
@@ -479,6 +480,27 @@ Works with:
 - floats
 - strings
 - booleans
+
+### 🔎 Isolate rows with null values
+
+Use `keep_rows_with_nulls` to audit incomplete data — keep only rows that have at least one null.
+
+```python
+frame = ar.read_csv("data.csv")
+
+# Keep all rows that have at least one null anywhere
+nulls = ar.keep_rows_with_nulls(frame)
+
+# Keep rows where specifically 'age' or 'score' is null
+nulls = ar.keep_rows_with_nulls(frame, subset=["age", "score"])
+
+# Works inside a pipeline too
+result = ar.pipeline(frame, [
+    ("keep_rows_with_nulls", {"subset": ["age"]}),
+])
+```
+
+Useful for data auditing — inspect what's missing before deciding how to fill or drop.
 
 <br>
 ### 🔢 Safe column division

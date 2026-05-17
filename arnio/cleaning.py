@@ -116,6 +116,69 @@ def drop_nulls(
     return ArFrame(result)
 
 
+def keep_rows_with_nulls(
+    frame: ArFrame,
+    *,
+    subset: list[str] | None = None,
+) -> ArFrame:
+    """Keep only rows that contain at least one null/empty value.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input data frame.
+    subset : list[str], optional
+        Column names to check for nulls. If None, checks all columns.
+        A row is kept if ANY column in the subset contains a null.
+
+    Returns
+    -------
+    ArFrame
+        New frame containing only rows with at least one null value.
+
+    Raises
+    ------
+    TypeError
+        If subset is passed as a string instead of a list.
+    ValueError
+        If any column in subset does not exist in the frame.
+
+    Examples
+    --------
+    >>> frame = ar.read_csv("data.csv")
+    >>> nulls = ar.keep_rows_with_nulls(frame)
+    >>> nulls_age = ar.keep_rows_with_nulls(frame, subset=["age"])
+    """
+
+    if isinstance(subset, str):
+        raise TypeError(
+            f"keep_rows_with_nulls: 'subset' must be a list of column names, "
+            f"not a string. Did you mean subset=['{subset}']?"
+        )
+
+    import pandas as pd
+
+    from .convert import from_pandas, to_pandas
+
+    is_arframe = not isinstance(frame, pd.DataFrame)
+    df = to_pandas(frame) if is_arframe else frame
+
+    cols = subset if subset is not None else df.columns.tolist()
+
+    # validate that all subset columns actually exist
+    unknown = [c for c in cols if c not in df.columns]
+    if unknown:
+        raise ValueError(
+            f"keep_rows_with_nulls: unknown column(s) in subset: {unknown}. "
+            f"Available columns: {df.columns.tolist()}"
+        )
+
+    mask = df[cols].isnull().any(axis=1)
+    result = df[mask].reset_index(drop=True)
+
+    return from_pandas(result) if is_arframe else result
+
+
 def fill_nulls(
     frame: ArFrame,
     value: Any,
