@@ -10,7 +10,6 @@ import tempfile
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 
-
 from ._core import _CsvConfig, _CsvReader
 from .exceptions import CsvReadError
 from .frame import ArFrame
@@ -52,6 +51,7 @@ def _utf8_csv_path(path: str, encoding: str) -> Iterator[str]:
             except OSError:
                 pass
 
+
 def _validate_delimiter(delimiter: str) -> str:
     """Validate CSV delimiter."""
     if not isinstance(delimiter, str):
@@ -66,9 +66,7 @@ def _validate_delimiter(delimiter: str) -> str:
 def _validate_usecols(usecols: Sequence[str]) -> list[str]:
     """Validate usecols parameter."""
     if isinstance(usecols, str):
-        raise TypeError(
-            "usecols must be a sequence of column names, not a string"
-        )
+        raise TypeError("usecols must be a sequence of column names, not a string")
 
     if not isinstance(usecols, Sequence):
         raise TypeError("usecols must be a sequence of strings")
@@ -78,9 +76,7 @@ def _validate_usecols(usecols: Sequence[str]) -> list[str]:
             raise TypeError("usecols must contain only strings")
 
     if len(set(usecols)) != len(usecols):
-        raise ValueError(
-            "usecols must not contain duplicate column names"
-        )
+        raise ValueError("usecols must not contain duplicate column names")
 
     return list(usecols)
 
@@ -94,6 +90,7 @@ def _validate_nrows(nrows: int) -> int:
         raise ValueError("nrows must be non-negative")
 
     return nrows
+
 
 def read_csv(
     path: str | os.PathLike[str],
