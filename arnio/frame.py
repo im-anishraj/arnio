@@ -61,7 +61,13 @@ class ArFrame:
         deep : bool, optional
             If False (default), counts only the fixed struct overhead for
             each column (e.g. ``sizeof(std::string) * capacity`` for string
-            columns).  This is a fast, lower-bound estimate.
+            columns). This is a fast, O(1) lower-bound estimate.
+
+            .. note::
+               **Behavior Change:** Previously, the default memory calculation
+               iterated through all strings to sum their capacities. To align
+               with pandas and provide fast O(1) estimates, `deep=False` now
+               strictly excludes string character heap storage.
 
             If True, also iterates every string element and adds its actual
             character byte count (``s.size()``), giving a precise total

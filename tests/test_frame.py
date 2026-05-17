@@ -1,7 +1,6 @@
 """Tests for ArFrame.memory_usage(deep=False/True)."""
 
 import pandas as pd
-import pytest
 
 import arnio as ar
 
@@ -98,9 +97,7 @@ class TestMemoryUsageDeep:
     def test_longer_strings_use_more_deep_memory(self):
         """A frame with longer strings must report more deep memory."""
         short_frame = ar.from_pandas(pd.DataFrame({"t": ["hi", "ok"]}))
-        long_frame = ar.from_pandas(
-            pd.DataFrame({"t": ["x" * 500, "y" * 500]})
-        )
+        long_frame = ar.from_pandas(pd.DataFrame({"t": ["x" * 500, "y" * 500]}))
         assert long_frame.memory_usage(deep=True) > short_frame.memory_usage(deep=True)
 
     def test_deep_returns_int(self):
