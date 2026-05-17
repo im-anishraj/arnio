@@ -77,15 +77,49 @@ class ArFrame:
 
     # --- Methods ---
 
-    def memory_usage(self) -> int:
+    def memory_usage(self, deep: bool = False) -> int:
         """Total bytes consumed in memory.
+
+        Parameters
+        ----------
+        deep : bool, optional
+            If ``False`` (default), counts only the fixed struct overhead for
+            each column — for string columns this is
+            ``sizeof(std::string) * capacity``, which excludes the
+            heap-allocated character buffers. This is a fast O(1)
+            lower-bound estimate.
+
+            .. note::
+               **Intentional behavior change from pre-deep API:** The original
+               ``memory_usage()`` iterated each string and added
+               ``s.capacity()`` to the total. With ``deep=False`` that
+               per-string iteration is skipped, so the default result will be
+               smaller than the old API for string-heavy frames. This change
+               was made deliberately to make the default path O(1).
+
+            If ``True``, iterates every string element and adds its allocated
+            buffer size (``s.capacity()``), which is the number of bytes the
+            OS actually reserved for that string — always ≥ the character
+            count. This gives a precise upper-bound of the heap footprint.
+
+            For numeric columns (``int64``, ``float64``, ``bool``) the result
+            is identical regardless of *deep* because those types store data
+            inline with no extra heap allocation.
 
         Returns
         -------
         int
-            Memory usage in bytes.
+            Total memory usage in bytes.
+
+        Examples
+        --------
+        >>> frame = ar.read_csv("data.csv")
+        >>> frame.memory_usage()          # fast shallow estimate
+        1024
+        >>> frame.memory_usage(deep=True) # precise, includes string chars
+        3072
         """
-        return self._frame.memory_usage()
+        return self._frame.memory_usage(deep)
 
     def select_columns(self, columns: list[str]) -> ArFrame:
         """Return a new ArFrame with only the selected columns.

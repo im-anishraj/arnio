@@ -58,7 +58,7 @@ const CellValue Column::at(size_t idx) const {
     return std::monostate{};
 }
 
-size_t Column::memory_usage() const {
+size_t Column::memory_usage(bool deep) const {
     assert_type_consistency();
     size_t usage = sizeof(Column);
     usage += name_.capacity();
@@ -66,8 +66,18 @@ size_t Column::memory_usage() const {
 
     if (std::holds_alternative<std::vector<std::string>>(data_)) {
         const auto& vec = std::get<std::vector<std::string>>(data_);
+        // Shallow (deep=false): only count the std::string struct overhead.
+        // NOTE: This intentionally excludes heap-allocated string character
+        // storage to provide a fast O(1) lower-bound estimate. This is a
+        // deliberate change from the pre-deep API for the default path.
         usage += vec.capacity() * sizeof(std::string);
-        for (const auto& s : vec) usage += s.capacity();
+        if (deep) {
+            // Deep: also count the heap-allocated buffer for each string.
+            // Uses capacity() (not size()) because capacity() is the actual
+            // number of bytes allocated by the OS, which may be larger than
+            // the number of characters currently stored.
+            for (const auto& s : vec) usage += s.capacity();
+        }
     } else if (std::holds_alternative<std::vector<int64_t>>(data_)) {
         usage += std::get<std::vector<int64_t>>(data_).capacity() * sizeof(int64_t);
     } else if (std::holds_alternative<std::vector<double>>(data_)) {

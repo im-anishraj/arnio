@@ -19,7 +19,7 @@ class Column {
     size_t size() const;
     bool is_null(size_t idx) const;
     const CellValue at(size_t idx) const;
-    size_t memory_usage() const;
+    size_t memory_usage(bool deep = false) const;
 
     // Mutators (used during construction/loading)
     void push_back(const CellValue& value);

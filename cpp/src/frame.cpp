@@ -32,10 +32,10 @@ std::unordered_map<std::string, std::string> Frame::dtypes() const {
     return result;
 }
 
-size_t Frame::memory_usage() const {
+size_t Frame::memory_usage(bool deep) const {
     size_t usage = sizeof(Frame);
     for (const auto& col : columns_) {
-        usage += col.memory_usage();
+        usage += col.memory_usage(deep);
     }
     return usage;
 }
