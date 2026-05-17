@@ -1,5 +1,5 @@
 """
-Reproducible benchmark: arnio vs pandas
+Reproducible benchmark: arnio vs pandas.
 
 Run:
 python benchmarks/benchmark_vs_pandas.py
@@ -80,11 +80,13 @@ def benchmark_pandas(path):
     df = df.dropna()
     df = df.drop_duplicates()
 
-    for col in df.select_dtypes(
+    object_columns = df.select_dtypes(
         include=["object", "string"]
-    ).columns:
-        df[col] = (
-            df[col]
+    ).columns
+
+    for column in object_columns:
+        df[column] = (
+            df[column]
             .astype(str)
             .str.strip()
             .str.lower()
@@ -173,9 +175,9 @@ def run_case(case):
 
     print(
         f"\nSpeed: "
-        f"{avg(pd_times)/avg(ar_times):.1f}x "
+        f"{avg(pd_times) / avg(ar_times):.1f}x "
         f"| RAM: "
-        f"{(1 - avg(ar_rams)/avg(pd_rams))*100:.0f}% reduction"
+        f"{(1 - avg(ar_rams) / avg(pd_rams)) * 100:.0f}% reduction"
     )
 
     print()
