@@ -55,6 +55,13 @@ class TestReadCsv:
         frame = ar.read_csv(sample_csv)
         assert len(frame) == 3
 
+    def test_contains_operator(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        assert "name" in frame
+        assert "missing" not in frame
+        assert 123 not in frame
+
     def test_header_whitespace(self, tmp_path):
         csv_path = str(tmp_path / "whitespace.csv")
         with open(csv_path, "w") as f:

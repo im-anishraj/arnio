@@ -255,6 +255,8 @@ class ArFrame:
         lines.append(f"DTypes:  {self.dtypes}")
         lines.append(f"Memory:  {self.memory_usage()} bytes")
         return "\n".join(lines)
+    def __contains__(self, item: object) -> bool:
+        return isinstance(item, str) and item in self.columns
 
     def preview(self, n: int = 5) -> str:
         """Return a lightweight string preview of the first ``n`` rows.
