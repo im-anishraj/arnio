@@ -377,7 +377,15 @@ class TestStandardizeMissingTokens:
     def test_normal_case(self):
         df = pd.DataFrame({"value": [1, 2, "N/A"]})
         result = ar.standardize_missing_tokens(df)
+        assert isinstance(result, pd.DataFrame)
         assert pd.isna(result["value"].iloc[2])
+
+    def test_normal_case_arframe(self):
+        frame = ar.from_pandas(pd.DataFrame({"value": [1, 2, "N/A"]}))
+        result = ar.standardize_missing_tokens(frame)
+        df = ar.to_pandas(result)
+        assert isinstance(result, ar.ArFrame)
+        assert pd.isna(df["value"].iloc[2])
 
     def test_default_case(self):
         df = pd.DataFrame({"value": [1, 2, "-"]})
@@ -422,6 +430,11 @@ class TestStandardizeMissingTokens:
         df = pd.DataFrame({"value": [1, 2, "-"]})
         result = ar.standardize_missing_tokens(df, tokens=[])
         assert result["value"].iloc[2] == "-"
+
+    def test_standardize_missing_tokens_unknown_subset_column_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"value": [1, 2, 3]}))
+        with pytest.raises(ValueError, match="Unknown columns in subset"):
+            ar.standardize_missing_tokens(frame, subset=["missing"])
 
 
 class TestStripWhitespace:
