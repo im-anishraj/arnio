@@ -36,6 +36,7 @@ class Schema:
 
     fields: dict[str, Field]
     strict: bool = False
+    unique: list[str] | tuple[str, ...] | None = None
 
     def validate(self, frame: ArFrame) -> ValidationResult:
         """Validate a frame against this schema."""
@@ -88,91 +89,24 @@ class ValidationResult:
         }
 
     def summary(self) -> dict[str, Any]:
-        """Return a compact validation summary.
-
-        Severity counts are not included because ``ValidationIssue`` does not
-        currently carry severity information.
-        """
+        """Return a compact validation summary."""
         by_rule: dict[str, int] = {}
         by_column: dict[str, int] = {}
-        by_column_and_rule: dict[str, dict[str, int]] = {}
         for issue in self.issues:
             by_rule[issue.rule] = by_rule.get(issue.rule, 0) + 1
             if issue.column is not None:
                 by_column[issue.column] = by_column.get(issue.column, 0) + 1
-                column_rules = by_column_and_rule.setdefault(issue.column, {})
-                column_rules[issue.rule] = column_rules.get(issue.rule, 0) + 1
         return {
             "passed": self.passed,
             "issue_count": self.issue_count,
             "bad_row_count": len(self.bad_rows),
             "issues_by_rule": by_rule,
             "issues_by_column": by_column,
-            "issues_by_column_and_rule": by_column_and_rule,
         }
 
     def to_pandas(self) -> pd.DataFrame:
         """Return issues as a pandas DataFrame."""
         return pd.DataFrame([issue.to_dict() for issue in self.issues])
-
-    def to_markdown(self, *, max_issues: int | None = None) -> str:
-        """Return a GitHub-friendly Markdown validation report.
-
-        Parameters
-        ----------
-        max_issues : int, optional
-            Maximum number of issues to include in the table. When omitted, all
-            issues are shown.
-        """
-        if max_issues is not None and (
-            not isinstance(max_issues, int) or isinstance(max_issues, bool)
-        ):
-            raise TypeError("max_issues must be an integer or None")
-        if max_issues is not None and max_issues < 0:
-            raise ValueError("max_issues must be non-negative")
-
-        status = "passed" if self.passed else "failed"
-        lines = [
-            "## Validation Report",
-            "",
-            f"- Status: **{status}**",
-            f"- Rows checked: {self.row_count}",
-            f"- Issues found: {self.issue_count}",
-            f"- Bad rows: {len(self.bad_rows)}",
-        ]
-
-        if self.passed:
-            return "\n".join(lines)
-
-        visible_issues = self.issues if max_issues is None else self.issues[:max_issues]
-        if not visible_issues:
-            lines.extend(["", "_Issue table omitted by `max_issues=0`._"])
-            return "\n".join(lines)
-
-        lines.extend(
-            [
-                "",
-                "| Column | Rule | Row | Value | Message |",
-                "| --- | --- | ---: | --- | --- |",
-            ]
-        )
-        for issue in visible_issues:
-            lines.append(
-                "| "
-                f"{_markdown_cell(issue.column)} | "
-                f"{_markdown_cell(issue.rule)} | "
-                f"{_markdown_cell(issue.row_index)} | "
-                f"{_markdown_cell(_clean_scalar(issue.value))} | "
-                f"{_markdown_cell(issue.message)} |"
-            )
-
-        hidden_count = self.issue_count - len(visible_issues)
-        if hidden_count > 0:
-            lines.extend(
-                ["", f"_Showing {len(visible_issues)} of {self.issue_count} issues._"]
-            )
-
-        return "\n".join(lines)
 
 
 def validate(frame: ArFrame, schema: Schema | dict[str, Field]) -> ValidationResult:
@@ -225,6 +159,40 @@ def validate(frame: ArFrame, schema: Schema | dict[str, Field]) -> ValidationRes
                     )
                 )
 
+    if schema.unique is not None:
+        if isinstance(schema.unique, (list, tuple)) and len(schema.unique) == 0:
+            issues.append(
+                ValidationIssue(
+                    column=None,
+                    rule="composite_unique",
+                    message="Composite unique columns cannot be empty",
+                )
+            )
+        elif isinstance(schema.unique, (list, tuple)):
+            missing_cols = [c for c in schema.unique if c not in df.columns]
+            if missing_cols:
+                for col in missing_cols:
+                    issues.append(
+                        ValidationIssue(
+                            column=col,
+                            rule="missing_column",
+                            message=f"Column {col!r} not found",
+                        )
+                    )
+            else:
+                duplicate_mask = df.duplicated(subset=list(schema.unique), keep=False)
+                if duplicate_mask.any():
+                    invalid = df[duplicate_mask]
+                    for index in invalid.index:
+                        issues.append(
+                            ValidationIssue(
+                                column=None,
+                                rule="composite_unique",
+                                message=f"Duplicate rows found for columns {list(schema.unique)}",
+                                row_index=int(index)
+                            )
+                        )
+
     bad_rows = sorted(
         {issue.row_index for issue in issues if issue.row_index is not None}
     )
@@ -244,17 +212,7 @@ def Int64(
     unique: bool = False,
 ) -> Field:
     """Create an int64 schema field."""
-
-    if min is not None and max is not None and min > max:
-        raise ValueError("min must be less than or equal to max")
-
-    return Field(
-        dtype="int64",
-        nullable=nullable,
-        min=min,
-        max=max,
-        unique=unique,
-    )
+    return Field(dtype="int64", nullable=nullable, min=min, max=max, unique=unique)
 
 
 def Float64(
@@ -265,17 +223,7 @@ def Float64(
     unique: bool = False,
 ) -> Field:
     """Create a float64 schema field."""
-
-    if min is not None and max is not None and min > max:
-        raise ValueError("min must be less than or equal to max")
-
-    return Field(
-        dtype="float64",
-        nullable=nullable,
-        min=min,
-        max=max,
-        unique=unique,
-    )
+    return Field(dtype="float64", nullable=nullable, min=min, max=max, unique=unique)
 
 
 def String(
@@ -288,12 +236,7 @@ def String(
     max_length: int | None = None,
 ) -> Field:
     """Create a string schema field."""
-
-    if min_length is not None and max_length is not None and min_length > max_length:
-        raise ValueError("min_length must be less than or equal to max_length")
-
     allowed_set = set(allowed) if allowed is not None else None
-
     return Field(
         dtype="string",
         nullable=nullable,
@@ -493,13 +436,6 @@ def _clean_scalar(value: Any) -> Any:
     if hasattr(value, "item"):
         return value.item()
     return value
-
-
-def _markdown_cell(value: Any) -> str:
-    if value is None:
-        return ""
-    text = str(value).replace("\n", "<br>").replace("|", "\\|")
-    return text
 
 
 _SEMANTIC_PATTERNS = {
