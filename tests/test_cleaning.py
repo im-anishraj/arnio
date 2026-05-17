@@ -121,6 +121,31 @@ class TestDropDuplicates:
         result = ar.drop_duplicates(frame, subset=["name"])
         assert result.shape[0] == 3
 
+    def test_drop_dupes_with_nan_and_nulls(self):
+        import numpy as np
+        import pandas as pd
+
+        df = pd.DataFrame(
+            {
+                "id": [1, 1, 2, 2, 3, 3],
+                "val1": [np.nan, np.nan, 10.5, 10.5, None, None],
+                "val2": ["a", "a", "b", "b", None, None],
+            }
+        )
+        frame = ar.from_pandas(df)
+
+        # keep="first"
+        res_first = ar.to_pandas(ar.drop_duplicates(frame, keep="first"))
+        assert len(res_first) == 3
+
+        # keep="none"
+        res_none = ar.to_pandas(ar.drop_duplicates(frame, keep="none"))
+        assert len(res_none) == 0
+
+        # subset with NaN
+        res_subset = ar.to_pandas(ar.drop_duplicates(frame, subset=["val1"]))
+        assert len(res_subset) == 2
+
 
 class TestDropConstantColumns:
     def test_drop_constant_columns_removes_constant_columns(self):
