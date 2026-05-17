@@ -140,6 +140,31 @@ Raises `ValueError` for invalid `n` (zero, negative, or non-integer).
 </details>
 
 <details>
+<summary><b>💰 Financial Decimal Support</b></summary>
+<br>
+
+`arnio` provides support for converting Python `decimal.Decimal` objects.
+
+* **Behavior**: Python `Decimal` objects are converted to C++ `double` types during serialization/binding.
+* **Caveat**: High-precision financial data may experience standard floating-point precision loss. For exact financial arithmetic, consider passing values as scaled integers (cents) or strings.
+
+Example:
+
+```python
+from decimal import Decimal
+import arnio as ar
+
+df = pd.DataFrame({
+    "price": [Decimal("19.99"), Decimal("29.95")]
+})
+
+frame = ar.from_pandas(df)  # Decimal values converted to float
+result = ar.to_pandas(frame)
+```
+
+</details>
+
+<details>
 <summary><b>🧩 Add custom steps without touching C++</b></summary>
 <br>
 

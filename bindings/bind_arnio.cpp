@@ -2,6 +2,9 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
+#include <cmath>
+#include <stdexcept>
+
 #include "arnio/cleaning.h"
 #include "arnio/column.h"
 #include "arnio/csv_reader.h"
@@ -9,10 +12,11 @@
 #include "arnio/types.h"
 
 namespace py = pybind11;
-using namespace arnio;
 
 PYBIND11_MODULE(_arnio_cpp, m) {
     m.doc() = "arnio C++ backend";
+    
+
 
     // --- DType enum ---
     py::enum_<DType>(m, "DType")
