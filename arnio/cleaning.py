@@ -390,6 +390,11 @@ def normalize_unicode(
 
     from .convert import from_pandas, to_pandas
 
+    valid_forms = {"NFC", "NFD", "NFKC", "NFKD"}
+
+    if form not in valid_forms:
+        raise ValueError(f"Unsupported Unicode normalization form: {form}")
+
     if subset is not None:
         validate_columns_exist(
             frame,

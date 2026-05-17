@@ -350,7 +350,7 @@ class TestNormalizeUnicode:
 
         import arnio as ar
 
-        df = pd.DataFrame({"text": ["café"]})
+        df = pd.DataFrame({"text": ["cafe\u0301"]})
 
         frame = ar.from_pandas(df)
 

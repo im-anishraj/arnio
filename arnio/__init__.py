@@ -21,12 +21,12 @@ from .cleaning import (
     fill_nulls,
     filter_rows,
     normalize_case,
+    normalize_unicode,
     rename_columns,
     round_numeric_columns,
     safe_divide_columns,
     strip_whitespace,
     validate_columns_exist,
-    normalize_unicode,
 )
 from .convert import from_pandas, to_pandas
 from .exceptions import ArnioError, CsvReadError, TypeCastError, UnknownStepError
