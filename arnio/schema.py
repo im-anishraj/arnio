@@ -5,13 +5,12 @@ Production data contracts and validation.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
 import pandas as pd
-
-import re
 
 from .convert import to_pandas
 from .frame import ArFrame
@@ -409,7 +408,6 @@ def _validate_column(
                 message=f"Column {name!r} has values that do not match the pattern",
             )
         )
-
 
     if field_def.semantic is not None:
         pattern = _SEMANTIC_PATTERNS.get(field_def.semantic)

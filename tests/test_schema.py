@@ -269,6 +269,7 @@ def test_custom_pattern_validation(tmp_path):
     assert result.issues[0].rule == "pattern"
     assert result.issues[0].row_index == 1
 
+
 def test_string_min_length_boundary(tmp_path):
     path = tmp_path / "names.csv"
     path.write_text("name\nab\nabc\n")
@@ -313,6 +314,7 @@ def test_null_values_skip_length_validation(tmp_path):
     assert result.issues[0].rule == "min_length"
     assert result.issues[0].row_index == 0
 
+
 def test_date_validation_accepts_valid_dates(tmp_path):
     path = tmp_path / "dates.csv"
     path.write_text("created_at\n2026-05-15\n2024-02-29\n")
@@ -353,14 +355,10 @@ def test_date_validation_handles_nullable_values(tmp_path):
 
     assert result.passed
 
+
 def test_date_validation_rejects_non_zero_padded_dates(tmp_path):
     path = tmp_path / "non_padded_dates.csv"
-    path.write_text(
-        "created_at\n"
-        "2026-5-15\n"
-        "2026-05-5\n"
-        "2026-5-5\n"
-    )
+    path.write_text("created_at\n" "2026-5-15\n" "2026-05-5\n" "2026-5-5\n")
 
     result = ar.validate(
         ar.read_csv(path),
