@@ -732,6 +732,7 @@ def _markdown_cell(value: Any) -> str:
     return text
 
 
+DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _SEMANTIC_PATTERNS = {
     "email": r"[^@\s]+@[^@\s]+\.[^@\s]+",
     "email:strict": (
