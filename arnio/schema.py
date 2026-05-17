@@ -37,9 +37,9 @@ class Schema:
     fields: dict[str, Field]
     strict: bool = False
 
-    def validate(self, frame: ArFrame) -> ValidationResult:
+    def validate(self, frame: ArFrame, *, max_errors: int | None = None) -> ValidationResult:
         """Validate a frame against this schema."""
-        return validate(frame, self)
+        return validate(frame, self, max_errors=max_errors)
 
 
 @dataclass(frozen=True)
@@ -175,7 +175,12 @@ class ValidationResult:
         return "\n".join(lines)
 
 
-def validate(frame: ArFrame, schema: Schema | dict[str, Field]) -> ValidationResult:
+def validate(
+    frame: ArFrame,
+    schema: Schema | dict[str, Field],
+    *,
+    max_errors: int | None = None,
+) -> ValidationResult:
     """Validate an ArFrame against a schema.
 
     Parameters
@@ -184,24 +189,40 @@ def validate(frame: ArFrame, schema: Schema | dict[str, Field]) -> ValidationRes
         Input frame.
     schema : Schema or dict[str, Field]
         Validation contract.
+    max_errors : int, optional
+        Stop collecting issues after this many. Defaults to None (collect all).
 
     Returns
     -------
     ValidationResult
         Validation result containing all issues and bad row indexes.
 
+    Raises
+    ------
+    ValueError
+        If max_errors is negative.
+
     Examples
     --------
     >>> schema = ar.Schema({"email": ar.Email(nullable=False)})
     >>> result = ar.validate(frame, schema)
     >>> result.passed
+    >>> result = ar.validate(frame, schema, max_errors=5)
     """
+    if max_errors is not None and (
+        not isinstance(max_errors, int) or isinstance(max_errors, bool)
+    ):
+        raise TypeError("max_errors must be an integer or None")
+    if max_errors is not None and max_errors < 0:
+        raise ValueError("max_errors must be non-negative")
     schema = schema if isinstance(schema, Schema) else Schema(schema)
     df = to_pandas(frame)
     dtypes = frame.dtypes
     issues: list[ValidationIssue] = []
 
     for name, field_def in schema.fields.items():
+        if max_errors is not None and len(issues) >= max_errors:
+            break
         if name not in df.columns:
             issues.append(
                 ValidationIssue(
@@ -212,10 +233,14 @@ def validate(frame: ArFrame, schema: Schema | dict[str, Field]) -> ValidationRes
             )
             continue
         issues.extend(_validate_column(df[name], dtypes.get(name), name, field_def))
+        if max_errors is not None:
+            del issues[max_errors:]
 
     if schema.strict:
         expected = set(schema.fields)
         for name in df.columns:
+            if max_errors is not None and len(issues) >= max_errors:
+                break
             if name not in expected:
                 issues.append(
                     ValidationIssue(

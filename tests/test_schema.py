@@ -258,6 +258,58 @@ def test_validation_result_to_markdown_rejects_non_integer_max_issues(sample_csv
             raise AssertionError(f"Expected max_issues={invalid!r} to raise")
 
 
+def test_validate_max_errors_limits_issues(sample_csv):
+    result = ar.validate(
+        ar.read_csv(sample_csv),
+        {"age": ar.Int64(min=31), "missing": ar.String()},
+        max_errors=1,
+    )
+
+    assert not result.passed
+    assert result.issue_count == 1
+
+
+def test_validate_max_errors_none_collects_all(sample_csv):
+    result = ar.validate(
+        ar.read_csv(sample_csv),
+        {"age": ar.Int64(min=31), "missing": ar.String()},
+    )
+
+    assert result.issue_count == 3
+
+
+def test_validate_max_errors_zero_returns_empty_issues(sample_csv):
+    result = ar.validate(
+        ar.read_csv(sample_csv),
+        {"age": ar.Int64(min=31)},
+        max_errors=0,
+    )
+
+    assert not result.passed
+    assert result.issue_count == 0
+
+
+def test_validate_max_errors_works_with_schema_validate(sample_csv):
+    schema = ar.Schema({"age": ar.Int64(min=31), "missing": ar.String()})
+    result = schema.validate(ar.read_csv(sample_csv), max_errors=1)
+
+    assert result.issue_count == 1
+
+
+def test_validate_max_errors_rejects_negative(sample_csv):
+    import pytest
+
+    with pytest.raises(ValueError, match="max_errors must be non-negative"):
+        ar.validate(ar.read_csv(sample_csv), {}, max_errors=-1)
+
+
+def test_validate_max_errors_rejects_non_integer(sample_csv):
+    import pytest
+
+    with pytest.raises(TypeError, match="max_errors must be an integer or None"):
+        ar.validate(ar.read_csv(sample_csv), {}, max_errors="bad")
+
+
 def test_custom_pattern_validation(tmp_path):
     path = tmp_path / "codes.csv"
     path.write_text("code\nAA-123\nbad\n")
