@@ -63,6 +63,7 @@ from .schema import (
     ValidationIssue,
     ValidationResult,
     validate,
+    Regex,
 )
 
 __all__ = [
