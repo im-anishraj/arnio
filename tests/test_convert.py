@@ -214,7 +214,8 @@ class TestFromPandas:
             ar.from_pandas(df)
 
     def test_from_pandas_unsupported_scalar_object_column(self):
-      """datetime64 columns now raise a clear TypeError with a fix hint."""
+        """datetime64 columns now raise a clear TypeError with a fix hint."""
+
     timestamp = pd.Timestamp("2026-05-14 12:30:00")
     df = pd.DataFrame({"created_at": [timestamp]})
     with pytest.raises(TypeError, match="Column 'created_at'"):
@@ -345,7 +346,7 @@ class TestFromPandas:
         frame = ar.from_pandas(df)
         result = ar.to_pandas(frame)
         assert isinstance(result.index, pd.RangeIndex)
-    
+
     def test_datetime_raises_clear_error(self):
         df = pd.DataFrame({"created_at": pd.to_datetime(["2021-01-01", "2022-06-15"])})
         with pytest.raises(TypeError, match="Column 'created_at'"):
@@ -387,10 +388,12 @@ class TestFromPandas:
             ar.from_pandas(df)
 
     def test_mixed_valid_and_invalid_raises_on_bad_column(self):
-        df = pd.DataFrame({
-            "name": ["Alice", "Bob"],
-            "joined": pd.to_datetime(["2020-01-01", "2021-06-01"]),
-        })
+        df = pd.DataFrame(
+            {
+                "name": ["Alice", "Bob"],
+                "joined": pd.to_datetime(["2020-01-01", "2021-06-01"]),
+            }
+        )
         with pytest.raises(TypeError, match="Column 'joined'"):
             ar.from_pandas(df)
 

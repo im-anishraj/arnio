@@ -216,7 +216,4 @@ def from_pandas(df: pd.DataFrame) -> ArFrame:
             dtype_hints[name] = dtype_hint
 
     cpp_frame = _Frame.from_dict(columns, dtype_hints)
-
-
     return ArFrame(cpp_frame, attrs=copylib.deepcopy(df.attrs))
-
