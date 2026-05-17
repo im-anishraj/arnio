@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.1](https://github.com/im-anishraj/arnio/compare/v1.7.0...v1.7.1) (2026-05-17)
+
+
+### Bug Fixes
+
+* reject impossible schema bounds ([906b286](https://github.com/im-anishraj/arnio/commit/906b286ad0bae551bea56746f90fa95135f749ab))
+
 ## [1.7.0](https://github.com/im-anishraj/arnio/compare/v1.6.2...v1.7.0) (2026-05-17)
 
 
