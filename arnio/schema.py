@@ -13,6 +13,14 @@ import pandas as pd
 from .convert import to_pandas
 from .frame import ArFrame
 
+ISSUE_COLUMNS = [
+    "column",
+    "rule",
+    "message",
+    "row_index",
+    "value",
+]
+
 
 @dataclass(frozen=True)
 class Field:
@@ -113,6 +121,9 @@ class ValidationResult:
 
     def to_pandas(self) -> pd.DataFrame:
         """Return issues as a pandas DataFrame."""
+        if not self.issues:
+            return pd.DataFrame(columns=ISSUE_COLUMNS)
+
         return pd.DataFrame([issue.to_dict() for issue in self.issues])
 
     def to_markdown(self, *, max_issues: int | None = None) -> str:
