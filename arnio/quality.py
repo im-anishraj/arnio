@@ -133,6 +133,7 @@ class DataQualityReport:
                     "max": _clean_scalar(column.max),
                     "mean": column.mean,
                     "warnings": column.warnings,
+                    "top_values": column.top_values,
                 }
                 for column in self.columns.values()
             ]
@@ -476,8 +477,7 @@ def _top_values(
     counts = series.value_counts(dropna=True)
     total = int(counts.sum())
     return [
-        (val, int(cnt), _ratio(int(cnt), total))
-        for val, cnt in counts.head(n).items()
+        (val, int(cnt), _ratio(int(cnt), total)) for val, cnt in counts.head(n).items()
     ]
 
 
