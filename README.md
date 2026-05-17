@@ -53,6 +53,8 @@ Colab install smoke test: **[COLAB_SMOKE_TEST.md](COLAB_SMOKE_TEST.md)**
 
 A simple workflow in just a few steps.
 
+> New to Arnio? Start with the pandas workflow example below before exploring advanced pipelines.
+
 ```python
 import arnio as ar
 
