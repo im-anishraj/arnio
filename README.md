@@ -379,6 +379,41 @@ Small differences are expected across CPUs, operating systems, compilers, Python
 
 <br>
 
+### 🧠 Auto Clean Memory Benchmark
+
+To measure the peak memory and execution time of the `auto_clean` pipeline using realistic dataset sizes:
+
+```bash
+python benchmarks/benchmark_auto_clean_memory.py --rows 100000
+```
+
+This script generates a reproducible synthetic dataset with mixed column types (strings, ints, floats, booleans, nulls, and duplicates) and measures:
+- `ar.read_csv` performance
+- `ar.auto_clean(mode="safe")` performance (low-risk cleanup like whitespace trimming)
+- `ar.auto_clean(mode="strict")` performance (includes type casting and deduplication)
+
+The dataset is regenerated deterministically unless `--reuse-file` is provided.
+Each `auto_clean` benchmark run reloads the dataset to avoid mutation or caching effects between runs.
+
+Options:
+- `--repeat N` runs each operation multiple times and reports average (and min/max range).
+- `--seed N` changes the deterministic dataset seed.
+- `--reuse-file` reuses an existing dataset file instead of regenerating it.
+- `--keep-file` keeps the generated CSV (otherwise it is removed at the end).
+
+Expected output format:
+
+```text
+Operation                    Time(s)     Peak Py(MiB)
+--------------------------------------------------------------------
+ar.read_csv           0.042 (0.041-0.044)    4.52 (4.50-4.60)
+ar.auto_clean(safe)   0.012 (0.011-0.013)    0.15 (0.14-0.16)
+ar.auto_clean(strict) 0.035 (0.034-0.036)    1.20 (1.18-1.22)
+--------------------------------------------------------------------
+Total avg (Read+Strict)       0.077             4.52
+```
+<br>
+
 ---
 
 <br>
