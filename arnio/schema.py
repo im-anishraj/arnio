@@ -13,6 +13,14 @@ import pandas as pd
 from .convert import to_pandas
 from .frame import ArFrame
 
+ISSUE_COLUMNS = [
+    "column",
+    "rule",
+    "message",
+    "row_index",
+    "value",
+]
+
 
 @dataclass(frozen=True)
 class Field:
@@ -113,6 +121,9 @@ class ValidationResult:
 
     def to_pandas(self) -> pd.DataFrame:
         """Return issues as a pandas DataFrame."""
+        if not self.issues:
+            return pd.DataFrame(columns=ISSUE_COLUMNS)
+
         return pd.DataFrame([issue.to_dict() for issue in self.issues])
 
     def to_markdown(self, *, max_issues: int | None = None) -> str:
@@ -244,7 +255,17 @@ def Int64(
     unique: bool = False,
 ) -> Field:
     """Create an int64 schema field."""
-    return Field(dtype="int64", nullable=nullable, min=min, max=max, unique=unique)
+
+    if min is not None and max is not None and min > max:
+        raise ValueError("min must be less than or equal to max")
+
+    return Field(
+        dtype="int64",
+        nullable=nullable,
+        min=min,
+        max=max,
+        unique=unique,
+    )
 
 
 def Float64(
@@ -255,7 +276,17 @@ def Float64(
     unique: bool = False,
 ) -> Field:
     """Create a float64 schema field."""
-    return Field(dtype="float64", nullable=nullable, min=min, max=max, unique=unique)
+
+    if min is not None and max is not None and min > max:
+        raise ValueError("min must be less than or equal to max")
+
+    return Field(
+        dtype="float64",
+        nullable=nullable,
+        min=min,
+        max=max,
+        unique=unique,
+    )
 
 
 def String(
@@ -268,7 +299,12 @@ def String(
     max_length: int | None = None,
 ) -> Field:
     """Create a string schema field."""
+
+    if min_length is not None and max_length is not None and min_length > max_length:
+        raise ValueError("min_length must be less than or equal to max_length")
+
     allowed_set = set(allowed) if allowed is not None else None
+
     return Field(
         dtype="string",
         nullable=nullable,
@@ -298,6 +334,16 @@ def Email(*, nullable: bool = True, unique: bool = False) -> Field:
 def URL(*, nullable: bool = True, unique: bool = False) -> Field:
     """Create a URL schema field."""
     return Field(dtype="string", nullable=nullable, semantic="url", unique=unique)
+
+
+def CountryCode(*, nullable: bool = True, unique: bool = False) -> Field:
+    """Create an uppercase ISO alpha-2 country-code schema field."""
+    return Field(
+        dtype="string",
+        nullable=nullable,
+        semantic="country_code",
+        unique=unique,
+    )
 
 
 def _validate_column(
@@ -481,4 +527,5 @@ _SEMANTIC_PATTERNS = {
     "email": r"[^@\s]+@[^@\s]+\.[^@\s]+",
     "url": r"https?://[^\s]+",
     "phone": r"\+?[0-9][0-9 .()\-]{6,}[0-9]",
+    "country_code": r"[A-Z]{2}",
 }
