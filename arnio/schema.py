@@ -218,12 +218,19 @@ def Bool(*, nullable: bool = True) -> Field:
     return Field(dtype="bool", nullable=nullable)
 
 
-def Email(*, nullable: bool = True, unique: bool = False) -> Field:
+def Email(
+    *,
+    nullable: bool = True,
+    unique: bool = False,
+    validation: str = "light",
+) -> Field:
     """Create an email-address schema field."""
+    if validation not in {"light", "strict"}:
+        raise ValueError("Email validation must be 'light' or 'strict'")
     return Field(
         dtype="string",
         nullable=nullable,
-        semantic="email",
+        semantic=f"email:{validation}",
         unique=unique,
     )
 
@@ -404,7 +411,13 @@ def _clean_scalar(value: Any) -> Any:
 
 
 _SEMANTIC_PATTERNS = {
-    "email": r"[^@\s]+@[^@\s]+\.[^@\s]+",
+    "email:light": r"[^@\s]+@[^@\s]+\.[^@\s]+",
+    "email:strict": (
+        r"[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+"
+        r"@"
+        r"[a-zA-Z0-9-]+"
+        r"(?:\.[a-zA-Z0-9-]+)+"
+    ),
     "url": r"https?://[^\s]+",
     "phone": r"\+?[0-9][0-9 .()\-]{6,}[0-9]",
 }
