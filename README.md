@@ -627,6 +627,8 @@ For production data contracts:
 schema = ar.Schema({
     "id": ar.Int64(nullable=False, unique=True),
     "email": ar.Email(nullable=False),
+    # CountryCode expects uppercase ISO alpha-2 values, for example IN, US, GB.
+    "country": ar.CountryCode(nullable=False),
     "username": ar.String(min_length=3, max_length=20),
     "revenue": ar.Float64(nullable=True, min=0),
 })
