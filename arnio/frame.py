@@ -150,7 +150,7 @@ class ArFrame:
         lines.append(f"Memory:  {self.memory_usage()} bytes")
         return "\n".join(lines)
 
-    def compare_schema(self, other: "ArFrame", strict: bool = False) -> bool:
+    def compare_schema(self, other: ArFrame, strict: bool = False) -> bool:
         """Compare the schema (columns and data types) with another ArFrame.
         Parameters
         ----------

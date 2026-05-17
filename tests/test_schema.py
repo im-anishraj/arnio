@@ -263,7 +263,7 @@ def test_custom_pattern_validation(tmp_path):
     path = tmp_path / "codes.csv"
     path.write_text("code\nAA-123\nbad\n")
     result = ar.validate(
-        ar.read_csv(path), {"code": ar.String(regex=r"^[A-Z]{2}-\d{3}$")}
+        ar.read_csv(path), {"code": ar.String(pattern=r"^[A-Z]{2}-\d{3}$")}
     )
 
     assert not result.passed
