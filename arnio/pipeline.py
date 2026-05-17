@@ -91,7 +91,7 @@ def pipeline(
     ... ])
     """
     from .convert import from_pandas, to_pandas
-    from .exceptions import UnknownStepError
+    from .exceptions import UnknownStepError, PipelineStepError
 
     result = frame
     for step in steps:
@@ -119,7 +119,10 @@ def pipeline(
         elif name in _PYTHON_STEP_REGISTRY:
             # Pure Python step - slower but contributor-friendly
             df = to_pandas(result)
-            df = _PYTHON_STEP_REGISTRY[name](df, **kwargs)
+            try:
+                df = _PYTHON_STEP_REGISTRY[name](df, **kwargs)
+            except Exception as e:
+                raise PipelineStepError(name, e)
             result = from_pandas(df)
         else:
             available = list(_STEP_REGISTRY.keys()) + list(_PYTHON_STEP_REGISTRY.keys())
