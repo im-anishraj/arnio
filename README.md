@@ -853,7 +853,13 @@ If you are new to Arnio terms, see the [contributor glossary](.github/CONTRIBUTI
 <a href="https://discord.gg/xsEw7r78M"><b>Discord</b></a>
 </p>
 
-<br>
+### 💖 Contributors
+
+Thanks to everyone who contributes to Arnio and helps improve the project.
+
+- [View all contributors](https://github.com/im-anishraj/arnio/graphs/contributors)
+- [Contribution Guide](.github/CONTRIBUTING.md)
+- [GitHub Discussions](https://github.com/im-anishraj/arnio/discussions)
 
 ---
 
