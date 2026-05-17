@@ -26,6 +26,54 @@ class TestReadCsv:
         frame = ar.read_csv(sample_csv, nrows=2)
         assert frame.shape == (2, 4)
 
+    def test_invalid_delimiter(self, tmp_path):
+        csv_path = tmp_path / "test.csv"
+        csv_path.write_text("a,b\n1,2\n")
+
+        with pytest.raises(ValueError, match="delimiter must be exactly one character"):
+            ar.read_csv(csv_path, delimiter="::")
+
+        with pytest.raises(ValueError, match="delimiter must be exactly one character"):
+            ar.read_csv(csv_path, delimiter="")
+
+        with pytest.raises(TypeError, match="delimiter must be a string"):
+            ar.read_csv(csv_path, delimiter=1)
+
+    def test_invalid_usecols(self, tmp_path):
+        csv_path = tmp_path / "test.csv"
+        csv_path.write_text("id,name\n1,Alice\n")
+
+        with pytest.raises(
+            TypeError,
+            match="usecols must be a sequence of column names, not a string",
+        ):
+            ar.read_csv(csv_path, usecols="name")
+
+        with pytest.raises(
+            TypeError,
+            match="usecols must contain only strings",
+        ):
+            ar.read_csv(csv_path, usecols=[123])
+
+        with pytest.raises(
+            ValueError,
+            match="usecols must not contain duplicate column names",
+        ):
+            ar.read_csv(csv_path, usecols=["id", "id"])
+
+    def test_invalid_nrows(self, tmp_path):
+        csv_path = tmp_path / "test.csv"
+        csv_path.write_text("a,b\n1,2\n")
+
+        with pytest.raises(TypeError, match="nrows must be an integer"):
+            ar.read_csv(csv_path, nrows=True)
+
+        with pytest.raises(TypeError, match="nrows must be an integer"):
+            ar.read_csv(csv_path, nrows=1.5)
+
+        with pytest.raises(ValueError, match="nrows must be non-negative"):
+            ar.read_csv(csv_path, nrows=-1)
+
     def test_no_header(self, csv_no_header):
         frame = ar.read_csv(csv_no_header, has_header=False)
         assert frame.shape == (2, 3)
@@ -222,6 +270,19 @@ class TestScanCsv:
             match="CSV input contains NUL bytes and appears to be binary or corrupted",
         ):
             ar.scan_csv(file_path)
+
+    def test_scan_invalid_delimiter(self, tmp_path):
+        csv_path = tmp_path / "test.csv"
+        csv_path.write_text("a,b\n1,2\n")
+
+        with pytest.raises(ValueError, match="delimiter must be exactly one character"):
+            ar.scan_csv(csv_path, delimiter="::")
+
+        with pytest.raises(ValueError, match="delimiter must be exactly one character"):
+            ar.scan_csv(csv_path, delimiter="")
+
+        with pytest.raises(TypeError, match="delimiter must be a string"):
+            ar.scan_csv(csv_path, delimiter=1)
 
     def test_scan_empty_file_raises(self, tmp_path):
         csv_path = tmp_path / "empty.csv"
