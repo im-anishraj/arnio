@@ -13,6 +13,7 @@ from .frame import ArFrame
 # Map step names to cleaning functions
 _STEP_REGISTRY: dict[str, Callable] = {
     "drop_nulls": cleaning.drop_nulls,
+    "keep_rows_with_nulls": cleaning.keep_rows_with_nulls,
     "fill_nulls": cleaning.fill_nulls,
     "validate_columns_exist": cleaning.validate_columns_exist,
     "drop_duplicates": cleaning.drop_duplicates,
@@ -23,6 +24,7 @@ _STEP_REGISTRY: dict[str, Callable] = {
     "rename_columns": cleaning.rename_columns,
     "cast_types": cleaning.cast_types,
     "round_numeric_columns": cleaning.round_numeric_columns,
+    "trim_column_names": cleaning.trim_column_names,
 }
 
 
@@ -128,3 +130,4 @@ register_step("filter_rows", cleaning.filter_rows)
 register_step("winsorize_outliers", cleaning.winsorize_outliers)
 
 register_step("safe_divide_columns", cleaning.safe_divide_columns)
+register_step("replace_values", cleaning.replace_values)
