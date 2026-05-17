@@ -351,9 +351,9 @@ def test_pipeline_combine_columns():
     import arnio as ar
 
     df = pd.DataFrame({"first": ["Alice", "Bob"], "last": ["Smith", "Jones"]})
-    
+
     frame = ar.from_pandas(df)
-    
+
     result = ar.pipeline(
         frame,
         [
@@ -367,17 +367,17 @@ def test_pipeline_combine_columns():
             )
         ],
     )
-    
+
     result_df = ar.to_pandas(result)
-    
+
     assert list(result_df["full_name"]) == ["Alice Smith", "Bob Jones"]
-    
-    
+
+
 def test_replace_values_simple():
     import pandas as pd
 
     import arnio as ar
-    
+
     df = pd.DataFrame({"status": ["active", "inactive", "active"]})
 
     frame = ar.from_pandas(df)
@@ -421,7 +421,7 @@ def test_replace_values_none():
     )
 
     result_df = ar.to_pandas(result)
-                  
+
     assert list(result_df["status"]) == ["A", "MISSING", "MISSING", "I"]
 
 
