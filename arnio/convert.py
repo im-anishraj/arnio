@@ -143,6 +143,12 @@ def to_pandas(frame: ArFrame, *, copy: bool = False) -> pd.DataFrame:
 def _pandas_dtype_to_arnio(dtype: object) -> _DType | None:
     if dtype == pd.Int64Dtype():
         return _DType.INT64
+    if dtype == pd.Float64Dtype() or dtype == np.dtype("float64"):
+        return _DType.FLOAT64
+    if dtype == pd.BooleanDtype() or dtype == np.dtype("bool"):
+        return _DType.BOOL
+    if dtype == pd.StringDtype() or dtype == np.dtype("object"):
+        return _DType.STRING
     return None
 
 
