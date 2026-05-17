@@ -1,5 +1,7 @@
 """Tests for schema validation."""
 
+import pytest
+
 import arnio as ar
 
 
@@ -464,3 +466,82 @@ def test_schema_composite_unique_empty_columns(tmp_path):
     issues = [i for i in result.issues if i.rule == "composite_unique"]
     assert len(issues) == 1
     assert "cannot be empty" in issues[0].message
+
+
+def test_datetime_validation_passes_for_valid_column(tmp_path):
+    path = tmp_path / "valid_datetimes.csv"
+    path.write_text(
+        "ts\n" "2026-01-01T12:00:00\n" "2026-06-15T08:30:00\n" "2026-12-31T23:59:59\n"
+    )
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {
+            "ts": ar.DateTime(
+                nullable=False,
+                format="%Y-%m-%dT%H:%M:%S",
+                min="2026-01-01",
+                max="2026-12-31T23:59:59",
+            )
+        },
+    )
+
+    assert result.passed
+    assert result.issue_count == 0
+    assert result.bad_rows == []
+
+
+def test_datetime_rejects_invalid_format_type():
+    with pytest.raises(TypeError, match="format must be a string or None"):
+        ar.DateTime(format=123)
+
+
+def test_datetime_rejects_invalid_boundary_values():
+    with pytest.raises(ValueError, match="min must be a parseable datetime scalar"):
+        ar.DateTime(min="not-a-date")
+
+    with pytest.raises(ValueError, match="max must be a parseable datetime scalar"):
+        ar.DateTime(max=["2026-01-01", "2026-01-02"])
+
+
+def test_datetime_rejects_min_greater_than_max():
+    with pytest.raises(ValueError, match="min must be less than or equal to max"):
+        ar.DateTime(min="2026-12-31", max="2026-01-01")
+
+
+def test_datetime_validation(tmp_path):
+    path = tmp_path / "datetimes.csv"
+    path.write_text(
+        "ts,note\n"
+        "2026-01-01T12:00:00,start\n"
+        "2026-12-31T23:59:59,end\n"
+        ",missing\n"
+        "invalid-date,bad\n"
+    )
+    frame = ar.read_csv(path)
+    schema = ar.Schema(
+        {
+            "ts": ar.DateTime(
+                nullable=False,
+                format="%Y-%m-%dT%H:%M:%S",
+                min="2026-01-01",
+                max="2026-12-31T23:59:59",
+            )
+        }
+    )
+
+    result = ar.validate(frame, schema)
+    rules = [issue.rule for issue in result.issues]
+
+    assert not result.passed
+    assert "format" in rules
+    assert "nullable" in rules
+
+    path2 = tmp_path / "boundary.csv"
+    path2.write_text("ts\n" "2025-12-31T23:59:59\n" "2027-01-01T00:00:00\n")
+    frame2 = ar.read_csv(path2)
+    result2 = ar.validate(frame2, schema)
+    rules2 = [issue.rule for issue in result2.issues]
+
+    assert "min" in rules2
+    assert "max" in rules2
