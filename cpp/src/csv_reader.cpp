@@ -174,7 +174,7 @@ std::vector<std::string> CsvReader::parse_line(const std::string& line) const {
     return fields;
 }
 
-DType CsvReader::infer_type(const std::string& value) const{
+DType CsvReader::infer_type(const std::string& value) const {
     if (value.empty()) return DType::NULL_TYPE;
 
     // Try bool
@@ -222,7 +222,7 @@ DType CsvReader::promote_type(DType current, DType incoming) {
     return DType::STRING;
 }
 
-CellValue CsvReader::parse_value(const std::string& raw, DType dtype) const{
+CellValue CsvReader::parse_value(const std::string& raw, DType dtype) const {
     if (raw.empty()) return std::monostate{};
 
     switch (dtype) {
