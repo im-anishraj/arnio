@@ -398,6 +398,7 @@ Most operations below run natively in C++. The current `filter_rows` step uses t
 | `normalize_case` | Force lower/upper/title case | `ar.normalize_case(frame, case_type="title")` |
 | `rename_columns` | Rename columns via mapping | `ar.rename_columns(frame, {"old": "new"})` |
 | `cast_types` | Cast column types | `ar.cast_types(frame, {"age": "int64"})` |
+| `remove_special_chars` | Remove special characters from string columns, keeping only alphanumeric characters and whitespace | `ar.remove_special_chars(frame, subset=["name", "city"])` |
 | `round_numeric_columns` | Round numeric columns (non-numeric columns in subset ignored safely) | `ar.round_numeric_columns(frame, decimals=2)` |
 | `clean` | Convenience shorthand | `ar.clean(frame, drop_nulls=True)` |
 | `safe_divide_columns` | Divide one column by another, handling zero/null denominators | `ar.safe_divide_columns(frame, numerator="revenue", denominator="cost", output_column="ratio")` |
@@ -409,6 +410,7 @@ clean = ar.pipeline(frame, [
     ("validate_columns_exist", {"columns": ["name", "city", "revenue"]}),
     ("strip_whitespace",),
     ("normalize_case", {"case_type": "lower"}),
+    ("remove_special_chars",),
     ("fill_nulls", {"value": "unknown", "subset": ["city"]}),
     ("drop_duplicates", {"keep": "first"}),
 ])
