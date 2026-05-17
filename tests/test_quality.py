@@ -1,7 +1,7 @@
 """Tests for data quality profiling and smart cleaning."""
 
-import pytest
 import pandas as pd
+import pytest
 
 import arnio as ar
 
