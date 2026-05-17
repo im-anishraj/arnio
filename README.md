@@ -441,6 +441,7 @@ Most operations below run natively in C++. Currently, `filter_rows` and `replace
 | `clean` | Convenience shorthand | `ar.clean(frame, drop_nulls=True)` |
 | `safe_divide_columns` | Divide one column by another, handling zero/null denominators | `ar.safe_divide_columns(frame, numerator="revenue", denominator="cost", output_column="ratio")` |
 | `trim_column_names` | Strip leading/trailing whitespace from column names | `ar.trim_column_names(frame)` |
+| `parse_numeric_strings` | Parse strings with currency/percentages into floats | `ar.parse_numeric_strings(frame, subset=["price"])` |
 
 #### `ArFrame.select_dtypes` — type-based column selection
 

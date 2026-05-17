@@ -933,3 +933,77 @@ def replace_values(frame, mapping, column=None):
             df = df.fillna(null_replacement)
 
     return from_pandas(df) if is_arframe else df
+
+def parse_numeric_strings(
+    frame: ArFrame,
+    *,
+    subset: list[str] | None = None,
+    errors: str = "coerce",
+) -> ArFrame:
+    """Parse string columns containing numeric characters, currency symbols, or percentages into floats.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input data frame.
+    subset : list[str], optional
+        Column names to parse. If None, applies to all string/object columns.
+    errors : str, default "coerce"
+        If 'raise', invalid parsing will raise an exception.
+        If 'coerce', then invalid parsing will be set as NaN/null.
+
+    Returns
+    -------
+    ArFrame
+        New frame with parsed numeric columns.
+
+    Examples
+    --------
+    >>> frame = ar.read_csv("data.csv")
+    >>> cleaned = ar.parse_numeric_strings(frame, subset=["price", "discount"])
+    """
+    import pandas as pd
+    from .convert import from_pandas, to_pandas
+
+    if errors not in ("coerce", "raise"):
+        raise ValueError(f"errors parameter must be 'coerce' or 'raise', not '{errors}'")
+
+    if subset is not None:
+        validate_columns_exist(
+            frame,
+            _validate_column_sequence(subset, argument_name="subset"),
+            operation="parse_numeric_strings",
+        )
+
+    is_arframe = not isinstance(frame, pd.DataFrame)
+    df = to_pandas(frame) if is_arframe else frame.copy()
+
+    if subset is not None:
+        target_columns = subset
+    else:
+        target_columns = df.select_dtypes(include=["object", "string"]).columns.tolist()
+
+    if not target_columns:
+        return frame
+
+    for col in target_columns:
+        if pd.api.types.is_string_dtype(df[col]) or pd.api.types.is_object_dtype(df[col]):
+            # 1. Clean whitespace
+            cleaned_series = df[col].astype(str).str.strip()
+            
+            # 2. Remove currency symbols and thousands separators
+            cleaned_series = cleaned_series.str.replace(r"[$,£€]", "", regex=True)
+            
+            # 3. Identify and remove percentages
+            is_percent = cleaned_series.str.endswith("%")
+            cleaned_series = cleaned_series.str.replace("%", "", regex=False)
+            
+            # 4. Convert to numeric
+            numeric_series = pd.to_numeric(cleaned_series, errors=errors)
+            
+            # 5. Divide percentages by 100
+            numeric_series.loc[is_percent] = numeric_series.loc[is_percent] / 100.0
+            
+            df[col] = numeric_series
+
+    return from_pandas(df) if is_arframe else df
