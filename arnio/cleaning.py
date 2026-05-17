@@ -524,6 +524,10 @@ def drop_columns_matching(frame, pattern):
     df = to_pandas(frame) if is_arframe else frame
 
     cols_to_drop = [col for col in df.columns if re.search(pattern, col)]
+    if len(cols_to_drop) == len(df.columns):
+        raise ValueError(
+            "Pattern matches all columns. At least one column must remain."
+        )
     result = df.drop(columns=cols_to_drop)
 
     return from_pandas(result) if is_arframe else result

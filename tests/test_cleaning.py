@@ -624,3 +624,9 @@ def test_drop_columns_matching_non_string_pattern():
     df = pd.DataFrame({"a": [1]})
     with pytest.raises(TypeError):
         ar.drop_columns_matching(df, 123)
+
+
+def test_drop_columns_matching_all_columns():
+    df = pd.DataFrame({"a": [1, 2], "b": [3, 4]})
+    with pytest.raises(ValueError, match="Pattern matches all columns"):
+        ar.drop_columns_matching(df, ".*")
