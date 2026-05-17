@@ -293,10 +293,10 @@ def test_country_code_validation_rejects_invalid_codes(tmp_path):
     )
 
     assert not result.passed
-    assert result.issue_count > 0
+    assert result.issue_count == 6
 
-    rules = {issue.rule for issue in result.issues}
-    assert "country_code" in rules or "nullable" in rules
+    assert [issue.row_index for issue in result.issues] == [0, 1, 2, 3, 4, 5]
+    assert {issue.rule for issue in result.issues} == {"country_code"}
 
 
 def test_string_min_length_boundary(tmp_path):
@@ -383,4 +383,3 @@ def test_equal_string_length_bounds_are_valid():
 
     assert field.min_length == 3
     assert field.max_length == 3
-
