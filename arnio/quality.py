@@ -77,6 +77,8 @@ class DataQualityReport:
     duplicate_rows: int
     duplicate_ratio: float
     columns: dict[str, ColumnProfile]
+    quality_score: float = 100.0
+    score_components: dict[str, float] = field(default_factory=dict)
     suggestions: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
@@ -87,6 +89,8 @@ class DataQualityReport:
             "memory_usage": self.memory_usage,
             "duplicate_rows": self.duplicate_rows,
             "duplicate_ratio": self.duplicate_ratio,
+            "quality_score": self.quality_score,
+            "score_components": self.score_components,
             "columns": {
                 name: column.to_dict() for name, column in self.columns.items()
             },
@@ -99,6 +103,8 @@ class DataQualityReport:
     def summary(self) -> dict[str, Any]:
         """Return the highest-signal report fields."""
         return {
+            "quality_score": self.quality_score,
+            "score_components": self.score_components,
             "rows": self.row_count,
             "columns": self.column_count,
             "memory_usage": self.memory_usage,
@@ -193,15 +199,54 @@ def profile(frame: ArFrame, *, sample_size: int = 5) -> DataQualityReport:
         suggestions=[],
     )
 
+    quality_score, score_components = _calculate_quality_score(
+        row_count, duplicate_ratio, columns
+    )
+
     return DataQualityReport(
         row_count=report.row_count,
         column_count=report.column_count,
         memory_usage=report.memory_usage,
         duplicate_rows=report.duplicate_rows,
         duplicate_ratio=report.duplicate_ratio,
+        quality_score=quality_score,
+        score_components=score_components,
         columns=report.columns,
         suggestions=suggest_cleaning(report),
     )
+
+
+def _calculate_quality_score(
+    row_count: int,
+    duplicate_ratio: float,
+    columns: dict[str, ColumnProfile],
+) -> tuple[float, dict[str, float]]:
+    if row_count == 0 or not columns:
+        return 100.0, {}
+
+    duplicate_penalty = round(min(duplicate_ratio * 100.0, 20.0), 2)
+    
+    null_ratios = [c.null_ratio for c in columns.values()]
+    avg_null_ratio = sum(null_ratios) / len(null_ratios) if null_ratios else 0.0
+    null_penalty = round(min(avg_null_ratio * 100.0, 40.0), 2)
+
+    type_mismatches = sum(1 for c in columns.values() if c.suggested_dtype is not None)
+    mismatch_ratio = type_mismatches / len(columns) if columns else 0.0
+    type_mismatch_penalty = round(min(mismatch_ratio * 100.0, 40.0), 2)
+
+    score_components: dict[str, float] = {}
+    if duplicate_penalty > 0:
+        score_components["duplicate_penalty"] = -duplicate_penalty
+    if null_penalty > 0:
+        score_components["null_penalty"] = -null_penalty
+    if type_mismatch_penalty > 0:
+        score_components["type_mismatch_penalty"] = -type_mismatch_penalty
+
+    quality_score = round(
+        100.0 - duplicate_penalty - null_penalty - type_mismatch_penalty, 2
+    )
+
+    return quality_score, score_components
 
 
 def suggest_cleaning(
