@@ -336,6 +336,16 @@ def URL(*, nullable: bool = True, unique: bool = False) -> Field:
     return Field(dtype="string", nullable=nullable, semantic="url", unique=unique)
 
 
+def CountryCode(*, nullable: bool = True, unique: bool = False) -> Field:
+    """Create an uppercase ISO alpha-2 country-code schema field."""
+    return Field(
+        dtype="string",
+        nullable=nullable,
+        semantic="country_code",
+        unique=unique,
+    )
+
+
 def _validate_column(
     series: pd.Series,
     actual_dtype: str | None,
@@ -517,4 +527,5 @@ _SEMANTIC_PATTERNS = {
     "email": r"[^@\s]+@[^@\s]+\.[^@\s]+",
     "url": r"https?://[^\s]+",
     "phone": r"\+?[0-9][0-9 .()\-]{6,}[0-9]",
+    "country_code": r"[A-Z]{2}",
 }

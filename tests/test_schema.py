@@ -279,6 +279,35 @@ def test_custom_pattern_validation(tmp_path):
     assert result.issues[0].row_index == 1
 
 
+def test_country_code_validation_accepts_iso_alpha_2_codes(tmp_path):
+    path = tmp_path / "countries.csv"
+    path.write_text("country\nIN\nUS\nGB\nFR\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"country": ar.CountryCode(nullable=False)},
+    )
+
+    assert result.passed
+    assert result.issue_count == 0
+
+
+def test_country_code_validation_rejects_invalid_codes(tmp_path):
+    path = tmp_path / "bad_countries.csv"
+    path.write_text("country\nIND\n1A\nA\nUSA\ngb\nFr\n\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"country": ar.CountryCode(nullable=False)},
+    )
+
+    assert not result.passed
+    assert result.issue_count == 6
+
+    assert [issue.row_index for issue in result.issues] == [0, 1, 2, 3, 4, 5]
+    assert {issue.rule for issue in result.issues} == {"country_code"}
+
+
 def test_string_min_length_boundary(tmp_path):
     path = tmp_path / "names.csv"
     path.write_text("name\nab\nabc\n")
