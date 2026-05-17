@@ -790,6 +790,15 @@ DataQualityReport(
       "min": 85.5,
       "max": 90.0,
       "warnings": ["contains_nulls"]
+    },
+    "city": {
+      "dtype": "string",
+      "semantic_type": "categorical",
+      "null_count": 0,
+      "top_values": [
+        {"value": "London", "count": 3, "ratio": 0.5},
+        {"value": "Paris", "count": 2, "ratio": 0.333}
+      ]
     }
   }
 }
