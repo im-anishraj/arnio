@@ -75,8 +75,59 @@ void validate_header(const std::vector<std::string>& header) {
     }
 }
 
+static bool has_valid_thousands_grouping(const std::string& value, char separator) {
+    std::string integer_part = value;
+
+    // Ignore decimal portion
+    size_t decimal_pos = value.find('.');
+    if (decimal_pos != std::string::npos) {
+        integer_part = value.substr(0, decimal_pos);
+    }
+
+    if (integer_part.empty()) {
+        return false;
+    }
+
+    std::vector<std::string> groups;
+    size_t start = 0;
+
+    while (true) {
+        size_t pos = integer_part.find(separator, start);
+
+        if (pos == std::string::npos) {
+            groups.push_back(integer_part.substr(start));
+            break;
+        }
+
+        groups.push_back(integer_part.substr(start, pos - start));
+        start = pos + 1;
+    }
+
+    // No empty groups allowed
+    for (const auto& group : groups) {
+        if (group.empty()) {
+            return false;
+        }
+    }
+
+    // First group: 1-3 digits
+    if (groups[0].size() < 1 || groups[0].size() > 3) {
+        return false;
+    }
+
+    // Remaining groups: exactly 3 digits
+    for (size_t i = 1; i < groups.size(); ++i) {
+        if (groups[i].size() != 3) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 std::string strip_thousands_separator(const std::string& value, const CsvConfig& config) {
-    if (!config.thousands_separator.has_value()) {
+    if (!config.thousands_separator.has_value() ||
+        !has_valid_thousands_grouping(value, config.thousands_separator.value())) {
         return value;
     }
     std::string cleaned = value;
@@ -131,7 +182,9 @@ DType CsvReader::infer_type(const std::string& value) const{
     std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
     if (lower == "true" || lower == "false") return DType::BOOL;
 
-    std::string cleaned = strip_thousands_separator(value, config_);
+    std::string normalized = value;
+    trim_in_place(normalized);
+    std::string cleaned = strip_thousands_separator(normalized, config_);
 
     // Try int64
     {
@@ -180,7 +233,9 @@ CellValue CsvReader::parse_value(const std::string& raw, DType dtype) const{
         }
         case DType::INT64: {
             try {
-                std::string cleaned = strip_thousands_separator(raw, config_);
+                std::string normalized = raw;
+                trim_in_place(normalized);
+                std::string cleaned = strip_thousands_separator(normalized, config_);
                 return static_cast<int64_t>(std::stoll(cleaned));
             } catch (...) {
                 return std::monostate{};
@@ -188,7 +243,9 @@ CellValue CsvReader::parse_value(const std::string& raw, DType dtype) const{
         }
         case DType::FLOAT64: {
             try {
-                std::string cleaned = strip_thousands_separator(raw, config_);
+                std::string normalized = raw;
+                trim_in_place(normalized);
+                std::string cleaned = strip_thousands_separator(normalized, config_);
                 return std::stod(cleaned);
             } catch (...) {
                 return std::monostate{};

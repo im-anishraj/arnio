@@ -38,6 +38,10 @@ class TestReadCsv:
         assert dtypes["name"] == "string"
         assert dtypes["active"] == "bool"
 
+    # ----------------------------
+    # Thousands separator tests
+    # ----------------------------
+
     def test_thousands_separator_comma(self, tmp_path):
         csv_path = tmp_path / "comma_thousands.csv"
         csv_path.write_text('value\n"1,234"\n')
@@ -51,6 +55,13 @@ class TestReadCsv:
         frame = ar.read_csv(csv_path, thousands_separator=" ")
         df = ar.to_pandas(frame)
         assert df["value"].iloc[0] == 1234
+
+    def test_valid_float_thousands_separator(self, tmp_path):
+        csv_path = tmp_path / "float.csv"
+        csv_path.write_text('value\n"1,234.56"\n')
+        frame = ar.read_csv(csv_path, thousands_separator=",")
+        df = ar.to_pandas(frame)
+        assert df["value"].iloc[0] == 1234.56
 
     def test_default_behavior_without_thousands_separator(self, tmp_path):
         csv_path = tmp_path / "default_behavior.csv"
@@ -82,12 +93,60 @@ class TestReadCsv:
         df = ar.to_pandas(frame)
         assert df["message"].iloc[0] == "hello,world"
 
+    @pytest.mark.parametrize(
+        "value",
+        ["12,34", "1,,234", "1234,", ",123"],
+    )
+    def test_invalid_thousands_grouping_remains_string(self, tmp_path, value):
+        csv_path = tmp_path / "invalid.csv"
+        csv_path.write_text(f'value\n"{value}"\n')
+        frame = ar.read_csv(csv_path, thousands_separator=",")
+        assert frame.dtypes["value"] == "string"
+
     def test_unquoted_comma_value_with_comma_delimiter(self, tmp_path):
         csv_path = tmp_path / "delimiter_interaction.csv"
         csv_path.write_text("value\n1,234\n")
         frame = ar.read_csv(csv_path)
         df = ar.to_pandas(frame)
         assert df["value"].iloc[0] == 1
+
+    def test_thousands_separator_negative_numbers(self, tmp_path):
+        csv_path = tmp_path / "negative_numbers.csv"
+        csv_path.write_text('value\n"-1,234"\n')
+        frame = ar.read_csv(csv_path, thousands_separator=",")
+        df = ar.to_pandas(frame)
+        assert df["value"].iloc[0] == -1234
+
+    def test_thousands_separator_large_numbers(self, tmp_path):
+        csv_path = tmp_path / "large.csv"
+        csv_path.write_text('value\n"1,234,567,890"\n')
+        frame = ar.read_csv(csv_path, thousands_separator=",")
+        df = ar.to_pandas(frame)
+        assert df["value"].iloc[0] == 1234567890
+
+    def test_mixed_int_and_float_consistency(self, tmp_path):
+        csv_path = tmp_path / "mixed.csv"
+        csv_path.write_text('value\n"1,234"\n"2,345.67"\n"3,000"\n')
+        frame = ar.read_csv(csv_path, thousands_separator=",")
+        df = ar.to_pandas(frame)
+        assert df["value"].iloc[0] == 1234
+        assert df["value"].iloc[1] == 2345.67
+        assert df["value"].iloc[2] == 3000
+
+    def test_thousands_separator_with_whitespace(self, tmp_path):
+        csv_path = tmp_path / "ws.csv"
+        csv_path.write_text('value\n" 1,234 "\n')
+        frame = ar.read_csv(csv_path, thousands_separator=",")
+        df = ar.to_pandas(frame)
+        assert df["value"].iloc[0] == 1234
+
+    def test_thousands_separator_empty_values(self, tmp_path):
+        csv_path = tmp_path / "empty.csv"
+        csv_path.write_text('value\n""\n"1,234"\n')
+        frame = ar.read_csv(csv_path, thousands_separator=",")
+        df = ar.to_pandas(frame)
+        assert pd.isna(df["value"].iloc[0])
+        assert df["value"].iloc[1] == 1234
 
     def test_large_csv(self, large_csv):
         frame = ar.read_csv(large_csv)
@@ -286,6 +345,14 @@ class TestScanCsv:
         csv_path = tmp_path / "scan_thousands.csv"
         csv_path.write_text('value\n"1,234"\n')
         schema = ar.scan_csv(csv_path, thousands_separator=",")
+        assert schema["value"] == "int64"
+
+    def test_scan_read_thousands_separator_parity(self, tmp_path):
+        csv_path = tmp_path / "parity.csv"
+        csv_path.write_text('value\n"1,234"\n')
+        schema = ar.scan_csv(csv_path, thousands_separator=",")
+        frame = ar.read_csv(csv_path, thousands_separator=",")
+        assert schema["value"] == frame.dtypes["value"]
         assert schema["value"] == "int64"
 
     def test_scan_binary_file_rejection(self, tmp_path):
