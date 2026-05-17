@@ -1,5 +1,6 @@
 """Tests for pandas conversion."""
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -23,6 +24,79 @@ class TestToPandas:
         frame = ar.read_csv(csv_with_nulls)
         df = ar.to_pandas(frame)
         assert df.isna().any().any()  # Should have some NaN/NA values
+
+    def test_copy_option_returns_equivalent_dataframe(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        zero_copy = ar.to_pandas(frame)
+        defensive = ar.to_pandas(frame, copy=True)
+
+        pd.testing.assert_frame_equal(defensive, zero_copy)
+        assert defensive is not zero_copy
+
+    def test_copy_option_rejects_non_bool(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(TypeError, match="copy must be a bool"):
+            ar.to_pandas(frame, copy="yes")
+
+    def test_copy_option_preserves_null_masks(self, csv_with_nulls):
+        frame = ar.read_csv(csv_with_nulls)
+
+        df = ar.to_pandas(frame, copy=True)
+
+        assert df.isna().any().any()
+
+    def test_copy_option_isolates_integer_buffers(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        zero_copy = ar.to_pandas(frame)
+        defensive = ar.to_pandas(frame, copy=True)
+        original_age = zero_copy.loc[0, "age"]
+
+        assert not np.shares_memory(
+            zero_copy["age"].to_numpy(copy=False),
+            defensive["age"].to_numpy(copy=False),
+        )
+
+        defensive.loc[0, "age"] = 99
+
+        assert zero_copy.loc[0, "age"] == original_age
+        assert ar.to_pandas(frame).loc[0, "age"] == original_age
+
+    def test_copy_option_isolates_float_buffers(self, tmp_path):
+        csv_path = tmp_path / "floats.csv"
+        csv_path.write_text("score\n1.5\n2.5\n3.5\n")
+        frame = ar.read_csv(csv_path)
+
+        zero_copy = ar.to_pandas(frame)
+        defensive = ar.to_pandas(frame, copy=True)
+
+        assert not np.shares_memory(
+            zero_copy["score"].to_numpy(copy=False),
+            defensive["score"].to_numpy(copy=False),
+        )
+
+        defensive.loc[0, "score"] = 99.5
+
+        assert zero_copy.loc[0, "score"] == 1.5
+        assert ar.to_pandas(frame).loc[0, "score"] == 1.5
+
+    def test_boolean_conversion_is_already_isolated(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        first = ar.to_pandas(frame)
+        second = ar.to_pandas(frame)
+
+        assert not np.shares_memory(
+            first["active"].to_numpy(copy=False),
+            second["active"].to_numpy(copy=False),
+        )
+
+        second.loc[0, "active"] = False
+
+        assert first.loc[0, "active"] is np.True_
+        assert ar.to_pandas(frame).loc[0, "active"] is np.True_
 
     def test_to_python_list_with_nulls(self):
         frame = ar.from_pandas(
@@ -216,6 +290,41 @@ class TestFromPandas:
         assert str(result["active"].dtype) == "boolean"
         assert list(result["active"]) == [True, False, pd.NA]
 
+    def test_nullable_string_roundtrip(self):
+        df = pd.DataFrame(
+            {
+                "name": pd.Series(
+                    ["Alice", pd.NA, "Bob"],
+                    dtype="string",
+                )
+            }
+        )
+        result = ar.to_pandas(ar.from_pandas(df))
+
+        assert str(result["name"].dtype) == "string"
+
+        pd.testing.assert_series_equal(
+            result["name"],
+            df["name"],
+        )
+
+    def test_nullable_float_roundtrip(self):
+        df = pd.DataFrame(
+            {
+                "score": pd.Series(
+                    [1.5, pd.NA, 3.7],
+                    dtype="Float64",
+                )
+            }
+        )
+
+        result = ar.to_pandas(ar.from_pandas(df))
+
+        assert str(result["score"].dtype) == "float64"
+        assert result["score"].tolist()[0] == 1.5
+        assert pd.isna(result["score"].tolist()[1])
+        assert result["score"].tolist()[2] == 3.7
+
     def test_bool_null_mask_roundtrip(self):
         df = pd.DataFrame(
             {
@@ -230,6 +339,13 @@ class TestFromPandas:
         result = ar.to_pandas(frame)
 
         assert list(result["flag"]) == [True, False, pd.NA]
+
+    def test_dataframe_index_is_dropped(self):
+        """pandas index is not preserved during from_pandas conversion."""
+        df = pd.DataFrame({"a": [1, 2, 3]}, index=["x", "y", "z"])
+        frame = ar.from_pandas(df)
+        result = ar.to_pandas(frame)
+        assert isinstance(result.index, pd.RangeIndex)
 
 
 class TestAttrsPreservation:

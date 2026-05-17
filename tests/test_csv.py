@@ -56,7 +56,6 @@ class TestReadCsv:
         assert len(frame) == 3
 
     def test_header_whitespace(self, tmp_path):
-
         csv_path = str(tmp_path / "whitespace.csv")
         with open(csv_path, "w") as f:
             f.write("name ,  age\nAlice,25\n")
@@ -252,3 +251,76 @@ class TestScanCsv:
     def test_scan_missing_file_passthrough(self, tmp_path):
         with pytest.raises(ar.CsvReadError):
             ar.scan_csv(str(tmp_path / "nonexistent.csv"))
+
+    def test_scan_schema_preserves_column_order(self, tmp_path):
+        csv_path = tmp_path / "order_test.csv"
+        csv_path.write_text("z,a,m\n1,2,3\n")
+
+        schema = ar.scan_csv(str(csv_path))
+        frame = ar.read_csv(str(csv_path))
+
+        assert list(schema.keys()) == ["z", "a", "m"]
+        assert list(frame.columns) == ["z", "a", "m"]
+
+    def test_scan_schema_order_matches_read_csv(self, sample_csv):
+        schema = ar.scan_csv(sample_csv)
+        frame = ar.read_csv(sample_csv)
+
+        assert list(schema.keys()) == list(frame.columns)
+
+    def test_scan_csv_non_utf8_multiline_boundary(self, tmp_path):
+        """scan_csv must not split a quoted multiline record at the sample boundary.
+
+        Previously the sampling path iterated raw physical lines, which could
+        cut through a quoted field that contained an embedded newline. The result
+        was an invalid partial CSV fed to scan_schema, causing either a parse
+        error or wrong type inference. With record-aware sampling (csv.reader)
+        the boundary always falls between complete records.
+        """
+        csv_file = tmp_path / "test_multiline_boundary.csv"
+
+        # Build ~10 000 rows so the multiline record sits right at the limit.
+        content_lines = ["id,text"]
+        for i in range(1, 9999):
+            content_lines.append(f"{i},value")
+
+        # Row 9999 — a quoted field containing embedded newlines and a
+        # latin-1 character (é). This record straddles the old line-count
+        # boundary and would have been split by the previous implementation.
+        content_lines.append('9999,"multiline\nrecord\ncafé"')
+        content_lines.append("10000,end")
+
+        csv_content = "\n".join(content_lines)
+
+        # Write as latin-1 so the non-UTF-8 transcode path is exercised.
+        csv_file.write_bytes(csv_content.encode("latin-1"))
+
+        schema = ar.scan_csv(str(csv_file), encoding="latin-1")
+        assert schema == {"id": "int64", "text": "string"}
+
+    def test_scan_csv_type_evidence_after_limit(self, tmp_path):
+        """Type evidence that appears after the sample window must not affect inference.
+
+        scan_csv is documented to infer types from a leading sample. A float
+        value that appears only beyond row 10 000 should not change the inferred
+        type of a column that looks like int64 within the sample. This test pins
+        that contract so future changes to the sample size don't silently break
+        the documented behaviour.
+        """
+        csv_file = tmp_path / "test_type_evidence.csv"
+
+        content_lines = ["id,value"]
+        for i in range(1, 10005):
+            content_lines.append(f"{i},100")
+
+        # Row 10 006 — float evidence that falls outside the 10 000-row sample.
+        content_lines.append("10006,3.14")
+
+        csv_content = "\n".join(content_lines)
+
+        # latin-1 encoding so the transcode + sampling path is exercised.
+        csv_file.write_bytes(csv_content.encode("latin-1"))
+
+        schema = ar.scan_csv(str(csv_file), encoding="latin-1")
+        # The float is outside the sample; 'value' must be inferred as int64.
+        assert schema["value"] == "int64"
