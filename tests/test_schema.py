@@ -166,3 +166,31 @@ def test_custom_pattern_validation(tmp_path):
     assert not result.passed
     assert result.issues[0].rule == "pattern"
     assert result.issues[0].row_index == 1
+
+def test_country_code_validation_accepts_iso_alpha_2_codes(tmp_path):
+    path = tmp_path / "countries.csv"
+    path.write_text("country\nIN\nUS\ngb\nFr\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"country": ar.CountryCode(nullable=False)},
+    )
+
+    assert result.passed
+    assert result.issue_count == 0
+
+
+def test_country_code_validation_rejects_invalid_codes(tmp_path):
+    path = tmp_path / "bad_countries.csv"
+    path.write_text("country\nIND\n1A\nA\nUSA\n\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"country": ar.CountryCode(nullable=False)},
+    )
+
+    assert not result.passed
+    assert result.issue_count > 0
+
+    rules = {issue.rule for issue in result.issues}
+    assert "country_code" in rules or "nullable" in rules
