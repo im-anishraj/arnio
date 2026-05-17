@@ -1,0 +1,114 @@
+name: Release Dry-Run Checklist
+
+on:
+  workflow_dispatch:
+
+jobs:
+  # ── 1. Validate version in pyproject.toml ─────────────────────────────────
+  validate-version:
+    name: "✅ Validate pyproject.toml version"
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get-version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract and validate version
+        id: get-version
+        run: |
+          python - <<'EOF'
+          import tomllib, re, sys
+          with open("pyproject.toml", "rb") as f:
+              data = tomllib.load(f)
+          version = data["project"]["version"]
+          if not re.match(r"^\d+\.\d+\.\d+", version):
+              print(f"❌ Invalid version format: {version}", file=sys.stderr)
+              sys.exit(1)
+          print(f"✅ Version looks valid: {version}")
+          EOF
+          VERSION=$(python -c "import tomllib; f=open('pyproject.toml','rb'); d=tomllib.load(f); print(d['project']['version'])")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+  # ── 2. Build sdist ─────────────────────────────────────────────────────────
+  build_sdist:
+    name: "📦 Build source distribution"
+    runs-on: ubuntu-latest
+    needs: validate-version
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build sdist
+        run: pipx run build --sdist
+
+      - name: Twine check sdist
+        run: |
+          pip install twine
+          twine check dist/*.tar.gz && echo "✅ Twine check passed" || { echo "❌ Twine check failed"; exit 1; }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: dist/*.tar.gz
+          retention-days: 3
+
+  # ── 3. Build platform wheels + smoke test (mirrors build_wheels.yml) ───────
+  build_wheels:
+    name: "🔨 Build & smoke test wheels (${{ matrix.os }})"
+    runs-on: ${{ matrix.os }}
+    needs: validate-version
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build wheels via cibuildwheel
+        uses: pypa/cibuildwheel@v2.22
+        env:
+          CIBW_ARCHS_MACOS: "x86_64 arm64"
+          CIBW_TEST_COMMAND: >-
+            python -c "import pathlib, sys, pytest; sys.path.append(str(pathlib.Path(r'{project}'))); raise SystemExit(pytest.main([str(pathlib.Path(r'{project}') / 'tests'), '-v', '--tb=short', '-x']))"
+
+      - name: Set up Python for smoke test
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Smoke test wheel install
+        run: python tests/smoke_wheel_install.py --wheelhouse wheelhouse
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.os }}
+          path: ./wheelhouse/*.whl
+          retention-days: 3
+
+  # ── 4. Summary report ─────────────────────────────────────────────────────
+  summary:
+    name: "📋 Dry-Run Summary"
+    runs-on: ubuntu-latest
+    needs: [validate-version, build_sdist, build_wheels]
+    if: always()
+    steps:
+      - name: Write step summary
+        run: |
+          echo "## 🚀 Release Dry-Run Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Version validation     | ${{ needs.validate-version.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| sdist build + twine    | ${{ needs.build_sdist.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Wheels + smoke (Linux) | ${{ needs.build_wheels.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Wheels + smoke (macOS) | ${{ needs.build_wheels.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Wheels + smoke (Win)   | ${{ needs.build_wheels.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Package version:** ${{ needs.validate-version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [[ "${{ needs.validate-version.result }}" == "success" && \
+                "${{ needs.build_sdist.result }}" == "success" && \
+                "${{ needs.build_wheels.result }}" == "success" ]]; then
+            echo "### ✅ All checks passed — safe to publish to PyPI." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### ❌ One or more checks failed — do NOT publish yet." >> $GITHUB_STEP_SUMMARY
+          fi
