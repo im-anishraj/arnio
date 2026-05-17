@@ -44,6 +44,7 @@ class Schema:
 
     fields: dict[str, Field]
     strict: bool = False
+    unique: list[str] | tuple[str, ...] | None = None
 
     def validate(self, frame: ArFrame) -> ValidationResult:
         """Validate a frame against this schema."""
@@ -235,6 +236,42 @@ def validate(frame: ArFrame, schema: Schema | dict[str, Field]) -> ValidationRes
                         message=f"Unexpected column: {name}",
                     )
                 )
+
+    if schema.unique is not None:
+        if isinstance(schema.unique, (list, tuple)) and len(schema.unique) == 0:
+            issues.append(
+                ValidationIssue(
+                    column=None,
+                    rule="composite_unique",
+                    message="Composite unique columns cannot be empty",
+                )
+            )
+        elif isinstance(schema.unique, (list, tuple)):
+            missing_cols = [c for c in schema.unique if c not in df.columns]
+            if missing_cols:
+                for col in missing_cols:
+                    issues.append(
+                        ValidationIssue(
+                            column=col,
+                            rule="missing_column",
+                            message=f"Column {col!r} not found",
+                        )
+                    )
+            else:
+                duplicate_mask = df.duplicated(subset=list(schema.unique), keep=False)
+                if duplicate_mask.any():
+                    for index in df[duplicate_mask].index:
+                        issues.append(
+                            ValidationIssue(
+                                column=None,
+                                rule="composite_unique",
+                                message=(
+                                    "Duplicate rows found for columns"
+                                    f" {list(schema.unique)}"
+                                ),
+                                row_index=int(index),
+                            )
+                        )
 
     bad_rows = sorted(
         {issue.row_index for issue in issues if issue.row_index is not None}
