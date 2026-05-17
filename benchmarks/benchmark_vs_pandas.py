@@ -3,6 +3,9 @@ Reproducible benchmark: arnio vs pandas
 Run: python benchmarks/benchmark_vs_pandas.py
 """
 
+import argparse
+import json
+import subprocess
 import sys
 import time
 import tracemalloc
@@ -51,12 +54,13 @@ def _get_psutil_process():
         return None
 
 
-def get_rss_source():
+def detect_rss_source():
     if _get_psutil_process() is not None:
         return "psutil"
     try:
         import resource
 
+        _ = resource.RUSAGE_SELF
         return "resource"
     except Exception:
         return "unavailable"
@@ -156,6 +160,28 @@ def avg(values):
     return sum(values) / len(values)
 
 
+def run_subprocess(engine, path):
+    cmd = [
+        sys.executable,
+        str(Path(__file__).resolve()),
+        "--engine",
+        engine,
+        "--case",
+        path,
+        "--json",
+    ]
+    completed = subprocess.run(
+        cmd,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    output = completed.stdout.strip()
+    if not output:
+        raise RuntimeError(f"No output from benchmark subprocess ({engine}).")
+    return json.loads(output)
+
+
 def run_case(case):
     print(case.name)
     print(f"{'Metric':<20} {'pandas':>12} {'arnio':>12}")
@@ -166,8 +192,18 @@ def run_case(case):
     pd_rss_rams, ar_rss_rams = [], []
 
     for i in range(RUNS):
-        pt, pr_trace, pr_rss = benchmark_pandas(case.path)
-        at, ar_trace, ar_rss = benchmark_arnio(case.path)
+        pd_result = run_subprocess("pandas", case.path)
+        ar_result = run_subprocess("arnio", case.path)
+        pt, pr_trace, pr_rss = (
+            pd_result["elapsed"],
+            pd_result["peak_trace_mb"],
+            pd_result.get("peak_rss_mb"),
+        )
+        at, ar_trace, ar_rss = (
+            ar_result["elapsed"],
+            ar_result["peak_trace_mb"],
+            ar_result.get("peak_rss_mb"),
+        )
         pd_times.append(pt)
         ar_times.append(at)
         pd_trace_rams.append(pr_trace)
@@ -199,8 +235,39 @@ def run_case(case):
     print()
 
 
+def run_child(engine, case_path):
+    if engine == "pandas":
+        elapsed, peak_trace_mb, peak_rss_mb = benchmark_pandas(case_path)
+    elif engine == "arnio":
+        elapsed, peak_trace_mb, peak_rss_mb = benchmark_arnio(case_path)
+    else:
+        raise ValueError(f"Unknown engine: {engine}")
+
+    payload = {
+        "elapsed": elapsed,
+        "peak_trace_mb": peak_trace_mb,
+        "peak_rss_mb": peak_rss_mb,
+    }
+    print(json.dumps(payload))
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Run Arnio vs pandas benchmarks")
+    parser.add_argument("--engine", choices=["pandas", "arnio"], help="Benchmark engine")
+    parser.add_argument("--case", help="CSV path for a single benchmark run")
+    parser.add_argument("--json", action="store_true", help="Emit JSON result")
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
-    rss_source = get_rss_source()
+    args = parse_args()
+    if args.engine and args.case:
+        if not args.json:
+            raise SystemExit("Child mode requires --json output.")
+        run_child(args.engine, args.case)
+        raise SystemExit(0)
+
+    rss_source = detect_rss_source()
     if rss_source == "resource":
         print(
             "Note: Peak RSS uses resource.getrusage; units are KB on Linux and bytes on macOS."
