@@ -5,6 +5,7 @@ Data cleaning functions.
 
 from __future__ import annotations
 
+import unicodedata
 from collections.abc import Sequence
 from typing import Any
 
@@ -440,6 +441,44 @@ def normalize_case(
         )
     result = _normalize_case(frame._frame, subset=subset, case_type=case_type)
     return ArFrame(result)
+
+
+def normalize_unicode(
+    frame: ArFrame,
+    *,
+    subset: list[str] | None = None,
+    form: str = "NFC",
+) -> ArFrame:
+    """Normalize Unicode text columns."""
+
+    from .convert import from_pandas, to_pandas
+
+    valid_forms = {"NFC", "NFD", "NFKC", "NFKD"}
+
+    if form not in valid_forms:
+        raise ValueError(f"Unsupported Unicode normalization form: {form}")
+
+    if subset is not None:
+        validate_columns_exist(
+            frame,
+            _validate_column_sequence(subset, argument_name="subset"),
+            operation="normalize_unicode",
+        )
+
+    df = to_pandas(frame).copy()
+
+    columns = (
+        subset
+        if subset is not None
+        else df.select_dtypes(include=["object", "string"]).columns
+    )
+
+    for col in columns:
+        df[col] = df[col].apply(
+            lambda x: unicodedata.normalize(form, x) if isinstance(x, str) else x
+        )
+
+    return from_pandas(df)
 
 
 def rename_columns(

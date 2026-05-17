@@ -22,6 +22,7 @@ from .cleaning import (
     filter_rows,
     keep_rows_with_nulls,
     normalize_case,
+    normalize_unicode,
     rename_columns,
     replace_values,
     round_numeric_columns,
@@ -114,4 +115,5 @@ __all__ = [
     "ArnioError",
     "CsvReadError",
     "TypeCastError",
+    "normalize_unicode",
 ]
