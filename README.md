@@ -441,6 +441,28 @@ Most operations below run natively in C++. The current `filter_rows` step uses t
 | `safe_divide_columns` | Divide one column by another, handling zero/null denominators | `ar.safe_divide_columns(frame, numerator="revenue", denominator="cost", output_column="ratio")` |
 | `trim_column_names` | Strip leading/trailing whitespace from column names | `ar.trim_column_names(frame)` |
 
+#### `ArFrame.select_dtypes` — type-based column selection
+
+Returns a **new `ArFrame`** containing only the columns whose dtype matches the filter. Raises `ValueError` if no columns match.
+
+```python
+frame = ar.read_csv("data.csv")
+
+# Keep only numeric columns
+numeric = frame.select_dtypes(include=["int64", "float64"])
+
+# Drop string columns
+without_strings = frame.select_dtypes(exclude="string")
+```
+
+**Valid dtype strings:** `"int64"`, `"float64"`, `"string"`, `"bool"`, `"null"`
+
+- At least one of `include` or `exclude` must be given — raises `ValueError` otherwise.
+- `include` and `exclude` must not overlap — raises `ValueError` if they share a dtype.
+- Unknown dtype strings raise `ValueError` with a list of valid options.
+- Raises `ValueError` when no columns match (never returns an empty frame silently).
+- Column order in the result always matches the original frame.
+
 Or compose them all into a **pipeline**:
 
 ```python
