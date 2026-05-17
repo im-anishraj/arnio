@@ -313,3 +313,44 @@ def test_null_values_skip_length_validation(tmp_path):
     assert result.issue_count == 1
     assert result.issues[0].rule == "min_length"
     assert result.issues[0].row_index == 0
+
+
+def test_int64_rejects_impossible_bounds():
+    try:
+        ar.Int64(min=10, max=1)
+    except ValueError as exc:
+        assert "min must be less than or equal to max" in str(exc)
+    else:
+        raise AssertionError("Expected invalid Int64 bounds to raise")
+
+
+def test_float64_rejects_impossible_bounds():
+    try:
+        ar.Float64(min=10.0, max=1.0)
+    except ValueError as exc:
+        assert "min must be less than or equal to max" in str(exc)
+    else:
+        raise AssertionError("Expected invalid Float64 bounds to raise")
+
+
+def test_string_rejects_impossible_length_bounds():
+    try:
+        ar.String(min_length=5, max_length=2)
+    except ValueError as exc:
+        assert "min_length must be less than or equal to max_length" in str(exc)
+    else:
+        raise AssertionError("Expected invalid String bounds to raise")
+
+
+def test_equal_numeric_bounds_are_valid():
+    field = ar.Int64(min=5, max=5)
+
+    assert field.min == 5
+    assert field.max == 5
+
+
+def test_equal_string_length_bounds_are_valid():
+    field = ar.String(min_length=3, max_length=3)
+
+    assert field.min_length == 3
+    assert field.max_length == 3

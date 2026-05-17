@@ -244,7 +244,17 @@ def Int64(
     unique: bool = False,
 ) -> Field:
     """Create an int64 schema field."""
-    return Field(dtype="int64", nullable=nullable, min=min, max=max, unique=unique)
+
+    if min is not None and max is not None and min > max:
+        raise ValueError("min must be less than or equal to max")
+
+    return Field(
+        dtype="int64",
+        nullable=nullable,
+        min=min,
+        max=max,
+        unique=unique,
+    )
 
 
 def Float64(
@@ -255,7 +265,17 @@ def Float64(
     unique: bool = False,
 ) -> Field:
     """Create a float64 schema field."""
-    return Field(dtype="float64", nullable=nullable, min=min, max=max, unique=unique)
+
+    if min is not None and max is not None and min > max:
+        raise ValueError("min must be less than or equal to max")
+
+    return Field(
+        dtype="float64",
+        nullable=nullable,
+        min=min,
+        max=max,
+        unique=unique,
+    )
 
 
 def String(
@@ -268,7 +288,12 @@ def String(
     max_length: int | None = None,
 ) -> Field:
     """Create a string schema field."""
+
+    if min_length is not None and max_length is not None and min_length > max_length:
+        raise ValueError("min_length must be less than or equal to max_length")
+
     allowed_set = set(allowed) if allowed is not None else None
+
     return Field(
         dtype="string",
         nullable=nullable,
