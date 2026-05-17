@@ -586,7 +586,7 @@ If a dtype is partially supported, users may need conversion before processing. 
 | `float64` | ✅ Supported | Fully supported with zero-copy conversion where possible |
 | `bool` | ✅ Supported | Native supported boolean type |
 | `string` | ✅ Supported | Recommended over `object` dtype for text workflows |
-| `datetime64[ns]` | ❌ Unsupported | No native datetime parsing or conversion support yet |
+| `datetime64[ns]` | ❌ Unsupported for native storage | No native datetime parsing or conversion support yet. Use `ar.DateTime()` for schema validation of string timestamp columns. |
 | `category` | ⚠️ Limited | Converted to string/object during processing |
 | `object` (mixed columns) | ⚠️ Limited | Mixed object columns may coerce to string and reduce type inference reliability |
 | nullable pandas dtypes (`Int64`, `boolean`) | ⚠️ Limited | Supported through pandas extension dtypes with null-mask handling |
@@ -599,6 +599,7 @@ If a dtype is partially supported, users may need conversion before processing. 
 - Boolean conversion is already copied by the binding because `std::vector<bool>` cannot be exposed as a zero-copy NumPy buffer in the current implementation.
 - Columns with null masks may require copies so pandas can apply nullable values safely.
 - String columns require Python string object creation during `to_pandas()` conversion.
+- `ar.DateTime()` validates string timestamp columns with optional `format`, `min`, and `max`; it does not add native `datetime64[ns]` storage or automatic datetime conversion.
 - Mixed `object` columns may reduce type inference accuracy and may require preprocessing.
 - Unsupported dtypes should raise clear user-facing errors instead of silent failures.
 > **Note:** pandas DataFrame indexes are currently not preserved during `from_pandas()` conversion. Converted frames receive a default `RangeIndex` when converted back via `to_pandas()`.
@@ -631,6 +632,7 @@ schema = ar.Schema({
     "country": ar.CountryCode(nullable=False),
     "username": ar.String(min_length=3, max_length=20),
     "revenue": ar.Float64(nullable=True, min=0),
+    "created_at": ar.DateTime(nullable=False, format="%Y-%m-%d"),
 })
 
 result = ar.validate(frame, schema)
@@ -790,6 +792,15 @@ DataQualityReport(
       "min": 85.5,
       "max": 90.0,
       "warnings": ["contains_nulls"]
+    },
+    "city": {
+      "dtype": "string",
+      "semantic_type": "categorical",
+      "null_count": 0,
+      "top_values": [
+        {"value": "London", "count": 3, "ratio": 0.5},
+        {"value": "Paris", "count": 2, "ratio": 0.333}
+      ]
     }
   }
 }
