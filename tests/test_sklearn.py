@@ -5,7 +5,9 @@ import pytest
 pytest.importorskip("sklearn")
 
 from sklearn.pipeline import Pipeline
+
 from arnio.integrations.sklearn import ArnioCleaner
+
 
 def test_arniocleaner_non_dataframe_input():
     cleaner = ArnioCleaner()
@@ -17,6 +19,7 @@ def test_arniocleaner_non_dataframe_input():
     with pytest.raises(TypeError, match="requires a pandas DataFrame"):
         cleaner.transform(np.array([[1], [2]]))
 
+
 def test_arniocleaner_configured_steps():
     df = pd.DataFrame({"A": ["  dirty  ", "data "], "B": [1, 2]})
 
@@ -24,6 +27,7 @@ def test_arniocleaner_configured_steps():
     result = cleaner.fit_transform(df)
 
     assert result["A"].tolist() == ["dirty", "data"]
+
 
 def test_arniocleaner_copy_behavior():
     df = pd.DataFrame({"A": ["  dirty  ", "data "]})
@@ -35,6 +39,7 @@ def test_arniocleaner_copy_behavior():
     # Original should still have spaces
     assert df.iloc[0, 0] == "  dirty  "
 
+
 def test_arniocleaner_in_pipeline():
     df = pd.DataFrame({"A": [" data ", "here "], "B": [1, 2]})
     cleaner = ArnioCleaner(steps=[])
@@ -45,4 +50,3 @@ def test_arniocleaner_in_pipeline():
     assert isinstance(result, pd.DataFrame)
     assert result.index.equals(df.index)
     assert list(result.columns) == ["A", "B"]
-    
