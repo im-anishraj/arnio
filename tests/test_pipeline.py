@@ -1,6 +1,7 @@
 """Tests for the pipeline function."""
 
 import pandas as pd
+import pytest
 
 import arnio as ar
 
@@ -353,3 +354,10 @@ def test_pipeline_drop_columns_matching():
     result = ar.pipeline(frame, [("drop_columns_matching", {"pattern": "^temp_"})])
     result_df = ar.to_pandas(result)
     assert list(result_df.columns) == ["keep_c"]
+
+
+def test_pipeline_drop_columns_matching_all_columns():
+    df = pd.DataFrame({"a": [1, 2], "b": [3, 4]})
+    frame = ar.from_pandas(df)
+    with pytest.raises(ValueError, match="Pattern matches all columns"):
+        ar.pipeline(frame, [("drop_columns_matching", {"pattern": ".*"})])
