@@ -559,6 +559,7 @@ def _validate_column(
 
     return issues
 
+
 def _validate_datetime(
     non_null: pd.Series,
     name: str,

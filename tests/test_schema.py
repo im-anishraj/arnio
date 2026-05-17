@@ -1,5 +1,7 @@
 """Tests for schema validation."""
 
+import pytest
+
 import arnio as ar
 
 
@@ -352,6 +354,7 @@ def test_null_values_skip_length_validation(tmp_path):
     assert result.issues[0].rule == "min_length"
     assert result.issues[0].row_index == 0
 
+
 def test_int64_rejects_impossible_bounds():
     try:
         ar.Int64(min=10, max=1)
@@ -486,6 +489,24 @@ def test_datetime_validation_passes_for_valid_column(tmp_path):
     assert result.passed
     assert result.issue_count == 0
     assert result.bad_rows == []
+
+
+def test_datetime_rejects_invalid_format_type():
+    with pytest.raises(TypeError, match="format must be a string or None"):
+        ar.DateTime(format=123)
+
+
+def test_datetime_rejects_invalid_boundary_values():
+    with pytest.raises(ValueError, match="min must be a parseable datetime scalar"):
+        ar.DateTime(min="not-a-date")
+
+    with pytest.raises(ValueError, match="max must be a parseable datetime scalar"):
+        ar.DateTime(max=["2026-01-01", "2026-01-02"])
+
+
+def test_datetime_rejects_min_greater_than_max():
+    with pytest.raises(ValueError, match="min must be less than or equal to max"):
+        ar.DateTime(min="2026-12-31", max="2026-01-01")
 
 
 def test_datetime_validation(tmp_path):
