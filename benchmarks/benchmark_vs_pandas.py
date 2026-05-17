@@ -253,7 +253,9 @@ def run_child(engine, case_path):
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Run Arnio vs pandas benchmarks")
-    parser.add_argument("--engine", choices=["pandas", "arnio"], help="Benchmark engine")
+    parser.add_argument(
+        "--engine", choices=["pandas", "arnio"], help="Benchmark engine"
+    )
     parser.add_argument("--case", help="CSV path for a single benchmark run")
     parser.add_argument("--json", action="store_true", help="Emit JSON result")
     return parser.parse_args()
