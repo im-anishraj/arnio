@@ -420,7 +420,7 @@ Total avg (Read+Strict)       0.077             4.52
 
 ## 🧰 Cleaning primitives
 
-Most operations below run natively in C++. The current `filter_rows` step uses the Python pipeline backend and may be optimized in C++ later.
+Most operations below run natively in C++. Currently, `filter_rows` and `replace_values` run via the Python (pandas) backend and may be optimized in C++ later.
 
 | Primitive | What it does | Example |
 |:---|:---|:---|
@@ -437,6 +437,7 @@ Most operations below run natively in C++. The current `filter_rows` step uses t
 | `rename_columns` | Rename columns via mapping | `ar.rename_columns(frame, {"old": "new"})` |
 | `cast_types` | Cast column types | `ar.cast_types(frame, {"age": "int64"})` |
 | `round_numeric_columns` | Round numeric columns (non-numeric columns in subset ignored safely) | `ar.round_numeric_columns(frame, decimals=2)` |
+| `replace_values` | Replace values using a mapping (column or whole-frame). Handles `None`/`NaN`. | `ar.replace_values(frame, {"active": "A", "inactive": "I"}, column="status")` |
 | `clean` | Convenience shorthand | `ar.clean(frame, drop_nulls=True)` |
 | `safe_divide_columns` | Divide one column by another, handling zero/null denominators | `ar.safe_divide_columns(frame, numerator="revenue", denominator="cost", output_column="ratio")` |
 | `trim_column_names` | Strip leading/trailing whitespace from column names | `ar.trim_column_names(frame)` |
@@ -474,6 +475,33 @@ clean = ar.pipeline(frame, [
     ("drop_duplicates", {"keep": "first"}),
 ])
 ```
+
+### 🔁 Replace values
+
+Use `replace_values` to substitute values using a mapping. It works as a pipeline step (Python backend) and can operate on a single column or the whole frame when `column` is omitted. It also understands null semantics: using `None` (or `np.nan`) as a mapping key targets existing nulls, and mapping a value to `None` creates real nulls.
+
+Column-specific example:
+
+```python
+clean = ar.pipeline(frame, [
+    ("replace_values", {"mapping": {"active": "A", "inactive": "I"}, "column": "status"}),
+])
+```
+
+Whole-frame example (no `column`):
+
+```python
+clean = ar.pipeline(frame, [
+    ("replace_values", {"mapping": {None: "MISSING", "active": "A", "inactive": "I"}}),
+])
+```
+
+Direct API:
+
+```python
+frame2 = ar.replace_values(frame, {"active": "A", "inactive": "I"})
+```
+
 ### 🔎 Filter rows inside pipelines
 
 Use `filter_rows` to keep only rows matching a condition.
@@ -573,6 +601,7 @@ If a dtype is partially supported, users may need conversion before processing. 
 - String columns require Python string object creation during `to_pandas()` conversion.
 - Mixed `object` columns may reduce type inference accuracy and may require preprocessing.
 - Unsupported dtypes should raise clear user-facing errors instead of silent failures.
+> **Note:** pandas DataFrame indexes are currently not preserved during `from_pandas()` conversion. Converted frames receive a default `RangeIndex` when converted back via `to_pandas()`.
 
 <br>
 
@@ -598,6 +627,8 @@ For production data contracts:
 schema = ar.Schema({
     "id": ar.Int64(nullable=False, unique=True),
     "email": ar.Email(nullable=False),
+    # CountryCode expects uppercase ISO alpha-2 values, for example IN, US, GB.
+    "country": ar.CountryCode(nullable=False),
     "username": ar.String(min_length=3, max_length=20),
     "revenue": ar.Float64(nullable=True, min=0),
 })
@@ -613,6 +644,17 @@ if not result.passed:
 ```
 
 `ValidationResult.to_markdown()` is useful in CI logs, GitHub comments, or data quality reports because it renders a compact validation summary plus a GitHub-friendly issue table.
+
+For multi-column uniqueness (composite keys):
+
+```python
+schema = ar.Schema({
+    "user_id": ar.Int64(nullable=False),
+    "course_id": ar.Int64(nullable=False),
+}, unique=["user_id", "course_id"])
+
+result = ar.validate(frame, schema)
+```
 Severity counts are not included in `summary()` yet because `ValidationIssue` does not currently carry severity information.
 
 For low-risk automatic cleanup:

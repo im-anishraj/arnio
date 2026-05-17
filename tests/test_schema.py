@@ -60,15 +60,24 @@ def test_schema_reports_missing_and_unexpected_columns(sample_csv):
     assert "unexpected_column" in rules
 
 
-def test_validation_result_to_pandas(sample_csv):
-    result = ar.validate(
-        ar.read_csv(sample_csv),
-        {"age": ar.Int64(min=31)},
+def test_validation_result_to_pandas_empty_has_stable_columns():
+    result = ar.ValidationResult(
+        row_count=3,
+        issue_count=0,
+        issues=[],
+        bad_rows=[],
     )
+
     df = result.to_pandas()
 
-    assert list(df["rule"]) == ["min", "min"]
-    assert list(df["row_index"]) == [0, 1]
+    assert df.empty
+    assert list(df.columns) == [
+        "column",
+        "rule",
+        "message",
+        "row_index",
+        "value",
+    ]
 
 
 def test_validation_result_summary_counts_repeated_issues_in_one_column():
@@ -270,6 +279,35 @@ def test_custom_pattern_validation(tmp_path):
     assert result.issues[0].row_index == 1
 
 
+def test_country_code_validation_accepts_iso_alpha_2_codes(tmp_path):
+    path = tmp_path / "countries.csv"
+    path.write_text("country\nIN\nUS\nGB\nFR\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"country": ar.CountryCode(nullable=False)},
+    )
+
+    assert result.passed
+    assert result.issue_count == 0
+
+
+def test_country_code_validation_rejects_invalid_codes(tmp_path):
+    path = tmp_path / "bad_countries.csv"
+    path.write_text("country\nIND\n1A\nA\nUSA\ngb\nFr\n\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"country": ar.CountryCode(nullable=False)},
+    )
+
+    assert not result.passed
+    assert result.issue_count == 6
+
+    assert [issue.row_index for issue in result.issues] == [0, 1, 2, 3, 4, 5]
+    assert {issue.rule for issue in result.issues} == {"country_code"}
+
+
 def test_string_min_length_boundary(tmp_path):
     path = tmp_path / "names.csv"
     path.write_text("name\nab\nabc\n")
@@ -354,3 +392,75 @@ def test_equal_string_length_bounds_are_valid():
 
     assert field.min_length == 3
     assert field.max_length == 3
+
+
+def test_schema_composite_unique_passes(tmp_path):
+    path = tmp_path / "composite.csv"
+    path.write_text("user_id,course_id\n1,101\n1,102\n2,101\n")
+    frame = ar.read_csv(path)
+    schema = ar.Schema(
+        {
+            "user_id": ar.Int64(),
+            "course_id": ar.Int64(),
+        },
+        unique=["user_id", "course_id"],
+    )
+    result = schema.validate(frame)
+    assert result.passed
+    assert result.issue_count == 0
+
+
+def test_schema_composite_unique_fails(tmp_path):
+    path = tmp_path / "composite_bad.csv"
+    path.write_text("user_id,course_id\n1,101\n1,102\n1,101\n")
+    frame = ar.read_csv(path)
+    schema = ar.Schema(
+        {
+            "user_id": ar.Int64(),
+            "course_id": ar.Int64(),
+        },
+        unique=["user_id", "course_id"],
+    )
+    result = schema.validate(frame)
+    assert not result.passed
+    issues = [i for i in result.issues if i.rule == "composite_unique"]
+    assert len(issues) == 2
+    assert issues[0].row_index == 0
+    assert issues[1].row_index == 2
+    assert "['user_id', 'course_id']" in issues[0].message
+
+
+def test_schema_composite_unique_invalid_column(tmp_path):
+    path = tmp_path / "composite_invalid.csv"
+    path.write_text("user_id,course_id\n1,101\n")
+    frame = ar.read_csv(path)
+    schema = ar.Schema(
+        {
+            "user_id": ar.Int64(),
+            "course_id": ar.Int64(),
+        },
+        unique=["user_id", "bad_column"],
+    )
+    result = schema.validate(frame)
+    assert not result.passed
+    issues = [i for i in result.issues if i.rule == "missing_column"]
+    assert len(issues) == 1
+    assert issues[0].column == "bad_column"
+
+
+def test_schema_composite_unique_empty_columns(tmp_path):
+    path = tmp_path / "composite_empty.csv"
+    path.write_text("user_id,course_id\n1,101\n")
+    frame = ar.read_csv(path)
+    schema = ar.Schema(
+        {
+            "user_id": ar.Int64(),
+            "course_id": ar.Int64(),
+        },
+        unique=[],
+    )
+    result = schema.validate(frame)
+    assert not result.passed
+    issues = [i for i in result.issues if i.rule == "composite_unique"]
+    assert len(issues) == 1
+    assert "cannot be empty" in issues[0].message
