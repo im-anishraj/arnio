@@ -577,6 +577,7 @@ schema = ar.Schema({
     "email": ar.Email(nullable=False),
     "username": ar.String(min_length=3, max_length=20),
     "revenue": ar.Float64(nullable=True, min=0),
+    "created_at": ar.Date(nullable=False),
 })
 
 result = ar.validate(frame, schema)
@@ -591,6 +592,8 @@ if not result.passed:
 
 `ValidationResult.to_markdown()` is useful in CI logs, GitHub comments, or data quality reports because it renders a compact validation summary plus a GitHub-friendly issue table.
 Severity counts are not included in `summary()` yet because `ValidationIssue` does not currently carry severity information.
+
+Date fields use the `YYYY-MM-DD` format and reject invalid calendar dates.
 
 For low-risk automatic cleanup:
 
