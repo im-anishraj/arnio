@@ -1,6 +1,12 @@
 # Changelog
 
-## [1.7.1](https://github.com/im-anishraj/arnio/compare/v1.7.0...v1.7.1) (2026-05-17)
+## [1.8.0](https://github.com/im-anishraj/arnio/compare/v1.7.0...v1.8.0) (2026-05-17)
+
+
+### Features
+
+* add ArFrame.select_dtypes for type-based column selection ([7899541](https://github.com/im-anishraj/arnio/commit/7899541113aad0f300decc08b94f285b920f3008))
+* add trim_column_names cleaning primitive and pipeline step ([d064335](https://github.com/im-anishraj/arnio/commit/d0643355f1f626a4ee2a4264aea67e316971df76))
 
 
 ### Bug Fixes
