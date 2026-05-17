@@ -189,11 +189,13 @@ class ArFrame:
             col = self._frame.column_by_index(i)
             dtype = col.dtype()
 
-            if dtype not in SUPPORTED_DTYPES:
-                raise TypeError(
-                    f"to_numpy() requires all columns to be numeric or bool. "
-                    f"Column '{col.name()}' has unsupported dtype '{dtype}'."
-                )
+        if dtype not in SUPPORTED_DTYPES:
+            if n_rows == 0:
+                return np.empty((0, n_cols), dtype=object)
+            raise TypeError(
+                f"to_numpy() requires all columns to be numeric or bool. "
+                f"Column '{col.name()}' has unsupported dtype '{dtype}'."
+            )
 
             mask = col.get_null_mask()
             has_nulls = mask.any()
