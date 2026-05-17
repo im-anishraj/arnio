@@ -57,6 +57,21 @@ def _utf8_csv_path(path: str, encoding: str) -> Iterator[str]:
                 pass
 
 
+def _validate_thousands_separator(
+    thousands_separator: str | None,
+) -> None:
+    if thousands_separator is None:
+        return
+    if not isinstance(thousands_separator, str):
+        raise TypeError("thousands_separator must be a string or None")
+    if len(thousands_separator) != 1:
+        raise ValueError("thousands_separator must be a single character")
+    if thousands_separator.isalnum() or thousands_separator in {'"', "\n", "\r"}:
+        raise ValueError(
+            "thousands_separator must be a single non-alphanumeric character"
+        )
+
+
 def read_csv(
     path: str | os.PathLike[str],
     *,
@@ -66,6 +81,7 @@ def read_csv(
     nrows: int | None = None,
     encoding: str = "utf-8",
     trim_headers: bool = True,
+    thousands_separator: str | None = None,
 ) -> ArFrame:
     """Read a CSV file into an ArFrame via C++ backend.
 
@@ -85,6 +101,14 @@ def read_csv(
         File encoding.
     trim_headers : bool, default True
         Strip leading/trailing whitespace from column names.
+    thousands_separator : str, optional
+        Single non-alphanumeric character used as a thousands separator
+        during numeric parsing.
+
+        Values containing delimiter characters must still be quoted
+        properly in the CSV input. For example, when using a comma
+        delimiter, the value "1,234" must be quoted, while unquoted
+        1,234 is interpreted as two separate fields.
 
     Returns
     -------
@@ -94,7 +118,10 @@ def read_csv(
     Raises
     ------
     ValueError
-        If file format is unsupported.
+        If file format is unsupported or if thousands_separator is invalid.
+
+    TypeError
+        If thousands_separator is not a string or None.
 
     CsvReadError
         If CSV input contains NUL bytes and appears binary or corrupted.
@@ -130,11 +157,14 @@ def read_csv(
     except FileNotFoundError:
         pass  # Let C++ backend handle or raise standard error
 
+    _validate_thousands_separator(thousands_separator)
+
     config = _CsvConfig()
     config.delimiter = delimiter
     config.has_header = has_header
     config.encoding = encoding
     config.trim_headers = trim_headers
+    config.thousands_separator = thousands_separator
 
     if usecols is not None:
         config.usecols = usecols
@@ -160,6 +190,7 @@ def scan_csv(
     delimiter: str = ",",
     encoding: str = "utf-8",
     trim_headers: bool = True,
+    thousands_separator: str | None = None,
 ) -> dict[str, str]:
     """Return schema (column names + inferred types) without loading data.
 
@@ -173,6 +204,14 @@ def scan_csv(
         File encoding. Non-UTF-8 inputs are transcoded before native scanning.
     trim_headers : bool, default True
         Strip leading/trailing whitespace from column names.
+    thousands_separator : str, optional
+        Single non-alphanumeric character used as a thousands separator
+        during numeric parsing.
+
+        Values containing delimiter characters must still be quoted
+        properly in the CSV input. For example, when using a comma
+        delimiter, the value "1,234" must be quoted, while unquoted
+        1,234 is interpreted as two separate fields.
 
     Returns
     -------
@@ -182,7 +221,10 @@ def scan_csv(
     Raises
     ------
     ValueError
-        If file format is unsupported.
+        If file format is unsupported or if thousands_separator is invalid.
+
+    TypeError
+        If thousands_separator is not a string or None.
 
     CsvReadError
         If CSV input contains NUL bytes and appears binary or corrupted.
@@ -220,10 +262,14 @@ def scan_csv(
     except FileNotFoundError:
         pass
 
+    _validate_thousands_separator(thousands_separator)
+
     config = _CsvConfig()
     config.delimiter = delimiter
     config.encoding = encoding
     config.trim_headers = trim_headers
+    config.thousands_separator = thousands_separator
+
     reader = _CsvReader(config)
     try:
         with _utf8_csv_path(path, encoding) as native_path:
