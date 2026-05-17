@@ -42,6 +42,7 @@ from .quality import (
     ColumnProfile,
     DataQualityReport,
     auto_clean,
+    duplicate_count,
     profile,
     suggest_cleaning,
 )
@@ -100,6 +101,7 @@ __all__ = [
     "auto_clean",
     "ColumnProfile",
     "DataQualityReport",
+    "duplicate_count",
     # Schema validation
     "Schema",
     "Field",
