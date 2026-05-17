@@ -74,6 +74,10 @@ size_t Frame::column_index(const std::string& name) const {
 void Frame::add_column(Column col) {
     name_index_[col.name()] = columns_.size();
     columns_.push_back(std::move(col));
+
+    if (columns_.size() == 1) {
+        row_count_ = columns_[0].size();
+    }
 }
 
 const std::vector<Column>& Frame::columns() const { return columns_; }
