@@ -373,6 +373,70 @@ class TestClipNumeric:
             ar.clip_numeric(frame, lower=5, upper=1)
 
 
+class TestStandardizeMissingTokens:
+    def test_normal_case(self):
+        df = pd.DataFrame({"value": [1, 2, "N/A"]})
+        result = ar.standardize_missing_tokens(df)
+        assert isinstance(result, pd.DataFrame)
+        assert pd.isna(result["value"].iloc[2])
+
+    def test_normal_case_arframe(self):
+        frame = ar.from_pandas(pd.DataFrame({"value": [1, 2, "N/A"]}))
+        result = ar.standardize_missing_tokens(frame)
+        df = ar.to_pandas(result)
+        assert isinstance(result, ar.ArFrame)
+        assert pd.isna(df["value"].iloc[2])
+
+    def test_default_case(self):
+        df = pd.DataFrame({"value": [1, 2, "-"]})
+        result = ar.standardize_missing_tokens(df)
+        assert pd.isna(result["value"].iloc[2])
+
+    def test_default_case_subset(self):
+        df = pd.DataFrame(
+            {
+                "roll_no": ["001", "002", "003"],
+                "name": ["Alice", "Bob", "Carter"],
+                "marks": [100, 90, "-"],
+            }
+        )
+        result = ar.standardize_missing_tokens(df, subset=["marks"])
+        assert pd.isna(result["marks"].iloc[2])
+        assert result["name"].iloc[2] == "Carter"
+
+    def test_custom_case(self):
+        df = pd.DataFrame({"value": [1, 2, "unknown"]})
+        result = ar.standardize_missing_tokens(df, tokens=["unknown"])
+        assert pd.isna(result["value"].iloc[2])
+
+    def test_custom_case_subset(self):
+        df = pd.DataFrame(
+            {
+                "roll_no": ["001", "002", "003"],
+                "name": ["Alice", "Bob", "Carter"],
+                "marks": [100, 90, "unknown"],
+            }
+        )
+        result = ar.standardize_missing_tokens(df, tokens=["unknown"], subset=["marks"])
+        assert pd.isna(result["marks"].iloc[2])
+        assert result["name"].iloc[2] == "Carter"
+
+    def test_non_string_columns(self):
+        df = pd.DataFrame({"value": [1, 2, 3]})
+        result = ar.standardize_missing_tokens(df)
+        assert result["value"].iloc[0] == 1
+
+    def test_unchanged_columns(self):
+        df = pd.DataFrame({"value": [1, 2, "-"]})
+        result = ar.standardize_missing_tokens(df, tokens=[])
+        assert result["value"].iloc[2] == "-"
+
+    def test_standardize_missing_tokens_unknown_subset_column_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"value": [1, 2, 3]}))
+        with pytest.raises(ValueError, match="Unknown columns in subset"):
+            ar.standardize_missing_tokens(frame, subset=["missing"])
+
+
 class TestStripWhitespace:
     def test_strip(self, csv_with_whitespace):
         frame = ar.read_csv(csv_with_whitespace)
