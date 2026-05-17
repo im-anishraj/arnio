@@ -224,15 +224,14 @@ PYBIND11_MODULE(_arnio_cpp, m) {
     py::class_<CsvReader>(m, "CsvReader")
         .def(py::init<const CsvConfig&>(), py::arg("config") = CsvConfig{})
         .def("read", &CsvReader::read)
-        .def("scan_schema",
-             [](const CsvReader& reader, const std::string& path) {
-                 auto result = reader.scan_schema(path);
-                 py::dict schema;
-                 for (const auto& pair : result) {
-                     schema[py::str(pair.first)] = py::str(pair.second);
-                 }
-                 return schema;
-             });
+        .def("scan_schema", [](const CsvReader& reader, const std::string& path) {
+            auto result = reader.scan_schema(path);
+            py::dict schema;
+            for (const auto& pair : result) {
+                schema[py::str(pair.first)] = py::str(pair.second);
+            }
+            return schema;
+        });
 
     // --- Cleaning functions ---
     m.def("drop_nulls", &drop_nulls, py::arg("frame"), py::arg("subset") = std::nullopt);
