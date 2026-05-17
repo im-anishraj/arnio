@@ -2,6 +2,8 @@
 
 import pandas as pd
 import pytest
+import json
+from arnio.quality import DataQualityReport
 
 import arnio as ar
 
@@ -209,6 +211,7 @@ def test_top_values_in_to_dict(tmp_path):
     assert d["top_values"][0]["count"] == 2
 
 
+
 def test_identifier_numeric_cast_prevention():
     df = pd.DataFrame(
         {
@@ -243,3 +246,46 @@ def test_identifier_numeric_cast_prevention():
     assert list(result["id"]) == ["001", "002", "003"]
     assert list(result["customer_id"]) == ["00123", "00456", "00789"]
     assert list(result["zip_code"]) == ["01234", "02345", "03456"]
+
+
+
+
+def test_quality_report_to_json_normal(tmp_path):
+    path = tmp_path / "json_test.csv"
+    path.write_text("x,y\n10,20\n30,40\n")
+    report = ar.profile(ar.read_csv(path))
+    
+    json_str = report.to_json()
+    data = json.loads(json_str)
+    
+    assert data["row_count"] == 2
+    assert data["column_count"] == 2
+    assert "x" in data["columns"]
+
+def test_quality_report_to_json_empty():
+    report = DataQualityReport(
+        row_count=0,
+        column_count=0,
+        memory_usage=0,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={}
+    )
+    json_str = report.to_json()
+    data = json.loads(json_str)
+    
+    assert data["row_count"] == 0
+    assert data["columns"] == {}
+
+def test_quality_report_to_json_stable_keys():
+    report = DataQualityReport(
+        row_count=5,
+        column_count=1,
+        memory_usage=50,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={}
+    )
+    json_str = report.to_json(sort_keys=True)
+    assert json_str == json.dumps(report.to_dict(), sort_keys=True)
+
