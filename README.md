@@ -766,15 +766,11 @@ If you are new to Arnio terms, see the [contributor glossary](.github/CONTRIBUTI
 
 ### 💖 Contributors
 
-Thanks to all the amazing people who contribute to **Arnio** 🚀
+Thanks to everyone who contributes to Arnio and helps improve the project.
 
-<p align="center">
-  <a href="https://github.com/im-anishraj/arnio/graphs/contributors">
-    <img src="https://contrib.rocks/image?repo=im-anishraj/arnio" alt="Contributors"/>
-  </a>
-</p>
-
-<br>
+- [View all contributors](https://github.com/im-anishraj/arnio/graphs/contributors)
+- [Contribution Guide](.github/CONTRIBUTING.md)
+- [GitHub Discussions](https://github.com/im-anishraj/arnio/discussions)
 
 ---
 
