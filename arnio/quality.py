@@ -130,6 +130,17 @@ class DataQualityReport:
         )
 
 
+def duplicate_count(df: pd.DataFrame, subset: list[str] | None = None) -> int:
+    if subset is not None:
+        missing_columns = [col for col in subset if col not in df.columns]
+        if missing_columns:
+            raise ValueError(f"Unknown columns for duplicate check: {missing_columns}")
+    if df.empty:
+        return 0
+    duplicated_mask = df.duplicated(subset=subset, keep="first")
+    return int(duplicated_mask.sum())
+
+
 def profile(frame: ArFrame, *, sample_size: int = 5) -> DataQualityReport:
     """Profile data quality for an ArFrame.
 
@@ -159,15 +170,6 @@ def profile(frame: ArFrame, *, sample_size: int = 5) -> DataQualityReport:
 
     df = to_pandas(frame)
     row_count, column_count = frame.shape
-    def duplicate_count(df : pd.DataFrame, subset : list[str] | None = None ) -> int:
-        if subset is not None :
-            missing_col = [col for col in subset if col not in df.columns]
-            if missing_col :
-                raise ValueError(f"Unknown columns for duplicate check: {missing_col}")
-        if df.empty:
-            return 0
-        duplicated_mask = df.duplicated(subset=subset,keep="first")
-        return int(duplicated_mask.sum())
     duplicate_rows = duplicate_count(df)
     duplicate_ratio = _ratio(duplicate_rows, row_count)
 

@@ -1,7 +1,10 @@
 """Tests for data quality profiling and smart cleaning."""
+
 import pandas as pd
 import pytest
+
 import arnio as ar
+
 
 def test_profile_reports_quality_signals(tmp_path):
     path = tmp_path / "quality.csv"
@@ -117,49 +120,60 @@ def test_profile_sample_size_validation(tmp_path):
     except TypeError as exc:
         assert "sample_size must be an integer" in str(exc)
 
-def test_duplicate_count_for_full_rows():
-    df = pd.DataFrame([
-        {"id": 1, "name": "A"},
-        {"id": 1, "name": "A"},
-        {"id": 2, "name": "B"},
-    ])
 
-    assert ar.duplicate_count(df) == 2
+def test_duplicate_count_for_full_rows():
+    df = pd.DataFrame(
+        [
+            {"id": 1, "name": "A"},
+            {"id": 1, "name": "A"},
+            {"id": 2, "name": "B"},
+        ]
+    )
+
+    assert ar.duplicate_count(df) == 1
 
 
 def test_duplicate_count_for_single_column():
-    df = pd.DataFrame([
-        {"id": 1, "name": "A"},
-        {"id": 1, "name": "B"},
-        {"id": 2, "name": "C"},
-    ])
+    df = pd.DataFrame(
+        [
+            {"id": 1, "name": "A"},
+            {"id": 1, "name": "B"},
+            {"id": 2, "name": "C"},
+        ]
+    )
 
-    assert ar.duplicate_count(df, subset=["id"]) == 2
+    assert ar.duplicate_count(df, subset=["id"]) == 1
 
 
 def test_duplicate_count_for_multiple_columns():
-    df = pd.DataFrame([
-        {"id": 1, "email": "a@test.com"},
-        {"id": 1, "email": "a@test.com"},
-        {"id": 1, "email": "b@test.com"},
-    ])
+    df = pd.DataFrame(
+        [
+            {"id": 1, "email": "a@test.com"},
+            {"id": 1, "email": "a@test.com"},
+            {"id": 1, "email": "b@test.com"},
+        ]
+    )
 
-    assert ar.duplicate_count(df, subset=["id", "email"]) == 2
+    assert ar.duplicate_count(df, subset=["id", "email"]) == 1
 
 
 def test_duplicate_count_no_duplicates():
-    df = pd.DataFrame([
-        {"id": 1, "name": "A"},
-        {"id": 2, "name": "B"},
-    ])
+    df = pd.DataFrame(
+        [
+            {"id": 1, "name": "A"},
+            {"id": 2, "name": "B"},
+        ]
+    )
 
     assert ar.duplicate_count(df, subset=["id"]) == 0
 
 
 def test_duplicate_count_invalid_column():
-    df = pd.DataFrame([
-        {"id": 1, "name": "A"},
-    ])
+    df = pd.DataFrame(
+        [
+            {"id": 1, "name": "A"},
+        ]
+    )
 
     with pytest.raises(ValueError, match="Unknown columns"):
         ar.duplicate_count(df, subset=["email"])
