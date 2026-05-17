@@ -59,6 +59,7 @@ from .schema import (
     ValidationIssue,
     ValidationResult,
     validate,
+    Regex,
 )
 
 __all__ = [
@@ -120,4 +121,5 @@ __all__ = [
     "CsvReadError",
     "TypeCastError",
     "normalize_unicode",
+    "Regex",
 ]
