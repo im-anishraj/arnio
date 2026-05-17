@@ -51,7 +51,7 @@ Colab install smoke test: **[COLAB_SMOKE_TEST.md](COLAB_SMOKE_TEST.md)**
 
 ## ⚡ Quickstart
 
-Three lines. That's the entire workflow.
+A simple workflow in just a few steps.
 
 ```python
 import arnio as ar
