@@ -1,7 +1,22 @@
 """
-arnio — Fast CSV processing and data cleaning companion for pandas.
+Arnio — High-performance C++ Data Cleaning for Python.
 
-import arnio as ar
+Arnio is a compiled C++ engine designed to handle messy data ingestion and cleaning
+BEFORE it reaches pandas. It minimizes memory spikes and maximizes speed by
+performing heavy lifting natively in columnar memory.
+
+Key Features:
+- 🚀 Fast C++ CSV parser with type inference.
+- 🧹 Declarative cleaning pipelines (drop_nulls, strip_whitespace, etc.).
+- 📊 Data profiling and quality reporting.
+- ✅ Schema validation for production data contracts.
+- ⚡ Zero-copy bridge to pandas/NumPy.
+
+Quickstart:
+    >>> import arnio as ar
+    >>> frame = ar.read_csv("data.csv")
+    >>> clean = ar.pipeline(frame, [("strip_whitespace",), ("drop_duplicates",)])
+    >>> df = ar.to_pandas(clean)
 """
 
 try:
