@@ -47,7 +47,7 @@ print(f"Data Types: {df.dtypes}")
 print(f"Dataset Shape: {df.shape}")
 print(f"Memory: {df.memory_usage()} bytes")
 print(df.preview())
-df = df.select_columns(columns=["id","name"])
+df = df.select_columns(columns=["id", "name"])
 ```
 
 ---

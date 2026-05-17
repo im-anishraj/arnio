@@ -34,11 +34,6 @@ Use Arnio _before_ and _alongside_ pandas, NumPy, scikit-learn, DuckDB, and Arro
 ```bash
 pip install arnio
 ```
-<br>
-
-API reference guide: **[Arnio API Reference](./API_REFERENCE.md)**
-
-<br>
 
 Colab install smoke test: **[COLAB_SMOKE_TEST.md](COLAB_SMOKE_TEST.md)**
 
@@ -75,9 +70,6 @@ clean = ar.pipeline(frame, [
 
 # Out comes a standard pandas DataFrame — use it like you always have
 df = ar.to_pandas(clean)
-
-# Use copy=True when you need defensive pandas-owned buffers
-safe_df = ar.to_pandas(clean, copy=True)
 ```
 
 Already have a pandas `DataFrame`? Use Arnio in-place in your existing pandas
@@ -203,6 +195,7 @@ This keeps pandas as the analysis tool while Arnio handles the preparation,
 quality, and validation layer.
 
 > Product direction: **[PROJECT_DIRECTION.md](PROJECT_DIRECTION.md)**
+> API reference guide: **[Arnio API Reference](./API_REFERENCE.md)**
 
 <br>
 
@@ -304,7 +297,7 @@ Arnio is not a pandas wrapper. It's a separate runtime with its own data model.
 | **Columnar storage** | Data lives in typed `std::vector`s — `vector<int64_t>`, `vector<double>`, `vector<string>` — not rows of variants. Cache-friendly and SIMD-ready. |
 | **Boolean null masks** | Nulls are tracked in a separate `vector<bool>`, keeping data vectors dense. No sentinel values, no NaN tricks. |
 | **Two-pass CSV read** | Pass 1 infers types across all rows. Pass 2 parses values directly into the correct typed column. No string→object→cast overhead. |
-| **Zero-copy bridge** | `to_pandas()` exposes C++ memory directly via NumPy's buffer protocol where supported. Numeric columns preserve the fast zero-copy path by default, while `copy=True` requests defensive pandas-owned buffers. |
+| **Zero-copy bridge** | `to_pandas()` exposes C++ memory directly via NumPy's buffer protocol. Numeric and boolean columns cross the boundary without copying. |
 | **Step registry** | Pipeline steps map to C++ function pointers. Adding a new cleaning primitive is a single function + one registry entry. |
 
 > Full architecture documentation: **[ARCHITECTURE.md](ARCHITECTURE.md)**
@@ -489,10 +482,7 @@ If a dtype is partially supported, users may need conversion before processing. 
 
 ### Notes
 
-- Numeric columns are optimized for zero-copy conversion between C++ and pandas where supported.
-- Pass `copy=True` to `to_pandas()` when downstream pandas code needs defensive pandas-owned column buffers.
-- Boolean conversion is already copied by the binding because `std::vector<bool>` cannot be exposed as a zero-copy NumPy buffer in the current implementation.
-- Columns with null masks may require copies so pandas can apply nullable values safely.
+- Numeric and boolean columns are optimized for zero-copy conversion between C++ and pandas.
 - String columns require Python string object creation during `to_pandas()` conversion.
 - Mixed `object` columns may reduce type inference accuracy and may require preprocessing.
 - Unsupported dtypes should raise clear user-facing errors instead of silent failures.
@@ -521,7 +511,6 @@ For production data contracts:
 schema = ar.Schema({
     "id": ar.Int64(nullable=False, unique=True),
     "email": ar.Email(nullable=False),
-    "username": ar.String(min_length=3, max_length=20),
     "revenue": ar.Float64(nullable=True, min=0),
 })
 
