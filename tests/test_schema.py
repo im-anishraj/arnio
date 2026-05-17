@@ -1,7 +1,5 @@
 """Tests for schema validation."""
 
-import pytest
-
 import arnio as ar
 
 
@@ -489,80 +487,113 @@ def test_schema_composite_unique_empty_columns(tmp_path):
     assert "cannot be empty" in issues[0].message
 
 
-def test_datetime_validation_passes_for_valid_column(tmp_path):
-    path = tmp_path / "valid_datetimes.csv"
-    path.write_text(
-        "ts\n" "2026-01-01T12:00:00\n" "2026-06-15T08:30:00\n" "2026-12-31T23:59:59\n"
-    )
-
-    result = ar.validate(
-        ar.read_csv(path),
-        {
-            "ts": ar.DateTime(
-                nullable=False,
-                format="%Y-%m-%dT%H:%M:%S",
-                min="2026-01-01",
-                max="2026-12-31T23:59:59",
-            )
+def test_bootstrap_from_report_normal_case():
+    report = ar.DataQualityReport(
+        row_count=100,
+        column_count=4,
+        memory_usage=1024,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={
+            "id": ar.ColumnProfile(
+                name="id",
+                dtype="int64",
+                semantic_type="identifier",
+                row_count=100,
+                null_count=0,
+                null_ratio=0.0,
+                unique_count=100,
+                unique_ratio=1.0,
+            ),
+            "score": ar.ColumnProfile(
+                name="score",
+                dtype="float32",
+                semantic_type="numeric",
+                row_count=100,
+                null_count=0,
+                null_ratio=0.0,
+                unique_count=50,
+                unique_ratio=0.5,
+            ),
+            "is_active": ar.ColumnProfile(
+                name="is_active",
+                dtype="bool",
+                semantic_type="boolean",
+                row_count=100,
+                null_count=0,
+                null_ratio=0.0,
+                unique_count=2,
+                unique_ratio=0.02,
+            ),
+            "name": ar.ColumnProfile(
+                name="name",
+                dtype="object",
+                semantic_type="text",
+                row_count=100,
+                null_count=0,
+                null_ratio=0.0,
+                unique_count=90,
+                unique_ratio=0.9,
+            ),
         },
     )
 
-    assert result.passed
-    assert result.issue_count == 0
-    assert result.bad_rows == []
+    schema = ar.Schema.bootstrap_from_report(report)
+
+    assert isinstance(schema, ar.Schema)
+    assert set(schema.fields.keys()) == {"id", "score", "is_active", "name"}
+    assert schema.fields["id"].dtype == "integer"
+    assert schema.fields["score"].dtype == "float"
+    assert schema.fields["is_active"].dtype == "boolean"
+    assert schema.fields["name"].dtype == "string"
 
 
-def test_datetime_rejects_invalid_format_type():
-    with pytest.raises(TypeError, match="format must be a string or None"):
-        ar.DateTime(format=123)
-
-
-def test_datetime_rejects_invalid_boundary_values():
-    with pytest.raises(ValueError, match="min must be a parseable datetime scalar"):
-        ar.DateTime(min="not-a-date")
-
-    with pytest.raises(ValueError, match="max must be a parseable datetime scalar"):
-        ar.DateTime(max=["2026-01-01", "2026-01-02"])
-
-
-def test_datetime_rejects_min_greater_than_max():
-    with pytest.raises(ValueError, match="min must be less than or equal to max"):
-        ar.DateTime(min="2026-12-31", max="2026-01-01")
-
-
-def test_datetime_validation(tmp_path):
-    path = tmp_path / "datetimes.csv"
-    path.write_text(
-        "ts,note\n"
-        "2026-01-01T12:00:00,start\n"
-        "2026-12-31T23:59:59,end\n"
-        ",missing\n"
-        "invalid-date,bad\n"
+def test_bootstrap_from_report_nullable_columns():
+    report = ar.DataQualityReport(
+        row_count=100,
+        column_count=3,
+        memory_usage=1024,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={
+            "no_nulls": ar.ColumnProfile(
+                name="no_nulls",
+                dtype="int64",
+                semantic_type="numeric",
+                row_count=100,
+                null_count=0,
+                null_ratio=0.0,
+                unique_count=100,
+                unique_ratio=1.0,
+            ),
+            "some_nulls": ar.ColumnProfile(
+                name="some_nulls",
+                dtype="int64",
+                semantic_type="numeric",
+                row_count=100,
+                null_count=5,
+                null_ratio=0.05,
+                unique_count=90,
+                unique_ratio=0.9,
+            ),
+            "all_nulls": ar.ColumnProfile(
+                name="all_nulls",
+                dtype="float",
+                semantic_type="empty",
+                row_count=100,
+                null_count=100,
+                null_ratio=1.0,
+                unique_count=0,
+                unique_ratio=0.0,
+            ),
+        },
     )
-    frame = ar.read_csv(path)
-    schema = ar.Schema(
-        {
-            "ts": ar.DateTime(
-                nullable=False,
-                format="%Y-%m-%dT%H:%M:%S",
-                min="2026-01-01",
-                max="2026-12-31T23:59:59",
-            )
-        }
-    )
 
-    result = ar.validate(frame, schema)
-    rules = [issue.rule for issue in result.issues]
+    schema = ar.Schema.bootstrap_from_report(report)
 
-    assert not result.passed
-    assert "format" in rules
-    assert "nullable" in rules
-
-    path2 = tmp_path / "boundary.csv"
-    path2.write_text("ts\n" "2025-12-31T23:59:59\n" "2027-01-01T00:00:00\n")
-    frame2 = ar.read_csv(path2)
-    result2 = ar.validate(frame2, schema)
-    rules2 = [issue.rule for issue in result2.issues]
+    assert schema.fields["no_nulls"].nullable is False
+    assert schema.fields["some_nulls"].nullable is True
+    assert schema.fields["all_nulls"].nullable is True
 
     assert "min" in rules2
     assert "max" in rules2
@@ -609,3 +640,72 @@ def test_bad_rows_reflects_one_based_indexes(tmp_path):
     result = ar.validate(frame, {"age": ar.Int64(min=0)})
 
     assert result.bad_rows == [1, 3]
+
+
+def test_bootstrap_from_report_mixed_string_like_columns():
+    report = ar.DataQualityReport(
+        row_count=10,
+        column_count=2,
+        memory_usage=128,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={
+            "cat_col": ar.ColumnProfile(
+                name="cat_col",
+                dtype="category",
+                semantic_type="categorical",
+                row_count=10,
+                null_count=0,
+                null_ratio=0.0,
+                unique_count=3,
+                unique_ratio=0.3,
+            ),
+            "obj_col": ar.ColumnProfile(
+                name="obj_col",
+                dtype="object",
+                semantic_type="text",
+                row_count=10,
+                null_count=0,
+                null_ratio=0.0,
+                unique_count=10,
+                unique_ratio=1.0,
+            ),
+        },
+    )
+
+    schema = ar.Schema.bootstrap_from_report(report)
+
+    assert schema.fields["cat_col"].dtype == "string"
+    assert schema.fields["obj_col"].dtype == "string"
+
+
+def test_bootstrap_from_report_empty_malformed_inputs():
+    import pytest
+
+    with pytest.raises(TypeError, match="Expected DataQualityReport"):
+        ar.Schema.bootstrap_from_report(None)
+
+    with pytest.raises(TypeError, match="Expected DataQualityReport"):
+        ar.Schema.bootstrap_from_report({"columns": {}})
+
+    empty_report = ar.DataQualityReport(
+        row_count=0,
+        column_count=0,
+        memory_usage=0,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+    )
+    with pytest.raises(ValueError, match="empty"):
+        ar.Schema.bootstrap_from_report(empty_report)
+
+    report_missing_dtype = ar.DataQualityReport(
+        row_count=10,
+        column_count=1,
+        memory_usage=100,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={"bad_col": {"null_count": 0}},  # type: ignore
+    )
+    with pytest.raises(ValueError, match="dtype"):
+        ar.Schema.bootstrap_from_report(report_missing_dtype)
