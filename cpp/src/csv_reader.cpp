@@ -40,16 +40,47 @@ inline bool record_complete(const std::string& record) {
 
     return !in_quotes;
 }
+static bool getline_universal(std::istream& stream, std::string& line, std::string& line_ending) {
+    line.clear();
+    line_ending = "\n";  // default
+    char c;
+    if (!stream.get(c)) return false;
+
+    while (stream) {
+        if (c == '\n') {
+            line_ending = "\n";
+            break;
+        }
+        if (c == '\r') {
+            if (stream.peek() == '\n') {
+                stream.get();
+                line_ending = "\r\n";
+            } else {
+                line_ending = "\r";
+            }
+            break;
+        }
+        line += c;
+        if (!stream.get(c)) break;
+    }
+    return true;
+}
 
 bool read_record(std::istream& file, std::string& record) {
     record.clear();
 
     std::string line;
-    while (std::getline(file, line)) {
-        if (!record.empty()) {
-            record.push_back('\n');
+    std::string line_ending;
+    std::string prev_line_ending;
+    bool first = true;
+
+    while (getline_universal(file, line, line_ending)) {
+        if (!first) {
+            record += prev_line_ending;  // ← use PREVIOUS ending as separator
         }
         record += line;
+        prev_line_ending = line_ending;
+        first = false;
 
         if (record_complete(record)) {
             return true;
@@ -188,7 +219,7 @@ CellValue CsvReader::parse_value(const std::string& raw, DType dtype) {
 }
 
 Frame CsvReader::read(const std::string& path) const {
-    std::ifstream file(path);
+    std::ifstream file(path, std::ios::binary);
     if (!file.is_open()) {
         throw std::runtime_error("Cannot open file: " + path);
     }
@@ -277,8 +308,9 @@ Frame CsvReader::read(const std::string& path) const {
     return Frame(std::move(columns));
 }
 
-std::vector<std::pair<std::string, std::string>> CsvReader::scan_schema(const std::string& path) const {
-    std::ifstream file(path);
+std::vector<std::pair<std::string, std::string>> CsvReader::scan_schema(
+    const std::string& path) const {
+    std::ifstream file(path, std::ios::binary);
     if (!file.is_open()) {
         throw std::runtime_error("Cannot open file: " + path);
     }
