@@ -86,3 +86,30 @@ class ArnioPandasAccessor:
     def validate(self, schema: Schema | dict[str, Any]) -> ValidationResult:
         """Validate the DataFrame against an Arnio schema."""
         return validate(self.to_arframe(), schema)
+
+    def to_numpy(
+        self,
+        columns: list[str] | None = None,
+        *,
+        null_value: float = float("nan"),
+        allow_non_numeric: bool = False,
+    ) -> "np.ndarray":
+        """Extract numeric columns as a 2-D NumPy ``float64`` array.
+
+        Converts the DataFrame to an ArFrame internally, then delegates
+        to :func:`arnio.to_numpy`.  See that function for full parameter
+        documentation.
+        """
+        import numpy as np
+
+        from arnio.convert import to_numpy
+
+        if null_value != null_value:  # NaN check without importing numpy at top
+            null_value = np.nan
+
+        return to_numpy(
+            self.to_arframe(),
+            columns,
+            null_value=null_value,
+            allow_non_numeric=allow_non_numeric,
+        )

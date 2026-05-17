@@ -184,4 +184,136 @@ def from_pandas(df: pd.DataFrame) -> ArFrame:
             dtype_hints[name] = dtype_hint
 
     cpp_frame = _Frame.from_dict(columns, dtype_hints)
-    return ArFrame(cpp_frame, attrs=copylib.deepcopy(df.attrs))
+    return ArFrame(cpp_frame, attrs=copy.deepcopy(df.attrs))
+
+
+_NUMERIC_DTYPES = {"int64", "float64", "bool"}
+
+
+def to_numpy(
+    frame: ArFrame,
+    columns: list[str] | None = None,
+    *,
+    null_value: float = np.nan,
+    allow_non_numeric: bool = False,
+) -> np.ndarray:
+    """Extract columns from an ArFrame as a 2-D NumPy ``float64`` array.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Source data.
+    columns : list[str] or None
+        Column names to include.  When *None* (the default), all numeric
+        columns (``int64``, ``float64``, ``bool``) are auto-selected in
+        their original order.
+    null_value : float, optional
+        Sentinel substituted for null / missing cells (default ``np.nan``).
+    allow_non_numeric : bool, optional
+        If *False* (default), selecting a non-numeric column raises
+        ``TypeError``.  If *True*, non-numeric columns are silently
+        skipped when *columns* is ``None``, or raise ``TypeError`` when
+        explicitly requested.
+
+    Returns
+    -------
+    np.ndarray
+        Array of shape ``(n_rows, n_selected_columns)`` with dtype
+        ``float64``.  Row order matches the ArFrame exactly.
+
+    Raises
+    ------
+    ValueError
+        If any requested column name does not exist in the frame, or if
+        no numeric columns are available when *columns* is ``None``.
+    TypeError
+        If a selected column has a non-numeric dtype and
+        *allow_non_numeric* is ``False``.
+
+    Examples
+    --------
+    >>> frame = ar.from_pandas(pd.DataFrame({"a": [1, 2], "b": [3.0, 4.0]}))
+    >>> ar.to_numpy(frame)
+    array([[1., 3.],
+           [2., 4.]])
+
+    >>> ar.to_numpy(frame, columns=["b"])
+    array([[3.],
+           [4.]])
+    """
+    dtypes = frame.dtypes
+    all_columns = frame.columns
+
+    # --- resolve column list ---
+    if columns is not None:
+        missing = [c for c in columns if c not in all_columns]
+        if missing:
+            raise ValueError(
+                f"Unknown columns: {missing}. "
+                f"Available columns: {all_columns}"
+            )
+        selected = list(columns)
+    else:
+        selected = [c for c in all_columns if dtypes[c] in _NUMERIC_DTYPES]
+        if not selected:
+            raise ValueError(
+                "No numeric columns found in frame. "
+                "Pass explicit column names via the 'columns' parameter."
+            )
+
+    # --- validate dtypes ---
+    non_numeric = [c for c in selected if dtypes[c] not in _NUMERIC_DTYPES]
+    if non_numeric and not allow_non_numeric:
+        raise TypeError(
+            f"Non-numeric columns selected: {non_numeric}. "
+            "Set allow_non_numeric=True to skip them, or remove them "
+            "from the 'columns' list."
+        )
+
+    # When allow_non_numeric is True and columns were explicit, drop the
+    # non-numeric ones silently.
+    if non_numeric and allow_non_numeric:
+        selected = [c for c in selected if dtypes[c] in _NUMERIC_DTYPES]
+        if not selected:
+            raise ValueError(
+                "All selected columns are non-numeric and "
+                "allow_non_numeric=True filters them out, "
+                "leaving no columns to convert."
+            )
+
+    cpp_frame = frame._frame
+    n_rows = cpp_frame.num_rows()
+
+    # Build a column-name → column-index mapping for O(1) lookup.
+    col_index = {name: i for i, name in enumerate(all_columns)}
+
+    arrays: list[np.ndarray] = []
+    for col_name in selected:
+        col = cpp_frame.column_by_index(col_index[col_name])
+        dtype = dtypes[col_name]
+        mask = col.get_null_mask()
+
+        if dtype == "int64":
+            arr = col.to_numpy_int().astype(np.float64, copy=True)
+        elif dtype == "float64":
+            arr = col.to_numpy_float().copy()
+        elif dtype == "bool":
+            arr = col.to_numpy_bool().astype(np.float64, copy=True)
+        else:
+            # Should not be reached after the dtype filter above.
+            raise TypeError(
+                f"Column '{col_name}' has unsupported dtype '{dtype}'."
+            )
+
+        # Apply null mask — replace masked positions with null_value.
+        if any(mask):
+            null_indices = [i for i, m in enumerate(mask) if m]
+            arr[null_indices] = null_value
+
+        arrays.append(arr)
+
+    if n_rows == 0:
+        return np.empty((0, len(selected)), dtype=np.float64)
+
+    return np.column_stack(arrays)
+
