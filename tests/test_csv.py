@@ -56,7 +56,6 @@ class TestReadCsv:
         assert len(frame) == 3
 
     def test_header_whitespace(self, tmp_path):
-
         csv_path = str(tmp_path / "whitespace.csv")
         with open(csv_path, "w") as f:
             f.write("name ,  age\nAlice,25\n")
@@ -268,3 +267,46 @@ class TestScanCsv:
         frame = ar.read_csv(sample_csv)
 
         assert list(schema.keys()) == list(frame.columns)
+
+    def test_scan_csv_non_utf8_multiline_boundary(self, tmp_path):
+        # Create a non-UTF-8 (latin-1) file with 10,000 rows, plus a quoted multiline row at the boundary.
+        csv_file = tmp_path / "test_multiline_boundary.csv"
+
+        # Row index 0 is header. Rows 1 to 9999 are simple rows.
+        # Row 10000 (at the sampling limit) is a multiline row containing a latin-1 char (café).
+        content_lines = ["id,text"]
+        for i in range(1, 9999):
+            content_lines.append(f"{i},value")
+
+        content_lines.append('9999,"multiline\nrecord\ncafé"')
+        content_lines.append("10000,end")
+
+        csv_content = "\n".join(content_lines)
+
+        # Write as latin-1
+        csv_file.write_bytes(csv_content.encode("latin-1"))
+
+        # Now scan_csv should successfully parse the schema without throwing CsvReadError or decoding errors
+        schema = ar.scan_csv(str(csv_file), encoding="latin-1")
+        assert schema == {"id": "int64", "text": "string"}
+
+    def test_scan_csv_type_evidence_after_limit(self, tmp_path):
+        # Create a non-UTF-8 (latin-1) file where a column has only integers
+        # in the first 10,000 rows, but a float appears after the sample limit.
+        csv_file = tmp_path / "test_type_evidence.csv"
+
+        content_lines = ["id,value"]
+        for i in range(1, 10005):
+            content_lines.append(f"{i},100")
+
+        # Row after the 10,000 sample limit has float type evidence (3.14)
+        content_lines.append("10006,3.14")
+
+        csv_content = "\n".join(content_lines)
+
+        # Write as latin-1
+        csv_file.write_bytes(csv_content.encode("latin-1"))
+
+        # scan_csv should infer 'value' as 'int64' because the float appears after the sample limit
+        schema = ar.scan_csv(str(csv_file), encoding="latin-1")
+        assert schema["value"] == "int64"
