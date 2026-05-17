@@ -1,0 +1,9 @@
+order_id,product,revenue,region,date
+1,Widget A,120.5,north,2024-01-01
+2,widget b,,South,2024-01-02
+2,widget b,,South,2024-01-02
+3,Widget C,300.0,EAST,2024-01-03
+4,,50.0,west,
+5,Widget D,210.0,NORTH,2024-01-05
+6, WIDGET A ,90.0, south ,2024-01-06
+7,Widget E,,east,2024-01-07
