@@ -191,6 +191,31 @@ class TestPipeline:
             assert "Expected a dict" in str(e)
 
 
+class TestListSteps:
+    def test_list_steps_includes_builtins(self):
+        steps = ar.list_steps()
+        assert "drop_nulls" in steps
+        assert "strip_whitespace" in steps
+        assert "cast_types" in steps
+
+    def test_list_steps_includes_custom_after_registration(self):
+        def dummy(df, **kwargs):
+            return df
+
+        ar.register_step("test_custom_step", dummy)
+        steps = ar.list_steps()
+        assert "test_custom_step" in steps
+
+    def test_list_steps_returns_sorted(self):
+        steps = ar.list_steps()
+        assert steps == sorted(steps)
+
+    def test_list_steps_does_not_mutate_registry(self):
+        before = ar.list_steps()
+        after = ar.list_steps()
+        assert before == after
+
+
 def test_filter_rows_greater_than():
     import pandas as pd
 
