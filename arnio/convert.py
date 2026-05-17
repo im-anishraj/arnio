@@ -143,6 +143,10 @@ def to_pandas(frame: ArFrame, *, copy: bool = False) -> pd.DataFrame:
 def _pandas_dtype_to_arnio(dtype: object) -> _DType | None:
     if dtype == pd.Int64Dtype():
         return _DType.INT64
+
+    if dtype == pd.StringDtype():
+        return _DType.STRING
+
     return None
 
 
@@ -184,4 +188,5 @@ def from_pandas(df: pd.DataFrame) -> ArFrame:
             dtype_hints[name] = dtype_hint
 
     cpp_frame = _Frame.from_dict(columns, dtype_hints)
+    return ArFrame(cpp_frame, attrs=copy.deepcopy(df.attrs))
     return ArFrame(cpp_frame, attrs=copylib.deepcopy(df.attrs))
