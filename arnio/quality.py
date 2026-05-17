@@ -365,7 +365,13 @@ def _detect_semantic_type(name: str, series: pd.Series, dtype: str) -> str:
     if len(values) == 0:
         return "empty"
 
-    if lower_name in {"id", "uuid"} or lower_name.endswith("_id"):
+    if lower_name in {
+        "id",
+        "uuid",
+        "zip",
+        "zipcode",
+        "zip_code",
+    } or lower_name.endswith("_id"):
         return "identifier"
     if _is_numeric_dtype(dtype):
         return "numeric"
@@ -388,6 +394,12 @@ def _suggest_casts(report: DataQualityReport) -> dict[str, str]:
     mapping: dict[str, str] = {}
     for name, column in report.columns.items():
         if column.suggested_dtype is not None:
+            # Skip numeric casts for identifier-like columns to prevent data loss (e.g., leading zeros)
+            if column.semantic_type == "identifier" and column.suggested_dtype in {
+                "int64",
+                "float64",
+            }:
+                continue
             mapping[name] = column.suggested_dtype
     return mapping
 

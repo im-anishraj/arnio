@@ -183,7 +183,6 @@ class TestFromPandas:
         assert list(df2["score"]) == [95.5, 87.0]
 
     def test_from_pandas_nested_data(self):
-
         df_list = pd.DataFrame({"a": [[1, 2], [3, 4]]})
         with pytest.raises(
             TypeError, match="Column 'a' contains unsupported nested value"
@@ -204,7 +203,6 @@ class TestFromPandas:
         assert list(df2["a"]) == ["1", "x", "3"]
 
     def test_from_pandas_mixed_object_column_with_nested_value(self):
-
         df = pd.DataFrame({"mixed": [1, "hello", {"a": 1}]}, dtype=object)
 
         with pytest.raises(
@@ -214,12 +212,11 @@ class TestFromPandas:
             ar.from_pandas(df)
 
     def test_from_pandas_unsupported_scalar_object_column(self):
+        """datetime64 columns now raise a clear TypeError with a fix hint."""
         timestamp = pd.Timestamp("2026-05-14 12:30:00")
-        frame = ar.from_pandas(pd.DataFrame({"created_at": [timestamp]}))
-
-        assert frame._frame.column_by_name("created_at").to_python_list() == [
-            str(timestamp)
-        ]
+        df = pd.DataFrame({"created_at": [timestamp]})
+        with pytest.raises(TypeError, match="Column 'created_at'"):
+            ar.from_pandas(df)
 
     def test_from_pandas_preserves_column_order(self):
         df = pd.DataFrame(
@@ -290,6 +287,41 @@ class TestFromPandas:
         assert str(result["active"].dtype) == "boolean"
         assert list(result["active"]) == [True, False, pd.NA]
 
+    def test_nullable_string_roundtrip(self):
+        df = pd.DataFrame(
+            {
+                "name": pd.Series(
+                    ["Alice", pd.NA, "Bob"],
+                    dtype="string",
+                )
+            }
+        )
+        result = ar.to_pandas(ar.from_pandas(df))
+
+        assert str(result["name"].dtype) == "string"
+
+        pd.testing.assert_series_equal(
+            result["name"],
+            df["name"],
+        )
+
+    def test_nullable_float_roundtrip(self):
+        df = pd.DataFrame(
+            {
+                "score": pd.Series(
+                    [1.5, pd.NA, 3.7],
+                    dtype="Float64",
+                )
+            }
+        )
+
+        result = ar.to_pandas(ar.from_pandas(df))
+
+        assert str(result["score"].dtype) == "float64"
+        assert result["score"].tolist()[0] == 1.5
+        assert pd.isna(result["score"].tolist()[1])
+        assert result["score"].tolist()[2] == 3.7
+
     def test_bool_null_mask_roundtrip(self):
         df = pd.DataFrame(
             {
@@ -304,6 +336,63 @@ class TestFromPandas:
         result = ar.to_pandas(frame)
 
         assert list(result["flag"]) == [True, False, pd.NA]
+
+    def test_dataframe_index_is_dropped(self):
+        """pandas index is not preserved during from_pandas conversion."""
+        df = pd.DataFrame({"a": [1, 2, 3]}, index=["x", "y", "z"])
+        frame = ar.from_pandas(df)
+        result = ar.to_pandas(frame)
+        assert isinstance(result.index, pd.RangeIndex)
+
+    def test_datetime_raises_clear_error(self):
+        df = pd.DataFrame({"created_at": pd.to_datetime(["2021-01-01", "2022-06-15"])})
+        with pytest.raises(TypeError, match="Column 'created_at'"):
+            ar.from_pandas(df)
+
+    def test_timedelta_raises_clear_error(self):
+        df = pd.DataFrame({"duration": pd.to_timedelta(["1 days", "2 days"])})
+        with pytest.raises(TypeError, match="Column 'duration'"):
+            ar.from_pandas(df)
+
+    def test_categorical_raises_clear_error(self):
+        df = pd.DataFrame({"status": pd.Categorical(["active", "inactive", "active"])})
+        with pytest.raises(TypeError, match="Column 'status'"):
+            ar.from_pandas(df)
+
+    def test_complex_raises_clear_error(self):
+        df = pd.DataFrame({"signal": np.array([1 + 2j, 3 + 4j, 5 + 6j])})
+        with pytest.raises(TypeError, match="Column 'signal'"):
+            ar.from_pandas(df)
+
+    def test_error_message_contains_fix_hint_datetime(self):
+        df = pd.DataFrame({"ts": pd.to_datetime(["2023-01-01"])})
+        with pytest.raises(TypeError, match="Fix:"):
+            ar.from_pandas(df)
+
+    def test_error_message_contains_fix_hint_timedelta(self):
+        df = pd.DataFrame({"td": pd.to_timedelta(["3 days"])})
+        with pytest.raises(TypeError, match="Fix:"):
+            ar.from_pandas(df)
+
+    def test_error_message_contains_fix_hint_category(self):
+        df = pd.DataFrame({"cat": pd.Categorical(["a", "b"])})
+        with pytest.raises(TypeError, match="Fix:"):
+            ar.from_pandas(df)
+
+    def test_error_message_contains_fix_hint_complex(self):
+        df = pd.DataFrame({"cx": np.array([1 + 1j])})
+        with pytest.raises(TypeError, match="Fix:"):
+            ar.from_pandas(df)
+
+    def test_mixed_valid_and_invalid_raises_on_bad_column(self):
+        df = pd.DataFrame(
+            {
+                "name": ["Alice", "Bob"],
+                "joined": pd.to_datetime(["2020-01-01", "2021-06-01"]),
+            }
+        )
+        with pytest.raises(TypeError, match="Column 'joined'"):
+            ar.from_pandas(df)
 
 
 class TestAttrsPreservation:

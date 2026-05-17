@@ -13,6 +13,14 @@ import pandas as pd
 from .convert import to_pandas
 from .frame import ArFrame
 
+ISSUE_COLUMNS = [
+    "column",
+    "rule",
+    "message",
+    "row_index",
+    "value",
+]
+
 
 @dataclass(frozen=True)
 class Field:
@@ -28,6 +36,9 @@ class Field:
     unique: bool = False
     min_length: int | None = None
     max_length: int | None = None
+    format: str | None = None
+    _datetime_min: pd.Timestamp | None = None
+    _datetime_max: pd.Timestamp | None = None
 
 
 @dataclass(frozen=True)
@@ -36,6 +47,7 @@ class Schema:
 
     fields: dict[str, Field]
     strict: bool = False
+    unique: list[str] | tuple[str, ...] | None = None
 
     def validate(self, frame: ArFrame) -> ValidationResult:
         """Validate a frame against this schema."""
@@ -113,6 +125,9 @@ class ValidationResult:
 
     def to_pandas(self) -> pd.DataFrame:
         """Return issues as a pandas DataFrame."""
+        if not self.issues:
+            return pd.DataFrame(columns=ISSUE_COLUMNS)
+
         return pd.DataFrame([issue.to_dict() for issue in self.issues])
 
     def to_markdown(self, *, max_issues: int | None = None) -> str:
@@ -225,6 +240,42 @@ def validate(frame: ArFrame, schema: Schema | dict[str, Field]) -> ValidationRes
                     )
                 )
 
+    if schema.unique is not None:
+        if isinstance(schema.unique, (list, tuple)) and len(schema.unique) == 0:
+            issues.append(
+                ValidationIssue(
+                    column=None,
+                    rule="composite_unique",
+                    message="Composite unique columns cannot be empty",
+                )
+            )
+        elif isinstance(schema.unique, (list, tuple)):
+            missing_cols = [c for c in schema.unique if c not in df.columns]
+            if missing_cols:
+                for col in missing_cols:
+                    issues.append(
+                        ValidationIssue(
+                            column=col,
+                            rule="missing_column",
+                            message=f"Column {col!r} not found",
+                        )
+                    )
+            else:
+                duplicate_mask = df.duplicated(subset=list(schema.unique), keep=False)
+                if duplicate_mask.any():
+                    for index in df[duplicate_mask].index:
+                        issues.append(
+                            ValidationIssue(
+                                column=None,
+                                rule="composite_unique",
+                                message=(
+                                    "Duplicate rows found for columns"
+                                    f" {list(schema.unique)}"
+                                ),
+                                row_index=int(index),
+                            )
+                        )
+
     bad_rows = sorted(
         {issue.row_index for issue in issues if issue.row_index is not None}
     )
@@ -244,7 +295,17 @@ def Int64(
     unique: bool = False,
 ) -> Field:
     """Create an int64 schema field."""
-    return Field(dtype="int64", nullable=nullable, min=min, max=max, unique=unique)
+
+    if min is not None and max is not None and min > max:
+        raise ValueError("min must be less than or equal to max")
+
+    return Field(
+        dtype="int64",
+        nullable=nullable,
+        min=min,
+        max=max,
+        unique=unique,
+    )
 
 
 def Float64(
@@ -255,7 +316,17 @@ def Float64(
     unique: bool = False,
 ) -> Field:
     """Create a float64 schema field."""
-    return Field(dtype="float64", nullable=nullable, min=min, max=max, unique=unique)
+
+    if min is not None and max is not None and min > max:
+        raise ValueError("min must be less than or equal to max")
+
+    return Field(
+        dtype="float64",
+        nullable=nullable,
+        min=min,
+        max=max,
+        unique=unique,
+    )
 
 
 def String(
@@ -268,7 +339,12 @@ def String(
     max_length: int | None = None,
 ) -> Field:
     """Create a string schema field."""
+
+    if min_length is not None and max_length is not None and min_length > max_length:
+        raise ValueError("min_length must be less than or equal to max_length")
+
     allowed_set = set(allowed) if allowed is not None else None
+
     return Field(
         dtype="string",
         nullable=nullable,
@@ -347,16 +423,17 @@ def _validate_column(
     issues: list[ValidationIssue] = []
 
     if field_def.dtype is not None and actual_dtype != field_def.dtype:
-        issues.append(
-            ValidationIssue(
-                column=name,
-                rule="dtype",
-                message=(
-                    f"Column {name!r} has dtype {actual_dtype!r}; "
-                    f"expected {field_def.dtype!r}"
-                ),
+        if not (field_def.dtype == "datetime" and actual_dtype == "string"):
+            issues.append(
+                ValidationIssue(
+                    column=name,
+                    rule="dtype",
+                    message=(
+                        f"Column {name!r} has dtype {actual_dtype!r}; "
+                        f"expected {field_def.dtype!r}"
+                    ),
+                )
             )
-        )
 
     if not field_def.nullable:
         issues.extend(
@@ -392,7 +469,10 @@ def _validate_column(
             )
         )
 
-    if field_def.min is not None or field_def.max is not None:
+    if field_def.dtype == "datetime":
+        issues.extend(_validate_datetime(non_null, name, field_def))
+
+    elif field_def.min is not None or field_def.max is not None:
         numeric = pd.to_numeric(non_null, errors="coerce")
         invalid_numeric = non_null[numeric.isna()]
         issues.extend(
@@ -481,6 +561,65 @@ def _validate_column(
     return issues
 
 
+def _validate_datetime(
+    non_null: pd.Series,
+    name: str,
+    field_def: Field,
+) -> list[ValidationIssue]:
+    issues: list[ValidationIssue] = []
+    parsed = pd.to_datetime(non_null, format=field_def.format, errors="coerce")
+
+    invalid_format = non_null[parsed.isna()]
+    issues.extend(
+        _row_issues(
+            invalid_format,
+            column=name,
+            rule="format",
+            message=f"Column {name!r} does not match the required datetime format",
+        )
+    )
+
+    valid_mask = parsed.notna()
+    valid_non_null = non_null[valid_mask]
+    valid_parsed = parsed[valid_mask]
+
+    if field_def._datetime_min is not None:
+        issues.extend(
+            _row_issues(
+                valid_non_null[valid_parsed < field_def._datetime_min],
+                column=name,
+                rule="min",
+                message=f"Column {name!r} has values below {field_def._datetime_min}",
+            )
+        )
+    if field_def._datetime_max is not None:
+        issues.extend(
+            _row_issues(
+                valid_non_null[valid_parsed > field_def._datetime_max],
+                column=name,
+                rule="max",
+                message=f"Column {name!r} has values above {field_def._datetime_max}",
+            )
+        )
+
+    return issues
+
+
+def _parse_datetime_bound(value: Any, name: str) -> pd.Timestamp | None:
+    if value is None:
+        return None
+    try:
+        parsed = pd.to_datetime(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"DateTime {name} must be a parseable datetime scalar"
+        ) from exc
+
+    if not isinstance(parsed, pd.Timestamp) or pd.isna(parsed):
+        raise ValueError(f"DateTime {name} must be a parseable datetime scalar")
+    return parsed
+
+
 def _row_issues(
     invalid: pd.Series,
     *,
@@ -493,7 +632,7 @@ def _row_issues(
             column=column,
             rule=rule,
             message=message,
-            row_index=int(index),
+            row_index=int(index) + 1,
             value=value,
         )
         for index, value in invalid.items()
@@ -519,4 +658,6 @@ _SEMANTIC_PATTERNS = {
     "email": r"[^@\s]+@[^@\s]+\.[^@\s]+",
     "url": r"https?://[^\s]+",
     "phone": r"\+?[0-9][0-9 .()\-]{6,}[0-9]",
+}
+    "country_code": r"[A-Z]{2}",
 }
