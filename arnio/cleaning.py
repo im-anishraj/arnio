@@ -520,6 +520,9 @@ def filter_rows(frame, column, op, value):
     if op not in ops:
         raise ValueError(f"Unsupported operator: {op}")
 
+    if column not in df.columns:
+        raise ValueError(f"Unknown column: {column}")
+
     filtered = df[getattr(df[column], ops[op])(value)]
 
     return from_pandas(filtered) if is_arframe else filtered
