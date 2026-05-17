@@ -22,7 +22,6 @@ ISSUE_COLUMNS = [
     "row_index",
     "value",
 ]
-DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
 @dataclass(frozen=True)
