@@ -21,6 +21,69 @@ class TestDropNulls:
         assert result.shape[0] == 3
 
 
+class TestKeepRowsWithNulls:
+    def test_keeps_only_null_rows(self, csv_with_nulls):
+        # full frame has 4 rows, 2 have nulls (row1: null name+score, row2: null age)
+        frame = ar.read_csv(csv_with_nulls)
+        result = ar.keep_rows_with_nulls(frame)
+        assert result.shape[0] == 2
+
+    def test_no_nulls_returns_empty(self, sample_csv):
+        # sample_csv has no nulls — result should be empty
+        frame = ar.read_csv(sample_csv)
+        result = ar.keep_rows_with_nulls(frame)
+        assert result.shape[0] == 0
+
+    def test_all_nulls_returns_all_rows(self, tmp_path):
+        # every row has a null — all rows should be kept
+        path = tmp_path / "all_nulls.csv"
+        path.write_text("name,age\nAlice,\n,25\nCharlie,\n")
+        frame = ar.read_csv(path)
+        result = ar.keep_rows_with_nulls(frame)
+        assert result.shape[0] == frame.shape[0]
+
+    def test_subset_targets_specific_column(self, csv_with_nulls):
+        # only checking 'age' column — only Charlie has null age
+        frame = ar.read_csv(csv_with_nulls)
+        result = ar.keep_rows_with_nulls(frame, subset=["age"])
+        assert result.shape[0] == 1
+
+    def test_subset_unknown_column_raises(self, csv_with_nulls):
+        # passing a column that doesn't exist should raise ValueError
+        frame = ar.read_csv(csv_with_nulls)
+        with pytest.raises(ValueError, match="unknown column"):
+            ar.keep_rows_with_nulls(frame, subset=["nonexistent"])
+
+    def test_index_is_reset(self, csv_with_nulls):
+        # returned frame should have clean 0-based index
+        frame = ar.read_csv(csv_with_nulls)
+        result = ar.keep_rows_with_nulls(frame)
+        df = ar.to_pandas(result)
+        assert list(df.index) == list(range(len(df)))
+
+    def test_pipeline_usage(self, csv_with_nulls):
+        # function should work correctly when called via pipeline
+        frame = ar.read_csv(csv_with_nulls)
+        result = ar.pipeline(
+            frame,
+            [
+                ("keep_rows_with_nulls",),
+            ],
+        )
+        assert result.shape[0] == 2
+
+    def test_pipeline_subset(self, csv_with_nulls):
+        # pipeline with subset parameter
+        frame = ar.read_csv(csv_with_nulls)
+        result = ar.pipeline(
+            frame,
+            [
+                ("keep_rows_with_nulls", {"subset": ["age"]}),
+            ],
+        )
+        assert result.shape[0] == 1
+
+
 class TestFillNulls:
     def test_fill_with_string(self, csv_with_nulls):
         frame = ar.read_csv(csv_with_nulls)
