@@ -52,6 +52,39 @@ def register_step(name: str, fn: Callable):
     _PYTHON_STEP_REGISTRY[name] = fn
 
 
+def unregister_step(name: str) -> None:
+    """Remove a custom pipeline step previously registered with ``register_step``.
+
+    Parameters
+    ----------
+    name : str
+        Name of the custom step to remove.
+
+    Raises
+    ------
+    UnknownStepError
+        If the name is not a registered custom step, or if it is a
+        built-in step (built-in steps cannot be unregistered).
+
+    Examples
+    --------
+    >>> ar.register_step("my_step", my_fn)
+    >>> ar.unregister_step("my_step")
+    """
+    from .exceptions import UnknownStepError
+
+    if name in _STEP_REGISTRY:
+        raise UnknownStepError(
+            name,
+            list(_PYTHON_STEP_REGISTRY.keys()),
+            msg=f"Cannot unregister built-in step {name!r}. Only custom steps added with register_step() can be removed.",
+        )
+    if name not in _PYTHON_STEP_REGISTRY:
+        available = list(_STEP_REGISTRY.keys()) + list(_PYTHON_STEP_REGISTRY.keys())
+        raise UnknownStepError(name, available)
+    del _PYTHON_STEP_REGISTRY[name]
+
+
 def pipeline(
     frame: ArFrame,
     steps: list[tuple],

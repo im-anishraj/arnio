@@ -13,12 +13,15 @@ class ArnioError(Exception):
 class UnknownStepError(ArnioError):
     """Raised when a pipeline step name is not registered."""
 
-    def __init__(self, name: str, available: list[str]):
-        super().__init__(
-            f"Unknown pipeline step: '{name}'.\n"
-            f"Available steps: {sorted(available)}\n"
-            f"To add a custom step: ar.register_step('{name}', your_fn)"
-        )
+    def __init__(self, name: str, available: list[str], msg: str | None = None):
+        if msg:
+            super().__init__(msg)
+        else:
+            super().__init__(
+                f"Unknown pipeline step: '{name}'.\n"
+                f"Available steps: {sorted(available)}\n"
+                f"To add a custom step: ar.register_step('{name}', your_fn)"
+            )
 
 
 class CsvReadError(ArnioError):
