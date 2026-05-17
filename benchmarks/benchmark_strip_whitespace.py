@@ -1,7 +1,6 @@
 """
 Reproducible Benchmark: strip_whitespace string allocation behavior.
 Run from repo root: python benchmarks/benchmark_strip_whitespace.py
-Run from current file location: python benchmark_strip_whitespace.py
 """
 
 import os
