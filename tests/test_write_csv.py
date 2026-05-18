@@ -64,3 +64,16 @@ class TestWriteCsv:
         out = tmp_path / "out.csv"
         ar.write_csv(frame, out)
         assert out.exists()
+    def test_high_precision_float_round_trip(self, tmp_path):
+        import pandas as pd
+        frame = ar.from_pandas(pd.DataFrame({"val": [1.23456789012345678]}))
+        out = str(tmp_path / "float.csv")
+        ar.write_csv(frame, out)
+        frame2 = ar.read_csv(out)
+        df = ar.to_pandas(frame2)
+        assert abs(df["val"].iloc[0] - 1.23456789012345678) < 1e-15
+
+    def test_invalid_delimiter(self, tmp_path):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
+        with pytest.raises(ValueError, match="delimiter must be a single character"):
+            ar.write_csv(frame, str(tmp_path / "out.csv"), delimiter=",,")

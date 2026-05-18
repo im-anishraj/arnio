@@ -1,5 +1,5 @@
 #include "arnio/csv_writer.h"
-
+#include <limits>
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
@@ -41,9 +41,11 @@ std::string CsvWriter::cell_to_string(const Frame& frame, size_t row, size_t col
     if (std::holds_alternative<int64_t>(cell)) {
         return std::to_string(std::get<int64_t>(cell));
     }
-    if (std::holds_alternative<double>(cell)) {
+    if (std::holds_alternative<double>(cell)) 
+    {
         std::ostringstream oss;
-        oss << std::get<double>(cell);
+        oss << std::setprecision(std::numeric_limits<double>::max_digits10)
+            << std::get<double>(cell);
         return oss.str();
     }
     if (std::holds_alternative<bool>(cell)) {
