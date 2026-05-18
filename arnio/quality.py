@@ -8,6 +8,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+import html
+
 import pandas as pd
 
 from .cleaning import cast_types, drop_duplicates, strip_whitespace
@@ -243,6 +245,105 @@ class DataQualityReport:
             lines.append("")
 
         return "\n".join(lines)
+
+    def to_html(self, file_path: str | None = None) -> str:
+        """Return a self-contained, dependency-free HTML data quality report."""
+        def e(text: Any) -> str:
+            return html.escape(str(text))
+
+        styles = """
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 20px; background-color: #f8f9fa; }
+        .container { max-width: 1200px; margin: 0 auto; background: #fff; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h1, h2 { color: #2c3e50; border-bottom: 1px solid #eee; padding-bottom: 10px; }
+        .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 30px; }
+        .metric-card { background: #f8f9fa; padding: 15px; border-radius: 6px; border: 1px solid #e9ecef; text-align: center; }
+        .metric-value { font-size: 24px; font-weight: bold; color: #007bff; }
+        .metric-label { font-size: 14px; color: #6c757d; text-transform: uppercase; letter-spacing: 0.5px; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #dee2e6; }
+        th { background-color: #f8f9fa; font-weight: 600; color: #495057; }
+        tr:hover { background-color: #f1f3f5; }
+        .warnings { color: #dc3545; font-size: 14px; }
+        .suggestion { background: #e8f4f8; border-left: 4px solid #17a2b8; padding: 10px 15px; margin-bottom: 10px; }
+        .suggestion code { font-family: monospace; background: #fff; padding: 2px 5px; border-radius: 3px; border: 1px solid #ced4da; }
+        """
+
+        lines: list[str] = []
+        lines.append("<!DOCTYPE html>")
+        lines.append('<html lang="en">')
+        lines.append("<head>")
+        lines.append('    <meta charset="UTF-8">')
+        lines.append('    <meta name="viewport" content="width=device-width, initial-scale=1.0">')
+        lines.append("    <title>Data Quality Report</title>")
+        lines.append(f"    <style>{styles}</style>")
+        lines.append("</head>")
+        lines.append("<body>")
+        lines.append('    <div class="container">')
+        lines.append("        <h1>Data Quality Report</h1>")
+
+        lines.append('        <div class="metrics-grid">')
+        metrics = [
+            ("Rows", self.row_count),
+            ("Columns", self.column_count),
+            ("Memory Usage", self.memory_usage),
+            ("Duplicate Rows", self.duplicate_rows),
+            ("Duplicate Ratio", f"{self.duplicate_ratio:.2%}"),
+            ("Quality Score", f"{self.quality_score:.2f}"),
+        ]
+        for label, value in metrics:
+            lines.append('            <div class="metric-card">')
+            lines.append(f'                <div class="metric-value">{e(value)}</div>')
+            lines.append(f'                <div class="metric-label">{e(label)}</div>')
+            lines.append('            </div>')
+        lines.append("        </div>")
+
+        if self.columns:
+            lines.append("        <h2>Columns Overview</h2>")
+            lines.append("        <table>")
+            lines.append("            <thead>")
+            lines.append("                <tr>")
+            lines.append("                    <th>Name</th>")
+            lines.append("                    <th>Type</th>")
+            lines.append("                    <th>Nulls</th>")
+            lines.append("                    <th>Unique</th>")
+            lines.append("                    <th>Warnings</th>")
+            lines.append("                </tr>")
+            lines.append("            </thead>")
+            lines.append("            <tbody>")
+            
+            for name in sorted(self.columns):
+                col = self.columns[name]
+                warnings_str = ", ".join(col.warnings) if col.warnings else "-"
+                lines.append("                <tr>")
+                lines.append(f"                    <td>{e(col.name)}</td>")
+                lines.append(f"                    <td>{e(col.dtype)}</td>")
+                lines.append(f"                    <td>{e(col.null_count)}</td>")
+                lines.append(f"                    <td>{e(col.unique_count)}</td>")
+                lines.append(f'                    <td class="warnings">{e(warnings_str)}</td>')
+                lines.append("                </tr>")
+                
+            lines.append("            </tbody>")
+            lines.append("        </table>")
+
+        if self.suggestions:
+            lines.append("        <h2>Cleaning Suggestions</h2>")
+            for step in self.suggestions:
+                conf_score = getattr(step, "confidence_score", None)
+                conf_text = f" (Confidence: {conf_score:.2f})" if conf_score is not None else ""
+                lines.append('        <div class="suggestion">')
+                lines.append(f'            <code>{e(step[0])}</code>: <code>{e(step[1])}</code>{e(conf_text)}')
+                lines.append('        </div>')
+
+        lines.append("    </div>")
+        lines.append("</body>")
+        lines.append("</html>")
+
+        html_out = "\n".join(lines)
+        if file_path:
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(html_out)
+
+        return html_out
 
     def summary(self) -> dict[str, Any]:
         """Return the highest-signal report fields."""

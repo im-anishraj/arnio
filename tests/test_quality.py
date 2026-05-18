@@ -605,3 +605,28 @@ def test_quality_score_type_mismatch():
     # 2 columns. 1 has type mismatch. ratio = 0.5 => 50 points => capped at -40.0
     assert report.score_components["type_mismatch_penalty"] == -40.0
     assert report.quality_score == 60.0
+
+
+def test_data_quality_report_to_html(tmp_path):
+    df = pd.DataFrame(
+        {
+            "id": [1, 2, 3],
+            "<script>malicious</script>": ["A", "B", "C"],
+        }
+    )
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+
+    html_out = report.to_html()
+    
+    assert html_out.startswith("<!DOCTYPE html>")
+    assert "Data Quality Report" in html_out
+    assert "&lt;script&gt;malicious&lt;/script&gt;" in html_out
+    assert "<script>" not in html_out
+    assert "Rows" in html_out
+    assert "3" in html_out
+
+    out_path = tmp_path / "report.html"
+    report.to_html(file_path=str(out_path))
+    assert out_path.exists()
+    assert out_path.read_text(encoding="utf-8").startswith("<!DOCTYPE html>")
