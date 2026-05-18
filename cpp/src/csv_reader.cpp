@@ -267,16 +267,17 @@ DType CsvReader::infer_type(const std::string& value) const {
     }
 
     long long val = 0;
+
     const char* start = int_candidate.data();
     const char* end = start + int_candidate.size();
 
     auto [ptr, ec] = std::from_chars(start, end, val);
 
     if (ec == std::errc() && ptr == end) {
-       return DType::INT64;
-
+        return DType::INT64;
     }
-    
+    }
+
     // Try float64
     {
         const char* start = cleaned.c_str();
