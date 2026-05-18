@@ -87,12 +87,12 @@ def _check_unsupported_dtype(col_name: object, series: pd.Series) -> None:
 
 
 def _normalize_scalar(value: object) -> object:
+    if isinstance(value, decimal.Decimal):
+        return _to_binding_safe(value)
     if pd.isna(value):
         return None
     if isinstance(value, np.generic):
         value = value.item()
-    if isinstance(value, decimal.Decimal):
-        return _to_binding_safe(value)
     if isinstance(value, float):
         return _to_binding_safe(value)
     if not isinstance(value, (bool, int, str)):

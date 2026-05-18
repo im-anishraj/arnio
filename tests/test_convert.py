@@ -488,6 +488,14 @@ class TestDecimalConversion:
         ):
             ar.from_pandas(df)
 
+    def test_from_pandas_rejects_decimal_nan(self):
+        """from_pandas() must reject Decimal NaN during conversion."""
+        df = pd.DataFrame({"value": [Decimal("100.50"), Decimal("NaN")]})
+        with pytest.raises(
+            ValueError, match="Invalid financial value: NaN or Infinity."
+        ):
+            ar.from_pandas(df)
+
     def test_from_pandas_rejects_float_infinity(self):
         """from_pandas() must reject native float infinity during conversion."""
         df = pd.DataFrame({"value": [100.50, float("inf")]})
