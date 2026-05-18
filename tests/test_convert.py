@@ -480,6 +480,22 @@ class TestDecimalConversion:
         assert pd.isna(result["amount"].iloc[1])
         assert result["amount"].iloc[2] == 50.25
 
+    def test_from_pandas_rejects_decimal_infinity(self):
+        """from_pandas() must reject Decimal infinity during conversion."""
+        df = pd.DataFrame({"value": [Decimal("100.50"), Decimal("Infinity")]})
+        with pytest.raises(
+            ValueError, match="Invalid financial value: NaN or Infinity."
+        ):
+            ar.from_pandas(df)
+
+    def test_from_pandas_rejects_float_infinity(self):
+        """from_pandas() must reject native float infinity during conversion."""
+        df = pd.DataFrame({"value": [100.50, float("inf")]})
+        with pytest.raises(
+            ValueError, match="Invalid financial value: NaN or Infinity."
+        ):
+            ar.from_pandas(df)
+
     def test_attrs_through_pipeline(self):
         """attrs survive a direct round-trip — pipeline frames are out of scope."""
         df = pd.DataFrame({"name": [" Alice ", " Bob "]})
@@ -506,7 +522,6 @@ class TestDecimalConversion:
         assert result.attrs["meta"]["tags"] == ["a", "b"]
 
 
-
 class TestToBindingSafeExtras:
     """Additional focused tests for to_binding_safe Decimal/float handling."""
 
@@ -527,6 +542,7 @@ class TestToBindingSafeExtras:
         ):
             _to_binding_safe(float("inf"))
 
-        with pytest.raises(ValueError, match="Invalid financial value: NaN or Infinity."):
+        with pytest.raises(
+            ValueError, match="Invalid financial value: NaN or Infinity."
+        ):
             _to_binding_safe(float("nan"))
-

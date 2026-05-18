@@ -20,7 +20,6 @@ def _is_nested(value: object) -> bool:
     return isinstance(value, (list, dict, tuple, set, np.ndarray))
 
 
-
 def _to_binding_safe(value: Any) -> Any:
     """
     Internal helper that normalizes scalars for the C++ binding layer.
@@ -52,6 +51,7 @@ def _to_binding_safe(value: Any) -> Any:
         return float(value)
 
     return value
+
 
 def _check_unsupported_dtype(col_name: object, series: pd.Series) -> None:
     """Raise a clear TypeError for dtypes that arnio cannot convert."""
@@ -85,7 +85,6 @@ def _check_unsupported_dtype(col_name: object, series: pd.Series) -> None:
         )
 
 
-
 def _normalize_scalar(value: object) -> object:
     if pd.isna(value):
         return None
@@ -93,7 +92,9 @@ def _normalize_scalar(value: object) -> object:
         return value.item()
     if isinstance(value, decimal.Decimal):
         return _to_binding_safe(value)
-    if not isinstance(value, (bool, int, float, str)):
+    if isinstance(value, float):
+        return _to_binding_safe(value)
+    if not isinstance(value, (bool, int, str)):
         return str(value)
     return value
 
