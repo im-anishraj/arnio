@@ -8,7 +8,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any
+from typing import Any, Callable
 
 import pandas as pd
 
@@ -54,6 +54,7 @@ class Schema:
     fields: dict[str, Field]
     strict: bool = False
     unique: list[str] | tuple[str, ...] | None = None
+    rules: list[Callable[[pd.DataFrame], list[ValidationIssue]]] | None = None
 
     def validate(self, frame: ArFrame) -> ValidationResult:
         """Validate a frame against this schema."""
@@ -301,6 +302,31 @@ def validate(frame: ArFrame, schema: Schema | dict[str, Field]) -> ValidationRes
                                 row_index=int(index),
                             )
                         )
+    if schema.rules:
+        for rule_fn in schema.rules:
+            rule_name = getattr(rule_fn, "__name__", type(rule_fn).__name__)
+            try:
+                result = rule_fn(df)
+                if not isinstance(result, list):
+                    raise TypeError(
+                        f"Rule {rule_name!r} must return a list of "
+                        f"ValidationIssue, got {type(result).__name__!r}"
+                    )
+                for item in result:
+                    if not isinstance(item, ValidationIssue):
+                        raise TypeError(
+                            f"Rule {rule_name!r} returned a non-ValidationIssue "
+                            f"item: {type(item).__name__!r}"
+                        )
+                issues.extend(result)
+            except KeyError as e:
+                issues.append(
+                    ValidationIssue(
+                        column=str(e).strip("'"),
+                        rule="missing_column",
+                        message=f"Cross-field rule referenced a missing column: {e}",
+                    )
+                )
 
     bad_rows = sorted(
         {issue.row_index for issue in issues if issue.row_index is not None}

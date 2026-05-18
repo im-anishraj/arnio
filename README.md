@@ -106,6 +106,35 @@ clean_df = df.arnio.clean([
 
 report = clean_df.arnio.profile()
 ```
+## Cross-field validation rules
+
+Pass a `rules` list to `Schema` for checks that span multiple columns.
+Each rule receives the full pandas `DataFrame` and must return a
+`list[ValidationIssue]` — an empty list means the rule passed.
+
+```python
+import arnio as ar
+
+def end_after_start(df):
+    return [
+        ar.ValidationIssue(
+            column="end_date",
+            rule="cross_field",
+            message="end_date must be >= start_date",
+            row_index=int(i) + 1,
+        )
+        for i, row in df.iterrows()
+        if row["end_date"] < row["start_date"]
+    ]
+
+schema = ar.Schema(
+    {"start_date": ar.String(), "end_date": ar.String()},
+    rules=[end_after_start],
+)
+
+result = schema.validate(ar.read_csv("events.csv"))
+print(result.passed)
+```
 
 ### Select specific columns
 

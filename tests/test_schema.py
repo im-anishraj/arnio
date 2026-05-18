@@ -903,6 +903,56 @@ def test_required_if_validation_fails_when_condition_matches(tmp_path):
     assert result.issues[0].row_index == 1
 
 
+def _date_order_rule(df):
+    return [
+        ar.ValidationIssue(
+            column="end_date",
+            rule="cross_field",
+            message="end_date must be >= start_date",
+            row_index=int(i) + 1,
+        )
+        for i, row in df.iterrows()
+        if row["end_date"] < row["start_date"]
+    ]
+
+
+def test_schema_rules_passes_when_all_rows_satisfy_rule(tmp_path):
+    path = tmp_path / "dates.csv"
+    path.write_text(
+        "start_date,end_date\n2024-01-01,2024-06-01\n2024-03-01,2024-12-31\n"
+    )
+    frame = ar.read_csv(path)
+    schema = ar.Schema(
+        {"start_date": ar.String(), "end_date": ar.String()},
+        rules=[_date_order_rule],
+    )
+
+    result = schema.validate(frame)
+
+    assert result.passed
+    assert result.issue_count == 0
+    assert result.bad_rows == []
+
+
+def test_schema_rules_fails_when_end_date_before_start_date(tmp_path):
+    path = tmp_path / "dates.csv"
+    path.write_text(
+        "start_date,end_date\n2025-05-17,2025-05-16\n2025-05-1,2025-05-11\n"
+    )
+    frame = ar.read_csv(path)
+    schema = ar.Schema(
+        {"start_date": ar.String(), "end_date": ar.String()},
+        rules=[_date_order_rule],
+    )
+
+    result = schema.validate(frame)
+
+    assert not result.passed
+    assert result.issue_count == 1
+    assert result.issues[0].rule == "cross_field"
+    assert result.issues[0].column == "end_date"
+
+
 def test_required_if_validation_ignores_non_matching_conditions(tmp_path):
     path = tmp_path / "conditional_ignore.csv"
     path.write_text("user_type,country\n" "local,\n" "guest,\n")
@@ -925,12 +975,25 @@ def test_required_if_validation_ignores_non_matching_conditions(tmp_path):
     assert result.issue_count == 0
 
 
+def test_schema_rules_equal_boundary_passes(tmp_path):
+    path = tmp_path / "dates.csv"
+    path.write_text("start_date,end_date\n2025-05-18,2025-05-18\n")
+    frame = ar.read_csv(path)
+    schema = ar.Schema(
+        {"start_date": ar.String(), "end_date": ar.String()},
+        rules=[_date_order_rule],
+    )
+
+    result = schema.validate(frame)
+
+    assert result.passed
+    assert result.issue_count == 0
+
+
 def test_required_if_validation_reports_missing_trigger_column(tmp_path):
     path = tmp_path / "missing_trigger.csv"
     path.write_text("country\n" "IN\n")
-
     frame = ar.read_csv(path)
-
     schema = ar.Schema(
         {
             "country": ar.String(
@@ -938,21 +1001,84 @@ def test_required_if_validation_reports_missing_trigger_column(tmp_path):
             ),
         }
     )
-
     result = schema.validate(frame)
-
     assert not result.passed
     assert result.issue_count == 1
     assert result.issues[0].rule == "missing_column"
     assert result.issues[0].column == "user_type"
 
 
+def test_schema_rules_row_index_is_one_based(tmp_path):
+    path = tmp_path / "dates.csv"
+    path.write_text(
+        "start_date,end_date\n"
+        "2025-01-01,2025-06-01\n"
+        "2025-09-01,2025-03-01\n"
+        "2025-01-01,2025-12-31\n"
+    )
+    frame = ar.read_csv(path)
+    schema = ar.Schema(
+        {"start_date": ar.String(), "end_date": ar.String()},
+        rules=[_date_order_rule],
+    )
+    result = schema.validate(frame)
+    assert not result.passed
+    assert len(result.issues) == 1
+    assert result.issues[0].row_index == 2
+
+
+def test_schema_rules_row_index_for_multiple_failing_rows(tmp_path):
+    path = tmp_path / "dates.csv"
+    path.write_text(
+        "start_date,end_date\n"
+        "2025-06-01,2025-01-01\n"
+        "2024-01-01,2024-12-31\n"
+        "2024-12-01,2024-03-01\n"
+    )
+    frame = ar.read_csv(path)
+    schema = ar.Schema(
+        {"start_date": ar.String(), "end_date": ar.String()},
+        rules=[_date_order_rule],
+    )
+    result = schema.validate(frame)
+    row_indexes = [issue.row_index for issue in result.issues]
+    assert row_indexes == [1, 3]
+
+
+def test_schema_rules_missing_column_returns_validation_issue(tmp_path):
+    path = tmp_path / "dates.csv"
+    path.write_text("start_date,end_date\n2024-01-01,2024-06-01\n")
+    frame = ar.read_csv(path)
+
+    def rule_with_bad_column(df):
+        return [
+            ar.ValidationIssue(
+                column="nonexistent",
+                rule="cross_field",
+                message="column missing",
+                row_index=int(i) + 1,
+            )
+            for i, row in df.iterrows()
+            if row["nonexistent"] < row["start_date"]
+        ]
+
+    schema = ar.Schema(
+        {"start_date": ar.String(), "end_date": ar.String()},
+        rules=[rule_with_bad_column],
+    )
+    result = schema.validate(frame)
+    assert not result.passed
+    assert result.issue_count == 1
+    issue = result.issues[0]
+    assert isinstance(issue, ar.ValidationIssue)
+    assert issue.rule == "missing_column"
+    assert "nonexistent" in issue.message
+
+
 def test_required_if_validation_handles_null_trigger_values(tmp_path):
     path = tmp_path / "null_trigger.csv"
     path.write_text("user_type,country\n" ",\n" "international,IN\n")
-
     frame = ar.read_csv(path)
-
     schema = ar.Schema(
         {
             "user_type": ar.String(nullable=True),
@@ -962,9 +1088,7 @@ def test_required_if_validation_handles_null_trigger_values(tmp_path):
             ),
         }
     )
-
     result = schema.validate(frame)
-
     assert result.passed
     assert result.issue_count == 0
 
@@ -1041,3 +1165,73 @@ def test_custom_validator_exceptions_propagate(tmp_path):
         )
 
     assert "validator exploded" in str(exc.value)
+
+
+def test_schema_rules_multiple_rules_all_run(tmp_path):
+    path = tmp_path / "dates.csv"
+    path.write_text("start_date,end_date\n2025-06-01,2025-01-01\n")
+    frame = ar.read_csv(path)
+
+    def always_fails(df):
+        return [
+            ar.ValidationIssue(
+                column="start_date",
+                rule="custom_check",
+                message="always fails",
+                row_index=1,
+            )
+        ]
+
+    schema = ar.Schema(
+        {"start_date": ar.String(), "end_date": ar.String()},
+        rules=[_date_order_rule, always_fails],
+    )
+    result = schema.validate(frame)
+    rules = {issue.rule for issue in result.issues}
+    assert "cross_field" in rules
+    assert "custom_check" in rules
+    assert result.issue_count == 2
+
+
+def test_schema_rules_none_by_default(tmp_path):
+    path = tmp_path / "dates.csv"
+    path.write_text("start_date,end_date\n2025-05-01,2025-01-01\n")
+    frame = ar.read_csv(path)
+    schema = ar.Schema({"start_date": ar.String(), "end_date": ar.String()})
+    result = schema.validate(frame)
+    assert result.passed
+    assert result.issue_count == 0
+
+
+def test_schema_rules_issue_shape_matches_validation_issue(tmp_path):
+    path = tmp_path / "dates.csv"
+    path.write_text("start_date,end_date\n2025-05-01,2025-01-01\n")
+    frame = ar.read_csv(path)
+    schema = ar.Schema(
+        {"start_date": ar.String(), "end_date": ar.String()},
+        rules=[_date_order_rule],
+    )
+    result = schema.validate(frame)
+    issue = result.issues[0]
+    assert isinstance(issue, ar.ValidationIssue)
+    assert issue.column == "end_date"
+    assert issue.rule == "cross_field"
+    assert isinstance(issue.message, str)
+    assert issue.row_index is not None
+
+
+def test_schema_rules_invalid_output_raises_type_error(tmp_path):
+    path = tmp_path / "dates.csv"
+    path.write_text("start_date,end_date\n2025-01-01,2025-06-01\n")
+    frame = ar.read_csv(path)
+
+    def bad_rule(df):
+        return ["not a ValidationIssue"]
+
+    schema = ar.Schema(
+        {"start_date": ar.String(), "end_date": ar.String()},
+        rules=[bad_rule],
+    )
+
+    with pytest.raises(TypeError, match="ValidationIssue"):
+        schema.validate(frame)
