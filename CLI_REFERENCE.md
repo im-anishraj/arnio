@@ -55,13 +55,17 @@ df = ar.to_pandas(clean)
 
 ## CLI Roadmap
 
-| Version | Goal | Status |
-|---------|------|--------|
-| v1.0 | Stable release, PyPI publishing, CI/CD | ✅ Shipped |
-| v1.1 | Release hardening, docs, tooling | ✅ Shipped |
-| v1.2 | C++ pipeline optimization, hash-based deduplication | 🔨 Active |
-| v1.3 | Chunked/streaming processing, Parquet and JSON readers | 📋 Planned |
-| v1.4 | Parallel column processing, SIMD string operations | 💭 Exploring |
+| Focus Area | Status |
+|-----------|--------|
+| CSV parsing and cleaning | 🔨 Current |
+| Data quality and schema validation | 🔨 Current |
+| Chunked and streaming processing | 📋 Near Term |
+| Native CSV writers | 📋 Near Term |
+| Parallel column processing | 💭 Long Term |
+| SIMD string operations | 💭 Long Term |
+| JSON Lines and Parquet support | 💭 Long Term |
+
+> Full roadmap: [ROADMAP.md](ROADMAP.md)
 
 ## Related Docs
 
