@@ -5,6 +5,7 @@
 #include "arnio/cleaning.h"
 #include "arnio/column.h"
 #include "arnio/csv_reader.h"
+#include "arnio/csv_writer.h"
 #include "arnio/frame.h"
 #include "arnio/types.h"
 
@@ -241,6 +242,17 @@ PYBIND11_MODULE(_arnio_cpp, m) {
             return schema;
         });
 
+    // --- CsvWriter ---
+    py::class_<CsvWriteConfig>(m, "CsvWriteConfig")
+        .def(py::init<>())
+        .def_readwrite("delimiter", &CsvWriteConfig::delimiter)
+        .def_readwrite("write_header", &CsvWriteConfig::write_header)
+        .def_readwrite("line_terminator", &CsvWriteConfig::line_terminator);
+
+    py::class_<CsvWriter>(m, "CsvWriter")
+        .def(py::init<const CsvWriteConfig&>(), py::arg("config") = CsvWriteConfig{})
+        .def("write", &CsvWriter::write);
+
     // --- Cleaning functions ---
     m.def(
         "drop_nulls",
@@ -300,3 +312,5 @@ PYBIND11_MODULE(_arnio_cpp, m) {
 
     m.def("cast_types", &cast_types, py::arg("frame"), py::arg("mapping"));
 }
+
+

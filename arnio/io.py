@@ -1,6 +1,6 @@
 """
 arnio.io
-CSV reading functions.
+CSV reading and writing functions.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ import tempfile
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 
-from ._core import _CsvConfig, _CsvReader
+from ._core import _CsvConfig, _CsvReader, _CsvWriteConfig, _CsvWriter
 from .exceptions import CsvReadError
 from .frame import ArFrame
 
@@ -217,6 +217,64 @@ def read_csv(
     return ArFrame(cpp_frame)
 
 
+def write_csv(
+    frame: ArFrame,
+    path: str | os.PathLike[str],
+    *,
+    delimiter: str = ",",
+    write_header: bool = True,
+    line_terminator: str = "\n",
+) -> None:
+    """Write an ArFrame to a CSV file via C++ backend.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        The data frame to write.
+    path : str
+        Destination file path. Supports .csv, .txt, and .tsv extensions.
+    delimiter : str, default ","
+        Field delimiter character.
+    write_header : bool, default True
+        Whether to write the column header row.
+    line_terminator : str, default "\\n"
+        Line terminator to use between rows.
+
+    Raises
+    ------
+    ValueError
+        If file format is unsupported.
+    RuntimeError
+        If the file cannot be opened or written.
+
+    Examples
+    --------
+    >>> ar.write_csv(frame, "output.csv")
+    >>> ar.write_csv(frame, "output.tsv", delimiter="\\t")
+    """
+    path = os.fspath(path)
+    path_lower = path.lower()
+    if not (
+        path_lower.endswith(".csv")
+        or path_lower.endswith(".txt")
+        or path_lower.endswith(".tsv")
+    ):
+        raise ValueError(
+            f"Unsupported file format: {path}. Only .csv, .txt, and .tsv are supported."
+        )
+
+    config = _CsvWriteConfig()
+    config.delimiter = delimiter
+    config.write_header = write_header
+    config.line_terminator = line_terminator
+
+    writer = _CsvWriter(config)
+    try:
+        writer.write(frame._frame, path)
+    except RuntimeError as e:
+        raise RuntimeError(str(e)) from e
+
+
 def scan_csv(
     path: str | os.PathLike[str],
     *,
@@ -305,3 +363,4 @@ def scan_csv(
             return reader.scan_schema(native_path)
     except RuntimeError as e:
         raise CsvReadError(str(e)) from e
+
