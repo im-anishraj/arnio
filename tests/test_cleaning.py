@@ -561,8 +561,12 @@ class TestNormalizeCase:
             pd.DataFrame({"city": ["São Paulo", "München", "東京", "Dev 🚀"]})
         )
 
-        lower = ar.to_pandas(ar.normalize_case(frame, subset=["city"], case_type="lower"))
-        upper = ar.to_pandas(ar.normalize_case(frame, subset=["city"], case_type="upper"))
+        lower = ar.to_pandas(
+            ar.normalize_case(frame, subset=["city"], case_type="lower")
+        )
+        upper = ar.to_pandas(
+            ar.normalize_case(frame, subset=["city"], case_type="upper")
+        )
 
         assert lower["city"].tolist() == ["são paulo", "münchen", "東京", "dev 🚀"]
         assert upper["city"].tolist() == ["SãO PAULO", "MüNCHEN", "東京", "DEV 🚀"]
@@ -578,6 +582,16 @@ class TestNormalizeCase:
         df = ar.to_pandas(result)
 
         assert df["city"].tolist() == ["São-Paulo", "München Central", "東京 Station"]
+
+    def test_title_preserves_non_ascii_word_prefixes(self):
+        import pandas as pd
+
+        frame = ar.from_pandas(pd.DataFrame({"word": ["éclair", "ñandú", "über-cool"]}))
+
+        result = ar.normalize_case(frame, subset=["word"], case_type="title")
+        df = ar.to_pandas(result)
+
+        assert df["word"].tolist() == ["éclair", "ñandú", "über-Cool"]
 
 
 class TestNormalizeUnicode:
