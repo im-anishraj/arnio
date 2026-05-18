@@ -6,7 +6,8 @@ Chained cleaning pipeline.
 from __future__ import annotations
 
 from threading import Lock
-from typing import Callable
+from time import perf_counter
+from typing import Any, Callable
 
 from . import cleaning
 from .frame import ArFrame
@@ -60,7 +61,9 @@ def register_step(name: str, fn: Callable):
 def pipeline(
     frame: ArFrame,
     steps: list[tuple],
-) -> ArFrame:
+    *,
+    return_metadata: bool = False,
+) -> ArFrame | tuple[ArFrame, dict[str, Any]]:
     """Apply a list of cleaning steps sequentially.
 
     Each step is a tuple of (step_name,) or (step_name, kwargs_dict).
@@ -73,6 +76,9 @@ def pipeline(
         Input data frame.
     steps : list[tuple]
         List of steps to apply. Each step is (name,) or (name, kwargs).
+    return_metadata : bool, default False
+        When True, also return a metadata dictionary with per-step timing
+        information in execution order.
 
     Returns
     -------
@@ -102,6 +108,7 @@ def pipeline(
         python_step_registry = dict(_PYTHON_STEP_REGISTRY)
 
     result = frame
+    step_timings: list[dict[str, Any]] = []
     for step in steps:
         if len(step) == 1:
             name = step[0]
@@ -120,19 +127,37 @@ def pipeline(
         if name in _STEP_REGISTRY:
             # C++ backed step - fast path
             fn = _STEP_REGISTRY[name]
+            started_at = perf_counter()
             if name in {"rename_columns", "cast_types"} and "mapping" not in kwargs:
                 result = fn(result, kwargs)
             else:
                 result = fn(result, **kwargs)
+            if return_metadata:
+                step_timings.append(
+                    {
+                        "step": name,
+                        "seconds": round(perf_counter() - started_at, 9),
+                    }
+                )
         elif name in python_step_registry:
             # Pure Python step - slower but contributor-friendly
+            started_at = perf_counter()
             df = to_pandas(result)
             df = python_step_registry[name](df, **kwargs)
             result = from_pandas(df)
+            if return_metadata:
+                step_timings.append(
+                    {
+                        "step": name,
+                        "seconds": round(perf_counter() - started_at, 9),
+                    }
+                )
         else:
             available = list(_STEP_REGISTRY.keys()) + list(python_step_registry.keys())
             raise UnknownStepError(name, available)
 
+    if return_metadata:
+        return result, {"step_timings": step_timings}
     return result
 
 

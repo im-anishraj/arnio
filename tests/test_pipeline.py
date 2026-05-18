@@ -214,6 +214,60 @@ class TestPipeline:
         result = ar.pipeline(frame, [])
         assert result.shape == frame.shape
 
+    def test_pipeline_return_metadata_disabled_by_default(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        result = ar.pipeline(
+            frame,
+            [
+                ("strip_whitespace",),
+            ],
+        )
+
+        assert isinstance(result, ar.ArFrame)
+
+    def test_pipeline_return_metadata_includes_step_timings(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        result, metadata = ar.pipeline(
+            frame,
+            [
+                ("strip_whitespace",),
+                ("normalize_case", {"case_type": "lower"}),
+            ],
+            return_metadata=True,
+        )
+
+        assert isinstance(result, ar.ArFrame)
+        assert list(metadata.keys()) == ["step_timings"]
+        assert len(metadata["step_timings"]) == 2
+        assert metadata["step_timings"][0]["step"] == "strip_whitespace"
+        assert metadata["step_timings"][1]["step"] == "normalize_case"
+        assert all(item["seconds"] >= 0 for item in metadata["step_timings"])
+
+    def test_pipeline_return_metadata_handles_python_steps(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        def add_marker(df, value="ok"):
+            df["marker"] = value
+            return df
+
+        ar.register_step("timed_python_step", add_marker)
+
+        result, metadata = ar.pipeline(
+            frame,
+            [
+                ("timed_python_step", {"value": "done"}),
+            ],
+            return_metadata=True,
+        )
+
+        df = ar.to_pandas(result)
+        assert set(df["marker"]) == {"done"}
+        assert len(metadata["step_timings"]) == 1
+        assert metadata["step_timings"][0]["step"] == "timed_python_step"
+        assert metadata["step_timings"][0]["seconds"] >= 0
+
     def test_register_python_step(self, sample_csv):
         frame = ar.read_csv(sample_csv)
 

@@ -271,6 +271,11 @@ ops = [
 df = ar.pipeline(df, ops)
 ```
 
+```python
+clean, metadata = ar.pipeline(df, ops, return_metadata=True)
+print(metadata["step_timings"])
+```
+
 ### register_step
 
 Extend the pipeline by adding your own custom Python functions.

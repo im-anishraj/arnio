@@ -77,6 +77,18 @@ df = ar.to_pandas(clean)
 safe_df = ar.to_pandas(clean, copy=True)
 ```
 
+Need step timings for debugging? Opt in without changing the default pipeline return type:
+
+```python
+clean, metadata = ar.pipeline(
+    frame,
+    [("strip_whitespace",), ("drop_duplicates",)],
+    return_metadata=True,
+)
+
+print(metadata["step_timings"])
+```
+
 Already have a pandas `DataFrame`? Use Arnio in-place in your existing pandas
 workflow:
 
