@@ -46,7 +46,7 @@ def test_schema_validation_collects_row_level_issues(tmp_path):
     rules = {issue.rule for issue in result.issues}
 
     assert not result.passed
-    assert result.bad_rows == [1, 2]
+    assert result.bad_rows == [2, 3]
     assert {"nullable", "max", "min", "email", "allowed"} <= rules
     assert result.summary()["issues_by_column"]["age"] == 2
 
@@ -62,15 +62,136 @@ def test_schema_reports_missing_and_unexpected_columns(sample_csv):
     assert "unexpected_column" in rules
 
 
+def test_validation_result_to_pandas_empty_has_stable_columns():
+    result = ar.ValidationResult(
+        row_count=3,
+        issue_count=0,
+        issues=[],
+        bad_rows=[],
+    )
+
+    df = result.to_pandas()
+
+    assert df.empty
+    assert list(df.columns) == [
+        "column",
+        "rule",
+        "message",
+        "row_index",
+        "value",
+    ]
+
+
+def test_validation_result_summary_counts_repeated_issues_in_one_column():
+    result = ar.ValidationResult(
+        row_count=3,
+        issue_count=3,
+        issues=[
+            ar.ValidationIssue(
+                column="age", rule="min", message="too small", row_index=0
+            ),
+            ar.ValidationIssue(
+                column="age", rule="min", message="too small", row_index=1
+            ),
+            ar.ValidationIssue(
+                column="age", rule="min", message="too small", row_index=2
+            ),
+        ],
+        bad_rows=[0, 1, 2],
+    )
+
+    summary = result.summary()
+
+    assert summary["issues_by_rule"] == {"min": 3}
+    assert summary["issues_by_column"] == {"age": 3}
+    assert summary["issues_by_column_and_rule"] == {"age": {"min": 3}}
+
+
+def test_validation_result_summary_counts_issues_across_multiple_columns():
+    result = ar.ValidationResult(
+        row_count=3,
+        issue_count=4,
+        issues=[
+            ar.ValidationIssue(
+                column="age", rule="min", message="too small", row_index=0
+            ),
+            ar.ValidationIssue(
+                column="status", rule="allowed", message="bad status", row_index=1
+            ),
+            ar.ValidationIssue(
+                column="email", rule="email", message="bad email", row_index=1
+            ),
+            ar.ValidationIssue(
+                column=None, rule="required_column", message="missing column"
+            ),
+        ],
+        bad_rows=[0, 1],
+    )
+
+    summary = result.summary()
+
+    assert summary["issues_by_rule"] == {
+        "min": 1,
+        "allowed": 1,
+        "email": 1,
+        "required_column": 1,
+    }
+    assert summary["issues_by_column"] == {"age": 1, "status": 1, "email": 1}
+    assert summary["issues_by_column_and_rule"] == {
+        "age": {"min": 1},
+        "status": {"allowed": 1},
+        "email": {"email": 1},
+    }
+
+
+def test_validation_result_summary_counts_grouped_rules_under_one_column():
+    result = ar.ValidationResult(
+        row_count=2,
+        issue_count=3,
+        issues=[
+            ar.ValidationIssue(
+                column="age", rule="min", message="too small", row_index=0
+            ),
+            ar.ValidationIssue(
+                column="age", rule="max", message="too large", row_index=1
+            ),
+            ar.ValidationIssue(
+                column="age", rule="numeric", message="not numeric", row_index=1
+            ),
+        ],
+        bad_rows=[0, 1],
+    )
+
+    summary = result.summary()
+
+    assert summary["issues_by_rule"] == {"min": 1, "max": 1, "numeric": 1}
+    assert summary["issues_by_column"] == {"age": 3}
+    assert summary["issues_by_column_and_rule"] == {
+        "age": {"min": 1, "max": 1, "numeric": 1}
+    }
+
+
+def test_validation_result_summary_counts_no_issue_result():
+    result = ar.ValidationResult(row_count=3, issue_count=0, issues=[], bad_rows=[])
+
+    summary = result.summary()
+
+    assert summary["passed"] is True
+    assert summary["issue_count"] == 0
+    assert summary["bad_row_count"] == 0
+    assert summary["issues_by_rule"] == {}
+    assert summary["issues_by_column"] == {}
+    assert summary["issues_by_column_and_rule"] == {}
+
+
 def test_validation_result_to_pandas(sample_csv):
     result = ar.validate(
         ar.read_csv(sample_csv),
         {"age": ar.Int64(min=31)},
     )
     df = result.to_pandas()
-
     assert list(df["rule"]) == ["min", "min"]
-    assert list(df["row_index"]) == [0, 1]
+    assert list(df["row_index"]) == [1, 2]
 
 
 def test_validation_result_to_markdown_for_success(sample_csv):
@@ -95,7 +216,7 @@ def test_validation_result_to_markdown_includes_issue_table(sample_csv):
     assert "- Status: **failed**" in markdown
     assert "- Issues found: 3" in markdown
     assert "| Column | Rule | Row | Value | Message |" in markdown
-    assert "| age | min | 0 |" in markdown
+    assert "| age | min | 1 |" in markdown
     assert (
         "| missing | required_column |  |  | Missing required column: missing |"
         in markdown
@@ -107,8 +228,8 @@ def test_validation_result_to_markdown_limits_visible_issues(sample_csv):
 
     markdown = result.to_markdown(max_issues=1)
 
-    assert "| age | min | 0 |" in markdown
-    assert "| age | min | 1 |" not in markdown
+    assert "| age | min | 1 |" in markdown
+    assert "| age | min | 2 |" not in markdown
     assert "_Showing 1 of 2 issues._" in markdown
 
 
@@ -167,7 +288,20 @@ def test_custom_pattern_validation(tmp_path):
 
     assert not result.passed
     assert result.issues[0].rule == "pattern"
+    assert result.issues[0].row_index == 2
+
+
+def test_row_index_is_one_based_for_first_row(tmp_path):
+    path = tmp_path / "codes.csv"
+    path.write_text("age\n-1\n30\n25\n")
+    frame = ar.read_csv(path)
+    result = ar.validate(frame, {"age": ar.Int64(min=0)})
+
+    assert not result.passed
+    assert len(result.issues) == 1
     assert result.issues[0].row_index == 1
+
+
 
 
 def test_raise_for_errors_passes(sample_csv):
@@ -212,3 +346,515 @@ def test_raise_for_errors_multiple_issues(tmp_path):
     msg = str(exc.value)
     assert "below 3" in msg
     assert "row 0" in msg and "row 1" in msg
+
+def test_email_validation_rejects_invalid_validation_mode():
+    with pytest.raises(ValueError):
+        ar.Email(validation="banana")
+
+
+def test_email_default_validation_mode_is_backward_compatible(tmp_path):
+    path = tmp_path / "emails.csv"
+    path.write_text("email\n" "simple@test.com\n")
+
+    frame = ar.read_csv(path)
+
+    result = ar.validate(
+        frame,
+        {"email": ar.Email(nullable=False)},
+    )
+
+    assert result.passed
+
+
+def test_email_strict_validation_rejects_invalid_emails(tmp_path):
+    path = tmp_path / "invalid_emails.csv"
+    path.write_text("email\n" "bad@@test.com\n" "user@localhost\n" "user@.com\n")
+
+    frame = ar.read_csv(path)
+
+    result = ar.validate(
+        frame,
+        {
+            "email": ar.Email(
+                nullable=False,
+                validation="strict",
+            )
+        },
+    )
+
+    assert not result.passed
+    assert result.issue_count == 3
+    assert all(issue.rule == "email:strict" for issue in result.issues)
+
+
+def test_email_strict_validation_accepts_valid_emails(tmp_path):
+    path = tmp_path / "valid_emails.csv"
+    path.write_text(
+        "email\n" "user@example.com\n" "first.last@test.co.uk\n" "hello+tag@gmail.com\n"
+    )
+
+    frame = ar.read_csv(path)
+
+    result = ar.validate(
+        frame,
+        {
+            "email": ar.Email(
+                nullable=False,
+                validation="strict",
+            )
+        },
+    )
+
+    assert result.passed
+
+
+def test_country_code_validation_accepts_iso_alpha_2_codes(tmp_path):
+    path = tmp_path / "countries.csv"
+    path.write_text("country\nIN\nUS\nGB\nFR\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"country": ar.CountryCode(nullable=False)},
+    )
+
+    assert result.passed
+    assert result.issue_count == 0
+
+
+def test_country_code_validation_rejects_invalid_codes(tmp_path):
+    path = tmp_path / "bad_countries.csv"
+    path.write_text("country\nIND\n1A\nA\nUSA\ngb\nFr\n\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"country": ar.CountryCode(nullable=False)},
+    )
+
+    assert not result.passed
+    assert result.issue_count == 6
+
+    assert [issue.row_index for issue in result.issues] == [1, 2, 3, 4, 5, 6]
+    assert {issue.rule for issue in result.issues} == {"country_code"}
+
+
+
+def test_string_min_length_boundary(tmp_path):
+    path = tmp_path / "names.csv"
+    path.write_text("name\nab\nabc\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"name": ar.String(min_length=3)},
+    )
+
+    assert not result.passed
+    assert result.issue_count == 1
+    assert result.issues[0].rule == "min_length"
+    assert result.issues[0].row_index == 1
+
+
+def test_string_max_length_boundary(tmp_path):
+    path = tmp_path / "names.csv"
+    path.write_text("name\nabcde\nabcdef\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"name": ar.String(max_length=5)},
+    )
+
+    assert not result.passed
+    assert result.issue_count == 1
+    assert result.issues[0].rule == "max_length"
+    assert result.issues[0].row_index == 2
+
+
+def test_null_values_skip_length_validation(tmp_path):
+    path = tmp_path / "names.csv"
+    path.write_text("name\n\nabcd\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"name": ar.String(min_length=5)},
+    )
+
+    assert not result.passed
+    assert result.issue_count == 1
+    assert result.issues[0].rule == "min_length"
+
+    assert result.issues[0].row_index == 0
+
+    assert result.issues[0].row_index == 1
+
+
+def test_int64_rejects_impossible_bounds():
+    try:
+        ar.Int64(min=10, max=1)
+    except ValueError as exc:
+        assert "min must be less than or equal to max" in str(exc)
+    else:
+        raise AssertionError("Expected invalid Int64 bounds to raise")
+
+
+def test_float64_rejects_impossible_bounds():
+    try:
+        ar.Float64(min=10.0, max=1.0)
+    except ValueError as exc:
+        assert "min must be less than or equal to max" in str(exc)
+    else:
+        raise AssertionError("Expected invalid Float64 bounds to raise")
+
+
+def test_string_rejects_impossible_length_bounds():
+    try:
+        ar.String(min_length=5, max_length=2)
+    except ValueError as exc:
+        assert "min_length must be less than or equal to max_length" in str(exc)
+    else:
+        raise AssertionError("Expected invalid String bounds to raise")
+
+
+def test_equal_numeric_bounds_are_valid():
+    field = ar.Int64(min=5, max=5)
+
+    assert field.min == 5
+    assert field.max == 5
+
+
+def test_equal_string_length_bounds_are_valid():
+    field = ar.String(min_length=3, max_length=3)
+
+    assert field.min_length == 3
+    assert field.max_length == 3
+
+
+def test_schema_composite_unique_passes(tmp_path):
+    path = tmp_path / "composite.csv"
+    path.write_text("user_id,course_id\n1,101\n1,102\n2,101\n")
+    frame = ar.read_csv(path)
+    schema = ar.Schema(
+        {
+            "user_id": ar.Int64(),
+            "course_id": ar.Int64(),
+        },
+        unique=["user_id", "course_id"],
+    )
+    result = schema.validate(frame)
+    assert result.passed
+    assert result.issue_count == 0
+
+
+def test_schema_composite_unique_fails(tmp_path):
+    path = tmp_path / "composite_bad.csv"
+    path.write_text("user_id,course_id\n1,101\n1,102\n1,101\n")
+    frame = ar.read_csv(path)
+    schema = ar.Schema(
+        {
+            "user_id": ar.Int64(),
+            "course_id": ar.Int64(),
+        },
+        unique=["user_id", "course_id"],
+    )
+    result = schema.validate(frame)
+    assert not result.passed
+    issues = [i for i in result.issues if i.rule == "composite_unique"]
+    assert len(issues) == 2
+    assert issues[0].row_index == 0
+    assert issues[1].row_index == 2
+    assert "['user_id', 'course_id']" in issues[0].message
+
+
+def test_schema_composite_unique_invalid_column(tmp_path):
+    path = tmp_path / "composite_invalid.csv"
+    path.write_text("user_id,course_id\n1,101\n")
+    frame = ar.read_csv(path)
+    schema = ar.Schema(
+        {
+            "user_id": ar.Int64(),
+            "course_id": ar.Int64(),
+        },
+        unique=["user_id", "bad_column"],
+    )
+    result = schema.validate(frame)
+    assert not result.passed
+    issues = [i for i in result.issues if i.rule == "missing_column"]
+    assert len(issues) == 1
+    assert issues[0].column == "bad_column"
+
+
+def test_schema_composite_unique_empty_columns(tmp_path):
+    path = tmp_path / "composite_empty.csv"
+    path.write_text("user_id,course_id\n1,101\n")
+    frame = ar.read_csv(path)
+    schema = ar.Schema(
+        {
+            "user_id": ar.Int64(),
+            "course_id": ar.Int64(),
+        },
+        unique=[],
+    )
+    result = schema.validate(frame)
+    assert not result.passed
+    issues = [i for i in result.issues if i.rule == "composite_unique"]
+    assert len(issues) == 1
+    assert "cannot be empty" in issues[0].message
+
+
+def test_email_default_keeps_backward_compatibility(sample_csv):
+    frame = ar.read_csv(sample_csv)
+
+    result = ar.validate(
+        frame,
+        {"email": ar.Email(nullable=False)},
+    )
+
+    assert all(
+        issue.rule == "email" for issue in result.issues if "email" in issue.rule
+    )
+
+
+def test_datetime_validation_passes_for_valid_column(tmp_path):
+    path = tmp_path / "valid_datetimes.csv"
+    path.write_text(
+        "ts\n" "2026-01-01T12:00:00\n" "2026-06-15T08:30:00\n" "2026-12-31T23:59:59\n"
+    )
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {
+            "ts": ar.DateTime(
+                nullable=False,
+                format="%Y-%m-%dT%H:%M:%S",
+                min="2026-01-01",
+                max="2026-12-31T23:59:59",
+            )
+        },
+    )
+
+    assert result.passed
+    assert result.issue_count == 0
+    assert result.bad_rows == []
+
+
+def test_datetime_rejects_invalid_format_type():
+    with pytest.raises(TypeError, match="format must be a string or None"):
+        ar.DateTime(format=123)
+
+
+def test_datetime_rejects_invalid_boundary_values():
+    with pytest.raises(ValueError, match="min must be a parseable datetime scalar"):
+        ar.DateTime(min="not-a-date")
+
+    with pytest.raises(ValueError, match="max must be a parseable datetime scalar"):
+        ar.DateTime(max=["2026-01-01", "2026-01-02"])
+
+
+def test_datetime_rejects_min_greater_than_max():
+    with pytest.raises(ValueError, match="min must be less than or equal to max"):
+        ar.DateTime(min="2026-12-31", max="2026-01-01")
+
+
+def test_datetime_validation(tmp_path):
+    path = tmp_path / "datetimes.csv"
+    path.write_text(
+        "ts,note\n"
+        "2026-01-01T12:00:00,start\n"
+        "2026-12-31T23:59:59,end\n"
+        ",missing\n"
+        "invalid-date,bad\n"
+    )
+    frame = ar.read_csv(path)
+    schema = ar.Schema(
+        {
+            "ts": ar.DateTime(
+                nullable=False,
+                format="%Y-%m-%dT%H:%M:%S",
+                min="2026-01-01",
+                max="2026-12-31T23:59:59",
+            )
+        }
+    )
+
+    result = ar.validate(frame, schema)
+    rules = [issue.rule for issue in result.issues]
+
+    assert not result.passed
+    assert "format" in rules
+    assert "nullable" in rules
+
+    path2 = tmp_path / "boundary.csv"
+    path2.write_text("ts\n" "2025-12-31T23:59:59\n" "2027-01-01T00:00:00\n")
+    frame2 = ar.read_csv(path2)
+    result2 = ar.validate(frame2, schema)
+    rules2 = [issue.rule for issue in result2.issues]
+
+    assert "min" in rules2
+    assert "max" in rules2
+
+
+def test_row_index_is_one_based_for_middle_row(tmp_path):
+    path = tmp_path / "codes.csv"
+    path.write_text("age\n30\n-5\n25\n")
+    frame = ar.read_csv(path)
+    result = ar.validate(frame, {"age": ar.Int64(min=0)})
+
+    assert not result.passed
+    assert len(result.issues) == 1
+    assert result.issues[0].row_index == 2
+
+
+def test_row_index_is_one_based_for_last_row(tmp_path):
+    path = tmp_path / "codes.csv"
+    path.write_text("age\n30\n25\n-1\n")
+    frame = ar.read_csv(path)
+    result = ar.validate(frame, {"age": ar.Int64(min=0)})
+
+    assert not result.passed
+    assert len(result.issues) == 1
+    assert result.issues[0].row_index == 3
+
+
+def test_row_index_multiple_invalid_rows(tmp_path):
+    path = tmp_path / "codes.csv"
+    path.write_text("age\n-1\n30\n-5\n25\n-9\n")
+    frame = ar.read_csv(path)
+    result = ar.validate(frame, {"age": ar.Int64(min=0)})
+
+    assert not result.passed
+    row_indexes = [issue.row_index for issue in result.issues]
+    assert row_indexes == [1, 3, 5]
+
+
+def test_bad_rows_reflects_one_based_indexes(tmp_path):
+    """bad_rows should contain 1-based row numbers."""
+    path = tmp_path / "codes.csv"
+    path.write_text("age\n-1\n30\n-5\n")
+    frame = ar.read_csv(path)
+    result = ar.validate(frame, {"age": ar.Int64(min=0)})
+
+    assert result.bad_rows == [1, 3]
+    assert result.issues[0].row_index == 1
+
+
+def test_regex_valid_match(tmp_path):
+    path = tmp_path / "ids.csv"
+    path.write_text("user_id\nUSR-1234\nUSR-5678\n")
+    result = ar.validate(
+        ar.read_csv(path),
+        {"user_id": ar.Regex(r"^USR-\d{4}$", nullable=False)},
+    )
+
+    assert result.passed
+    assert result.issue_count == 0
+
+
+def test_regex_mismatch_reports_pattern_rule(tmp_path):
+    path = tmp_path / "ids.csv"
+    path.write_text("user_id\nUSR-1234\nbadvalue\n")
+    result = ar.validate(
+        ar.read_csv(path),
+        {"user_id": ar.Regex(r"^USR-\d{4}$", nullable=False)},
+    )
+
+    assert not result.passed
+    assert result.issues[0].rule == "pattern"
+    assert result.issues[0].row_index == 2
+
+
+def test_regex_null_allowed(tmp_path):
+    path = tmp_path / "ids.csv"
+    path.write_text("user_id\nUSR-1234\n\n")
+    result = ar.validate(
+        ar.read_csv(path),
+        {"user_id": ar.Regex(r"^USR-\d{4}$", nullable=True)},
+    )
+    assert result.passed
+
+
+def test_date_validation_rejects_invalid_dates(tmp_path):
+    path = tmp_path / "bad_dates.csv"
+    path.write_text("created_at\n2026-99-99\nhello\n15/05/2026\n2026-02-30\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"created_at": ar.Date(nullable=False)},
+    )
+
+    assert not result.passed
+    assert result.issue_count == 4
+
+    rules = {issue.rule for issue in result.issues}
+    assert "date" in rules
+
+
+def test_date_validation_handles_nullable_values(tmp_path):
+    path = tmp_path / "nullable_dates.csv"
+    path.write_text("created_at\n2026-05-15\n\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"created_at": ar.Date(nullable=True)},
+    )
+
+    assert result.passed
+
+
+def test_regex_null_not_allowed(tmp_path):
+    path = tmp_path / "ids.csv"
+    path.write_text("user_id,other\nUSR-1234,a\n,b\n")
+    result = ar.validate(
+        ar.read_csv(path),
+        {"user_id": ar.Regex(r"^USR-\d{4}$", nullable=False)},
+    )
+
+    assert not result.passed
+    assert result.issues[0].rule == "nullable"
+
+
+def test_regex_invalid_pattern_raises_at_construction():
+    try:
+        ar.Regex(r"[invalid")
+        assert False, "Expected re.error"
+    except Exception as exc:
+        assert (
+            "unterminated" in str(exc).lower() or "error" in type(exc).__name__.lower()
+        )
+
+
+def test_regex_numeric_column_coerces_to_string(tmp_path):
+    path = tmp_path / "codes.csv"
+    path.write_text("code\n123\n456\n")
+    result = ar.validate(
+        ar.read_csv(path),
+        {"code": ar.Regex(r"^\d+$")},
+    )
+
+    assert result.issues[0].rule == "dtype"
+
+
+def test_regex_fullmatch_not_partial(tmp_path):
+    path = tmp_path / "ids.csv"
+    path.write_text("user_id\nUSR-1234-EXTRA\n")
+    result = ar.validate(
+        ar.read_csv(path),
+        {"user_id": ar.Regex(r"^USR-\d{4}$")},
+    )
+
+    assert not result.passed
+    assert result.issues[0].rule == "pattern"
+
+
+def test_date_validation_rejects_non_zero_padded_dates(tmp_path):
+    path = tmp_path / "non_padded_dates.csv"
+    path.write_text("created_at\n" "2026-5-15\n" "2026-05-5\n" "2026-5-5\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"created_at": ar.Date(nullable=False)},
+    )
+
+    assert not result.passed
+    assert result.issue_count == 3
+
+    rules = {issue.rule for issue in result.issues}
+    assert "date" in rules
+

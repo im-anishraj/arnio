@@ -3,6 +3,7 @@ add_library(arnio_core STATIC
     src/frame.cpp
     src/csv_reader.cpp
     src/cleaning.cpp
+    src/csv_writer.cpp
 )
 
 target_include_directories(arnio_core PUBLIC

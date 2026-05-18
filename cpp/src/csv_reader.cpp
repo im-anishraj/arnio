@@ -277,7 +277,8 @@ Frame CsvReader::read(const std::string& path) const {
     return Frame(std::move(columns));
 }
 
-std::unordered_map<std::string, std::string> CsvReader::scan_schema(const std::string& path) const {
+std::vector<std::pair<std::string, std::string>> CsvReader::scan_schema(
+    const std::string& path) const {
     std::ifstream file(path);
     if (!file.is_open()) {
         throw std::runtime_error("Cannot open file: " + path);
@@ -295,12 +296,17 @@ std::unordered_map<std::string, std::string> CsvReader::scan_schema(const std::s
         validate_header(header);
     }
 
-    // Read up to 100 rows for type inference
     size_t num_cols = header.size();
     std::vector<DType> col_types(num_cols, DType::NULL_TYPE);
     size_t sample_count = 0;
 
-    while (sample_count < 100 && read_record(file, line)) {
+    size_t max_samples = config_.sample_size.value_or(100);
+
+    while (read_record(file, line)) {
+        if (sample_count >= max_samples) {
+            break;
+        }
+
         if (line.empty()) continue;
         auto fields = parse_line(line);
         for (size_t i = 0; i < num_cols && i < fields.size(); ++i) {
@@ -313,9 +319,10 @@ std::unordered_map<std::string, std::string> CsvReader::scan_schema(const std::s
         if (dt == DType::NULL_TYPE) dt = DType::STRING;
     }
 
-    std::unordered_map<std::string, std::string> schema;
+    std::vector<std::pair<std::string, std::string>> schema;
+    schema.reserve(num_cols);
     for (size_t i = 0; i < num_cols; ++i) {
-        schema[header[i]] = dtype_to_string(col_types[i]);
+        schema.emplace_back(header[i], dtype_to_string(col_types[i]));
     }
     return schema;
 }
