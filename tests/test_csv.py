@@ -385,3 +385,81 @@ class TestScanCsv:
         schema = ar.scan_csv(str(csv_file), encoding="latin-1")
         # The float is outside the sample; 'value' must be inferred as int64.
         assert schema["value"] == "int64"
+
+
+class TestArFrameHeadTail:
+    def test_head_default(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        result = frame.head()
+        assert isinstance(result, ar.ArFrame)
+        assert result.shape == (3, 4)
+
+    def test_head_custom_n(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        result = frame.head(2)
+        df = ar.to_pandas(result)
+        assert result.shape == (2, 4)
+        assert df["name"].tolist() == ["Alice", "Bob"]
+
+    def test_head_zero(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        result = frame.head(0)
+        assert isinstance(result, ar.ArFrame)
+        assert result.shape == (0, 4)
+
+    def test_head_large_n(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        result = frame.head(100)
+        assert result.shape == (3, 4)
+
+    def test_head_empty_frame(self, tmp_path):
+        csv_path = tmp_path / "empty_rows.csv"
+        csv_path.write_text("name,age\n")
+        frame = ar.read_csv(csv_path)
+        result = frame.head()
+        assert result.shape == (0, 2)
+
+    def test_tail_default(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        result = frame.tail()
+        assert isinstance(result, ar.ArFrame)
+        assert result.shape == (3, 4)
+
+    def test_tail_custom_n(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        result = frame.tail(2)
+        df = ar.to_pandas(result)
+        assert result.shape == (2, 4)
+        assert df["name"].tolist() == ["Bob", "Charlie"]
+
+    def test_tail_zero(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        result = frame.tail(0)
+        assert isinstance(result, ar.ArFrame)
+        assert result.shape == (0, 4)
+
+    def test_tail_large_n(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        result = frame.tail(100)
+        assert result.shape == (3, 4)
+
+    def test_tail_empty_frame(self, tmp_path):
+        csv_path = tmp_path / "empty_rows.csv"
+        csv_path.write_text("name,age\n")
+        frame = ar.read_csv(csv_path)
+        result = frame.tail()
+        assert result.shape == (0, 2)
+
+    def test_head_invalid_n(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        with pytest.raises(ValueError):
+            frame.head(-1)
+        with pytest.raises(ValueError):
+            frame.head(True)
+
+    def test_tail_invalid_n(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        with pytest.raises(ValueError):
+            frame.tail(-1)
+        with pytest.raises(ValueError):
+            frame.tail(True)
