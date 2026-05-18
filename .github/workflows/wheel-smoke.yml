@@ -33,6 +33,7 @@ jobs:
         run: cibuildwheel --only cp312-manylinux_x86_64 --output-dir wheelhouse
         env:
           CIBW_BUILD_VERBOSITY: 1
+          CIBW_TEST_COMMAND: ""
 
       - name: Run wheel smoke test
         run: python tests/smoke_wheel_install.py --wheelhouse wheelhouse
