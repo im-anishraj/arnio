@@ -757,13 +757,13 @@ if not result.passed:
 
 Validation messages also indicate when string values appear safely convertible to numeric dtypes.
 
-```python
+python
 frame = ar.from_pandas(pd.DataFrame({
-    "age": ["1", "2", "3"]
+"age": ["1", "2", "3"]
 }))
 
 schema = ar.Schema({
-    "age": ar.Int64()
+"age": ar.Int64()
 })
 
 result = ar.validate(frame, schema)
@@ -771,8 +771,8 @@ result = ar.validate(frame, schema)
 print(result.issues[0].message)
 
 # Column 'age' has dtype 'string'; expected 'int64'.
+
 # Values appear safely convertible to 'int64'
-```
 
 In this example, `country` becomes required only when
 `user_type == "international"`.

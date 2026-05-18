@@ -14,7 +14,6 @@ import pandas as pd
 
 from .convert import to_pandas
 from .frame import ArFrame
-from .quality import _suggest_column_dtype
 
 ISSUE_COLUMNS = [
     "column",
@@ -522,48 +521,57 @@ def _validate_column(
     issues: list[ValidationIssue] = []
 
     if field_def.dtype is not None and actual_dtype != field_def.dtype:
-      if not (field_def.dtype == "datetime" and actual_dtype == "string"):
+        if not (field_def.dtype == "datetime" and actual_dtype == "string"):
 
-        message = (
-            f"Column {name!r} has dtype {actual_dtype!r}; "
-            f"expected {field_def.dtype!r}"
-        )
-
-        compatible_dtype = None
-
-        if actual_dtype == "string":
-            lower_name = name.lower()
-
-            is_identifier_like = (
-                lower_name == "id"
-                or lower_name.endswith("_id")
-                or lower_name in {
-                    "uuid",
-                    "zip",
-                    "zipcode",
-                    "zip_code",
-                }
+            message = (
+                f"Column {name!r} has dtype {actual_dtype!r}; "
+                f"expected {field_def.dtype!r}"
             )
 
-            if not is_identifier_like:
-                compatible_dtype = _suggest_column_dtype(
-                    series,
-                    actual_dtype,
+            compatible_dtype = None
+
+            if actual_dtype == "string":
+                lower_name = name.lower()
+
+                is_identifier_like = (
+                    lower_name == "id"
+                    or lower_name.endswith("_id")
+                    or lower_name
+                    in {
+                        "uuid",
+                        "zip",
+                        "zipcode",
+                        "zip_code",
+                    }
                 )
 
-        if compatible_dtype == field_def.dtype:
-            message += (
-                f". Values appear safely convertible "
-                f"to {field_def.dtype!r}"
-            )
+                if not is_identifier_like:
+                    try:
+                        numeric = pd.to_numeric(
+                            series.dropna(),
+                            errors="raise",
+                        )
 
-        issues.append(
-            ValidationIssue(
-                column=name,
-                rule="dtype",
-                message=message,
+                        if (numeric % 1 == 0).all():
+                            compatible_dtype = "int64"
+                        else:
+                            compatible_dtype = "float64"
+
+                    except Exception:
+                        compatible_dtype = None
+
+            if compatible_dtype == field_def.dtype:
+                message += (
+                    f". Values appear safely convertible " f"to {field_def.dtype!r}"
+                )
+
+            issues.append(
+                ValidationIssue(
+                    column=name,
+                    rule="dtype",
+                    message=message,
+                )
             )
-        )
 
     if not field_def.nullable:
         issues.extend(
