@@ -361,12 +361,19 @@ def Bool(*, nullable: bool = True) -> Field:
     return Field(dtype="bool", nullable=nullable)
 
 
-def Email(*, nullable: bool = True, unique: bool = False) -> Field:
+def Email(
+    *,
+    nullable: bool = True,
+    unique: bool = False,
+    validation: str = "light",
+) -> Field:
     """Create an email-address schema field."""
+    if validation not in {"light", "strict"}:
+        raise ValueError("Email validation must be 'light' or 'strict'")
     return Field(
         dtype="string",
         nullable=nullable,
-        semantic="email",
+        semantic="email" if validation == "light" else "email:strict",
         unique=unique,
     )
 
@@ -382,6 +389,44 @@ def CountryCode(*, nullable: bool = True, unique: bool = False) -> Field:
         dtype="string",
         nullable=nullable,
         semantic="country_code",
+        unique=unique,
+    )
+
+
+def Regex(
+    pattern: str,
+    *,
+    nullable: bool = True,
+    unique: bool = False,
+) -> Field:
+    """Create a regex-validated string schema field.
+
+    The pattern is compiled at call time so invalid expressions raise
+    ``re.error`` immediately rather than at validation time.
+
+    Parameters
+    ----------
+    pattern : str
+        Regular expression that every non-null value must fully match.
+    nullable : bool, default True
+        Whether null values are allowed.
+    unique : bool, default False
+        Whether all non-null values must be unique.
+
+    Examples
+    --------
+    >>> schema = ar.Schema({
+    ...     "user_id": ar.Regex(r"^USR-\\d{4}$", nullable=False),
+    ...     "zip_code": ar.Regex(r"^\\d{5}(-\\d{4})?$", nullable=True),
+    ... })
+    """
+    import re
+
+    re.compile(pattern)  # fail fast on invalid pattern
+    return Field(
+        dtype="string",
+        nullable=nullable,
+        pattern=pattern,
         unique=unique,
     )
 
@@ -631,7 +676,7 @@ def _row_issues(
             column=column,
             rule=rule,
             message=message,
-            row_index=int(index),
+            row_index=int(index) + 1,
             value=value,
         )
         for index, value in invalid.items()
@@ -655,6 +700,12 @@ def _markdown_cell(value: Any) -> str:
 
 _SEMANTIC_PATTERNS = {
     "email": r"[^@\s]+@[^@\s]+\.[^@\s]+",
+    "email:strict": (
+        r"[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+"
+        r"@"
+        r"[a-zA-Z0-9-]+"
+        r"(?:\.[a-zA-Z0-9-]+)+"
+    ),
     "url": r"https?://[^\s]+",
     "phone": r"\+?[0-9][0-9 .()\-]{6,}[0-9]",
     "country_code": r"[A-Z]{2}",

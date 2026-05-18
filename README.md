@@ -77,6 +77,18 @@ df = ar.to_pandas(clean)
 safe_df = ar.to_pandas(clean, copy=True)
 ```
 
+Need step timings for debugging? Opt in without changing the default pipeline return type:
+
+```python
+clean, metadata = ar.pipeline(
+    frame,
+    [("strip_whitespace",), ("drop_duplicates",)],
+    return_metadata=True,
+)
+
+print(metadata["step_timings"])
+```
+
 Already have a pandas `DataFrame`? Use Arnio in-place in your existing pandas
 workflow:
 
@@ -118,7 +130,8 @@ print(selected.columns)
 `scan_csv` reads only the header + a sample to infer the schema. Zero data loaded.
 
 ```python
-schema = ar.scan_csv("100GB_file.csv")
+# Pass sample_size to control how many rows are evaluated for type inference
+schema = ar.scan_csv("100GB_file.csv", sample_size=500)
 # {'id': 'int64', 'name': 'string', 'is_active': 'bool', 'revenue': 'float64'}
 ```
 
@@ -192,6 +205,7 @@ clean_df = df.arnio.clean(drop_duplicates=True)
 quality = clean_df.arnio.profile()
 validation = clean_df.arnio.validate({
     "email": ar.Email(nullable=False),
+    "user_code": ar.Regex(r"^USR-\d{4}$", nullable=False),
     "age": ar.Int64(nullable=True, min=0),
 })
 ```
@@ -200,6 +214,46 @@ This keeps pandas as the analysis tool while Arnio handles the preparation,
 quality, and validation layer.
 
 > Product direction: **[PROJECT_DIRECTION.md](PROJECT_DIRECTION.md)**
+
+## 📘 Examples
+
+These examples demonstrate how Arnio integrates with the Python data ecosystem.
+
+They follow a simple workflow:
+
+**clean/validate data with Arnio → analyze with other tools**
+
+### 🔹 Interoperability Examples
+
+- **Arnio + pandas**
+  Clean and normalize messy tabular data using Arnio, then analyze it using pandas.
+  Run:
+```bash
+  python examples/arnio_with_pandas.py
+```
+
+- **Arnio + NumPy**
+  Prepare numeric data safely using Arnio, then perform computations using NumPy.
+  Run:
+```bash
+  python examples/arnio_with_numpy.py
+```
+
+- **Arnio + scikit-learn**
+  Prepare messy data with Arnio, then train a model with scikit-learn.
+  Run:
+```bash
+  python examples/arnio_with_sklearn.py
+```
+
+- **Arnio + DuckDB**
+  Clean data with Arnio, then run SQL queries using DuckDB.
+  Run:
+```bash
+  python examples/arnio_with_duckdb.py
+```
+
+
 
 <br>
 
@@ -269,29 +323,23 @@ df = ar.to_pandas(ar.pipeline(frame, [
 
 Arnio is not a pandas wrapper. It's a separate runtime with its own data model.
 
-```text
-┌──────────────────────────────────────────────────────────────┐
-│  Your Python Code                                            │
-│  frame = ar.read_csv("data.csv")                             │
-│  clean = ar.pipeline(frame, [...])                           │
-│  df = ar.to_pandas(clean)                                    │
-└────────────────────────┬─────────────────────────────────────┘
-                         │  pybind11 boundary
-┌────────────────────────▼─────────────────────────────────────┐
-│  C++ Runtime  (_arnio_cpp)                                   │
-│                                                              │
-│  ┌─────────────┐  ┌─────────────────┐  ┌──────────────────┐ │
-│  │  CsvReader   │  │  Frame/Column   │  │  Cleaning Engine │ │
-│  │  • RFC 4180  │  │  • Columnar     │  │  • drop_nulls    │ │
-│  │  • BOM strip │  │  • std::variant │  │  • fill_nulls    │ │
-│  │  • Type      │  │  • Bool null    │  │  • drop_dupes    │ │
-│  │    inference │  │    masks        │  │  • strip_ws      │ │
-│  │  • Quoted    │  │  • O(1) column  │  │  • normalize     │ │
-│  │    fields    │  │    lookup       │  │  • rename/cast   │ │
-│  └─────────────┘  └─────────────────┘  └──────────────────┘ │
-│                                                              │
-│  to_pandas() ──→ zero-copy NumPy buffer (numerics/bools)     │
-└──────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+  subgraph python["Your Python Code"]
+    PY["frame = ar.read_csv('data.csv')\nclean = ar.pipeline(frame, [...])\ndf = ar.to_pandas(clean)"]
+  end
+
+  python -->|"pybind11 boundary"| cpp
+
+  subgraph cpp["C++ Runtime (_arnio_cpp)"]
+    direction TB
+    CSV["CsvReader\n• RFC 4180\n• BOM strip\n• Type inference\n• Quoted fields"]
+    FRAME["Frame / Column\n• Columnar\n• std::variant\n• Bool null masks\n• O(1) column lookup"]
+    CLEAN["Cleaning Engine\n• drop_nulls\n• fill_nulls\n• drop_dupes\n• strip_ws\n• normalize\n• rename/cast"]
+    CSV --> FRAME --> CLEAN
+  end
+
+  cpp -->|"to_pandas() → zero-copy NumPy buffer (numerics/bools)"| OUT["pandas DataFrame"]
 ```
 
 ### Design decisions that matter
@@ -305,6 +353,7 @@ Arnio is not a pandas wrapper. It's a separate runtime with its own data model.
 | **Step registry** | Pipeline steps map to C++ function pointers. Adding a new cleaning primitive is a single function + one registry entry. |
 
 > Full architecture documentation: **[ARCHITECTURE.md](ARCHITECTURE.md)**
+> API reference guide: **[Arnio API Reference](./API_REFERENCE.md)**
 
 <br>
 
@@ -553,6 +602,16 @@ result = ar.pipeline(frame, [
 
 Useful for data auditing — inspect what's missing before deciding how to fill or drop.
 
+### Boolean string normalization
+
+```python
+clean = ar.parse_bool_strings(frame)
+```
+
+This normalizes values such as `"yes"`, `"no"`, `"true"`, `"false"`, `"y"`, `"n"`, `"1"`, and `"0"` into boolean values while preserving unsupported values unchanged.
+
+Columns containing both parsed boolean values and unsupported string values may round-trip as strings because of ArFrame column typing semantics.
+
 <br>
 ### 🔢 Safe column division
 
@@ -631,6 +690,7 @@ schema = ar.Schema({
     # CountryCode expects uppercase ISO alpha-2 values, for example IN, US, GB.
     "country": ar.CountryCode(nullable=False),
     "username": ar.String(min_length=3, max_length=20),
+    "user_code": ar.Regex(r"^USR-\d{4}$", nullable=False),
     "revenue": ar.Float64(nullable=True, min=0),
     "created_at": ar.DateTime(nullable=False, format="%Y-%m-%d"),
 })
@@ -741,7 +801,10 @@ data = {
 df = ar.from_pandas(pd.DataFrame(data))
 # Bounded profiling for large datasets (controls how many sample values are kept)
 report = ar.profile(df, sample_size=5)
+safe_report = report.to_dict(redact_sample_values=True)
 ```
+
+Use `report.to_dict(redact_sample_values=True)` when sharing reports outside your team and you want to avoid exposing raw example/sample values.
 
 ### 1. Terminal Representation (Simplified Example)
 *A simplified view of the standard string representation of the report object:*
@@ -754,7 +817,7 @@ DataQualityReport(
     duplicate_rows=0,
     columns={
         'user_id': ColumnProfile(dtype='int64', semantic_type='identifier', unique_count=4),
-        'email': ColumnProfile(dtype='string', semantic_type='categorical', null_count=1, unique_ratio=0.666667),
+        'email': ColumnProfile(dtype='string', semantic_type='categorical', null_count=1, unique_ratio=0.666667, min=13, max=13, mean=13.0),
         'score': ColumnProfile(dtype='float64', semantic_type='numeric', mean=87.9, min=85.5, max=90.0)
     }
 )
@@ -782,6 +845,9 @@ DataQualityReport(
       "semantic_type": "categorical",
       "null_count": 1,
       "unique_ratio": 0.666667,
+      "min": 13,
+      "max": 13,
+      "mean": 13.0,
       "warnings": ["contains_nulls"]
     },
     "score": {

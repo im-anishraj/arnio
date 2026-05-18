@@ -20,6 +20,9 @@ CSV_FILE = "benchmarks/benchmark_1m.csv"
 WIDE_CSV_FILE = "benchmarks/benchmark_wide.csv"
 RUNS = 3
 
+BASELINE_FILE = "benchmarks/baseline.json"
+REGRESSION_THRESHOLD = 5  # Percent
+
 
 @dataclass(frozen=True)
 class BenchmarkCase:
@@ -182,7 +185,23 @@ def run_subprocess(engine, path):
     return json.loads(output)
 
 
+def load_baseline():
+    try:
+        with open(BASELINE_FILE) as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return {}
+
+
+def calculate_regression(current, baseline):
+    return (
+        (current - baseline) / baseline
+    ) * 100  # How much slower current benchmark is compared to baseline
+
+
 def run_case(case):
+    baseline_data = load_baseline()
+
     print(case.name)
     print(f"{'Metric':<20} {'pandas':>12} {'arnio':>12}")
     print("-" * 46)
@@ -232,6 +251,24 @@ def run_case(case):
         )
     else:
         print(f"\nSpeed: {avg(pd_times)/avg(ar_times):.1f}x")
+
+    baseline_case = baseline_data.get(case.name)
+
+    if baseline_case:
+        baseline_time = baseline_case["arnio_exec_time"]
+        current_time = avg(ar_times)
+
+        regression = calculate_regression(current_time, baseline_time)
+
+        if regression > REGRESSION_THRESHOLD:
+            print(
+                f"WARNING: Regression detected:"
+                f"{regression:.1f}% slower than baseline "
+                f"(threshold: {REGRESSION_THRESHOLD}%)"
+            )
+    else:
+        print("No baseline found for regression comparison.")
+
     print()
 
 

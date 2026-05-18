@@ -17,6 +17,7 @@ struct CsvConfig {
     std::string encoding = "utf-8";  // Currently only utf-8 supported
     bool trim_headers = true;        // for implementing the trim_headers option
     std::optional<char> thousands_separator = std::nullopt;
+    std::optional<size_t> sample_size = std::nullopt;
 };
 
 class CsvReader {
