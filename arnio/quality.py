@@ -428,7 +428,9 @@ def suggest_cleaning(
             non_null_ratio = 1.0 - col_profile.null_ratio
 
             score = 0.95
-            reason = f"Column '{col_name}' conforms perfectly to {target_dtype} structure."
+            reason = (
+                f"Column '{col_name}' conforms perfectly to {target_dtype} structure."
+            )
 
             if non_null_ratio < 0.2:
                 score -= 0.3
