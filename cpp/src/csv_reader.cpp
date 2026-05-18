@@ -76,7 +76,7 @@ bool read_record(std::istream& file, std::string& record) {
 
     while (getline_universal(file, line, line_ending)) {
         if (!first) {
-            record += prev_line_ending;  // ← use PREVIOUS ending as separator
+            record += prev_line_ending;  //  use PREVIOUS ending as separator
         }
         record += line;
         prev_line_ending = line_ending;
@@ -184,7 +184,7 @@ DType CsvReader::promote_type(DType current, DType incoming) {
         return DType::FLOAT64;
     }
 
-    // Any other conflict → string
+    // Any other conflict string
     return DType::STRING;
 }
 
