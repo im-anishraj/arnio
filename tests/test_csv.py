@@ -1,4 +1,3 @@
-
 """Tests for CSV reading functionality."""
 
 from pathlib import Path
