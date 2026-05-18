@@ -9,6 +9,8 @@ from threading import Lock
 from time import perf_counter
 from typing import Any, Callable
 
+import pandas as pd
+
 from . import cleaning
 from .frame import ArFrame
 
@@ -144,8 +146,19 @@ def pipeline(
             # Pure Python step - slower but contributor-friendly
             started_at = perf_counter()
             df = to_pandas(result)
-            df = python_step_registry[name](df, **kwargs)
-            result = from_pandas(df)
+            returned = python_step_registry[name](df, **kwargs)
+            if returned is None:
+                raise TypeError(
+                    f"Custom pipeline step '{name}' returned None. "
+                    "Steps must return a pandas DataFrame."
+                )
+            if not isinstance(returned, pd.DataFrame):
+                raise TypeError(
+                    f"Custom pipeline step '{name}' returned "
+                    f"{type(returned).__name__!r} instead of a pandas DataFrame. "
+                    "Steps must return a pandas DataFrame."
+                )
+            result = from_pandas(returned)
             if return_metadata:
                 step_timings.append(
                     {
