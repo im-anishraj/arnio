@@ -333,22 +333,24 @@ class DataQualityReport:
             lines.append('<html lang="en">')
             lines.append("<head>")
             lines.append('  <meta charset="UTF-8">')
-            lines.append('  <meta name="viewport" content="width=device-width, initial-scale=1.0">')
+            lines.append(
+                '  <meta name="viewport" content="width=device-width, initial-scale=1.0">'
+            )
             lines.append("  <title>Data Quality Report</title>")
             lines.append(f"  <style>{styles}</style>")
             lines.append("</head>")
-            lines.append("<body style=\"margin:0;padding:16px;background:#f3f4f6;\">")
-            lines.append("<div class=\"arnio-dqr\">")
+            lines.append('<body style="margin:0;padding:16px;background:#f3f4f6;">')
+            lines.append('<div class="arnio-dqr">')
         else:
             lines.append(f"<style>{styles}</style>")
-            lines.append("<div class=\"arnio-dqr\">")
+            lines.append('<div class="arnio-dqr">')
 
-        lines.append("<div class=\"container\">")
-        lines.append("<div class=\"header\">")
+        lines.append('<div class="container">')
+        lines.append('<div class="header">')
         lines.append("<div>")
         lines.append("<h1>Data Quality Report</h1>")
         lines.append(
-            f"<div class=\"subtitle\">Rows: {e(self.row_count)} · Columns: {e(self.column_count)} · Memory: {e(fmt_bytes(self.memory_usage))}</div>"
+            f'<div class="subtitle">Rows: {e(self.row_count)} · Columns: {e(self.column_count)} · Memory: {e(fmt_bytes(self.memory_usage))}</div>'
         )
         lines.append("</div>")
         lines.append(
@@ -356,7 +358,7 @@ class DataQualityReport:
         )
         lines.append("</div>")
 
-        lines.append("<div class=\"grid\">")
+        lines.append('<div class="grid">')
         cards: list[tuple[str, str]] = [
             ("Duplicate rows", f"{self.duplicate_rows} ({self.duplicate_ratio:.2%})"),
             ("Columns w/ nulls", str(cols_with_nulls)),
@@ -367,14 +369,14 @@ class DataQualityReport:
             penalty_total = sum(self.score_components.values())
             cards.append(("Score delta", f"{penalty_total:+.2f}"))
         for label, value in cards:
-            lines.append("<div class=\"card\">")
-            lines.append(f"<div class=\"label\">{e(label)}</div>")
-            lines.append(f"<div class=\"value\">{e(value)}</div>")
+            lines.append('<div class="card">')
+            lines.append(f'<div class="label">{e(label)}</div>')
+            lines.append(f'<div class="value">{e(value)}</div>')
             lines.append("</div>")
         lines.append("</div>")
 
         if self.score_components:
-            lines.append("<div class=\"section\">")
+            lines.append('<div class="section">')
             lines.append("<h2>Score Components</h2>")
             lines.append("<table>")
             lines.append("<thead><tr><th>Component</th><th>Delta</th></tr></thead>")
@@ -390,7 +392,7 @@ class DataQualityReport:
             lines.append("</div>")
 
         if self.columns:
-            lines.append("<div class=\"section\">")
+            lines.append('<div class="section">')
             lines.append("<h2>Columns</h2>")
             lines.append("<table>")
             lines.append(
@@ -410,10 +412,12 @@ class DataQualityReport:
                 if col.top_values:
                     top_bits: list[str] = []
                     for v, _c, r in col.top_values[:3]:
-                        top_bits.append(f"<span class=\"chip\">{e(v)} · {e(f'{r:.0%}')}</span>")
+                        top_bits.append(
+                            f"<span class=\"chip\">{e(v)} · {e(f'{r:.0%}')}</span>"
+                        )
                     top_html = "".join(top_bits)
                 else:
-                    top_html = "<span class=\"muted\">-</span>"
+                    top_html = '<span class="muted">-</span>'
 
                 lines.append("<tr>")
                 lines.append(f"<td><code>{e(col.name)}</code></td>")
@@ -422,13 +426,13 @@ class DataQualityReport:
                 lines.append(
                     "<td>"
                     f"{e(col.null_count)} <span class=\"muted\">({e(f'{null_pct:.1f}%')})</span>"
-                    f"<div class=\"bar\"><span style=\"width:{max(0.0, min(100.0, null_pct)):.2f}%\"></span></div>"
+                    f'<div class="bar"><span style="width:{max(0.0, min(100.0, null_pct)):.2f}%"></span></div>'
                     "</td>"
                 )
                 lines.append(
                     "<td>"
                     f"{e(col.unique_count)} <span class=\"muted\">({e(f'{unique_pct:.1f}%')})</span>"
-                    f"<div class=\"bar\"><span style=\"width:{max(0.0, min(100.0, unique_pct)):.2f}%\"></span></div>"
+                    f'<div class="bar"><span style="width:{max(0.0, min(100.0, unique_pct)):.2f}%"></span></div>'
                     "</td>"
                 )
                 lines.append(f"<td>{top_html}</td>")
@@ -441,7 +445,7 @@ class DataQualityReport:
             lines.append("</div>")
 
         if self.suggestions:
-            lines.append("<div class=\"section\">")
+            lines.append('<div class="section">')
             lines.append("<h2>Cleaning Suggestions</h2>")
             for step in self.suggestions:
                 conf_score = getattr(step, "confidence_score", None)
@@ -454,9 +458,11 @@ class DataQualityReport:
                 conf_text = f" — {e(' · '.join(conf_bits))}" if conf_bits else ""
                 lines.append("<details>")
                 lines.append(
-                    f"<summary><code>{e(step[0])}</code> <span class=\"muted\">{e(step[1])}</span></summary>"
+                    f'<summary><code>{e(step[0])}</code> <span class="muted">{e(step[1])}</span></summary>'
                 )
-                lines.append(f"<div class=\"subtitle\">{conf_text}</div>" if conf_text else "")
+                lines.append(
+                    f'<div class="subtitle">{conf_text}</div>' if conf_text else ""
+                )
                 lines.append("</details>")
             lines.append("</div>")
 
