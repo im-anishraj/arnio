@@ -87,6 +87,3 @@ void CsvWriter::write(const Frame& frame, const std::string& path) const {
 }
 
 }  // namespace arnio
-
-
-"" 

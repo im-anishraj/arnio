@@ -26,6 +26,3 @@ class CsvWriter {
 };
 
 }  // namespace arnio
-
-
-"" 
