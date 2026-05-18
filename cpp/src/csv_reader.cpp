@@ -33,7 +33,6 @@ inline void trim_in_place(std::string& s) {
                 .base(),
             s.end());
 }
-}
 
 inline void strip_utf8_bom(std::string& s) {
     if (s.size() >= 3 && static_cast<unsigned char>(s[0]) == 0xEF &&
@@ -260,11 +259,15 @@ DType CsvReader::infer_type(const std::string& value) const {
     // Try int64
     std::string trimmed = trim_whitespace(cleaned);
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 15fd88b (Handle signed integer inference with leading plus sign)
     std::string int_candidate = trimmed;
 
     if (!int_candidate.empty() && int_candidate[0] == '+') {
         int_candidate.erase(0, 1);
     }
+<<<<<<< HEAD
 =======
 >>>>>>> a0aa2bf (fix(csv): address review feedback for integer inference)
 
@@ -272,6 +275,13 @@ DType CsvReader::infer_type(const std::string& value) const {
 
     const char* start = int_candidate.data();
     const char* end = start + int_candidate.size();
+=======
+
+    const char* start = int_candidate.data();
+    const char* end = int_candidate.data() + int_candidate.size();
+
+    long long val = 0;
+>>>>>>> 15fd88b (Handle signed integer inference with leading plus sign)
 
     auto [ptr, ec] = std::from_chars(start, end, val);
 
@@ -282,7 +292,7 @@ DType CsvReader::infer_type(const std::string& value) const {
 
     // Try float64
     {
-        const char* start = cleaned.c_str();
+        const char* start = trimmed.c_str();
         char* end = nullptr;
         double val = std::strtod(start, &end);
         (void)val;
