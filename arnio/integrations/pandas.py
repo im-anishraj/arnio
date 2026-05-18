@@ -69,13 +69,20 @@ class ArnioPandasAccessor:
         *,
         mode: str = "safe",
         return_report: bool = False,
-    ) -> pd.DataFrame | tuple[pd.DataFrame, DataQualityReport]:
+        dry_run: bool = False,
+        allow_lossy_casts: bool = False,
+    ) -> pd.DataFrame | DataQualityReport | tuple[pd.DataFrame, DataQualityReport]:
         """Run Arnio's automatic cleaning and return pandas output."""
         result = auto_clean(
             self.to_arframe(),
             mode=mode,
             return_report=return_report,
+            dry_run=dry_run,
+            allow_lossy_casts=allow_lossy_casts,
         )
+
+        if dry_run and not return_report:
+            return result
 
         if return_report:
             frame, report = result

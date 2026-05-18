@@ -1,6 +1,6 @@
 """
 arnio.io
-CSV reading functions.
+CSV reading and writing functions.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ import tempfile
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 
-from ._core import _CsvConfig, _CsvReader
+from ._core import _CsvConfig, _CsvReader, _CsvWriteConfig, _CsvWriter
 from .exceptions import CsvReadError
 from .frame import ArFrame
 
@@ -76,6 +76,25 @@ def _utf8_csv_path(
                 pass
 
 
+def _validate_thousands_separator(
+    thousands_separator: str | None,
+) -> None:
+    if thousands_separator is None:
+        return
+    if not isinstance(thousands_separator, str):
+        raise TypeError("thousands_separator must be a string or None")
+    if len(thousands_separator) != 1:
+        raise ValueError("thousands_separator must be a single character")
+    if thousands_separator.isalnum() or thousands_separator in {'"', "\n", "\r"}:
+        raise ValueError(
+            "thousands_separator must be a single non-alphanumeric character"
+        )
+    if thousands_separator in {".", "+", "-"}:
+        raise ValueError(
+            "Invalid thousands_separator: '.', '+' and '-' are not allowed"
+        )
+
+
 def _validate_delimiter(delimiter: str) -> str:
     """Validate CSV delimiter."""
     if not isinstance(delimiter, str):
@@ -125,6 +144,7 @@ def read_csv(
     nrows: int | None = None,
     encoding: str = "utf-8",
     trim_headers: bool = True,
+    thousands_separator: str | None = None,
 ) -> ArFrame:
     """Read a CSV file into an ArFrame via C++ backend.
 
@@ -144,6 +164,14 @@ def read_csv(
         File encoding.
     trim_headers : bool, default True
         Strip leading/trailing whitespace from column names.
+    thousands_separator : str, optional
+        Single non-alphanumeric character used as a thousands separator
+        during numeric parsing.
+
+        Values containing delimiter characters must still be quoted
+        properly in the CSV input. For example, when using a comma
+        delimiter, the value "1,234" must be quoted, while unquoted
+        1,234 is interpreted as two separate fields.
 
     Returns
     -------
@@ -153,7 +181,10 @@ def read_csv(
     Raises
     ------
     ValueError
-        If file format is unsupported.
+        If file format is unsupported or if thousands_separator is invalid.
+
+    TypeError
+        If thousands_separator is not a string or None.
 
     CsvReadError
         If CSV input contains NUL bytes and appears binary or corrupted.
@@ -189,6 +220,7 @@ def read_csv(
     except FileNotFoundError:
         pass  # Let C++ backend handle or raise standard error
 
+    _validate_thousands_separator(thousands_separator)
     delimiter = _validate_delimiter(delimiter)
 
     config = _CsvConfig()
@@ -196,6 +228,7 @@ def read_csv(
     config.has_header = has_header
     config.encoding = encoding
     config.trim_headers = trim_headers
+    config.thousands_separator = thousands_separator
 
     if usecols is not None:
         config.usecols = _validate_usecols(usecols)
@@ -217,12 +250,75 @@ def read_csv(
     return ArFrame(cpp_frame)
 
 
+def write_csv(
+    frame: ArFrame,
+    path: str | os.PathLike[str],
+    *,
+    delimiter: str = ",",
+    write_header: bool = True,
+    line_terminator: str = "\n",
+) -> None:
+    """Write an ArFrame to a CSV file via C++ backend.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        The data frame to write.
+    path : str
+        Destination file path. Supports .csv, .txt, and .tsv extensions.
+    delimiter : str, default ","
+        Field delimiter character.
+    write_header : bool, default True
+        Whether to write the column header row.
+    line_terminator : str, default "\\n"
+        Line terminator to use between rows.
+
+    Raises
+    ------
+    ValueError
+        If file format is unsupported.
+    RuntimeError
+        If the file cannot be opened or written.
+
+    Examples
+    --------
+    >>> ar.write_csv(frame, "output.csv")
+    >>> ar.write_csv(frame, "output.tsv", delimiter="\\t")
+    """
+    path = os.fspath(path)
+    path_lower = path.lower()
+    if not (
+        path_lower.endswith(".csv")
+        or path_lower.endswith(".txt")
+        or path_lower.endswith(".tsv")
+    ):
+        raise ValueError(
+            f"Unsupported file format: {path}. Only .csv, .txt, and .tsv are supported."
+        )
+
+    if len(delimiter) != 1:
+        raise ValueError(f"delimiter must be a single character, got {delimiter!r}")
+
+    config = _CsvWriteConfig()
+    config.delimiter = delimiter
+    config.write_header = write_header
+    config.line_terminator = line_terminator
+
+    writer = _CsvWriter(config)
+    try:
+        writer.write(frame._frame, path)
+    except RuntimeError as e:
+        raise RuntimeError(str(e)) from e
+
+
 def scan_csv(
     path: str | os.PathLike[str],
     *,
     delimiter: str = ",",
     encoding: str = "utf-8",
     trim_headers: bool = True,
+    thousands_separator: str | None = None,
+    sample_size: int | None = None,
 ) -> dict[str, str]:
     """Return schema (column names + inferred types) without loading data.
 
@@ -237,6 +333,16 @@ def scan_csv(
         transcoded to infer the schema.
     trim_headers : bool, default True
         Strip leading/trailing whitespace from column names.
+    thousands_separator : str, optional
+        Single non-alphanumeric character used as a thousands separator
+        during numeric parsing.
+
+        Values containing delimiter characters must still be quoted
+        properly in the CSV input. For example, when using a comma
+        delimiter, the value "1,234" must be quoted, while unquoted
+        1,234 is interpreted as two separate fields.
+    sample_size : int, optional
+        Number of rows to read for type inference. If None, defaults to 100 rows.
 
     Returns
     -------
@@ -246,7 +352,10 @@ def scan_csv(
     Raises
     ------
     ValueError
-        If file format is unsupported.
+        If file format is unsupported or if thousands_separator is invalid.
+
+    TypeError
+        If thousands_separator is not a string or None.
 
     CsvReadError
         If CSV input contains NUL bytes and appears binary or corrupted.
@@ -284,12 +393,22 @@ def scan_csv(
     except FileNotFoundError:
         pass
 
+    _validate_thousands_separator(thousands_separator)
     delimiter = _validate_delimiter(delimiter)
 
     config = _CsvConfig()
     config.delimiter = delimiter
     config.encoding = encoding
     config.trim_headers = trim_headers
+    config.thousands_separator = thousands_separator
+
+    if sample_size is not None:
+        if not isinstance(sample_size, int) or isinstance(sample_size, bool):
+            raise TypeError("sample_size must be an integer.")
+        if sample_size <= 0:
+            raise ValueError("sample_size must be a positive integer greater than 0.")
+        config.sample_size = sample_size
+
     reader = _CsvReader(config)
     try:
         # Schema inference only needs a sample, avoiding full-file transcode.
@@ -300,7 +419,7 @@ def scan_csv(
             path,
             encoding,
             delimiter=delimiter,
-            sample_rows=10000,
+            sample_rows=100 if sample_size is None else sample_size,
         ) as native_path:
             return reader.scan_schema(native_path)
     except RuntimeError as e:

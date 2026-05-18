@@ -1,6 +1,33 @@
 """Tests for the pipeline function."""
 
+import importlib
+import threading
+from concurrent.futures import ThreadPoolExecutor
+
+import pandas as pd
+import pytest
+
 import arnio as ar
+
+pipeline_module = importlib.import_module("arnio.pipeline")
+
+
+@pytest.fixture(autouse=True)
+def restore_python_step_registry():
+    """Restore custom pipeline steps after each test.
+
+    Tests may register temporary custom steps. This fixture prevents those
+    registrations from leaking into other tests while preserving any steps
+    that were already registered before the test started.
+    """
+    with pipeline_module._REGISTRY_LOCK:
+        original_registry = dict(pipeline_module._PYTHON_STEP_REGISTRY)
+
+    yield
+
+    with pipeline_module._REGISTRY_LOCK:
+        pipeline_module._PYTHON_STEP_REGISTRY.clear()
+        pipeline_module._PYTHON_STEP_REGISTRY.update(original_registry)
 
 
 class TestPipeline:
@@ -117,6 +144,19 @@ class TestPipeline:
         assert list(df["value"]) == [0, 2, 5]
         assert list(df["label"]) == ["a", "b", "c"]
 
+    def test_pipeline_standardize_missing_tokens(self):
+        frame = ar.from_pandas(pd.DataFrame({"value": [1, 2, "N/A"]}))
+
+        result = ar.pipeline(
+            frame,
+            [
+                ("standardize_missing_tokens",),
+            ],
+        )
+        df = ar.to_pandas(result)
+
+        assert pd.isna(df["value"].iloc[2])
+
     def test_pipeline_mapping_shorthand(self, sample_csv):
         frame = ar.read_csv(sample_csv)
         result = ar.pipeline(
@@ -187,6 +227,152 @@ class TestPipeline:
         frame = ar.read_csv(sample_csv)
         result = ar.pipeline(frame, [])
         assert result.shape == frame.shape
+
+    def test_pipeline_return_metadata_disabled_by_default(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        result = ar.pipeline(
+            frame,
+            [
+                ("strip_whitespace",),
+            ],
+        )
+
+        assert isinstance(result, ar.ArFrame)
+
+    def test_pipeline_return_metadata_includes_step_timings(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        result, metadata = ar.pipeline(
+            frame,
+            [
+                ("strip_whitespace",),
+                ("normalize_case", {"case_type": "lower"}),
+            ],
+            return_metadata=True,
+        )
+
+        assert isinstance(result, ar.ArFrame)
+        assert list(metadata.keys()) == ["step_timings"]
+        assert len(metadata["step_timings"]) == 2
+        assert metadata["step_timings"][0]["step"] == "strip_whitespace"
+        assert metadata["step_timings"][1]["step"] == "normalize_case"
+        assert all(item["seconds"] >= 0 for item in metadata["step_timings"])
+
+    def test_pipeline_return_metadata_handles_python_steps(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        def add_marker(df, value="ok"):
+            df["marker"] = value
+            return df
+
+        ar.register_step("timed_python_step", add_marker)
+
+        result, metadata = ar.pipeline(
+            frame,
+            [
+                ("timed_python_step", {"value": "done"}),
+            ],
+            return_metadata=True,
+        )
+
+        df = ar.to_pandas(result)
+        assert set(df["marker"]) == {"done"}
+        assert len(metadata["step_timings"]) == 1
+        assert metadata["step_timings"][0]["step"] == "timed_python_step"
+        assert metadata["step_timings"][0]["seconds"] >= 0
+
+    def test_register_python_step(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        def add_marker(df, value="ok"):
+            df["marker"] = value
+            return df
+
+        ar.register_step("test_add_marker", add_marker)
+
+        result = ar.pipeline(
+            frame,
+            [
+                ("test_add_marker", {"value": "done"}),
+            ],
+        )
+
+        df = ar.to_pandas(result)
+        assert "marker" in df.columns
+        assert set(df["marker"]) == {"done"}
+
+    def test_concurrent_step_registration(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        def make_step(column_name):
+            def step(df):
+                df[column_name] = column_name
+                return df
+
+            return step
+
+        step_count = 25
+        step_names = [f"concurrent_step_{i}" for i in range(step_count)]
+
+        def register(name):
+            ar.register_step(name, make_step(name))
+
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            list(executor.map(register, step_names))
+
+        result = ar.pipeline(frame, [(name,) for name in step_names])
+        df = ar.to_pandas(result)
+
+        for name in step_names:
+            assert name in df.columns
+            assert set(df[name]) == {name}
+
+    def test_pipeline_uses_stable_registry_snapshot_during_execution(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        started = threading.Event()
+        continue_step = threading.Event()
+
+        def blocking_step(df):
+            started.set()
+            continue_step.wait(timeout=5)
+            df["blocking_step_done"] = True
+            return df
+
+        def late_step(df):
+            df["late_step_done"] = True
+            return df
+
+        ar.register_step("blocking_snapshot_step", blocking_step)
+
+        errors = []
+
+        def run_pipeline():
+            try:
+                ar.pipeline(
+                    frame,
+                    [
+                        ("blocking_snapshot_step",),
+                        ("late_snapshot_step",),
+                    ],
+                )
+            except Exception as exc:
+                errors.append(exc)
+
+        thread = threading.Thread(target=run_pipeline)
+        thread.start()
+
+        assert started.wait(timeout=5)
+
+        ar.register_step("late_snapshot_step", late_step)
+
+        continue_step.set()
+        thread.join(timeout=5)
+
+        assert len(errors) == 1
+        assert isinstance(errors[0], ar.UnknownStepError)
+        assert "late_snapshot_step" in str(errors[0])
 
     def test_invalid_step_name(self, sample_csv):
         frame = ar.read_csv(sample_csv)

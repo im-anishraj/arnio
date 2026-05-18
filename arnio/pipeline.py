@@ -5,7 +5,11 @@ Chained cleaning pipeline.
 
 from __future__ import annotations
 
-from typing import Callable
+from threading import Lock
+from time import perf_counter
+from typing import Any, Callable
+
+import pandas as pd
 
 from . import cleaning
 from .frame import ArFrame
@@ -20,6 +24,7 @@ _STEP_REGISTRY: dict[str, Callable] = {
     "drop_constant_columns": cleaning.drop_constant_columns,
     "clip_numeric": cleaning.clip_numeric,
     "strip_whitespace": cleaning.strip_whitespace,
+    "parse_bool_strings": cleaning.parse_bool_strings,
     "normalize_case": cleaning.normalize_case,
     "normalize_unicode": cleaning.normalize_unicode,
     "rename_columns": cleaning.rename_columns,
@@ -29,8 +34,10 @@ _STEP_REGISTRY: dict[str, Callable] = {
     "trim_column_names": cleaning.trim_column_names,
 }
 
-
-_PYTHON_STEP_REGISTRY: dict[str, Callable] = {}
+_REGISTRY_LOCK = Lock()
+_PYTHON_STEP_REGISTRY: dict[str, Callable] = {
+    "standardize_missing_tokens": cleaning.standardize_missing_tokens
+}
 
 
 def register_step(name: str, fn: Callable):
@@ -49,13 +56,17 @@ def register_step(name: str, fn: Callable):
     ...     return df.dropna(thresh=threshold)
     >>> ar.register_step("custom_clean", custom_clean)
     """
-    _PYTHON_STEP_REGISTRY[name] = fn
+    with _REGISTRY_LOCK:
+
+        _PYTHON_STEP_REGISTRY[name] = fn
 
 
 def pipeline(
     frame: ArFrame,
     steps: list[tuple],
-) -> ArFrame:
+    *,
+    return_metadata: bool = False,
+) -> ArFrame | tuple[ArFrame, dict[str, Any]]:
     """Apply a list of cleaning steps sequentially.
 
     Each step is a tuple of (step_name,) or (step_name, kwargs_dict).
@@ -68,6 +79,9 @@ def pipeline(
         Input data frame.
     steps : list[tuple]
         List of steps to apply. Each step is (name,) or (name, kwargs).
+    return_metadata : bool, default False
+        When True, also return a metadata dictionary with per-step timing
+        information in execution order.
 
     Returns
     -------
@@ -93,7 +107,11 @@ def pipeline(
     from .convert import from_pandas, to_pandas
     from .exceptions import UnknownStepError
 
+    with _REGISTRY_LOCK:
+        python_step_registry = dict(_PYTHON_STEP_REGISTRY)
+
     result = frame
+    step_timings: list[dict[str, Any]] = []
     for step in steps:
         if len(step) == 1:
             name = step[0]
@@ -112,19 +130,48 @@ def pipeline(
         if name in _STEP_REGISTRY:
             # C++ backed step - fast path
             fn = _STEP_REGISTRY[name]
+            started_at = perf_counter()
             if name in {"rename_columns", "cast_types"} and "mapping" not in kwargs:
                 result = fn(result, kwargs)
             else:
                 result = fn(result, **kwargs)
-        elif name in _PYTHON_STEP_REGISTRY:
+            if return_metadata:
+                step_timings.append(
+                    {
+                        "step": name,
+                        "seconds": round(perf_counter() - started_at, 9),
+                    }
+                )
+        elif name in python_step_registry:
             # Pure Python step - slower but contributor-friendly
+            started_at = perf_counter()
             df = to_pandas(result)
-            df = _PYTHON_STEP_REGISTRY[name](df, **kwargs)
-            result = from_pandas(df)
+            returned = python_step_registry[name](df, **kwargs)
+            if returned is None:
+                raise TypeError(
+                    f"Custom pipeline step '{name}' returned None. "
+                    "Steps must return a pandas DataFrame."
+                )
+            if not isinstance(returned, pd.DataFrame):
+                raise TypeError(
+                    f"Custom pipeline step '{name}' returned "
+                    f"{type(returned).__name__!r} instead of a pandas DataFrame. "
+                    "Steps must return a pandas DataFrame."
+                )
+            result = from_pandas(returned)
+            if return_metadata:
+                step_timings.append(
+                    {
+                        "step": name,
+                        "seconds": round(perf_counter() - started_at, 9),
+                    }
+                )
         else:
-            available = list(_STEP_REGISTRY.keys()) + list(_PYTHON_STEP_REGISTRY.keys())
+            available = list(_STEP_REGISTRY.keys()) + list(python_step_registry.keys())
             raise UnknownStepError(name, available)
 
+    if return_metadata:
+        return result, {"step_timings": step_timings}
     return result
 
 

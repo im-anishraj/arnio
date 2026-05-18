@@ -373,6 +373,70 @@ class TestClipNumeric:
             ar.clip_numeric(frame, lower=5, upper=1)
 
 
+class TestStandardizeMissingTokens:
+    def test_normal_case(self):
+        df = pd.DataFrame({"value": [1, 2, "N/A"]})
+        result = ar.standardize_missing_tokens(df)
+        assert isinstance(result, pd.DataFrame)
+        assert pd.isna(result["value"].iloc[2])
+
+    def test_normal_case_arframe(self):
+        frame = ar.from_pandas(pd.DataFrame({"value": [1, 2, "N/A"]}))
+        result = ar.standardize_missing_tokens(frame)
+        df = ar.to_pandas(result)
+        assert isinstance(result, ar.ArFrame)
+        assert pd.isna(df["value"].iloc[2])
+
+    def test_default_case(self):
+        df = pd.DataFrame({"value": [1, 2, "-"]})
+        result = ar.standardize_missing_tokens(df)
+        assert pd.isna(result["value"].iloc[2])
+
+    def test_default_case_subset(self):
+        df = pd.DataFrame(
+            {
+                "roll_no": ["001", "002", "003"],
+                "name": ["Alice", "Bob", "Carter"],
+                "marks": [100, 90, "-"],
+            }
+        )
+        result = ar.standardize_missing_tokens(df, subset=["marks"])
+        assert pd.isna(result["marks"].iloc[2])
+        assert result["name"].iloc[2] == "Carter"
+
+    def test_custom_case(self):
+        df = pd.DataFrame({"value": [1, 2, "unknown"]})
+        result = ar.standardize_missing_tokens(df, tokens=["unknown"])
+        assert pd.isna(result["value"].iloc[2])
+
+    def test_custom_case_subset(self):
+        df = pd.DataFrame(
+            {
+                "roll_no": ["001", "002", "003"],
+                "name": ["Alice", "Bob", "Carter"],
+                "marks": [100, 90, "unknown"],
+            }
+        )
+        result = ar.standardize_missing_tokens(df, tokens=["unknown"], subset=["marks"])
+        assert pd.isna(result["marks"].iloc[2])
+        assert result["name"].iloc[2] == "Carter"
+
+    def test_non_string_columns(self):
+        df = pd.DataFrame({"value": [1, 2, 3]})
+        result = ar.standardize_missing_tokens(df)
+        assert result["value"].iloc[0] == 1
+
+    def test_unchanged_columns(self):
+        df = pd.DataFrame({"value": [1, 2, "-"]})
+        result = ar.standardize_missing_tokens(df, tokens=[])
+        assert result["value"].iloc[2] == "-"
+
+    def test_standardize_missing_tokens_unknown_subset_column_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"value": [1, 2, 3]}))
+        with pytest.raises(ValueError, match="Unknown columns in subset"):
+            ar.standardize_missing_tokens(frame, subset=["missing"])
+
+
 class TestStripWhitespace:
     def test_strip(self, csv_with_whitespace):
         frame = ar.read_csv(csv_with_whitespace)
@@ -463,6 +527,224 @@ class TestNormalizeUnicode:
         assert result_df["text"].iloc[0] == "café"
 
 
+class TestParseBoolStrings:
+    def test_parse_basic_bool_strings(self):
+        import pandas as pd
+
+        df = pd.DataFrame(
+            {
+                "active": ["YES", "no", "True", "0"],
+            }
+        )
+
+        frame = ar.from_pandas(df)
+
+        result = ar.pipeline(
+            frame,
+            [
+                ("parse_bool_strings",),
+            ],
+        )
+
+        cleaned = ar.to_pandas(result)
+
+        assert cleaned["active"].tolist() == [True, False, True, False]
+
+    def test_parse_bool_strings_preserves_unknown_values(self):
+        import pandas as pd
+
+        df = pd.DataFrame(
+            {
+                "active": ["YES", "maybe", "0"],
+            }
+        )
+
+        frame = ar.from_pandas(df)
+
+        result = ar.pipeline(
+            frame,
+            [
+                ("parse_bool_strings",),
+            ],
+        )
+
+        cleaned = ar.to_pandas(result)
+
+        assert cleaned["active"].tolist() == [
+            "True",
+            "maybe",
+            "False",
+        ]
+
+    def test_parse_bool_strings_mixed_object_column(self):
+        import pandas as pd
+
+        df = pd.DataFrame(
+            {
+                "active": ["YES", 123, "0"],
+            },
+            dtype=object,
+        )
+
+        frame = ar.from_pandas(df)
+
+        result = ar.pipeline(
+            frame,
+            [
+                ("parse_bool_strings",),
+            ],
+        )
+
+        cleaned = ar.to_pandas(result)
+
+        assert cleaned["active"].tolist() == [
+            "True",
+            "123",
+            "False",
+        ]
+
+    def test_parse_bool_strings_direct_usage(self):
+        import pandas as pd
+
+        df = pd.DataFrame(
+            {
+                "active": [" YES ", "no", "maybe", None],
+            }
+        )
+
+        frame = ar.from_pandas(df)
+
+        result = ar.parse_bool_strings(frame)
+
+        cleaned = ar.to_pandas(result)
+
+        assert cleaned["active"].tolist()[:3] == [
+            "True",
+            "False",
+            "maybe",
+        ]
+
+        assert pd.isna(cleaned["active"].iloc[3])
+
+    def test_parse_bool_strings_subset(self):
+        import pandas as pd
+
+        df = pd.DataFrame(
+            {
+                "active": ["YES", "no"],
+                "other": ["YES", "no"],
+            },
+            dtype=object,
+        )
+
+        frame = ar.from_pandas(df)
+
+        result = ar.parse_bool_strings(
+            frame,
+            subset=["active"],
+        )
+
+        cleaned = ar.to_pandas(result)
+
+        assert cleaned["active"].tolist() == [True, False]
+        assert cleaned["other"].tolist() == ["YES", "no"]
+
+    def test_parse_bool_strings_custom_values(self):
+        import pandas as pd
+
+        df = pd.DataFrame(
+            {
+                "status": [
+                    "enabled",
+                    "disabled",
+                    " ENABLED ",
+                    " DISABLED ",
+                    "maybe",
+                ],
+            },
+            dtype=object,
+        )
+
+        frame = ar.from_pandas(df)
+
+        result = ar.parse_bool_strings(
+            frame,
+            true_values={"enabled"},
+            false_values={"disabled"},
+        )
+
+        cleaned = ar.to_pandas(result)
+
+        assert cleaned["status"].tolist() == [
+            "True",
+            "False",
+            "True",
+            "False",
+            "maybe",
+        ]
+
+    def test_parse_bool_strings_overlap_rejected(self):
+        import pandas as pd
+
+        df = pd.DataFrame(
+            {
+                "active": ["yes", "no"],
+            },
+            dtype=object,
+        )
+
+        frame = ar.from_pandas(df)
+
+        with pytest.raises(ValueError):
+            ar.parse_bool_strings(
+                frame,
+                true_values={"yes"},
+                false_values={" YES "},
+            )
+
+    def test_parse_bool_strings_invalid_subset_type(self):
+        import pandas as pd
+
+        df = pd.DataFrame(
+            {
+                "active": ["YES", "no"],
+            }
+        )
+
+        frame = ar.from_pandas(df)
+
+        with pytest.raises(TypeError):
+            ar.parse_bool_strings(frame, subset="active")
+
+    def test_parse_bool_strings_empty_subset(self):
+        import pandas as pd
+
+        df = pd.DataFrame(
+            {
+                "active": ["YES", "no"],
+            }
+        )
+
+        frame = ar.from_pandas(df)
+
+        with pytest.raises(ValueError):
+            ar.parse_bool_strings(frame, subset=[])
+
+    def test_parse_bool_strings_missing_subset_column(self):
+        import pandas as pd
+
+        df = pd.DataFrame(
+            {
+                "active": ["YES", "no"],
+            }
+        )
+
+        frame = ar.from_pandas(df)
+
+        with pytest.raises(ValueError):
+            ar.parse_bool_strings(frame, subset=["missing"])
+
+
 class TestRenameColumns:
     def test_rename(self, sample_csv):
         frame = ar.read_csv(sample_csv)
@@ -470,6 +752,30 @@ class TestRenameColumns:
         assert "full_name" in result.columns
         assert "years" in result.columns
         assert "name" not in result.columns
+
+    def test_rename_rejects_non_mapping(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(TypeError, match="mapping must be a mapping"):
+            ar.rename_columns(frame, [("name", "full_name")])
+
+    def test_rename_rejects_non_string_target(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(TypeError, match="values must be non-empty strings"):
+            ar.rename_columns(frame, {"name": 123})
+
+    def test_rename_rejects_duplicate_targets(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(ValueError, match="target names would create duplicates"):
+            ar.rename_columns(frame, {"name": "person", "age": "person"})
+
+    def test_rename_rejects_collision_with_unmapped_column(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(ValueError, match="collide with existing columns"):
+            ar.rename_columns(frame, {"name": "age"})
 
 
 class TestTrimColumnNames:
@@ -521,6 +827,34 @@ class TestCastTypes:
         with pytest.raises(ar.TypeCastError, match="Unknown target dtype"):
             ar.cast_types(frame, {"age": "decimal"})
 
+    def test_cast_invalid_value_raises_by_default(self):
+        frame = ar.from_pandas(pd.DataFrame({"age": ["1", "bad"]}))
+
+        with pytest.raises(ar.TypeCastError, match="Cannot cast column 'age'"):
+            ar.cast_types(frame, {"age": "int64"})
+
+    def test_cast_invalid_value_can_be_coerced(self):
+        frame = ar.from_pandas(pd.DataFrame({"age": ["1", "bad"]}))
+
+        result = ar.cast_types(frame, {"age": "int64"}, errors="coerce")
+        df = ar.to_pandas(result)
+
+        assert result.dtypes["age"] == "int64"
+        assert df["age"].iloc[0] == 1
+        assert pd.isna(df["age"].iloc[1])
+
+    def test_cast_rejects_invalid_errors_policy(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(ValueError, match="errors must be either"):
+            ar.cast_types(frame, {"age": "int64"}, errors="ignore")
+
+    def test_cast_bool_rejects_unknown_strings(self):
+        frame = ar.from_pandas(pd.DataFrame({"active": ["true", "maybe"]}))
+
+        with pytest.raises(ar.TypeCastError, match="Cannot cast column 'active'"):
+            ar.cast_types(frame, {"active": "bool"})
+
 
 class TestCleanAPI:
     def test_clean_defaults(self, csv_with_whitespace):
@@ -561,6 +895,26 @@ class TestFilterRows:
 
         assert len(result) == 1
         assert result.iloc[0]["age"] == 30
+
+    def test_filter_rows_with_missing_values_does_not_crash(self):
+        import numpy as np
+        import pandas as pd
+
+        df = pd.DataFrame({"age": [20, 30, np.nan, pd.NA, None]})
+
+        result = ar.filter_rows(df, "age", ">", 25)
+
+        assert len(result) == 1
+        assert result.iloc[0]["age"] == 30
+
+    def test_filter_rows_arframe_resets_row_positions(self):
+        frame = ar.from_pandas(pd.DataFrame({"age": [10, 30, 40]}))
+
+        result = ar.filter_rows(frame, "age", ">", 20)
+        df = ar.to_pandas(result)
+
+        assert list(df.index) == [0, 1]
+        assert list(df["age"]) == [30, 40]
 
 
 class TestRoundNumericColumns:
@@ -805,3 +1159,40 @@ class TestSafeDivideColumns:
             assert "already exists" in str(w[0].message)
         df = ar.to_pandas(result)
         assert df["ratio"].iloc[0] == 2.0
+
+    def test_string_zero_denominator_is_treated_as_zero(self):
+        frame = ar.from_pandas(
+            pd.DataFrame({"revenue": ["100", "200"], "cost": ["0", "50"]})
+        )
+
+        result = ar.safe_divide_columns(
+            frame,
+            numerator="revenue",
+            denominator="cost",
+            output_column="ratio",
+        )
+        df = ar.to_pandas(result)
+
+        assert list(df["ratio"]) == [0.0, 4.0]
+
+    def test_nonnumeric_numerator_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"revenue": ["oops"], "cost": ["10"]}))
+
+        with pytest.raises(ValueError, match="Numerator column 'revenue'"):
+            ar.safe_divide_columns(
+                frame,
+                numerator="revenue",
+                denominator="cost",
+                output_column="ratio",
+            )
+
+    def test_nonnumeric_denominator_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"revenue": ["100"], "cost": ["oops"]}))
+
+        with pytest.raises(ValueError, match="Denominator column 'cost'"):
+            ar.safe_divide_columns(
+                frame,
+                numerator="revenue",
+                denominator="cost",
+                output_column="ratio",
+            )

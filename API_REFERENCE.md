@@ -271,6 +271,11 @@ ops = [
 df = ar.pipeline(df, ops)
 ```
 
+```python
+clean, metadata = ar.pipeline(df, ops, return_metadata=True)
+print(metadata["step_timings"])
+```
+
 ### register_step
 
 Extend the pipeline by adding your own custom Python functions.
@@ -300,6 +305,11 @@ Profile the data and immediately apply repairs.
 
 Summary of structural data quality metrics.
 
+#### Methods:
+* **`to_html(file_path: str | None = None) -> str`**: Generates a self-contained, offline-friendly, beautiful HTML dashboard report of your dataset's metrics, columns, and cleaning suggestions. Dynamically escapes all data values to prevent XSS. If `file_path` is provided, writes the HTML output to a file.
+* **`to_markdown() -> str`**: Returns a GitHub-friendly markdown representation of the report.
+* **`summary() -> dict`**: Returns a high-signal dictionary representation of the report metrics.
+
 ### ColumnProfile
 
 Detailed health check for a single column.
@@ -308,6 +318,9 @@ Detailed health check for a single column.
 report = ar.profile(df)
 summary = report.summary()
 suggestions = ar.suggest_cleaning(df)
+
+# Export the report as a beautiful, self-contained HTML file
+html_report = report.to_html(file_path="quality_report.html")
 
 safe = ar.auto_clean(df)
 print(ar.to_pandas(safe))

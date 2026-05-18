@@ -77,6 +77,18 @@ df = ar.to_pandas(clean)
 safe_df = ar.to_pandas(clean, copy=True)
 ```
 
+Need step timings for debugging? Opt in without changing the default pipeline return type:
+
+```python
+clean, metadata = ar.pipeline(
+    frame,
+    [("strip_whitespace",), ("drop_duplicates",)],
+    return_metadata=True,
+)
+
+print(metadata["step_timings"])
+```
+
 Already have a pandas `DataFrame`? Use Arnio in-place in your existing pandas
 workflow:
 
@@ -111,6 +123,24 @@ print(selected.columns)
 
 <br>
 
+### Security note: CSV formula injection
+
+Arnio preserves cell values when reading CSV files. It does not rewrite strings that
+begin with spreadsheet formula prefixes such as `=`, `+`, `-`, or `@`.
+
+If you export Arnio-cleaned data back to CSV and expect users to open that file in
+Excel, Google Sheets, LibreOffice, or another spreadsheet application, treat
+untrusted text fields as potentially executable spreadsheet formulas. Before
+exporting, escape or neutralize formula-like strings in user-controlled columns,
+for example by prefixing a single quote or another project-approved escape marker.
+
+This is especially important for customer names, notes, comments, imported form
+fields, and any other free-text values that may come from outside your trust
+boundary. Arnio focuses on parsing, validation, profiling, and cleanup; final CSV
+export policy should stay explicit in the application that writes the file.
+
+<br>
+
 <details>
 <summary><b>📸 Peek at a 100 GB file without loading it</b></summary>
 <br>
@@ -118,7 +148,8 @@ print(selected.columns)
 `scan_csv` reads only the header + a sample to infer the schema. Zero data loaded.
 
 ```python
-schema = ar.scan_csv("100GB_file.csv")
+# Pass sample_size to control how many rows are evaluated for type inference
+schema = ar.scan_csv("100GB_file.csv", sample_size=500)
 # {'id': 'int64', 'name': 'string', 'is_active': 'bool', 'revenue': 'float64'}
 ```
 
@@ -139,6 +170,35 @@ print(frame.preview(n=10))  # first 10 rows
 ```
 
 Raises `ValueError` for invalid `n` (zero, negative, or non-integer).
+</details>
+
+<details>
+<summary><b>💰 Financial Decimal Support</b></summary>
+<br>
+
+`arnio` provides support for converting Python `decimal.Decimal` objects.
+
+* **Behavior**: Python `Decimal` objects are automatically preserved as high-precision strings during serialization/binding to prevent floating-point precision loss.
+* **Caveat**: When reading back into Pandas, `to_pandas()` returns these as string (`object` dtype) columns. You will need to explicitly cast them back to `Decimal` objects on the resulting DataFrame if you want to resume exact math.
+
+Example:
+
+```python
+from decimal import Decimal
+
+import pandas as pd
+
+import arnio as ar
+
+df = pd.DataFrame({
+    "price": [Decimal("19.99"), Decimal("29.95")]
+})
+
+frame = ar.from_pandas(df)  # Decimal values safely preserved as exact strings
+result = ar.to_pandas(frame)
+# result["price"] will be string objects ["19.99", "29.95"]
+```
+
 </details>
 
 <details>
@@ -215,7 +275,9 @@ clean_df = df.arnio.clean(drop_duplicates=True)
 quality = clean_df.arnio.profile()
 validation = clean_df.arnio.validate({
     "email": ar.Email(nullable=False),
+    "user_code": ar.Regex(r"^USR-\d{4}$", nullable=False),
     "age": ar.Int64(nullable=True, min=0),
+    "score": ar.Custom("positive"),
 })
 ```
 
@@ -223,6 +285,46 @@ This keeps pandas as the analysis tool while Arnio handles the preparation,
 quality, and validation layer.
 
 > Product direction: **[PROJECT_DIRECTION.md](PROJECT_DIRECTION.md)**
+
+## 📘 Examples
+
+These examples demonstrate how Arnio integrates with the Python data ecosystem.
+
+They follow a simple workflow:
+
+**clean/validate data with Arnio → analyze with other tools**
+
+### 🔹 Interoperability Examples
+
+- **Arnio + pandas**
+  Clean and normalize messy tabular data using Arnio, then analyze it using pandas.
+  Run:
+```bash
+  python examples/arnio_with_pandas.py
+```
+
+- **Arnio + NumPy**
+  Prepare numeric data safely using Arnio, then perform computations using NumPy.
+  Run:
+```bash
+  python examples/arnio_with_numpy.py
+```
+
+- **Arnio + scikit-learn**
+  Prepare messy data with Arnio, then train a model with scikit-learn.
+  Run:
+```bash
+  python examples/arnio_with_sklearn.py
+```
+
+- **Arnio + DuckDB**
+  Clean data with Arnio, then run SQL queries using DuckDB.
+  Run:
+```bash
+  python examples/arnio_with_duckdb.py
+```
+
+
 
 <br>
 
@@ -438,7 +540,7 @@ Total avg (Read+Strict)       0.077             4.52
 
 ## 🧰 Cleaning primitives
 
-Most operations below run natively in C++. Currently, `filter_rows` and `replace_values` run via the Python (pandas) backend and may be optimized in C++ later.
+Most operations below run natively in C++. Currently, `filter_rows`, `replace_values` and `standardize_missing_tokens` run via the Python (pandas) backend and may be optimized in C++ later.
 
 | Primitive | What it does | Example |
 |:---|:---|:---|
@@ -451,6 +553,7 @@ Most operations below run natively in C++. Currently, `filter_rows` and `replace
 | `drop_constant_columns` | Remove columns with only one unique value | `ar.drop_constant_columns(frame)` |
 | `clip_numeric` | Clip numeric values to lower and/or upper bounds | `ar.clip_numeric(frame, lower=0, upper=100)` |
 | `strip_whitespace` | Trim leading/trailing spaces from strings | `ar.strip_whitespace(frame)` |
+| `standardize_missing_tokens` | Replace common missing-value strings with NaN | `ar.standardize_missing_tokens(frame)` |
 | `normalize_case` | Force lower/upper/title case | `ar.normalize_case(frame, case_type="title")` |
 | `rename_columns` | Rename columns via mapping | `ar.rename_columns(frame, {"old": "new"})` |
 | `cast_types` | Cast column types | `ar.cast_types(frame, {"age": "int64"})` |
@@ -488,6 +591,7 @@ Or compose them all into a **pipeline**:
 clean = ar.pipeline(frame, [
     ("validate_columns_exist", {"columns": ["name", "city", "revenue"]}),
     ("strip_whitespace",),
+    ("standardize_missing_tokens",),
     ("normalize_case", {"case_type": "lower"}),
     ("fill_nulls", {"value": "unknown", "subset": ["city"]}),
     ("drop_duplicates", {"keep": "first"}),
@@ -571,6 +675,16 @@ result = ar.pipeline(frame, [
 
 Useful for data auditing — inspect what's missing before deciding how to fill or drop.
 
+### Boolean string normalization
+
+```python
+clean = ar.parse_bool_strings(frame)
+```
+
+This normalizes values such as `"yes"`, `"no"`, `"true"`, `"false"`, `"y"`, `"n"`, `"1"`, and `"0"` into boolean values while preserving unsupported values unchanged.
+
+Columns containing both parsed boolean values and unsupported string values may round-trip as strings because of ArFrame column typing semantics.
+
 <br>
 ### 🔢 Safe column division
 
@@ -643,17 +757,31 @@ clean = ar.pipeline(frame, suggestions)
 For production data contracts:
 
 ```python
+# Register a custom validator once, then reference it by name in any schema
+ar.register_validator("positive", lambda v: v > 0)
+
 schema = ar.Schema({
     "id": ar.Int64(nullable=False, unique=True),
     "email": ar.Email(nullable=False),
-    # CountryCode expects uppercase ISO alpha-2 values, for example IN, US, GB.
-    "country": ar.CountryCode(nullable=False),
+
+    "user_type": ar.String(nullable=False),
+
+    # country becomes required when user_type == "international"
+    "country": ar.String(
+        nullable=True,
+        required_if=("user_type", "international"),
+    ),
+
     "username": ar.String(min_length=3, max_length=20),
-    "revenue": ar.Float64(nullable=True, min=0),
+    "user_code": ar.Regex(r"^USR-\d{4}$", nullable=False),
+    "revenue": ar.Custom("positive", nullable=True),
+    "signup_date": ar.Date(nullable=False),
     "created_at": ar.DateTime(nullable=False, format="%Y-%m-%d"),
 })
 
+
 result = ar.validate(frame, schema)
+
 if not result.passed:
     summary = result.summary()
     print(summary["issues_by_rule"])
@@ -662,6 +790,11 @@ if not result.passed:
     print(result.to_pandas())
     print(result.to_markdown(max_issues=10))
 ```
+
+In this example, `country` becomes required only when
+`user_type == "international"`.
+
+Date validates strict YYYY-MM-DD calendar dates.
 
 `ValidationResult.to_markdown()` is useful in CI logs, GitHub comments, or data quality reports because it renders a compact validation summary plus a GitHub-friendly issue table.
 
@@ -759,7 +892,31 @@ data = {
 df = ar.from_pandas(pd.DataFrame(data))
 # Bounded profiling for large datasets (controls how many sample values are kept)
 report = ar.profile(df, sample_size=5)
+safe_report = report.to_dict(redact_sample_values=True)
 ```
+
+Sample output now includes quantiles for numeric columns:
+
+```json
+{
+  "age": {
+    "dtype": "float64",
+    "mean": 35.2,
+    "std": 10.1,
+    "min": 18.0,
+    "max": 60.0,
+    "q25": 27.5,
+    "q50": 35.0,
+    "q75": 44.0,
+    "q95": 57.0,
+    "null_count": 0
+  }
+}
+```
+
+Use `report.to_dict(redact_sample_values=True)` when sharing reports outside your team and you want to avoid exposing raw example/sample values.
+
+> **Scoring Contract:** The `quality_score` starts at 100.0 and subtracts capped penalties for duplicates, nulls, and suggested dtype mismatches. The `score_components` field exposes these penalties as negative values. (Note: Semantic-validity penalties are intentionally out of scope for the current implementation.)
 
 ### 1. Terminal Representation (Simplified Example)
 *A simplified view of the standard string representation of the report object:*
@@ -770,9 +927,11 @@ DataQualityReport(
     column_count=3,
     memory_usage=733,
     duplicate_rows=0,
+    quality_score=100.0,
+    score_components={},
     columns={
         'user_id': ColumnProfile(dtype='int64', semantic_type='identifier', unique_count=4),
-        'email': ColumnProfile(dtype='string', semantic_type='categorical', null_count=1, unique_ratio=0.666667),
+        'email': ColumnProfile(dtype='string', semantic_type='categorical', null_count=1, unique_ratio=0.666667, min=13, max=13, mean=13.0),
         'score': ColumnProfile(dtype='float64', semantic_type='numeric', mean=87.9, min=85.5, max=90.0)
     }
 )
@@ -788,6 +947,8 @@ DataQualityReport(
   "memory_usage": 733,
   "duplicate_rows": 0,
   "duplicate_ratio": 0.0,
+  "quality_score": 100.0,
+  "score_components": {},
   "columns": {
     "user_id": {
       "dtype": "int64",
@@ -800,6 +961,9 @@ DataQualityReport(
       "semantic_type": "categorical",
       "null_count": 1,
       "unique_ratio": 0.666667,
+      "min": 13,
+      "max": 13,
+      "mean": 13.0,
       "warnings": ["contains_nulls"]
     },
     "score": {
@@ -820,7 +984,15 @@ DataQualityReport(
         {"value": "Paris", "count": 2, "ratio": 0.333}
       ]
     }
-  }
+  },
+  "suggestions": [
+    {
+      "step": "cast_types",
+      "kwargs": {"score": "float64"},
+      "confidence_score": 0.95,
+      "confidence_reason": "Column 'score' conforms perfectly to float64 structure."
+    }
+  ]
 }
 ```
 
@@ -833,6 +1005,7 @@ DataQualityReport(
 | **Column Count** | 3 |
 | **Memory Usage** | 733 bytes |
 | **Duplicates** | 0 (0.0%) |
+| **Quality Score** | 100.0 |
 <br>
 
 ## 🗺️ Roadmap
