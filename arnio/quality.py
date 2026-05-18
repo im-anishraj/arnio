@@ -90,6 +90,7 @@ class ColumnProfile:
     min: Any = None
     max: Any = None
     mean: float | None = None
+    std: float | None = None
     q25: float | None = None
     q50: float | None = None
     q75: float | None = None
@@ -120,6 +121,7 @@ class ColumnProfile:
             "min": _clean_scalar(self.min),
             "max": _clean_scalar(self.max),
             "mean": self.mean,
+            "std": self.std,
             **(
                 {
                     "q25": _clean_scalar(self.q25),
@@ -394,6 +396,7 @@ class DataQualityReport:
                     "min": _clean_scalar(column.min),
                     "max": _clean_scalar(column.max),
                     "mean": column.mean,
+                    "std": column.std,
                     **(
                         {
                             "q25": _clean_scalar(column.q25),
@@ -410,6 +413,28 @@ class DataQualityReport:
                 for column in self.columns.values()
             ]
         )
+
+
+@dataclass(frozen=True)
+class ProfileComparison:
+    """Structured drift comparison between two quality profiles."""
+
+    left_profile: DataQualityReport
+    right_profile: DataQualityReport
+    drift_report: dict[str, dict[str, Any]]
+    status_counts: dict[str, int] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-friendly dictionary representation."""
+        return {
+            "left_profile": self.left_profile.to_dict(),
+            "right_profile": self.right_profile.to_dict(),
+            "status_counts": dict(self.status_counts),
+            "drift_report": {
+                name: _clean_drift_entry(entry)
+                for name, entry in self.drift_report.items()
+            },
+        }
 
 
 def profile(frame: ArFrame, *, sample_size: int = 5) -> DataQualityReport:
@@ -482,6 +507,74 @@ def profile(frame: ArFrame, *, sample_size: int = 5) -> DataQualityReport:
     )
 
 
+def compare_profiles(
+    profile_a: DataQualityReport,
+    profile_b: DataQualityReport,
+) -> ProfileComparison:
+    """Compare two data-quality profiles for drift.
+
+    The comparison is column-wise and focuses on changes in null ratios, dtype,
+    uniqueness, and numeric distribution metrics. Numeric columns compare
+    ``mean``, ``std``, ``min``, and ``max`` when available.
+
+    Parameters
+    ----------
+    profile_a, profile_b : DataQualityReport
+        Profiles produced by :func:`profile`.
+
+    Returns
+    -------
+    ProfileComparison
+        Structured comparison containing a ``drift_report`` entry for each
+        shared column.
+
+    Raises
+    ------
+    ValueError
+        If the two profiles do not cover the same set of columns.
+
+    Examples
+    --------
+    >>> baseline = ar.profile(ar.read_csv("baseline.csv"))
+    >>> current = ar.profile(ar.read_csv("current.csv"))
+    >>> comparison = ar.compare_profiles(baseline, current)
+    >>> comparison.drift_report["score"]["status"]
+    'warning'
+    """
+    if not isinstance(profile_a, DataQualityReport) or not isinstance(
+        profile_b, DataQualityReport
+    ):
+        raise TypeError("compare_profiles expects two DataQualityReport instances")
+
+    columns_a = set(profile_a.columns)
+    columns_b = set(profile_b.columns)
+    if columns_a != columns_b:
+        missing_from_a = sorted(columns_b - columns_a)
+        missing_from_b = sorted(columns_a - columns_b)
+        raise ValueError(
+            "Profiles have incompatible schemas: "
+            f"missing from profile_a={missing_from_a}, "
+            f"missing from profile_b={missing_from_b}"
+        )
+
+    drift_report: dict[str, dict[str, Any]] = {}
+    status_counts = {"ok": 0, "warning": 0, "changed": 0}
+
+    for name in sorted(columns_a):
+        entry = _compare_column_profiles(
+            profile_a.columns[name], profile_b.columns[name]
+        )
+        drift_report[name] = entry
+        status_counts[entry["status"]] += 1
+
+    return ProfileComparison(
+        left_profile=profile_a,
+        right_profile=profile_b,
+        drift_report=drift_report,
+        status_counts=status_counts,
+    )
+
+
 def _calculate_quality_score(
     row_count: int,
     duplicate_ratio: float,
@@ -513,6 +606,125 @@ def _calculate_quality_score(
     )
 
     return quality_score, score_components
+
+
+def _merge_status(current: str, new_status: str) -> str:
+    order = {"ok": 0, "warning": 1, "changed": 2}
+    return new_status if order[new_status] > order[current] else current
+
+
+def _numeric_delta(value_a: Any, value_b: Any) -> float | None:
+    if isinstance(value_a, (int, float)) and isinstance(value_b, (int, float)):
+        return abs(float(value_a) - float(value_b))
+    return None
+
+
+def _clean_drift_entry(entry: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "status": entry["status"],
+        "changes": {
+            metric: {key: _clean_scalar(value) for key, value in change.items()}
+            for metric, change in entry["changes"].items()
+        },
+        "reasons": list(entry["reasons"]),
+    }
+
+
+def _compare_column_profiles(
+    column_a: ColumnProfile,
+    column_b: ColumnProfile,
+) -> dict[str, Any]:
+    changes: dict[str, dict[str, Any]] = {}
+    reasons: list[str] = []
+    status = "ok"
+
+    def add_change(
+        metric: str,
+        value_a: Any,
+        value_b: Any,
+        *,
+        warning_threshold: float | None = None,
+        changed_threshold: float | None = None,
+        reason: str | None = None,
+    ) -> None:
+        nonlocal status
+        if value_a == value_b:
+            return
+
+        delta = _numeric_delta(value_a, value_b)
+        changes[metric] = {
+            "baseline": _clean_scalar(value_a),
+            "comparison": _clean_scalar(value_b),
+            "delta": _clean_scalar(delta),
+        }
+
+        metric_status = "warning"
+        if changed_threshold is not None and delta is not None and delta > changed_threshold:
+            metric_status = "changed"
+        elif warning_threshold is not None and delta is not None and delta > warning_threshold:
+            metric_status = "warning"
+        elif warning_threshold is None and changed_threshold is None:
+            metric_status = "changed"
+
+        status = _merge_status(status, metric_status)
+        if reason is not None:
+            reasons.append(reason)
+
+    add_change(
+        "dtype",
+        column_a.dtype,
+        column_b.dtype,
+        reason=f"dtype changed from {column_a.dtype} to {column_b.dtype}",
+    )
+    add_change(
+        "null_ratio",
+        column_a.null_ratio,
+        column_b.null_ratio,
+        warning_threshold=0.1,
+        changed_threshold=0.25,
+        reason="null ratio changed",
+    )
+    add_change(
+        "unique_count",
+        column_a.unique_count,
+        column_b.unique_count,
+        warning_threshold=max(1.0, column_a.row_count * 0.1, column_b.row_count * 0.1),
+        changed_threshold=max(2.0, column_a.row_count * 0.25, column_b.row_count * 0.25),
+        reason="unique count changed",
+    )
+    add_change(
+        "unique_ratio",
+        column_a.unique_ratio,
+        column_b.unique_ratio,
+        warning_threshold=0.1,
+        changed_threshold=0.25,
+        reason="unique ratio changed",
+    )
+
+    if _is_numeric_dtype(column_a.dtype) and _is_numeric_dtype(column_b.dtype):
+        for metric in ("mean", "std", "min", "max"):
+            value_a = getattr(column_a, metric)
+            value_b = getattr(column_b, metric)
+            if value_a is None or value_b is None:
+                continue
+            scale = max(abs(float(value_a)), abs(float(value_b)), 1.0)
+            add_change(
+                metric,
+                value_a,
+                value_b,
+                warning_threshold=scale,
+                changed_threshold=scale * 2.0,
+                reason=f"numeric {metric} changed",
+            )
+
+    if not changes:
+        reasons.append("no drift detected")
+
+    return {
+        "status": status,
+        "changes": changes,
+        "reasons": reasons,
+    }
 
 
 def suggest_cleaning(
@@ -699,6 +911,7 @@ def _profile_column(
     whitespace_count = 0
     top_values = None
     q25 = q50 = q75 = q95 = None
+    std = None
     if dtype == "string" or pd.api.types.is_string_dtype(series.dtype):
         as_text = non_null.astype("string")
         stripped = as_text.str.strip()
@@ -714,6 +927,7 @@ def _profile_column(
             min_value = numeric_non_null.min()
             max_value = numeric_non_null.max()
             mean = float(numeric_non_null.mean())
+            std = float(numeric_non_null.std(ddof=0))
             quantiles = numeric_non_null.quantile([0.25, 0.50, 0.75, 0.95])
             q25 = round(float(quantiles.loc[0.25]), 4)
             q50 = round(float(quantiles.loc[0.50]), 4)
@@ -752,6 +966,7 @@ def _profile_column(
         min=min_value,
         max=max_value,
         mean=mean,
+        std=std,
         q25=q25,
         q50=q50,
         q75=q75,

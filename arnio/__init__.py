@@ -44,7 +44,9 @@ from .quality import (
     ColumnProfile,
     DataQualityReport,
     auto_clean,
+    compare_profiles,
     profile,
+    ProfileComparison,
     suggest_cleaning,
 )
 from .schema import (
@@ -105,10 +107,12 @@ __all__ = [
     "register_step",
     # Data quality
     "profile",
+    "compare_profiles",
     "suggest_cleaning",
     "auto_clean",
     "ColumnProfile",
     "DataQualityReport",
+    "ProfileComparison",
     # Schema validation
     "Schema",
     "Field",

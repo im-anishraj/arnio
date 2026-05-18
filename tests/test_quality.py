@@ -37,6 +37,53 @@ def test_report_summary_and_pandas_output(csv_with_whitespace):
     assert set(df["name"]) == {"name", "city"}
 
 
+def test_compare_profiles_identical_profiles_are_ok():
+    frame = ar.from_pandas(pd.DataFrame({"score": [10.0, 11.0, 12.0], "city": ["a", "b", "a"]}))
+
+    comparison = ar.compare_profiles(ar.profile(frame), ar.profile(frame))
+
+    assert set(comparison.drift_report) == {"score", "city"}
+    assert all(entry["status"] == "ok" for entry in comparison.drift_report.values())
+    assert comparison.status_counts == {"ok": 2, "warning": 0, "changed": 0}
+
+
+def test_compare_profiles_detects_numeric_drift():
+    baseline = ar.profile(ar.from_pandas(pd.DataFrame({"score": [10.0, 10.0, 10.0]})))
+    current = ar.profile(ar.from_pandas(pd.DataFrame({"score": [20.0, 20.0, 20.0]})))
+
+    comparison = ar.compare_profiles(baseline, current)
+
+    assert comparison.drift_report["score"]["status"] in {"warning", "changed"}
+    assert comparison.drift_report["score"]["changes"]["mean"]["baseline"] == 10.0
+    assert comparison.drift_report["score"]["changes"]["mean"]["comparison"] == 20.0
+
+
+def test_compare_profiles_rejects_schema_mismatch():
+    left = ar.profile(ar.from_pandas(pd.DataFrame({"score": [1.0, 2.0]})))
+    right = ar.profile(ar.from_pandas(pd.DataFrame({"score": [1.0, 2.0], "city": ["a", "b"]})))
+
+    with pytest.raises(ValueError, match="incompatible schemas"):
+        ar.compare_profiles(left, right)
+
+
+def test_compare_profiles_handles_empty_profiles():
+    empty = ar.profile(ar.from_pandas(pd.DataFrame()))
+
+    comparison = ar.compare_profiles(empty, empty)
+
+    assert comparison.drift_report == {}
+    assert comparison.status_counts == {"ok": 0, "warning": 0, "changed": 0}
+
+
+def test_compare_profiles_handles_single_column_profiles():
+    frame = ar.from_pandas(pd.DataFrame({"name": ["Alice", "Bob"]}))
+
+    comparison = ar.compare_profiles(ar.profile(frame), ar.profile(frame))
+
+    assert comparison.drift_report["name"]["status"] == "ok"
+    assert comparison.status_counts == {"ok": 1, "warning": 0, "changed": 0}
+
+
 def test_profile_numeric_quantiles():
     frame = ar.from_pandas(pd.DataFrame({"age": [1.0, 2.0, 3.0, 4.0, 5.0]}))
 

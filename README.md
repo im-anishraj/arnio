@@ -961,6 +961,16 @@ Sample output now includes quantiles for numeric columns:
 
 Use `report.to_dict(redact_sample_values=True)` when sharing reports outside your team and you want to avoid exposing raw example/sample values.
 
+### Compare Profiles
+Use `ar.compare_profiles()` to compare two profiling reports and flag per-column drift.
+
+```python
+baseline = ar.profile(ar.read_csv("baseline.csv"))
+current = ar.profile(ar.read_csv("current.csv"))
+comparison = ar.compare_profiles(baseline, current)
+print(comparison.drift_report["score"]["status"])
+```
+
 > **Scoring Contract:** The `quality_score` starts at 100.0 and subtracts capped penalties for duplicates, nulls, and suggested dtype mismatches. The `score_components` field exposes these penalties as negative values. (Note: Semantic-validity penalties are intentionally out of scope for the current implementation.)
 
 ### 1. Terminal Representation (Simplified Example)
