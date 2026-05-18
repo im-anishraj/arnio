@@ -29,8 +29,8 @@ from .cleaning import (
     round_numeric_columns,
     safe_divide_columns,
     strip_whitespace,
-    validate_columns_exist,
     trim_column_names,
+    validate_columns_exist,
 )
 from .convert import from_pandas, to_pandas
 from .exceptions import ArnioError, CsvReadError, TypeCastError, UnknownStepError
