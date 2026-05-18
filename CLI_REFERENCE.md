@@ -67,5 +67,5 @@ df = ar.to_pandas(clean)
 
 - `ROADMAP.md` — full version roadmap
 - `ARCHITECTURE.md` — system architecture
-- `API_REFERENCE.md` — full API reference
 - `GSSOC_GUIDE.md` — contributor onboarding guide
+- `README.md` — quickstart and examples
