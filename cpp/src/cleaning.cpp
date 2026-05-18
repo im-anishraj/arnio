@@ -472,9 +472,9 @@ Frame clip_numeric(const Frame& frame, std::optional<double> lower, std::optiona
             const auto& vec = std::get<std::vector<int64_t>>(src.data());
             Column col(src.name(), DType::INT64);
             const int64_t lo = lower.has_value() ? static_cast<int64_t>(lower.value())
-                                                  : std::numeric_limits<int64_t>::min();
+                                                 : std::numeric_limits<int64_t>::min();
             const int64_t hi = upper.has_value() ? static_cast<int64_t>(upper.value())
-                                                  : std::numeric_limits<int64_t>::max();
+                                                 : std::numeric_limits<int64_t>::max();
             for (size_t r = 0; r < src.size(); ++r) {
                 if (src.is_null(r)) {
                     col.push_null();
