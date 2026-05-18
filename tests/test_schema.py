@@ -808,3 +808,135 @@ def test_date_validation_rejects_non_zero_padded_dates(tmp_path):
 
     rules = {issue.rule for issue in result.issues}
     assert "date" in rules
+
+def test_required_if_validation_passes_when_condition_matches(tmp_path):
+    path = tmp_path / "conditional_pass.csv"
+    path.write_text(
+        "user_type,country\n"
+        "international,IN\n"
+        "local,\n"
+    )
+
+    frame = ar.read_csv(path)
+
+    schema = ar.Schema(
+        {
+            "user_type": ar.String(nullable=False),
+            "country": ar.String(
+                nullable=True,
+                required_if=("user_type", "international"),
+            ),
+        }
+    )
+
+    result = schema.validate(frame)
+
+    assert result.passed
+    assert result.issue_count == 0
+    assert result.bad_rows == []
+
+
+def test_required_if_validation_fails_when_condition_matches(tmp_path):
+    path = tmp_path / "conditional_fail.csv"
+    path.write_text(
+        "user_type,country\n"
+        "international,\n"
+        "local,IN\n"
+    )
+
+    frame = ar.read_csv(path)
+
+    schema = ar.Schema(
+        {
+            "user_type": ar.String(nullable=False),
+            "country": ar.String(
+                nullable=True,
+                required_if=("user_type", "international"),
+            ),
+        }
+    )
+
+    result = schema.validate(frame)
+
+    assert not result.passed
+    assert result.issue_count == 1
+    assert result.issues[0].rule == "required_if"
+    assert result.issues[0].column == "country"
+    assert result.issues[0].row_index == 1
+
+
+def test_required_if_validation_ignores_non_matching_conditions(tmp_path):
+    path = tmp_path / "conditional_ignore.csv"
+    path.write_text(
+        "user_type,country\n"
+        "local,\n"
+        "guest,\n"
+    )
+
+    frame = ar.read_csv(path)
+
+    schema = ar.Schema(
+        {
+            "user_type": ar.String(nullable=False),
+            "country": ar.String(
+                nullable=True,
+                required_if=("user_type", "international"),
+            ),
+        }
+    )
+
+    result = schema.validate(frame)
+
+    assert result.passed
+    assert result.issue_count == 0
+
+
+def test_required_if_validation_reports_missing_trigger_column(tmp_path):
+    path = tmp_path / "missing_trigger.csv"
+    path.write_text(
+        "country\n"
+        "IN\n"
+    )
+
+    frame = ar.read_csv(path)
+
+    schema = ar.Schema(
+        {
+            "country": ar.String(
+                required_if=("user_type", "international"),
+            ),
+        }
+    )
+
+    result = schema.validate(frame)
+
+    assert not result.passed
+    assert result.issue_count == 1
+    assert result.issues[0].rule == "missing_column"
+    assert result.issues[0].column == "user_type"
+
+
+def test_required_if_validation_handles_null_trigger_values(tmp_path):
+    path = tmp_path / "null_trigger.csv"
+    path.write_text(
+        "user_type,country\n"
+        ",\n"
+        "international,IN\n"
+    )
+
+    frame = ar.read_csv(path)
+
+    schema = ar.Schema(
+        {
+            "user_type": ar.String(nullable=True),
+            "country": ar.String(
+                nullable=True,
+                required_if=("user_type", "international"),
+            ),
+        }
+    )
+
+    result = schema.validate(frame)
+
+    assert result.passed
+    assert result.issue_count == 0
