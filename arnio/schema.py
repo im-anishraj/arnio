@@ -558,7 +558,6 @@ def _validate_column(
                     message=f"Column {name!r} contains invalid {field_def.semantic} values",
                 )
             )
-     
 
     if field_def.semantic == "url" and field_def.allowed_schemes is not None:
         url_pattern = _SEMANTIC_PATTERNS["url"]
@@ -569,7 +568,6 @@ def _validate_column(
         invalid_scheme = valid_urls[
             ~valid_text.str.lower().str.startswith(
                 tuple(f"{scheme}://" for scheme in field_def.allowed_schemes)
-
             )
         ]
 

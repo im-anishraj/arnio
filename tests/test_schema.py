@@ -610,7 +610,7 @@ def test_bad_rows_reflects_one_based_indexes(tmp_path):
 
     assert result.bad_rows == [1, 3]
 
-    
+
 def test_url_allowed_schemes_accepts_valid_scheme(tmp_path):
     path = tmp_path / "urls.csv"
     path.write_text("website\nhttps://example.com\n")
