@@ -1604,6 +1604,39 @@ def test_schema_rules_none_by_default(tmp_path):
     assert result.issue_count == 0
 
 
+def test_currency_code_valid(tmp_path):
+    path = tmp_path / "currencies.csv"
+    path.write_text("currency\nUSD\nEUR\nINR\nJPY\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"currency": ar.CurrencyCode(nullable=False)},
+    )
+
+    assert result.passed
+    assert result.issue_count == 0
+
+
+def test_currency_code_invalid(tmp_path):
+    path = tmp_path / "bad_currencies.csv"
+    # We add a dummy column so the empty currency row isn't skipped as a blank line
+    path.write_text("currency,dummy\nUS,1\nUSDD,2\nusd,3\nUS1,4\nEur,5\n,6\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"currency": ar.CurrencyCode(nullable=False)},
+    )
+
+    assert not result.passed
+    assert result.issue_count == 6
+
+    assert sorted([issue.row_index for issue in result.issues]) == [1, 2, 3, 4, 5, 6]
+
+    rules = {issue.rule for issue in result.issues}
+    assert "currency_code" in rules
+    assert "nullable" in rules
+
+
 def test_schema_rules_issue_shape_matches_validation_issue(tmp_path):
     path = tmp_path / "dates.csv"
     path.write_text("start_date,end_date\n2025-05-01,2025-01-01\n")

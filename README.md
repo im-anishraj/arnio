@@ -881,6 +881,9 @@ schema = ar.Schema({
         required_if=("user_type", "international"),
     ),
 
+    # CurrencyCode validates 3-letter uppercase ISO codes like USD, EUR, INR.
+    "currency": ar.CurrencyCode(),
+
     "username": ar.String(min_length=3, max_length=20),
     "user_code": ar.Regex(r"^USR-\d{4}$", nullable=False),
     "revenue": ar.Custom("positive", nullable=True),
