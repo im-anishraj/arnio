@@ -252,112 +252,220 @@ class DataQualityReport:
         return "\n".join(lines)
 
     def to_html(self, file_path: str | None = None) -> str:
-        """Return a self-contained, dependency-free HTML data quality report."""
+        """Return a self-contained, dependency-free HTML data quality report.
 
-        def e(text: Any) -> str:
-            return html.escape(str(text))
-
-        styles = """
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 20px; background-color: #f8f9fa; }
-        .container { max-width: 1200px; margin: 0 auto; background: #fff; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-        h1, h2 { color: #2c3e50; border-bottom: 1px solid #eee; padding-bottom: 10px; }
-        .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 30px; }
-        .metric-card { background: #f8f9fa; padding: 15px; border-radius: 6px; border: 1px solid #e9ecef; text-align: center; }
-        .metric-value { font-size: 24px; font-weight: bold; color: #007bff; }
-        .metric-label { font-size: 14px; color: #6c757d; text-transform: uppercase; letter-spacing: 0.5px; }
-        table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
-        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #dee2e6; }
-        th { background-color: #f8f9fa; font-weight: 600; color: #495057; }
-        tr:hover { background-color: #f1f3f5; }
-        .warnings { color: #dc3545; font-size: 14px; }
-        .suggestion { background: #e8f4f8; border-left: 4px solid #17a2b8; padding: 10px 15px; margin-bottom: 10px; }
-        .suggestion code { font-family: monospace; background: #fff; padding: 2px 5px; border-radius: 3px; border: 1px solid #ced4da; }
+        In notebook environments, ``DataQualityReport`` will render a compact dashboard
+        automatically via ``_repr_html_``.
         """
 
-        lines: list[str] = []
-        lines.append("<!DOCTYPE html>")
-        lines.append('<html lang="en">')
-        lines.append("<head>")
-        lines.append('    <meta charset="UTF-8">')
-        lines.append(
-            '    <meta name="viewport" content="width=device-width, initial-scale=1.0">'
-        )
-        lines.append("    <title>Data Quality Report</title>")
-        lines.append(f"    <style>{styles}</style>")
-        lines.append("</head>")
-        lines.append("<body>")
-        lines.append('    <div class="container">')
-        lines.append("        <h1>Data Quality Report</h1>")
-
-        lines.append('        <div class="metrics-grid">')
-        metrics = [
-            ("Rows", self.row_count),
-            ("Columns", self.column_count),
-            ("Memory Usage", self.memory_usage),
-            ("Duplicate Rows", self.duplicate_rows),
-            ("Duplicate Ratio", f"{self.duplicate_ratio:.2%}"),
-            ("Quality Score", f"{self.quality_score:.2f}"),
-        ]
-        for label, value in metrics:
-            lines.append('            <div class="metric-card">')
-            lines.append(f'                <div class="metric-value">{e(value)}</div>')
-            lines.append(f'                <div class="metric-label">{e(label)}</div>')
-            lines.append("            </div>")
-        lines.append("        </div>")
-
-        if self.columns:
-            lines.append("        <h2>Columns Overview</h2>")
-            lines.append("        <table>")
-            lines.append("            <thead>")
-            lines.append("                <tr>")
-            lines.append("                    <th>Name</th>")
-            lines.append("                    <th>Type</th>")
-            lines.append("                    <th>Nulls</th>")
-            lines.append("                    <th>Unique</th>")
-            lines.append("                    <th>Warnings</th>")
-            lines.append("                </tr>")
-            lines.append("            </thead>")
-            lines.append("            <tbody>")
-
-            for name in sorted(self.columns):
-                col = self.columns[name]
-                warnings_str = ", ".join(col.warnings) if col.warnings else "-"
-                lines.append("                <tr>")
-                lines.append(f"                    <td>{e(col.name)}</td>")
-                lines.append(f"                    <td>{e(col.dtype)}</td>")
-                lines.append(f"                    <td>{e(col.null_count)}</td>")
-                lines.append(f"                    <td>{e(col.unique_count)}</td>")
-                lines.append(
-                    f'                    <td class="warnings">{e(warnings_str)}</td>'
-                )
-                lines.append("                </tr>")
-
-            lines.append("            </tbody>")
-            lines.append("        </table>")
-
-        if self.suggestions:
-            lines.append("        <h2>Cleaning Suggestions</h2>")
-            for step in self.suggestions:
-                conf_score = getattr(step, "confidence_score", None)
-                conf_text = (
-                    f" (Confidence: {conf_score:.2f})" if conf_score is not None else ""
-                )
-                lines.append('        <div class="suggestion">')
-                lines.append(
-                    f"            <code>{e(step[0])}</code>: <code>{e(step[1])}</code>{e(conf_text)}"
-                )
-                lines.append("        </div>")
-
-        lines.append("    </div>")
-        lines.append("</body>")
-        lines.append("</html>")
-
-        html_out = "\n".join(lines)
+        html_out = self._to_html_dashboard(full_document=True)
         if file_path:
             with open(file_path, "w", encoding="utf-8") as f:
                 f.write(html_out)
 
         return html_out
+
+    def _repr_html_(self) -> str:  # pragma: no cover - exercised via tests directly
+        """Notebook-friendly HTML representation."""
+        return self._to_html_dashboard(full_document=False)
+
+    def _to_html_dashboard(self, *, full_document: bool) -> str:
+        def e(text: Any) -> str:
+            return html.escape(str(text), quote=True)
+
+        def fmt_bytes(n: int) -> str:
+            units = ["B", "KB", "MB", "GB", "TB"]
+            value = float(n)
+            unit_idx = 0
+            while value >= 1024 and unit_idx < len(units) - 1:
+                value /= 1024
+                unit_idx += 1
+            if unit_idx == 0:
+                return f"{int(value)} {units[unit_idx]}"
+            return f"{value:.2f} {units[unit_idx]}"
+
+        def score_class(score: float) -> str:
+            if score >= 90:
+                return "good"
+            if score >= 70:
+                return "warn"
+            return "bad"
+
+        total_warnings = sum(len(c.warnings) for c in self.columns.values())
+        cols_with_warnings = sum(1 for c in self.columns.values() if c.warnings)
+        cols_with_nulls = sum(1 for c in self.columns.values() if c.null_count > 0)
+
+        styles = """
+        /* Scoped styles for notebook output */
+        .arnio-dqr { font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; line-height: 1.45; color: #111827; }
+        .arnio-dqr .container { max-width: 1200px; margin: 0 auto; background: #ffffff; padding: 20px; border-radius: 10px; border: 1px solid #e5e7eb; }
+        .arnio-dqr .header { display: flex; gap: 14px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-bottom: 14px; }
+        .arnio-dqr h1 { margin: 0; font-size: 20px; letter-spacing: -0.01em; }
+        .arnio-dqr .subtitle { color: #6b7280; font-size: 12px; margin-top: 2px; }
+        .arnio-dqr .pill { display:inline-flex; align-items:center; gap:8px; padding: 6px 10px; border-radius: 999px; border: 1px solid #e5e7eb; background: #f9fafb; font-size: 12px; }
+        .arnio-dqr .score { font-weight: 700; }
+        .arnio-dqr .score.good { color: #047857; }
+        .arnio-dqr .score.warn { color: #b45309; }
+        .arnio-dqr .score.bad { color: #b91c1c; }
+        .arnio-dqr .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin: 14px 0 18px 0; }
+        .arnio-dqr .card { border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px 12px; background: #ffffff; }
+        .arnio-dqr .card .label { color: #6b7280; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
+        .arnio-dqr .card .value { font-size: 18px; font-weight: 700; margin-top: 4px; }
+        .arnio-dqr .section { margin-top: 14px; }
+        .arnio-dqr h2 { margin: 0 0 8px 0; font-size: 14px; color: #111827; letter-spacing: -0.01em; }
+        .arnio-dqr table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        .arnio-dqr th, .arnio-dqr td { padding: 8px 8px; border-bottom: 1px solid #e5e7eb; vertical-align: top; }
+        .arnio-dqr th { text-align: left; color: #374151; background: #f9fafb; position: sticky; top: 0; }
+        .arnio-dqr .muted { color: #6b7280; }
+        .arnio-dqr .warn { color: #b91c1c; font-weight: 600; }
+        .arnio-dqr .chip { display:inline-block; padding: 2px 6px; border: 1px solid #e5e7eb; border-radius: 999px; background:#ffffff; margin: 0 4px 4px 0; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 11px; }
+        .arnio-dqr .bar { width: 100%; height: 6px; border-radius: 999px; background: #e5e7eb; overflow: hidden; margin-top: 4px; }
+        .arnio-dqr .bar > span { display: block; height: 100%; background: #3b82f6; }
+        .arnio-dqr details { border: 1px solid #e5e7eb; border-radius: 10px; padding: 8px 10px; background: #ffffff; }
+        .arnio-dqr details + details { margin-top: 8px; }
+        .arnio-dqr summary { cursor: pointer; font-weight: 600; }
+        .arnio-dqr code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 11px; }
+        """
+
+        lines: list[str] = []
+        if full_document:
+            lines.append("<!DOCTYPE html>")
+            lines.append('<html lang="en">')
+            lines.append("<head>")
+            lines.append('  <meta charset="UTF-8">')
+            lines.append('  <meta name="viewport" content="width=device-width, initial-scale=1.0">')
+            lines.append("  <title>Data Quality Report</title>")
+            lines.append(f"  <style>{styles}</style>")
+            lines.append("</head>")
+            lines.append("<body style=\"margin:0;padding:16px;background:#f3f4f6;\">")
+            lines.append("<div class=\"arnio-dqr\">")
+        else:
+            lines.append(f"<style>{styles}</style>")
+            lines.append("<div class=\"arnio-dqr\">")
+
+        lines.append("<div class=\"container\">")
+        lines.append("<div class=\"header\">")
+        lines.append("<div>")
+        lines.append("<h1>Data Quality Report</h1>")
+        lines.append(
+            f"<div class=\"subtitle\">Rows: {e(self.row_count)} · Columns: {e(self.column_count)} · Memory: {e(fmt_bytes(self.memory_usage))}</div>"
+        )
+        lines.append("</div>")
+        lines.append(
+            f"<div class=\"pill\"><span class=\"muted\">Quality score</span> <span class=\"score {score_class(self.quality_score)}\">{e(f'{self.quality_score:.2f}')}</span></div>"
+        )
+        lines.append("</div>")
+
+        lines.append("<div class=\"grid\">")
+        cards: list[tuple[str, str]] = [
+            ("Duplicate rows", f"{self.duplicate_rows} ({self.duplicate_ratio:.2%})"),
+            ("Columns w/ nulls", str(cols_with_nulls)),
+            ("Columns w/ warnings", str(cols_with_warnings)),
+            ("Total warnings", str(total_warnings)),
+        ]
+        if self.score_components:
+            penalty_total = sum(self.score_components.values())
+            cards.append(("Score delta", f"{penalty_total:+.2f}"))
+        for label, value in cards:
+            lines.append("<div class=\"card\">")
+            lines.append(f"<div class=\"label\">{e(label)}</div>")
+            lines.append(f"<div class=\"value\">{e(value)}</div>")
+            lines.append("</div>")
+        lines.append("</div>")
+
+        if self.score_components:
+            lines.append("<div class=\"section\">")
+            lines.append("<h2>Score Components</h2>")
+            lines.append("<table>")
+            lines.append("<thead><tr><th>Component</th><th>Delta</th></tr></thead>")
+            lines.append("<tbody>")
+            for key, value in sorted(self.score_components.items()):
+                cls = "warn" if value < 0 else "muted"
+                lines.append("<tr>")
+                lines.append(f"<td><code>{e(key)}</code></td>")
+                lines.append(f"<td class=\"{cls}\">{e(f'{value:+.2f}')}</td>")
+                lines.append("</tr>")
+            lines.append("</tbody>")
+            lines.append("</table>")
+            lines.append("</div>")
+
+        if self.columns:
+            lines.append("<div class=\"section\">")
+            lines.append("<h2>Columns</h2>")
+            lines.append("<table>")
+            lines.append(
+                "<thead><tr>"
+                "<th>Name</th><th>Dtype</th><th>Semantic</th><th>Nulls</th><th>Unique</th>"
+                "<th>Top values</th><th>Warnings</th><th>Suggestion</th>"
+                "</tr></thead>"
+            )
+            lines.append("<tbody>")
+            for name in sorted(self.columns):
+                col = self.columns[name]
+                null_pct = (col.null_ratio * 100.0) if col.row_count else 0.0
+                unique_pct = (col.unique_ratio * 100.0) if col.row_count else 0.0
+                warnings_str = ", ".join(col.warnings) if col.warnings else "-"
+                suggested = col.suggested_dtype if col.suggested_dtype else "-"
+
+                if col.top_values:
+                    top_bits: list[str] = []
+                    for v, _c, r in col.top_values[:3]:
+                        top_bits.append(f"<span class=\"chip\">{e(v)} · {e(f'{r:.0%}')}</span>")
+                    top_html = "".join(top_bits)
+                else:
+                    top_html = "<span class=\"muted\">-</span>"
+
+                lines.append("<tr>")
+                lines.append(f"<td><code>{e(col.name)}</code></td>")
+                lines.append(f"<td>{e(col.dtype)}</td>")
+                lines.append(f"<td>{e(col.semantic_type)}</td>")
+                lines.append(
+                    "<td>"
+                    f"{e(col.null_count)} <span class=\"muted\">({e(f'{null_pct:.1f}%')})</span>"
+                    f"<div class=\"bar\"><span style=\"width:{max(0.0, min(100.0, null_pct)):.2f}%\"></span></div>"
+                    "</td>"
+                )
+                lines.append(
+                    "<td>"
+                    f"{e(col.unique_count)} <span class=\"muted\">({e(f'{unique_pct:.1f}%')})</span>"
+                    f"<div class=\"bar\"><span style=\"width:{max(0.0, min(100.0, unique_pct)):.2f}%\"></span></div>"
+                    "</td>"
+                )
+                lines.append(f"<td>{top_html}</td>")
+                lines.append(
+                    f"<td class=\"{'warn' if col.warnings else 'muted'}\">{e(warnings_str)}</td>"
+                )
+                lines.append(f"<td>{e(suggested)}</td>")
+                lines.append("</tr>")
+            lines.append("</tbody></table>")
+            lines.append("</div>")
+
+        if self.suggestions:
+            lines.append("<div class=\"section\">")
+            lines.append("<h2>Cleaning Suggestions</h2>")
+            for step in self.suggestions:
+                conf_score = getattr(step, "confidence_score", None)
+                conf_reason = getattr(step, "confidence_reason", None)
+                conf_bits: list[str] = []
+                if conf_score is not None:
+                    conf_bits.append(f"Confidence: {conf_score:.2f}")
+                if conf_reason:
+                    conf_bits.append(str(conf_reason))
+                conf_text = f" — {e(' · '.join(conf_bits))}" if conf_bits else ""
+                lines.append("<details>")
+                lines.append(
+                    f"<summary><code>{e(step[0])}</code> <span class=\"muted\">{e(step[1])}</span></summary>"
+                )
+                lines.append(f"<div class=\"subtitle\">{conf_text}</div>" if conf_text else "")
+                lines.append("</details>")
+            lines.append("</div>")
+
+        lines.append("</div>")  # container
+        lines.append("</div>")  # arnio-dqr
+        if full_document:
+            lines.append("</body></html>")
+
+        return "\n".join(lines)
 
     def summary(self) -> dict[str, Any]:
         """Return the highest-signal report fields."""

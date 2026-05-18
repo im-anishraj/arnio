@@ -983,6 +983,19 @@ report = ar.profile(df, sample_size=5)
 safe_report = report.to_dict(redact_sample_values=True)
 ```
 
+### Notebook dashboard (Jupyter / Colab)
+
+`DataQualityReport` includes a notebook-friendly HTML dashboard. In a notebook, simply evaluate `report` in a cell to see a rich, static summary (quality score, duplicates, nulls, warnings, top values, and cleaning suggestions).
+
+If you want to embed or save the HTML explicitly:
+
+```python
+from IPython.display import HTML
+
+HTML(report.to_html())
+# or: report.to_html(file_path="data_quality_report.html")
+```
+
 Sample output now includes quantiles for numeric columns:
 
 ```json

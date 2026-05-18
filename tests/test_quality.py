@@ -857,7 +857,13 @@ def test_data_quality_report_to_html_focused(tmp_path):
         unique_ratio=0.5,
         empty_string_count=0,
         whitespace_count=0,
+        suggested_dtype="<script>unsafe_dtype</script>",
         warnings=["<script>unsafe_warning</script>"],
+        top_values=[
+            ("<script>unsafe_val</script>", 7, 0.7),
+            ("B", 2, 0.2),
+            ("C", 1, 0.1),
+        ],
     )
 
     # 2. Construct a CleaningSuggestion with HTML characters
@@ -906,11 +912,51 @@ def test_data_quality_report_to_html_focused(tmp_path):
     assert "<script>unsafe_step</script>" not in html_out
     assert "&lt;script&gt;unsafe_val&lt;/script&gt;" in html_out
     assert "<script>unsafe_val</script>" not in html_out
-    # Note: confidence_reason is not rendered in to_html output (only score is rendered)
+    assert "&lt;script&gt;unsafe_reason&lt;/script&gt;" in html_out
+    assert "<script>unsafe_reason</script>" not in html_out
     assert "0.95" in html_out  # confidence_score is rendered
+    assert "&lt;script&gt;unsafe_dtype&lt;/script&gt;" in html_out
+
+    # Verify proper HTML escaping of top_values
+    assert "&lt;script&gt;unsafe_val&lt;/script&gt;" in html_out
+    assert "<script>unsafe_val</script>" not in html_out
 
     # Verify file writing
     out_path = tmp_path / "report_focused.html"
     report.to_html(file_path=str(out_path))
     assert out_path.exists()
     assert out_path.read_text(encoding="utf-8").startswith("<!DOCTYPE html>")
+
+
+def test_data_quality_report_repr_html_snippet():
+    from arnio.quality import ColumnProfile, DataQualityReport
+
+    col = ColumnProfile(
+        name="<script>unsafe_col</script>",
+        dtype="object",
+        semantic_type="string",
+        row_count=3,
+        null_count=1,
+        null_ratio=1 / 3,
+        unique_count=2,
+        unique_ratio=2 / 3,
+        warnings=["<script>unsafe_warning</script>"],
+        top_values=[("<script>unsafe_val</script>", 2, 2 / 3)],
+    )
+    report = DataQualityReport(
+        row_count=3,
+        column_count=1,
+        memory_usage=1234,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={"x": col},
+        quality_score=88.0,
+        score_components={"null_penalty": -10.0},
+    )
+
+    html_out = report._repr_html_()
+    assert "<!DOCTYPE html>" not in html_out
+    assert 'class="arnio-dqr"' in html_out
+    assert "Data Quality Report" in html_out
+    assert "&lt;script&gt;unsafe_col&lt;/script&gt;" in html_out
+    assert "<script>unsafe_col</script>" not in html_out
