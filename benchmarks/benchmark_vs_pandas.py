@@ -1,8 +1,7 @@
-"""
-Reproducible benchmark: arnio vs pandas.
 
-Run:
-python benchmarks/benchmark_vs_pandas.py
+    """
+Reproducible benchmark: arnio vs pandas
+Run: python benchmarks/benchmark_vs_pandas.py
 """
 
 import argparse
@@ -483,3 +482,4 @@ if __name__ == "__main__":
 
     for benchmark_case in BENCHMARKS:
         run_case(benchmark_case)
+
