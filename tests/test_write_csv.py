@@ -64,8 +64,10 @@ class TestWriteCsv:
         out = tmp_path / "out.csv"
         ar.write_csv(frame, out)
         assert out.exists()
+
     def test_high_precision_float_round_trip(self, tmp_path):
         import pandas as pd
+
         frame = ar.from_pandas(pd.DataFrame({"val": [1.23456789012345678]}))
         out = str(tmp_path / "float.csv")
         ar.write_csv(frame, out)

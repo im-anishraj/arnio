@@ -173,9 +173,7 @@ def read_csv(
             f"Unsupported file format: {path}. Only .csv, .txt, and .tsv are supported."
         )
     if len(delimiter) != 1:
-        raise ValueError(
-        f"delimiter must be a single character, got {delimiter!r}"
-    )
+        raise ValueError(f"delimiter must be a single character, got {delimiter!r}")
 
     if _is_utf8_encoding(encoding):
         try:
