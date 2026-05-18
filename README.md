@@ -839,6 +839,8 @@ safe_report = report.to_dict(redact_sample_values=True)
 
 Use `report.to_dict(redact_sample_values=True)` when sharing reports outside your team and you want to avoid exposing raw example/sample values.
 
+> **Scoring Contract:** The `quality_score` starts at 100.0 and subtracts capped penalties for duplicates, nulls, and suggested dtype mismatches. The `score_components` field exposes these penalties as negative values. (Note: Semantic-validity penalties are intentionally out of scope for the current implementation.)
+
 ### 1. Terminal Representation (Simplified Example)
 *A simplified view of the standard string representation of the report object:*
 
