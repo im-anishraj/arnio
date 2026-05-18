@@ -19,6 +19,7 @@ struct CsvConfig {
     std::optional<char> thousands_separator = std::nullopt;
     std::optional<size_t> sample_size = std::nullopt;
     std::optional<std::vector<std::string>> null_values = std::nullopt;
+    std::string mode = "strict";
 };
 
 class CsvReader {

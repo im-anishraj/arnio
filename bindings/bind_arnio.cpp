@@ -223,6 +223,7 @@ PYBIND11_MODULE(_arnio_cpp, m) {
         .def_readwrite("trim_headers", &CsvConfig::trim_headers)
         .def_readwrite("thousands_separator", &CsvConfig::thousands_separator)
         .def_readwrite("sample_size", &CsvConfig::sample_size)
+        .def_readwrite("mode", &CsvConfig::mode)
         .def_readwrite("null_values", &CsvConfig::null_values);
 
     py::class_<CsvReader>(m, "CsvReader")

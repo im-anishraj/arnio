@@ -842,3 +842,36 @@ def test_scan_csv_type_evidence_after_limit(tmp_path):
     csv_file.write_bytes(csv_content.encode("latin-1"))
     schema = ar.scan_csv(str(csv_file), encoding="latin-1")
     assert schema["value"] == "int64"
+
+    def test_strict_mode_rejects_missing_columns(self, tmp_path):
+        csv_path = tmp_path / "strict_missing.csv"
+        csv_path.write_text("id,name\n1,Alice\n2\n")
+
+        with pytest.raises(
+            ar.CsvReadError,
+            match="inconsistent column count",
+        ):
+            ar.read_csv(csv_path, mode="strict")
+
+    def test_permissive_mode_allows_missing_columns(self, tmp_path):
+        csv_path = tmp_path / "permissive_missing.csv"
+        csv_path.write_text("id,name\n1,Alice\n2\n")
+        frame = ar.read_csv(csv_path, mode="permissive")
+
+        assert frame.shape == (2, 2)
+
+        df = ar.to_pandas(frame)
+
+        assert df["id"].iloc[0] == 1
+        assert df["name"].iloc[0] == "Alice"
+        assert pd.isna(df["name"].iloc[1])
+
+    def test_invalid_parser_mode(self, tmp_path):
+        csv_path = tmp_path / "invalid_mode.csv"
+        csv_path.write_text("id,name\n1,Alice\n")
+
+        with pytest.raises(
+            ValueError,
+            match="mode must be either",
+        ):
+            ar.read_csv(csv_path, mode="fast")
