@@ -43,6 +43,7 @@ class Field:
     format: str | None = None
     _datetime_min: pd.Timestamp | None = None
     _datetime_max: pd.Timestamp | None = None
+    required_if: tuple[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -230,7 +231,7 @@ def validate(frame: ArFrame, schema: Schema | dict[str, Field]) -> ValidationRes
                 )
             )
             continue
-        issues.extend(_validate_column(df[name], dtypes.get(name), name, field_def))
+        issues.extend(_validate_column( df , df[name], dtypes.get(name), name, field_def))
 
     if schema.strict:
         expected = set(schema.fields)
@@ -297,6 +298,7 @@ def Int64(
     min: int | None = None,
     max: int | None = None,
     unique: bool = False,
+     required_if: tuple[str, Any] | None = None,
 ) -> Field:
     """Create an int64 schema field."""
 
@@ -309,6 +311,7 @@ def Int64(
         min=min,
         max=max,
         unique=unique,
+        required_if=required_if
     )
 
 
@@ -318,6 +321,7 @@ def Float64(
     min: float | None = None,
     max: float | None = None,
     unique: bool = False,
+     required_if: tuple[str, Any] | None = None,
 ) -> Field:
     """Create a float64 schema field."""
 
@@ -330,6 +334,7 @@ def Float64(
         min=min,
         max=max,
         unique=unique,
+        required_if=required_if
     )
 
 
@@ -341,6 +346,7 @@ def String(
     unique: bool = False,
     min_length: int | None = None,
     max_length: int | None = None,
+     required_if: tuple[str, Any] | None = None,
 ) -> Field:
     """Create a string schema field."""
 
@@ -357,12 +363,13 @@ def String(
         unique=unique,
         min_length=min_length,
         max_length=max_length,
+        required_if=required_if
     )
 
 
-def Bool(*, nullable: bool = True) -> Field:
+def Bool(*, nullable: bool = True,  required_if: tuple[str, Any] | None = None,) -> Field:
     """Create a bool schema field."""
-    return Field(dtype="bool", nullable=nullable)
+    return Field(dtype="bool", nullable=nullable , required_if=required_if)
 
 
 def Email(
@@ -370,6 +377,7 @@ def Email(
     nullable: bool = True,
     unique: bool = False,
     validation: str = "light",
+    required_if: tuple[str, Any] | None = None,
 ) -> Field:
     """Create an email-address schema field."""
     if validation not in {"light", "strict"}:
@@ -379,15 +387,16 @@ def Email(
         nullable=nullable,
         semantic="email" if validation == "light" else "email:strict",
         unique=unique,
+        required_if=required_if
     )
 
 
-def URL(*, nullable: bool = True, unique: bool = False) -> Field:
+def URL(*, nullable: bool = True, unique: bool = False ,  required_if: tuple[str, Any] | None = None,) -> Field:
     """Create a URL schema field."""
-    return Field(dtype="string", nullable=nullable, semantic="url", unique=unique)
+    return Field(dtype="string", nullable=nullable, semantic="url", unique=unique , required_if=required_if)
 
 
-def CountryCode(*, nullable: bool = True, unique: bool = False) -> Field:
+def CountryCode(*, nullable: bool = True, unique: bool = False ,  required_if: tuple[str, Any] | None = None,) -> Field:
     """Create an uppercase ISO alpha-2 country-code schema field."""
     return Field(
         dtype="string",
@@ -472,6 +481,7 @@ def DateTime(
 
 
 def _validate_column(
+    df: pd.DataFrame ,
     series: pd.Series,
     actual_dtype: str | None,
     name: str,
@@ -503,6 +513,33 @@ def _validate_column(
         )
 
     non_null = series.dropna()
+
+    if field_def.required_if is not None:
+        condition_column, expected_value = field_def.required_if
+
+        if condition_column not in df.columns:
+            issues.append(
+                ValidationIssue(
+                    column=condition_column,
+                    rule="missing_column",
+                    message=f"Column {condition_column!r} not found",
+                )
+            )
+        else:
+            trigger_mask = df[condition_column] == expected_value
+            invalid = series[trigger_mask & series.isna()]
+
+            issues.extend(
+                _row_issues(
+                    invalid,
+                    column=name,
+                    rule="required_if",
+                    message=(
+                        f"Column {name!r} is required when "
+                        f"{condition_column!r} == {expected_value!r}"
+                    ),
+                )
+            )
 
     if field_def.unique:
         duplicate_mask = non_null.duplicated(keep=False)
