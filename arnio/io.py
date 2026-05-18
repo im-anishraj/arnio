@@ -16,6 +16,8 @@ from ._core import _CsvConfig, _CsvReader, _CsvWriteConfig, _CsvWriter
 from .exceptions import CsvReadError
 from .frame import ArFrame
 
+DEFAULT_DELIMITER_CANDIDATES = (",", ";", "\t", "|")
+
 
 def _is_utf8_encoding(encoding: str) -> bool:
     """Return whether the encoding should be treated as raw UTF-8 input."""
@@ -104,6 +106,139 @@ def _validate_delimiter(delimiter: str) -> str:
         raise ValueError("delimiter must be exactly one character")
 
     return delimiter
+
+
+def _validate_delimiter_candidates(candidates: Sequence[str]) -> tuple[str, ...]:
+    if isinstance(candidates, str):
+        raise TypeError("candidates must be a sequence of delimiter strings")
+    if not isinstance(candidates, Sequence):
+        raise TypeError("candidates must be a sequence of delimiter strings")
+    if not candidates:
+        raise ValueError("candidates must contain at least one delimiter")
+
+    validated = tuple(_validate_delimiter(candidate) for candidate in candidates)
+    if len(set(validated)) != len(validated):
+        raise ValueError("candidates must not contain duplicate delimiters")
+    return validated
+
+
+def _delimiter_score(sample: str, delimiter: str) -> tuple[int, int, int]:
+    try:
+        rows = [
+            row
+            for row in csv.reader(sample.splitlines(), delimiter=delimiter)
+            if row and any(field.strip() for field in row)
+        ]
+    except csv.Error:
+        return (0, 0, 0)
+
+    widths = [len(row) for row in rows]
+    delimited_widths = [width for width in widths if width > 1]
+    if not delimited_widths:
+        return (0, 0, 0)
+
+    width_counts = {
+        width: delimited_widths.count(width) for width in set(delimited_widths)
+    }
+    most_common_width = max(width_counts, key=width_counts.get)
+    consistent_rows = width_counts[most_common_width]
+    delimiter_occurrences = sum(line.count(delimiter) for line in sample.splitlines())
+    return (consistent_rows, most_common_width, delimiter_occurrences)
+
+
+def sniff_csv_delimiter(
+    path: str | os.PathLike[str],
+    *,
+    candidates: Sequence[str] = DEFAULT_DELIMITER_CANDIDATES,
+    encoding: str = "utf-8",
+    sample_size: int = 65536,
+) -> str:
+    """Detect the delimiter used by a CSV-like text file.
+
+    Parameters
+    ----------
+    path : str
+        Path to the CSV-like file.
+    candidates : sequence of str, default (",", ";", "\\t", "|")
+        Single-character delimiters to evaluate.
+    encoding : str, default "utf-8"
+        Text encoding used to read the sample.
+    sample_size : int, default 65536
+        Maximum number of characters to sample from the file.
+
+    Returns
+    -------
+    str
+        Detected delimiter character.
+
+    Raises
+    ------
+    ValueError
+        If candidates are invalid, no delimiter is detected, or the best
+        delimiter is ambiguous.
+
+    TypeError
+        If candidates or sample_size have invalid types.
+
+    CsvReadError
+        If the file is empty, binary/corrupted, missing, or cannot be decoded.
+
+    Examples
+    --------
+    >>> delimiter = ar.sniff_csv_delimiter("data.csv")
+    >>> frame = ar.read_csv("data.csv", delimiter=delimiter)
+    """
+    if isinstance(sample_size, bool) or not isinstance(sample_size, int):
+        raise TypeError("sample_size must be an integer")
+    if sample_size <= 0:
+        raise ValueError("sample_size must be a positive integer greater than 0")
+
+    path = os.fspath(path)
+    validated_candidates = _validate_delimiter_candidates(candidates)
+
+    try:
+        with open(path, "rb") as f:
+            raw = f.read(sample_size)
+    except OSError as e:
+        raise CsvReadError(str(e)) from e
+
+    if not raw:
+        raise CsvReadError(f"CSV file is empty: {path!r}")
+    if b"\0" in raw:
+        raise CsvReadError(
+            "CSV input contains NUL bytes and appears to be binary or corrupted"
+        )
+
+    try:
+        sample = raw.decode(encoding)
+    except LookupError as e:
+        raise ValueError(f"Unknown encoding: {encoding}") from e
+    except UnicodeDecodeError as e:
+        raise CsvReadError(
+            f"Could not decode {path!r} using encoding {encoding!r}"
+        ) from e
+
+    scores = {
+        delimiter: _delimiter_score(sample, delimiter)
+        for delimiter in validated_candidates
+    }
+    usable_scores = {
+        delimiter: score for delimiter, score in scores.items() if score[0] > 0
+    }
+    if not usable_scores:
+        raise ValueError(
+            f"Could not detect a delimiter from candidates {validated_candidates!r}"
+        )
+
+    best_score = max(usable_scores.values())
+    best_delimiters = [
+        delimiter for delimiter, score in usable_scores.items() if score == best_score
+    ]
+    if len(best_delimiters) > 1:
+        formatted = ", ".join(repr(delimiter) for delimiter in best_delimiters)
+        raise ValueError(f"Ambiguous delimiter candidates: {formatted}")
+
+    return best_delimiters[0]
 
 
 def _validate_usecols(usecols: Sequence[str]) -> list[str]:

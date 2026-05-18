@@ -38,7 +38,7 @@ from .convert import from_pandas, to_pandas
 from .exceptions import ArnioError, CsvReadError, TypeCastError, UnknownStepError
 from .frame import ArFrame
 from .integrations import ArnioPandasAccessor
-from .io import read_csv, scan_csv, write_csv
+from .io import read_csv, scan_csv, sniff_csv_delimiter, write_csv
 from .pipeline import pipeline, register_step
 from .quality import (
     ColumnProfile,
@@ -74,6 +74,7 @@ __all__ = [
     "read_csv",
     "write_csv",
     "scan_csv",
+    "sniff_csv_delimiter",
     # Cleaning
     "drop_nulls",
     "keep_rows_with_nulls",

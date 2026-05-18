@@ -442,6 +442,88 @@ class TestReadCsv:
             ar.read_csv(str(tmp_path / "nonexistent.csv"))
 
 
+class TestSniffCsvDelimiter:
+    @pytest.mark.parametrize(
+        ("delimiter", "content"),
+        [
+            (",", "name,age\nAlice,30\nBob,41\n"),
+            (";", "name;age\nAlice;30\nBob;41\n"),
+            ("\t", "name\tage\nAlice\t30\nBob\t41\n"),
+            ("|", "name|age\nAlice|30\nBob|41\n"),
+        ],
+    )
+    def test_detects_default_delimiters(self, tmp_path, delimiter, content):
+        csv_path = tmp_path / "data.csv"
+        csv_path.write_text(content)
+
+        assert ar.sniff_csv_delimiter(csv_path) == delimiter
+
+    def test_ignores_quoted_candidate_delimiters(self, tmp_path):
+        csv_path = tmp_path / "quoted.csv"
+        csv_path.write_text('name,comment\nAlice,"hello, world"\nBob,"a,b,c"\n')
+
+        assert ar.sniff_csv_delimiter(csv_path) == ","
+
+    def test_custom_candidates(self, tmp_path):
+        csv_path = tmp_path / "custom.csv"
+        csv_path.write_text("name^age\nAlice^30\n")
+
+        assert ar.sniff_csv_delimiter(csv_path, candidates=["^", "|"]) == "^"
+
+    def test_non_utf8_encoding(self, tmp_path):
+        csv_path = tmp_path / "latin.csv"
+        csv_path.write_bytes("name;city\nAndré;Québec\n".encode("latin-1"))
+
+        assert ar.sniff_csv_delimiter(csv_path, encoding="latin-1") == ";"
+
+    def test_no_delimiter_detected(self, tmp_path):
+        csv_path = tmp_path / "single_column.csv"
+        csv_path.write_text("name\nAlice\nBob\n")
+
+        with pytest.raises(ValueError, match="Could not detect a delimiter"):
+            ar.sniff_csv_delimiter(csv_path)
+
+    def test_ambiguous_delimiter_detected(self, tmp_path):
+        csv_path = tmp_path / "ambiguous.csv"
+        csv_path.write_text("a,b|c\n1,2|3\n")
+
+        with pytest.raises(ValueError, match="Ambiguous delimiter candidates"):
+            ar.sniff_csv_delimiter(csv_path, candidates=[",", "|"])
+
+    def test_invalid_candidates(self, tmp_path):
+        csv_path = tmp_path / "data.csv"
+        csv_path.write_text("a,b\n1,2\n")
+
+        with pytest.raises(TypeError, match="candidates must be a sequence"):
+            ar.sniff_csv_delimiter(csv_path, candidates=",")
+        with pytest.raises(ValueError, match="at least one delimiter"):
+            ar.sniff_csv_delimiter(csv_path, candidates=[])
+        with pytest.raises(ValueError, match="duplicate delimiters"):
+            ar.sniff_csv_delimiter(csv_path, candidates=[",", ","])
+        with pytest.raises(ValueError, match="delimiter must be exactly one character"):
+            ar.sniff_csv_delimiter(csv_path, candidates=["::"])
+
+    def test_invalid_sample_size(self, tmp_path):
+        csv_path = tmp_path / "data.csv"
+        csv_path.write_text("a,b\n1,2\n")
+
+        with pytest.raises(TypeError, match="sample_size must be an integer"):
+            ar.sniff_csv_delimiter(csv_path, sample_size=True)
+        with pytest.raises(ValueError, match="sample_size must be a positive integer"):
+            ar.sniff_csv_delimiter(csv_path, sample_size=0)
+
+    def test_empty_and_binary_files_raise_csv_read_error(self, tmp_path):
+        empty_path = tmp_path / "empty.csv"
+        empty_path.write_text("")
+        with pytest.raises(ar.CsvReadError, match="CSV file is empty"):
+            ar.sniff_csv_delimiter(empty_path)
+
+        binary_path = tmp_path / "binary.csv"
+        binary_path.write_bytes(b"a,b\n1,\0\n")
+        with pytest.raises(ar.CsvReadError, match="NUL bytes"):
+            ar.sniff_csv_delimiter(binary_path)
+
+
 class TestScanCsv:
     def test_scan_schema(self, sample_csv):
         schema = ar.scan_csv(sample_csv)

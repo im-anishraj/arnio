@@ -203,6 +203,23 @@ Useful for exploring datasets before committing memory.
 </details>
 
 <details>
+<summary><b>Detect CSV delimiters before loading</b></summary>
+<br>
+
+`sniff_csv_delimiter` samples a CSV-like file and returns the most likely
+delimiter from comma, semicolon, tab, and pipe by default.
+
+```python
+delimiter = ar.sniff_csv_delimiter("unknown_export.csv")
+frame = ar.read_csv("unknown_export.csv", delimiter=delimiter)
+```
+
+Pass `candidates` for project-specific delimiters. Arnio raises a clear
+`ValueError` when no delimiter is detected or when the sample is ambiguous, so
+ingestion code can ask for an explicit delimiter instead of guessing.
+</details>
+
+<details>
 <summary><b>👀 Preview rows without pandas conversion or full-column Python list materialization</b></summary>
 <br>
 
