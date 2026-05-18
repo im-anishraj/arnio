@@ -64,4 +64,3 @@ class TestWriteCsv:
         out = tmp_path / "out.csv"
         ar.write_csv(frame, out)
         assert out.exists()
-        
