@@ -236,6 +236,7 @@ validation = clean_df.arnio.validate({
     "email": ar.Email(nullable=False),
     "user_code": ar.Regex(r"^USR-\d{4}$", nullable=False),
     "age": ar.Int64(nullable=True, min=0),
+    "score": ar.Custom("positive"),
 })
 ```
 
@@ -715,6 +716,9 @@ clean = ar.pipeline(frame, suggestions)
 For production data contracts:
 
 ```python
+# Register a custom validator once, then reference it by name in any schema
+ar.register_validator("positive", lambda v: v > 0)
+
 schema = ar.Schema({
     "id": ar.Int64(nullable=False, unique=True),
     "email": ar.Email(nullable=False),
@@ -729,7 +733,7 @@ schema = ar.Schema({
 
     "username": ar.String(min_length=3, max_length=20),
     "user_code": ar.Regex(r"^USR-\d{4}$", nullable=False),
-    "revenue": ar.Float64(nullable=True, min=0),
+    "revenue": ar.Custom("positive", nullable=True),
     "signup_date": ar.Date(nullable=False),
     "created_at": ar.DateTime(nullable=False, format="%Y-%m-%d"),
 })

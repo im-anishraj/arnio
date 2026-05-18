@@ -967,3 +967,59 @@ def test_required_if_validation_handles_null_trigger_values(tmp_path):
 
     assert result.passed
     assert result.issue_count == 0
+
+
+def test_register_validator_and_custom_field_passes(tmp_path):
+    ar.register_validator("positive", lambda v: v > 0)
+    path = tmp_path / "scores.csv"
+    path.write_text("score\n1\n5\n100\n")
+    result = ar.validate(ar.read_csv(path), {"score": ar.Custom("positive")})
+    assert result.passed
+
+
+def test_register_validator_and_custom_field_fails(tmp_path):
+    ar.register_validator("positive", lambda v: v > 0)
+    path = tmp_path / "scores.csv"
+    path.write_text("score\n1\n-5\n0\n")
+    result = ar.validate(ar.read_csv(path), {"score": ar.Custom("positive")})
+    assert not result.passed
+    assert result.issues[0].rule == "custom"
+    assert result.issues[0].row_index == 2
+
+
+def test_custom_field_respects_nullable(tmp_path):
+    import pandas as pd
+
+    ar.register_validator("positive", lambda v: v > 0)
+    df = pd.DataFrame({"score": [1, None, 5]})
+    frame = ar.from_pandas(df)
+    result = ar.validate(frame, {"score": ar.Custom("positive", nullable=False)})
+    assert not result.passed
+    assert any(i.rule == "nullable" for i in result.issues)
+
+
+def test_custom_raises_for_unregistered_name():
+    try:
+        ar.Custom("nonexistent_validator")
+    except ValueError as exc:
+        assert "nonexistent_validator" in str(exc)
+    else:
+        raise AssertionError("Expected ValueError for unregistered validator")
+
+
+def test_register_validator_raises_for_non_callable():
+    try:
+        ar.register_validator("bad", "not_a_function")
+    except TypeError as exc:
+        assert "callable" in str(exc)
+    else:
+        raise AssertionError("Expected TypeError")
+
+
+def test_register_validator_raises_for_empty_name():
+    try:
+        ar.register_validator("", lambda v: True)
+    except ValueError as exc:
+        assert "non-empty" in str(exc)
+    else:
+        raise AssertionError("Expected ValueError for empty name")

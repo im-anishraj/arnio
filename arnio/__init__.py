@@ -51,6 +51,7 @@ from .schema import (
     URL,
     Bool,
     CountryCode,
+    Custom,
     Date,
     DateTime,
     Email,
@@ -62,6 +63,7 @@ from .schema import (
     String,
     ValidationIssue,
     ValidationResult,
+    register_validator,
     validate,
 )
 
@@ -128,5 +130,7 @@ __all__ = [
     "TypeCastError",
     "normalize_unicode",
     "Regex",
+    "Custom",
+    "register_validator",
     "Date",
 ]

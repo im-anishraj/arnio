@@ -503,44 +503,6 @@ def Regex(
     )
 
 
-def Regex(
-    pattern: str,
-    *,
-    nullable: bool = True,
-    unique: bool = False,
-) -> Field:
-    """Create a regex-validated string schema field.
-
-    The pattern is compiled at call time so invalid expressions raise
-    ``re.error`` immediately rather than at validation time.
-
-    Parameters
-    ----------
-    pattern : str
-        Regular expression that every non-null value must fully match.
-    nullable : bool, default True
-        Whether null values are allowed.
-    unique : bool, default False
-        Whether all non-null values must be unique.
-
-    Examples
-    --------
-    >>> schema = ar.Schema({
-    ...     "user_id": ar.Regex(r"^USR-\\d{4}$", nullable=False),
-    ...     "zip_code": ar.Regex(r"^\\d{5}(-\\d{4})?$", nullable=True),
-    ... })
-    """
-    import re
-
-    re.compile(pattern)  # fail fast on invalid pattern
-    return Field(
-        dtype="string",
-        nullable=nullable,
-        pattern=pattern,
-        unique=unique,
-    )
-
-
 def DateTime(
     *,
     nullable: bool = True,
@@ -700,44 +662,66 @@ def _validate_column(
         )
 
     if field_def.semantic is not None:
-        pattern = _SEMANTIC_PATTERNS.get(field_def.semantic)
-        if pattern is None:
-            issues.append(
-                ValidationIssue(
-                    column=name,
-                    rule="semantic",
-                    message=f"Unknown semantic type: {field_def.semantic}",
+        if field_def.semantic.startswith("custom:"):
+            validator_name = field_def.semantic[len("custom:") :]
+            fn = _CUSTOM_VALIDATORS.get(validator_name)
+            if fn is None:
+                issues.append(
+                    ValidationIssue(
+                        column=name,
+                        rule="custom",
+                        message=f"Custom validator {validator_name!r} is not registered",
+                    )
                 )
-            )
-        else:
-            if field_def.semantic == "date":
-                invalid_values = []
-
-                for index, value in non_null.items():
-                    value_str = str(value)
-
-                    if DATE_PATTERN.fullmatch(value_str) is None:
-                        invalid_values.append((index, value))
-                        continue
-
-                    try:
-                        datetime.strptime(value_str, "%Y-%m-%d")
-                    except ValueError:
-                        invalid_values.append((index, value))
-
-                invalid = pd.Series({index: value for index, value in invalid_values})
             else:
-                invalid = non_null[~text.str.fullmatch(pattern, na=False)]
-
-            issues.extend(
-                _row_issues(
-                    invalid,
-                    column=name,
-                    rule=field_def.semantic,
-                    message=f"Column {name!r} contains invalid {field_def.semantic} values",
+                invalid = non_null[~non_null.map(fn).astype(bool)]
+                issues.extend(
+                    _row_issues(
+                        invalid,
+                        column=name,
+                        rule="custom",
+                        message=(
+                            f"Column {name!r} contains values that failed "
+                            f"the {validator_name!r} validator"
+                        ),
+                    )
                 )
-            )
+        else:
+            pattern = _SEMANTIC_PATTERNS.get(field_def.semantic)
+            if pattern is None:
+                issues.append(
+                    ValidationIssue(
+                        column=name,
+                        rule="semantic",
+                        message=f"Unknown semantic type: {field_def.semantic}",
+                    )
+                )
+            else:
+                if field_def.semantic == "date":
+                    invalid_values = []
+                    for index, value in non_null.items():
+                        value_str = str(value)
+                        if DATE_PATTERN.fullmatch(value_str) is None:
+                            invalid_values.append((index, value))
+                            continue
+                        try:
+                            datetime.strptime(value_str, "%Y-%m-%d")
+                        except ValueError:
+                            invalid_values.append((index, value))
+                    invalid = pd.Series(
+                        {index: value for index, value in invalid_values}
+                    )
+                else:
+                    invalid = non_null[~text.str.fullmatch(pattern, na=False)]
 
+                issues.extend(
+                    _row_issues(
+                        invalid,
+                        column=name,
+                        rule=field_def.semantic,
+                        message=f"Column {name!r} contains invalid {field_def.semantic} values",
+                    )
+                )
     if field_def.min_length is not None:
         invalid = non_null[text.str.len() < field_def.min_length]
         issues.extend(
@@ -869,3 +853,62 @@ _SEMANTIC_PATTERNS = {
     "country_code": r"[A-Z]{2}",
     "date": r"\d{4}-\d{2}-\d{2}",
 }
+
+# Registry for custom validators registered via register_validator()
+_CUSTOM_VALIDATORS: dict[str, callable] = {}
+
+
+def register_validator(name: str, fn: callable) -> None:
+    """Register a custom validator function for use with Custom().
+
+    Parameters
+    ----------
+    name : str
+        Unique name to identify this validator.
+    fn : callable
+        A function that accepts a scalar value and returns True if valid,
+        False otherwise.
+
+    Examples
+    --------
+    >>> def is_positive(value):
+    ...     return value > 0
+    >>> ar.register_validator("positive", is_positive)
+    """
+    if not callable(fn):
+        raise TypeError("fn must be callable")
+    if not isinstance(name, str) or not name:
+        raise ValueError("name must be a non-empty string")
+    _CUSTOM_VALIDATORS[name] = fn
+
+
+def Custom(
+    name: str,
+    *,
+    nullable: bool = True,
+    unique: bool = False,
+) -> Field:
+    """Create a field validated by a registered custom validator.
+
+    Parameters
+    ----------
+    name : str
+        Name of the validator registered via register_validator().
+    nullable : bool, default True
+        Whether null values are allowed.
+    unique : bool, default False
+        Whether all non-null values must be unique.
+
+    Examples
+    --------
+    >>> ar.register_validator("positive", lambda v: v > 0)
+    >>> schema = ar.Schema({"score": ar.Custom("positive", nullable=False)})
+    """
+    if name not in _CUSTOM_VALIDATORS:
+        raise ValueError(
+            f"No validator registered under {name!r}. "
+            "Call ar.register_validator() first."
+        )
+    return Field(
+        dtype=None, nullable=nullable, unique=unique, semantic=f"custom:{name}"
+    )
