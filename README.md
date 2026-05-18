@@ -746,6 +746,8 @@ if not result.passed:
 
 Date validates strict YYYY-MM-DD calendar dates.
 
+Date validates strict YYYY-MM-DD calendar dates.
+
 `ValidationResult.to_markdown()` is useful in CI logs, GitHub comments, or data quality reports because it renders a compact validation summary plus a GitHub-friendly issue table.
 
 For multi-column uniqueness (composite keys):
