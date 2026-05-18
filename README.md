@@ -736,7 +736,10 @@ data = {
 df = ar.from_pandas(pd.DataFrame(data))
 # Bounded profiling for large datasets (controls how many sample values are kept)
 report = ar.profile(df, sample_size=5)
+safe_report = report.to_dict(redact_sample_values=True)
 ```
+
+Use `report.to_dict(redact_sample_values=True)` when sharing reports outside your team and you want to avoid exposing raw example/sample values.
 
 ### 1. Terminal Representation (Simplified Example)
 *A simplified view of the standard string representation of the report object:*

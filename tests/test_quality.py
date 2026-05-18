@@ -103,6 +103,61 @@ def test_profile_sample_size_small_dataset_and_nulls(tmp_path):
     assert report.columns["id"].sample_values == [1.0, 3.0]
 
 
+def test_quality_to_dict_default_preserves_sample_values(tmp_path):
+    path = tmp_path / "dict_default.csv"
+    path.write_text("name\nAlice\nBob\n")
+    report = ar.profile(ar.read_csv(path), sample_size=2)
+
+    d = report.to_dict()
+
+    assert d["columns"]["name"]["sample_values"] == ["Alice", "Bob"]
+
+
+def test_quality_to_dict_redacts_sample_values(tmp_path):
+    path = tmp_path / "dict_redacted.csv"
+    path.write_text("name\nAlice\nBob\n")
+    report = ar.profile(ar.read_csv(path), sample_size=2)
+
+    d = report.to_dict(redact_sample_values=True)
+
+    assert d["columns"]["name"]["sample_values"] == ["[REDACTED]", "[REDACTED]"]
+    assert report.columns["name"].sample_values == ["Alice", "Bob"]
+
+
+def test_quality_to_dict_redacts_multiple_columns_and_preserves_lengths(tmp_path):
+    path = tmp_path / "dict_multi.csv"
+    path.write_text("name,city\nAlice,Paris\nBob,London\n")
+    report = ar.profile(ar.read_csv(path), sample_size=2)
+
+    d = report.to_dict(redact_sample_values=True)
+
+    assert d["columns"]["name"]["sample_values"] == ["[REDACTED]", "[REDACTED]"]
+    assert d["columns"]["city"]["sample_values"] == ["[REDACTED]", "[REDACTED]"]
+    assert len(d["columns"]["name"]["sample_values"]) == 2
+    assert len(d["columns"]["city"]["sample_values"]) == 2
+
+
+def test_quality_to_dict_redaction_keeps_no_example_cases_empty(tmp_path):
+    path = tmp_path / "dict_empty_samples.csv"
+    path.write_text("id\n1\n2\n")
+    report = ar.profile(ar.read_csv(path), sample_size=0)
+
+    d = report.to_dict(redact_sample_values=True)
+
+    assert d["columns"]["id"]["sample_values"] == []
+
+
+def test_column_profile_to_dict_redacts_sample_values_direct(tmp_path):
+    path = tmp_path / "column_redacted.csv"
+    path.write_text("name\nAlice\nBob\n")
+    report = ar.profile(ar.read_csv(path), sample_size=2)
+
+    d = report.columns["name"].to_dict(redact_sample_values=True)
+
+    assert d["sample_values"] == ["[REDACTED]", "[REDACTED]"]
+    assert report.columns["name"].sample_values == ["Alice", "Bob"]
+
+
 def test_profile_sample_size_validation(tmp_path):
     path = tmp_path / "sample.csv"
     path.write_text("id\n1\n")

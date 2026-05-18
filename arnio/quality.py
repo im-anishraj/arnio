@@ -37,8 +37,13 @@ class ColumnProfile:
     warnings: list[str] = field(default_factory=list)
     top_values: list[tuple[Any, int, float]] | None = None
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self, *, redact_sample_values: bool = False) -> dict[str, Any]:
         """Return a JSON-friendly dictionary."""
+        sample_values = (
+            ["[REDACTED]" for _ in self.sample_values]
+            if redact_sample_values
+            else [_clean_scalar(value) for value in self.sample_values]
+        )
         return {
             "name": self.name,
             "dtype": self.dtype,
@@ -54,7 +59,7 @@ class ColumnProfile:
             "min": _clean_scalar(self.min),
             "max": _clean_scalar(self.max),
             "mean": self.mean,
-            "sample_values": [_clean_scalar(value) for value in self.sample_values],
+            "sample_values": sample_values,
             "warnings": list(self.warnings),
             "top_values": (
                 [
@@ -79,7 +84,7 @@ class DataQualityReport:
     columns: dict[str, ColumnProfile]
     suggestions: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self, *, redact_sample_values: bool = False) -> dict[str, Any]:
         """Return a JSON-friendly dictionary representation."""
         return {
             "row_count": self.row_count,
@@ -88,7 +93,8 @@ class DataQualityReport:
             "duplicate_rows": self.duplicate_rows,
             "duplicate_ratio": self.duplicate_ratio,
             "columns": {
-                name: column.to_dict() for name, column in self.columns.items()
+                name: column.to_dict(redact_sample_values=redact_sample_values)
+                for name, column in self.columns.items()
             },
             "suggestions": [
                 {"step": step, "kwargs": dict(kwargs)}
