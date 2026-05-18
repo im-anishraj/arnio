@@ -431,22 +431,20 @@ class TestDecimalConversion:
     def test_decimal_normal_conversion(self):
         """Normal financial value conversion."""
         dec_val = Decimal("123.45")
-        assert _to_binding_safe(dec_val) == 123.45
-        assert isinstance(_to_binding_safe(dec_val), float)
+        assert _to_binding_safe(dec_val) == "123.45"
+        assert isinstance(_to_binding_safe(dec_val), str)
 
     def test_decimal_edge_cases(self):
         """Zero and negative values."""
-        assert _to_binding_safe(Decimal("0.00")) == 0.0
-        assert _to_binding_safe(Decimal("-0.01")) == -0.01
-        assert _to_binding_safe(Decimal("999.999")) == 999.999
+        assert _to_binding_safe(Decimal("0.00")) == "0.00"
+        assert _to_binding_safe(Decimal("-0.01")) == "-0.01"
+        assert _to_binding_safe(Decimal("999.999")) == "999.999"
 
     def test_decimal_precision_loss_awareness(self):
-        """Large precision decimal may have precision lost to float capabilities."""
+        """Large precision decimal is perfectly preserved as string."""
         large_dec = Decimal("1.234567890123456789")
         result = _to_binding_safe(large_dec)
-        assert result == float(large_dec)
-        # Verify it's the same as direct conversion
-        assert result == float("1.234567890123456789")
+        assert result == "1.234567890123456789"
 
     def test_invalid_cases_infinity(self):
         """Invalid floating/decimal boundaries like infinity."""
@@ -461,24 +459,24 @@ class TestDecimalConversion:
             _to_binding_safe(float("-inf"))
 
     def test_decimal_from_pandas_roundtrip(self):
-        """Decimal columns convert to float during from_pandas."""
+        """Decimal columns convert to exact strings during from_pandas."""
         df = pd.DataFrame(
             {"price": [Decimal("19.99"), Decimal("29.95"), Decimal("15.50")]}
         )
         frame = ar.from_pandas(df)
         result = ar.to_pandas(frame)
-        # Result should be float, not Decimal
-        assert list(result["price"]) == [19.99, 29.95, 15.50]
-        assert result["price"].dtype == "float64"
+        # Result should be preserved as exact strings
+        assert list(result["price"]) == ["19.99", "29.95", "15.50"]
+        assert result["price"].dtype == "string"
 
     def test_decimal_with_nulls(self):
         """Decimal columns with null values."""
         df = pd.DataFrame({"amount": [Decimal("100.50"), None, Decimal("50.25")]})
         frame = ar.from_pandas(df)
         result = ar.to_pandas(frame)
-        assert result["amount"].iloc[0] == 100.50
+        assert result["amount"].iloc[0] == "100.50"
         assert pd.isna(result["amount"].iloc[1])
-        assert result["amount"].iloc[2] == 50.25
+        assert result["amount"].iloc[2] == "50.25"
 
     def test_from_pandas_rejects_decimal_infinity(self):
         """from_pandas() must reject Decimal infinity during conversion."""

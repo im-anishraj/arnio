@@ -147,8 +147,8 @@ Raises `ValueError` for invalid `n` (zero, negative, or non-integer).
 
 `arnio` provides support for converting Python `decimal.Decimal` objects.
 
-* **Behavior**: Python `Decimal` objects are converted to C++ `double` types during serialization/binding.
-* **Caveat**: High-precision financial data may have precision lost during conversion. For exact financial arithmetic, consider passing values as scaled integers (cents) or strings.
+* **Behavior**: Python `Decimal` objects are automatically preserved as high-precision strings during serialization/binding to prevent floating-point precision loss.
+* **Caveat**: When reading back into Pandas, `to_pandas()` returns these as string (`object` dtype) columns. You will need to explicitly cast them back to `Decimal` objects on the resulting DataFrame if you want to resume exact math.
 
 Example:
 
@@ -163,8 +163,9 @@ df = pd.DataFrame({
     "price": [Decimal("19.99"), Decimal("29.95")]
 })
 
-frame = ar.from_pandas(df)  # Decimal values converted to float
+frame = ar.from_pandas(df)  # Decimal values safely preserved as exact strings
 result = ar.to_pandas(frame)
+# result["price"] will be string objects ["19.99", "29.95"]
 ```
 
 </details>

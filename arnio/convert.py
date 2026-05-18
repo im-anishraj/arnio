@@ -33,8 +33,9 @@ def _to_binding_safe(value: Any) -> Any:
     Returns
     -------
     Any
-        Value safe for C++ binding. Decimal and float inputs are converted to
-        binary float, and NaN/Infinity are rejected.
+        Value safe for C++ binding. Decimal inputs are preserved as exact
+        strings. Float inputs are converted to binary float. NaN/Infinity are
+        rejected.
 
     Raises
     ------
@@ -44,7 +45,7 @@ def _to_binding_safe(value: Any) -> Any:
     if isinstance(value, decimal.Decimal):
         if value.is_nan() or value.is_infinite():
             raise ValueError("Invalid financial value: NaN or Infinity.")
-        return float(value)
+        return str(value)
 
     if isinstance(value, float):
         if math.isnan(value) or math.isinf(value):
