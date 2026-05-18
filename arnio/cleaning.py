@@ -14,12 +14,11 @@ from ._core import (
     _drop_nulls,
     _fill_nulls,
     _normalize_case,
-    _rename_columns,
     _strip_whitespace,
 )
+from .convert import from_pandas, to_pandas
 from .exceptions import TypeCastError
 from .frame import ArFrame
-from .convert import from_pandas, to_pandas
 
 
 def validate_columns_exist(
