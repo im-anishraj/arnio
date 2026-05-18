@@ -7,7 +7,7 @@ A technical reference guide to the public classes and functions within the **Arn
 | Category              | Components                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | :-------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Core Class**        | [**`ArFrame`**](#arframe) • Properties: [`shape`](#shape), [`columns`](#columns), [`dtypes`](#dtypes) • [`is_empty`](#is_empty) • Methods: [`memory_usage`](#memory_usage), [`preview`](#preview), [`select_columns`](#select_columns), [`select_dtypes`](#select_dtypes)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| | **I/O** | [`read_csv`](#read_csv) • [`scan_csv`](#scan_csv)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| **I/O** | [`read_csv`](#read_csv) • [`scan_csv`](#scan_csv) • [`write_csv`](#write_csv) |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             
 | **Cleaning**          | [`cast_types`](#cast_types) • [`clean`](#clean) • [`clip_numeric`](#clip_numeric) • [`combine_columns`](#combine_columns) • [`drop_constant_columns`](#drop_constant_columns) • [`drop_duplicates`](#drop_duplicates) • [`drop_nulls`](#drop_nulls) • [`fill_nulls`](#fill_nulls) • [`filter_rows`](#filter_rows) • [`keep_rows_with_nulls`](#keep_rows_with_nulls) • [`normalize_case`](#normalize_case) • [`normalize_unicode`](#normalize_unicode) • [`rename_columns`](#rename_columns) • [`replace_values`](#replace_values) • [`round_numeric_columns`](#round_numeric_columns) • [`safe_divide_columns`](#safe_divide_columns) • [`strip_whitespace`](#strip_whitespace) • [`trim_column_names`](#trim_column_names) • [`validate_columns_exist`](#validate_columns_exist) |
 | **Conversion**        | [`from_pandas`](#from_pandas) • [`to_pandas`](#to_pandas)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | **Integration**       | [`ArnioPandasAccessor`](#arniopandasaccessor)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
@@ -72,42 +72,44 @@ schema = ar.scan_csv("large_dataset.csv")
 
 ### write_csv
 
-Writes an `ArFrame` to a CSV file with configurable delimiter and
-line terminator options.
+Writes an `ArFrame` to a CSV file via the C++ backend.
 
 ```python
-ar.write_csv(df, "output.csv")
+ar.write_csv(frame, "output.csv")
 ```
 
 #### Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `frame` | `ArFrame` | required | The frame to write |
-| `path` | `str` | required | Output file path |
-| `delimiter` | `str` | `","` | Column separator character |
-| `line_terminator` | `str` | `"\n"` | Row separator character |
+| `frame` | `ArFrame` | required | The data frame to write |
+| `path` | `str \| os.PathLike[str]` | required | Destination file path. Supports `.csv`, `.txt`, `.tsv` |
+| `delimiter` | `str` | `","` | Single character field separator |
+| `write_header` | `bool` | `True` | Whether to write the column header row |
+| `line_terminator` | `str` | `"\n"` | Line terminator between rows |
 
-#### Validation rules
+#### Raises
 
-- `delimiter` must be a single character. Passing an empty string
-  or multi-character string raises `ArnioError`.
-- `line_terminator` must be `"\n"` or `"\r\n"`. Any other value
-  raises `ArnioError`.
-- `path` must be a non-empty string. Passing an empty path raises
-  `ArnioError`.
+| Error | When |
+|-------|------|
+| `ValueError` | File extension is not `.csv`, `.txt`, or `.tsv` |
+| `ValueError` | `delimiter` is not exactly one character |
+| `RuntimeError` | File cannot be opened or written |
 
 #### Examples
 
 ```python
-# Default comma delimiter
-ar.write_csv(df, "output.csv")
+# Default comma-separated
+ar.write_csv(frame, "output.csv")
 
-# Tab-separated file
-ar.write_csv(df, "output.tsv", delimiter="\t")
+# Tab-separated
+ar.write_csv(frame, "output.tsv", delimiter="\t")
+
+# Without header row
+ar.write_csv(frame, "output.csv", write_header=False)
 
 # Windows line endings
-ar.write_csv(df, "output.csv", line_terminator="\r\n")
+ar.write_csv(frame, "output.csv", line_terminator="\r\n")
 ```
 
 ---
