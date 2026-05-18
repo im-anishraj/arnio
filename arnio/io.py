@@ -363,4 +363,3 @@ def scan_csv(
             return reader.scan_schema(native_path)
     except RuntimeError as e:
         raise CsvReadError(str(e)) from e
-
