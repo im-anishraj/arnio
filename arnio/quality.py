@@ -47,7 +47,6 @@ class ColumnProfile:
     q50: float | None = None
     q75: float | None = None
     q95: float | None = None
-    has_quantiles: bool = field(default=False, repr=False, compare=False)
     sample_values: list[Any] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     top_values: list[tuple[Any, int, float]] | None = None
@@ -81,7 +80,7 @@ class ColumnProfile:
                     "q75": _clean_scalar(self.q75),
                     "q95": _clean_scalar(self.q95),
                 }
-                if self.has_quantiles
+                if _is_numeric_dtype(self.dtype)
                 else {}
             ),
             "sample_values": sample_values,
@@ -224,10 +223,16 @@ class DataQualityReport:
                     "min": _clean_scalar(column.min),
                     "max": _clean_scalar(column.max),
                     "mean": column.mean,
-                    "q25": _clean_scalar(column.q25),
-                    "q50": _clean_scalar(column.q50),
-                    "q75": _clean_scalar(column.q75),
-                    "q95": _clean_scalar(column.q95),
+                    **(
+                        {
+                            "q25": _clean_scalar(column.q25),
+                            "q50": _clean_scalar(column.q50),
+                            "q75": _clean_scalar(column.q75),
+                            "q95": _clean_scalar(column.q95),
+                        }
+                        if _is_numeric_dtype(column.dtype)
+                        else {}
+                    ),
                     "warnings": column.warnings,
                     "top_values": column.top_values,
                 }
@@ -449,7 +454,6 @@ def _profile_column(
     whitespace_count = 0
     top_values = None
     q25 = q50 = q75 = q95 = None
-    has_quantiles = _is_numeric_dtype(dtype) or pd.api.types.is_numeric_dtype(series.dtype)
     if dtype == "string" or pd.api.types.is_string_dtype(series.dtype):
         as_text = non_null.astype("string")
         stripped = as_text.str.strip()
@@ -507,7 +511,6 @@ def _profile_column(
         q50=q50,
         q75=q75,
         q95=q95,
-        has_quantiles=has_quantiles,
         sample_values=sample_values,
         warnings=warnings,
         top_values=top_values,
