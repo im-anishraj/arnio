@@ -528,5 +528,5 @@ class TestToBindingSafeExtras:
             _to_binding_safe(float("inf"))
 
         with pytest.raises(ValueError, match="Invalid financial value: NaN or Infinity."):
-            to_binding_safe(float('nan'))
+            _to_binding_safe(float("nan"))
 
