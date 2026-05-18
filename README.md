@@ -1034,13 +1034,14 @@ DataQualityReport(
 ## 🗺️ Roadmap
 
 | Version | Focus | Status |
-|:---:|:---|:---:|
+|:---:|:S---|:---:|
 | **v1.0** | Stable release · cross-platform wheels · CI/CD · PyPI publishing · Google Colab support | ✅ Shipped |
 | **v1.1** | Production readiness · release hardening · docs/tooling | ✅ Shipped |
 | **v1.2** | C++ pipeline optimization · speed parity with pandas · hash-based deduplication | 🔨 Active |
 | **v1.3** | Chunked / streaming processing · Parquet & JSON readers | 📋 Planned |
 | **v1.4** | Parallel column processing · SIMD string operations | 💭 Exploring |
 
+> For CLI command reference and examples, see [CLI_REFERENCE.md](CLI_REFERENCE.md).
 <br>
 
 ---
