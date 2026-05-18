@@ -5,6 +5,7 @@ Chained cleaning pipeline.
 
 from __future__ import annotations
 
+from threading import Lock
 from typing import Callable
 
 from . import cleaning
@@ -21,14 +22,17 @@ _STEP_REGISTRY: dict[str, Callable] = {
     "clip_numeric": cleaning.clip_numeric,
     "strip_whitespace": cleaning.strip_whitespace,
     "normalize_case": cleaning.normalize_case,
+    "normalize_unicode": cleaning.normalize_unicode,
     "rename_columns": cleaning.rename_columns,
     "cast_types": cleaning.cast_types,
     "round_numeric_columns": cleaning.round_numeric_columns,
+    "combine_columns": cleaning.combine_columns,
     "trim_column_names": cleaning.trim_column_names,
 }
 
 
 _PYTHON_STEP_REGISTRY: dict[str, Callable] = {}
+_REGISTRY_LOCK = Lock()
 
 
 def register_step(name: str, fn: Callable):
@@ -47,7 +51,9 @@ def register_step(name: str, fn: Callable):
     ...     return df.dropna(thresh=threshold)
     >>> ar.register_step("custom_clean", custom_clean)
     """
-    _PYTHON_STEP_REGISTRY[name] = fn
+    with _REGISTRY_LOCK:
+
+        _PYTHON_STEP_REGISTRY[name] = fn
 
 
 def pipeline(
@@ -91,6 +97,9 @@ def pipeline(
     from .convert import from_pandas, to_pandas
     from .exceptions import UnknownStepError
 
+    with _REGISTRY_LOCK:
+        python_step_registry = dict(_PYTHON_STEP_REGISTRY)
+
     result = frame
     for step in steps:
         if len(step) == 1:
@@ -114,13 +123,13 @@ def pipeline(
                 result = fn(result, kwargs)
             else:
                 result = fn(result, **kwargs)
-        elif name in _PYTHON_STEP_REGISTRY:
+        elif name in python_step_registry:
             # Pure Python step - slower but contributor-friendly
             df = to_pandas(result)
-            df = _PYTHON_STEP_REGISTRY[name](df, **kwargs)
+            df = python_step_registry[name](df, **kwargs)
             result = from_pandas(df)
         else:
-            available = list(_STEP_REGISTRY.keys()) + list(_PYTHON_STEP_REGISTRY.keys())
+            available = list(_STEP_REGISTRY.keys()) + list(python_step_registry.keys())
             raise UnknownStepError(name, available)
 
     return result

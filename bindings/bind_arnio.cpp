@@ -154,62 +154,62 @@ PYBIND11_MODULE(_arnio_cpp, m) {
             py::return_value_policy::reference_internal)
         .def("add_column", &Frame::add_column)
         .def("clone", &Frame::clone)
-        .def_static("from_dict",
-                    [](py::dict cols_dict, py::dict dtype_hints) {
-                        Frame frame;
+        .def_static(
+            "from_dict",
+            [](py::dict cols_dict, py::dict dtype_hints) {
+                Frame frame;
 
-                        for (auto item : cols_dict) {
-                            std::string name = py::cast<std::string>(item.first);
-                            py::list values = py::cast<py::list>(item.second);
+                for (auto item : cols_dict) {
+                    std::string name = py::cast<std::string>(item.first);
+                    py::list values = py::cast<py::list>(item.second);
 
-                            DType dtype = DType::STRING;
-                            py::str py_name(name);
+                    DType dtype = DType::STRING;
+                    py::str py_name(name);
 
-                            if (dtype_hints.contains(py_name)) {
-                                dtype = dtype_hints[py_name].cast<DType>();
-                            } else {
-                                for (auto val : values) {
-                                    if (val.is_none()) continue;
-                                    if (py::isinstance<py::bool_>(val)) {
-                                        dtype = DType::BOOL;
-                                        break;
-                                    }
-                                    if (py::isinstance<py::int_>(val)) {
-                                        dtype = DType::INT64;
-                                        break;
-                                    }
-                                    if (py::isinstance<py::float_>(val)) {
-                                        dtype = DType::FLOAT64;
-                                        break;
-                                    }
-                                    break;
-                                }
+                    if (dtype_hints.contains(py_name)) {
+                        dtype = dtype_hints[py_name].cast<DType>();
+                    } else {
+                        for (auto val : values) {
+                            if (val.is_none()) continue;
+                            if (py::isinstance<py::bool_>(val)) {
+                                dtype = DType::BOOL;
+                                break;
                             }
-
-                            Column col(name, dtype);
-                            for (auto val : values) {
-                                if (val.is_none()) {
-                                    col.push_null();
-                                    continue;
-                                }
-
-                                if (dtype == DType::BOOL)
-                                    col.push_back(val.cast<bool>());
-                                else if (dtype == DType::INT64)
-                                    col.push_back(val.cast<int64_t>());
-                                else if (dtype == DType::FLOAT64)
-                                    col.push_back(val.cast<double>());
-                                else
-                                    col.push_back(py::str(val).cast<std::string>());
+                            if (py::isinstance<py::int_>(val)) {
+                                dtype = DType::INT64;
+                                break;
                             }
+                            if (py::isinstance<py::float_>(val)) {
+                                dtype = DType::FLOAT64;
+                                break;
+                            }
+                            break;
+                        }
+                    }
 
-                            frame.add_column(col);
+                    Column col(name, dtype);
+                    for (auto val : values) {
+                        if (val.is_none()) {
+                            col.push_null();
+                            continue;
                         }
 
-                        return frame;
-                    },
-                    py::arg("cols_dict"),
-                    py::arg("dtype_hints") = py::dict());
+                        if (dtype == DType::BOOL)
+                            col.push_back(val.cast<bool>());
+                        else if (dtype == DType::INT64)
+                            col.push_back(val.cast<int64_t>());
+                        else if (dtype == DType::FLOAT64)
+                            col.push_back(val.cast<double>());
+                        else
+                            col.push_back(py::str(val).cast<std::string>());
+                    }
+
+                    frame.add_column(col);
+                }
+
+                return frame;
+            },
+            py::arg("cols_dict"), py::arg("dtype_hints") = py::dict());
 
     // --- CsvReader ---
     py::class_<CsvConfig>(m, "CsvConfig")
@@ -223,19 +223,32 @@ PYBIND11_MODULE(_arnio_cpp, m) {
 
     py::class_<CsvReader>(m, "CsvReader")
         .def(py::init<const CsvConfig&>(), py::arg("config") = CsvConfig{})
-        .def("read", &CsvReader::read)
-        .def("scan_schema",
+        .def("read",
              [](const CsvReader& reader, const std::string& path) {
-                 auto result = reader.scan_schema(path);
-                 py::dict schema;
-                 for (const auto& pair : result) {
-                     schema[py::str(pair.first)] = py::str(pair.second);
-                 }
-                 return schema;
-             });
+                 py::gil_scoped_release release;
+                 return reader.read(path);
+             })
+        .def("scan_schema", [](const CsvReader& reader, const std::string& path) {
+            std::vector<std::pair<std::string, std::string>> result;
+            {
+                py::gil_scoped_release release;
+                result = reader.scan_schema(path);
+            }
+            py::dict schema;
+            for (const auto& pair : result) {
+                schema[py::str(pair.first)] = py::str(pair.second);
+            }
+            return schema;
+        });
 
     // --- Cleaning functions ---
-    m.def("drop_nulls", &drop_nulls, py::arg("frame"), py::arg("subset") = std::nullopt);
+    m.def(
+        "drop_nulls",
+        [](const Frame& frame, const std::optional<std::vector<std::string>>& subset) {
+            py::gil_scoped_release release;
+            return drop_nulls(frame, subset);
+        },
+        py::arg("frame"), py::arg("subset") = std::nullopt);
 
     m.def(
         "fill_nulls",
@@ -257,14 +270,31 @@ PYBIND11_MODULE(_arnio_cpp, m) {
         },
         py::arg("frame"), py::arg("value"), py::arg("subset") = std::nullopt);
 
-    m.def("drop_duplicates", &drop_duplicates, py::arg("frame"), py::arg("subset") = std::nullopt,
-          py::arg("keep") = "first");
+    m.def(
+        "drop_duplicates",
+        [](const Frame& frame, const std::optional<std::vector<std::string>>& subset,
+           const std::string& keep) {
+            py::gil_scoped_release release;
+            return drop_duplicates(frame, subset, keep);
+        },
+        py::arg("frame"), py::arg("subset") = std::nullopt, py::arg("keep") = "first");
 
-    m.def("strip_whitespace", &strip_whitespace, py::arg("frame"),
-          py::arg("subset") = std::nullopt);
+    m.def(
+        "strip_whitespace",
+        [](const Frame& frame, const std::optional<std::vector<std::string>>& subset) {
+            py::gil_scoped_release release;
+            return strip_whitespace(frame, subset);
+        },
+        py::arg("frame"), py::arg("subset") = std::nullopt);
 
-    m.def("normalize_case", &normalize_case, py::arg("frame"), py::arg("subset") = std::nullopt,
-          py::arg("case_type") = "lower");
+    m.def(
+        "normalize_case",
+        [](const Frame& frame, const std::optional<std::vector<std::string>>& subset,
+           const std::string& case_type) {
+            py::gil_scoped_release release;
+            return normalize_case(frame, subset, case_type);
+        },
+        py::arg("frame"), py::arg("subset") = std::nullopt, py::arg("case_type") = "lower");
 
     m.def("rename_columns", &rename_columns, py::arg("frame"), py::arg("mapping"));
 

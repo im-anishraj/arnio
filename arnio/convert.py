@@ -18,6 +18,38 @@ def _is_nested(value: object) -> bool:
     return isinstance(value, (list, dict, tuple, set, np.ndarray))
 
 
+def _check_unsupported_dtype(col_name: object, series: pd.Series) -> None:
+    """Raise a clear TypeError for dtypes that arnio cannot convert."""
+    dtype = series.dtype
+    dtype_str = str(dtype)
+    name = repr(str(col_name))
+
+    if hasattr(dtype, "tz") or dtype_str.startswith("datetime64"):
+        raise TypeError(
+            f"Column {name} has unsupported dtype '{dtype_str}'.\n"
+            f"  Fix: df[{name}] = df[{name}].astype(str)  "
+            f"# or use .dt.strftime('%Y-%m-%d') for formatted dates"
+        )
+
+    if dtype_str.startswith("timedelta"):
+        raise TypeError(
+            f"Column {name} has unsupported dtype '{dtype_str}'.\n"
+            f"  Fix: df[{name}] = df[{name}].dt.total_seconds()"
+        )
+
+    if hasattr(dtype, "categories"):
+        raise TypeError(
+            f"Column {name} has unsupported dtype 'category'.\n"
+            f"  Fix: df[{name}] = df[{name}].astype(str)"
+        )
+
+    if dtype_str in ("complex128", "complex64"):
+        raise TypeError(
+            f"Column {name} has unsupported dtype '{dtype_str}'.\n"
+            f"  Fix: df[{name}] = df[{name}].apply(str)"
+        )
+
+
 def _normalize_scalar(value: object) -> object:
     if pd.isna(value):
         return None
@@ -109,7 +141,6 @@ def to_pandas(frame: ArFrame, *, copy: bool = False) -> pd.DataFrame:
             arr = col.to_numpy_int()
             if copy:
                 arr = arr.copy()
-            # pandas Int64Dtype handles nulls via mask
             series = pd.Series(arr, dtype=pd.Int64Dtype())
             series[mask] = pd.NA
             data[name] = series
@@ -128,7 +159,6 @@ def to_pandas(frame: ArFrame, *, copy: bool = False) -> pd.DataFrame:
             series[mask] = pd.NA
             data[name] = series
         else:
-            # STRING or unknown
             values = col.to_python_list()
             series = pd.Series(values, dtype=pd.StringDtype())
             series[mask] = pd.NA
@@ -176,6 +206,8 @@ def from_pandas(df: pd.DataFrame) -> ArFrame:
     for col_name in df.columns:
         series = df[col_name]
         name = str(col_name)
+
+        _check_unsupported_dtype(col_name, series)  # NEW: check before converting
 
         columns[name] = _series_to_python_values(series, col_name)
 
