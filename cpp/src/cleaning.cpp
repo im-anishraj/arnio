@@ -274,8 +274,7 @@ Frame normalize_case(const Frame& frame, const std::optional<std::vector<std::st
             }
             return result;
         };
-    } 
-    else if (case_type == "upper") {
+    } else if (case_type == "upper") {
         transform_fn = [](const std::string& s) {
             std::string result = s;
             for (auto& c : result) {
@@ -291,24 +290,13 @@ Frame normalize_case(const Frame& frame, const std::optional<std::vector<std::st
             std::string result = s;
             bool next_upper = true;
             for (auto& c : result) {
-                unsigned char uc = static_cast<unsigned char>(c);
-
-                if (std::isspace(uc)) {
+                if (std::isspace(static_cast<unsigned char>(c))) {
                     next_upper = true;
-                    continue;
-                }
-
-                // skip UTF-8 / non-ASCII bytes safely
-                if (uc > 127) {
-                    next_upper = false;
-                    continue;
-                }
-
-                if (next_upper) {
-                    c = static_cast<char>(std::toupper(uc));
+                } else if (next_upper) {
+                    c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
                     next_upper = false;
                 } else {
-                    c = static_cast<char>(std::tolower(uc));
+                    c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
                 }
             }
             return result;
