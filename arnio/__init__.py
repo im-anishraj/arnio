@@ -124,5 +124,4 @@ __all__ = [
     "normalize_unicode",
     "Regex",
     "Date",
-    "trim_column_names",
 ]

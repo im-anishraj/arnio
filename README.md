@@ -416,11 +416,11 @@ Total avg (Read+Strict)       0.077             4.52
 
 ## 🧰 Cleaning primitives
 
-<<<<<<< HEAD
+
 Most operations below run natively in C++. Currently, `filter_rows` and `replace_values` run via the Python (pandas) backend and may be optimized in C++ later.
-=======
+
 Most operations below run natively in C++. The current `filter_rows` step uses the Python pipeline backend and may be optimized in C++ later.
->>>>>>> 5d7bf63 (fix: scope Date schema PR cleanup)
+
 
 | Primitive | What it does | Example |
 |:---|:---|:---|
