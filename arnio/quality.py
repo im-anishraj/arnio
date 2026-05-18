@@ -135,22 +135,14 @@ class DataQualityReport:
             lines.append("## Columns")
             lines.append("")
 
-            lines.append(
-                "| Name | Dtype | Semantic Type | Nulls | Unique | Warnings |"
-            )
+            lines.append("| Name | Dtype | Semantic Type | Nulls | Unique | Warnings |")
 
-            lines.append(
-                "|---|---|---|---|---|---|"
-            )
+            lines.append("|---|---|---|---|---|---|")
 
             for name in sorted(self.columns):
                 column = self.columns[name]
 
-                warnings = (
-                    ", ".join(column.warnings)
-                    if column.warnings
-                    else "-"
-                )
+                warnings = ", ".join(column.warnings) if column.warnings else "-"
 
                 lines.append(
                     f"| {column.name} "
