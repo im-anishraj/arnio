@@ -302,8 +302,6 @@ def test_row_index_is_one_based_for_first_row(tmp_path):
     assert result.issues[0].row_index == 1
 
 
-
-
 def test_raise_for_errors_passes(sample_csv):
     frame = ar.read_csv(sample_csv)
     schema = ar.Schema({"name": ar.String(nullable=False)})
@@ -345,7 +343,8 @@ def test_raise_for_errors_multiple_issues(tmp_path):
 
     msg = str(exc.value)
     assert "below 3" in msg
-    assert "row 0" in msg and "row 1" in msg
+    assert "row 1" in msg and "row 2" in msg
+
 
 def test_email_validation_rejects_invalid_validation_mode():
     with pytest.raises(ValueError):
@@ -437,7 +436,6 @@ def test_country_code_validation_rejects_invalid_codes(tmp_path):
     assert {issue.rule for issue in result.issues} == {"country_code"}
 
 
-
 def test_string_min_length_boundary(tmp_path):
     path = tmp_path / "names.csv"
     path.write_text("name\nab\nabc\n")
@@ -480,8 +478,6 @@ def test_null_values_skip_length_validation(tmp_path):
     assert not result.passed
     assert result.issue_count == 1
     assert result.issues[0].rule == "min_length"
-
-    assert result.issues[0].row_index == 0
 
     assert result.issues[0].row_index == 1
 
@@ -857,4 +853,3 @@ def test_date_validation_rejects_non_zero_padded_dates(tmp_path):
 
     rules = {issue.rule for issue in result.issues}
     assert "date" in rules
-
