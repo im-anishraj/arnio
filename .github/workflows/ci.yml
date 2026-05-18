@@ -75,3 +75,28 @@ jobs:
           file: ./coverage.xml
           fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}
+
+python314_smoke:
+  runs-on: ubuntu-latest
+
+  continue-on-error: true
+
+  steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python 3.14
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.14"
+
+    - name: Upgrade packaging tools
+      run: |
+        python -m pip install --upgrade pip setuptools wheel
+
+    - name: Install package
+      run: |
+        pip install -e .[dev]
+
+    - name: Smoke test
+      run: |
+        python -c "import arnio; print('arnio import OK')"
