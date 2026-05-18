@@ -249,7 +249,7 @@ def from_pandas(df: pd.DataFrame) -> ArFrame:
         seen.add(label)
     if dupes:
         raise ValueError(
-            f"from_pandas() does not support duplicate column labels: {[repr(l) for l in dupes]}"
+            f"from_pandas() does not support duplicate column labels: {[repr(label) for label in dupes]}"
         )
 
     columns = {}
