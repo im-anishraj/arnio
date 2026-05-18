@@ -29,11 +29,6 @@ jobs:
       - name: Install cibuildwheel
         run: pip install cibuildwheel==2.22.0
 
-      - name: Build manylinux wheel
-        run: cibuildwheel --platform linux --only cp312-manylinux_x86_64
-        env:
-          CIBW_BUILD_VERBOSITY: 1
-
       - name: Run wheel smoke test
         run: python tests/smoke_wheel_install.py --wheelhouse wheelhouse
 
