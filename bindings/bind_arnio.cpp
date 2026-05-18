@@ -322,6 +322,6 @@ PYBIND11_MODULE(_arnio_cpp, m) {
             py::gil_scoped_release release;
             return clip_numeric(frame, lower, upper, subset);
         },
-        py::arg("frame"), py::arg("lower") = std::nullopt,
-        py::arg("upper") = std::nullopt, py::arg("subset") = std::nullopt);
+        py::arg("frame"), py::arg("lower") = std::nullopt, py::arg("upper") = std::nullopt,
+        py::arg("subset") = std::nullopt);
 }
