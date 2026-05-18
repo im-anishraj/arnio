@@ -554,7 +554,11 @@ def normalize_case(
     subset: list[str] | None = None,
     case_type: str = "lower",
 ) -> ArFrame:
-    """Normalize string columns to lower/upper/title case.
+    """Normalize ASCII letters in string columns to lower/upper/title case.
+
+    Non-ASCII UTF-8 bytes are preserved unchanged. This keeps accented text,
+    CJK characters, emoji, and other multibyte data valid while avoiding a
+    heavyweight Unicode case-folding dependency.
 
     Parameters
     ----------

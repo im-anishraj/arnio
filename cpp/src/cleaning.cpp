@@ -268,22 +268,50 @@ Frame normalize_case(const Frame& frame, const std::optional<std::vector<std::st
                      const std::string& case_type) {
     auto target_indices_set = resolve_subset(frame, subset);
     std::unordered_set<size_t> targets(target_indices_set.begin(), target_indices_set.end());
+    auto ascii_lower = [](char c) -> char {
+        const auto uc = static_cast<unsigned char>(c);
+        if (uc >= 'A' && uc <= 'Z') {
+            return static_cast<char>(uc + ('a' - 'A'));
+        }
+        return c;
+    };
+    auto ascii_upper = [](char c) -> char {
+        const auto uc = static_cast<unsigned char>(c);
+        if (uc >= 'a' && uc <= 'z') {
+            return static_cast<char>(uc - ('a' - 'A'));
+        }
+        return c;
+    };
+    auto is_ascii_alpha = [](char c) -> bool {
+        const auto uc = static_cast<unsigned char>(c);
+        return (uc >= 'A' && uc <= 'Z') || (uc >= 'a' && uc <= 'z');
+    };
 
     std::function<std::string(const std::string&)> transform_fn;
     if (case_type == "lower") {
         transform_fn = [](const std::string& s) {
             std::string result = s;
-            std::transform(result.begin(), result.end(), result.begin(), ::tolower);
+            for (auto& c : result) {
+                const auto uc = static_cast<unsigned char>(c);
+                if (uc >= 'A' && uc <= 'Z') {
+                    c = static_cast<char>(uc + ('a' - 'A'));
+                }
+            }
             return result;
         };
     } else if (case_type == "upper") {
         transform_fn = [](const std::string& s) {
             std::string result = s;
-            std::transform(result.begin(), result.end(), result.begin(), ::toupper);
+            for (auto& c : result) {
+                const auto uc = static_cast<unsigned char>(c);
+                if (uc >= 'a' && uc <= 'z') {
+                    c = static_cast<char>(uc - ('a' - 'A'));
+                }
+            }
             return result;
         };
     } else if (case_type == "title") {
-        transform_fn = [](const std::string& s) {
+        transform_fn = [ascii_lower, ascii_upper, is_ascii_alpha](const std::string& s) {
             std::string result = s;
             bool next_upper = true;
             auto is_word_boundary = [](char c) -> bool {
@@ -293,11 +321,14 @@ Frame normalize_case(const Frame& frame, const std::optional<std::vector<std::st
             for (auto& c : result) {
                 if (is_word_boundary(c)) {
                     next_upper = true;
-                } else if (next_upper) {
-                    c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+                } else if (next_upper && is_ascii_alpha(c)) {
+                    c = ascii_upper(c);
                     next_upper = false;
                 } else {
-                    c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                    c = ascii_lower(c);
+                    if (is_ascii_alpha(c)) {
+                        next_upper = false;
+                    }
                 }
             }
             return result;

@@ -554,6 +554,31 @@ class TestNormalizeCase:
         assert df["name"].iloc[0] == "Hello/World"
         assert df["name"].iloc[1] == "Foo/Bar"
 
+    def test_unicode_bytes_are_preserved_for_lower_and_upper(self):
+        import pandas as pd
+
+        frame = ar.from_pandas(
+            pd.DataFrame({"city": ["São Paulo", "München", "東京", "Dev 🚀"]})
+        )
+
+        lower = ar.to_pandas(ar.normalize_case(frame, subset=["city"], case_type="lower"))
+        upper = ar.to_pandas(ar.normalize_case(frame, subset=["city"], case_type="upper"))
+
+        assert lower["city"].tolist() == ["são paulo", "münchen", "東京", "dev 🚀"]
+        assert upper["city"].tolist() == ["SãO PAULO", "MüNCHEN", "東京", "DEV 🚀"]
+
+    def test_unicode_bytes_are_preserved_for_title(self):
+        import pandas as pd
+
+        frame = ar.from_pandas(
+            pd.DataFrame({"city": ["são-paulo", "münchen central", "東京 station"]})
+        )
+
+        result = ar.normalize_case(frame, subset=["city"], case_type="title")
+        df = ar.to_pandas(result)
+
+        assert df["city"].tolist() == ["São-Paulo", "München Central", "東京 Station"]
+
 
 class TestNormalizeUnicode:
     def test_normalize_unicode(self):
