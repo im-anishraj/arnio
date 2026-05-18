@@ -5,10 +5,25 @@
 #include <cerrno>
 #include <cstddef>
 #include <cstdlib>
+#include <charconv>
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
 #include <unordered_set>
+
+static std::string trim_whitespace(const std::string& s) {
+    size_t start = 0;
+    while (start < s.size() && std::isspace(static_cast<unsigned char>(s[start]))) {
+        ++start;
+    }
+
+    size_t end = s.size();
+    while (end > start && std::isspace(static_cast<unsigned char>(s[end - 1]))) {
+        --end;
+    }
+
+    return s.substr(start, end - start);
+}
 
 namespace arnio {
 
@@ -244,20 +259,24 @@ DType CsvReader::infer_type(const std::string& value) const {
     std::string cleaned = normalize_numeric(value, config_);
 
     // Try int64
-    {
-        const char* start = cleaned.c_str();
-        char* end = nullptr;
-        errno = 0;
-        long long val = std::strtoll(start, &end, 10);
-        (void)val;
-        if (end != start && *end == '\0') {
-            if (errno == ERANGE) return DType::STRING;
-            return DType::INT64;
-        }
+    std::string trimmed = trim_whitespace(cleaned);
+    std::string int_candidate = trimmed;
+
+    if (!int_candidate.empty() && int_candidate[0] == '+') {
+        int_candidate.erase(0, 1);
     }
 
-    if (looks_like_integer_literal(cleaned)) return DType::STRING;
+    long long val = 0;
+    const char* start = int_candidate.data();
+    const char* end = start + int_candidate.size();
 
+    auto [ptr, ec] = std::from_chars(start, end, val);
+
+    if (ec == std::errc() && ptr == end) {
+       return DType::INT64;
+
+    }
+    
     // Try float64
     {
         const char* start = cleaned.c_str();
