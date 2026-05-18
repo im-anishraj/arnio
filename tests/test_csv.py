@@ -26,6 +26,54 @@ class TestReadCsv:
         frame = ar.read_csv(sample_csv, nrows=2)
         assert frame.shape == (2, 4)
 
+    def test_invalid_delimiter(self, tmp_path):
+        csv_path = tmp_path / "test.csv"
+        csv_path.write_text("a,b\n1,2\n")
+
+        with pytest.raises(ValueError, match="delimiter must be exactly one character"):
+            ar.read_csv(csv_path, delimiter="::")
+
+        with pytest.raises(ValueError, match="delimiter must be exactly one character"):
+            ar.read_csv(csv_path, delimiter="")
+
+        with pytest.raises(TypeError, match="delimiter must be a string"):
+            ar.read_csv(csv_path, delimiter=1)
+
+    def test_invalid_usecols(self, tmp_path):
+        csv_path = tmp_path / "test.csv"
+        csv_path.write_text("id,name\n1,Alice\n")
+
+        with pytest.raises(
+            TypeError,
+            match="usecols must be a sequence of column names, not a string",
+        ):
+            ar.read_csv(csv_path, usecols="name")
+
+        with pytest.raises(
+            TypeError,
+            match="usecols must contain only strings",
+        ):
+            ar.read_csv(csv_path, usecols=[123])
+
+        with pytest.raises(
+            ValueError,
+            match="usecols must not contain duplicate column names",
+        ):
+            ar.read_csv(csv_path, usecols=["id", "id"])
+
+    def test_invalid_nrows(self, tmp_path):
+        csv_path = tmp_path / "test.csv"
+        csv_path.write_text("a,b\n1,2\n")
+
+        with pytest.raises(TypeError, match="nrows must be an integer"):
+            ar.read_csv(csv_path, nrows=True)
+
+        with pytest.raises(TypeError, match="nrows must be an integer"):
+            ar.read_csv(csv_path, nrows=1.5)
+
+        with pytest.raises(ValueError, match="nrows must be non-negative"):
+            ar.read_csv(csv_path, nrows=-1)
+
     def test_no_header(self, csv_no_header):
         frame = ar.read_csv(csv_no_header, has_header=False)
         assert frame.shape == (2, 3)
@@ -55,8 +103,14 @@ class TestReadCsv:
         frame = ar.read_csv(sample_csv)
         assert len(frame) == 3
 
-    def test_header_whitespace(self, tmp_path):
+    def test_contains_operator(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
 
+        assert "name" in frame
+        assert "missing" not in frame
+        assert 123 not in frame
+
+    def test_header_whitespace(self, tmp_path):
         csv_path = str(tmp_path / "whitespace.csv")
         with open(csv_path, "w") as f:
             f.write("name ,  age\nAlice,25\n")
@@ -243,6 +297,56 @@ class TestScanCsv:
         ):
             ar.scan_csv(file_path)
 
+    def test_scan_sample_size(self, tmp_path):
+        csv_path = tmp_path / "sample.csv"
+        csv_path.write_text("id,value\n1,10\n2,20\n3,30\n4,hello\n")
+
+        schema_early = ar.scan_csv(csv_path, sample_size=2)
+        assert schema_early["value"] == "int64"
+
+        schema_full = ar.scan_csv(csv_path, sample_size=10)
+        assert schema_full["value"] == "string"
+
+    def test_scan_sample_size_invalid(self, sample_csv):
+
+        with pytest.raises(ValueError, match="sample_size must be a positive integer"):
+            ar.scan_csv(sample_csv, sample_size=0)
+
+        with pytest.raises(ValueError, match="sample_size must be a positive integer"):
+            ar.scan_csv(sample_csv, sample_size=-5)
+
+    def test_scan_sample_size_none_preserves_default(self, tmp_path):
+        csv_path = tmp_path / "sample_default.csv"
+        csv_path.write_text("id,val\n1,a\n2,b\n3,c\n")
+
+        res_implicit = ar.scan_csv(csv_path)
+        res_explicit = ar.scan_csv(csv_path, sample_size=None)
+
+        assert res_implicit == res_explicit
+
+    def test_scan_sample_size_invalid_types(self, sample_csv):
+        with pytest.raises(TypeError):
+            ar.scan_csv(sample_csv, sample_size=True)
+
+        with pytest.raises(TypeError):
+            ar.scan_csv(sample_csv, sample_size=1.5)
+
+        with pytest.raises(TypeError):
+            ar.scan_csv(sample_csv, sample_size="100")
+
+    def test_scan_invalid_delimiter(self, tmp_path):
+        csv_path = tmp_path / "test.csv"
+        csv_path.write_text("a,b\n1,2\n")
+
+        with pytest.raises(ValueError, match="delimiter must be exactly one character"):
+            ar.scan_csv(csv_path, delimiter="::")
+
+        with pytest.raises(ValueError, match="delimiter must be exactly one character"):
+            ar.scan_csv(csv_path, delimiter="")
+
+        with pytest.raises(TypeError, match="delimiter must be a string"):
+            ar.scan_csv(csv_path, delimiter=1)
+
     def test_scan_empty_file_raises(self, tmp_path):
         csv_path = tmp_path / "empty.csv"
         csv_path.write_text("")
@@ -268,3 +372,60 @@ class TestScanCsv:
         frame = ar.read_csv(sample_csv)
 
         assert list(schema.keys()) == list(frame.columns)
+
+    def test_scan_csv_non_utf8_multiline_boundary(self, tmp_path):
+        """scan_csv must not split a quoted multiline record at the sample boundary.
+
+        Previously the sampling path iterated raw physical lines, which could
+        cut through a quoted field that contained an embedded newline. The result
+        was an invalid partial CSV fed to scan_schema, causing either a parse
+        error or wrong type inference. With record-aware sampling (csv.reader)
+        the boundary always falls between complete records.
+        """
+        csv_file = tmp_path / "test_multiline_boundary.csv"
+
+        # Build ~10 000 rows so the multiline record sits right at the limit.
+        content_lines = ["id,text"]
+        for i in range(1, 9999):
+            content_lines.append(f"{i},value")
+
+        # Row 9999 — a quoted field containing embedded newlines and a
+        # latin-1 character (é). This record straddles the old line-count
+        # boundary and would have been split by the previous implementation.
+        content_lines.append('9999,"multiline\nrecord\ncafé"')
+        content_lines.append("10000,end")
+
+        csv_content = "\n".join(content_lines)
+
+        # Write as latin-1 so the non-UTF-8 transcode path is exercised.
+        csv_file.write_bytes(csv_content.encode("latin-1"))
+
+        schema = ar.scan_csv(str(csv_file), encoding="latin-1")
+        assert schema == {"id": "int64", "text": "string"}
+
+    def test_scan_csv_type_evidence_after_limit(self, tmp_path):
+        """Type evidence that appears after the sample window must not affect inference.
+
+        scan_csv is documented to infer types from a leading sample. A float
+        value that appears only beyond row 10 000 should not change the inferred
+        type of a column that looks like int64 within the sample. This test pins
+        that contract so future changes to the sample size don't silently break
+        the documented behaviour.
+        """
+        csv_file = tmp_path / "test_type_evidence.csv"
+
+        content_lines = ["id,value"]
+        for i in range(1, 10005):
+            content_lines.append(f"{i},100")
+
+        # Row 10 006 — float evidence that falls outside the 10 000-row sample.
+        content_lines.append("10006,3.14")
+
+        csv_content = "\n".join(content_lines)
+
+        # latin-1 encoding so the transcode + sampling path is exercised.
+        csv_file.write_bytes(csv_content.encode("latin-1"))
+
+        schema = ar.scan_csv(str(csv_file), encoding="latin-1")
+        # The float is outside the sample; 'value' must be inferred as int64.
+        assert schema["value"] == "int64"
