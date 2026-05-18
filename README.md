@@ -228,8 +228,7 @@ Custom steps run through a pandas↔ArFrame conversion bridge. Prototype in Pyth
 <summary><b>✂️ Slice rows with head() and tail()</b></summary>
 <br>
 
-`head()` and `tail()` return the first or last `n` rows as a new `ArFrame`, no full conversion needed.
-
+`head()` and `tail()` return the first or last `n` rows as a new `ArFrame`.
 ```python
 frame = ar.read_csv("data.csv")
 
