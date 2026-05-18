@@ -123,6 +123,24 @@ print(selected.columns)
 
 <br>
 
+### Security note: CSV formula injection
+
+Arnio preserves cell values when reading CSV files. It does not rewrite strings that
+begin with spreadsheet formula prefixes such as `=`, `+`, `-`, or `@`.
+
+If you export Arnio-cleaned data back to CSV and expect users to open that file in
+Excel, Google Sheets, LibreOffice, or another spreadsheet application, treat
+untrusted text fields as potentially executable spreadsheet formulas. Before
+exporting, escape or neutralize formula-like strings in user-controlled columns,
+for example by prefixing a single quote or another project-approved escape marker.
+
+This is especially important for customer names, notes, comments, imported form
+fields, and any other free-text values that may come from outside your trust
+boundary. Arnio focuses on parsing, validation, profiling, and cleanup; final CSV
+export policy should stay explicit in the application that writes the file.
+
+<br>
+
 <details>
 <summary><b>📸 Peek at a 100 GB file without loading it</b></summary>
 <br>
