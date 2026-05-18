@@ -22,6 +22,7 @@ ISSUE_COLUMNS = [
     "message",
     "row_index",
     "value",
+    "severity",
 ]
 
 DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -45,6 +46,7 @@ class Field:
     _datetime_min: pd.Timestamp | None = None
     _datetime_max: pd.Timestamp | None = None
     required_if: tuple[str, Any] | None = None
+    severity: str = "error"
 
 
 @dataclass(frozen=True)
@@ -69,6 +71,7 @@ class ValidationIssue:
     message: str
     row_index: int | None = None
     value: Any = None
+    severity: str = "error"
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-friendly dictionary."""
@@ -78,6 +81,7 @@ class ValidationIssue:
             "message": self.message,
             "row_index": self.row_index,
             "value": _clean_scalar(self.value),
+            "severity": self.severity,
         }
 
 
@@ -92,8 +96,8 @@ class ValidationResult:
 
     @property
     def passed(self) -> bool:
-        """Whether validation passed with zero issues."""
-        return self.issue_count == 0
+        """Whether validation passed with zero error-level issues."""
+        return not any(issue.severity == "error" for issue in self.issues)
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-friendly dictionary."""
@@ -106,11 +110,7 @@ class ValidationResult:
         }
 
     def summary(self) -> dict[str, Any]:
-        """Return a compact validation summary.
-
-        Severity counts are not included because ``ValidationIssue`` does not
-        currently carry severity information.
-        """
+        """Return a compact validation summary."""
         by_rule: dict[str, int] = {}
         by_column: dict[str, int] = {}
         by_column_and_rule: dict[str, dict[str, int]] = {}
@@ -162,7 +162,7 @@ class ValidationResult:
             f"- Bad rows: {len(self.bad_rows)}",
         ]
 
-        if self.passed:
+        if self.passed and self.issue_count == 0:
             return "\n".join(lines)
 
         visible_issues = self.issues if max_issues is None else self.issues[:max_issues]
@@ -561,6 +561,7 @@ def _validate_column(
                 column=name,
                 rule="nullable",
                 message=f"Column {name!r} contains null values",
+                severity=field_def.severity,
             )
         )
 
@@ -590,6 +591,7 @@ def _validate_column(
                         f"Column {name!r} is required when "
                         f"{condition_column!r} == {expected_value!r}"
                     ),
+                    severity=field_def.severity,
                 )
             )
 
@@ -601,6 +603,7 @@ def _validate_column(
                 column=name,
                 rule="unique",
                 message=f"Column {name!r} contains duplicate values",
+                severity=field_def.severity,
             )
         )
 
@@ -612,6 +615,7 @@ def _validate_column(
                 column=name,
                 rule="allowed",
                 message=f"Column {name!r} contains values outside the allowed set",
+                severity=field_def.severity,
             )
         )
 
@@ -627,6 +631,7 @@ def _validate_column(
                 column=name,
                 rule="numeric",
                 message=f"Column {name!r} contains non-numeric values",
+                severity=field_def.severity,
             )
         )
         if field_def.min is not None:
@@ -636,6 +641,7 @@ def _validate_column(
                     column=name,
                     rule="min",
                     message=f"Column {name!r} has values below {field_def.min}",
+                    severity=field_def.severity,
                 )
             )
         if field_def.max is not None:
@@ -645,6 +651,7 @@ def _validate_column(
                     column=name,
                     rule="max",
                     message=f"Column {name!r} has values above {field_def.max}",
+                    severity=field_def.severity,
                 )
             )
 
@@ -658,6 +665,7 @@ def _validate_column(
                 column=name,
                 rule="pattern",
                 message=f"Column {name!r} has values that do not match the pattern",
+                severity=field_def.severity,
             )
         )
 
@@ -684,6 +692,7 @@ def _validate_column(
                             f"Column {name!r} contains values that failed "
                             f"the {validator_name!r} validator"
                         ),
+                        severity=field_def.severity,
                     )
                 )
         else:
@@ -720,6 +729,7 @@ def _validate_column(
                         column=name,
                         rule=field_def.semantic,
                         message=f"Column {name!r} contains invalid {field_def.semantic} values",
+                        severity=field_def.severity,
                     )
                 )
     if field_def.min_length is not None:
@@ -730,6 +740,7 @@ def _validate_column(
                 column=name,
                 rule="min_length",
                 message=f"Column {name!r} has values shorter than {field_def.min_length}",
+                severity=field_def.severity,
             )
         )
 
@@ -741,6 +752,7 @@ def _validate_column(
                 column=name,
                 rule="max_length",
                 message=f"Column {name!r} has values longer than {field_def.max_length}",
+                severity=field_def.severity,
             )
         )
 
@@ -762,6 +774,7 @@ def _validate_datetime(
             column=name,
             rule="format",
             message=f"Column {name!r} does not match the required datetime format",
+            severity=field_def.severity,
         )
     )
 
@@ -776,6 +789,7 @@ def _validate_datetime(
                 column=name,
                 rule="min",
                 message=f"Column {name!r} has values below {field_def._datetime_min}",
+                severity=field_def.severity,
             )
         )
     if field_def._datetime_max is not None:
@@ -785,6 +799,7 @@ def _validate_datetime(
                 column=name,
                 rule="max",
                 message=f"Column {name!r} has values above {field_def._datetime_max}",
+                severity=field_def.severity,
             )
         )
 
@@ -812,6 +827,7 @@ def _row_issues(
     column: str,
     rule: str,
     message: str,
+    severity: str = "error",
 ) -> list[ValidationIssue]:
     return [
         ValidationIssue(
@@ -820,6 +836,7 @@ def _row_issues(
             message=message,
             row_index=int(index) + 1,
             value=value,
+            severity=severity,
         )
         for index, value in invalid.items()
     ]

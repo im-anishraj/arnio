@@ -79,6 +79,7 @@ def test_validation_result_to_pandas_empty_has_stable_columns():
         "message",
         "row_index",
         "value",
+        "severity",
     ]
 
 
@@ -203,6 +204,26 @@ def test_validation_result_to_markdown_for_success(sample_csv):
     assert "- Status: **passed**" in markdown
     assert "- Issues found: 0" in markdown
     assert "| Column | Rule | Row | Value | Message |" not in markdown
+
+
+def test_warning_severity_does_not_fail_validation(tmp_path):
+    path = tmp_path / "warnings.csv"
+    path.write_text("age\n15\n")
+
+    schema = {
+        "age": ar.Field(
+            dtype="int64",
+            min=18,
+            severity="warning",
+        )
+    }
+
+    result = ar.validate(ar.read_csv(path), schema)
+
+    assert result.passed
+    assert result.issue_count == 1
+    assert result.issues[0].severity == "warning"
+    assert result.issues[0].rule == "min"
 
 
 def test_validation_result_to_markdown_includes_issue_table(sample_csv):
