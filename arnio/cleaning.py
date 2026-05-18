@@ -15,6 +15,7 @@ from ._core import (
     _drop_nulls,
     _fill_nulls,
     _normalize_case,
+    _remove_control_characters,
     _rename_columns,
     _strip_whitespace,
 )
@@ -403,6 +404,34 @@ def strip_whitespace(
             operation="strip_whitespace",
         )
     result = _strip_whitespace(frame._frame, subset=subset)
+    return ArFrame(result)
+
+
+def remove_control_characters(
+    frame: ArFrame,
+    *,
+    subset: list[str] | None = None,
+) -> ArFrame:
+    """Remove control characters from string columns.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input data frame.
+    subset : list[str], optional
+        Column names to strip whitespace from. If None, applies to all string columns.
+
+    Returns
+    -------
+    ArFrame
+        New frame with whitespace trimmed from string columns.
+
+    Examples
+    --------
+    >>> frame = ar.read_csv("data.csv")
+    >>> clean = ar.remove_control_characters(frame, subset=["name"])
+    """
+    result = _remove_control_characters(frame._frame, subset=subset)
     return ArFrame(result)
 
 

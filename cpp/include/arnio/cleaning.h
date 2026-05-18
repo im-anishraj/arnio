@@ -26,6 +26,11 @@ Frame drop_duplicates(const Frame& frame,
 Frame strip_whitespace(const Frame& frame,
                        const std::optional<std::vector<std::string>>& subset = std::nullopt);
 
+// Remove control characters from string columns                       
+Frame remove_control_characters(
+    const Frame& frame,
+    const std::optional<std::vector<std::string>>& subset = std::nullopt);
+
 // Normalize case of string columns
 Frame normalize_case(const Frame& frame,
                      const std::optional<std::vector<std::string>>& subset = std::nullopt,

@@ -29,6 +29,7 @@ from .cleaning import (
     round_numeric_columns,
     safe_divide_columns,
     strip_whitespace,
+    remove_control_characters,
     trim_column_names,
     validate_columns_exist,
 )
@@ -75,7 +76,7 @@ __all__ = [
     "filter_rows",
     "replace_values",
     "drop_duplicates",
-    "drop_constant_columns",
+    "remove_control_characters",
     "clip_numeric",
     "combine_columns",
     "strip_whitespace",
