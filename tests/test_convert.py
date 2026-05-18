@@ -415,6 +415,12 @@ class TestFromPandas:
         frame = ar.from_pandas(df)
         assert frame.columns == ["x", "y"]
 
+    def test_duplicate_non_string_labels_raises(self):
+        df = pd.DataFrame([[1, 2, 3]], columns=[0, 1, 0])
+        with pytest.raises(ValueError, match="duplicate column labels") as exc_info:
+            ar.from_pandas(df)
+        assert "0" in str(exc_info.value)
+
 
 class TestAttrsPreservation:
     def test_attrs_roundtrip(self):
