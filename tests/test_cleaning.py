@@ -563,8 +563,8 @@ class TestFilterRows:
         assert result.iloc[0]["age"] == 30
 
     def test_filter_rows_with_missing_values_does_not_crash(self):
-        import pandas as pd
         import numpy as np
+        import pandas as pd
 
         df = pd.DataFrame({"age": [20, 30, np.nan, pd.NA, None]})
 
