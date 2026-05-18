@@ -749,7 +749,7 @@ DataQualityReport(
     duplicate_rows=0,
     columns={
         'user_id': ColumnProfile(dtype='int64', semantic_type='identifier', unique_count=4),
-        'email': ColumnProfile(dtype='string', semantic_type='categorical', null_count=1, unique_ratio=0.666667),
+        'email': ColumnProfile(dtype='string', semantic_type='categorical', null_count=1, unique_ratio=0.666667, min=13, max=13, mean=13.0),
         'score': ColumnProfile(dtype='float64', semantic_type='numeric', mean=87.9, min=85.5, max=90.0)
     }
 )
@@ -777,6 +777,9 @@ DataQualityReport(
       "semantic_type": "categorical",
       "null_count": 1,
       "unique_ratio": 0.666667,
+      "min": 13,
+      "max": 13,
+      "mean": 13.0,
       "warnings": ["contains_nulls"]
     },
     "score": {

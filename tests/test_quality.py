@@ -243,3 +243,88 @@ def test_identifier_numeric_cast_prevention():
     assert list(result["id"]) == ["001", "002", "003"]
     assert list(result["customer_id"]) == ["00123", "00456", "00789"]
     assert list(result["zip_code"]) == ["01234", "02345", "03456"]
+
+
+# ── string length statistics tests ───────────────────────────────────────────
+
+
+def test_profile_string_metrics():
+    df = pd.DataFrame({"text": ["a", "abc", "abcde", "", "  ", None]})
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+
+    profile = report.columns["text"]
+    assert profile.dtype == "string"
+    assert profile.min == 0
+    assert profile.max == 5
+    assert profile.mean == 2.2
+    assert profile.empty_string_count == 2
+    assert profile.whitespace_count == 1
+    assert "empty_strings" in profile.warnings
+
+
+def test_profile_empty_and_null_strings():
+    df = pd.DataFrame(
+        {
+            "all_null": [None, None],
+            "all_empty": ["", ""],
+        }
+    )
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+
+    # All null
+    p_null = report.columns["all_null"]
+    assert p_null.min is None
+    assert p_null.max is None
+    assert p_null.mean is None
+    assert p_null.null_count == 2
+
+    # All empty
+    p_empty = report.columns["all_empty"]
+    assert p_empty.min == 0
+    assert p_empty.max == 0
+    assert p_empty.mean == 0.0
+    assert p_empty.empty_string_count == 2
+
+
+def test_profile_string_clean_happy_path():
+    """Clean string column with no nulls, no empties — simplest case."""
+    df = pd.DataFrame({"name": ["hello", "hi", "hey"]})
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+
+    p = report.columns["name"]
+    assert p.dtype == "string"
+    assert p.min == 2
+    assert p.max == 5
+    assert p.mean == 10 / 3
+    assert p.null_count == 0
+    assert p.empty_string_count == 0
+    assert p.whitespace_count == 0
+
+
+def test_profile_string_metrics_to_dict():
+    """String length values appear correctly in to_dict() output."""
+    df = pd.DataFrame({"label": ["short", "medium-ish", "x"]})
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+    d = report.to_dict()
+
+    col = d["columns"]["label"]
+    assert col["min"] == 1
+    assert col["max"] == 10
+    assert col["mean"] == 5.0 + 1 / 3
+
+
+def test_profile_string_metrics_to_pandas():
+    """String length values appear correctly in to_pandas() output."""
+    df = pd.DataFrame({"label": ["short", "medium-ish", "x"]})
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+    result_df = report.to_pandas()
+
+    row = result_df[result_df["name"] == "label"].iloc[0]
+    assert row["min"] == 1
+    assert row["max"] == 10
+    assert row["mean"] == 5.0 + 1 / 3

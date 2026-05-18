@@ -17,7 +17,17 @@ from .frame import ArFrame
 
 @dataclass(frozen=True)
 class ColumnProfile:
-    """Quality profile for one column."""
+    """Quality profile for one column.
+
+    For numeric columns ``min``, ``max``, and ``mean`` report **value**
+    statistics.  For string columns the same fields report **string-length**
+    statistics (minimum length, maximum length, and mean length of non-null
+    values).
+
+    ``empty_string_count`` is the number of non-null values that become empty
+    after stripping leading/trailing whitespace — whitespace-only strings are
+    therefore counted as empty.
+    """
 
     name: str
     dtype: str
@@ -320,13 +330,21 @@ def _profile_column(
         whitespace_count = int((as_text != stripped).sum())
         top_values = _top_values(non_null)
 
-    numeric = pd.to_numeric(series, errors="coerce")
-    numeric_non_null = numeric.dropna()
     min_value = max_value = mean = None
-    if len(numeric_non_null) and _is_numeric_dtype(dtype):
-        min_value = numeric_non_null.min()
-        max_value = numeric_non_null.max()
-        mean = float(numeric_non_null.mean())
+    if len(non_null) and _is_numeric_dtype(dtype):
+        numeric = pd.to_numeric(series, errors="coerce")
+        numeric_non_null = numeric.dropna()
+        if len(numeric_non_null):
+            min_value = numeric_non_null.min()
+            max_value = numeric_non_null.max()
+            mean = float(numeric_non_null.mean())
+    elif len(non_null) and (
+        dtype == "string" or pd.api.types.is_string_dtype(series.dtype)
+    ):
+        lengths = non_null.astype("string").str.len()
+        min_value = int(lengths.min())
+        max_value = int(lengths.max())
+        mean = float(lengths.mean())
 
     semantic_type = _detect_semantic_type(name, series, dtype)
     suggested_dtype = _suggest_column_dtype(series, dtype)
