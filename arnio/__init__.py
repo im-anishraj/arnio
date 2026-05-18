@@ -50,6 +50,7 @@ from .schema import (
     URL,
     Bool,
     CountryCode,
+    Date,
     DateTime,
     Email,
     Field,
@@ -124,4 +125,5 @@ __all__ = [
     "TypeCastError",
     "normalize_unicode",
     "Regex",
+    "Date",
 ]

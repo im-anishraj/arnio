@@ -155,6 +155,35 @@ Raises `ValueError` for invalid `n` (zero, negative, or non-integer).
 </details>
 
 <details>
+<summary><b>💰 Financial Decimal Support</b></summary>
+<br>
+
+`arnio` provides support for converting Python `decimal.Decimal` objects.
+
+* **Behavior**: Python `Decimal` objects are automatically preserved as high-precision strings during serialization/binding to prevent floating-point precision loss.
+* **Caveat**: When reading back into Pandas, `to_pandas()` returns these as string (`object` dtype) columns. You will need to explicitly cast them back to `Decimal` objects on the resulting DataFrame if you want to resume exact math.
+
+Example:
+
+```python
+from decimal import Decimal
+
+import pandas as pd
+
+import arnio as ar
+
+df = pd.DataFrame({
+    "price": [Decimal("19.99"), Decimal("29.95")]
+})
+
+frame = ar.from_pandas(df)  # Decimal values safely preserved as exact strings
+result = ar.to_pandas(frame)
+# result["price"] will be string objects ["19.99", "29.95"]
+```
+
+</details>
+
+<details>
 <summary><b>🧩 Add custom steps without touching C++</b></summary>
 <br>
 
@@ -692,8 +721,10 @@ schema = ar.Schema({
     "username": ar.String(min_length=3, max_length=20),
     "user_code": ar.Regex(r"^USR-\d{4}$", nullable=False),
     "revenue": ar.Float64(nullable=True, min=0),
+    "signup_date": ar.Date(nullable=False),
     "created_at": ar.DateTime(nullable=False, format="%Y-%m-%d"),
 })
+
 
 result = ar.validate(frame, schema)
 if not result.passed:
@@ -704,6 +735,8 @@ if not result.passed:
     print(result.to_pandas())
     print(result.to_markdown(max_issues=10))
 ```
+
+Date validates strict YYYY-MM-DD calendar dates.
 
 `ValidationResult.to_markdown()` is useful in CI logs, GitHub comments, or data quality reports because it renders a compact validation summary plus a GitHub-friendly issue table.
 

@@ -118,12 +118,16 @@ class TestReadCsv:
         df = ar.to_pandas(frame)
         assert df["value"].iloc[0] == "1,234"
 
-    @pytest.mark.parametrize("separator", ["", "a", "3", "ab", "\n", '"'])
+    @pytest.mark.parametrize(
+        "separator", ["", "a", "3", "ab", "\n", '"', ".", "+", "-"]
+    )
     def test_invalid_thousands_separator(self, tmp_path, separator):
         csv_path = tmp_path / "default_behavior.csv"
         csv_path.write_text("value\n1234\n")
         with pytest.raises(ValueError):
             ar.read_csv(csv_path, thousands_separator=separator)
+        with pytest.raises(ValueError):
+            ar.scan_csv(csv_path, thousands_separator=separator)
 
     @pytest.mark.parametrize("separator", [1, 1.5, True, [], {}])
     def test_invalid_non_string_thousands_separator(self, tmp_path, separator):

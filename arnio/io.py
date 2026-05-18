@@ -89,6 +89,10 @@ def _validate_thousands_separator(
         raise ValueError(
             "thousands_separator must be a single non-alphanumeric character"
         )
+    if thousands_separator in {".", "+", "-"}:
+        raise ValueError(
+            "Invalid thousands_separator: '.', '+' and '-' are not allowed"
+        )
 
 
 def _validate_delimiter(delimiter: str) -> str:

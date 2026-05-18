@@ -6,6 +6,9 @@ Pandas conversion functions.
 from __future__ import annotations
 
 import copy as copylib
+import decimal
+import math
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -16,6 +19,40 @@ from .frame import ArFrame
 
 def _is_nested(value: object) -> bool:
     return isinstance(value, (list, dict, tuple, set, np.ndarray))
+
+
+def _to_binding_safe(value: Any) -> Any:
+    """
+    Internal helper that normalizes scalars for the C++ binding layer.
+
+    Parameters
+    ----------
+    value : Any
+        Input value to convert.
+
+    Returns
+    -------
+    Any
+        Value safe for C++ binding. Decimal inputs are preserved as exact
+        strings. Float inputs are converted to binary float. NaN/Infinity are
+        rejected.
+
+    Raises
+    ------
+    ValueError
+        If the value is NaN or infinite.
+    """
+    if isinstance(value, decimal.Decimal):
+        if value.is_nan() or value.is_infinite():
+            raise ValueError("Invalid financial value: NaN or Infinity.")
+        return str(value)
+
+    if isinstance(value, float):
+        if math.isnan(value) or math.isinf(value):
+            raise ValueError("Invalid financial value: NaN or Infinity.")
+        return float(value)
+
+    return value
 
 
 def _check_unsupported_dtype(col_name: object, series: pd.Series) -> None:
@@ -51,11 +88,15 @@ def _check_unsupported_dtype(col_name: object, series: pd.Series) -> None:
 
 
 def _normalize_scalar(value: object) -> object:
+    if isinstance(value, decimal.Decimal):
+        return _to_binding_safe(value)
     if pd.isna(value):
         return None
     if isinstance(value, np.generic):
-        return value.item()
-    if not isinstance(value, (bool, int, float, str)):
+        value = value.item()
+    if isinstance(value, float):
+        return _to_binding_safe(value)
+    if not isinstance(value, (bool, int, str)):
         return str(value)
     return value
 
