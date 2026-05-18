@@ -326,8 +326,7 @@ Frame normalize_case(const Frame& frame, const std::optional<std::vector<std::st
                     next_upper = false;
                 } else {
                     c = ascii_lower(c);
-                    if (is_ascii_alpha(c) ||
-                        static_cast<unsigned char>(c) >= 0x80) {
+                    if (is_ascii_alpha(c) || static_cast<unsigned char>(c) >= 0x80) {
                         next_upper = false;
                     }
                 }
