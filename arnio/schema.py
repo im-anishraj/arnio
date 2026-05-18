@@ -379,7 +379,9 @@ def diff_schema(
             )
         )
 
-    if _normalize_unique(expected_schema.unique) != _normalize_unique(observed_schema.unique):
+    if _normalize_unique(expected_schema.unique) != _normalize_unique(
+        observed_schema.unique
+    ):
         differences.append(
             SchemaDiffEntry(
                 column=None,
@@ -1046,10 +1048,12 @@ def _field_to_dict(field_def: Field) -> dict[str, Any]:
     }
 
 
-def _normalize_unique(value: list[str] | tuple[str, ...] | None) -> tuple[str, ...] | None:
+def _normalize_unique(
+    value: list[str] | tuple[str, ...] | None,
+) -> tuple[str, ...] | None:
     if value is None:
         return None
-    return tuple(value)
+    return tuple(sorted(value))
 
 
 def _normalize_sequence(value: Any) -> Any:

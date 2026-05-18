@@ -1282,7 +1282,7 @@ def test_diff_schema_accepts_plain_field_dicts():
     }
 
 
-def test_diff_schema_reports_composite_unique_changes():
+def test_diff_schema_treats_composite_unique_order_as_equivalent():
     expected = ar.Schema(
         {"user_id": ar.String(), "event_id": ar.String()},
         unique=["user_id", "event_id"],
@@ -1294,14 +1294,30 @@ def test_diff_schema_reports_composite_unique_changes():
 
     diff = ar.diff_schema(expected, observed)
 
+    assert not diff.changed
+    assert diff.difference_count == 0
+
+
+def test_diff_schema_reports_composite_unique_column_set_changes():
+    expected = ar.Schema(
+        {"user_id": ar.String(), "event_id": ar.String(), "session_id": ar.String()},
+        unique=["user_id", "event_id"],
+    )
+    observed = ar.Schema(
+        {"user_id": ar.String(), "event_id": ar.String(), "session_id": ar.String()},
+        unique=["user_id", "session_id"],
+    )
+
+    diff = ar.diff_schema(expected, observed)
+
     assert diff.changed
     assert diff.differences == [
         ar.SchemaDiffEntry(
             column=None,
             change="changed_schema",
             attribute="unique",
-            expected=("user_id", "event_id"),
-            observed=("event_id", "user_id"),
+            expected=("event_id", "user_id"),
+            observed=("session_id", "user_id"),
         )
     ]
 
