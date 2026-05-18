@@ -377,13 +377,10 @@ def clip_numeric(
         if unknown_columns:
             raise ValueError(f"Unknown columns in subset: {unknown_columns}")
 
-        non_numeric_columns = [
-            col for col in subset if not _is_supported_numeric(col)
-        ]
+        non_numeric_columns = [col for col in subset if not _is_supported_numeric(col)]
         if non_numeric_columns:
             raise ValueError(
-                "clip_numeric only supports numeric columns: "
-                f"{non_numeric_columns}"
+                "clip_numeric only supports numeric columns: " f"{non_numeric_columns}"
             )
 
         # Empty subset — nothing to clip, return the frame unchanged.
@@ -396,6 +393,29 @@ def clip_numeric(
         # If none exist, return the frame unchanged without touching C++.
         if not any(_is_supported_numeric(col) for col in dtypes):
             return frame
+
+    # Validate that bounds supplied for INT64 columns are integral.
+    # The C++ path silently truncates float bounds via static_cast<int64_t>, which
+    # would change semantics (e.g. lower=1.5 becoming 1).  Raise early so callers
+    # get an explicit error rather than silent data mutation.
+    int64_cols = [
+        col
+        for col in (subset if subset is not None else dtypes)
+        if dtypes.get(col) == "int64"
+    ]
+    if int64_cols:
+        if lower is not None and lower != int(lower):
+            raise ValueError(
+                f"lower bound {lower!r} is not an integer value; "
+                "clip_numeric does not truncate bounds for int64 columns. "
+                "Cast the column to float64 first, or use an integral bound."
+            )
+        if upper is not None and upper != int(upper):
+            raise ValueError(
+                f"upper bound {upper!r} is not an integer value; "
+                "clip_numeric does not truncate bounds for int64 columns. "
+                "Cast the column to float64 first, or use an integral bound."
+            )
 
     # Hot path: delegate entirely to the native C++ implementation.
     # No pandas conversion, no DataFrame copy — operates directly on the

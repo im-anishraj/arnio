@@ -372,6 +372,51 @@ class TestClipNumeric:
         with pytest.raises(ValueError, match="lower cannot be greater than upper"):
             ar.clip_numeric(frame, lower=5, upper=1)
 
+    def test_clip_numeric_empty_subset_returns_frame_unchanged(self):
+        # subset=[] must return the original frame without modification.
+        # This was a previous review blocker; the guard lives in the Python wrapper
+        # and must never reach the C++ layer.
+        frame = ar.from_pandas(pd.DataFrame({"value": [-5, 0, 10]}))
+
+        result = ar.clip_numeric(frame, lower=0, upper=5, subset=[])
+
+        df_orig = ar.to_pandas(frame)
+        df_result = ar.to_pandas(result)
+        assert list(df_result["value"]) == list(df_orig["value"])
+
+    def test_clip_numeric_non_integral_lower_on_int64_raises(self):
+        # A float lower bound that is not integral (e.g. 1.5) must raise rather
+        # than silently truncate to 1 via C++ static_cast<int64_t>.
+        frame = ar.from_pandas(pd.DataFrame({"x": [0, 2, 5]}))
+
+        with pytest.raises(ValueError, match="not an integer value"):
+            ar.clip_numeric(frame, lower=1.5)
+
+    def test_clip_numeric_non_integral_upper_on_int64_raises(self):
+        # Same guard for the upper bound.
+        frame = ar.from_pandas(pd.DataFrame({"x": [0, 2, 5]}))
+
+        with pytest.raises(ValueError, match="not an integer value"):
+            ar.clip_numeric(frame, upper=3.7)
+
+    def test_clip_numeric_integral_float_bound_on_int64_accepted(self):
+        # A float that is mathematically integral (e.g. 2.0) is fine.
+        frame = ar.from_pandas(pd.DataFrame({"x": [-1, 2, 10]}))
+
+        result = ar.clip_numeric(frame, lower=0.0, upper=5.0)
+        df = ar.to_pandas(result)
+
+        assert list(df["x"]) == [0, 2, 5]
+
+    def test_clip_numeric_non_integral_bound_on_float64_accepted(self):
+        # Non-integral bounds are valid for float64 columns.
+        frame = ar.from_pandas(pd.DataFrame({"v": [-1.0, 2.5, 9.9]}))
+
+        result = ar.clip_numeric(frame, lower=1.5, upper=8.3)
+        df = ar.to_pandas(result)
+
+        assert list(df["v"]) == [1.5, 2.5, 8.3]
+
 
 class TestStandardizeMissingTokens:
     def test_normal_case(self):
