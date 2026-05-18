@@ -233,3 +233,13 @@ class TestArFrame:
         frame = ar.read_csv(str(csv_path))
         assert frame.is_empty is False
         assert len(frame) == 1
+
+
+def test_repr_returns_string():
+    df = pd.DataFrame({"very_very_very_long_column_name_for_testing": [1, 2]})
+
+    frame = ar.from_pandas(df)
+
+    result = repr(frame)
+
+    assert isinstance(result, str)
