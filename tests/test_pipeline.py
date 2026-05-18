@@ -4,8 +4,8 @@ import importlib
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
-import pytest
 import pandas as pd
+import pytest
 
 import arnio as ar
 
