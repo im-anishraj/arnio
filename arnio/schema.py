@@ -15,7 +15,6 @@ import pandas as pd
 from .convert import to_pandas
 from .frame import ArFrame
 
-
 ISSUE_COLUMNS = [
     "column",
     "rule",
