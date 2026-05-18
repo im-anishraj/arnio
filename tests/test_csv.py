@@ -1,3 +1,4 @@
+
 """Tests for CSV reading functionality."""
 
 from pathlib import Path
@@ -316,6 +317,17 @@ class TestScanCsv:
         res_explicit = ar.scan_csv(csv_path, sample_size=None)
 
         assert res_implicit == res_explicit
+
+    def test_scan_sample_size_invalid_types(self, sample_csv):
+        with pytest.raises(TypeError):
+            ar.scan_csv(sample_csv, sample_size=True)
+
+        with pytest.raises(TypeError):
+            ar.scan_csv(sample_csv, sample_size=1.5)
+
+        with pytest.raises(TypeError):
+            ar.scan_csv(sample_csv, sample_size="100")
+
     def test_scan_invalid_delimiter(self, tmp_path):
         csv_path = tmp_path / "test.csv"
         csv_path.write_text("a,b\n1,2\n")
