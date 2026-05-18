@@ -231,7 +231,7 @@ def validate(frame: ArFrame, schema: Schema | dict[str, Field]) -> ValidationRes
                 )
             )
             continue
-        issues.extend(_validate_column( df , df[name], dtypes.get(name), name, field_def))
+        issues.extend(_validate_column(df, df[name], dtypes.get(name), name, field_def))
 
     if schema.strict:
         expected = set(schema.fields)
@@ -298,7 +298,7 @@ def Int64(
     min: int | None = None,
     max: int | None = None,
     unique: bool = False,
-     required_if: tuple[str, Any] | None = None,
+    required_if: tuple[str, Any] | None = None,
 ) -> Field:
     """Create an int64 schema field."""
 
@@ -311,7 +311,7 @@ def Int64(
         min=min,
         max=max,
         unique=unique,
-        required_if=required_if
+        required_if=required_if,
     )
 
 
@@ -321,7 +321,7 @@ def Float64(
     min: float | None = None,
     max: float | None = None,
     unique: bool = False,
-     required_if: tuple[str, Any] | None = None,
+    required_if: tuple[str, Any] | None = None,
 ) -> Field:
     """Create a float64 schema field."""
 
@@ -334,7 +334,7 @@ def Float64(
         min=min,
         max=max,
         unique=unique,
-        required_if=required_if
+        required_if=required_if,
     )
 
 
@@ -346,7 +346,7 @@ def String(
     unique: bool = False,
     min_length: int | None = None,
     max_length: int | None = None,
-     required_if: tuple[str, Any] | None = None,
+    required_if: tuple[str, Any] | None = None,
 ) -> Field:
     """Create a string schema field."""
 
@@ -363,13 +363,17 @@ def String(
         unique=unique,
         min_length=min_length,
         max_length=max_length,
-        required_if=required_if
+        required_if=required_if,
     )
 
 
-def Bool(*, nullable: bool = True,  required_if: tuple[str, Any] | None = None,) -> Field:
+def Bool(
+    *,
+    nullable: bool = True,
+    required_if: tuple[str, Any] | None = None,
+) -> Field:
     """Create a bool schema field."""
-    return Field(dtype="bool", nullable=nullable , required_if=required_if)
+    return Field(dtype="bool", nullable=nullable, required_if=required_if)
 
 
 def Email(
@@ -387,16 +391,32 @@ def Email(
         nullable=nullable,
         semantic="email" if validation == "light" else "email:strict",
         unique=unique,
-        required_if=required_if
+        required_if=required_if,
     )
 
 
-def URL(*, nullable: bool = True, unique: bool = False ,  required_if: tuple[str, Any] | None = None,) -> Field:
+def URL(
+    *,
+    nullable: bool = True,
+    unique: bool = False,
+    required_if: tuple[str, Any] | None = None,
+) -> Field:
     """Create a URL schema field."""
-    return Field(dtype="string", nullable=nullable, semantic="url", unique=unique , required_if=required_if)
+    return Field(
+        dtype="string",
+        nullable=nullable,
+        semantic="url",
+        unique=unique,
+        required_if=required_if,
+    )
 
 
-def CountryCode(*, nullable: bool = True, unique: bool = False ,  required_if: tuple[str, Any] | None = None,) -> Field:
+def CountryCode(
+    *,
+    nullable: bool = True,
+    unique: bool = False,
+    required_if: tuple[str, Any] | None = None,
+) -> Field:
     """Create an uppercase ISO alpha-2 country-code schema field."""
     return Field(
         dtype="string",
@@ -412,6 +432,7 @@ def Date(*, nullable: bool = True, unique: bool = False) -> Field:
         nullable=nullable,
         semantic="date",
         unique=unique,
+        required_if=required_if,
     )
 
 
@@ -420,6 +441,7 @@ def Regex(
     *,
     nullable: bool = True,
     unique: bool = False,
+    required_if: tuple[str, Any] | None = None,
 ) -> Field:
     """Create a regex-validated string schema field.
 
@@ -450,6 +472,7 @@ def Regex(
         nullable=nullable,
         pattern=pattern,
         unique=unique,
+        required_if=required_if,
     )
 
 
@@ -460,6 +483,7 @@ def DateTime(
     max: Any = None,
     unique: bool = False,
     format: str | None = None,
+    required_if: tuple[str, Any] | None = None,
 ) -> Field:
     """Create a datetime schema field for validating string timestamps."""
     if format is not None and not isinstance(format, str):
@@ -477,11 +501,12 @@ def DateTime(
         format=format,
         _datetime_min=min_val,
         _datetime_max=max_val,
+        required_if=required_if,
     )
 
 
 def _validate_column(
-    df: pd.DataFrame ,
+    df: pd.DataFrame,
     series: pd.Series,
     actual_dtype: str | None,
     name: str,
