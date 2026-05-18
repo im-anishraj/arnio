@@ -561,6 +561,8 @@ def test_email_default_keeps_backward_compatibility(sample_csv):
     assert all(
         issue.rule == "email" for issue in result.issues if "email" in issue.rule
     )
+
+
 def test_datetime_validation_passes_for_valid_column(tmp_path):
     path = tmp_path / "valid_datetimes.csv"
     path.write_text(
