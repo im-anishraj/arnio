@@ -189,6 +189,35 @@ print(selected.columns)
 
 
 > Every step above executes in C++. Your Python code is a _configuration_ — not the execution engine.
+ 
+### Failure and Error Behavior
+
+#### Missing file
+
+```python
+ar.read_csv("missing.csv")
+```
+
+Expected behavior:
+- Raises a file-related error if the file does not exist.
+
+#### Malformed CSV
+
+```python
+ar.read_csv("broken.csv")
+```
+
+Expected behavior:
+- Parsing fails with an appropriate CSV/parsing error.
+
+#### Empty input
+
+```python
+ar.read_csv("empty.csv")
+```
+
+Expected behavior:
+- Returns an empty frame or raises a validation/parsing error depending on the input structure.
 
 <br>
 
@@ -223,6 +252,34 @@ schema = ar.scan_csv("100GB_file.csv", sample_size=500)
 ```
 
 Useful for exploring datasets before committing memory.
+
+### Schema Validation Failure Examples
+
+#### Invalid schema
+
+```python
+schema = {
+    "age": int
+}
+
+ar.scan_csv("data.csv")
+```
+
+Expected behavior:
+- Validation may fail if detected column types do not match the expected structure.
+
+#### Missing required fields
+
+```python
+schema = {
+    "name": str,
+    "age": int
+}
+```
+
+Expected behavior:
+- Validation fails if required columns are missing from the dataset.
+
 </details>
 
 <details>
@@ -289,8 +346,22 @@ clean = ar.pipeline(frame, [
     ("drop_duplicates",),
 ])
 ```
-
 Custom steps run through a pandas↔ArFrame conversion bridge. Prototype in Python, then optionally migrate hot paths to C++ for full speed.
+
+### Pipeline Error Handling Behavior
+
+Pipeline steps propagate exceptions raised during execution.
+
+```python
+clean = ar.pipeline(frame, [
+    ("strip_whitespace",),
+    ("drop_duplicates",),
+])
+```
+
+Expected behavior:
+- If a pipeline step fails, execution stops and the corresponding error is propagated to the caller.
+
 </details>
 
 <details>
