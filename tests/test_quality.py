@@ -6,6 +6,64 @@ import pytest
 import arnio as ar
 
 
+def test_dtype_validation_reports_safe_int64_conversion():
+    frame = ar.from_pandas(
+        pd.DataFrame({"age": ["1", "2", "3"]})
+    )
+
+    schema = ar.Schema({
+        "age": ar.Int64()
+    })
+
+    result = ar.validate(frame, schema)
+
+    assert not result.passed
+    assert "safely convertible to 'int64'" in result.issues[0].message
+
+
+def test_dtype_validation_reports_safe_float64_conversion():
+    frame = ar.from_pandas(
+        pd.DataFrame({"score": ["1.5", "2.7"]})
+    )
+
+    schema = ar.Schema({
+        "score": ar.Float64()
+    })
+
+    result = ar.validate(frame, schema)
+
+    assert not result.passed
+    assert "safely convertible to 'float64'" in result.issues[0].message
+
+
+def test_dtype_validation_does_not_report_safe_conversion_for_invalid_values():
+    frame = ar.from_pandas(
+        pd.DataFrame({"age": ["1", "abc", "3"]})
+    )
+
+    schema = ar.Schema({
+        "age": ar.Int64()
+    })
+
+    result = ar.validate(frame, schema)
+
+    assert not result.passed
+    assert "safely convertible" not in result.issues[0].message
+
+def test_dtype_validation_does_not_report_safe_conversion_for_identifier_like_strings():
+    frame = ar.from_pandas(
+        pd.DataFrame({"user_id": ["001", "002", "003"]})
+    )
+
+    schema = ar.Schema({
+        "user_id": ar.Int64()
+    })
+
+    result = ar.validate(frame, schema)
+
+    assert not result.passed
+    assert "safely convertible" not in result.issues[0].message
+
 def test_profile_reports_quality_signals(tmp_path):
     path = tmp_path / "quality.csv"
     path.write_text(

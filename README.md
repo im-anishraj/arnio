@@ -118,7 +118,6 @@ print(selected.columns)
 # ['name', 'revenue']
 ```
 
-
 > Every step above executes in C++. Your Python code is a _configuration_ — not the execution engine.
 
 <br>
@@ -136,6 +135,7 @@ schema = ar.scan_csv("100GB_file.csv", sample_size=500)
 ```
 
 Useful for exploring datasets before committing memory.
+
 </details>
 
 <details>
@@ -152,6 +152,7 @@ print(frame.preview(n=10))  # first 10 rows
 ```
 
 Raises `ValueError` for invalid `n` (zero, negative, or non-integer).
+
 </details>
 
 <details>
@@ -160,8 +161,8 @@ Raises `ValueError` for invalid `n` (zero, negative, or non-integer).
 
 `arnio` provides support for converting Python `decimal.Decimal` objects.
 
-* **Behavior**: Python `Decimal` objects are automatically preserved as high-precision strings during serialization/binding to prevent floating-point precision loss.
-* **Caveat**: When reading back into Pandas, `to_pandas()` returns these as string (`object` dtype) columns. You will need to explicitly cast them back to `Decimal` objects on the resulting DataFrame if you want to resume exact math.
+- **Behavior**: Python `Decimal` objects are automatically preserved as high-precision strings during serialization/binding to prevent floating-point precision loss.
+- **Caveat**: When reading back into Pandas, `to_pandas()` returns these as string (`object` dtype) columns. You will need to explicitly cast them back to `Decimal` objects on the resulting DataFrame if you want to resume exact math.
 
 Example:
 
@@ -204,6 +205,7 @@ clean = ar.pipeline(frame, [
 ```
 
 Custom steps run through a pandas↔ArFrame conversion bridge. Prototype in Python, then optionally migrate hot paths to C++ for full speed.
+
 </details>
 
 <br>
@@ -217,13 +219,13 @@ Custom steps run through a pandas↔ArFrame conversion bridge. Prototype in Pyth
 Arnio is designed to make the rest of the Python data stack more productive,
 not to replace it.
 
-| Workflow | How Arnio helps |
-|:---|:---|
-| **pandas** | Clean, validate, and profile messy `DataFrame`s through `df.arnio`. |
-| **NumPy** | Prepare typed numeric data before array/modeling workflows. |
-| **scikit-learn** | Use Arnio cleaning as a preprocessing layer before model training. |
-| **DuckDB / Arrow** | Validate and prepare data before analytics and columnar exchange. |
-| **notebooks** | Inspect quality issues and cleaning suggestions before analysis. |
+| Workflow           | How Arnio helps                                                     |
+| :----------------- | :------------------------------------------------------------------ |
+| **pandas**         | Clean, validate, and profile messy `DataFrame`s through `df.arnio`. |
+| **NumPy**          | Prepare typed numeric data before array/modeling workflows.         |
+| **scikit-learn**   | Use Arnio cleaning as a preprocessing layer before model training.  |
+| **DuckDB / Arrow** | Validate and prepare data before analytics and columnar exchange.   |
+| **notebooks**      | Inspect quality issues and cleaning suggestions before analysis.    |
 
 ### Pandas accessor
 
@@ -257,6 +259,7 @@ They follow a simple workflow:
 - **Arnio + pandas**
   Clean and normalize messy tabular data using Arnio, then analyze it using pandas.
   Run:
+
 ```bash
   python examples/arnio_with_pandas.py
 ```
@@ -264,6 +267,7 @@ They follow a simple workflow:
 - **Arnio + NumPy**
   Prepare numeric data safely using Arnio, then perform computations using NumPy.
   Run:
+
 ```bash
   python examples/arnio_with_numpy.py
 ```
@@ -271,6 +275,7 @@ They follow a simple workflow:
 - **Arnio + scikit-learn**
   Prepare messy data with Arnio, then train a model with scikit-learn.
   Run:
+
 ```bash
   python examples/arnio_with_sklearn.py
 ```
@@ -278,11 +283,10 @@ They follow a simple workflow:
 - **Arnio + DuckDB**
   Clean data with Arnio, then run SQL queries using DuckDB.
   Run:
+
 ```bash
   python examples/arnio_with_duckdb.py
 ```
-
-
 
 <br>
 
@@ -312,6 +316,7 @@ Six lines. Four full-data passes. All in interpreted Python. This is fine for a 
 <td width="50%">
 
 ### Without Arnio
+
 ```python
 df = pd.read_csv(path)
 df.columns = df.columns.str.strip()
@@ -327,6 +332,7 @@ df = df.drop_duplicates()
 <td width="50%">
 
 ### With Arnio
+
 ```python
 frame = ar.read_csv(path)
 df = ar.to_pandas(ar.pipeline(frame, [
@@ -373,13 +379,13 @@ flowchart LR
 
 ### Design decisions that matter
 
-| Decision | What it means |
-|:---|:---|
-| **Columnar storage** | Data lives in typed `std::vector`s — `vector<int64_t>`, `vector<double>`, `vector<string>` — not rows of variants. Cache-friendly and SIMD-ready. |
-| **Boolean null masks** | Nulls are tracked in a separate `vector<bool>`, keeping data vectors dense. No sentinel values, no NaN tricks. |
-| **Two-pass CSV read** | Pass 1 infers types across all rows. Pass 2 parses values directly into the correct typed column. No string→object→cast overhead. |
-| **Zero-copy bridge** | `to_pandas()` exposes C++ memory directly via NumPy's buffer protocol where supported. Numeric columns preserve the fast zero-copy path by default, while `copy=True` requests defensive pandas-owned buffers. |
-| **Step registry** | Pipeline steps map to C++ function pointers. Adding a new cleaning primitive is a single function + one registry entry. |
+| Decision               | What it means                                                                                                                                                                                                  |
+| :--------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Columnar storage**   | Data lives in typed `std::vector`s — `vector<int64_t>`, `vector<double>`, `vector<string>` — not rows of variants. Cache-friendly and SIMD-ready.                                                              |
+| **Boolean null masks** | Nulls are tracked in a separate `vector<bool>`, keeping data vectors dense. No sentinel values, no NaN tricks.                                                                                                 |
+| **Two-pass CSV read**  | Pass 1 infers types across all rows. Pass 2 parses values directly into the correct typed column. No string→object→cast overhead.                                                                              |
+| **Zero-copy bridge**   | `to_pandas()` exposes C++ memory directly via NumPy's buffer protocol where supported. Numeric columns preserve the fast zero-copy path by default, while `copy=True` requests defensive pandas-owned buffers. |
+| **Step registry**      | Pipeline steps map to C++ function pointers. Adding a new cleaning primitive is a single function + one registry entry.                                                                                        |
 
 > Full architecture documentation: **[ARCHITECTURE.md](ARCHITECTURE.md)**
 > API reference guide: **[Arnio API Reference](./API_REFERENCE.md)**
@@ -466,6 +472,7 @@ python benchmarks/benchmark_auto_clean_memory.py --rows 100000
 ```
 
 This script generates a reproducible synthetic dataset with mixed column types (strings, ints, floats, booleans, nulls, and duplicates) and measures:
+
 - `ar.read_csv` performance
 - `ar.auto_clean(mode="safe")` performance (low-risk cleanup like whitespace trimming)
 - `ar.auto_clean(mode="strict")` performance (includes type casting and deduplication)
@@ -474,6 +481,7 @@ The dataset is regenerated deterministically unless `--reuse-file` is provided.
 Each `auto_clean` benchmark run reloads the dataset to avoid mutation or caching effects between runs.
 
 Options:
+
 - `--repeat N` runs each operation multiple times and reports average (and min/max range).
 - `--seed N` changes the deterministic dataset seed.
 - `--reuse-file` reuses an existing dataset file instead of regenerating it.
@@ -490,6 +498,7 @@ ar.auto_clean(strict) 0.035 (0.034-0.036)    1.20 (1.18-1.22)
 --------------------------------------------------------------------
 Total avg (Read+Strict)       0.077             4.52
 ```
+
 <br>
 
 ---
@@ -500,26 +509,26 @@ Total avg (Read+Strict)       0.077             4.52
 
 Most operations below run natively in C++. Currently, `filter_rows`, `replace_values` and `standardize_missing_tokens` run via the Python (pandas) backend and may be optimized in C++ later.
 
-| Primitive | What it does | Example |
-|:---|:---|:---|
-| `drop_nulls` | Remove rows with null/empty values | `ar.drop_nulls(frame, subset=["age"])` |
-| `keep_rows_with_nulls` | Keep only rows that contain at least one null | `ar.keep_rows_with_nulls(frame, subset=["age"])` |
-| `validate_columns_exist` | Fail early when required columns are missing | `ar.validate_columns_exist(frame, ["age"])` |
-| `filter_rows` | Filter rows using comparison operators | `ar.filter_rows(frame, column="age", op=">", value=18)` |
-| `fill_nulls` | Replace nulls with a scalar | `ar.fill_nulls(frame, 0, subset=["revenue"])` |
-| `drop_duplicates` | Deduplicate rows (first/last/none) | `ar.drop_duplicates(frame, keep="first")` |
-| `drop_constant_columns` | Remove columns with only one unique value | `ar.drop_constant_columns(frame)` |
-| `clip_numeric` | Clip numeric values to lower and/or upper bounds | `ar.clip_numeric(frame, lower=0, upper=100)` |
-| `strip_whitespace` | Trim leading/trailing spaces from strings | `ar.strip_whitespace(frame)` |
-| `standardize_missing_tokens` | Replace common missing-value strings with NaN | `ar.standardize_missing_tokens(frame)` |
-| `normalize_case` | Force lower/upper/title case | `ar.normalize_case(frame, case_type="title")` |
-| `rename_columns` | Rename columns via mapping | `ar.rename_columns(frame, {"old": "new"})` |
-| `cast_types` | Cast column types | `ar.cast_types(frame, {"age": "int64"})` |
-| `round_numeric_columns` | Round numeric columns (non-numeric columns in subset ignored safely) | `ar.round_numeric_columns(frame, decimals=2)` |
-| `replace_values` | Replace values using a mapping (column or whole-frame). Handles `None`/`NaN`. | `ar.replace_values(frame, {"active": "A", "inactive": "I"}, column="status")` |
-| `clean` | Convenience shorthand | `ar.clean(frame, drop_nulls=True)` |
-| `safe_divide_columns` | Divide one column by another, handling zero/null denominators | `ar.safe_divide_columns(frame, numerator="revenue", denominator="cost", output_column="ratio")` |
-| `trim_column_names` | Strip leading/trailing whitespace from column names | `ar.trim_column_names(frame)` |
+| Primitive                    | What it does                                                                  | Example                                                                                         |
+| :--------------------------- | :---------------------------------------------------------------------------- | :---------------------------------------------------------------------------------------------- |
+| `drop_nulls`                 | Remove rows with null/empty values                                            | `ar.drop_nulls(frame, subset=["age"])`                                                          |
+| `keep_rows_with_nulls`       | Keep only rows that contain at least one null                                 | `ar.keep_rows_with_nulls(frame, subset=["age"])`                                                |
+| `validate_columns_exist`     | Fail early when required columns are missing                                  | `ar.validate_columns_exist(frame, ["age"])`                                                     |
+| `filter_rows`                | Filter rows using comparison operators                                        | `ar.filter_rows(frame, column="age", op=">", value=18)`                                         |
+| `fill_nulls`                 | Replace nulls with a scalar                                                   | `ar.fill_nulls(frame, 0, subset=["revenue"])`                                                   |
+| `drop_duplicates`            | Deduplicate rows (first/last/none)                                            | `ar.drop_duplicates(frame, keep="first")`                                                       |
+| `drop_constant_columns`      | Remove columns with only one unique value                                     | `ar.drop_constant_columns(frame)`                                                               |
+| `clip_numeric`               | Clip numeric values to lower and/or upper bounds                              | `ar.clip_numeric(frame, lower=0, upper=100)`                                                    |
+| `strip_whitespace`           | Trim leading/trailing spaces from strings                                     | `ar.strip_whitespace(frame)`                                                                    |
+| `standardize_missing_tokens` | Replace common missing-value strings with NaN                                 | `ar.standardize_missing_tokens(frame)`                                                          |
+| `normalize_case`             | Force lower/upper/title case                                                  | `ar.normalize_case(frame, case_type="title")`                                                   |
+| `rename_columns`             | Rename columns via mapping                                                    | `ar.rename_columns(frame, {"old": "new"})`                                                      |
+| `cast_types`                 | Cast column types                                                             | `ar.cast_types(frame, {"age": "int64"})`                                                        |
+| `round_numeric_columns`      | Round numeric columns (non-numeric columns in subset ignored safely)          | `ar.round_numeric_columns(frame, decimals=2)`                                                   |
+| `replace_values`             | Replace values using a mapping (column or whole-frame). Handles `None`/`NaN`. | `ar.replace_values(frame, {"active": "A", "inactive": "I"}, column="status")`                   |
+| `clean`                      | Convenience shorthand                                                         | `ar.clean(frame, drop_nulls=True)`                                                              |
+| `safe_divide_columns`        | Divide one column by another, handling zero/null denominators                 | `ar.safe_divide_columns(frame, numerator="revenue", denominator="cost", output_column="ratio")` |
+| `trim_column_names`          | Strip leading/trailing whitespace from column names                           | `ar.trim_column_names(frame)`                                                                   |
 
 #### `ArFrame.select_dtypes` — type-based column selection
 
@@ -670,17 +679,17 @@ This table helps users understand which pandas dtypes and workflows are fully su
 
 If a dtype is partially supported, users may need conversion before processing. Unsupported dtypes should raise clear errors where applicable.
 
-| Pandas Dtype | Support Status | Notes |
-|---|---|---|
-| `int64` | ✅ Supported | Fully supported with native C++ columnar storage |
-| `float64` | ✅ Supported | Fully supported with zero-copy conversion where possible |
-| `bool` | ✅ Supported | Native supported boolean type |
-| `string` | ✅ Supported | Recommended over `object` dtype for text workflows |
-| `datetime64[ns]` | ❌ Unsupported for native storage | No native datetime parsing or conversion support yet. Use `ar.DateTime()` for schema validation of string timestamp columns. |
-| `category` | ⚠️ Limited | Converted to string/object during processing |
-| `object` (mixed columns) | ⚠️ Limited | Mixed object columns may coerce to string and reduce type inference reliability |
-| nullable pandas dtypes (`Int64`, `boolean`) | ⚠️ Limited | Supported through pandas extension dtypes with null-mask handling |
-| `timedelta64[ns]` | ❌ Unsupported | Not currently supported |
+| Pandas Dtype                                | Support Status                    | Notes                                                                                                                        |
+| ------------------------------------------- | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `int64`                                     | ✅ Supported                      | Fully supported with native C++ columnar storage                                                                             |
+| `float64`                                   | ✅ Supported                      | Fully supported with zero-copy conversion where possible                                                                     |
+| `bool`                                      | ✅ Supported                      | Native supported boolean type                                                                                                |
+| `string`                                    | ✅ Supported                      | Recommended over `object` dtype for text workflows                                                                           |
+| `datetime64[ns]`                            | ❌ Unsupported for native storage | No native datetime parsing or conversion support yet. Use `ar.DateTime()` for schema validation of string timestamp columns. |
+| `category`                                  | ⚠️ Limited                        | Converted to string/object during processing                                                                                 |
+| `object` (mixed columns)                    | ⚠️ Limited                        | Mixed object columns may coerce to string and reduce type inference reliability                                              |
+| nullable pandas dtypes (`Int64`, `boolean`) | ⚠️ Limited                        | Supported through pandas extension dtypes with null-mask handling                                                            |
+| `timedelta64[ns]`                           | ❌ Unsupported                    | Not currently supported                                                                                                      |
 
 ### Notes
 
@@ -692,7 +701,7 @@ If a dtype is partially supported, users may need conversion before processing. 
 - `ar.DateTime()` validates string timestamp columns with optional `format`, `min`, and `max`; it does not add native `datetime64[ns]` storage or automatic datetime conversion.
 - Mixed `object` columns may reduce type inference accuracy and may require preprocessing.
 - Unsupported dtypes should raise clear user-facing errors instead of silent failures.
-> **Note:** pandas DataFrame indexes are currently not preserved during `from_pandas()` conversion. Converted frames receive a default `RangeIndex` when converted back via `to_pandas()`.
+  > **Note:** pandas DataFrame indexes are currently not preserved during `from_pandas()` conversion. Converted frames receive a default `RangeIndex` when converted back via `to_pandas()`.
 
 <br>
 
@@ -746,6 +755,25 @@ if not result.passed:
     print(result.to_markdown(max_issues=10))
 ```
 
+Validation messages also indicate when string values appear safely convertible to numeric dtypes.
+
+```python
+frame = ar.from_pandas(pd.DataFrame({
+    "age": ["1", "2", "3"]
+}))
+
+schema = ar.Schema({
+    "age": ar.Int64()
+})
+
+result = ar.validate(frame, schema)
+
+print(result.issues[0].message)
+
+# Column 'age' has dtype 'string'; expected 'int64'.
+# Values appear safely convertible to 'int64'
+```
+
 In this example, `country` becomes required only when
 `user_type == "international"`.
 
@@ -763,6 +791,7 @@ schema = ar.Schema({
 
 result = ar.validate(frame, schema)
 ```
+
 Severity counts are not included in `summary()` yet because `ValidationIssue` does not currently carry severity information.
 
 For low-risk automatic cleanup:
@@ -807,22 +836,22 @@ strict = ar.auto_clean(frame, mode="strict")
 
 Messy input:
 
-| order_id | customer | city |
-|:--|:--|:--|
-| 1001 | ` Ishan ` | ` Paris ` |
-| 1002 | ` Prasoon ` | `London` |
-| 1002 | ` Prasoon ` | `London` |
-| 1003 | ` Pranay ` | ` New York ` |
-| 1004 | ` Dhruv ` | ` Tokyo ` |
+| order_id | customer  | city       |
+| :------- | :-------- | :--------- |
+| 1001     | `Ishan`   | `Paris`    |
+| 1002     | `Prasoon` | `London`   |
+| 1002     | `Prasoon` | `London`   |
+| 1003     | `Pranay`  | `New York` |
+| 1004     | `Dhruv`   | `Tokyo`    |
 
 Expected cleaned output with `mode="strict"`:
 
-| order_id | customer | city |
-|:--|:--|:--|
-| 1001 | Ishan | Paris |
-| 1002 | Prasoon | London |
-| 1003 | Pranay | New York |
-| 1004 | Dhruv | Tokyo |
+| order_id | customer | city     |
+| :------- | :------- | :------- |
+| 1001     | Ishan    | Paris    |
+| 1002     | Prasoon  | London   |
+| 1003     | Pranay   | New York |
+| 1004     | Dhruv    | Tokyo    |
 
 `mode="safe"` only trims whitespace. Use `mode="strict"` when you also want deterministic built-in cleanup such as exact duplicate removal.
 
@@ -874,7 +903,8 @@ Use `report.to_dict(redact_sample_values=True)` when sharing reports outside you
 > **Scoring Contract:** The `quality_score` starts at 100.0 and subtracts capped penalties for duplicates, nulls, and suggested dtype mismatches. The `score_components` field exposes these penalties as negative values. (Note: Semantic-validity penalties are intentionally out of scope for the current implementation.)
 
 ### 1. Terminal Representation (Simplified Example)
-*A simplified view of the standard string representation of the report object:*
+
+_A simplified view of the standard string representation of the report object:_
 
 ```text
 DataQualityReport(
@@ -893,7 +923,8 @@ DataQualityReport(
 ```
 
 ### 2. JSON Format (Excerpts from .to_dict())
-*Key fields from the structured JSON export for integration with APIs or dashboards:*
+
+_Key fields from the structured JSON export for integration with APIs or dashboards:_
 
 ```json
 {
@@ -935,15 +966,15 @@ DataQualityReport(
       "semantic_type": "categorical",
       "null_count": 0,
       "top_values": [
-        {"value": "London", "count": 3, "ratio": 0.5},
-        {"value": "Paris", "count": 2, "ratio": 0.333}
+        { "value": "London", "count": 3, "ratio": 0.5 },
+        { "value": "Paris", "count": 2, "ratio": 0.333 }
       ]
     }
   },
   "suggestions": [
     {
       "step": "cast_types",
-      "kwargs": {"score": "float64"},
+      "kwargs": { "score": "float64" },
       "confidence_score": 0.95,
       "confidence_reason": "Column 'score' conforms perfectly to float64 structure."
     }
@@ -952,26 +983,28 @@ DataQualityReport(
 ```
 
 ### 3. Example Summary Table
-*A manually formatted Markdown table representing the core metrics:*
 
-| Metric | Value |
-| :--- | :--- |
-| **Row Count** | 4 |
-| **Column Count** | 3 |
-| **Memory Usage** | 733 bytes |
-| **Duplicates** | 0 (0.0%) |
-| **Quality Score** | 100.0 |
+_A manually formatted Markdown table representing the core metrics:_
+
+| Metric            | Value     |
+| :---------------- | :-------- |
+| **Row Count**     | 4         |
+| **Column Count**  | 3         |
+| **Memory Usage**  | 733 bytes |
+| **Duplicates**    | 0 (0.0%)  |
+| **Quality Score** | 100.0     |
+
 <br>
 
 ## 🗺️ Roadmap
 
-| Version | Focus | Status |
-|:---:|:---|:---:|
-| **v1.0** | Stable release · cross-platform wheels · CI/CD · PyPI publishing · Google Colab support | ✅ Shipped |
-| **v1.1** | Production readiness · release hardening · docs/tooling | ✅ Shipped |
-| **v1.2** | C++ pipeline optimization · speed parity with pandas · hash-based deduplication | 🔨 Active |
-| **v1.3** | Chunked / streaming processing · Parquet & JSON readers | 📋 Planned |
-| **v1.4** | Parallel column processing · SIMD string operations | 💭 Exploring |
+| Version  | Focus                                                                                   |    Status    |
+| :------: | :-------------------------------------------------------------------------------------- | :----------: |
+| **v1.0** | Stable release · cross-platform wheels · CI/CD · PyPI publishing · Google Colab support |  ✅ Shipped  |
+| **v1.1** | Production readiness · release hardening · docs/tooling                                 |  ✅ Shipped  |
+| **v1.2** | C++ pipeline optimization · speed parity with pandas · hash-based deduplication         |  🔨 Active   |
+| **v1.3** | Chunked / streaming processing · Parquet & JSON readers                                 |  📋 Planned  |
+| **v1.4** | Parallel column processing · SIMD string operations                                     | 💭 Exploring |
 
 <br>
 
@@ -1020,6 +1053,7 @@ ar.register_step("remove_special_chars", remove_special_chars)
 ### If you do know C++
 
 The biggest performance wins are in:
+
 - **`drop_duplicates`** — replacing `std::ostringstream` row serialization with proper hash-based comparisons
 - **`strip_whitespace`** — converting from copy-on-write to in-place mutation
 - **Parallel column processing** — `std::thread` across independent columns
