@@ -325,8 +325,7 @@ class TestFromPandas:
         assert pd.isna(result["score"].tolist()[1])
         assert result["score"].tolist()[2] == 3.7
 
-
-    def test_decimal_values_convert_to_float(self):
+    def test_decimal_values_convert_to_string(self):
         from decimal import Decimal
 
         df = pd.DataFrame(
@@ -342,8 +341,7 @@ class TestFromPandas:
         frame = ar.from_pandas(df)
         result = ar.to_pandas(frame)
 
-        assert result["amount"].tolist() == [10.5, 20.25, 30.75]
-
+        assert result["amount"].tolist() == ["10.5", "20.25", "30.75"]
 
     def test_decimal_values_with_nulls(self):
         from decimal import Decimal
@@ -356,28 +354,28 @@ class TestFromPandas:
                     Decimal("30.75"),
                 ]
             },
-            dtype = object,
+            dtype=object,
         )
 
         frame = ar.from_pandas(df)
         result = ar.to_pandas(frame)
 
-        assert result["amount"].tolist()[0] == 10.5
+        assert result["amount"].tolist()[0] == "10.5"
         assert pd.isna(result["amount"].tolist()[1])
-        assert result["amount"].tolist()[2] == 30.75
+        assert result["amount"].tolist()[2] == "30.75"
 
     def test_bool_null_mask_roundtrip(self):
         df = pd.DataFrame(
             {
                 "flag": pd.Series(
-                    [True,False,pd.NA],
+                    [True, False, pd.NA],
                     dtype="boolean",
                 )
             }
         )
         frame = ar.from_pandas(df)
         result = ar.to_pandas(frame)
-        assert list(result["flag"]) == [True,False,pd.NA]
+        assert list(result["flag"]) == [True, False, pd.NA]
 
     def test_dataframe_index_is_dropped(self):
         """pandas index is not preserved during from_pandas conversion."""
