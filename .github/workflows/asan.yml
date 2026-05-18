@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - feat/asan-workflow   # temporary for testing (remove before PR)
+      - feat/asan-workflow   # remove before final PR
 
 jobs:
   asan:
@@ -39,7 +39,7 @@ jobs:
       - name: Install build dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install scikit-build-core cmake ninja
+          pip install scikit-build-core cmake ninja pybind11
 
       - name: Install project
         run: |
