@@ -37,6 +37,44 @@ def test_report_summary_and_pandas_output(csv_with_whitespace):
     assert set(df["name"]) == {"name", "city"}
 
 
+def test_profile_numeric_quantiles():
+    frame = ar.from_pandas(pd.DataFrame({"age": [1.0, 2.0, 3.0, 4.0, 5.0]}))
+
+    report = ar.profile(frame)
+    profile = report.columns["age"].to_dict()
+
+    assert profile["q25"] == 2.0
+    assert profile["q50"] == 3.0
+    assert profile["q75"] == 4.0
+    assert profile["q95"] == 4.8
+
+
+def test_profile_all_null_numeric_quantiles():
+    frame = ar.from_pandas(
+        pd.DataFrame({"score": pd.Series([None, None], dtype="float64")})
+    )
+
+    report = ar.profile(frame)
+    profile = report.columns["score"].to_dict()
+
+    assert profile["q25"] is None
+    assert profile["q50"] is None
+    assert profile["q75"] is None
+    assert profile["q95"] is None
+
+
+def test_profile_non_numeric_no_quantiles():
+    frame = ar.from_pandas(pd.DataFrame({"name": ["Alice", "Bob", "Cara"]}))
+
+    report = ar.profile(frame)
+    profile = report.columns["name"].to_dict()
+
+    assert "q25" not in profile
+    assert "q50" not in profile
+    assert "q75" not in profile
+    assert "q95" not in profile
+
+
 def test_compare_profiles_identical_profiles_are_ok():
     frame = ar.from_pandas(
         pd.DataFrame({"score": [10.0, 11.0, 12.0], "city": ["a", "b", "a"]})
@@ -453,11 +491,43 @@ def test_identifier_numeric_cast_prevention():
 
 
 def test_profile_string_metrics():
-    frame = ar.from_pandas(pd.DataFrame({"score": [1.0, 2.0, 3.0]}))
-
+    df = pd.DataFrame({"text": ["a", "abc", "abcde", "", "  ", None]})
+    frame = ar.from_pandas(df)
     report = ar.profile(frame)
 
-    assert report.columns["score"].std == pytest.approx(0.8164965809)
+    profile = report.columns["text"]
+    assert profile.dtype == "string"
+    assert profile.min == 0
+    assert profile.max == 5
+    assert profile.mean == 2.2
+    assert profile.empty_string_count == 2
+    assert profile.whitespace_count == 1
+    assert "empty_strings" in profile.warnings
+
+
+def test_profile_empty_and_null_strings():
+    df = pd.DataFrame(
+        {
+            "all_null": [None, None],
+            "all_empty": ["", ""],
+        }
+    )
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+
+    # All null
+    p_null = report.columns["all_null"]
+    assert p_null.min is None
+    assert p_null.max is None
+    assert p_null.mean is None
+    assert p_null.null_count == 2
+
+    # All empty
+    p_empty = report.columns["all_empty"]
+    assert p_empty.min == 0
+    assert p_empty.max == 0
+    assert p_empty.mean == 0.0
+    assert p_empty.empty_string_count == 2
 
 
 def test_profile_string_clean_happy_path():
