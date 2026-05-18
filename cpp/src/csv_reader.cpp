@@ -11,29 +11,28 @@
 #include <stdexcept>
 #include <unordered_set>
 
-static std::string trim_whitespace(const std::string& s) {
-    size_t start = 0;
-    while (start < s.size() && std::isspace(static_cast<unsigned char>(s[start]))) {
-        ++start;
-    }
-
-    size_t end = s.size();
-    while (end > start && std::isspace(static_cast<unsigned char>(s[end - 1]))) {
-        --end;
-    }
-
-    return s.substr(start, end - start);
-}
-
 namespace arnio {
 
 namespace {
+
+static std::string trim_whitespace(const std::string& s) {
+    auto start = s.find_first_not_of(" \t\n\r\f\v");
+    if (start == std::string::npos) {
+        return "";
+    }
+
+    auto end = s.find_last_not_of(" \t\n\r\f\v");
+    return s.substr(start, end - start + 1);
+}
+
 inline void trim_in_place(std::string& s) {
     s.erase(s.begin(),
             std::find_if(s.begin(), s.end(), [](unsigned char ch) { return !std::isspace(ch); }));
+
     s.erase(std::find_if(s.rbegin(), s.rend(), [](unsigned char ch) { return !std::isspace(ch); })
                 .base(),
             s.end());
+}
 }
 
 inline void strip_utf8_bom(std::string& s) {
@@ -260,11 +259,14 @@ DType CsvReader::infer_type(const std::string& value) const {
 
     // Try int64
     std::string trimmed = trim_whitespace(cleaned);
+<<<<<<< HEAD
     std::string int_candidate = trimmed;
 
     if (!int_candidate.empty() && int_candidate[0] == '+') {
         int_candidate.erase(0, 1);
     }
+=======
+>>>>>>> a0aa2bf (fix(csv): address review feedback for integer inference)
 
     long long val = 0;
 
