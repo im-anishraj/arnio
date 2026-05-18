@@ -186,8 +186,11 @@ def run_subprocess(engine, path):
 
 
 def load_baseline():
-    with open(BASELINE_FILE) as f:
-        return json.load(f)
+    try:
+        with open(BASELINE_FILE) as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return {}
 
 
 def calculate_regression(current, baseline):
@@ -259,7 +262,7 @@ def run_case(case):
 
         if regression > REGRESSION_THRESHOLD:
             print(
-                f"⚠ Regression detected: "
+                f"WARNING: Regression detected:"
                 f"{regression:.1f}% slower than baseline "
                 f"(threshold: {REGRESSION_THRESHOLD}%)"
             )
