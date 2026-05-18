@@ -43,10 +43,10 @@ from .pipeline import pipeline, register_step
 from .quality import (
     ColumnProfile,
     DataQualityReport,
+    ProfileComparison,
     auto_clean,
     compare_profiles,
     profile,
-    ProfileComparison,
     suggest_cleaning,
 )
 from .schema import (

@@ -940,35 +940,18 @@ report = ar.profile(df, sample_size=5)
 safe_report = report.to_dict(redact_sample_values=True)
 ```
 
-Sample output now includes quantiles for numeric columns:
-
-```json
-{
-  "age": {
-    "dtype": "float64",
-    "mean": 35.2,
-    "std": 10.1,
-    "min": 18.0,
-    "max": 60.0,
-    "q25": 27.5,
-    "q50": 35.0,
-    "q75": 44.0,
-    "q95": 57.0,
-    "null_count": 0
-  }
-}
-```
-
 Use `report.to_dict(redact_sample_values=True)` when sharing reports outside your team and you want to avoid exposing raw example/sample values.
 
 ### Compare Profiles
-Use `ar.compare_profiles()` to compare two profiling reports and flag per-column drift.
+Use `ar.compare_profiles()` to compare two `DataQualityReport` profiles and flag per-column drift.
 
 ```python
 baseline = ar.profile(ar.read_csv("baseline.csv"))
-current = ar.profile(ar.read_csv("current.csv"))
+current  = ar.profile(ar.read_csv("current.csv"))
+
 comparison = ar.compare_profiles(baseline, current)
-print(comparison.drift_report["score"]["status"])
+print(comparison.drift_report["score"]["status"])  # "ok", "warning", or "changed"
+print(comparison.status_counts)  # {"ok": 2, "warning": 1, "changed": 0}
 ```
 
 > **Scoring Contract:** The `quality_score` starts at 100.0 and subtracts capped penalties for duplicates, nulls, and suggested dtype mismatches. The `score_components` field exposes these penalties as negative values. (Note: Semantic-validity penalties are intentionally out of scope for the current implementation.)
