@@ -73,17 +73,20 @@ def register_step(name: str, fn: Callable, overwrite: bool = False):
     ...     return df
     >>> ar.register_step("custom_clean", new_custom_clean, overwrite=True)
     """
+    # 1. Validate the step name
+    if not isinstance(name, str) or not name.strip():
+        raise ValueError(
+            f"Invalid pipeline step name: {name!r}. Expected a non-empty string."
+        )
+
+    # 2. Validate that the object is a callable (Fix for Issue #721)
+    if not callable(fn):
+        raise TypeError(
+            f"Could not register custom step {name!r}: "
+            f"expected a callable (function or class), but got {type(fn).__name__!r}."
+        )
+
     with _REGISTRY_LOCK:
-        if name in _STEP_REGISTRY:
-            raise ValueError(
-                f"Cannot register '{name}': conflicts with built-in C++ step. "
-                f"Use a different name."
-            )
-        if name in _PYTHON_STEP_REGISTRY and not overwrite:
-            raise ValueError(
-                f"Step '{name}' is already registered as a custom Python step. "
-                "To intentionally overwrite it, set 'overwrite=True'."
-            )
         _PYTHON_STEP_REGISTRY[name] = fn
 
 
