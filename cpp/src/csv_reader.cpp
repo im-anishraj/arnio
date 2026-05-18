@@ -178,13 +178,13 @@ DType CsvReader::promote_type(DType current, DType incoming) {
     if (current == DType::NULL_TYPE) return incoming;
     if (incoming == DType::NULL_TYPE) return current;
 
-    // int64 + float64 → float64
+    // int64 + float64 -> float64
     if ((current == DType::INT64 && incoming == DType::FLOAT64) ||
         (current == DType::FLOAT64 && incoming == DType::INT64)) {
         return DType::FLOAT64;
     }
 
-    // Any other conflict string
+    // Any other conflict -> string
     return DType::STRING;
 }
 

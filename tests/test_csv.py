@@ -412,27 +412,29 @@ def test_row_split_crlf_outside_quotes(tmp_path):
     assert len(df) == 2
     assert list(df["a"]) == [1, 3]
 
-    def test_scan_csv_non_utf8_multiline_boundary(self, tmp_path):
-        """scan_csv must not split a quoted multiline record at the sample boundary."""
-        csv_file = tmp_path / "test_multiline_boundary.csv"
-        content_lines = ["id,text"]
-        for i in range(1, 9999):
-            content_lines.append(f"{i},value")
-        content_lines.append('9999,"multiline\nrecord\ncafé"')
-        content_lines.append("10000,end")
-        csv_content = "\n".join(content_lines)
-        csv_file.write_bytes(csv_content.encode("latin-1"))
-        schema = ar.scan_csv(str(csv_file), encoding="latin-1")
-        assert schema == {"id": "int64", "text": "string"}
 
-    def test_scan_csv_type_evidence_after_limit(self, tmp_path):
-        """Type evidence after sample window must not affect inference."""
-        csv_file = tmp_path / "test_type_evidence.csv"
-        content_lines = ["id,value"]
-        for i in range(1, 10005):
-            content_lines.append(f"{i},100")
-        content_lines.append("10006,3.14")
-        csv_content = "\n".join(content_lines)
-        csv_file.write_bytes(csv_content.encode("latin-1"))
-        schema = ar.scan_csv(str(csv_file), encoding="latin-1")
-        assert schema["value"] == "int64"
+def test_scan_csv_non_utf8_multiline_boundary(tmp_path):
+    """scan_csv must not split a quoted multiline record at the sample boundary."""
+    csv_file = tmp_path / "test_multiline_boundary.csv"
+    content_lines = ["id,text"]
+    for i in range(1, 9999):
+        content_lines.append(f"{i},value")
+    content_lines.append('9999,"multiline\nrecord\ncafé"')
+    content_lines.append("10000,end")
+    csv_content = "\n".join(content_lines)
+    csv_file.write_bytes(csv_content.encode("latin-1"))
+    schema = ar.scan_csv(str(csv_file), encoding="latin-1")
+    assert schema == {"id": "int64", "text": "string"}
+
+
+def test_scan_csv_type_evidence_after_limit(tmp_path):
+    """Type evidence after sample window must not affect inference."""
+    csv_file = tmp_path / "test_type_evidence.csv"
+    content_lines = ["id,value"]
+    for i in range(1, 10005):
+        content_lines.append(f"{i},100")
+    content_lines.append("10006,3.14")
+    csv_content = "\n".join(content_lines)
+    csv_file.write_bytes(csv_content.encode("latin-1"))
+    schema = ar.scan_csv(str(csv_file), encoding="latin-1")
+    assert schema["value"] == "int64"
