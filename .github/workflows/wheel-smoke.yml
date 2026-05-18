@@ -4,10 +4,10 @@ on:
   pull_request:
     paths:
       - '.github/workflows/wheel-smoke.yml'
-      - 'bindings/**'
-      - 'cpp/**'
-      - 'arnio/**'
       - 'pyproject.toml'
+      - 'setup.py'
+      - 'CMakeLists.txt'
+      - 'cpp/**'
   schedule:
     - cron: '0 4 * * 1'
   workflow_dispatch:
