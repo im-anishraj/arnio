@@ -526,8 +526,6 @@ class TestDecimalConversion:
         result = ar.to_pandas(frame)
         # stored copy must be unaffected
         assert result.attrs["meta"]["tags"] == ["a", "b"]
-<<<<<<< HEAD
-=======
 
 
 class TestToBindingSafeExtras:
@@ -554,4 +552,3 @@ class TestToBindingSafeExtras:
             ValueError, match="Invalid financial value: NaN or Infinity."
         ):
             _to_binding_safe(float("nan"))
->>>>>>> 946debd5aa22e595df6229c81b7ecac4ab858dae
