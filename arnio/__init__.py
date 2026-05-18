@@ -14,15 +14,14 @@ except Exception:
 from .cleaning import (
     cast_types,
     clean,
-    drop_constant_columns,
     drop_duplicates,
     drop_nulls,
     fill_nulls,
     filter_rows,
     normalize_case,
-    remove_control_characters,
     rename_columns,
     strip_whitespace,
+    remove_control_characters,
 )
 from .convert import from_pandas, to_pandas
 from .exceptions import ArnioError, CsvReadError, TypeCastError, UnknownStepError
@@ -62,7 +61,6 @@ __all__ = [
     "filter_rows",
     "drop_duplicates",
     "remove_control_characters",
-    "drop_constant_columns",
     "strip_whitespace",
     "normalize_case",
     "rename_columns",
