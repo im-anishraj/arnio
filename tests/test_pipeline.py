@@ -400,17 +400,15 @@ class TestPipeline:
 
     def test_custom_step_exception_wrapping_and_chaining(self):
         """Verify that exceptions thrown by custom Python steps are wrapped with context."""
+
         def failing_step(df, **kwargs):
             raise RuntimeError("Internal step crash")
 
         ar.register_step("error_prone_step", failing_step)
 
-        try:
-            import pandas as pd
+        import pandas as pd
 
-            frame = ar.from_pandas(pd.DataFrame({"dummy": [1, 2, 3]}))
-        except Exception:
-            return
+        frame = ar.from_pandas(pd.DataFrame({"dummy": [1, 2, 3]}))
 
         with pytest.raises(ar.PipelineStepError) as exc_info:
             ar.pipeline(frame, [("error_prone_step",)])
@@ -888,4 +886,3 @@ def test_replace_values_direct_pandas_does_not_mutate_input():
     assert list(df["status"]) == ["active", "inactive"]
     # output should be replaced
     assert list(out["status"]) == ["A", "inactive"]
-    
