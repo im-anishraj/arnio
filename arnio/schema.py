@@ -124,8 +124,10 @@ class ValidationResult:
         by_rule: dict[str, int] = {}
         by_column: dict[str, int] = {}
         by_column_and_rule: dict[str, dict[str, int]] = {}
+        severity_counts: dict[str, int] = {}
         for issue in self.issues:
             by_rule[issue.rule] = by_rule.get(issue.rule, 0) + 1
+            severity_counts[issue.severity] = severity_counts.get(issue.severity, 0) + 1
             if issue.column is not None:
                 by_column[issue.column] = by_column.get(issue.column, 0) + 1
                 column_rules = by_column_and_rule.setdefault(issue.column, {})
@@ -135,6 +137,7 @@ class ValidationResult:
             "issue_count": self.issue_count,
             "bad_row_count": len(self.bad_rows),
             "issues_by_rule": by_rule,
+            "severity_counts": severity_counts,
             "issues_by_column": by_column,
             "issues_by_column_and_rule": by_column_and_rule,
         }
@@ -183,8 +186,8 @@ class ValidationResult:
         lines.extend(
             [
                 "",
-                "| Column | Rule | Row | Value | Message |",
-                "| --- | --- | ---: | --- | --- |",
+                "| Column | Rule | Severity | Row | Value | Message |",
+                "|---|---|---|---|---|---|",
             ]
         )
         for issue in visible_issues:
@@ -192,6 +195,7 @@ class ValidationResult:
                 "| "
                 f"{_markdown_cell(issue.column)} | "
                 f"{_markdown_cell(issue.rule)} | "
+                f"{_markdown_cell(issue.severity)} | "
                 f"{_markdown_cell(issue.row_index)} | "
                 f"{_markdown_cell(_clean_scalar(issue.value))} | "
                 f"{_markdown_cell(issue.message)} |"
@@ -586,6 +590,7 @@ def _validate_column(
                         f"Column {name!r} has dtype {actual_dtype!r}; "
                         f"expected {field_def.dtype!r}"
                     ),
+                    severity=field_def.severity,
                 )
             )
 
