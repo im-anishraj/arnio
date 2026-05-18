@@ -17,7 +17,17 @@ from .frame import ArFrame
 
 @dataclass(frozen=True)
 class ColumnProfile:
-    """Quality profile for one column."""
+    """Quality profile for one column.
+
+    For numeric columns ``min``, ``max``, and ``mean`` report **value**
+    statistics.  For string columns the same fields report **string-length**
+    statistics (minimum length, maximum length, and mean length of non-null
+    values).
+
+    ``empty_string_count`` is the number of non-null values that become empty
+    after stripping leading/trailing whitespace — whitespace-only strings are
+    therefore counted as empty.
+    """
 
     name: str
     dtype: str
@@ -35,9 +45,15 @@ class ColumnProfile:
     mean: float | None = None
     sample_values: list[Any] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    top_values: list[tuple[Any, int, float]] | None = None
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self, *, redact_sample_values: bool = False) -> dict[str, Any]:
         """Return a JSON-friendly dictionary."""
+        sample_values = (
+            ["[REDACTED]" for _ in self.sample_values]
+            if redact_sample_values
+            else [_clean_scalar(value) for value in self.sample_values]
+        )
         return {
             "name": self.name,
             "dtype": self.dtype,
@@ -53,8 +69,16 @@ class ColumnProfile:
             "min": _clean_scalar(self.min),
             "max": _clean_scalar(self.max),
             "mean": self.mean,
-            "sample_values": [_clean_scalar(value) for value in self.sample_values],
+            "sample_values": sample_values,
             "warnings": list(self.warnings),
+            "top_values": (
+                [
+                    {"value": _clean_scalar(v), "count": c, "ratio": r}
+                    for v, c, r in self.top_values
+                ]
+                if self.top_values is not None
+                else None
+            ),
         }
 
 
@@ -68,9 +92,11 @@ class DataQualityReport:
     duplicate_rows: int
     duplicate_ratio: float
     columns: dict[str, ColumnProfile]
+    quality_score: float = 100.0
+    score_components: dict[str, float] = field(default_factory=dict)
     suggestions: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self, *, redact_sample_values: bool = False) -> dict[str, Any]:
         """Return a JSON-friendly dictionary representation."""
         return {
             "row_count": self.row_count,
@@ -78,8 +104,11 @@ class DataQualityReport:
             "memory_usage": self.memory_usage,
             "duplicate_rows": self.duplicate_rows,
             "duplicate_ratio": self.duplicate_ratio,
+            "quality_score": self.quality_score,
+            "score_components": self.score_components,
             "columns": {
-                name: column.to_dict() for name, column in self.columns.items()
+                name: column.to_dict(redact_sample_values=redact_sample_values)
+                for name, column in self.columns.items()
             },
             "suggestions": [
                 {"step": step, "kwargs": dict(kwargs)}
@@ -87,9 +116,66 @@ class DataQualityReport:
             ],
         }
 
+    def to_markdown(self) -> str:
+        """Return a GitHub-friendly Markdown report."""
+
+        lines: list[str] = []
+
+        lines.append("# Data Quality Report")
+        lines.append("")
+
+        # Overview
+        lines.append("## Overview")
+        lines.append("")
+        lines.append(f"- Rows: {self.row_count}")
+        lines.append(f"- Columns: {self.column_count}")
+        lines.append(f"- Memory Usage: {self.memory_usage}")
+        lines.append(f"- Duplicate Rows: {self.duplicate_rows}")
+        lines.append(f"- Duplicate Ratio: {self.duplicate_ratio:.2%}")
+        lines.append("")
+
+        # Columns
+        if self.columns:
+            lines.append("## Columns")
+            lines.append("")
+
+            lines.append("| Name | Dtype | Semantic Type | Nulls | Unique | Warnings |")
+
+            lines.append("|---|---|---|---|---|---|")
+
+            for name in sorted(self.columns):
+                column = self.columns[name]
+
+                warnings = ", ".join(column.warnings) if column.warnings else "-"
+
+                lines.append(
+                    f"| {column.name} "
+                    f"| {column.dtype} "
+                    f"| {column.semantic_type} "
+                    f"| {column.null_count} "
+                    f"| {column.unique_count} "
+                    f"| {warnings} |"
+                )
+
+            lines.append("")
+
+        # Suggestions
+        if self.suggestions:
+            lines.append("## Suggested Cleaning Steps")
+            lines.append("")
+
+            for step, kwargs in self.suggestions:
+                lines.append(f"- `{step}`: `{kwargs}`")
+
+            lines.append("")
+
+        return "\n".join(lines)
+
     def summary(self) -> dict[str, Any]:
         """Return the highest-signal report fields."""
         return {
+            "quality_score": self.quality_score,
+            "score_components": self.score_components,
             "rows": self.row_count,
             "columns": self.column_count,
             "memory_usage": self.memory_usage,
@@ -124,6 +210,7 @@ class DataQualityReport:
                     "max": _clean_scalar(column.max),
                     "mean": column.mean,
                     "warnings": column.warnings,
+                    "top_values": column.top_values,
                 }
                 for column in self.columns.values()
             ]
@@ -183,15 +270,54 @@ def profile(frame: ArFrame, *, sample_size: int = 5) -> DataQualityReport:
         suggestions=[],
     )
 
+    quality_score, score_components = _calculate_quality_score(
+        row_count, duplicate_ratio, columns
+    )
+
     return DataQualityReport(
         row_count=report.row_count,
         column_count=report.column_count,
         memory_usage=report.memory_usage,
         duplicate_rows=report.duplicate_rows,
         duplicate_ratio=report.duplicate_ratio,
+        quality_score=quality_score,
+        score_components=score_components,
         columns=report.columns,
         suggestions=suggest_cleaning(report),
     )
+
+
+def _calculate_quality_score(
+    row_count: int,
+    duplicate_ratio: float,
+    columns: dict[str, ColumnProfile],
+) -> tuple[float, dict[str, float]]:
+    if row_count == 0 or not columns:
+        return 100.0, {}
+
+    duplicate_penalty = round(min(duplicate_ratio * 100.0, 20.0), 2)
+
+    null_ratios = [c.null_ratio for c in columns.values()]
+    avg_null_ratio = sum(null_ratios) / len(null_ratios) if null_ratios else 0.0
+    null_penalty = round(min(avg_null_ratio * 100.0, 40.0), 2)
+
+    type_mismatches = sum(1 for c in columns.values() if c.suggested_dtype is not None)
+    mismatch_ratio = type_mismatches / len(columns) if columns else 0.0
+    type_mismatch_penalty = round(min(mismatch_ratio * 100.0, 40.0), 2)
+
+    score_components: dict[str, float] = {}
+    if duplicate_penalty > 0:
+        score_components["duplicate_penalty"] = -duplicate_penalty
+    if null_penalty > 0:
+        score_components["null_penalty"] = -null_penalty
+    if type_mismatch_penalty > 0:
+        score_components["type_mismatch_penalty"] = -type_mismatch_penalty
+
+    quality_score = round(
+        100.0 - duplicate_penalty - null_penalty - type_mismatch_penalty, 2
+    )
+
+    return quality_score, score_components
 
 
 def suggest_cleaning(
@@ -302,19 +428,29 @@ def _profile_column(
 
     empty_string_count = 0
     whitespace_count = 0
+    top_values = None
     if dtype == "string" or pd.api.types.is_string_dtype(series.dtype):
         as_text = non_null.astype("string")
         stripped = as_text.str.strip()
         empty_string_count = int((stripped == "").sum())
         whitespace_count = int((as_text != stripped).sum())
+        top_values = _top_values(non_null)
 
-    numeric = pd.to_numeric(series, errors="coerce")
-    numeric_non_null = numeric.dropna()
     min_value = max_value = mean = None
-    if len(numeric_non_null) and _is_numeric_dtype(dtype):
-        min_value = numeric_non_null.min()
-        max_value = numeric_non_null.max()
-        mean = float(numeric_non_null.mean())
+    if len(non_null) and _is_numeric_dtype(dtype):
+        numeric = pd.to_numeric(series, errors="coerce")
+        numeric_non_null = numeric.dropna()
+        if len(numeric_non_null):
+            min_value = numeric_non_null.min()
+            max_value = numeric_non_null.max()
+            mean = float(numeric_non_null.mean())
+    elif len(non_null) and (
+        dtype == "string" or pd.api.types.is_string_dtype(series.dtype)
+    ):
+        lengths = non_null.astype("string").str.len()
+        min_value = int(lengths.min())
+        max_value = int(lengths.max())
+        mean = float(lengths.mean())
 
     semantic_type = _detect_semantic_type(name, series, dtype)
     suggested_dtype = _suggest_column_dtype(series, dtype)
@@ -343,6 +479,7 @@ def _profile_column(
         mean=mean,
         sample_values=sample_values,
         warnings=warnings,
+        top_values=top_values,
     )
 
 
@@ -352,7 +489,13 @@ def _detect_semantic_type(name: str, series: pd.Series, dtype: str) -> str:
     if len(values) == 0:
         return "empty"
 
-    if lower_name in {"id", "uuid"} or lower_name.endswith("_id"):
+    if lower_name in {
+        "id",
+        "uuid",
+        "zip",
+        "zipcode",
+        "zip_code",
+    } or lower_name.endswith("_id"):
         return "identifier"
     if _is_numeric_dtype(dtype):
         return "numeric"
@@ -375,6 +518,12 @@ def _suggest_casts(report: DataQualityReport) -> dict[str, str]:
     mapping: dict[str, str] = {}
     for name, column in report.columns.items():
         if column.suggested_dtype is not None:
+            # Skip numeric casts for identifier-like columns to prevent data loss (e.g., leading zeros)
+            if column.semantic_type == "identifier" and column.suggested_dtype in {
+                "int64",
+                "float64",
+            }:
+                continue
             mapping[name] = column.suggested_dtype
     return mapping
 
@@ -449,6 +598,23 @@ def _clean_scalar(value: Any) -> Any:
     if hasattr(value, "item"):
         return value.item()
     return value
+
+
+def _top_values(
+    series: pd.Series,
+    n: int = 5,
+) -> list[tuple[Any, int, float]]:
+    """Return top-N value frequencies for a non-null series.
+
+    Nulls are excluded. Percentages are based on the non-null total.
+    """
+    if len(series) == 0:
+        return []
+    counts = series.value_counts(dropna=True)
+    total = int(counts.sum())
+    return [
+        (val, int(cnt), _ratio(int(cnt), total)) for val, cnt in counts.head(n).items()
+    ]
 
 
 _EMAIL_PATTERN = r"[^@\s]+@[^@\s]+\.[^@\s]+"
