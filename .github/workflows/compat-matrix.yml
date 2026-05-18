@@ -1,10 +1,8 @@
 name: Compatibility Matrix
 
 on:
-  push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+  schedule:
+    - cron: '0 3 * * 1'  # every Monday at 3am
   workflow_dispatch:
 
 jobs:
@@ -47,3 +45,4 @@ jobs:
 
       - name: Run test suite
         run: pytest tests/test_compat_matrix.py -v --tb=short
+        
