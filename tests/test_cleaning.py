@@ -1339,9 +1339,7 @@ class TestClipNumericNativeRegression:
     # ------------------------------------------------------------------
 
     def test_subset_clips_only_named_column(self):
-        frame = ar.from_pandas(
-            pd.DataFrame({"a": [-10, 5, 200], "b": [-10, 5, 200]})
-        )
+        frame = ar.from_pandas(pd.DataFrame({"a": [-10, 5, 200], "b": [-10, 5, 200]}))
         result = ar.clip_numeric(frame, lower=0, upper=100, subset=["a"])
         df = ar.to_pandas(result)
         assert df["a"].tolist() == [0, 5, 100]
@@ -1376,10 +1374,10 @@ class TestClipNumericNativeRegression:
             ar.clip_numeric(frame, lower=0, subset=["nonexistent"])
 
     def test_non_numeric_subset_column_raises(self):
-        frame = ar.from_pandas(
-            pd.DataFrame({"x": [1, 2, 3], "label": ["a", "b", "c"]})
-        )
-        with pytest.raises(ValueError, match="clip_numeric only supports numeric columns"):
+        frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3], "label": ["a", "b", "c"]}))
+        with pytest.raises(
+            ValueError, match="clip_numeric only supports numeric columns"
+        ):
             ar.clip_numeric(frame, lower=0, subset=["label"])
 
     # ------------------------------------------------------------------
