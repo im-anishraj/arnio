@@ -12,7 +12,8 @@ from typing import Any, Callable
 import pandas as pd
 
 from . import cleaning
-from .exceptions import UnknownStepError
+from .convert import from_pandas, to_pandas
+from .exceptions import PipelineStepError, UnknownStepError
 from .frame import ArFrame
 
 # Map step names to cleaning functions
@@ -138,9 +139,6 @@ def pipeline(
     ...     ("drop_duplicates", {"keep": "first"}),
     ... ])
     """
-    from .convert import from_pandas, to_pandas
-    from .exceptions import UnknownStepError, PipelineStepError
-
     with _REGISTRY_LOCK:
         python_step_registry = dict(_PYTHON_STEP_REGISTRY)
 
@@ -184,11 +182,20 @@ def pipeline(
         elif name in python_step_registry:
             # Pure Python step - slower but contributor-friendly
             started_at = perf_counter()
+            fn = python_step_registry[name]
             df = to_pandas(result)
 
+            # Isolate genuine custom steps from internal core library functions
+            is_builtin = (
+                getattr(fn, "__module__", "").startswith("arnio.cleaning")
+                or name == "standardize_missing_tokens"
+            )
+
             try:
-                returned = python_step_registry[name](df, **kwargs)
+                returned = fn(df, **kwargs)
             except Exception as e:
+                if is_builtin:
+                    raise
                 raise PipelineStepError(name, e) from e
 
             if returned is None:
