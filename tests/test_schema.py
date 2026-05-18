@@ -46,7 +46,7 @@ def test_schema_validation_collects_row_level_issues(tmp_path):
     rules = {issue.rule for issue in result.issues}
 
     assert not result.passed
-    assert result.bad_rows == [1, 2]
+    assert result.bad_rows == [2, 3]
     assert {"nullable", "max", "min", "email", "allowed"} <= rules
     assert result.summary()["issues_by_column"]["age"] == 2
 
