@@ -426,7 +426,12 @@ def CountryCode(
     )
 
 
-def Date(*, nullable: bool = True, unique: bool = False , required_if: tuple[str, Any] | None = None,) -> Field:
+def Date(
+    *,
+    nullable: bool = True,
+    unique: bool = False,
+    required_if: tuple[str, Any] | None = None,
+) -> Field:
     """Create a date schema field."""
     return Field(
         dtype="string",

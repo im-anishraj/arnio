@@ -809,13 +809,10 @@ def test_date_validation_rejects_non_zero_padded_dates(tmp_path):
     rules = {issue.rule for issue in result.issues}
     assert "date" in rules
 
+
 def test_required_if_validation_passes_when_condition_matches(tmp_path):
     path = tmp_path / "conditional_pass.csv"
-    path.write_text(
-        "user_type,country\n"
-        "international,IN\n"
-        "local,\n"
-    )
+    path.write_text("user_type,country\n" "international,IN\n" "local,\n")
 
     frame = ar.read_csv(path)
 
@@ -838,11 +835,7 @@ def test_required_if_validation_passes_when_condition_matches(tmp_path):
 
 def test_required_if_validation_fails_when_condition_matches(tmp_path):
     path = tmp_path / "conditional_fail.csv"
-    path.write_text(
-        "user_type,country\n"
-        "international,\n"
-        "local,IN\n"
-    )
+    path.write_text("user_type,country\n" "international,\n" "local,IN\n")
 
     frame = ar.read_csv(path)
 
@@ -867,11 +860,7 @@ def test_required_if_validation_fails_when_condition_matches(tmp_path):
 
 def test_required_if_validation_ignores_non_matching_conditions(tmp_path):
     path = tmp_path / "conditional_ignore.csv"
-    path.write_text(
-        "user_type,country\n"
-        "local,\n"
-        "guest,\n"
-    )
+    path.write_text("user_type,country\n" "local,\n" "guest,\n")
 
     frame = ar.read_csv(path)
 
@@ -893,10 +882,7 @@ def test_required_if_validation_ignores_non_matching_conditions(tmp_path):
 
 def test_required_if_validation_reports_missing_trigger_column(tmp_path):
     path = tmp_path / "missing_trigger.csv"
-    path.write_text(
-        "country\n"
-        "IN\n"
-    )
+    path.write_text("country\n" "IN\n")
 
     frame = ar.read_csv(path)
 
@@ -918,11 +904,7 @@ def test_required_if_validation_reports_missing_trigger_column(tmp_path):
 
 def test_required_if_validation_handles_null_trigger_values(tmp_path):
     path = tmp_path / "null_trigger.csv"
-    path.write_text(
-        "user_type,country\n"
-        ",\n"
-        "international,IN\n"
-    )
+    path.write_text("user_type,country\n" ",\n" "international,IN\n")
 
     frame = ar.read_csv(path)
 
