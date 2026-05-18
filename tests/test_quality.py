@@ -458,6 +458,8 @@ def test_profile_string_metrics():
     report = ar.profile(frame)
 
     assert report.columns["score"].std == pytest.approx(0.8164965809)
+
+
 def test_profile_string_clean_happy_path():
     """Clean string column with no nulls, no empties — simplest case."""
     df = pd.DataFrame({"name": ["hello", "hi", "hey"]})
