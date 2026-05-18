@@ -6,7 +6,7 @@ Pandas conversion functions.
 from __future__ import annotations
 
 import copy as copylib
-
+from decimal import Decimal
 import numpy as np
 import pandas as pd
 
@@ -23,10 +23,14 @@ def _normalize_scalar(value: object) -> object:
         return None
     if isinstance(value, np.generic):
         return value.item()
+
+    if isinstance(value, Decimal):
+        return float(value)
+
     if not isinstance(value, (bool, int, float, str)):
         return str(value)
-    return value
 
+    return value
 
 def _scalar_kind(value: object) -> str:
     if isinstance(value, bool):
