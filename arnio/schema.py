@@ -35,6 +35,21 @@ def _validate_severity(severity: str) -> None:
         raise ValueError("severity must be 'error' or 'warning'")
 
 
+_DTYPE_MAP = {
+    "int": "int64",
+    "int64": "int64",
+    "int32": "int64",
+    "float": "float64",
+    "float64": "float64",
+    "float32": "float64",
+    "bool": "bool",
+    "object": "string",
+    "string": "string",
+    "str": "string",
+    "null": "null",
+}
+
+
 @dataclass(frozen=True)
 class Field:
     """Validation rules for one column."""
@@ -71,6 +86,50 @@ class Schema:
     def validate(self, frame: ArFrame) -> ValidationResult:
         """Validate a frame against this schema."""
         return validate(frame, self)
+
+    @classmethod
+    def bootstrap_from_report(cls, report: Any) -> Schema:
+        """Create a Schema from a DataQualityReport.
+
+        Args:
+            report: A DataQualityReport produced by arnio.profile().
+
+        Returns:
+            Schema: A new Schema inferred from the report's column profiles.
+
+        Raises:
+            TypeError: If the input is not a DataQualityReport.
+            ValueError: If the report has no columns, or any column profile
+                is missing a dtype.
+
+        Example:
+            >>> report = ar.profile(frame)
+            >>> schema = ar.Schema.bootstrap_from_report(report)
+            >>> result = schema.validate(frame)
+        """
+        from .quality import DataQualityReport
+
+        if not isinstance(report, DataQualityReport):
+            raise TypeError(f"Expected DataQualityReport, got {type(report).__name__}")
+        if not report.columns:
+            raise ValueError(
+                "Cannot bootstrap schema from an empty report (no columns)."
+            )
+
+        fields = {}
+        for col_name, profile in report.columns.items():
+            dtype_val = getattr(profile, "dtype", None)
+            null_count = getattr(profile, "null_count", 0)
+
+            if not dtype_val:
+                raise ValueError(
+                    f"Column profile for {col_name!r} is missing 'dtype' key."
+                )
+
+            arnio_dtype = _DTYPE_MAP.get(str(dtype_val).lower(), "string")
+            fields[col_name] = Field(dtype=arnio_dtype, nullable=null_count > 0)
+
+        return cls(fields=fields)
 
 
 @dataclass(frozen=True)

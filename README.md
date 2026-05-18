@@ -1139,6 +1139,28 @@ DataQualityReport(
 | **Quality Score** | 100.0 |
 <br>
 
+### Bootstrapping a Schema from a Quality Report
+
+After profiling a dataset, you can automatically generate a validation schema
+directly from the report:
+
+```python
+import arnio as ar
+
+frame = ar.from_pandas(df)
+report = ar.profile(frame)
+
+schema = ar.Schema.bootstrap_from_report(report)
+result = schema.validate(frame)
+
+print(result.passed)
+print(result.summary())
+```
+
+The inferred schema uses conservative defaults: column dtypes are mapped
+directly from the report, and a column is marked `nullable=True` if any
+null values were observed during profiling.
+
 ## 🗺️ Roadmap
 
 | Version | Focus | Status |

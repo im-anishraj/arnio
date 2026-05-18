@@ -382,6 +382,60 @@ def test_raise_for_errors_multiple_issues(tmp_path):
     assert "row 1" in msg and "row 2" in msg
 
 
+def test_schema_bootstrap_from_report_infers_dtype_and_nullable(tmp_path):
+    path = tmp_path / "quality.csv"
+    path.write_text(
+        "id,name,score,active\n"
+        "1,Alice,9.5,true\n"
+        "2,Bob,,false\n"
+        "3,Carol,7.25,true\n"
+    )
+    report = ar.profile(ar.read_csv(path))
+
+    schema = ar.Schema.bootstrap_from_report(report)
+
+    assert schema.fields == {
+        "id": ar.Field(dtype="int64", nullable=False),
+        "name": ar.Field(dtype="string", nullable=False),
+        "score": ar.Field(dtype="float64", nullable=True),
+        "active": ar.Field(dtype="bool", nullable=False),
+    }
+
+
+def test_schema_bootstrap_from_report_validates_source_frame(tmp_path):
+    path = tmp_path / "quality.csv"
+    path.write_text("id,name\n1,Alice\n2,Bob\n")
+    frame = ar.read_csv(path)
+    report = ar.profile(frame)
+
+    schema = ar.Schema.bootstrap_from_report(report)
+    result = schema.validate(frame)
+
+    assert result.passed
+    assert result.issue_count == 0
+
+
+def test_schema_bootstrap_from_report_rejects_non_report():
+    with pytest.raises(TypeError, match="Expected DataQualityReport"):
+        ar.Schema.bootstrap_from_report({"columns": {}})
+
+
+def test_schema_bootstrap_from_report_rejects_empty_report():
+    from arnio.quality import DataQualityReport
+
+    report = DataQualityReport(
+        row_count=0,
+        column_count=0,
+        memory_usage=0,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+    )
+
+    with pytest.raises(ValueError, match="empty report"):
+        ar.Schema.bootstrap_from_report(report)
+
+
 def test_email_validation_rejects_invalid_validation_mode():
     with pytest.raises(ValueError):
         ar.Email(validation="banana")
