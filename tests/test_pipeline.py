@@ -5,6 +5,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
+import pandas as pd
 
 import arnio as ar
 
@@ -144,8 +145,6 @@ class TestPipeline:
         assert list(df["label"]) == ["a", "b", "c"]
 
     def test_pipeline_standardize_missing_tokens(self):
-        import pandas as pd
-
         frame = ar.from_pandas(pd.DataFrame({"value": [1, 2, "N/A"]}))
 
         result = ar.pipeline(

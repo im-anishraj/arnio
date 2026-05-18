@@ -938,7 +938,27 @@ def replace_values(frame, mapping, column=None):
 
 
 def standardize_missing_tokens(frame, tokens=None, subset=None):
-    """Converting missing tokens in the DataFrame to the standard form NaN"""
+    """Converting missing tokens in the DataFrame to the standard form NaN
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input data frame.
+    tokens : list[str], optional
+        List of strings to treat as missing. If None, then a built-in default tokens list is used
+    subset : list[str], optional
+        Column names to replace missing tokens in. If None, applies to all columns.
+
+    Returns
+    -------
+    ArFrame
+        New frame with missing token values replaced by NaN.
+
+    Examples
+    --------
+    >>> frame = ar.from_pandas(pd.DataFrame({"value": [1, 2, "N/A"]}))
+    >>> result = ar.standardize_missing_tokens(frame)
+    """
 
     import pandas as pd
 
@@ -948,20 +968,21 @@ def standardize_missing_tokens(frame, tokens=None, subset=None):
     df = to_pandas(frame) if is_arframe else frame
 
     df = df.copy()
+    if isinstance(subset, str):
+        raise TypeError(
+            f"subset must be a list of column names, not a string. "
+            f"Did you mean subset=['{subset}']?"
+        )
 
     default_tokens = ["N/A", "NA", "n/a", "na", "-", "none", "nil", "null", "", "?"]
 
-    # check if the user has passed their own tokens or not
-    # Case 1 : when user does not pass a subset
     if subset is None:
         if tokens is None:
             df = df.replace(default_tokens, float("nan"))
         else:
             df = df.replace(tokens, float("nan"))
 
-    # Case 2 : when user passes a subset
     else:
-        # check if the subset column is valid or not
         unknown_columns = [column for column in subset if column not in df.columns]
         if unknown_columns:
             raise ValueError(f"Unknown columns in subset: {unknown_columns}")
