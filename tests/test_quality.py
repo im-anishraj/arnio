@@ -470,14 +470,19 @@ def test_quality_score_duplicates(tmp_path):
     # 3 rows, 2 duplicates. ratio = 0.66
     # 0.66 * 100 = 66 points penalty => capped at -20.0
     assert report.score_components["duplicate_penalty"] == -20.0
+    assert report.quality_score == 80.0
 
 
-def test_quality_score_type_mismatch(tmp_path):
-    path = tmp_path / "mismatch.csv"
-    # score column is read as string, but contains only numbers,
-    # which triggers a suggested_dtype of int64/float64.
-    path.write_text('id,score\n1,"10"\n2,"20"\n')
-    report = ar.profile(ar.read_csv(path))
+def test_quality_score_type_mismatch():
+    df = pd.DataFrame(
+        {
+            "id": [1, 2],
+            "score": ["10", "20"],
+        }
+    )
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
 
     # 2 columns. 1 has type mismatch. ratio = 0.5 => 50 points => capped at -40.0
     assert report.score_components["type_mismatch_penalty"] == -40.0
+    assert report.quality_score == 60.0

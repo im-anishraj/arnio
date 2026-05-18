@@ -848,6 +848,8 @@ DataQualityReport(
     column_count=3,
     memory_usage=733,
     duplicate_rows=0,
+    quality_score=100.0,
+    score_components={},
     columns={
         'user_id': ColumnProfile(dtype='int64', semantic_type='identifier', unique_count=4),
         'email': ColumnProfile(dtype='string', semantic_type='categorical', null_count=1, unique_ratio=0.666667, min=13, max=13, mean=13.0),
@@ -866,6 +868,8 @@ DataQualityReport(
   "memory_usage": 733,
   "duplicate_rows": 0,
   "duplicate_ratio": 0.0,
+  "quality_score": 100.0,
+  "score_components": {},
   "columns": {
     "user_id": {
       "dtype": "int64",
@@ -914,6 +918,7 @@ DataQualityReport(
 | **Column Count** | 3 |
 | **Memory Usage** | 733 bytes |
 | **Duplicates** | 0 (0.0%) |
+| **Quality Score** | 100.0 |
 <br>
 
 ## 🗺️ Roadmap
