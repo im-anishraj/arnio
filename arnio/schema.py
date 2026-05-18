@@ -559,23 +559,17 @@ def _validate_column(
                 )
             )
      
-    if (
-        field_def.semantic == "url"
-        and field_def.allowed_schemes is not None
-    ):
-        valid_url_mask = text.str.fullmatch(
-           _SEMANTIC_PATTERNS["url"],
-           na=False,
-        )
-        
-        valid_urls = text[valid_url_mask]
 
+    if field_def.semantic == "url" and field_def.allowed_schemes is not None:
+        url_pattern = _SEMANTIC_PATTERNS["url"]
+
+        valid_urls = non_null[text.str.fullmatch(url_pattern, na=False)]
+
+        valid_text = valid_urls.astype("string")
         invalid_scheme = valid_urls[
-            ~valid_urls.str.lower().str.startswith(
-                tuple(
-                    f"{scheme}://"
-                    for scheme in field_def.allowed_schemes
-                )
+            ~valid_text.str.lower().str.startswith(
+                tuple(f"{scheme}://" for scheme in field_def.allowed_schemes)
+
             )
         ]
 
