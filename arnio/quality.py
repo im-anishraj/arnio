@@ -15,6 +15,52 @@ from .convert import to_pandas
 from .frame import ArFrame
 
 
+class CleaningSuggestion(tuple):
+    """A data quality cleaning suggestion that is backwards-compatible with tuples.
+
+    Exposes `step` and `kwargs` like a regular 2-tuple, but also carries
+    `confidence_score` and `confidence_reason` attributes.
+    """
+
+    def __new__(
+        cls,
+        step: str,
+        kwargs: dict[str, Any],
+        confidence_score: float,
+        confidence_reason: str,
+    ) -> CleaningSuggestion:
+        instance = super().__new__(cls, (step, kwargs))
+        instance._confidence_score = float(confidence_score)
+        instance._confidence_reason = str(confidence_reason)
+        return instance
+
+    @property
+    def step(self) -> str:
+        return self[0]
+
+    @property
+    def kwargs(self) -> dict[str, Any]:
+        return self[1]
+
+    @property
+    def confidence_score(self) -> float:
+        return self._confidence_score
+
+    @property
+    def confidence_reason(self) -> str:
+        return self._confidence_reason
+
+    def __getnewargs__(self) -> tuple[str, dict[str, Any], float, str]:
+        return (self.step, self.kwargs, self.confidence_score, self.confidence_reason)
+
+    def __repr__(self) -> str:
+        return (
+            f"CleaningSuggestion(step={self.step!r}, kwargs={self.kwargs!r}, "
+            f"confidence_score={self.confidence_score:.2f}, "
+            f"confidence_reason={self.confidence_reason!r})"
+        )
+
+
 @dataclass(frozen=True)
 class ColumnProfile:
     """Quality profile for one column.
@@ -111,8 +157,13 @@ class DataQualityReport:
                 for name, column in self.columns.items()
             },
             "suggestions": [
-                {"step": step, "kwargs": dict(kwargs)}
-                for step, kwargs in self.suggestions
+                {
+                    "step": s[0],
+                    "kwargs": dict(s[1]),
+                    "confidence_score": getattr(s, "confidence_score", None),
+                    "confidence_reason": getattr(s, "confidence_reason", None),
+                }
+                for s in self.suggestions
             ],
         }
 
@@ -164,8 +215,16 @@ class DataQualityReport:
             lines.append("## Suggested Cleaning Steps")
             lines.append("")
 
-            for step, kwargs in self.suggestions:
-                lines.append(f"- `{step}`: `{kwargs}`")
+            for step in self.suggestions:
+                conf_score = getattr(step, "confidence_score", None)
+                conf_reason = getattr(step, "confidence_reason", None)
+                if conf_score is not None and conf_reason is not None:
+                    lines.append(
+                        f"- `{step[0]}`: `{step[1]}` "
+                        f"(Confidence: {conf_score:.2f} - {conf_reason})"
+                    )
+                else:
+                    lines.append(f"- `{step[0]}`: `{step[1]}`")
 
             lines.append("")
 
@@ -322,7 +381,7 @@ def _calculate_quality_score(
 
 def suggest_cleaning(
     frame_or_report: ArFrame | DataQualityReport,
-) -> list[tuple[str, dict[str, Any]]]:
+) -> list[CleaningSuggestion]:
     """Suggest safe built-in cleaning steps.
 
     Parameters
@@ -332,7 +391,7 @@ def suggest_cleaning(
 
     Returns
     -------
-    list[tuple[str, dict[str, Any]]]
+    list[CleaningSuggestion]
         Pipeline-compatible cleaning suggestions.
 
     Examples
@@ -346,19 +405,68 @@ def suggest_cleaning(
         else profile(frame_or_report)
     )
 
-    suggestions: list[tuple[str, dict[str, Any]]] = []
+    suggestions: list[CleaningSuggestion] = []
     whitespace_columns = [
         name for name, column in report.columns.items() if column.whitespace_count > 0
     ]
     if whitespace_columns:
-        suggestions.append(("strip_whitespace", {"subset": whitespace_columns}))
+        suggestions.append(
+            CleaningSuggestion(
+                "strip_whitespace",
+                {"subset": whitespace_columns},
+                0.95,
+                "Trimming leading/trailing whitespace is a safe and highly recommended operation for columns with formatting anomalies.",
+            )
+        )
 
     cast_mapping = _suggest_casts(report)
     if cast_mapping:
-        suggestions.append(("cast_types", cast_mapping))
+        col_scores = []
+        col_reasons = []
+        for col_name, target_dtype in cast_mapping.items():
+            col_profile = report.columns[col_name]
+            non_null_ratio = 1.0 - col_profile.null_ratio
+
+            score = 0.95
+            reason = f"Column '{col_name}' conforms perfectly to {target_dtype} structure."
+
+            if non_null_ratio < 0.2:
+                score -= 0.3
+                reason = f"Column '{col_name}' has very low non-null support ({non_null_ratio:.1%}) for {target_dtype} type inference."
+            elif non_null_ratio < 0.5:
+                score -= 0.15
+                reason = f"Column '{col_name}' has moderate non-null support ({non_null_ratio:.1%}) for {target_dtype} type inference."
+
+            col_scores.append(score)
+            col_reasons.append(reason)
+
+        avg_score = round(sum(col_scores) / len(col_scores), 2)
+        reason = "; ".join(col_reasons)
+        suggestions.append(
+            CleaningSuggestion(
+                "cast_types",
+                cast_mapping,
+                avg_score,
+                reason,
+            )
+        )
 
     if report.duplicate_rows > 0:
-        suggestions.append(("drop_duplicates", {"keep": "first"}))
+        if report.duplicate_ratio > 0.5:
+            score = 0.75
+            reason = f"High duplicate ratio ({report.duplicate_ratio:.1%}) suggests potential schema or merge anomalies; review before dropping."
+        else:
+            score = 0.95
+            reason = f"Low duplicate ratio ({report.duplicate_ratio:.1%}) suggests standard redundant records."
+
+        suggestions.append(
+            CleaningSuggestion(
+                "drop_duplicates",
+                {"keep": "first"},
+                score,
+                reason,
+            )
+        )
 
     return suggestions
 

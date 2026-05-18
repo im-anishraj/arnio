@@ -907,7 +907,15 @@ DataQualityReport(
         {"value": "Paris", "count": 2, "ratio": 0.333}
       ]
     }
-  }
+  },
+  "suggestions": [
+    {
+      "step": "cast_types",
+      "kwargs": {"score": "float64"},
+      "confidence_score": 0.95,
+      "confidence_reason": "Column 'score' conforms perfectly to float64 structure."
+    }
+  ]
 }
 ```
 
