@@ -192,7 +192,6 @@ clean_df = df.arnio.clean(drop_duplicates=True)
 quality = clean_df.arnio.profile()
 validation = clean_df.arnio.validate({
     "email": ar.Email(nullable=False),
-    "user_code": ar.Regex(r"^USR-\d{4}$", nullable=False),
     "age": ar.Int64(nullable=True, min=0),
 })
 ```
@@ -416,9 +415,7 @@ Total avg (Read+Strict)       0.077             4.52
 
 ## 🧰 Cleaning primitives
 
-
 Most operations below run natively in C++. Currently, `filter_rows` and `replace_values` run via the Python (pandas) backend and may be optimized in C++ later.
-
 
 | Primitive | What it does | Example |
 |:---|:---|:---|
@@ -629,7 +626,6 @@ schema = ar.Schema({
     # CountryCode expects uppercase ISO alpha-2 values, for example IN, US, GB.
     "country": ar.CountryCode(nullable=False),
     "username": ar.String(min_length=3, max_length=20),
-    "user_code": ar.Regex(r"^USR-\d{4}$", nullable=False),
     "revenue": ar.Float64(nullable=True, min=0),
     "created_at": ar.DateTime(nullable=False, format="%Y-%m-%d"),
 })
@@ -657,8 +653,6 @@ schema = ar.Schema({
 result = ar.validate(frame, schema)
 ```
 Severity counts are not included in `summary()` yet because `ValidationIssue` does not currently carry severity information.
-
-Date fields use the `YYYY-MM-DD` format and reject invalid calendar dates.
 
 For low-risk automatic cleanup:
 
@@ -742,10 +736,7 @@ data = {
 df = ar.from_pandas(pd.DataFrame(data))
 # Bounded profiling for large datasets (controls how many sample values are kept)
 report = ar.profile(df, sample_size=5)
-safe_report = report.to_dict(redact_sample_values=True)
 ```
-
-Use `report.to_dict(redact_sample_values=True)` when sharing reports outside your team and you want to avoid exposing raw example/sample values.
 
 ### 1. Terminal Representation (Simplified Example)
 *A simplified view of the standard string representation of the report object:*
@@ -758,7 +749,7 @@ DataQualityReport(
     duplicate_rows=0,
     columns={
         'user_id': ColumnProfile(dtype='int64', semantic_type='identifier', unique_count=4),
-        'email': ColumnProfile(dtype='string', semantic_type='categorical', null_count=1, unique_ratio=0.666667, min=13, max=13, mean=13.0),
+        'email': ColumnProfile(dtype='string', semantic_type='categorical', null_count=1, unique_ratio=0.666667),
         'score': ColumnProfile(dtype='float64', semantic_type='numeric', mean=87.9, min=85.5, max=90.0)
     }
 )
@@ -786,9 +777,6 @@ DataQualityReport(
       "semantic_type": "categorical",
       "null_count": 1,
       "unique_ratio": 0.666667,
-      "min": 13,
-      "max": 13,
-      "mean": 13.0,
       "warnings": ["contains_nulls"]
     },
     "score": {
