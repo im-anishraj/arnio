@@ -26,7 +26,7 @@ class TestToPandas:
     def test_nulls_converted(self, csv_with_nulls):
         frame = ar.read_csv(csv_with_nulls)
         df = ar.to_pandas(frame)
-        assert df.isna().any().any()  # Should have some NaN/NA values
+        assert df.isna().any().any()
 
     def test_copy_option_returns_equivalent_dataframe(self, sample_csv):
         frame = ar.read_csv(sample_csv)
@@ -148,6 +148,44 @@ class TestFromPandas:
         assert "x" in frame.columns
         assert "y" in frame.columns
         assert "z" in frame.columns
+
+    def test_string_dtype_roundtrip_with_missing_value(self):
+        df = pd.DataFrame(
+            {
+                "name": pd.Series(
+                    ["a", pd.NA],
+                    dtype=pd.StringDtype(),
+                )
+            }
+        )
+
+        result = ar.to_pandas(ar.from_pandas(df))
+
+        assert str(result["name"].dtype) == "string"
+        assert list(result["name"]) == ["a", pd.NA]
+
+    def test_string_dtype_roundtrip_all_nulls(self):
+        df = pd.DataFrame(
+            {
+                "name": pd.Series(
+                    [pd.NA, pd.NA],
+                    dtype=pd.StringDtype(),
+                )
+            }
+        )
+
+        result = ar.to_pandas(ar.from_pandas(df))
+
+        assert str(result["name"].dtype) == "string"
+        assert result["name"].isna().tolist() == [True, True]
+
+    def test_plain_object_string_column_behavior_unchanged(self):
+        df = pd.DataFrame({"name": ["a", "b"]}, dtype=object)
+
+        result = ar.to_pandas(ar.from_pandas(df))
+
+        assert list(result["name"]) == ["a", "b"]
+        assert str(result["name"].dtype) == "string"
 
     def test_nullable_int64_roundtrip_mixed_values(self):
         df = pd.DataFrame({"id": pd.Series([1, pd.NA, 3], dtype=pd.Int64Dtype())})
@@ -465,7 +503,6 @@ class TestDecimalConversion:
         )
         frame = ar.from_pandas(df)
         result = ar.to_pandas(frame)
-        # Result should be preserved as exact strings
         assert list(result["price"]) == ["19.99", "29.95", "15.50"]
         assert result["price"].dtype == "string"
 
@@ -521,10 +558,8 @@ class TestDecimalConversion:
         df = pd.DataFrame({"x": [1, 2]})
         df.attrs = {"meta": {"version": 1, "tags": ["a", "b"]}}
         frame = ar.from_pandas(df)
-        # mutate the original nested object
         df.attrs["meta"]["tags"].append("c")
         result = ar.to_pandas(frame)
-        # stored copy must be unaffected
         assert result.attrs["meta"]["tags"] == ["a", "b"]
 
 
