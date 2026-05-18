@@ -837,6 +837,25 @@ report = ar.profile(df, sample_size=5)
 safe_report = report.to_dict(redact_sample_values=True)
 ```
 
+Sample output now includes quantiles for numeric columns:
+
+```json
+{
+  "age": {
+    "dtype": "float64",
+    "mean": 35.2,
+    "std": 10.1,
+    "min": 18.0,
+    "max": 60.0,
+    "q25": 27.5,
+    "q50": 35.0,
+    "q75": 44.0,
+    "q95": 57.0,
+    "null_count": 0
+  }
+}
+```
+
 Use `report.to_dict(redact_sample_values=True)` when sharing reports outside your team and you want to avoid exposing raw example/sample values.
 
 > **Scoring Contract:** The `quality_score` starts at 100.0 and subtracts capped penalties for duplicates, nulls, and suggested dtype mismatches. The `score_components` field exposes these penalties as negative values. (Note: Semantic-validity penalties are intentionally out of scope for the current implementation.)

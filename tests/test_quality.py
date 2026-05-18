@@ -37,6 +37,42 @@ def test_report_summary_and_pandas_output(csv_with_whitespace):
     assert set(df["name"]) == {"name", "city"}
 
 
+def test_profile_numeric_quantiles():
+    frame = ar.from_pandas(pd.DataFrame({"age": [1.0, 2.0, 3.0, 4.0, 5.0]}))
+
+    report = ar.profile(frame)
+    profile = report.columns["age"].to_dict()
+
+    assert profile["q25"] == 2.0
+    assert profile["q50"] == 3.0
+    assert profile["q75"] == 4.0
+    assert profile["q95"] == 4.8
+
+
+def test_profile_all_null_numeric_quantiles():
+    frame = ar.from_pandas(pd.DataFrame({"score": pd.Series([None, None], dtype="float64")}))
+
+    report = ar.profile(frame)
+    profile = report.columns["score"].to_dict()
+
+    assert profile["q25"] is None
+    assert profile["q50"] is None
+    assert profile["q75"] is None
+    assert profile["q95"] is None
+
+
+def test_profile_non_numeric_no_quantiles():
+    frame = ar.from_pandas(pd.DataFrame({"name": ["Alice", "Bob", "Cara"]}))
+
+    report = ar.profile(frame)
+    profile = report.columns["name"].to_dict()
+
+    assert "q25" not in profile
+    assert "q50" not in profile
+    assert "q75" not in profile
+    assert "q95" not in profile
+
+
 def test_suggest_cleaning_returns_pipeline_compatible_steps(csv_with_duplicates):
     frame = ar.read_csv(csv_with_duplicates)
     suggestions = ar.suggest_cleaning(frame)
