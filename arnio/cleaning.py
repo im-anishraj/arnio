@@ -5,6 +5,7 @@ Data cleaning functions.
 
 from __future__ import annotations
 
+import unicodedata
 from collections.abc import Sequence
 from typing import Any
 
@@ -114,6 +115,69 @@ def drop_nulls(
         )
     result = _drop_nulls(frame._frame, subset=subset)
     return ArFrame(result)
+
+
+def keep_rows_with_nulls(
+    frame: ArFrame,
+    *,
+    subset: list[str] | None = None,
+) -> ArFrame:
+    """Keep only rows that contain at least one null/empty value.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input data frame.
+    subset : list[str], optional
+        Column names to check for nulls. If None, checks all columns.
+        A row is kept if ANY column in the subset contains a null.
+
+    Returns
+    -------
+    ArFrame
+        New frame containing only rows with at least one null value.
+
+    Raises
+    ------
+    TypeError
+        If subset is passed as a string instead of a list.
+    ValueError
+        If any column in subset does not exist in the frame.
+
+    Examples
+    --------
+    >>> frame = ar.read_csv("data.csv")
+    >>> nulls = ar.keep_rows_with_nulls(frame)
+    >>> nulls_age = ar.keep_rows_with_nulls(frame, subset=["age"])
+    """
+
+    if isinstance(subset, str):
+        raise TypeError(
+            f"keep_rows_with_nulls: 'subset' must be a list of column names, "
+            f"not a string. Did you mean subset=['{subset}']?"
+        )
+
+    import pandas as pd
+
+    from .convert import from_pandas, to_pandas
+
+    is_arframe = not isinstance(frame, pd.DataFrame)
+    df = to_pandas(frame) if is_arframe else frame
+
+    cols = subset if subset is not None else df.columns.tolist()
+
+    # validate that all subset columns actually exist
+    unknown = [c for c in cols if c not in df.columns]
+    if unknown:
+        raise ValueError(
+            f"keep_rows_with_nulls: unknown column(s) in subset: {unknown}. "
+            f"Available columns: {df.columns.tolist()}"
+        )
+
+    mask = df[cols].isnull().any(axis=1)
+    result = df[mask].reset_index(drop=True)
+
+    return from_pandas(result) if is_arframe else result
 
 
 def fill_nulls(
@@ -379,6 +443,44 @@ def normalize_case(
     return ArFrame(result)
 
 
+def normalize_unicode(
+    frame: ArFrame,
+    *,
+    subset: list[str] | None = None,
+    form: str = "NFC",
+) -> ArFrame:
+    """Normalize Unicode text columns."""
+
+    from .convert import from_pandas, to_pandas
+
+    valid_forms = {"NFC", "NFD", "NFKC", "NFKD"}
+
+    if form not in valid_forms:
+        raise ValueError(f"Unsupported Unicode normalization form: {form}")
+
+    if subset is not None:
+        validate_columns_exist(
+            frame,
+            _validate_column_sequence(subset, argument_name="subset"),
+            operation="normalize_unicode",
+        )
+
+    df = to_pandas(frame).copy()
+
+    columns = (
+        subset
+        if subset is not None
+        else df.select_dtypes(include=["object", "string"]).columns
+    )
+
+    for col in columns:
+        df[col] = df[col].apply(
+            lambda x: unicodedata.normalize(form, x) if isinstance(x, str) else x
+        )
+
+    return from_pandas(df)
+
+
 def rename_columns(
     frame: ArFrame,
     mapping: dict[str, str],
@@ -409,6 +511,42 @@ def rename_columns(
     )
     result = _rename_columns(frame._frame, mapping)
     return ArFrame(result)
+
+
+def trim_column_names(frame: ArFrame) -> ArFrame:
+    """Strip leading and trailing whitespace from column names.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input data frame.
+
+    Returns
+    -------
+    ArFrame
+        New frame with trimmed column names.
+
+    Raises
+    ------
+    ValueError
+        If trimming would create duplicate column names.
+
+    Examples
+    --------
+    >>> frame = ar.read_csv("data.csv")  # columns: [" name ", " age "]
+    >>> clean = ar.trim_column_names(frame)  # columns: ["name", "age"]
+    """
+    from .convert import from_pandas, to_pandas
+
+    df = to_pandas(frame)
+    trimmed = [col.strip() for col in df.columns]
+
+    if len(trimmed) != len(set(trimmed)):
+        raise ValueError(f"Trimming column names would create duplicates: {trimmed}")
+
+    df = df.copy()
+    df.columns = trimmed
+    return from_pandas(df)
 
 
 def cast_types(
@@ -584,6 +722,73 @@ def round_numeric_columns(
     return from_pandas(df) if is_arframe else df
 
 
+def combine_columns(
+    frame,
+    *,
+    subset: list[str] | None = None,
+    separator: str = " ",
+    output_column: str = "combined",
+):
+    """Combine multiple columns into a single output column.
+
+    Parameters
+    ----------
+    frame : ArFrame or pd.DataFrame
+        Input data frame.
+    subset : list[str], optional
+        Columns to combine. If None, all columns are used.
+    separator : str
+        String used to separate values in the output column.
+    output_column : str
+        Name of the new column to store combined values.
+
+    Returns
+    -------
+    ArFrame or pd.DataFrame
+        Frame with the combined output column appended.
+    """
+    import pandas as pd
+
+    from .convert import from_pandas, to_pandas
+
+    if not isinstance(separator, str):
+        raise TypeError("separator must be a string")
+    if not isinstance(output_column, str) or not output_column.strip():
+        raise ValueError("output_column must be a non-empty string")
+
+    is_arframe = not isinstance(frame, pd.DataFrame)
+    df = to_pandas(frame) if is_arframe else frame.copy()
+
+    if subset is None:
+        subset_columns = list(df.columns)
+    else:
+        subset_columns = _validate_column_sequence(subset, argument_name="subset")
+        missing = [column for column in subset_columns if column not in df.columns]
+        if missing:
+            available = ", ".join(df.columns) or "<none>"
+            raise KeyError(
+                f"Missing columns for combine_columns: {missing}. Available columns: {available}"
+            )
+
+    if not subset_columns:
+        raise ValueError("subset must contain at least one column")
+
+    if output_column in df.columns:
+
+        raise ValueError(f"Output column '{output_column}' already exists.")
+
+    combined = (
+        df[subset_columns].astype("string").fillna("").agg(separator.join, axis=1)
+    )
+    null_mask = df[subset_columns].isna().all(axis=1)
+    combined = combined.mask(null_mask, pd.NA)
+
+    df = df.copy()
+    df[output_column] = combined
+
+    return from_pandas(df) if is_arframe else df
+
+
 def safe_divide_columns(
     frame, numerator: str, denominator: str, output_column: str, fill_value: float = 0.0
 ):
@@ -642,5 +847,89 @@ def safe_divide_columns(
     result = df[numerator] / safe_denom
     df = df.copy()
     df[output_column] = result.fillna(fill_value)
+
+    return from_pandas(df) if is_arframe else df
+
+
+def replace_values(frame, mapping, column=None):
+    """Replace values based on a mapping dict.
+
+    If column is None, applies to all columns.
+
+    Handles None/NaN in mappings:
+    - If mapping has a null-like key (None / NaN / pd.NA), this replaces existing nulls via fillna.
+    - If mapping maps to a null-like value, the replacement will result in real nulls (NaN/NA).
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input data frame.
+    mapping : dict
+        Mapping of values to replace.
+    column : str, optional
+        Specific column to apply replacements to. If None, applies to all columns.
+
+    Returns
+    -------
+    ArFrame
+        New frame with values replaced.
+
+    Examples
+    --------
+    >>> frame = ar.read_csv("data.csv")
+    >>> replaced = ar.replace_values(frame, {"old_value": "new_value"}, column="name")
+    """
+    import pandas as pd
+
+    from .convert import from_pandas, to_pandas
+
+    if not isinstance(mapping, dict):
+        raise TypeError(
+            "mapping must be a dict-like mapping of {old_value: new_value}, "
+            f"not {type(mapping).__name__}."
+        )
+    if not mapping:
+        raise ValueError("mapping must not be empty")
+
+    is_arframe = not isinstance(frame, pd.DataFrame)
+    # Avoid mutating the caller's DataFrame in the direct pandas API path.
+    df = to_pandas(frame) if is_arframe else frame.copy()
+
+    if column is not None:
+        if not isinstance(column, str) or not column.strip():
+            raise TypeError("column must be a non-empty string when provided")
+        if column not in df.columns:
+            available = ", ".join(map(str, df.columns)) or "<none>"
+            raise KeyError(
+                f"Column '{column}' not found. Available columns: {available}"
+            )
+
+    # Normalize mapping and separate null-key handling because NaN != NaN
+    null_key_present = False
+    null_replacement = None
+    normalized_mapping = {}
+
+    for k, v in mapping.items():
+        # detect null-like keys (None, NaN, pd.NA)
+        if k is None or pd.isna(k):
+            null_key_present = True
+            null_replacement = v
+        else:
+            normalized_mapping[k] = v
+
+    if column:
+        s = df[column]
+        if normalized_mapping:
+            s = s.replace(normalized_mapping)
+        if null_key_present:
+            # replace existing nulls (NaN/None/pd.NA) in the series
+            s = s.fillna(null_replacement)
+        df[column] = s
+    else:
+        if normalized_mapping:
+            df = df.replace(normalized_mapping)
+        if null_key_present:
+            # replace existing nulls anywhere in the dataframe
+            df = df.fillna(null_replacement)
 
     return from_pandas(df) if is_arframe else df
