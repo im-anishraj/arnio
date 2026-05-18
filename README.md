@@ -164,6 +164,29 @@ clean = ar.pipeline(frame, [
 Custom steps run through a pandas↔ArFrame conversion bridge. Prototype in Python, then optionally migrate hot paths to C++ for full speed.
 </details>
 
+<details>
+<summary><b>✂️ Slice rows with head() and tail()</b></summary>
+<br>
+
+`head()` and `tail()` return the first or last `n` rows as a new `ArFrame`, no full conversion needed.
+
+```python
+frame = ar.read_csv("data.csv")
+
+frame.head()     # first 5 rows (default)
+frame.head(10)   # first 10 rows
+frame.tail(3)    # last 3 rows
+
+# n larger than row count returns all rows safely
+frame.head(1000)
+
+# n=0 returns an empty ArFrame
+frame.head(0)
+```
+
+Raises `ValueError` for negative or boolean `n`.
+</details>
+
 <br>
 
 ---
