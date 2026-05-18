@@ -46,10 +46,6 @@ def _utf8_csv_path(
                 "w", encoding="utf-8", newline="", suffix=".csv", delete=False
             ) as tmp:
                 if sample_rows is not None:
-                    # Use csv.reader so we advance through complete CSV records
-                    # rather than raw physical lines. This prevents a quoted
-                    # multiline field from being split at the sampling boundary,
-                    # which would produce an invalid partial CSV for scan_schema.
                     reader = csv.reader(src, delimiter=delimiter)
                     writer = csv.writer(tmp, delimiter=delimiter)
                     for row_count, row in enumerate(reader):
@@ -173,7 +169,7 @@ def read_csv(
             f"Unsupported file format: {path}. Only .csv, .txt, and .tsv are supported."
         )
     if len(delimiter) != 1:
-        raise ValueError(f"delimiter must be a single character, got {delimiter!r}")
+        raise ValueError(f"delimiter must be exactly one character, got {delimiter!r}")
 
     if _is_utf8_encoding(encoding):
         try:
@@ -265,6 +261,9 @@ def write_csv(
             f"Unsupported file format: {path}. Only .csv, .txt, and .tsv are supported."
         )
 
+    if len(delimiter) != 1:
+        raise ValueError(f"delimiter must be a single character, got {delimiter!r}")
+
     config = _CsvWriteConfig()
     config.delimiter = delimiter
     config.write_header = write_header
@@ -352,10 +351,6 @@ def scan_csv(
     config.trim_headers = trim_headers
     reader = _CsvReader(config)
     try:
-        # Schema inference only needs a sample, avoiding full-file transcode.
-        # sample_rows is passed so _utf8_csv_path uses record-aware sampling
-        # via csv.reader, which correctly handles quoted multiline fields that
-        # straddle the boundary.
         with _utf8_csv_path(
             path,
             encoding,
