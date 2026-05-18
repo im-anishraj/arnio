@@ -2077,6 +2077,7 @@ def URL(
     )
 
 
+<<<<<<< HEAD
 def PhoneNumber(
     *,
     nullable: bool = True,
@@ -2123,6 +2124,41 @@ def CountryCode(
     Returns:
         Field: Configured uppercase ISO alpha-2 country-code schema field.
     """
+=======
+def Choice(
+    allowed: set[Any] | list[Any] | tuple[Any, ...],
+    *,
+    nullable: bool = True,
+) -> Field:
+    """Create a categorical schema field restricted to explicit allowed values.
+
+    Parameters
+    ----------
+    allowed : set, list, or tuple
+        The set of permitted values for this column.
+    nullable : bool, optional
+        Whether null values are permitted. Defaults to True.
+
+    Returns
+    -------
+    Field
+        A Field configured to validate against the allowed values.
+
+    Examples
+    --------
+    >>> schema = ar.Schema({"status": ar.Choice(["active", "inactive", "pending"])})
+    >>> result = ar.validate(frame, schema)
+    """
+    if not allowed:
+        raise ValueError("allowed values cannot be empty")
+    return Field(
+        nullable=nullable,
+        allowed=set(allowed),
+    )
+
+def CountryCode(*, nullable: bool = True, unique: bool = False) -> Field:
+    """Create an uppercase ISO alpha-2 country-code schema field."""
+>>>>>>> 1391c52 (feat: add Choice field validator for categorical columns)
     return Field(
         dtype="string",
         nullable=nullable,
