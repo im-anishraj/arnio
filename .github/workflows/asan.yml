@@ -26,14 +26,14 @@ jobs:
 
       - name: Set ASAN and CMake flags
         run: |
-          echo "CC=clang"                                              >> $GITHUB_ENV
-          echo "CXX=clang++"                                          >> $GITHUB_ENV
-          echo "CMAKE_CXX_FLAGS=-fsanitize=address -fno-omit-frame-pointer" >> $GITHUB_ENV
-          echo "CMAKE_SHARED_LINKER_FLAGS=-fsanitize=address"         >> $GITHUB_ENV
-          echo "CMAKE_EXE_LINKER_FLAGS=-fsanitize=address"            >> $GITHUB_ENV
-          echo "ASAN_OPTIONS=detect_leaks=0:abort_on_error=1"         >> $GITHUB_ENV
-          echo "PYTHONMALLOC=malloc"                                  >> $GITHUB_ENV
-          echo "PYTHONFAULTHANDLER=1"                                 >> $GITHUB_ENV
+          echo "CC=clang"                                                        >> $GITHUB_ENV
+          echo "CXX=clang++"                                                     >> $GITHUB_ENV
+          echo "CMAKE_CXX_FLAGS=-fsanitize=address -fno-omit-frame-pointer"      >> $GITHUB_ENV
+          echo "CMAKE_SHARED_LINKER_FLAGS=-fsanitize=address"                    >> $GITHUB_ENV
+          echo "CMAKE_EXE_LINKER_FLAGS=-fsanitize=address"                       >> $GITHUB_ENV
+          echo "ASAN_OPTIONS=detect_leaks=0:abort_on_error=1:log_path=/tmp/asan.log" >> $GITHUB_ENV
+          echo "PYTHONMALLOC=malloc"                                              >> $GITHUB_ENV
+          echo "PYTHONFAULTHANDLER=1"                                             >> $GITHUB_ENV
 
       - name: Install build dependencies
         run: |
@@ -51,9 +51,19 @@ jobs:
             ASAN_LIB=$(find /usr/lib/llvm-*/lib /usr/lib/x86_64-linux-gnu \
               -name "libasan.so*" 2>/dev/null | head -1)
           fi
-          echo "Resolved: $ASAN_LIB"
+          echo "Resolved ASAN lib: $ASAN_LIB"
           echo "LD_PRELOAD=$ASAN_LIB" >> $GITHUB_ENV
 
       - name: Run tests with ASAN
         run: |
           pytest tests/ -v -k "not benchmark"
+
+      - name: Print ASAN report (if any)
+        if: always()
+        run: |
+          if ls /tmp/asan.log.* 2>/dev/null; then
+            echo "===== ASAN REPORT ====="
+            cat /tmp/asan.log.*
+          else
+            echo "No ASAN log files found."
+          fi
