@@ -190,34 +190,6 @@ print(selected.columns)
 
 > Every step above executes in C++. Your Python code is a _configuration_ — not the execution engine.
  
-### Failure and Error Behavior
-
-#### Missing file
-
-```python
-ar.read_csv("missing.csv")
-```
-
-Expected behavior:
-- Raises a file-related error if the file does not exist.
-
-#### Malformed CSV
-
-```python
-ar.read_csv("broken.csv")
-```
-
-Expected behavior:
-- Parsing fails with an appropriate CSV/parsing error.
-
-#### Empty input
-
-```python
-ar.read_csv("empty.csv")
-```
-
-Expected behavior:
-- Returns an empty frame or raises a validation/parsing error depending on the input structure.
 
 <br>
 
@@ -252,33 +224,6 @@ schema = ar.scan_csv("100GB_file.csv", sample_size=500)
 ```
 
 Useful for exploring datasets before committing memory.
-
-### Schema Validation Failure Examples
-
-#### Invalid schema
-
-```python
-schema = {
-    "age": int
-}
-
-ar.scan_csv("data.csv")
-```
-
-Expected behavior:
-- Validation may fail if detected column types do not match the expected structure.
-
-#### Missing required fields
-
-```python
-schema = {
-    "name": str,
-    "age": int
-}
-```
-
-Expected behavior:
-- Validation fails if required columns are missing from the dataset.
 
 </details>
 
@@ -347,20 +292,6 @@ clean = ar.pipeline(frame, [
 ])
 ```
 Custom steps run through a pandas↔ArFrame conversion bridge. Prototype in Python, then optionally migrate hot paths to C++ for full speed.
-
-### Pipeline Error Handling Behavior
-
-Pipeline steps propagate exceptions raised during execution.
-
-```python
-clean = ar.pipeline(frame, [
-    ("strip_whitespace",),
-    ("drop_duplicates",),
-])
-```
-
-Expected behavior:
-- If a pipeline step fails, execution stops and the corresponding error is propagated to the caller.
 
 </details>
 
@@ -1388,7 +1319,104 @@ arnio/
 ├── examples/                # basic_usage.py, auto_clean_tutorial.py, custom_step.py
 └── website/                 # Project website — arnio.vercel.app
 ```
+## ⚠️ Error Handling
 
+### `read_csv` and `scan_csv`
+
+**Missing file** — raises `CsvReadError`:
+
+```python
+# Bad: file does not exist
+ar.read_csv("missing.csv")
+# arnio.exceptions.CsvReadError: Cannot open file: missing.csv
+
+# Good: file exists and is readable
+frame = ar.read_csv("sales_data.csv")
+```
+
+**Empty or binary file** — raises `CsvReadError`:
+
+```python
+# Bad: file is empty or contains binary/NUL bytes
+ar.read_csv("empty.csv")
+# arnio.exceptions.CsvReadError: CSV input contains NUL bytes
+# and appears to be binary or corrupted
+
+# Good: file contains valid UTF-8 text with a header row
+frame = ar.read_csv("clean.csv")
+```
+
+**Malformed CSV** — arnio is lenient and reads what it can,
+extra fields are silently ignored rather than raising an error:
+
+```python
+frame = ar.read_csv("broken.csv")
+# No exception raised — Arnio reads valid fields and ignores extra fields
+```
+
+### Schema Validation
+
+Use `ar.validate()` to check a frame against a schema.
+Validation does not raise — it returns a `ValidationResult`
+with a `passed` flag and a list of `issues`.
+
+**Type mismatch** — `passed` is `False`, issue rule is `dtype`:
+
+```python
+# Bad: 'age' column contains strings but schema expects int64
+schema = ar.Schema({"name": ar.String(nullable=False), "age": ar.Int64(nullable=False)})
+result = ar.validate(frame, schema)
+print(result.passed)   # False
+print(result.issues)
+# [ValidationIssue(column='age', rule='dtype',
+#   message="Column 'age' has dtype 'string'; expected 'int64'")]
+
+# Good: column types match the schema
+schema = ar.Schema({"name": ar.String(nullable=False), "age": ar.Int64(nullable=False)})
+result = ar.validate(frame, schema)
+print(result.passed)   # True
+```
+
+**Missing required column** — issue rule is `required_column`:
+
+```python
+# Bad: 'email' column is required but not present in the frame
+schema = ar.Schema({
+    "name": ar.String(nullable=False),
+    "age": ar.Int64(nullable=False),
+    "email": ar.Email(nullable=False),
+})
+result = ar.validate(frame, schema)
+print(result.passed)   # False
+print(result.issues)
+# [ValidationIssue(column='email', rule='required_column',
+#   message='Missing required column: email')]
+
+# Good: all required columns are present in the frame
+schema = ar.Schema({"name": ar.String(nullable=False)})
+result = ar.validate(frame, schema)
+print(result.passed)   # True
+```
+
+### Pipeline Step Errors
+
+An unknown step name raises `UnknownStepError` immediately
+and lists all valid step names:
+
+```python
+# Bad: typo in step name
+ar.pipeline(frame, [("srtip_whitespace",)])
+# arnio.exceptions.UnknownStepError: Unknown pipeline step: 'srtip_whitespace'.
+# Available steps: ['cast_types', 'drop_constant_columns', 'drop_duplicates',
+# 'drop_nulls', 'fill_nulls', 'filter_rows', 'normalize_case',
+# 'rename_columns', 'strip_whitespace']
+
+# Good: valid step names only
+clean_frame = ar.pipeline(frame, [
+    ("strip_whitespace",),
+    ("drop_duplicates",),
+])
+```
 <br>
 
 ---
