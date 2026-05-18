@@ -121,3 +121,7 @@ __all__ = [
     "TypeCastError",
     "normalize_unicode",
 ]
+
+
+# This makes it publicly accessible (for the issue #345)
+from .cleaning import remove_special_chars 
