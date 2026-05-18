@@ -26,7 +26,6 @@ ISSUE_COLUMNS = [
 DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
-
 @dataclass(frozen=True)
 class Field:
     """Validation rules for one column."""
@@ -388,7 +387,6 @@ def URL(*, nullable: bool = True, unique: bool = False) -> Field:
     return Field(dtype="string", nullable=nullable, semantic="url", unique=unique)
 
 
-
 def CountryCode(*, nullable: bool = True, unique: bool = False) -> Field:
     """Create an uppercase ISO alpha-2 country-code schema field."""
     return Field(
@@ -396,8 +394,8 @@ def CountryCode(*, nullable: bool = True, unique: bool = False) -> Field:
         nullable=nullable,
         semantic="country_code",
     )
-        
-    
+
+
 def Date(*, nullable: bool = True, unique: bool = False) -> Field:
     """Create a date schema field."""
     return Field(
