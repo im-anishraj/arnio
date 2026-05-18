@@ -1,0 +1,120 @@
+diff --git a/arnio/io.py b/arnio/io.py
+index 0229a13..27c8199 100644
+--- a/arnio/io.py
++++ b/arnio/io.py
+@@ -1,6 +1,6 @@
+ """
+ arnio.io
+-CSV reading functions.
++CSV reading and writing functions.
+ """
+ 
+ from __future__ import annotations
+@@ -12,7 +12,7 @@ import tempfile
+ from collections.abc import Iterator, Sequence
+ from contextlib import contextmanager
+ 
+-from ._core import _CsvConfig, _CsvReader
++from ._core import _CsvConfig, _CsvReader, _CsvWriteConfig, _CsvWriter
+ from .exceptions import CsvReadError
+ from .frame import ArFrame
+ 
+@@ -46,10 +46,6 @@ def _utf8_csv_path(
+                 "w", encoding="utf-8", newline="", suffix=".csv", delete=False
+             ) as tmp:
+                 if sample_rows is not None:
+-                    # Use csv.reader so we advance through complete CSV records
+-                    # rather than raw physical lines. This prevents a quoted
+-                    # multiline field from being split at the sampling boundary,
+-                    # which would produce an invalid partial CSV for scan_schema.
+                     reader = csv.reader(src, delimiter=delimiter)
+                     writer = csv.writer(tmp, delimiter=delimiter)
+                     for row_count, row in enumerate(reader):
+@@ -172,6 +168,8 @@ def read_csv(
+         raise ValueError(
+             f"Unsupported file format: {path}. Only .csv, .txt, and .tsv are supported."
+         )
++    if len(delimiter) != 1:
++        raise ValueError(f"delimiter must be exactly one character, got {delimiter!r}")
+ 
+     if _is_utf8_encoding(encoding):
+         try:
+@@ -217,6 +215,67 @@ def read_csv(
+     return ArFrame(cpp_frame)
+ 
+ 
++def write_csv(
++    frame: ArFrame,
++    path: str | os.PathLike[str],
++    *,
++    delimiter: str = ",",
++    write_header: bool = True,
++    line_terminator: str = "\n",
++) -> None:
++    """Write an ArFrame to a CSV file via C++ backend.
++
++    Parameters
++    ----------
++    frame : ArFrame
++        The data frame to write.
++    path : str
++        Destination file path. Supports .csv, .txt, and .tsv extensions.
++    delimiter : str, default ","
++        Field delimiter character.
++    write_header : bool, default True
++        Whether to write the column header row.
++    line_terminator : str, default "\\n"
++        Line terminator to use between rows.
++
++    Raises
++    ------
++    ValueError
++        If file format is unsupported.
++    RuntimeError
++        If the file cannot be opened or written.
++
++    Examples
++    --------
++    >>> ar.write_csv(frame, "output.csv")
++    >>> ar.write_csv(frame, "output.tsv", delimiter="\\t")
++    """
++    path = os.fspath(path)
++    path_lower = path.lower()
++    if not (
++        path_lower.endswith(".csv")
++        or path_lower.endswith(".txt")
++        or path_lower.endswith(".tsv")
++    ):
++        raise ValueError(
++            f"Unsupported file format: {path}. Only .csv, .txt, and .tsv are supported."
++        )
++
++    if len(delimiter) != 1:
++        raise ValueError(f"delimiter must be a single character, got {delimiter!r}")
++
++    config = _CsvWriteConfig()
++    config.delimiter = delimiter
++    config.write_header = write_header
++    config.line_terminator = line_terminator
++
++    writer = _CsvWriter(config)
++    try:
++        writer.write(frame._frame, path)
++    except RuntimeError as e:
++        raise RuntimeError(str(e)) from e
++
++
+ def scan_csv(
+     path: str | os.PathLike[str],
+     *,
+@@ -292,10 +351,6 @@ def scan_csv(
+     config.trim_headers = trim_headers
+     reader = _CsvReader(config)
+     try:
+-        # Schema inference only needs a sample, avoiding full-file transcode.
+-        # sample_rows is passed so _utf8_csv_path uses record-aware sampling
+-        # via csv.reader, which correctly handles quoted multiline fields that
+-        # straddle the boundary.
+         with _utf8_csv_path(
+             path,
+             encoding,
