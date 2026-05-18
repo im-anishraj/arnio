@@ -400,6 +400,35 @@ def test_report_to_markdown_basic(tmp_path):
     assert "| id | int64 | identifier |" in md
 
 
+def test_report_to_markdown_includes_uniqueness_metrics(tmp_path):
+    path = tmp_path / "unique_metrics.csv"
+
+    path.write_text("id,name\n" "1,Alice\n" "2,Bob\n" "2,Bob\n")
+
+    report = ar.profile(ar.read_csv(path))
+
+    md = report.to_markdown()
+
+    assert "Unique Count" in md
+    assert "Unique Ratio" in md
+
+    # id column: 2 unique non-null values across 3 rows
+    assert "66.67%" in md
+
+
+def test_unique_ratio_empty_column(tmp_path):
+    path = tmp_path / "empty_unique.csv"
+
+    path.write_text("name\n\n\n")
+
+    report = ar.profile(ar.read_csv(path))
+
+    column = report.columns["name"]
+
+    assert column.unique_count >= 0
+    assert column.unique_ratio >= 0.0
+
+
 def test_report_to_markdown_deterministic(tmp_path):
     path = tmp_path / "stable.csv"
 
