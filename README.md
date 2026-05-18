@@ -744,7 +744,8 @@ if not result.passed:
     print(result.to_markdown(max_issues=10))
 ```
 
-Date validates strict YYYY-MM-DD calendar dates.
+In this example, `country` becomes required only when
+`user_type == "international"`.
 
 Date validates strict YYYY-MM-DD calendar dates.
 

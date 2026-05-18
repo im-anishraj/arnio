@@ -422,10 +422,11 @@ def CountryCode(
         dtype="string",
         nullable=nullable,
         semantic="country_code",
+        required_if=required_if,
     )
 
 
-def Date(*, nullable: bool = True, unique: bool = False) -> Field:
+def Date(*, nullable: bool = True, unique: bool = False , required_if: tuple[str, Any] | None = None,) -> Field:
     """Create a date schema field."""
     return Field(
         dtype="string",
