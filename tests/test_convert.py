@@ -26,7 +26,7 @@ class TestToPandas:
     def test_nulls_converted(self, csv_with_nulls):
         frame = ar.read_csv(csv_with_nulls)
         df = ar.to_pandas(frame)
-        assert df.isna().any().any()
+        assert df.isna().any().any()  # Should have some NaN/NA values
 
     def test_copy_option_returns_equivalent_dataframe(self, sample_csv):
         frame = ar.read_csv(sample_csv)
@@ -503,6 +503,7 @@ class TestDecimalConversion:
         )
         frame = ar.from_pandas(df)
         result = ar.to_pandas(frame)
+        # Result should be preserved as exact strings
         assert list(result["price"]) == ["19.99", "29.95", "15.50"]
         assert result["price"].dtype == "string"
 
@@ -558,8 +559,10 @@ class TestDecimalConversion:
         df = pd.DataFrame({"x": [1, 2]})
         df.attrs = {"meta": {"version": 1, "tags": ["a", "b"]}}
         frame = ar.from_pandas(df)
+        # mutate the original nested object
         df.attrs["meta"]["tags"].append("c")
         result = ar.to_pandas(frame)
+        # stored copy must be unaffected
         assert result.attrs["meta"]["tags"] == ["a", "b"]
 
 
