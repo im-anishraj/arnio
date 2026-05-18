@@ -50,7 +50,9 @@ def test_profile_numeric_quantiles():
 
 
 def test_profile_all_null_numeric_quantiles():
-    frame = ar.from_pandas(pd.DataFrame({"score": pd.Series([None, None], dtype="float64")}))
+    frame = ar.from_pandas(
+        pd.DataFrame({"score": pd.Series([None, None], dtype="float64")})
+    )
 
     report = ar.profile(frame)
     profile = report.columns["score"].to_dict()
