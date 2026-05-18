@@ -436,6 +436,7 @@ Most operations below run natively in C++. Currently, `filter_rows` and `replace
 | `clean` | Convenience shorthand | `ar.clean(frame, drop_nulls=True)` |
 | `safe_divide_columns` | Divide one column by another, handling zero/null denominators | `ar.safe_divide_columns(frame, numerator="revenue", denominator="cost", output_column="ratio")` |
 | `trim_column_names` | Strip leading/trailing whitespace from column names | `ar.trim_column_names(frame)` |
+| `parse_bool_strings` | Normalize boolean-like string values into booleans | `ar.parse_bool_strings(frame)` |
 
 #### `ArFrame.select_dtypes` — type-based column selection
 
@@ -526,6 +527,16 @@ Works with:
 - floats
 - strings
 - booleans
+
+### Boolean string normalization
+
+```python
+clean = ar.parse_bool_strings(frame)
+```
+
+This normalizes values such as `"yes"`, `"no"`, `"true"`, `"false"`, `"y"`, `"n"`, `"1"`, and `"0"` into boolean values while preserving unsupported values unchanged.
+
+Columns containing both parsed boolean values and unsupported string values may round-trip as strings because of ArFrame column typing semantics.
 
 <br>
 
