@@ -246,17 +246,22 @@ def run_case(case):
     else:
         print(f"\nSpeed: {avg(pd_times)/avg(ar_times):.1f}x")
     
-    baseline_time = baseline_data[case.name]["arnio_exec_time"]
-    current_time = avg(ar_times)
+    baseline_case = baseline_data.get(case.name)
 
-    regression = calculate_regression(current_time, baseline_time)
+    if baseline_case:
+        baseline_time = baseline_case["arnio_exec_time"]
+        current_time = avg(ar_times)
 
-    if regression > REGRESSION_THRESHOLD:
-        print(
-            f"⚠ Regression detected: "
-            f"{regression:.1f}% slower than baseline "
-            f"(threshold: {REGRESSION_THRESHOLD}%)"
-        )
+        regression = calculate_regression(current_time, baseline_time)
+
+        if regression > REGRESSION_THRESHOLD:
+            print(
+                f"⚠ Regression detected: "
+                f"{regression:.1f}% slower than baseline "
+                f"(threshold: {REGRESSION_THRESHOLD}%)"
+            )
+    else:
+        print("No baseline found for regression comparison.")
 
     print()
 
