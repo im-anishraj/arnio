@@ -441,7 +441,7 @@ class TestDecimalConversion:
         assert _to_binding_safe(Decimal("999.999")) == 999.999
 
     def test_decimal_precision_loss_awareness(self):
-        """Large precision decimal gets truncated to float capabilities."""
+        """Large precision decimal may have precision lost to float capabilities."""
         large_dec = Decimal("1.234567890123456789")
         result = _to_binding_safe(large_dec)
         assert result == float(large_dec)

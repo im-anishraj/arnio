@@ -2,9 +2,6 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
-#include <cmath>
-#include <stdexcept>
-
 #include "arnio/cleaning.h"
 #include "arnio/column.h"
 #include "arnio/csv_reader.h"

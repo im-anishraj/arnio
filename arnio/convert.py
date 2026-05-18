@@ -9,6 +9,7 @@ import copy as copylib
 import decimal
 import math
 from typing import Any
+
 import numpy as np
 import pandas as pd
 
@@ -89,7 +90,7 @@ def _normalize_scalar(value: object) -> object:
     if pd.isna(value):
         return None
     if isinstance(value, np.generic):
-        return value.item()
+        value = value.item()
     if isinstance(value, decimal.Decimal):
         return _to_binding_safe(value)
     if isinstance(value, float):
