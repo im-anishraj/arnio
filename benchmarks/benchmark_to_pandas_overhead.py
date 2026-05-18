@@ -1,3 +1,4 @@
+import sys
 import time
 import tracemalloc
 
@@ -43,24 +44,7 @@ def generate_mock_data(row_count, dtype_type):
 def profile_conversion_path(row_count, dtype_type):
     df_base = generate_mock_data(row_count, dtype_type)
 
-    # If binary C++ extensions are missing locally, simulate the profiling path natively
-    if not HAS_ARNIO_CPP:
-        tracemalloc.start()
-        start_time = time.perf_counter()
-
-        # Native fallback mock operation
-        _ = df_base.copy()
-
-        end_time = time.perf_counter()
-        current, peak = tracemalloc.get_traced_memory()
-        tracemalloc.stop()
-
-        scale_factor = row_count / 10000
-        return (end_time - start_time) * 1000 * scale_factor, (
-            peak / (1024 * 1024)
-        ) * scale_factor
-
-    # Production path when compiled on GitHub Actions / Maintainer environment
+    # Production path utilizing correct ar.to_pandas(arnio_frame) API
     try:
         arnio_frame = ar.from_pandas(df_base)
     except AttributeError:
@@ -69,8 +53,8 @@ def profile_conversion_path(row_count, dtype_type):
     tracemalloc.start()
     start_time = time.perf_counter()
 
-    # Intentionally utilizing the result framework to prevent semantic compiler optimization
-    res_df = arnio_frame.to_pandas()
+    # Corrected to use the global public API instead of the instance method
+    res_df = ar.to_pandas(arnio_frame)
     _ = len(res_df)
 
     end_time = time.perf_counter()
@@ -84,15 +68,20 @@ def profile_conversion_path(row_count, dtype_type):
 
 
 def run_all_benchmarks():
+    # If binary C++ extensions are missing locally, print explicit skip error and exit safely
+    if not HAS_ARNIO_CPP:
+        print("=" * 70)
+        print("ERROR: Cannot execute arnio performance benchmarks.")
+        print("REASON: Core C++ binary extensions (_arnio_cpp) are missing locally.")
+        print("Please build the repository with 'pip install -e .' before running.")
+        print("=" * 70)
+        sys.exit(1)
+
     scales = [10000, 100000, 1000000]  # 10k, 100k, 1M rows
     dtypes = ["numeric", "bool", "string"]
 
     print("=" * 70)
     print("ARNIO PERFORMANCE BENCHMARK: .to_pandas() CONVERSION OVERHEAD")
-    if not HAS_ARNIO_CPP:
-        print(
-            "NOTICE: C++ extensions missing locally. Running in Environment Simulation Mode."
-        )
     print("=" * 70)
     print(
         f"{'Data Type':<15} | {'Row Count':<12} | {'Time (ms)':<12} | {'Peak Memory (MB)':<15}"
