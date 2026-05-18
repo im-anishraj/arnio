@@ -3,8 +3,9 @@ Regression tests verifying arnio works with the oldest supported
 pandas (>=1.5) and numpy (>=1.23) versions declared in pyproject.toml.
 """
 
-import pandas as pd
 import numpy as np
+import pandas as pd
+
 import arnio
 
 
