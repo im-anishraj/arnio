@@ -6,6 +6,7 @@ Data quality profiling and safe automatic cleaning helpers.
 from __future__ import annotations
 
 import html
+import json
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -181,6 +182,10 @@ class DataQualityReport:
                 for s in self.suggestions
             ],
         }
+
+    def to_json(self, **kwargs: Any) -> str:
+        """Return a JSON string representation of the report."""
+        return json.dumps(self.to_dict(), **kwargs)
 
     def to_markdown(self) -> str:
         """Return a GitHub-friendly Markdown report."""
