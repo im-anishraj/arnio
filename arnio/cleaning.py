@@ -385,6 +385,12 @@ def clip_numeric(
                 "clip_numeric only supports numeric columns: "
                 f"{non_numeric_columns}"
             )
+
+        # Empty subset — nothing to clip, return the frame unchanged.
+        # This preserves the behaviour of the previous pandas-based implementation
+        # which returned early when target_columns was empty.
+        if len(subset) == 0:
+            return frame
     else:
         # When no subset is given, check whether there are any clippable columns.
         # If none exist, return the frame unchanged without touching C++.

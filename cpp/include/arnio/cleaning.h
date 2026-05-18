@@ -39,4 +39,10 @@ Frame rename_columns(const Frame& frame,
 Frame cast_types(const Frame& frame, const std::unordered_map<std::string, std::string>& mapping,
                  bool coerce_invalid = false);
 
+// Clip numeric columns to lower and/or upper bounds.
+// Only INT64 and FLOAT64 columns are affected; all other columns are cloned
+// unchanged.  Null values are preserved as-is.
+Frame clip_numeric(const Frame& frame, std::optional<double> lower, std::optional<double> upper,
+                   const std::optional<std::vector<std::string>>& subset = std::nullopt);
+
 }  // namespace arnio
