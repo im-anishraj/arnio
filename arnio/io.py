@@ -311,7 +311,7 @@ def scan_csv(
             path,
             encoding,
             delimiter=delimiter,
-            sample_rows=10000,
+            sample_rows=100 if sample_size is None else sample_size,
         ) as native_path:
             return reader.scan_schema(native_path)
     except RuntimeError as e:
