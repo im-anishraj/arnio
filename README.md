@@ -88,6 +88,23 @@ clean, metadata = ar.pipeline(
 
 print(metadata["step_timings"])
 ```
+### Pipeline validation behavior
+
+Pipeline step specifications are validated before execution begins.
+
+Malformed step tuples, invalid kwargs structures, or unknown step names fail early before any pipeline steps execute.
+
+```python
+ar.pipeline(
+    frame,
+    [
+        ("strip_whitespace",),
+        ("bad_step", "oops", "extra"),
+    ],
+)
+```
+
+This prevents partial pipeline execution when later pipeline steps are invalid.
 
 Already have a pandas `DataFrame`? Use Arnio in-place in your existing pandas
 workflow:

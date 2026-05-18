@@ -363,7 +363,7 @@ class TestPipeline:
         thread = threading.Thread(target=run_pipeline)
         thread.start()
 
-        assert started.wait(timeout=5)
+        assert not started.is_set()
 
         ar.register_step("late_snapshot_step", late_step)
 
@@ -397,6 +397,65 @@ class TestPipeline:
             assert False, "Should have raised ValueError"
         except ValueError as e:
             assert "Expected a dict" in str(e)
+
+    def test_pipeline_rejects_invalid_step_format(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(ValueError, match="Invalid step format"):
+            ar.pipeline(
+                frame,
+                [
+                    ("strip_whitespace",),
+                    ("bad_step", "oops", "extra"),
+                ],
+            )
+
+    def test_pipeline_rejects_non_tuple_step(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(ValueError, match="Invalid step format"):
+            ar.pipeline(
+                frame,
+                [
+                    "strip_whitespace",
+                ],
+            )
+
+    def test_pipeline_rejects_invalid_kwargs_type(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(ValueError, match="Expected a dict"):
+            ar.pipeline(
+                frame,
+                [
+                    ("drop_nulls", "not_a_dict"),
+                ],
+            )
+
+    def test_pipeline_validation_happens_before_execution(
+        self,
+        sample_csv,
+    ):
+        frame = ar.read_csv(sample_csv)
+
+        calls = []
+
+        def tracker(df):
+            calls.append("executed")
+            return df
+
+        ar.register_step("tracker_validation_test", tracker)
+
+        with pytest.raises(ValueError, match="Invalid step format"):
+            ar.pipeline(
+                frame,
+                [
+                    ("tracker_validation_test",),
+                    ("bad_step", "oops", "extra"),
+                ],
+            )
+
+        assert calls == []
 
 
 def test_filter_rows_greater_than():

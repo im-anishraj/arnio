@@ -12,6 +12,7 @@ from typing import Any, Callable
 import pandas as pd
 
 from . import cleaning
+from .exceptions import UnknownStepError
 from .frame import ArFrame
 
 # Map step names to cleaning functions
@@ -59,6 +60,39 @@ def register_step(name: str, fn: Callable):
     with _REGISTRY_LOCK:
 
         _PYTHON_STEP_REGISTRY[name] = fn
+
+
+def _validate_pipeline_steps(
+    steps: list[tuple],
+    python_step_registry: dict[str, Callable],
+) -> None:
+    """Validate pipeline steps before execution begins."""
+
+    available_steps = set(_STEP_REGISTRY) | set(python_step_registry)
+
+    for step in steps:
+        if not isinstance(step, tuple) or not (1 <= len(step) <= 2):
+            raise ValueError(
+                f"Invalid step format: {step!r}. " "Expected (name,) or (name, kwargs)"
+            )
+
+        name = step[0]
+
+        if not isinstance(name, str):
+            raise ValueError(
+                f"Invalid pipeline step name: {name!r}. " "Expected a string"
+            )
+
+        if len(step) == 2 and not isinstance(step[1], dict):
+            raise ValueError(
+                f"Invalid step kwargs for '{name}': " f"{step[1]!r}. Expected a dict"
+            )
+
+        if name not in available_steps:
+            raise UnknownStepError(
+                name,
+                sorted(available_steps),
+            )
 
 
 def pipeline(
@@ -109,6 +143,11 @@ def pipeline(
 
     with _REGISTRY_LOCK:
         python_step_registry = dict(_PYTHON_STEP_REGISTRY)
+
+    _validate_pipeline_steps(
+        steps,
+        python_step_registry,
+    )
 
     result = frame
     step_timings: list[dict[str, Any]] = []
