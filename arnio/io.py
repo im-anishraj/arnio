@@ -216,6 +216,7 @@ def read_csv(
 
     return ArFrame(cpp_frame)
 
+
 def write_csv(
     frame: ArFrame,
     path: str | os.PathLike[str],
@@ -275,6 +276,7 @@ def write_csv(
         writer.write(frame._frame, path)
     except RuntimeError as e:
         raise RuntimeError(str(e)) from e
+
 
 def scan_csv(
     path: str | os.PathLike[str],
