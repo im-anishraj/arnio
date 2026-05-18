@@ -185,7 +185,7 @@ def pipeline(
             # Pure Python step - slower but contributor-friendly
             started_at = perf_counter()
             df = to_pandas(result)
-            
+
             try:
                 returned = python_step_registry[name](df, **kwargs)
             except Exception as e:
