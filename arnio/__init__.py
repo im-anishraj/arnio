@@ -54,12 +54,12 @@ from .schema import (
     Field,
     Float64,
     Int64,
+    Regex,
     Schema,
     String,
     ValidationIssue,
     ValidationResult,
     validate,
-    Regex,
 )
 
 __all__ = [
