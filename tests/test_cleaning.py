@@ -753,6 +753,30 @@ class TestRenameColumns:
         assert "years" in result.columns
         assert "name" not in result.columns
 
+    def test_rename_rejects_non_mapping(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(TypeError, match="mapping must be a mapping"):
+            ar.rename_columns(frame, [("name", "full_name")])
+
+    def test_rename_rejects_non_string_target(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(TypeError, match="values must be non-empty strings"):
+            ar.rename_columns(frame, {"name": 123})
+
+    def test_rename_rejects_duplicate_targets(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(ValueError, match="target names would create duplicates"):
+            ar.rename_columns(frame, {"name": "person", "age": "person"})
+
+    def test_rename_rejects_collision_with_unmapped_column(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(ValueError, match="collide with existing columns"):
+            ar.rename_columns(frame, {"name": "age"})
+
 
 class TestTrimColumnNames:
     def test_trim_column_names_basic(self):
@@ -802,6 +826,34 @@ class TestCastTypes:
 
         with pytest.raises(ar.TypeCastError, match="Unknown target dtype"):
             ar.cast_types(frame, {"age": "decimal"})
+
+    def test_cast_invalid_value_raises_by_default(self):
+        frame = ar.from_pandas(pd.DataFrame({"age": ["1", "bad"]}))
+
+        with pytest.raises(ar.TypeCastError, match="Cannot cast column 'age'"):
+            ar.cast_types(frame, {"age": "int64"})
+
+    def test_cast_invalid_value_can_be_coerced(self):
+        frame = ar.from_pandas(pd.DataFrame({"age": ["1", "bad"]}))
+
+        result = ar.cast_types(frame, {"age": "int64"}, errors="coerce")
+        df = ar.to_pandas(result)
+
+        assert result.dtypes["age"] == "int64"
+        assert df["age"].iloc[0] == 1
+        assert pd.isna(df["age"].iloc[1])
+
+    def test_cast_rejects_invalid_errors_policy(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(ValueError, match="errors must be either"):
+            ar.cast_types(frame, {"age": "int64"}, errors="ignore")
+
+    def test_cast_bool_rejects_unknown_strings(self):
+        frame = ar.from_pandas(pd.DataFrame({"active": ["true", "maybe"]}))
+
+        with pytest.raises(ar.TypeCastError, match="Cannot cast column 'active'"):
+            ar.cast_types(frame, {"active": "bool"})
 
 
 class TestCleanAPI:
@@ -854,6 +906,15 @@ class TestFilterRows:
 
         assert len(result) == 1
         assert result.iloc[0]["age"] == 30
+
+    def test_filter_rows_arframe_resets_row_positions(self):
+        frame = ar.from_pandas(pd.DataFrame({"age": [10, 30, 40]}))
+
+        result = ar.filter_rows(frame, "age", ">", 20)
+        df = ar.to_pandas(result)
+
+        assert list(df.index) == [0, 1]
+        assert list(df["age"]) == [30, 40]
 
 
 class TestRoundNumericColumns:
@@ -1098,3 +1159,40 @@ class TestSafeDivideColumns:
             assert "already exists" in str(w[0].message)
         df = ar.to_pandas(result)
         assert df["ratio"].iloc[0] == 2.0
+
+    def test_string_zero_denominator_is_treated_as_zero(self):
+        frame = ar.from_pandas(
+            pd.DataFrame({"revenue": ["100", "200"], "cost": ["0", "50"]})
+        )
+
+        result = ar.safe_divide_columns(
+            frame,
+            numerator="revenue",
+            denominator="cost",
+            output_column="ratio",
+        )
+        df = ar.to_pandas(result)
+
+        assert list(df["ratio"]) == [0.0, 4.0]
+
+    def test_nonnumeric_numerator_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"revenue": ["oops"], "cost": ["10"]}))
+
+        with pytest.raises(ValueError, match="Numerator column 'revenue'"):
+            ar.safe_divide_columns(
+                frame,
+                numerator="revenue",
+                denominator="cost",
+                output_column="ratio",
+            )
+
+    def test_nonnumeric_denominator_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"revenue": ["100"], "cost": ["oops"]}))
+
+        with pytest.raises(ValueError, match="Denominator column 'cost'"):
+            ar.safe_divide_columns(
+                frame,
+                numerator="revenue",
+                denominator="cost",
+                output_column="ratio",
+            )

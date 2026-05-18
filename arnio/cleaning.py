@@ -6,7 +6,7 @@ Data cleaning functions.
 from __future__ import annotations
 
 import unicodedata
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from ._core import (
@@ -78,6 +78,34 @@ def _validate_column_sequence(
     invalid_columns = [column for column in normalized if not isinstance(column, str)]
     if invalid_columns:
         raise TypeError(f"{argument_name} must contain only string column names")
+
+    return normalized
+
+
+def _validate_string_mapping(
+    mapping: Mapping[str, str],
+    *,
+    argument_name: str,
+    allow_empty: bool = True,
+) -> dict[str, str]:
+    if not isinstance(mapping, Mapping):
+        raise TypeError(f"{argument_name} must be a mapping of string keys to strings")
+
+    normalized = dict(mapping)
+    if not normalized and not allow_empty:
+        raise ValueError(f"{argument_name} must not be empty")
+
+    invalid_keys = [key for key in normalized if not isinstance(key, str)]
+    if invalid_keys:
+        raise TypeError(f"{argument_name} keys must contain only string column names")
+
+    invalid_values = [
+        value
+        for value in normalized.values()
+        if not isinstance(value, str) or not value.strip()
+    ]
+    if invalid_values:
+        raise TypeError(f"{argument_name} values must be non-empty strings")
 
     return normalized
 
@@ -589,11 +617,31 @@ def rename_columns(
     >>> frame = ar.read_csv("data.csv")
     >>> renamed = ar.rename_columns(frame, {"old_name": "new_name"})
     """
+    mapping = _validate_string_mapping(mapping, argument_name="mapping")
     validate_columns_exist(
         frame,
         _validate_column_sequence(list(mapping), argument_name="mapping keys"),
         operation="rename_columns",
     )
+
+    target_names = list(mapping.values())
+    duplicate_targets = sorted(
+        {name for name in target_names if target_names.count(name) > 1}
+    )
+    if duplicate_targets:
+        raise ValueError(
+            f"rename_columns target names would create duplicates: {duplicate_targets}"
+        )
+
+    mapped_sources = set(mapping)
+    unmapped_columns = set(frame.columns) - mapped_sources
+    collisions = sorted(name for name in target_names if name in unmapped_columns)
+    if collisions:
+        raise ValueError(
+            "rename_columns target names collide with existing columns that are not "
+            f"being renamed: {collisions}"
+        )
+
     result = _rename_columns(frame._frame, mapping)
     return ArFrame(result)
 
@@ -637,6 +685,8 @@ def trim_column_names(frame: ArFrame) -> ArFrame:
 def cast_types(
     frame: ArFrame,
     mapping: dict[str, str],
+    *,
+    errors: str = "raise",
 ) -> ArFrame:
     """Cast columns to specified types via {col: type_str} dict.
 
@@ -646,6 +696,8 @@ def cast_types(
         Input data frame.
     mapping : dict[str, str]
         Dictionary mapping column names to target type strings (e.g., "int64", "float64", "bool", "string").
+    errors : {"raise", "coerce"}, default "raise"
+        Whether invalid casts raise ``TypeCastError`` or become null values.
 
     Returns
     -------
@@ -657,13 +709,21 @@ def cast_types(
     >>> frame = ar.read_csv("data.csv")
     >>> casted = ar.cast_types(frame, {"age": "int64", "score": "float64"})
     """
+    if errors not in {"raise", "coerce"}:
+        raise ValueError("errors must be either 'raise' or 'coerce'")
+
+    mapping = _validate_string_mapping(mapping, argument_name="mapping")
     validate_columns_exist(
         frame,
         _validate_column_sequence(list(mapping), argument_name="mapping keys"),
         operation="cast_types",
     )
     try:
-        result = _cast_types(frame._frame, mapping)
+        result = _cast_types(
+            frame._frame,
+            mapping,
+            errors == "coerce",
+        )
     except ValueError as e:
         raise TypeCastError(str(e)) from e
     return ArFrame(result)
@@ -749,6 +809,8 @@ def filter_rows(frame, column, op, value):
     mask = getattr(df[column], ops[op])(value)
     mask = mask.fillna(False).astype(bool)
     filtered = df[mask]
+    if is_arframe:
+        filtered = filtered.reset_index(drop=True)
 
     return from_pandas(filtered) if is_arframe else filtered
 
@@ -930,8 +992,26 @@ def safe_divide_columns(
             stacklevel=2,
         )
 
-    safe_denom = df[denominator].replace(0, float("nan"))
-    result = df[numerator] / safe_denom
+    numerator_values = pd.to_numeric(df[numerator], errors="coerce")
+    denominator_values = pd.to_numeric(df[denominator], errors="coerce")
+
+    bad_numerator = numerator_values.isna() & df[numerator].notna()
+    bad_denominator = denominator_values.isna() & df[denominator].notna()
+    if bad_numerator.any():
+        bad_values = df.loc[bad_numerator, numerator].head(3).tolist()
+        raise ValueError(
+            f"Numerator column '{numerator}' contains non-numeric values: {bad_values}"
+        )
+    if bad_denominator.any():
+        bad_values = df.loc[bad_denominator, denominator].head(3).tolist()
+        raise ValueError(
+            f"Denominator column '{denominator}' contains non-numeric values: {bad_values}"
+        )
+
+    safe_denom = denominator_values.mask(
+        denominator_values.isna() | denominator_values.eq(0)
+    )
+    result = numerator_values / safe_denom
     df = df.copy()
     df[output_column] = result.fillna(fill_value)
 

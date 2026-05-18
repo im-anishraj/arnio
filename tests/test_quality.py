@@ -187,6 +187,23 @@ def test_auto_clean_strict_applies_exact_deduplication(tmp_path):
     assert clean.shape == (1, 1)
 
 
+def test_auto_clean_strict_casts_require_explicit_opt_in():
+    frame = ar.from_pandas(pd.DataFrame({"active": ["true", "false"]}))
+
+    with pytest.raises(ValueError, match="would apply type casts"):
+        ar.auto_clean(frame, mode="strict")
+
+
+def test_auto_clean_dry_run_returns_report_without_mutating():
+    frame = ar.from_pandas(pd.DataFrame({"active": ["true", "false"]}))
+
+    report = ar.auto_clean(frame, mode="strict", dry_run=True)
+
+    assert isinstance(report, ar.DataQualityReport)
+    assert ("cast_types", {"active": "bool"}) in report.suggestions
+    assert frame.dtypes["active"] == "string"
+
+
 def test_auto_clean_rejects_unknown_mode(sample_csv):
     frame = ar.read_csv(sample_csv)
 
@@ -412,7 +429,7 @@ def test_identifier_numeric_cast_prevention():
     assert "customer_id" not in suggestions
     assert "zip_code" not in suggestions
 
-    cleaned = ar.auto_clean(frame, mode="strict")
+    cleaned = ar.auto_clean(frame, mode="strict", allow_lossy_casts=True)
     result = ar.to_pandas(cleaned)
     assert list(result["id"]) == ["001", "002", "003"]
     assert list(result["customer_id"]) == ["00123", "00456", "00789"]

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <functional>
 #include <sstream>
 #include <stdexcept>
@@ -120,6 +121,12 @@ static CellValue coerce_value(const CellValue& value, DType target) {
     }
 
     throw std::invalid_argument("Fill value is incompatible with target column type");
+}
+
+static std::invalid_argument cast_error(const std::string& column, const std::string& value,
+                                        const std::string& target, size_t row) {
+    return std::invalid_argument("Cannot cast column '" + column + "' value '" + value +
+                                 "' at row " + std::to_string(row + 1) + " to " + target);
 }
 
 // Helper: build a new frame from selected row indices
@@ -334,7 +341,8 @@ Frame rename_columns(const Frame& frame,
     return Frame(std::move(new_cols));
 }
 
-Frame cast_types(const Frame& frame, const std::unordered_map<std::string, std::string>& mapping) {
+Frame cast_types(const Frame& frame, const std::unordered_map<std::string, std::string>& mapping,
+                 bool coerce_invalid) {
     std::vector<Column> new_cols;
     new_cols.reserve(frame.num_cols());
     for (size_t ci = 0; ci < frame.num_cols(); ++ci) {
@@ -377,22 +385,48 @@ Frame cast_types(const Frame& frame, const std::unordered_map<std::string, std::
                     break;
                 case DType::INT64:
                     try {
-                        col.push_back(static_cast<int64_t>(std::stoll(str_val)));
+                        size_t pos = 0;
+                        int64_t parsed = std::stoll(str_val, &pos);
+                        if (pos != str_val.size()) {
+                            throw cast_error(src.name(), str_val, it->second, r);
+                        }
+                        col.push_back(parsed);
                     } catch (...) {
-                        col.push_null();
+                        if (coerce_invalid) {
+                            col.push_null();
+                        } else {
+                            throw cast_error(src.name(), str_val, it->second, r);
+                        }
                     }
                     break;
                 case DType::FLOAT64:
                     try {
-                        col.push_back(std::stod(str_val));
+                        size_t pos = 0;
+                        double parsed = std::stod(str_val, &pos);
+                        if (pos != str_val.size() || !std::isfinite(parsed)) {
+                            throw cast_error(src.name(), str_val, it->second, r);
+                        }
+                        col.push_back(parsed);
                     } catch (...) {
-                        col.push_null();
+                        if (coerce_invalid) {
+                            col.push_null();
+                        } else {
+                            throw cast_error(src.name(), str_val, it->second, r);
+                        }
                     }
                     break;
                 case DType::BOOL: {
                     std::string lower = str_val;
                     std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
-                    col.push_back(lower == "true" || lower == "1");
+                    if (lower == "true" || lower == "1") {
+                        col.push_back(true);
+                    } else if (lower == "false" || lower == "0") {
+                        col.push_back(false);
+                    } else if (coerce_invalid) {
+                        col.push_null();
+                    } else {
+                        throw cast_error(src.name(), str_val, it->second, r);
+                    }
                     break;
                 }
                 default:

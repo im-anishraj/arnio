@@ -502,7 +502,9 @@ def auto_clean(
     *,
     mode: str = "safe",
     return_report: bool = False,
-) -> ArFrame | tuple[ArFrame, DataQualityReport]:
+    dry_run: bool = False,
+    allow_lossy_casts: bool = False,
+) -> ArFrame | DataQualityReport | tuple[ArFrame, DataQualityReport]:
     """Apply built-in automatic cleaning.
 
     Parameters
@@ -514,21 +516,36 @@ def auto_clean(
         ``strict`` also applies deterministic casts and exact duplicate removal.
     return_report : bool, default False
         Whether to return the pre-cleaning quality report.
+    dry_run : bool, default False
+        Return the proposed pre-cleaning report without mutating the frame.
+    allow_lossy_casts : bool, default False
+        Required before strict mode applies suggested type casts.
 
     Returns
     -------
-    ArFrame or tuple[ArFrame, DataQualityReport]
-        Cleaned frame, optionally with the source quality report.
+    ArFrame, DataQualityReport, or tuple[ArFrame, DataQualityReport]
+        Cleaned frame, the dry-run report, or a frame/report tuple.
 
     Examples
     --------
     >>> clean = ar.auto_clean(frame)
-    >>> clean, report = ar.auto_clean(frame, mode="strict", return_report=True)
+    >>> report = ar.auto_clean(frame, mode="strict", dry_run=True)
+    >>> clean = ar.auto_clean(frame, mode="strict", allow_lossy_casts=True)
     """
     if mode not in {"safe", "strict"}:
         raise ValueError("mode must be 'safe' or 'strict'")
 
+    if not isinstance(dry_run, bool):
+        raise TypeError("dry_run must be a bool")
+    if not isinstance(allow_lossy_casts, bool):
+        raise TypeError("allow_lossy_casts must be a bool")
+
     report = profile(frame)
+    if dry_run:
+        if return_report:
+            return frame, report
+        return report
+
     result = frame
 
     for step, kwargs in report.suggestions:
@@ -537,6 +554,12 @@ def auto_clean(
         if step == "strip_whitespace":
             result = strip_whitespace(result, **kwargs)
         elif step == "cast_types":
+            if not allow_lossy_casts:
+                raise ValueError(
+                    "auto_clean(mode='strict') would apply type casts. "
+                    f"Proposed mapping: {kwargs}. Run with dry_run=True to inspect "
+                    "the report, or pass allow_lossy_casts=True to apply them."
+                )
             result = cast_types(result, kwargs)
         elif step == "drop_duplicates":
             result = drop_duplicates(result, **kwargs)
