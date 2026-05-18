@@ -808,4 +808,3 @@ def test_date_validation_rejects_non_zero_padded_dates(tmp_path):
 
     rules = {issue.rule for issue in result.issues}
     assert "date" in rules
-
