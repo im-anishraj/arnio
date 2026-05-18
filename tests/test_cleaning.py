@@ -1196,3 +1196,197 @@ class TestSafeDivideColumns:
                 denominator="cost",
                 output_column="ratio",
             )
+
+
+class TestClipNumericNativeRegression:
+    """Regression tests verifying the native C++ clip_numeric hot-path.
+
+    These tests guard against regressions introduced when the implementation
+    was moved from a pandas round-trip to the native C++ path.  They
+    complement the existing TestClipNumeric suite by exercising edge cases
+    that are specific to the columnar C++ representation.
+    """
+
+    # ------------------------------------------------------------------
+    # INT64 column behaviour
+    # ------------------------------------------------------------------
+
+    def test_int64_lower_bound_applied(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [-100, 0, 50]}))
+        result = ar.clip_numeric(frame, lower=0)
+        assert ar.to_pandas(result)["x"].tolist() == [0, 0, 50]
+
+    def test_int64_upper_bound_applied(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [0, 50, 200]}))
+        result = ar.clip_numeric(frame, upper=100)
+        assert ar.to_pandas(result)["x"].tolist() == [0, 50, 100]
+
+    def test_int64_both_bounds(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [-10, 5, 150]}))
+        result = ar.clip_numeric(frame, lower=0, upper=100)
+        assert ar.to_pandas(result)["x"].tolist() == [0, 5, 100]
+
+    def test_int64_value_at_exact_bound_unchanged(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [0, 100]}))
+        result = ar.clip_numeric(frame, lower=0, upper=100)
+        assert ar.to_pandas(result)["x"].tolist() == [0, 100]
+
+    def test_int64_null_preserved(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [None, -5, 200]}))
+        df = ar.to_pandas(ar.clip_numeric(frame, lower=0, upper=100))
+        assert pd.isna(df["x"].iloc[0])
+        assert df["x"].iloc[1] == 0
+        assert df["x"].iloc[2] == 100
+
+    # ------------------------------------------------------------------
+    # FLOAT64 column behaviour
+    # ------------------------------------------------------------------
+
+    def test_float64_lower_bound_applied(self):
+        frame = ar.from_pandas(pd.DataFrame({"v": [-1.5, 0.0, 3.7]}))
+        result = ar.clip_numeric(frame, lower=0.0)
+        vals = ar.to_pandas(result)["v"].tolist()
+        assert vals == [0.0, 0.0, 3.7]
+
+    def test_float64_upper_bound_applied(self):
+        frame = ar.from_pandas(pd.DataFrame({"v": [0.5, 5.0, 9.9]}))
+        result = ar.clip_numeric(frame, upper=5.0)
+        vals = ar.to_pandas(result)["v"].tolist()
+        assert vals == [0.5, 5.0, 5.0]
+
+    def test_float64_both_bounds(self):
+        frame = ar.from_pandas(pd.DataFrame({"v": [-99.9, 2.5, 99.9]}))
+        result = ar.clip_numeric(frame, lower=0.0, upper=10.0)
+        vals = ar.to_pandas(result)["v"].tolist()
+        assert vals == [0.0, 2.5, 10.0]
+
+    def test_float64_null_preserved(self):
+        frame = ar.from_pandas(pd.DataFrame({"v": [None, -1.0, 20.0]}))
+        df = ar.to_pandas(ar.clip_numeric(frame, lower=0.0, upper=10.0))
+        assert pd.isna(df["v"].iloc[0])
+        assert df["v"].iloc[1] == 0.0
+        assert df["v"].iloc[2] == 10.0
+
+    # ------------------------------------------------------------------
+    # Mixed-type frame: non-numeric columns must be cloned unchanged
+    # ------------------------------------------------------------------
+
+    def test_string_column_untouched(self):
+        frame = ar.from_pandas(
+            pd.DataFrame({"score": [-5, 50, 200], "label": ["low", "mid", "high"]})
+        )
+        result = ar.clip_numeric(frame, lower=0, upper=100)
+        df = ar.to_pandas(result)
+        assert df["score"].tolist() == [0, 50, 100]
+        assert df["label"].tolist() == ["low", "mid", "high"]
+
+    def test_bool_column_untouched(self):
+        frame = ar.from_pandas(
+            pd.DataFrame({"score": [-5, 50, 200], "flag": [True, False, True]})
+        )
+        result = ar.clip_numeric(frame, lower=0, upper=100)
+        df = ar.to_pandas(result)
+        assert df["score"].tolist() == [0, 50, 100]
+        assert df["flag"].tolist() == [True, False, True]
+
+    # ------------------------------------------------------------------
+    # Subset selection
+    # ------------------------------------------------------------------
+
+    def test_subset_clips_only_named_column(self):
+        frame = ar.from_pandas(
+            pd.DataFrame({"a": [-10, 5, 200], "b": [-10, 5, 200]})
+        )
+        result = ar.clip_numeric(frame, lower=0, upper=100, subset=["a"])
+        df = ar.to_pandas(result)
+        assert df["a"].tolist() == [0, 5, 100]
+        assert df["b"].tolist() == [-10, 5, 200]  # untouched
+
+    # ------------------------------------------------------------------
+    # Frame with no numeric columns — must return frame unchanged
+    # ------------------------------------------------------------------
+
+    def test_no_numeric_columns_returns_frame_unchanged(self):
+        frame = ar.from_pandas(pd.DataFrame({"name": ["Alice", "Bob"]}))
+        result = ar.clip_numeric(frame, lower=0, upper=100)
+        assert ar.to_pandas(result)["name"].tolist() == ["Alice", "Bob"]
+
+    # ------------------------------------------------------------------
+    # Validation errors — must still be raised by the Python wrapper
+    # ------------------------------------------------------------------
+
+    def test_no_bounds_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+        with pytest.raises(ValueError, match="At least one of 'lower' or 'upper'"):
+            ar.clip_numeric(frame)
+
+    def test_inverted_bounds_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+        with pytest.raises(ValueError, match="lower cannot be greater than upper"):
+            ar.clip_numeric(frame, lower=10, upper=5)
+
+    def test_unknown_subset_column_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+        with pytest.raises(ValueError, match="Unknown columns in subset"):
+            ar.clip_numeric(frame, lower=0, subset=["nonexistent"])
+
+    def test_non_numeric_subset_column_raises(self):
+        frame = ar.from_pandas(
+            pd.DataFrame({"x": [1, 2, 3], "label": ["a", "b", "c"]})
+        )
+        with pytest.raises(ValueError, match="clip_numeric only supports numeric columns"):
+            ar.clip_numeric(frame, lower=0, subset=["label"])
+
+    # ------------------------------------------------------------------
+    # Pipeline integration
+    # ------------------------------------------------------------------
+
+    def test_pipeline_clip_numeric(self):
+        frame = ar.from_pandas(pd.DataFrame({"score": [-10, 50, 200]}))
+        result = ar.pipeline(frame, [("clip_numeric", {"lower": 0, "upper": 100})])
+        assert ar.to_pandas(result)["score"].tolist() == [0, 50, 100]
+
+    # ------------------------------------------------------------------
+    # Large-frame determinism: result must be identical to the old
+    # pandas-based implementation for a representative dataset.
+    # ------------------------------------------------------------------
+
+    def test_native_matches_pandas_reference(self):
+        """Native result must be numerically identical to pandas.clip()."""
+        import numpy as np
+
+        rng = np.random.default_rng(42)
+        n = 10_000
+        df = pd.DataFrame(
+            {
+                "int_col": rng.integers(-500, 500, size=n).tolist(),
+                "float_col": rng.uniform(-500.0, 500.0, size=n).tolist(),
+                "label": ["x"] * n,
+            }
+        )
+        # Introduce some nulls
+        for idx in rng.integers(0, n, size=200):
+            df.at[idx, "int_col"] = None
+        for idx in rng.integers(0, n, size=200):
+            df.at[idx, "float_col"] = None
+
+        frame = ar.from_pandas(df)
+        native_df = ar.to_pandas(ar.clip_numeric(frame, lower=-100, upper=100))
+
+        # Reference: pandas clip on a copy
+        ref = df.copy()
+        ref["int_col"] = ref["int_col"].clip(lower=-100, upper=100)
+        ref["float_col"] = ref["float_col"].clip(lower=-100, upper=100)
+
+        pd.testing.assert_series_equal(
+            native_df["int_col"].reset_index(drop=True),
+            ref["int_col"].reset_index(drop=True),
+            check_names=False,
+        )
+        pd.testing.assert_series_equal(
+            native_df["float_col"].reset_index(drop=True),
+            ref["float_col"].reset_index(drop=True),
+            check_names=False,
+        )
+        # String column must be untouched
+        assert native_df["label"].tolist() == ["x"] * n

@@ -11,6 +11,7 @@ from typing import Any
 
 from ._core import (
     _cast_types,
+    _clip_numeric,
     _drop_duplicates,
     _drop_nulls,
     _fill_nulls,
@@ -359,45 +360,47 @@ def clip_numeric(
     >>> frame = ar.read_csv("data.csv")
     >>> clipped = ar.clip_numeric(frame, lower=0, upper=100)
     """
-    from pandas.api.types import is_bool_dtype, is_numeric_dtype
-
-    from .convert import from_pandas, to_pandas
-
     if lower is None and upper is None:
         raise ValueError("At least one of 'lower' or 'upper' must be provided")
     if lower is not None and upper is not None and lower > upper:
         raise ValueError("lower cannot be greater than upper")
 
-    df = to_pandas(frame)
+    # Validate subset columns and their types against the frame's own dtype map,
+    # avoiding any pandas conversion for the validation step.
+    dtypes = frame.dtypes  # dict[str, str] — pure C++ metadata, no round-trip
 
-    def _is_supported_numeric(column_name: str) -> bool:
-        series = df[column_name]
-        return is_numeric_dtype(series) and not is_bool_dtype(series)
+    def _is_supported_numeric(col_name: str) -> bool:
+        return dtypes.get(col_name) in ("int64", "float64")
 
-    if subset is None:
-        target_columns = [
-            column for column in df.columns if _is_supported_numeric(column)
-        ]
-    else:
-        unknown_columns = [column for column in subset if column not in df.columns]
+    if subset is not None:
+        unknown_columns = [col for col in subset if col not in dtypes]
         if unknown_columns:
             raise ValueError(f"Unknown columns in subset: {unknown_columns}")
 
         non_numeric_columns = [
-            column for column in subset if not _is_supported_numeric(column)
+            col for col in subset if not _is_supported_numeric(col)
         ]
         if non_numeric_columns:
             raise ValueError(
-                "clip_numeric only supports numeric columns: " f"{non_numeric_columns}"
+                "clip_numeric only supports numeric columns: "
+                f"{non_numeric_columns}"
             )
-        target_columns = subset
+    else:
+        # When no subset is given, check whether there are any clippable columns.
+        # If none exist, return the frame unchanged without touching C++.
+        if not any(_is_supported_numeric(col) for col in dtypes):
+            return frame
 
-    if not target_columns:
-        return frame
-
-    clipped = df.copy()
-    clipped[target_columns] = clipped[target_columns].clip(lower=lower, upper=upper)
-    return from_pandas(clipped)
+    # Hot path: delegate entirely to the native C++ implementation.
+    # No pandas conversion, no DataFrame copy — operates directly on the
+    # columnar C++ Frame and returns a new Frame.
+    result = _clip_numeric(
+        frame._frame,
+        lower=float(lower) if lower is not None else None,
+        upper=float(upper) if upper is not None else None,
+        subset=subset,
+    )
+    return ArFrame(result)
 
 
 def strip_whitespace(
