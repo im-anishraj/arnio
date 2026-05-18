@@ -27,6 +27,13 @@ ISSUE_COLUMNS = [
 
 DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
+_VALID_SEVERITIES = {"error", "warning"}
+
+
+def _validate_severity(severity: str) -> None:
+    if severity not in _VALID_SEVERITIES:
+        raise ValueError("severity must be 'error' or 'warning'")
+
 
 @dataclass(frozen=True)
 class Field:
@@ -47,6 +54,9 @@ class Field:
     _datetime_max: pd.Timestamp | None = None
     required_if: tuple[str, Any] | None = None
     severity: str = "error"
+
+    def __post_init__(self) -> None:
+        _validate_severity(self.severity)
 
 
 @dataclass(frozen=True)
@@ -249,6 +259,7 @@ def validate(frame: ArFrame, schema: Schema | dict[str, Field]) -> ValidationRes
                     column=name,
                     rule="required_column",
                     message=f"Missing required column: {name}",
+                    severity=field_def.severity,
                 )
             )
             continue
@@ -319,6 +330,7 @@ def Int64(
     min: int | None = None,
     max: int | None = None,
     unique: bool = False,
+    severity: str = "error",
     required_if: tuple[str, Any] | None = None,
 ) -> Field:
     """Create an int64 schema field."""
@@ -333,6 +345,7 @@ def Int64(
         max=max,
         unique=unique,
         required_if=required_if,
+        severity=severity,
     )
 
 
@@ -342,6 +355,7 @@ def Float64(
     min: float | None = None,
     max: float | None = None,
     unique: bool = False,
+    severity: str = "error",
     required_if: tuple[str, Any] | None = None,
 ) -> Field:
     """Create a float64 schema field."""
@@ -356,6 +370,7 @@ def Float64(
         max=max,
         unique=unique,
         required_if=required_if,
+        severity=severity,
     )
 
 
@@ -365,6 +380,7 @@ def String(
     pattern: str | None = None,
     allowed: set[Any] | list[Any] | tuple[Any, ...] | None = None,
     unique: bool = False,
+    severity: str = "error",
     min_length: int | None = None,
     max_length: int | None = None,
     required_if: tuple[str, Any] | None = None,
@@ -385,22 +401,30 @@ def String(
         min_length=min_length,
         max_length=max_length,
         required_if=required_if,
+        severity=severity,
     )
 
 
 def Bool(
     *,
     nullable: bool = True,
+    severity: str = "error",
     required_if: tuple[str, Any] | None = None,
 ) -> Field:
     """Create a bool schema field."""
-    return Field(dtype="bool", nullable=nullable, required_if=required_if)
+    return Field(
+        dtype="bool",
+        nullable=nullable,
+        required_if=required_if,
+        severity=severity,
+    )
 
 
 def Email(
     *,
     nullable: bool = True,
     unique: bool = False,
+    severity: str = "error",
     validation: str = "light",
     required_if: tuple[str, Any] | None = None,
 ) -> Field:
@@ -413,6 +437,7 @@ def Email(
         semantic="email" if validation == "light" else "email:strict",
         unique=unique,
         required_if=required_if,
+        severity=severity,
     )
 
 
@@ -420,6 +445,7 @@ def URL(
     *,
     nullable: bool = True,
     unique: bool = False,
+    severity: str = "error",
     required_if: tuple[str, Any] | None = None,
 ) -> Field:
     """Create a URL schema field."""
@@ -429,6 +455,7 @@ def URL(
         semantic="url",
         unique=unique,
         required_if=required_if,
+        severity=severity,
     )
 
 
@@ -436,6 +463,7 @@ def CountryCode(
     *,
     nullable: bool = True,
     unique: bool = False,
+    severity: str = "error",
     required_if: tuple[str, Any] | None = None,
 ) -> Field:
     """Create an uppercase ISO alpha-2 country-code schema field."""
@@ -444,6 +472,7 @@ def CountryCode(
         nullable=nullable,
         semantic="country_code",
         required_if=required_if,
+        severity=severity,
     )
 
 
@@ -451,6 +480,7 @@ def Date(
     *,
     nullable: bool = True,
     unique: bool = False,
+    severity: str = "error",
     required_if: tuple[str, Any] | None = None,
 ) -> Field:
     """Create a date schema field."""
@@ -460,6 +490,7 @@ def Date(
         semantic="date",
         unique=unique,
         required_if=required_if,
+        severity=severity,
     )
 
 
@@ -468,6 +499,7 @@ def Regex(
     *,
     nullable: bool = True,
     unique: bool = False,
+    severity: str = "error",
     required_if: tuple[str, Any] | None = None,
 ) -> Field:
     """Create a regex-validated string schema field.
@@ -500,6 +532,7 @@ def Regex(
         pattern=pattern,
         unique=unique,
         required_if=required_if,
+        severity=severity,
     )
 
 
@@ -509,6 +542,7 @@ def DateTime(
     min: Any = None,
     max: Any = None,
     unique: bool = False,
+    severity: str = "error",
     format: str | None = None,
     required_if: tuple[str, Any] | None = None,
 ) -> Field:
@@ -529,6 +563,7 @@ def DateTime(
         _datetime_min=min_val,
         _datetime_max=max_val,
         required_if=required_if,
+        severity=severity,
     )
 
 
@@ -904,6 +939,7 @@ def Custom(
     *,
     nullable: bool = True,
     unique: bool = False,
+    severity: str = "error",
 ) -> Field:
     """Create a field validated by a registered custom validator.
 
@@ -927,5 +963,9 @@ def Custom(
             "Call ar.register_validator() first."
         )
     return Field(
-        dtype=None, nullable=nullable, unique=unique, semantic=f"custom:{name}"
+        dtype=None,
+        nullable=nullable,
+        unique=unique,
+        semantic=f"custom:{name}",
+        severity=severity,
     )

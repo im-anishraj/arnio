@@ -754,8 +754,8 @@ schema = ar.Schema({
     "revenue": ar.Custom("positive", nullable=True),
     "signup_date": ar.Date(nullable=False),
     "created_at": ar.DateTime(nullable=False, format="%Y-%m-%d"),
-})
 
+})
 
 result = ar.validate(frame, schema)
 
@@ -773,6 +773,26 @@ In this example, `country` becomes required only when
 
 Date validates strict YYYY-MM-DD calendar dates.
 
+### Warning-only validation
+
+```python
+schema = ar.Schema(
+    {
+        "age": ar.Int64(
+            min=18,
+            severity="warning",
+        )
+    }
+)
+
+result = ar.validate(frame, schema)
+
+print(result.passed)  # True
+print(result.issue_count)  # Warning issues are still reported
+```
+
+Warning-level issues remain visible in validation results without failing the overall validation status.
+
 `ValidationResult.to_markdown()` is useful in CI logs, GitHub comments, or data quality reports because it renders a compact validation summary plus a GitHub-friendly issue table.
 
 For multi-column uniqueness (composite keys):
@@ -785,7 +805,7 @@ schema = ar.Schema({
 
 result = ar.validate(frame, schema)
 ```
-Severity counts are not included in `summary()` yet because `ValidationIssue` does not currently carry severity information.
+
 
 For low-risk automatic cleanup:
 

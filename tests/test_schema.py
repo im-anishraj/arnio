@@ -512,6 +512,11 @@ def test_int64_rejects_impossible_bounds():
         raise AssertionError("Expected invalid Int64 bounds to raise")
 
 
+def test_invalid_severity_raises():
+    with pytest.raises(ValueError, match="severity must be"):
+        ar.Int64(severity="warn")
+
+
 def test_float64_rejects_impossible_bounds():
     try:
         ar.Float64(min=10.0, max=1.0)
