@@ -630,3 +630,77 @@ def test_data_quality_report_to_html(tmp_path):
     report.to_html(file_path=str(out_path))
     assert out_path.exists()
     assert out_path.read_text(encoding="utf-8").startswith("<!DOCTYPE html>")
+
+
+def test_data_quality_report_to_html_focused(tmp_path):
+    from arnio.quality import CleaningSuggestion, ColumnProfile, DataQualityReport
+
+    # 1. Construct a mock ColumnProfile with HTML characters in warning and name, and specific missing value counts and dtypes
+    col_unsafe = ColumnProfile(
+        name="<script>unsafe_col</script>",
+        dtype="int64",
+        semantic_type="numeric",
+        row_count=10,
+        null_count=3,
+        null_ratio=0.3,
+        unique_count=5,
+        unique_ratio=0.5,
+        empty_string_count=0,
+        whitespace_count=0,
+        warnings=["<script>unsafe_warning</script>"],
+    )
+
+    # 2. Construct a CleaningSuggestion with HTML characters
+    suggest = CleaningSuggestion(
+        step="<script>unsafe_step</script>",
+        kwargs={"col": "<script>unsafe_val</script>"},
+        confidence_score=0.95,
+        confidence_reason="<script>unsafe_reason</script>",
+    )
+
+    # 3. Construct DataQualityReport
+    report = DataQualityReport(
+        row_count=10,
+        column_count=1,
+        memory_usage=80,
+        duplicate_rows=2,
+        duplicate_ratio=0.2,
+        columns={"<script>unsafe_col</script>": col_unsafe},
+        quality_score=95.0,
+        score_components={"null_penalty": -5.0},
+        suggestions=[suggest],
+    )
+
+    # 4. Generate HTML and assert safe escaping, missing-value counts, and dtype rendering
+    html_out = report.to_html()
+
+    # Verify basic HTML structures
+    assert html_out.startswith("<!DOCTYPE html>")
+    assert "Data Quality Report" in html_out
+
+    # Verify missing-value counts and dtype rendering
+    assert "3" in html_out  # null_count
+    assert "int64" in html_out  # dtype
+    assert "10" in html_out  # row_count
+
+    # Verify proper HTML escaping of column name
+    assert "&lt;script&gt;unsafe_col&lt;/script&gt;" in html_out
+    assert "<script>unsafe_col</script>" not in html_out
+
+    # Verify proper HTML escaping of warnings
+    assert "&lt;script&gt;unsafe_warning&lt;/script&gt;" in html_out
+    assert "<script>unsafe_warning</script>" not in html_out
+
+    # Verify proper HTML escaping of suggestions
+    assert "&lt;script&gt;unsafe_step&lt;/script&gt;" in html_out
+    assert "<script>unsafe_step</script>" not in html_out
+    assert "&lt;script&gt;unsafe_val&lt;/script&gt;" in html_out
+    assert "<script>unsafe_val</script>" not in html_out
+    assert "&lt;script&gt;unsafe_reason&lt;/script&gt;" in html_out
+    assert "<script>unsafe_reason</script>" not in html_out
+
+    # Verify file writing
+    out_path = tmp_path / "report_focused.html"
+    report.to_html(file_path=str(out_path))
+    assert out_path.exists()
+    assert out_path.read_text(encoding="utf-8").startswith("<!DOCTYPE html>")
