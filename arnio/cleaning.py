@@ -459,7 +459,21 @@ def parse_bool_strings(
             f"true_values and false_values overlap after normalization: {overlap}"
         )
 
-    columns = subset or df.select_dtypes(include=["object", "string"]).columns
+    if subset is not None:
+        if not isinstance(subset, list):
+            raise TypeError("subset must be a list of column names or None")
+
+        if len(subset) == 0:
+            raise ValueError("subset cannot be empty")
+
+        missing = [col for col in subset if col not in df.columns]
+
+        if missing:
+            raise ValueError(f"Columns not found in frame: {missing}")
+
+        columns = subset
+    else:
+        columns = df.select_dtypes(include=["object", "string"]).columns.tolist()
 
     for col in columns:
         df[col] = df[col].apply(

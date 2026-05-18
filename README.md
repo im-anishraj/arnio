@@ -192,6 +192,7 @@ clean_df = df.arnio.clean(drop_duplicates=True)
 quality = clean_df.arnio.profile()
 validation = clean_df.arnio.validate({
     "email": ar.Email(nullable=False),
+    "user_code": ar.Regex(r"^USR-\d{4}$", nullable=False),
     "age": ar.Int64(nullable=True, min=0),
 })
 ```
@@ -436,7 +437,6 @@ Most operations below run natively in C++. Currently, `filter_rows` and `replace
 | `clean` | Convenience shorthand | `ar.clean(frame, drop_nulls=True)` |
 | `safe_divide_columns` | Divide one column by another, handling zero/null denominators | `ar.safe_divide_columns(frame, numerator="revenue", denominator="cost", output_column="ratio")` |
 | `trim_column_names` | Strip leading/trailing whitespace from column names | `ar.trim_column_names(frame)` |
-| `parse_bool_strings` | Normalize boolean-like string values into booleans | `ar.parse_bool_strings(frame)` |
 
 #### `ArFrame.select_dtypes` — type-based column selection
 
@@ -528,6 +528,27 @@ Works with:
 - strings
 - booleans
 
+### 🔎 Isolate rows with null values
+
+Use `keep_rows_with_nulls` to audit incomplete data — keep only rows that have at least one null.
+
+```python
+frame = ar.read_csv("data.csv")
+
+# Keep all rows that have at least one null anywhere
+nulls = ar.keep_rows_with_nulls(frame)
+
+# Keep rows where specifically 'age' or 'score' is null
+nulls = ar.keep_rows_with_nulls(frame, subset=["age", "score"])
+
+# Works inside a pipeline too
+result = ar.pipeline(frame, [
+    ("keep_rows_with_nulls", {"subset": ["age"]}),
+])
+```
+
+Useful for data auditing — inspect what's missing before deciding how to fill or drop.
+
 ### Boolean string normalization
 
 ```python
@@ -537,6 +558,57 @@ clean = ar.parse_bool_strings(frame)
 This normalizes values such as `"yes"`, `"no"`, `"true"`, `"false"`, `"y"`, `"n"`, `"1"`, and `"0"` into boolean values while preserving unsupported values unchanged.
 
 Columns containing both parsed boolean values and unsupported string values may round-trip as strings because of ArFrame column typing semantics.
+
+<br>
+### 🔢 Safe column division
+
+Divide one column by another while handling division by zero and null denominators explicitly:
+
+```python
+result = ar.safe_divide_columns(
+    frame,
+    numerator="revenue",
+    denominator="cost",
+    output_column="ratio",
+    fill_value=0.0,  # used when denominator is zero or null
+)
+```
+
+> When the denominator is **zero or null**, the result is replaced with `fill_value` (default `0.0`) instead of raising an error or producing `NaN`/`Inf`.
+
+---
+
+<br>
+
+## 📊 Pandas Dtype Support Matrix
+
+This table helps users understand which pandas dtypes and workflows are fully supported, partially supported, unsupported, or planned.
+
+If a dtype is partially supported, users may need conversion before processing. Unsupported dtypes should raise clear errors where applicable.
+
+| Pandas Dtype | Support Status | Notes |
+|---|---|---|
+| `int64` | ✅ Supported | Fully supported with native C++ columnar storage |
+| `float64` | ✅ Supported | Fully supported with zero-copy conversion where possible |
+| `bool` | ✅ Supported | Native supported boolean type |
+| `string` | ✅ Supported | Recommended over `object` dtype for text workflows |
+| `datetime64[ns]` | ❌ Unsupported for native storage | No native datetime parsing or conversion support yet. Use `ar.DateTime()` for schema validation of string timestamp columns. |
+| `category` | ⚠️ Limited | Converted to string/object during processing |
+| `object` (mixed columns) | ⚠️ Limited | Mixed object columns may coerce to string and reduce type inference reliability |
+| nullable pandas dtypes (`Int64`, `boolean`) | ⚠️ Limited | Supported through pandas extension dtypes with null-mask handling |
+| `timedelta64[ns]` | ❌ Unsupported | Not currently supported |
+
+### Notes
+
+- Numeric columns are optimized for zero-copy conversion between C++ and pandas where supported.
+- Pass `copy=True` to `to_pandas()` when downstream pandas code needs defensive pandas-owned column buffers.
+- Boolean conversion is already copied by the binding because `std::vector<bool>` cannot be exposed as a zero-copy NumPy buffer in the current implementation.
+- Columns with null masks may require copies so pandas can apply nullable values safely.
+- String columns require Python string object creation during `to_pandas()` conversion.
+- `ar.DateTime()` validates string timestamp columns with optional `format`, `min`, and `max`; it does not add native `datetime64[ns]` storage or automatic datetime conversion.
+- Mixed `object` columns may reduce type inference accuracy and may require preprocessing.
+- Unsupported dtypes should raise clear user-facing errors instead of silent failures.
+> **Note:** pandas DataFrame indexes are currently not preserved during `from_pandas()` conversion. Converted frames receive a default `RangeIndex` when converted back via `to_pandas()`.
 
 <br>
 
@@ -565,6 +637,7 @@ schema = ar.Schema({
     # CountryCode expects uppercase ISO alpha-2 values, for example IN, US, GB.
     "country": ar.CountryCode(nullable=False),
     "username": ar.String(min_length=3, max_length=20),
+    "user_code": ar.Regex(r"^USR-\d{4}$", nullable=False),
     "revenue": ar.Float64(nullable=True, min=0),
     "created_at": ar.DateTime(nullable=False, format="%Y-%m-%d"),
 })
@@ -675,7 +748,10 @@ data = {
 df = ar.from_pandas(pd.DataFrame(data))
 # Bounded profiling for large datasets (controls how many sample values are kept)
 report = ar.profile(df, sample_size=5)
+safe_report = report.to_dict(redact_sample_values=True)
 ```
+
+Use `report.to_dict(redact_sample_values=True)` when sharing reports outside your team and you want to avoid exposing raw example/sample values.
 
 ### 1. Terminal Representation (Simplified Example)
 *A simplified view of the standard string representation of the report object:*
@@ -688,7 +764,7 @@ DataQualityReport(
     duplicate_rows=0,
     columns={
         'user_id': ColumnProfile(dtype='int64', semantic_type='identifier', unique_count=4),
-        'email': ColumnProfile(dtype='string', semantic_type='categorical', null_count=1, unique_ratio=0.666667),
+        'email': ColumnProfile(dtype='string', semantic_type='categorical', null_count=1, unique_ratio=0.666667, min=13, max=13, mean=13.0),
         'score': ColumnProfile(dtype='float64', semantic_type='numeric', mean=87.9, min=85.5, max=90.0)
     }
 )
@@ -716,6 +792,9 @@ DataQualityReport(
       "semantic_type": "categorical",
       "null_count": 1,
       "unique_ratio": 0.666667,
+      "min": 13,
+      "max": 13,
+      "mean": 13.0,
       "warnings": ["contains_nulls"]
     },
     "score": {

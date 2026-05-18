@@ -638,6 +638,48 @@ class TestParseBoolStrings:
                 false_values={" YES "},
             )
 
+    def test_parse_bool_strings_invalid_subset_type(self):
+        import pandas as pd
+
+        df = pd.DataFrame(
+            {
+                "active": ["YES", "no"],
+            }
+        )
+
+        frame = ar.from_pandas(df)
+
+        with pytest.raises(TypeError):
+            ar.parse_bool_strings(frame, subset="active")
+
+    def test_parse_bool_strings_empty_subset(self):
+        import pandas as pd
+
+        df = pd.DataFrame(
+            {
+                "active": ["YES", "no"],
+            }
+        )
+
+        frame = ar.from_pandas(df)
+
+        with pytest.raises(ValueError):
+            ar.parse_bool_strings(frame, subset=[])
+
+    def test_parse_bool_strings_missing_subset_column(self):
+        import pandas as pd
+
+        df = pd.DataFrame(
+            {
+                "active": ["YES", "no"],
+            }
+        )
+
+        frame = ar.from_pandas(df)
+
+        with pytest.raises(ValueError):
+            ar.parse_bool_strings(frame, subset=["missing"])
+
 
 class TestRenameColumns:
     def test_rename(self, sample_csv):
