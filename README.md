@@ -76,6 +76,7 @@ df = ar.to_pandas(clean)
 # Use copy=True when you need defensive pandas-owned buffers
 safe_df = ar.to_pandas(clean, copy=True)
 ```
+- Decimal values in pandas object columns are preserved as strings during `from_pandas()` conversion to avoid silent precision loss from float conversion.
 
 Already have a pandas `DataFrame`? Use Arnio in-place in your existing pandas
 workflow:

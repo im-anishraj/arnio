@@ -343,6 +343,22 @@ class TestFromPandas:
 
         assert result["amount"].tolist() == ["10.5", "20.25", "30.75"]
 
+    def test_high_precision_decimal_preserved_as_string(self):
+        from decimal import Decimal
+
+        df = pd.DataFrame(
+            {
+                "amount": [
+                    Decimal("0.123456789123456789"),
+                ]
+            }
+        )
+
+        frame = ar.from_pandas(df)
+        result = ar.to_pandas(frame)
+
+        assert result["amount"].tolist() == ["0.123456789123456789"]
+
     def test_decimal_values_with_nulls(self):
         from decimal import Decimal
 
