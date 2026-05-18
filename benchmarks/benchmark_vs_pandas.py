@@ -2,7 +2,7 @@
 Reproducible benchmark: arnio vs pandas
 Run: python benchmarks/benchmark_vs_pandas.py
 """
-
+import json
 import time
 import tracemalloc
 from dataclasses import dataclass
@@ -15,6 +15,9 @@ import arnio as ar
 CSV_FILE = "benchmarks/benchmark_1m.csv"
 WIDE_CSV_FILE = "benchmarks/benchmark_wide.csv"
 RUNS = 3
+
+BASELINE_FILE = "benchmarks/baseline.json"
+REGRESSION_THRESHOLD = 5  # Percent
 
 
 @dataclass(frozen=True)
@@ -81,8 +84,18 @@ def benchmark_arnio(path):
 def avg(values):
     return sum(values) / len(values)
 
+def load_baseline():
+    with open(BASELINE_FILE, "r") as f:
+        return json.load(f)
+    
+def calculate_regression(current, baseline):
+    return ((current - baseline) / baseline) * 100 #How much slower current benchmark is compared to baseline
+
+
 
 def run_case(case):
+    baseline_data = load_baseline()
+
     print(case.name)
     print(f"{'Metric':<20} {'pandas':>12} {'arnio':>12}")
     print("-" * 46)
@@ -103,6 +116,19 @@ def run_case(case):
     print(
         f"\nSpeed: {avg(pd_times)/avg(ar_times):.1f}x | RAM: {(1 - avg(ar_rams)/avg(pd_rams))*100:.0f}% reduction"
     )
+    
+    baseline_time = baseline_data[case.name]["arnio_exec_time"]
+    current_time = avg(ar_times)
+
+    regression = calculate_regression(current_time, baseline_time)
+
+    if regression > REGRESSION_THRESHOLD:
+        print(
+            f"⚠ Regression detected: "
+            f"{regression:.1f}% slower than baseline "
+            f"(threshold: {REGRESSION_THRESHOLD}%)"
+        )
+
     print()
 
 
