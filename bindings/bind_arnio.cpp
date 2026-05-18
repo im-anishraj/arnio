@@ -12,11 +12,10 @@
 #include "arnio/types.h"
 
 namespace py = pybind11;
+using namespace arnio;
 
 PYBIND11_MODULE(_arnio_cpp, m) {
     m.doc() = "arnio C++ backend";
-    
-
 
     // --- DType enum ---
     py::enum_<DType>(m, "DType")
