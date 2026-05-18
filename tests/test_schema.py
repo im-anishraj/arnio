@@ -714,10 +714,11 @@ def test_regex_mismatch_reports_pattern_rule(tmp_path):
 def test_regex_null_allowed(tmp_path):
     path = tmp_path / "ids.csv"
     path.write_text("user_id\nUSR-1234\n\n")
-    ar.validate(
+    result = ar.validate(
         ar.read_csv(path),
         {"user_id": ar.Regex(r"^USR-\d{4}$", nullable=True)},
     )
+    assert result.passed
 
 
 def test_date_validation_rejects_invalid_dates(tmp_path):
@@ -807,3 +808,4 @@ def test_date_validation_rejects_non_zero_padded_dates(tmp_path):
 
     rules = {issue.rule for issue in result.issues}
     assert "date" in rules
+
