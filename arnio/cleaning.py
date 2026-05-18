@@ -5,7 +5,6 @@ Data cleaning functions.
 
 from __future__ import annotations
 
-import unicodedata
 from collections.abc import Sequence
 from typing import Any
 
@@ -450,6 +449,7 @@ def normalize_unicode(
     form: str = "NFC",
 ) -> ArFrame:
     """Normalize Unicode text columns."""
+    import unicodedata
 
     from .convert import from_pandas, to_pandas
 
@@ -933,3 +933,61 @@ def replace_values(frame, mapping, column=None):
             df = df.fillna(null_replacement)
 
     return from_pandas(df) if is_arframe else df
+
+
+def drop_columns_matching(frame, pattern):
+    """Drop columns whose names match a given pattern.
+
+    Parameters
+    ----------
+    frame : ArFrame or pd.DataFrame
+        Input data frame.
+    pattern : str
+        Regex pattern to match column names against.
+
+    Returns
+    -------
+    ArFrame or pd.DataFrame
+        Data frame with matching columns removed.
+
+    Raises
+    ------
+    TypeError
+        If pattern is not a string.
+    re.error
+        If pattern is not a valid regex.
+    ValueError
+        If pattern matches all columns.
+
+    Examples
+    --------
+    >>> frame = ar.read_csv("data.csv")
+    >>> cleaned = drop_columns_matching(frame, "^temp_")
+    """
+    import re
+
+    import pandas as pd
+
+    from .convert import from_pandas, to_pandas
+
+    if not isinstance(pattern, str):
+        raise TypeError(f"pattern must be a string, got {type(pattern).__name__}")
+
+    try:
+        re.compile(pattern)
+    except re.error as e:
+        raise re.error(f"Invalid regex pattern: {pattern!r}") from e
+
+    is_arframe = not isinstance(frame, pd.DataFrame)
+    df = to_pandas(frame) if is_arframe else frame
+
+    cols_to_drop = [col for col in df.columns if re.search(pattern, col)]
+
+    if len(cols_to_drop) == len(df.columns):
+        raise ValueError(
+            "Pattern matches all columns. At least one column must remain."
+        )
+
+    result = df.drop(columns=cols_to_drop)
+
+    return from_pandas(result) if is_arframe else result
