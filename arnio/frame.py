@@ -87,6 +87,50 @@ class ArFrame:
         """
         return self._frame.memory_usage()
 
+    def head(self, n: int = 5) -> ArFrame:
+        """Return the first n rows as an ArFrame.
+
+        Parameters
+        ----------
+        n : int, optional
+            Number of rows to return. Defaults to 5.
+
+        Returns
+        -------
+        ArFrame
+            New ArFrame containing the first n rows.
+        """
+        if isinstance(n, bool) or not isinstance(n, int) or n < 0:
+            raise ValueError(f"`n` must be a non-negative integer, got {n!r}")
+
+        from .convert import from_pandas, to_pandas
+
+        df = to_pandas(self)
+
+        return from_pandas(df.head(n))
+
+    def tail(self, n: int = 5) -> ArFrame:
+        """Return the last n rows as an ArFrame.
+
+        Parameters
+        ----------
+        n : int, optional
+            Number of rows to return. Defaults to 5.
+
+        Returns
+        -------
+        ArFrame
+            New ArFrame containing the last n rows.
+        """
+        if isinstance(n, bool) or not isinstance(n, int) or n < 0:
+            raise ValueError(f"`n` must be a non-negative integer, got {n!r}")
+
+        from .convert import from_pandas, to_pandas
+
+        df = to_pandas(self)
+
+        return from_pandas(df.tail(n))
+
     def select_columns(self, columns: list[str]) -> ArFrame:
         """Return a new ArFrame with only the selected columns.
 
@@ -255,6 +299,9 @@ class ArFrame:
         lines.append(f"DTypes:  {self.dtypes}")
         lines.append(f"Memory:  {self.memory_usage()} bytes")
         return "\n".join(lines)
+
+    def __contains__(self, item: object) -> bool:
+        return isinstance(item, str) and item in self.columns
 
     def preview(self, n: int = 5) -> str:
         """Return a lightweight string preview of the first ``n`` rows.
