@@ -1023,3 +1023,21 @@ def test_register_validator_raises_for_empty_name():
         assert "non-empty" in str(exc)
     else:
         raise AssertionError("Expected ValueError for empty name")
+
+
+def test_custom_validator_exceptions_propagate(tmp_path):
+    def broken_validator(value):
+        raise RuntimeError("validator exploded")
+
+    ar.register_validator("broken", broken_validator)
+
+    path = tmp_path / "scores.csv"
+    path.write_text("score\n1\n")
+
+    with pytest.raises(RuntimeError) as exc:
+        ar.validate(
+            ar.read_csv(path),
+            {"score": ar.Custom("broken")},
+        )
+
+    assert "validator exploded" in str(exc.value)
