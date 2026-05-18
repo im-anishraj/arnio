@@ -5,10 +5,9 @@ Data quality profiling and safe automatic cleaning helpers.
 
 from __future__ import annotations
 
+import html
 from dataclasses import dataclass, field
 from typing import Any
-
-import html
 
 import pandas as pd
 
@@ -248,6 +247,7 @@ class DataQualityReport:
 
     def to_html(self, file_path: str | None = None) -> str:
         """Return a self-contained, dependency-free HTML data quality report."""
+
         def e(text: Any) -> str:
             return html.escape(str(text))
 
@@ -273,7 +273,9 @@ class DataQualityReport:
         lines.append('<html lang="en">')
         lines.append("<head>")
         lines.append('    <meta charset="UTF-8">')
-        lines.append('    <meta name="viewport" content="width=device-width, initial-scale=1.0">')
+        lines.append(
+            '    <meta name="viewport" content="width=device-width, initial-scale=1.0">'
+        )
         lines.append("    <title>Data Quality Report</title>")
         lines.append(f"    <style>{styles}</style>")
         lines.append("</head>")
@@ -294,7 +296,7 @@ class DataQualityReport:
             lines.append('            <div class="metric-card">')
             lines.append(f'                <div class="metric-value">{e(value)}</div>')
             lines.append(f'                <div class="metric-label">{e(label)}</div>')
-            lines.append('            </div>')
+            lines.append("            </div>")
         lines.append("        </div>")
 
         if self.columns:
@@ -310,7 +312,7 @@ class DataQualityReport:
             lines.append("                </tr>")
             lines.append("            </thead>")
             lines.append("            <tbody>")
-            
+
             for name in sorted(self.columns):
                 col = self.columns[name]
                 warnings_str = ", ".join(col.warnings) if col.warnings else "-"
@@ -319,9 +321,11 @@ class DataQualityReport:
                 lines.append(f"                    <td>{e(col.dtype)}</td>")
                 lines.append(f"                    <td>{e(col.null_count)}</td>")
                 lines.append(f"                    <td>{e(col.unique_count)}</td>")
-                lines.append(f'                    <td class="warnings">{e(warnings_str)}</td>')
+                lines.append(
+                    f'                    <td class="warnings">{e(warnings_str)}</td>'
+                )
                 lines.append("                </tr>")
-                
+
             lines.append("            </tbody>")
             lines.append("        </table>")
 
@@ -329,10 +333,14 @@ class DataQualityReport:
             lines.append("        <h2>Cleaning Suggestions</h2>")
             for step in self.suggestions:
                 conf_score = getattr(step, "confidence_score", None)
-                conf_text = f" (Confidence: {conf_score:.2f})" if conf_score is not None else ""
+                conf_text = (
+                    f" (Confidence: {conf_score:.2f})" if conf_score is not None else ""
+                )
                 lines.append('        <div class="suggestion">')
-                lines.append(f'            <code>{e(step[0])}</code>: <code>{e(step[1])}</code>{e(conf_text)}')
-                lines.append('        </div>')
+                lines.append(
+                    f"            <code>{e(step[0])}</code>: <code>{e(step[1])}</code>{e(conf_text)}"
+                )
+                lines.append("        </div>")
 
         lines.append("    </div>")
         lines.append("</body>")

@@ -507,7 +507,7 @@ def test_profile_string_metrics_to_pandas():
 def test_report_to_markdown_basic(tmp_path):
     path = tmp_path / "report.csv"
 
-    path.write_text("id,name\n" "1,Alice\n" "2,Bob\n")
+    path.write_text("id,name\n1,Alice\n2,Bob\n")
 
     report = ar.profile(ar.read_csv(path))
 
@@ -522,7 +522,7 @@ def test_report_to_markdown_basic(tmp_path):
 def test_report_to_markdown_deterministic(tmp_path):
     path = tmp_path / "stable.csv"
 
-    path.write_text("id,name\n" "1,Alice\n" "2,Bob\n")
+    path.write_text("id,name\n1,Alice\n2,Bob\n")
 
     report = ar.profile(ar.read_csv(path))
 
@@ -618,7 +618,7 @@ def test_data_quality_report_to_html(tmp_path):
     report = ar.profile(frame)
 
     html_out = report.to_html()
-    
+
     assert html_out.startswith("<!DOCTYPE html>")
     assert "Data Quality Report" in html_out
     assert "&lt;script&gt;malicious&lt;/script&gt;" in html_out
