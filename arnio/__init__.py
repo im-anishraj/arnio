@@ -32,7 +32,7 @@ from .cleaning import (
     trim_column_names,
     validate_columns_exist,
 )
-from .convert import from_pandas, to_pandas
+from .convert import from_pandas, to_numpy, to_pandas
 from .exceptions import ArnioError, CsvReadError, TypeCastError, UnknownStepError
 from .frame import ArFrame
 from .integrations import ArnioPandasAccessor
@@ -88,6 +88,7 @@ __all__ = [
     "trim_column_names",
     # Conversion
     "to_pandas",
+    "to_numpy",
     "from_pandas",
     # Integrations
     "ArnioPandasAccessor",
