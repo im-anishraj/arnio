@@ -153,6 +153,29 @@ result = schema.validate(ar.read_csv("events.csv"))
 print(result.passed)
 ```
 
+## Schema diff reports
+
+Use `diff_schema()` to compare expected and observed data contracts across
+datasets, releases, or generated schemas.
+
+```python
+import arnio as ar
+
+expected = ar.Schema({
+    "id": ar.Int64(nullable=False, unique=True),
+    "email": ar.Email(nullable=False),
+})
+
+observed = ar.Schema({
+    "id": ar.Int64(nullable=False),
+    "created_at": ar.DateTime(format="%Y-%m-%d"),
+})
+
+diff = ar.diff_schema(expected, observed)
+print(diff.summary())
+print(diff.to_markdown())
+```
+
 ### Select specific columns
 
 Use `select_columns()` to create a new `ArFrame` with only the required columns before converting to pandas.

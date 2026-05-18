@@ -1235,3 +1235,98 @@ def test_schema_rules_invalid_output_raises_type_error(tmp_path):
 
     with pytest.raises(TypeError, match="ValidationIssue"):
         schema.validate(frame)
+
+
+def test_diff_schema_reports_missing_extra_and_changed_fields():
+    expected = ar.Schema(
+        {
+            "id": ar.Int64(nullable=False, unique=True),
+            "email": ar.Email(nullable=False),
+            "status": ar.String(allowed={"active", "blocked"}),
+        },
+        strict=True,
+    )
+    observed = ar.Schema(
+        {
+            "id": ar.Int64(nullable=False),
+            "status": ar.String(allowed={"active", "pending"}),
+            "created_at": ar.DateTime(format="%Y-%m-%d"),
+        },
+        strict=False,
+    )
+
+    diff = ar.diff_schema(expected, observed)
+    changes = {(item.column, item.change, item.attribute) for item in diff.differences}
+
+    assert diff.changed
+    assert diff.difference_count == 5
+    assert ("email", "missing_column", None) in changes
+    assert ("created_at", "extra_column", None) in changes
+    assert ("id", "changed_field", "unique") in changes
+    assert ("status", "changed_field", "allowed") in changes
+    assert (None, "changed_schema", "strict") in changes
+
+
+def test_diff_schema_accepts_plain_field_dicts():
+    diff = ar.diff_schema(
+        {"id": ar.Int64(nullable=False)},
+        {"id": ar.Int64(nullable=False)},
+    )
+
+    assert not diff.changed
+    assert diff.difference_count == 0
+    assert diff.to_dict() == {
+        "changed": False,
+        "difference_count": 0,
+        "differences": [],
+    }
+
+
+def test_diff_schema_reports_composite_unique_changes():
+    expected = ar.Schema(
+        {"user_id": ar.String(), "event_id": ar.String()},
+        unique=["user_id", "event_id"],
+    )
+    observed = ar.Schema(
+        {"user_id": ar.String(), "event_id": ar.String()},
+        unique=["event_id", "user_id"],
+    )
+
+    diff = ar.diff_schema(expected, observed)
+
+    assert diff.changed
+    assert diff.differences == [
+        ar.SchemaDiffEntry(
+            column=None,
+            change="changed_schema",
+            attribute="unique",
+            expected=("user_id", "event_id"),
+            observed=("event_id", "user_id"),
+        )
+    ]
+
+
+def test_schema_diff_summary_and_markdown_escape_cells():
+    diff = ar.SchemaDiff(
+        [
+            ar.SchemaDiffEntry(
+                column="notes|raw",
+                change="changed_field",
+                attribute="pattern",
+                expected="left|right",
+                observed="left\nright",
+            )
+        ]
+    )
+
+    assert diff.summary() == {
+        "changed": True,
+        "difference_count": 1,
+        "differences_by_change": {"changed_field": 1},
+        "differences_by_column": {"notes|raw": 1},
+    }
+    markdown = diff.to_markdown()
+    assert "## Schema Diff" in markdown
+    assert "notes\\|raw" in markdown
+    assert "left\\|right" in markdown
+    assert "left<br>right" in markdown

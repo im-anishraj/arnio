@@ -217,6 +217,182 @@ class ValidationResult:
         raise ArnioError("\n".join(parts))
 
 
+@dataclass(frozen=True)
+class SchemaDiffEntry:
+    """One schema contract difference."""
+
+    column: str | None
+    change: str
+    attribute: str | None = None
+    expected: Any = None
+    observed: Any = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-friendly dictionary."""
+        return {
+            "column": self.column,
+            "change": self.change,
+            "attribute": self.attribute,
+            "expected": _clean_scalar(self.expected),
+            "observed": _clean_scalar(self.observed),
+        }
+
+
+@dataclass(frozen=True)
+class SchemaDiff:
+    """Result of comparing two schema contracts."""
+
+    differences: list[SchemaDiffEntry]
+
+    @property
+    def changed(self) -> bool:
+        """Whether the two schemas differ."""
+        return bool(self.differences)
+
+    @property
+    def difference_count(self) -> int:
+        """Number of differences found."""
+        return len(self.differences)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-friendly dictionary."""
+        return {
+            "changed": self.changed,
+            "difference_count": self.difference_count,
+            "differences": [diff.to_dict() for diff in self.differences],
+        }
+
+    def summary(self) -> dict[str, Any]:
+        """Return compact counts by change kind."""
+        by_change: dict[str, int] = {}
+        by_column: dict[str, int] = {}
+        for diff in self.differences:
+            by_change[diff.change] = by_change.get(diff.change, 0) + 1
+            if diff.column is not None:
+                by_column[diff.column] = by_column.get(diff.column, 0) + 1
+        return {
+            "changed": self.changed,
+            "difference_count": self.difference_count,
+            "differences_by_change": by_change,
+            "differences_by_column": by_column,
+        }
+
+    def to_markdown(self) -> str:
+        """Return a GitHub-friendly Markdown schema diff report."""
+        lines = [
+            "## Schema Diff",
+            "",
+            f"- Status: **{'changed' if self.changed else 'unchanged'}**",
+            f"- Differences found: {self.difference_count}",
+        ]
+        if not self.changed:
+            return "\n".join(lines)
+
+        lines.extend(
+            [
+                "",
+                "| Column | Change | Attribute | Expected | Observed |",
+                "| --- | --- | --- | --- | --- |",
+            ]
+        )
+        for diff in self.differences:
+            lines.append(
+                "| "
+                f"{_markdown_cell(diff.column)} | "
+                f"{_markdown_cell(diff.change)} | "
+                f"{_markdown_cell(diff.attribute)} | "
+                f"{_markdown_cell(_clean_scalar(diff.expected))} | "
+                f"{_markdown_cell(_clean_scalar(diff.observed))} |"
+            )
+        return "\n".join(lines)
+
+
+def diff_schema(
+    expected: Schema | dict[str, Field],
+    observed: Schema | dict[str, Field],
+) -> SchemaDiff:
+    """Compare two schema contracts.
+
+    Parameters
+    ----------
+    expected : Schema or dict[str, Field]
+        Baseline or required contract.
+    observed : Schema or dict[str, Field]
+        Newly inferred, generated, or release candidate contract.
+
+    Returns
+    -------
+    SchemaDiff
+        Structured differences covering missing columns, extra columns,
+        changed field attributes, and schema-level options.
+    """
+    expected_schema = expected if isinstance(expected, Schema) else Schema(expected)
+    observed_schema = observed if isinstance(observed, Schema) else Schema(observed)
+    differences: list[SchemaDiffEntry] = []
+
+    expected_columns = set(expected_schema.fields)
+    observed_columns = set(observed_schema.fields)
+
+    for column in sorted(expected_columns - observed_columns):
+        differences.append(
+            SchemaDiffEntry(
+                column=column,
+                change="missing_column",
+                expected=_field_to_dict(expected_schema.fields[column]),
+            )
+        )
+
+    for column in sorted(observed_columns - expected_columns):
+        differences.append(
+            SchemaDiffEntry(
+                column=column,
+                change="extra_column",
+                observed=_field_to_dict(observed_schema.fields[column]),
+            )
+        )
+
+    for column in sorted(expected_columns & observed_columns):
+        expected_field = _field_to_dict(expected_schema.fields[column])
+        observed_field = _field_to_dict(observed_schema.fields[column])
+        for attribute in sorted(set(expected_field) | set(observed_field)):
+            expected_value = expected_field.get(attribute)
+            observed_value = observed_field.get(attribute)
+            if expected_value != observed_value:
+                differences.append(
+                    SchemaDiffEntry(
+                        column=column,
+                        change="changed_field",
+                        attribute=attribute,
+                        expected=expected_value,
+                        observed=observed_value,
+                    )
+                )
+
+    if expected_schema.strict != observed_schema.strict:
+        differences.append(
+            SchemaDiffEntry(
+                column=None,
+                change="changed_schema",
+                attribute="strict",
+                expected=expected_schema.strict,
+                observed=observed_schema.strict,
+            )
+        )
+
+    if _normalize_unique(expected_schema.unique) != _normalize_unique(observed_schema.unique):
+        differences.append(
+            SchemaDiffEntry(
+                column=None,
+                change="changed_schema",
+                attribute="unique",
+                expected=_normalize_unique(expected_schema.unique),
+                observed=_normalize_unique(observed_schema.unique),
+            )
+        )
+
+    return SchemaDiff(differences)
+
+
 def validate(frame: ArFrame, schema: Schema | dict[str, Field]) -> ValidationResult:
     """Validate an ArFrame against a schema.
 
@@ -851,7 +1027,44 @@ def _row_issues(
     ]
 
 
+def _field_to_dict(field_def: Field) -> dict[str, Any]:
+    return {
+        "dtype": field_def.dtype,
+        "nullable": field_def.nullable,
+        "min": field_def.min,
+        "max": field_def.max,
+        "pattern": field_def.pattern,
+        "semantic": field_def.semantic,
+        "allowed": _normalize_sequence(field_def.allowed),
+        "unique": field_def.unique,
+        "min_length": field_def.min_length,
+        "max_length": field_def.max_length,
+        "format": field_def.format,
+        "datetime_min": _clean_scalar(field_def._datetime_min),
+        "datetime_max": _clean_scalar(field_def._datetime_max),
+        "required_if": _normalize_sequence(field_def.required_if),
+    }
+
+
+def _normalize_unique(value: list[str] | tuple[str, ...] | None) -> tuple[str, ...] | None:
+    if value is None:
+        return None
+    return tuple(value)
+
+
+def _normalize_sequence(value: Any) -> Any:
+    if isinstance(value, set):
+        return sorted(value)
+    if isinstance(value, tuple):
+        return list(value)
+    return value
+
+
 def _clean_scalar(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {key: _clean_scalar(val) for key, val in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_clean_scalar(item) for item in value]
     if pd.isna(value):
         return None
     if hasattr(value, "item"):
