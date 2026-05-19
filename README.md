@@ -61,6 +61,12 @@ import arnio as ar
 # Load CSV directly through C++ — no Python parsing overhead
 frame = ar.read_csv("messy_sales_data.csv")
 
+# Strict mode (default) fails on inconsistent row widths
+frame = ar.read_csv("messy_sales_data.csv", mode="strict")
+
+# Permissive mode fills missing trailing values with nulls
+frame = ar.read_csv("messy_sales_data.csv", mode="permissive")
+
 # Declare what clean data looks like — arnio handles the rest
 clean = ar.pipeline(frame, [
     ("strip_whitespace",),

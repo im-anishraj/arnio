@@ -200,6 +200,12 @@ def read_csv(
         delimiter, the value "1,234" must be quoted, while unquoted
         1,234 is interpreted as two separate fields.
 
+    mode : {"strict", "permissive"}, default "strict"
+        Controls malformed row handling.
+
+        - strict: raises CsvReadError on inconsistent row widths.
+        - permissive: fills missing trailing fields with nulls.
+
     Returns
     -------
     ArFrame
