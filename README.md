@@ -896,6 +896,8 @@ Expected cleaned output with `mode="strict"`:
 
 See [examples/auto_clean_tutorial.py](examples/auto_clean_tutorial.py) for a runnable version of this walkthrough.
 
+> For strict mode data-loss risks and safe workflow, see [AUTO_CLEAN_GUIDE.md](AUTO_CLEAN_GUIDE.md).
+
 <br>
 
 ## Data Quality Reports
