@@ -215,6 +215,19 @@ def _materialize_csv_input(
     raise TypeError("read_csv expected a filesystem path or text file-like object")
 
 
+def _reject_utf8_nul_bytes(path: str) -> None:
+    """Reject UTF-8 CSV inputs that contain NUL bytes anywhere in the file."""
+    try:
+        with open(path, "rb") as f:
+            while chunk := f.read(8192):
+                if b"\0" in chunk:
+                    raise CsvReadError(
+                        "CSV input contains NUL bytes and appears to be binary or corrupted"
+                    )
+    except FileNotFoundError:
+        pass  # Let C++ backend handle or raise standard error
+
+
 def read_csv(
     path: str | os.PathLike[str],
     *,
@@ -293,6 +306,8 @@ def read_csv(
             f"Unsupported file format: {path}. Only .csv, .txt, and .tsv are supported."
         )
 
+    if _is_utf8_encoding(encoding):
+        _reject_utf8_nul_bytes(path)
     try:
         if os.path.getsize(path) == 0:
             raise CsvReadError(f"CSV file is empty: {path!r}")
@@ -597,6 +612,8 @@ def scan_csv(
             f"Unsupported file format: {path}. Only .csv, .txt, and .tsv are supported."
         )
 
+    if _is_utf8_encoding(encoding):
+        _reject_utf8_nul_bytes(path)
     try:
         if os.path.getsize(path) == 0:
             raise CsvReadError(f"CSV file is empty: {path!r}")

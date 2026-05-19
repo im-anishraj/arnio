@@ -577,8 +577,11 @@ class TestScanCsv:
             f.write(b"a,b\n" * 400)
             f.write(b"\0binary,data\n")
 
-        schema = ar.scan_csv(file_path)
-        assert schema == {"col1": "string", "col2": "string"}
+        with pytest.raises(
+            ar.CsvReadError,
+            match="CSV input contains NUL bytes and appears to be binary or corrupted",
+        ):
+            ar.scan_csv(file_path)
 
     def test_scan_late_binary_file_rejection_with_larger_sample(self, tmp_path):
         file_path = str(tmp_path / "data.csv")
@@ -587,6 +590,12 @@ class TestScanCsv:
             f.write(b"col1,col2\n")
             f.write(b"a,b\n" * 400)
             f.write(b"\0binary,data\n")
+
+        with pytest.raises(
+            ar.CsvReadError,
+            match="CSV input contains NUL bytes and appears to be binary or corrupted",
+        ):
+            ar.scan_csv(file_path)
 
         with pytest.raises(
             ar.CsvReadError,
