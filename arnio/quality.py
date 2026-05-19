@@ -1673,14 +1673,18 @@ def _profile_column(
 
     semantic_type = _detect_semantic_type(name, series, dtype)
     suggested_dtype = _suggest_column_dtype(series, dtype)
-    
+
     email_validity_ratio = None
     url_validity_ratio = None
     if len(non_null) > 0:
         if semantic_type == "email":
-            email_validity_ratio = _match_ratio(non_null.astype("string").str.strip(), _EMAIL_PATTERN)
+            email_validity_ratio = _match_ratio(
+                non_null.astype("string").str.strip(), _EMAIL_PATTERN
+            )
         elif semantic_type == "url":
-            url_validity_ratio = _match_ratio(non_null.astype("string").str.strip(), _URL_PATTERN)
+            url_validity_ratio = _match_ratio(
+                non_null.astype("string").str.strip(), _URL_PATTERN
+            )
 
     warnings = _column_warnings(
         null_count=null_count,

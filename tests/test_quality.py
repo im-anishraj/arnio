@@ -76,50 +76,79 @@ def test_profile_non_numeric_no_quantiles():
 
 
 def test_profile_email_and_url_validity_ratios():
-    df = pd.DataFrame({
-        "good_email": ["alice@test.com", "bob@test.com", "cara@test.com", "dave@test.com", "eve@test.com"],
-        "mixed_email": ["alice@test.com", "bob@test.com", "cara@test.com", "dave@test.com", "invalid-email"],
-        "good_url": ["http://test.com", "https://example.com/foo", "https://another.org", "http://a.b", "https://last.com"],
-        "mixed_url": ["http://test.com", "https://example.com/foo", "https://another.org", "http://a.b", "not-a-url"],
-        "generic": ["hello", "world", "foo", "bar", "baz"]
-    })
-    
+    df = pd.DataFrame(
+        {
+            "good_email": [
+                "alice@test.com",
+                "bob@test.com",
+                "cara@test.com",
+                "dave@test.com",
+                "eve@test.com",
+            ],
+            "mixed_email": [
+                "alice@test.com",
+                "bob@test.com",
+                "cara@test.com",
+                "dave@test.com",
+                "invalid-email",
+            ],
+            "good_url": [
+                "http://test.com",
+                "https://example.com/foo",
+                "https://another.org",
+                "http://a.b",
+                "https://last.com",
+            ],
+            "mixed_url": [
+                "http://test.com",
+                "https://example.com/foo",
+                "https://another.org",
+                "http://a.b",
+                "not-a-url",
+            ],
+            "generic": ["hello", "world", "foo", "bar", "baz"],
+        }
+    )
+
     frame = ar.from_pandas(df)
     report = ar.profile(frame)
-    
+
     assert report.columns["good_email"].semantic_type == "email"
     assert report.columns["mixed_email"].semantic_type == "email"
     assert report.columns["good_url"].semantic_type == "url"
     assert report.columns["mixed_url"].semantic_type == "url"
     assert report.columns["generic"].semantic_type == "categorical"
-    
+
     assert report.columns["good_email"].email_validity_ratio == 1.0
     assert report.columns["good_email"].url_validity_ratio is None
-    
+
     assert report.columns["mixed_email"].email_validity_ratio == 0.8
     assert report.columns["mixed_email"].url_validity_ratio is None
-    
+
     assert report.columns["good_url"].url_validity_ratio == 1.0
     assert report.columns["good_url"].email_validity_ratio is None
-    
+
     assert report.columns["mixed_url"].url_validity_ratio == 0.8
     assert report.columns["mixed_url"].email_validity_ratio is None
-    
+
     assert report.columns["generic"].email_validity_ratio is None
     assert report.columns["generic"].url_validity_ratio is None
 
     good_email_dict = report.columns["good_email"].to_dict()
     assert good_email_dict["email_validity_ratio"] == 1.0
     assert good_email_dict["url_validity_ratio"] is None
-    
+
     mixed_url_dict = report.columns["mixed_url"].to_dict()
     assert mixed_url_dict["url_validity_ratio"] == 0.8
     assert mixed_url_dict["email_validity_ratio"] is None
-    
+
     pdf = report.to_pandas()
     good_email_row = pdf[pdf["name"] == "good_email"].iloc[0]
     assert good_email_row["email_validity_ratio"] == 1.0
-    assert pd.isna(good_email_row["url_validity_ratio"]) or good_email_row["url_validity_ratio"] is None
+    assert (
+        pd.isna(good_email_row["url_validity_ratio"])
+        or good_email_row["url_validity_ratio"] is None
+    )
 
 
 def test_compare_profiles_identical_profiles_are_ok():
