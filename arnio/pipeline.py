@@ -153,7 +153,7 @@ def pipeline(
     )
 
     result = frame
-    
+
     step_timings: list[dict[str, Any]] = []
     for step in steps:
         if len(step) == 1:
@@ -188,7 +188,6 @@ def pipeline(
                 if not dry_run:
                     result = step_result
 
-
             if return_metadata:
                 step_timings.append(
                     {
@@ -200,7 +199,6 @@ def pipeline(
             # Pure Python step - slower but contributor-friendly
             started_at = perf_counter()
 
-            
             fn = python_step_registry[name]
 
             df = to_pandas(result)
