@@ -1150,6 +1150,3 @@ def test_compare_profiles_above_changed_threshold_is_changed():
     comparison = ar.compare_profiles(baseline, current)
     assert comparison.drift_report["score"]["status"] == "changed"
     assert comparison.status_counts == {"ok": 0, "warning": 0, "changed": 1}
-
-
-
