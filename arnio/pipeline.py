@@ -117,15 +117,12 @@ def pipeline(
     steps : list[tuple]
         List of steps to apply. Each step is (name,) or (name, kwargs).
     return_metadata : bool, default False
-    When True, also return a metadata dictionary with per-step timing
-    information in execution order.
-
-    dry_run : bool, default False
-    Validates pipeline structure and step execution without
-    returning transformed output.
-
         When True, also return a metadata dictionary with per-step timing
         information in execution order.
+
+    dry_run : bool, default False
+        Validates pipeline structure and step execution without
+        returning transformed output.
 
     Returns
     -------
