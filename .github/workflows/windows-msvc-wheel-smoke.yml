@@ -9,6 +9,7 @@ on:
       - "CMakeLists.txt"
       - "bindings/**"
       - "cpp/**"
+      - ".github/workflows/windows-msvc-wheel-smoke.yml"
   pull_request:
     branches: [ "main" ]
     paths:
@@ -17,6 +18,7 @@ on:
       - "CMakeLists.txt"
       - "bindings/**"
       - "cpp/**"
+      - ".github/workflows/windows-msvc-wheel-smoke.yml"
 
 jobs:
   windows_msvc_wheel_smoke:
@@ -38,10 +40,14 @@ jobs:
       - name: Build wheel
         run: pip wheel . --no-deps -w dist/
 
-      - name: Install wheel in clean environment
-        run: pip install --find-links dist/ arnio --no-index
-
-      - name: Run smoke test
+      - name: Install wheel in fresh environment
         run: |
-          python -c "import arnio; print('arnio import OK on Windows MSVC')"
-          python -c "import arnio as ar; print(ar.__version__)"
+          python -m venv smoke_env
+          smoke_env\Scripts\pip install --find-links dist/ arnio --no-index
+
+      - name: Run smoke test from temp directory
+        run: |
+          cd $env:TEMP
+          smoke_env\Scripts\python -c "import arnio; print('arnio import OK:', arnio.__version__)"
+          smoke_env\Scripts\python -c "from arnio import ArFrame; print('ArFrame import OK')"
+        working-directory: ${{ github.workspace }}
