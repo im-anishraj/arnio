@@ -91,6 +91,13 @@ class TestWriteCsv:
         ):
             ar.write_csv(frame, str(tmp_path / "out.csv"), delimiter=delimiter)
 
+    def test_quote_character_delimiter_rejected(self, tmp_path):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
+        with pytest.raises(
+            ValueError, match="delimiter must not be the CSV quote character"
+        ):
+            ar.write_csv(frame, str(tmp_path / "out.csv"), delimiter='"')
+
 
 class TestWriteCsvLineTerminatorBytes:
     """Raw-byte regression tests for line_terminator.

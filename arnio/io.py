@@ -302,6 +302,8 @@ def write_csv(
         raise ValueError(f"delimiter must be a single character, got {delimiter!r}")
     if delimiter in {"\n", "\r"}:
         raise ValueError("delimiter must not be a newline character")
+    if delimiter == '"':
+        raise ValueError("delimiter must not be the CSV quote character")
     if not isinstance(line_terminator, str):
         raise TypeError("line_terminator must be a string")
     if line_terminator == "":
