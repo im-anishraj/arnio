@@ -647,6 +647,18 @@ class TestScanCsv:
         with _utf8_csv_path(str(csv_path), "latin-1", sample_rows=2) as native_path:
             assert Path(native_path).read_text(encoding="utf-8") == "name\nAndré\n"
 
+    def test_scan_sample_size_non_utf8_does_not_leak_later_type_evidence(
+        self, tmp_path
+    ):
+        csv_path = tmp_path / "latin1_sample_limit.csv"
+        csv_path.write_bytes("id,value\n1,100\n2,200\n3,ol\xe1\n".encode("latin-1"))
+
+        schema_limited = ar.scan_csv(csv_path, encoding="latin-1", sample_size=2)
+        schema_full = ar.scan_csv(csv_path, encoding="latin-1", sample_size=4)
+
+        assert schema_limited["value"] == "int64"
+        assert schema_full["value"] == "string"
+
     def test_scan_invalid_delimiter(self, tmp_path):
         csv_path = tmp_path / "test.csv"
         csv_path.write_text("a,b\n1,2\n")
