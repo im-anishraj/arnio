@@ -1,11 +1,37 @@
 """Tests for the pipeline function."""
 
-import arnio as ar
+import importlib
 import os
 import tempfile
+import threading
+from concurrent.futures import ThreadPoolExecutor
+
+import pandas as pd
 import pytest
+
+import arnio as ar
 from arnio.exceptions import PipelineSerializationError
 from arnio.pipeline import load_pipeline, save_pipeline
+
+pipeline_module = importlib.import_module("arnio.pipeline")
+
+
+@pytest.fixture(autouse=True)
+def restore_python_step_registry():
+    """Restore custom pipeline steps after each test.
+
+    Tests may register temporary custom steps. This fixture prevents those
+    registrations from leaking into other tests while preserving any steps
+    that were already registered before the test started.
+    """
+    with pipeline_module._REGISTRY_LOCK:
+        original_registry = dict(pipeline_module._PYTHON_STEP_REGISTRY)
+
+    yield
+
+    with pipeline_module._REGISTRY_LOCK:
+        pipeline_module._PYTHON_STEP_REGISTRY.clear()
+        pipeline_module._PYTHON_STEP_REGISTRY.update(original_registry)
 
 
 class TestPipeline:
@@ -631,8 +657,37 @@ def test_replace_values_direct_pandas_does_not_mutate_input():
 
 def test_pipeline_serialization_errors():
     """Verify that serialization raises correct exceptions for bad files."""
-    with pytest.raises(PipelineSerializationError, match="Failed to load"):
+    with pytest.raises(PipelineSerializationError, match="File not found"):
         load_pipeline("non_existent_file.json")
+
+
+def test_malformed_pipeline_structures():
+    """Verify that loading corrupted structural shapes throws clear errors instead of indexing slips."""
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        # Test Case A: Dictionary instead of List
+        dict_path = os.path.join(tmpdirname, "dict.json")
+        with open(dict_path, "w") as f:
+            f.write('{"this_is_a_dictionary_not_a_list": true}')
+        with pytest.raises(
+            PipelineSerializationError, match="root element must be a list"
+        ):
+            load_pipeline(dict_path)
+
+        # Test Case B: Empty file string configuration
+        empty_path = os.path.join(tmpdirname, "empty.json")
+        with open(empty_path, "w") as f:
+            f.write("")
+        with pytest.raises(PipelineSerializationError, match="file is empty"):
+            load_pipeline(empty_path)
+
+        # Test Case C: Malformed step layout missing proper mapping configuration
+        bad_step_path = os.path.join(tmpdirname, "bad_step.json")
+        with open(bad_step_path, "w") as f:
+            f.write('[["drop_nulls", "not_a_dictionary_kwargs"]]')
+        with pytest.raises(
+            PipelineSerializationError, match="kwargs must be a dictionary structure"
+        ):
+            load_pipeline(bad_step_path)
 
 
 def test_roundtrip_kwargs_determinism():

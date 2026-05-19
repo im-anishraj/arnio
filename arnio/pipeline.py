@@ -5,13 +5,12 @@ Chained cleaning pipeline.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Callable
 
 from . import cleaning
 from .frame import ArFrame
-
-import json
-from pathlib import Path
 
 try:
     import yaml
@@ -147,6 +146,9 @@ def save_pipeline(steps: list[tuple], filepath: str | Path) -> None:
     """Save a list of pipeline steps to a JSON or YAML file for reproducible jobs."""
     from .exceptions import PipelineSerializationError
 
+    if not isinstance(steps, list):
+        raise PipelineSerializationError("Pipeline steps must be a list of tuples.")
+
     path = Path(filepath)
     try:
         if path.suffix == ".json":
@@ -176,22 +178,65 @@ def load_pipeline(filepath: str | Path) -> list[tuple]:
     path = Path(filepath)
     if not path.exists():
         raise PipelineSerializationError(f"File not found: {filepath}")
+
     try:
         if path.suffix == ".json":
             with open(path, encoding="utf-8") as f:
-                loaded_steps = json.load(f)
+                content = f.read().strip()
+                if not content:
+                    raise PipelineSerializationError(
+                        "Malformed pipeline file: file is empty."
+                    )
+                loaded_steps = json.loads(content)
         elif path.suffix in [".yaml", ".yml"]:
             if not HAS_YAML:
                 raise PipelineSerializationError(
                     "PyYAML is required for YAML support. Please install it."
                 )
             with open(path, encoding="utf-8") as f:
-                loaded_steps = yaml.safe_load(f)
+                content = f.read().strip()
+                if not content:
+                    raise PipelineSerializationError(
+                        "Malformed pipeline file: file is empty."
+                    )
+                loaded_steps = yaml.safe_load(content)
         else:
             raise PipelineSerializationError(
                 f"Unsupported format: {path.suffix}. Use .json or .yaml"
             )
-        return [tuple(step) for step in loaded_steps]
+
+        # 1. Validate root structure shape
+        if loaded_steps is None:
+            raise PipelineSerializationError(
+                "Malformed pipeline file: file is empty or null."
+            )
+        if not isinstance(loaded_steps, list):
+            raise PipelineSerializationError(
+                "Malformed pipeline file: root element must be a list."
+            )
+
+        # 2. Validate individual step specifications
+        validated_steps = []
+        for idx, step in enumerate(loaded_steps):
+            if not isinstance(step, list):
+                raise PipelineSerializationError(
+                    f"Malformed pipeline step at index {idx}: step entry must be a list/tuple format."
+                )
+            if len(step) == 0 or len(step) > 2:
+                raise PipelineSerializationError(
+                    f"Malformed pipeline step at index {idx}: entry must match (name,) or (name, kwargs)."
+                )
+            if not isinstance(step[0], str):
+                raise PipelineSerializationError(
+                    f"Malformed pipeline step at index {idx}: step name must be a string."
+                )
+            if len(step) == 2 and not isinstance(step[1], dict):
+                raise PipelineSerializationError(
+                    f"Malformed pipeline step at index {idx}: kwargs must be a dictionary structure."
+                )
+            validated_steps.append(tuple(step))
+
+        return validated_steps
     except Exception as e:
         if isinstance(e, PipelineSerializationError):
             raise
