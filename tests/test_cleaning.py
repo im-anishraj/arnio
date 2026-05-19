@@ -1337,10 +1337,11 @@ class TestCombineColumnsNativeRegression:
 
         rng = np.random.default_rng(42)
         n = 10_000
+        # Use integers and strings to avoid float formatting differences between C++ and pandas
         df = pd.DataFrame(
             {
-                "col_a": rng.integers(0, 100, size=n).tolist(),
-                "col_b": rng.integers(0, 100, size=n).tolist(),
+                "col_a": rng.integers(0, 100, size=n).astype(str).tolist(),
+                "col_b": rng.integers(0, 100, size=n).astype(str).tolist(),
                 "label": ["str"] * n,
             }
         )
@@ -1350,25 +1351,26 @@ class TestCombineColumnsNativeRegression:
         for idx in rng.integers(0, n, size=200):
             df.at[idx, "label"] = None
 
+        # Add some empty strings
+        for idx in rng.integers(0, n, size=200):
+            df.at[idx, "col_b"] = ""
+
         frame = ar.from_pandas(df)
         native_df = ar.to_pandas(
-            ar.combine_columns(frame, subset=["col_a", "label"], separator="-")
+            ar.combine_columns(frame, subset=["col_a", "label", "col_b"], separator="-")
         )
 
         # Reference: pandas
         ref = df.copy()
-        subset_columns = ["col_a", "label"]
+        subset_columns = ["col_a", "label", "col_b"]
         combined = ref[subset_columns].astype("string").fillna("").agg("-".join, axis=1)
         null_mask = ref[subset_columns].isna().all(axis=1)
         combined = combined.mask(null_mask, pd.NA)
         ref["combined"] = combined
 
-        # Note: pandas astype("string") might format floats differently if pandas inferred col_a as float due to NaNs.
-        # But here col_a is filled with ints, and since it has NaNs, pandas might treat it as float or object.
-        # arnio uses strict types. We will compare strings directly, but if there are trailing .0 in pandas,
-        # we accept the arnio behavior as it uses pure std::to_string.
-        # For simplicity, let's just assert that there are no crashes and null behavior is preserved.
-        assert pd.isna(native_df["combined"]).sum() == pd.isna(ref["combined"]).sum()
+        pd.testing.assert_series_equal(
+            native_df["combined"], ref["combined"], check_dtype=False, check_names=False
+        )
         assert len(native_df) == len(ref)
 
     def test_native_all_nulls_row_produces_null(self):

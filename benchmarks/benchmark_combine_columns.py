@@ -3,15 +3,8 @@ Reproducible Benchmark: combine_columns performance.
 Run from repo root: python benchmarks/benchmark_combine_columns.py
 """
 
-import os
-import sys
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
-
 import time
 import tracemalloc
-
-from generate_data import generate
 
 import arnio as ar
 
@@ -50,26 +43,33 @@ def benchmark_combine_pandas(df, subset):
 
 
 if __name__ == "__main__":
-    generate(rows=ROWS, path="benchmarks/benchmark_combine_columns.csv")
-
+    import numpy as np
     import pandas as pd
 
-    df = pd.read_csv("benchmarks/benchmark_combine_columns.csv")
-    frame = ar.from_pandas(df)
+    print(f"Generating synthetic dataset with {ROWS:,} rows...")
+    rng = np.random.default_rng(42)
+    df = pd.DataFrame(
+        {
+            "name": [f"Name_{i}" for i in rng.integers(0, 1000, size=ROWS)],
+            "city": [f"City_{i}" for i in rng.integers(0, 100, size=ROWS)],
+            "age": rng.integers(18, 90, size=ROWS).astype(str),
+            "score": rng.random(size=ROWS).astype(str),
+        }
+    )
 
-    # We will pick a few columns to combine
-    subset = ["name", "city", "age"]
+    # Introduce some nulls to make it realistic
+    for col in df.columns:
+        null_indices = rng.choice(ROWS, size=ROWS // 20, replace=False)
+        df.loc[null_indices, col] = None
+
+    frame = ar.from_pandas(df)
+    subset = ["name", "city", "age", "score"]
 
     native_times, native_rams = [], []
     for _ in range(RUNS):
-        # We catch exceptions just in case it fails during benchmarking
-        try:
-            t, r = benchmark_combine_native(frame, subset)
-            native_times.append(t)
-            native_rams.append(r)
-        except Exception as e:
-            print(f"Native failed: {e}")
-            sys.exit(1)
+        t, r = benchmark_combine_native(frame, subset)
+        native_times.append(t)
+        native_rams.append(r)
 
     pandas_times, pandas_rams = [], []
     for _ in range(RUNS):
