@@ -180,7 +180,10 @@ class TestDropDuplicates:
         # Only Charlie is unique
         assert result.shape[0] == 1
 
-    @pytest.mark.parametrize("keep", ["invalid", True, None])
+    @pytest.mark.parametrize(
+        "keep",
+        ["invalid", "FIRST", "all", "", True, None],
+    )
     def test_drop_dupes_rejects_invalid_keep_values(self, csv_with_duplicates, keep):
         frame = ar.read_csv(csv_with_duplicates)
         with pytest.raises(ValueError, match="keep must be one of"):
@@ -196,6 +199,29 @@ class TestDropDuplicates:
 
         with pytest.raises(ValueError, match="keep must be one of"):
             ar.drop_duplicates(frame, keep=True)
+
+    @pytest.mark.parametrize(
+        ("keep", "expected_names"),
+        [
+            ("first", ["Alice", "Bob", "Charlie"]),
+            ("last", ["Alice", "Charlie", "Bob"]),
+            ("none", ["Charlie"]),
+            (False, ["Charlie"]),
+        ],
+    )
+    def test_drop_duplicates_keep_matrix_deterministic(
+        self,
+        csv_with_duplicates,
+        keep,
+        expected_names,
+    ):
+        frame = ar.read_csv(csv_with_duplicates)
+
+        result = ar.drop_duplicates(frame, keep=keep)
+
+        names = ar.to_pandas(result)["name"].tolist()
+
+        assert names == expected_names
 
 
 class TestDropColumns:
