@@ -6,6 +6,7 @@ CSV reading and writing functions.
 from __future__ import annotations
 
 import csv
+import io
 import os
 import shutil
 import tempfile
@@ -13,7 +14,7 @@ from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from typing import cast
 
-from ._core import _CsvConfig, _CsvReader, _CsvWriteConfig, _CsvWriter
+from ._core import _CsvChunkReader, _CsvConfig, _CsvReader, _CsvWriteConfig, _CsvWriter
 from .exceptions import CsvReadError, JsonlReadError
 from .frame import ArFrame
 
@@ -136,6 +137,28 @@ def _validate_nrows(nrows: int) -> int:
     return nrows
 
 
+def _validate_skip_rows(skip_rows: int) -> int:
+    """Validate skip_rows parameter."""
+    if isinstance(skip_rows, bool) or not isinstance(skip_rows, int):
+        raise TypeError("skip_rows must be an integer")
+
+    if skip_rows < 0:
+        raise ValueError("skip_rows must be non-negative")
+
+    return skip_rows
+
+
+def _validate_chunksize(chunksize: int) -> int:
+    """Validate chunksize parameter."""
+    if isinstance(chunksize, bool) or not isinstance(chunksize, int):
+        raise TypeError("chunksize must be an integer")
+
+    if chunksize <= 0:
+        raise ValueError("chunksize must be a positive integer")
+
+    return chunksize
+
+
 def _validate_null_values(null_values: list[str]) -> list[str]:
     """Validate null_values parameter."""
     if isinstance(null_values, str):
@@ -155,11 +178,41 @@ def _validate_parser_mode(mode: str) -> str:
     """Validate CSV parser mode."""
     if not isinstance(mode, str):
         raise TypeError("mode must be a string")
-
     if mode not in {"strict", "permissive"}:
         raise ValueError("mode must be either 'strict' or 'permissive'")
-
     return mode
+
+
+def _materialize_csv_input(
+    source: str | os.PathLike[str] | io.TextIOBase,
+) -> tuple[str, bool]:
+    """Convert supported CSV inputs into a filesystem path."""
+    if isinstance(source, (str, os.PathLike)):
+        return os.fspath(source), False
+    if isinstance(source, io.StringIO) or (
+        hasattr(source, "read") and callable(source.read)
+    ):
+        content = source.read()
+
+        if not isinstance(content, str):
+            raise TypeError("read_csv file-like objects must return text, not bytes")
+
+        tmp = tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            suffix=".csv",
+            delete=False,
+        )
+
+        try:
+            tmp.write(content)
+            tmp.close()
+            return tmp.name, True
+        except Exception:
+            os.unlink(tmp.name)
+            raise
+
+    raise TypeError("read_csv expected a filesystem path or text file-like object")
 
 
 def read_csv(
@@ -179,8 +232,9 @@ def read_csv(
 
     Parameters
     ----------
-    path : str
-        Path to the CSV file. Supports .csv, .txt, and .tsv extensions.
+    path : str or file-like object
+        Filesystem path or text file-like object containing CSV data.
+        Supports .csv, .txt, and .tsv extensions for path inputs.
     delimiter : str, default ","
         Field delimiter character.
     has_header : bool, default True
@@ -228,7 +282,7 @@ def read_csv(
     --------
     >>> frame = ar.read_csv("data.csv", delimiter=",", has_header=True)
     """
-    path = os.fspath(path)
+    path, should_cleanup = _materialize_csv_input(path)
     path_lower = path.lower()
     if not (
         path_lower.endswith(".csv")
@@ -266,9 +320,13 @@ def read_csv(
         config.nrows = _validate_nrows(nrows)
 
     reader = _CsvReader(config)
+
     try:
         with _utf8_csv_path(path, encoding, delimiter=delimiter) as native_path:
             cpp_frame = reader.read(native_path)
+
+        return ArFrame(cpp_frame)
+
     except ValueError:
         raise
     except CsvReadError:
@@ -276,7 +334,129 @@ def read_csv(
     except RuntimeError as e:
         raise CsvReadError(str(e)) from e
 
-    return ArFrame(cpp_frame)
+    finally:
+        if should_cleanup and os.path.exists(path):
+            os.unlink(path)
+
+
+def read_csv_chunked(
+    path: str | os.PathLike[str],
+    *,
+    chunksize: int = 10_000,
+    delimiter: str = ",",
+    has_header: bool = True,
+    usecols: list[str] | None = None,
+    nrows: int | None = None,
+    skip_rows: int = 0,
+    encoding: str = "utf-8",
+    trim_headers: bool = True,
+    thousands_separator: str | None = None,
+    null_values: list[str] | None = None,
+    mode: str = "strict",
+) -> Iterator[ArFrame]:
+    """Read a CSV file in chunks, yielding ArFrame objects.
+
+    Column types are inferred from the first chunk and applied consistently
+    to all subsequent chunks. Memory use is bounded by the chunk size.
+
+    Parameters
+    ----------
+    path : str
+        Path to the CSV file. Supports .csv, .txt, and .tsv extensions.
+    chunksize : int, default 10_000
+        Maximum number of data rows per yielded chunk.
+    delimiter : str, default ","
+        Field delimiter character.
+    has_header : bool, default True
+        Whether the file has a header row.
+    usecols : list[str], optional
+        Columns to read. If None, reads all columns.
+    nrows : int, optional
+        Maximum total number of data rows to read across all chunks.
+    skip_rows : int, default 0
+        Number of data rows to skip after the header row.
+    encoding : str, default "utf-8"
+        File encoding.
+    trim_headers : bool, default True
+        Strip leading/trailing whitespace from column names.
+    thousands_separator : str, optional
+        Single non-alphanumeric character used as a thousands separator
+        during numeric parsing.
+    null_values : list[str], optional
+        Strings treated as null values.
+    mode : {"strict", "permissive"}, default "strict"
+        Controls malformed row handling.
+
+    Yields
+    ------
+    ArFrame
+        Successive chunks of the CSV data.
+
+    Examples
+    --------
+    >>> for chunk in ar.read_csv_chunked("huge.csv", chunksize=100_000):
+    ...     clean = ar.pipeline(chunk, [("drop_nulls",)])
+    ...     df = ar.to_pandas(clean)
+    ...     process(df)
+    """
+    path = os.fspath(path)
+    path_lower = path.lower()
+    if not (
+        path_lower.endswith(".csv")
+        or path_lower.endswith(".txt")
+        or path_lower.endswith(".tsv")
+    ):
+        raise ValueError(
+            f"Unsupported file format: {path}. Only .csv, .txt, and .tsv are supported."
+        )
+
+    try:
+        if os.path.getsize(path) == 0:
+            raise CsvReadError(f"CSV file is empty: {path!r}")
+    except FileNotFoundError:
+        pass
+
+    _validate_thousands_separator(thousands_separator)
+    delimiter = _validate_delimiter(delimiter)
+    mode = _validate_parser_mode(mode)
+    chunksize = _validate_chunksize(chunksize)
+    skip_rows = _validate_skip_rows(skip_rows)
+
+    config = _CsvConfig()
+    config.delimiter = delimiter
+    config.has_header = has_header
+    config.encoding = encoding
+    config.trim_headers = trim_headers
+    config.thousands_separator = thousands_separator
+    config.mode = mode
+    config.skip_rows = skip_rows
+
+    if null_values is not None:
+        config.null_values = _validate_null_values(null_values)
+
+    if usecols is not None:
+        config.usecols = _validate_usecols(usecols)
+
+    if nrows is not None:
+        config.nrows = _validate_nrows(nrows)
+
+    reader = _CsvChunkReader(config)
+    try:
+        with _utf8_csv_path(path, encoding, delimiter=delimiter) as native_path:
+            reader.open(native_path)
+            while True:
+                cpp_frame = reader.next_chunk(chunksize)
+                if cpp_frame is None:
+                    break
+                yield ArFrame(cpp_frame)
+    except ValueError:
+        raise
+    except CsvReadError:
+        raise
+    except RuntimeError as e:
+        raise CsvReadError(str(e)) from e
+    finally:
+        reader.close()
 
 
 def write_csv(

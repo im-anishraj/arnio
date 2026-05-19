@@ -76,11 +76,29 @@ clean = ar.pipeline(frame, [
     ("drop_duplicates",),
 ])
 
+
+
 # Out comes a standard pandas DataFrame — use it like you always have
 df = ar.to_pandas(clean)
 
 # Use copy=True when you need defensive pandas-owned buffers
 safe_df = ar.to_pandas(clean, copy=True)
+```
+
+
+### Dry Run Validation
+
+Use `dry_run=True` to validate pipeline configuration and
+step execution without returning transformed output.
+
+```python
+ar.pipeline(
+    frame,
+    [
+        ("drop_nulls",),
+    ],
+    dry_run=True,
+)
 ```
 
 Need step timings for debugging? Opt in without changing the default pipeline return type:

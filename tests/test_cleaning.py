@@ -180,7 +180,10 @@ class TestDropDuplicates:
         # Only Charlie is unique
         assert result.shape[0] == 1
 
-    @pytest.mark.parametrize("keep", ["invalid", True, None])
+    @pytest.mark.parametrize(
+        "keep",
+        ["invalid", "FIRST", "all", "", True, None],
+    )
     def test_drop_dupes_rejects_invalid_keep_values(self, csv_with_duplicates, keep):
         frame = ar.read_csv(csv_with_duplicates)
         with pytest.raises(ValueError, match="keep must be one of"):
@@ -196,6 +199,29 @@ class TestDropDuplicates:
 
         with pytest.raises(ValueError, match="keep must be one of"):
             ar.drop_duplicates(frame, keep=True)
+
+    @pytest.mark.parametrize(
+        ("keep", "expected_names"),
+        [
+            ("first", ["Alice", "Bob", "Charlie"]),
+            ("last", ["Alice", "Charlie", "Bob"]),
+            ("none", ["Charlie"]),
+            (False, ["Charlie"]),
+        ],
+    )
+    def test_drop_duplicates_keep_matrix_deterministic(
+        self,
+        csv_with_duplicates,
+        keep,
+        expected_names,
+    ):
+        frame = ar.read_csv(csv_with_duplicates)
+
+        result = ar.drop_duplicates(frame, keep=keep)
+
+        names = ar.to_pandas(result)["name"].tolist()
+
+        assert names == expected_names
 
 
 class TestDropColumns:
@@ -907,6 +933,48 @@ class TestParseBoolStrings:
 
         with pytest.raises(ValueError):
             ar.parse_bool_strings(frame, subset=["missing"])
+
+    def test_parse_bool_strings_non_string_true_values_raises(self):
+        """Regression: non-string items in true_values must raise TypeError,
+        not crash with AttributeError on .strip().lower()."""
+        import pandas as pd
+
+        df = pd.DataFrame({"active": ["yes", "no"]}, dtype=object)
+        frame = ar.from_pandas(df)
+
+        with pytest.raises(TypeError, match="true_values must contain only strings"):
+            ar.parse_bool_strings(frame, true_values={1, "yes"})
+
+    def test_parse_bool_strings_non_string_false_values_raises(self):
+        """Regression: non-string items in false_values must raise TypeError,
+        not crash with AttributeError on .strip().lower()."""
+        import pandas as pd
+
+        df = pd.DataFrame({"active": ["yes", "no"]}, dtype=object)
+        frame = ar.from_pandas(df)
+
+        with pytest.raises(TypeError, match="false_values must contain only strings"):
+            ar.parse_bool_strings(frame, false_values={0, "no"})
+
+    def test_parse_bool_strings_none_in_custom_values_raises(self):
+        """Regression: None in true_values/false_values must raise TypeError."""
+        import pandas as pd
+
+        df = pd.DataFrame({"active": ["yes", "no"]}, dtype=object)
+        frame = ar.from_pandas(df)
+
+        with pytest.raises(TypeError, match="true_values must contain only strings"):
+            ar.parse_bool_strings(frame, true_values={"yes", None})
+
+    def test_parse_bool_strings_bool_in_custom_values_raises(self):
+        """Regression: bool items in true_values must raise TypeError."""
+        import pandas as pd
+
+        df = pd.DataFrame({"active": ["yes", "no"]}, dtype=object)
+        frame = ar.from_pandas(df)
+
+        with pytest.raises(TypeError, match="true_values must contain only strings"):
+            ar.parse_bool_strings(frame, true_values={True, "yes"})
 
 
 class TestRenameColumns:

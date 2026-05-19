@@ -431,7 +431,7 @@ def clip_numeric(
         non_numeric_columns = [col for col in subset if not _is_supported_numeric(col)]
         if non_numeric_columns:
             raise ValueError(
-                "clip_numeric only supports numeric columns: " f"{non_numeric_columns}"
+                f"clip_numeric only supports numeric columns: {non_numeric_columns}"
             )
 
         # Empty subset — nothing to clip, return the frame unchanged.
@@ -554,9 +554,23 @@ def parse_bool_strings(
     df = to_pandas(frame).copy()
     if true_values is None:
         true_values = {"true", "yes", "y", "1"}
+    else:
+        invalid = [v for v in true_values if not isinstance(v, str)]
+        if invalid:
+            raise TypeError(
+                f"true_values must contain only strings, got "
+                f"{type(invalid[0]).__name__}"
+            )
 
     if false_values is None:
         false_values = {"false", "no", "n", "0"}
+    else:
+        invalid = [v for v in false_values if not isinstance(v, str)]
+        if invalid:
+            raise TypeError(
+                f"false_values must contain only strings, got "
+                f"{type(invalid[0]).__name__}"
+            )
 
     true_values = {v.strip().lower() for v in true_values}
     false_values = {v.strip().lower() for v in false_values}

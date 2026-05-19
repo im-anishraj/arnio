@@ -1996,3 +1996,31 @@ def test_datetime_timezone_aware_above_max_fails(tmp_path):
     assert not result.passed
     assert any(i.rule == "max" for i in result.issues)
     assert result.issues[0].row_index == 1
+
+
+def test_validate_unique_string_raises_type_error(tmp_path):
+    schema = ar.Schema(fields={"id": ar.String()}, unique=["id"])
+
+    object.__setattr__(schema, "unique", "id")
+
+    path = tmp_path / "unique_test.csv"
+    path.write_text("id\nA\nB\nA\n")
+    frame = ar.read_csv(path)
+
+    with pytest.raises(
+        TypeError, match="Schema 'unique' must be a list or tuple of strings"
+    ):
+        ar.validate(frame, schema)
+
+
+def test_validate_unique_invalid_member_type_raises_type_error(tmp_path):
+    schema = ar.Schema(fields={"id": ar.String()}, unique=["id"])
+
+    object.__setattr__(schema, "unique", ["id", 123])
+
+    path = tmp_path / "unique_member_test.csv"
+    path.write_text("id\nA\nB\n")
+    frame = ar.read_csv(path)
+
+    with pytest.raises(TypeError, match="Schema 'unique' members must be strings"):
+        ar.validate(frame, schema)

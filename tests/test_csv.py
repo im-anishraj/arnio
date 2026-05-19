@@ -1,5 +1,6 @@
 """Tests for CSV reading functionality."""
 
+import io
 from pathlib import Path
 
 import pandas as pd
@@ -721,6 +722,31 @@ def test_quoted_field_with_embedded_crlf(tmp_path):
     assert df["note"][0] == "line1\r\nline2"
 
 
+def test_crlf_line_endings_do_not_preserve_trailing_carriage_return(tmp_path):
+    csv_path = tmp_path / "normal_crlf.csv"
+
+    csv_path.write_bytes(b"id,name\r\n1,Alice\r\n2,Bob\r\n")
+
+    frame = ar.read_csv(csv_path)
+
+    df = ar.to_pandas(frame)
+
+    assert df["name"].iloc[0] == "Alice"
+    assert df["name"].iloc[1] == "Bob"
+
+
+def test_embedded_quoted_crlf_is_preserved(tmp_path):
+    csv_path = tmp_path / "embedded_crlf.csv"
+
+    csv_path.write_bytes(b'id,notes\r\n1,"hello\r\nworld"\r\n')
+
+    frame = ar.read_csv(csv_path)
+
+    df = ar.to_pandas(frame)
+
+    assert df["notes"].iloc[0] == "hello\r\nworld"
+
+
 def test_quoted_field_with_embedded_cr(tmp_path):
     """CR-only inside quotes must be preserved as field content."""
     csv_file = tmp_path / "test.csv"
@@ -855,6 +881,37 @@ def test_strict_mode_rejects_missing_columns(tmp_path):
         ar.read_csv(csv_path, mode="strict")
 
 
+def test_read_csv_supports_stringio():
+    buffer = io.StringIO("id,name\n1,Alice\n2,Bob\n")
+
+    frame = ar.read_csv(buffer)
+
+    df = ar.to_pandas(frame)
+
+    assert list(df["name"]) == ["Alice", "Bob"]
+
+
+def test_read_csv_rejects_binary_buffer():
+    buffer = io.BytesIO(b"id,name\n1,Alice\n")
+
+    with pytest.raises(
+        TypeError,
+        match="must return text",
+    ):
+        ar.read_csv(buffer)
+
+
+def test_read_csv_path_behavior_unchanged(tmp_path):
+    csv_path = tmp_path / "data.csv"
+    csv_path.write_text("id,name\n1,Alice\n")
+
+    frame = ar.read_csv(csv_path)
+
+    df = ar.to_pandas(frame)
+
+    assert list(df["name"]) == ["Alice"]
+
+
 def test_permissive_mode_allows_missing_columns(tmp_path):
     csv_path = tmp_path / "permissive_missing.csv"
     csv_path.write_text("id,name\n1,Alice\n2\n")
@@ -866,31 +923,6 @@ def test_permissive_mode_allows_missing_columns(tmp_path):
     assert df["id"].iloc[0] == 1
     assert df["name"].iloc[0] == "Alice"
     assert pd.isna(df["name"].iloc[1])
-
-
-def test_crlf_line_endings_do_not_preserve_trailing_carriage_return(tmp_path):
-    csv_path = tmp_path / "normal_crlf.csv"
-
-    csv_path.write_bytes(b"id,name\r\n1,Alice\r\n2,Bob\r\n")
-
-    frame = ar.read_csv(csv_path)
-
-    df = ar.to_pandas(frame)
-
-    assert df["name"].iloc[0] == "Alice"
-    assert df["name"].iloc[1] == "Bob"
-
-
-def test_embedded_quoted_crlf_is_preserved(tmp_path):
-    csv_path = tmp_path / "embedded_crlf.csv"
-
-    csv_path.write_bytes(b'id,notes\r\n1,"hello\r\nworld"\r\n')
-
-    frame = ar.read_csv(csv_path)
-
-    df = ar.to_pandas(frame)
-
-    assert df["notes"].iloc[0] == "hello\r\nworld"
 
 
 def test_invalid_parser_mode(tmp_path):
