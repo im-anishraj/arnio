@@ -160,21 +160,21 @@ class TestReadCsv:
         csv_path = tmp_path / "delimiter_interaction.csv"
         csv_path.write_text("value\n1,234\n")
         with pytest.raises(ar.CsvReadError, match="CSV row 2 has 2 fields; expected 1"):
-            ar.read_csv(csv_path, mode="strict")
+            ar.read_csv(csv_path)
 
     def test_read_csv_rejects_missing_fields(self, tmp_path):
         csv_path = tmp_path / "missing_fields.csv"
         csv_path.write_text("a,b\n1,2\n3\n")
 
         with pytest.raises(ar.CsvReadError, match="CSV row 3 has 1 fields; expected 2"):
-            ar.read_csv(csv_path, mode="strict")
+            ar.read_csv(csv_path)
 
     def test_read_csv_rejects_extra_fields_without_header(self, tmp_path):
         csv_path = tmp_path / "extra_fields_no_header.csv"
         csv_path.write_text("1,2\n3,4,5\n")
 
         with pytest.raises(ar.CsvReadError, match="CSV row 2 has 3 fields; expected 2"):
-            ar.read_csv(csv_path, has_header=False, mode="strict")
+            ar.read_csv(csv_path, has_header=False)
 
     def test_large_integer_overflow_remains_string(self, tmp_path):
         csv_path = tmp_path / "large_integer.csv"
