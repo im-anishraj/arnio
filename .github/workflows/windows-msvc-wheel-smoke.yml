@@ -43,6 +43,8 @@ jobs:
       - name: Install wheel in fresh environment
         run: |
           python -m venv smoke_env
+          smoke_env\Scripts\pip install --upgrade pip
+          smoke_env\Scripts\pip install pandas numpy
           smoke_env\Scripts\pip install --find-links dist/ arnio --no-index
 
       - name: Run smoke test from temp directory
