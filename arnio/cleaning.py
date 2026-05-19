@@ -982,8 +982,6 @@ def combine_columns(
         Frame with the combined output column appended.
     """
     import pandas as pd
-
-    from .convert import from_pandas, to_pandas
     from .frame import ArFrame
 
     if not isinstance(separator, str):
