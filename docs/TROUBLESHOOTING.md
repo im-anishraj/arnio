@@ -11,15 +11,15 @@ Some users may encounter a MemoryError when trying to load large CSV files.
 Large datasets may not fully fit into memory, even if the machine appears to have enough resources. In some cases, automatic column type inference can also increase memory usage.
 
 ### What to do about it
-
-- Load only the data required for your workflow
-- Only load the columns you actually need
-- Try not to do unnecessary conversions early on, like casting everything right away
+- Use `usecols` in `ar.read_csv(...)` to load only required columns
+- Use `select_columns()` to reduce unnecessary data before processing
+- Avoid unnecessary `cast_types()` operations unless they are required
 
 ### Quick example
 
 ```python
 import arnio as ar
+
 frame = ar.read_csv(
     "large.csv",
     usecols=["id", "name"]
@@ -38,9 +38,8 @@ This usually happens when the column contains mixed values, missing entries, or 
 
 ### What to do about it
 
-- Clean those inconsistent values before you load anything
-- Pass explicit datatype definitions whenever possible
-- Also check for empty spaces, stray symbols, or any invalid tokens in numeric columns
+- Use `cast_types()` to apply explicit Arnio datatypes when needed
+- Check columns for invalid values or unexpected symbols before validation
 
 ### Quick example
 
@@ -67,10 +66,10 @@ This usually happens because the dataset contains missing values, incorrect data
 
 ### What to do about it
 
-- Review logs from the validations carefully
-- Look for rows with null or unexpected values
-- Compare the columns in the dataset to see if the names and types of the columns match what you expect them to be
-- Ensure that there are no missing required fields
+- Review the validation output from `ar.validate(...)` carefully
+- Inspect rows containing null or unexpected values before validation
+- Verify that column names and datatypes match the expected `Schema`
+- Ensure all required fields defined in the schema are present
 
 ### Quick example
 
@@ -78,7 +77,7 @@ This usually happens because the dataset contains missing values, incorrect data
 result = ar.validate(frame, schema)
 
 print(result.passed)
-print(result.summary())
+print(result.issues)
 ```
 
 ## Unknown or custom steps not running
@@ -93,23 +92,23 @@ This usually happens when the custom step is not registered correctly or require
 
 ### What to do about it
 
-- Verify that the custom step is registered correctly
-- Check any import statements for the customized steps and verify that the names/modules exist
-- Always restart the environment if you've added a new step to the pipeline
-- Validate that your configuration is referencing the proper step name in the pipeline
+- Verify that the custom step is registered using `ar.register_step(...)`
+- Check that the custom step function and imports are available before running the pipeline
+- Restart the environment after adding new custom pipeline steps
+- Ensure the correct step name is referenced inside `ar.pipeline(...)`
 
 ### Quick example
 
 ```python
-def clean_data(df):
-    return df
+def clean_data(frame):
+    return frame
 
 ar.register_step("clean_data", clean_data)
 
-result = ar.pipeline(
-    frame,
-    [("clean_data",)]
-)
+ops = [
+    ("clean_data",),
+]
+frame = ar.pipeline(frame, ops)
 ```
 
 ## Slow CSV parsing and performance issues
@@ -124,10 +123,10 @@ Performance issues usually occur when unnecessary columns are loaded, datatype i
 
 ### What to do about it
 
-- Only load the columns that you actually require.
-- Avoid converting datatypes that are unnecessary.
-- Process only the data required for your workflow.
-- Remove unused data before processing.
+- Use `usecols` in `ar.read_csv(...)` to load only required columns
+- Avoid unnecessary `cast_types()` operations unless they are needed
+- Use `select_columns()` to reduce unnecessary data before processing
+- Remove unused columns with `drop_columns()` when possible
 
 ### Quick example
 
