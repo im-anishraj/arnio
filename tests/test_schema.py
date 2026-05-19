@@ -667,8 +667,8 @@ def test_schema_composite_unique_fails(tmp_path):
     assert not result.passed
     issues = [i for i in result.issues if i.rule == "composite_unique"]
     assert len(issues) == 2
-    assert issues[0].row_index == 0
-    assert issues[1].row_index == 2
+    assert issues[0].row_index == 1
+    assert issues[1].row_index == 3
     assert "['user_id', 'course_id']" in issues[0].message
 
 

@@ -558,7 +558,7 @@ def validate(frame: ArFrame, schema: Schema | dict[str, Field]) -> ValidationRes
                                     "Duplicate rows found for columns"
                                     f" {list(schema.unique)}"
                                 ),
-                                row_index=int(index),
+                                row_index=int(index) + 1,
                             )
                         )
     if schema.rules:
