@@ -6,6 +6,7 @@ import pandas as pd
 import pytest
 
 import arnio as ar
+from arnio.io import _utf8_csv_path
 
 MESSY_CSV = str(Path(__file__).parent / "fixtures" / "messy_sales_data.csv")
 
@@ -528,6 +529,13 @@ class TestScanCsv:
 
         with pytest.raises(TypeError):
             ar.scan_csv(sample_csv, sample_size="100")
+
+    def test_non_utf8_sampling_respects_requested_record_count(self, tmp_path):
+        csv_path = tmp_path / "latin1.csv"
+        csv_path.write_text("name\nAndré\nBeyoncé\n", encoding="latin-1")
+
+        with _utf8_csv_path(str(csv_path), "latin-1", sample_rows=2) as native_path:
+            assert Path(native_path).read_text(encoding="utf-8") == "name\nAndré\n"
 
     def test_scan_invalid_delimiter(self, tmp_path):
         csv_path = tmp_path / "test.csv"

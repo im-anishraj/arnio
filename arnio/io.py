@@ -53,9 +53,9 @@ def _utf8_csv_path(
                     reader = csv.reader(src, delimiter=delimiter)
                     writer = csv.writer(tmp, delimiter=delimiter)
                     for row_count, row in enumerate(reader):
-                        writer.writerow(row)
                         if row_count >= sample_rows:
                             break
+                        writer.writerow(row)
                 else:
                     shutil.copyfileobj(src, tmp)
                 tmp_name = tmp.name
