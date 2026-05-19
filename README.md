@@ -650,6 +650,40 @@ arnio/
 This project is a Python/C++ package. It does NOT run as a Node.js app.
 
 ### 1. Clone the repository
+
 ```bash
 git clone https://github.com/im-anishraj/arnio.git
 cd arnio
+```
+
+### 2. Create a virtual environment
+
+```bash
+python -m venv .venv
+```
+
+### 3. Activate the virtual environment
+
+**Windows (PowerShell):**
+
+```bash
+.venv\Scripts\Activate.ps1
+```
+
+**Linux/macOS:**
+
+```bash
+source .venv/bin/activate
+```
+
+### 4. Install development dependencies
+
+```bash
+pip install -e ".[dev]"
+```
+
+### 5. Run tests
+
+```bash
+python -m pytest tests -q
+```
