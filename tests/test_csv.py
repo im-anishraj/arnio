@@ -442,6 +442,68 @@ class TestReadCsv:
         with pytest.raises(ar.CsvReadError):
             ar.read_csv(str(tmp_path / "nonexistent.csv"))
 
+    def test_null_values_default_preserves_empty_only_behavior(self, tmp_path):
+        csv_path = tmp_path / "default_nulls.csv"
+        csv_path.write_text("a,b\n,1\nNA,2\n")
+        frame = ar.read_csv(csv_path)
+        df = ar.to_pandas(frame)
+        assert pd.isna(df.loc[0, "a"])
+        assert df.loc[1, "a"] == "NA"
+        assert frame.dtypes["a"] == "string"
+
+    def test_null_values_custom_is_case_insensitive(self, tmp_path):
+        csv_path = tmp_path / "case_nulls.csv"
+        csv_path.write_text("a\nNa\nnA\nna\n")
+        frame = ar.read_csv(csv_path, null_values=["NA"])
+        df = ar.to_pandas(frame)
+        assert df["a"].isna().sum() == 3
+
+    def test_null_values_custom_preserves_type_inference(self, tmp_path):
+        csv_path = tmp_path / "type_infer.csv"
+        csv_path.write_text("a\n1\nNA\n3\n")
+        frame = ar.read_csv(csv_path, null_values=["NA"])
+        assert frame.dtypes["a"] == "int64"
+
+    def test_null_values_empty_disables_default_empty_null(self, tmp_path):
+        csv_path = tmp_path / "empty_nulls.csv"
+        csv_path.write_text("a,b\n,1\nNA,2\n")
+        frame = ar.read_csv(csv_path, null_values=[])
+        df = ar.to_pandas(frame)
+        assert df.loc[0, "a"] == ""
+        assert df.loc[1, "a"] == "NA"
+
+    def test_null_values_custom_overrides_defaults(self, tmp_path):
+        csv_path = tmp_path / "custom_nulls.csv"
+        csv_path.write_text("a,b\n,1\nMISSING,2\n")
+        frame = ar.read_csv(csv_path, null_values=["MISSING"])
+        df = ar.to_pandas(frame)
+        assert df.loc[0, "a"] == ""
+        assert pd.isna(df.loc[1, "a"])
+
+    def test_null_values_read_and_scan_csv_parity(self, tmp_path):
+        csv_path = tmp_path / "parity.csv"
+        csv_path.write_text("a\n1\nNA\n3\n")
+
+        default_frame = ar.read_csv(csv_path)
+        default_schema = ar.scan_csv(csv_path)
+        assert default_frame.dtypes["a"] == "string"
+        assert default_schema["a"] == "string"
+
+        custom_frame = ar.read_csv(csv_path, null_values=["NA"])
+        custom_schema = ar.scan_csv(csv_path, null_values=["NA"])
+        assert custom_frame.dtypes["a"] == "int64"
+        assert custom_schema["a"] == "int64"
+
+    def test_null_values_invalid_type(self):
+        with pytest.raises(
+            TypeError, match="must be a list of strings, not a bare string"
+        ):
+            ar.read_csv("dummy.csv", null_values="NA")
+        with pytest.raises(TypeError, match="must be a list of strings"):
+            ar.read_csv("dummy.csv", null_values=("NA",))
+        with pytest.raises(TypeError, match="must contain only strings"):
+            ar.read_csv("dummy.csv", null_values=[1])
+
 
 class TestScanCsv:
     def test_scan_schema(self, sample_csv):
@@ -559,6 +621,16 @@ class TestScanCsv:
     def test_scan_missing_file_passthrough(self, tmp_path):
         with pytest.raises(ar.CsvReadError):
             ar.scan_csv(str(tmp_path / "nonexistent.csv"))
+
+    def test_scan_null_values_invalid_type(self):
+        with pytest.raises(
+            TypeError, match="must be a list of strings, not a bare string"
+        ):
+            ar.scan_csv("dummy.csv", null_values="NA")
+        with pytest.raises(TypeError, match="must be a list of strings"):
+            ar.scan_csv("dummy.csv", null_values=("NA",))
+        with pytest.raises(TypeError, match="must contain only strings"):
+            ar.scan_csv("dummy.csv", null_values=[1])
 
     def test_scan_schema_preserves_column_order(self, tmp_path):
         csv_path = tmp_path / "order_test.csv"

@@ -18,6 +18,7 @@ struct CsvConfig {
     bool trim_headers = true;        // for implementing the trim_headers option
     std::optional<char> thousands_separator = std::nullopt;
     std::optional<size_t> sample_size = std::nullopt;
+    std::optional<std::vector<std::string>> null_values = std::nullopt;
 };
 
 class CsvReader {
@@ -35,6 +36,9 @@ class CsvReader {
 
     // Parse a single CSV line respecting quotes
     std::vector<std::string> parse_line(const std::string& line) const;
+
+    // Check if a string is a null sentinel
+    bool is_null_sentinel(const std::string& value) const;
 
     // Infer DType from a string value
     DType infer_type(const std::string& value) const;

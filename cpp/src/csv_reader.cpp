@@ -233,8 +233,29 @@ std::vector<std::string> CsvReader::parse_line(const std::string& line) const {
     return fields;
 }
 
+bool CsvReader::is_null_sentinel(const std::string& value) const {
+    if (config_.null_values.has_value()) {
+        const auto& sentinels = config_.null_values.value();
+        for (const auto& sentinel : sentinels) {
+            if (value.size() != sentinel.size()) continue;
+            bool match = true;
+            for (size_t i = 0; i < value.size(); ++i) {
+                if (std::tolower(static_cast<unsigned char>(value[i])) !=
+                    std::tolower(static_cast<unsigned char>(sentinel[i]))) {
+                    match = false;
+                    break;
+                }
+            }
+            if (match) return true;
+        }
+        return false;
+    }
+
+    return value.empty();
+}
+
 DType CsvReader::infer_type(const std::string& value) const {
-    if (value.empty()) return DType::NULL_TYPE;
+    if (is_null_sentinel(value)) return DType::NULL_TYPE;
 
     // Try bool
     std::string lower = value;
@@ -303,7 +324,7 @@ DType CsvReader::promote_type(DType current, DType incoming) {
 }
 
 CellValue CsvReader::parse_value(const std::string& raw, DType dtype) const {
-    if (raw.empty()) return std::monostate{};
+    if (is_null_sentinel(raw)) return std::monostate{};
 
     switch (dtype) {
         case DType::BOOL: {

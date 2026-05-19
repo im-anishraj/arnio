@@ -135,6 +135,21 @@ def _validate_nrows(nrows: int) -> int:
     return nrows
 
 
+def _validate_null_values(null_values: list[str]) -> list[str]:
+    """Validate null_values parameter."""
+    if isinstance(null_values, str):
+        raise TypeError("null_values must be a list of strings, not a bare string")
+
+    if not isinstance(null_values, list):
+        raise TypeError("null_values must be a list of strings")
+
+    for val in null_values:
+        if not isinstance(val, str):
+            raise TypeError("null_values must contain only strings")
+
+    return list(null_values)
+
+
 def read_csv(
     path: str | os.PathLike[str],
     *,
@@ -145,6 +160,7 @@ def read_csv(
     encoding: str = "utf-8",
     trim_headers: bool = True,
     thousands_separator: str | None = None,
+    null_values: list[str] | None = None,
 ) -> ArFrame:
     """Read a CSV file into an ArFrame via C++ backend.
 
@@ -229,6 +245,9 @@ def read_csv(
     config.encoding = encoding
     config.trim_headers = trim_headers
     config.thousands_separator = thousands_separator
+
+    if null_values is not None:
+        config.null_values = _validate_null_values(null_values)
 
     if usecols is not None:
         config.usecols = _validate_usecols(usecols)
@@ -327,6 +346,7 @@ def scan_csv(
     trim_headers: bool = True,
     thousands_separator: str | None = None,
     sample_size: int | None = None,
+    null_values: list[str] | None = None,
 ) -> dict[str, str]:
     """Return schema (column names + inferred types) without loading data.
 
@@ -409,6 +429,9 @@ def scan_csv(
     config.encoding = encoding
     config.trim_headers = trim_headers
     config.thousands_separator = thousands_separator
+
+    if null_values is not None:
+        config.null_values = _validate_null_values(null_values)
 
     if sample_size is not None:
         if not isinstance(sample_size, int) or isinstance(sample_size, bool):

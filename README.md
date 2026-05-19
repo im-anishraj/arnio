@@ -188,6 +188,21 @@ print(selected.columns)
 ```
 
 
+### Handling missing values
+
+Arnio supports configuring which strings are treated as null during CSV parsing using the `null_values` parameter in `read_csv` and `scan_csv`. By default, Arnio preserves its existing behavior and treats only empty cells as null. Custom matching is case-insensitive and applies to cell values only (not headers).
+
+```python
+# Default behavior: empty cells are null
+frame = ar.read_csv("data.csv")
+
+# Provide a custom list of sentinels (overrides the empty-cell default)
+frame = ar.read_csv("data.csv", null_values=["", "MISSING", "UNKNOWN"])
+
+# Disable null sentinel handling completely
+frame = ar.read_csv("data.csv", null_values=[])
+```
+
 > Every step above executes in C++. Your Python code is a _configuration_ — not the execution engine.
 
 <br>
