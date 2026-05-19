@@ -296,6 +296,8 @@ def write_csv(
             f"Unsupported file format: {path}. Only .csv, .txt, and .tsv are supported."
         )
 
+    if not isinstance(delimiter, str):
+        raise TypeError("delimiter must be a string")
     if len(delimiter) != 1:
         raise ValueError(f"delimiter must be a single character, got {delimiter!r}")
 
