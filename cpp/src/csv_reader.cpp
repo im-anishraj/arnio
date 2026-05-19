@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <cctype>
 #include <cerrno>
-#include <charconv>
 #include <cstddef>
 #include <cstdlib>
 #include <fstream>
@@ -14,21 +13,9 @@
 namespace arnio {
 
 namespace {
-
-static std::string trim_whitespace(const std::string& s) {
-    auto start = s.find_first_not_of(" \t\n\r\f\v");
-    if (start == std::string::npos) {
-        return "";
-    }
-
-    auto end = s.find_last_not_of(" \t\n\r\f\v");
-    return s.substr(start, end - start + 1);
-}
-
 inline void trim_in_place(std::string& s) {
     s.erase(s.begin(),
             std::find_if(s.begin(), s.end(), [](unsigned char ch) { return !std::isspace(ch); }));
-
     s.erase(std::find_if(s.rbegin(), s.rend(), [](unsigned char ch) { return !std::isspace(ch); })
                 .base(),
             s.end());
@@ -257,57 +244,47 @@ DType CsvReader::infer_type(const std::string& value) const {
     std::string cleaned = normalize_numeric(value, config_);
 
     // Try int64
-    std::string trimmed = trim_whitespace(cleaned);
-    std::string int_candidate = trimmed;
-
-    if (!int_candidate.empty() && int_candidate[0] == '+') {
-        int_candidate.erase(0, 1);
+    {
+        const char* start = cleaned.c_str();
+        char* end = nullptr;
+        errno = 0;
+        long long val = std::strtoll(start, &end, 10);
+        (void)val;
+        if (end != start && *end == '\0') {
+            if (errno == ERANGE) return DType::STRING;
+            return DType::INT64;
+        }
     }
 
-    long long val = 0;
+    if (looks_like_integer_literal(cleaned)) return DType::STRING;
 
-    const char* start = int_candidate.data();
-    const char* end = start + int_candidate.size();
-
-    const char* start = int_candidate.data();
-    const char* end = int_candidate.data() + int_candidate.size();
-
-    long long val = 0;
-
-    auto [ptr, ec] = std::from_chars(start, end, val);
-
-    if (ec == std::errc() && ptr == end) {
-        return DType::INT64;
+    // Try float64
+    {
+        const char* start = cleaned.c_str();
+        char* end = nullptr;
+        double val = std::strtod(start, &end);
+        (void)val;
+        if (end != start && *end == '\0') return DType::FLOAT64;
     }
-}
 
-// Try float64
-{
-    const char* start = trimmed.c_str();
-    char* end = nullptr;
-    double val = std::strtod(start, &end);
-    (void)val;
-    if (end != start && *end == '\0') return DType::FLOAT64;
-}
-
-// If thousands separator is set and value contains it but failed
-// grouping validation, it's a malformed numeric — treat as NULL_TYPE
-// so it doesn't poison the whole column's dtype to STRING.
-if (config_.thousands_separator.has_value()) {
-    char sep = config_.thousands_separator.value();
-    if (value.find(sep) != std::string::npos && !has_valid_thousands_grouping(value, sep)) {
-        std::string check = value;
-        trim_in_place(check);
-        if (!check.empty() && (check[0] == '-' || check[0] == '+')) check = check.substr(1);
-        bool looks_numeric =
-            !check.empty() && std::all_of(check.begin(), check.end(), [sep](char c) {
-                return std::isdigit((unsigned char)c) || c == sep || c == '.';
-            });
-        if (looks_numeric) return DType::NULL_TYPE;
+    // If thousands separator is set and value contains it but failed
+    // grouping validation, it's a malformed numeric — treat as NULL_TYPE
+    // so it doesn't poison the whole column's dtype to STRING.
+    if (config_.thousands_separator.has_value()) {
+        char sep = config_.thousands_separator.value();
+        if (value.find(sep) != std::string::npos && !has_valid_thousands_grouping(value, sep)) {
+            std::string check = value;
+            trim_in_place(check);
+            if (!check.empty() && (check[0] == '-' || check[0] == '+')) check = check.substr(1);
+            bool looks_numeric =
+                !check.empty() && std::all_of(check.begin(), check.end(), [sep](char c) {
+                    return std::isdigit((unsigned char)c) || c == sep || c == '.';
+                });
+            if (looks_numeric) return DType::NULL_TYPE;
+        }
     }
-}
 
-return DType::STRING;
+    return DType::STRING;
 }
 
 DType CsvReader::promote_type(DType current, DType incoming) {
