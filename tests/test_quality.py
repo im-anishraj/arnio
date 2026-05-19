@@ -457,8 +457,8 @@ def test_auto_clean_rejects_unknown_mode(sample_csv):
 def test_auto_clean_strict_casts_ambiguous_numeric_strings():
     df = pd.DataFrame(
         {
-            "code": ["007", "008"],          # Not identifier-like, but has leading zeros
-            "user_id": ["001", "002"],       # Identifier-like, has leading zeros
+            "code": ["007", "008"],  # Not identifier-like, but has leading zeros
+            "user_id": ["001", "002"],  # Identifier-like, has leading zeros
         }
     )
     frame = ar.from_pandas(df)
