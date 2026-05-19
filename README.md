@@ -241,6 +241,32 @@ Useful for exploring datasets before committing memory.
 </details>
 
 <details>
+<summary><b>📄 Read JSON Lines (JSONL / NDJSON) files</b></summary>
+<br>
+
+`read_jsonl` parses one JSON object per line into an ArFrame. Blank lines are skipped, missing keys become nulls, and mixed-type columns are coerced to string — the same rules as `from_pandas`.
+
+```python
+# events.jsonl
+# {"user": "alice", "score": 9.5, "active": true}
+# {"user": "bob",   "score": 8.1, "active": false}
+
+frame = ar.read_jsonl("events.jsonl")
+
+# Limit rows
+frame = ar.read_jsonl("large.jsonl", nrows=1000)
+
+# Non-UTF-8 encoding
+frame = ar.read_jsonl("data.ndjson", encoding="latin-1")
+
+# Plug straight into the cleaning pipeline
+clean = ar.pipeline(frame, [("strip_whitespace",), ("drop_nulls",)])
+```
+
+Raises `ar.JsonlReadError` with the 1-based line number if a line contains invalid JSON.
+</details>
+
+<details>
 <summary><b>👀 Preview rows without pandas conversion or full-column Python list materialization</b></summary>
 <br>
 
@@ -1382,7 +1408,7 @@ arnio/
 │   └── bind_arnio.cpp       # pybind11 module — the Python↔C++ bridge
 ├── arnio/
 │   ├── __init__.py          # Public API surface
-│   ├── io.py                # read_csv, scan_csv
+│   ├── io.py                # read_csv, read_jsonl, scan_csv, write_csv
 │   ├── cleaning.py          # Python wrappers for C++ cleaning functions
 │   ├── pipeline.py          # Step registry + pipeline executor
 │   ├── convert.py           # to_pandas (zero-copy), from_pandas

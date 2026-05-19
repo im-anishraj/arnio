@@ -13,7 +13,7 @@ from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 
 from ._core import _CsvConfig, _CsvReader, _CsvWriteConfig, _CsvWriter
-from .exceptions import CsvReadError
+from .exceptions import CsvReadError, JsonlReadError
 from .frame import ArFrame
 
 
@@ -437,3 +437,107 @@ def scan_csv(
             return reader.scan_schema(native_path)
     except RuntimeError as e:
         raise CsvReadError(str(e)) from e
+
+
+def read_jsonl(
+    path: str | os.PathLike[str],
+    *,
+    encoding: str = "utf-8",
+    nrows: int | None = None,
+) -> ArFrame:
+    """Read a JSON Lines file into an ArFrame.
+
+    Each non-blank line must be a complete JSON object (``{...}``).  Column
+    names are taken from the union of all keys found in the file.  Missing
+    keys in a row become null values.  Type inference follows the same rules
+    as :func:`from_pandas`: the first non-null value in a column determines
+    its dtype; mixed-type columns are coerced to string.
+
+    Parameters
+    ----------
+    path : str or path-like
+        Path to the ``.jsonl`` or ``.ndjson`` file.
+    encoding : str, default ``"utf-8"``
+        File encoding.
+    nrows : int, optional
+        Maximum number of data rows to read.  If ``None``, all rows are read.
+
+    Returns
+    -------
+    ArFrame
+        Data frame containing the parsed records.
+
+    Raises
+    ------
+    ValueError
+        If the file extension is not ``.jsonl`` or ``.ndjson``, or if
+        ``nrows`` is not a non-negative integer.
+    JsonlReadError
+        If the file is empty (no data rows), or if a line contains invalid
+        JSON.  The error message includes the 1-based line number.
+
+    Examples
+    --------
+    >>> frame = ar.read_jsonl("events.jsonl")
+    >>> frame = ar.read_jsonl("data.ndjson", nrows=1000)
+    """
+    import json
+
+    from .convert import from_pandas
+
+    path = os.fspath(path)
+    path_lower = path.lower()
+    if not (path_lower.endswith(".jsonl") or path_lower.endswith(".ndjson")):
+        raise ValueError(
+            f"Unsupported file format: {path}. "
+            "read_jsonl only supports .jsonl and .ndjson files."
+        )
+
+    if nrows is not None:
+        if isinstance(nrows, bool) or not isinstance(nrows, int):
+            raise TypeError("nrows must be an integer")
+        if nrows < 0:
+            raise ValueError("nrows must be non-negative")
+
+    records: list[dict] = []
+    try:
+        with open(path, encoding=encoding) as fh:
+            for lineno, raw_line in enumerate(fh, start=1):
+                line = raw_line.rstrip("\r\n")
+                if not line.strip():
+                    continue  # skip blank / whitespace-only lines
+                try:
+                    obj = json.loads(line)
+                except json.JSONDecodeError as exc:
+                    raise JsonlReadError(
+                        f"Invalid JSON on line {lineno} of {path!r}: {exc}"
+                    ) from exc
+                if not isinstance(obj, dict):
+                    raise JsonlReadError(
+                        f"Expected a JSON object on line {lineno} of {path!r}, "
+                        f"got {type(obj).__name__}"
+                    )
+                if nrows is not None and len(records) >= nrows:
+                    break
+                records.append(obj)
+    except OSError as exc:
+        raise JsonlReadError(str(exc)) from exc
+    except UnicodeDecodeError as exc:
+        raise JsonlReadError(
+            f"Could not decode {path!r} using encoding {encoding!r}: {exc}"
+        ) from exc
+
+    if not records:
+        if nrows == 0:
+            # nrows=0 is a valid request for zero rows — return empty frame
+            import pandas as pd
+
+            from .convert import from_pandas
+
+            return from_pandas(pd.DataFrame())
+        raise JsonlReadError(f"JSON Lines file is empty (no data rows): {path!r}")
+
+    import pandas as pd
+
+    df = pd.DataFrame(records)
+    return from_pandas(df)
