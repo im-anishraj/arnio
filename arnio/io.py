@@ -978,3 +978,27 @@ def sniff_delimiter(
         )
 
     return best_candidates[0]
+
+
+def write_csv(
+    frame: ArFrame,
+    path: str | os.PathLike[str],
+    *,
+    delimiter: str = ",",
+    newline: str = "\n",
+    quote_char: str = '"',
+) -> None:
+    """Write an ArFrame to a CSV file."""
+    if len(delimiter) != 1:
+        raise ValueError(f"delimiter must be a single character, got: {delimiter!r}")
+    if newline not in ("\n", "\r\n", "\r"):
+        raise ValueError(f"newline must be one of '\\n', '\\r\\n', '\\r', got: {newline!r}")
+    if len(quote_char) != 1:
+        raise ValueError(f"quote_char must be a single character, got: {quote_char!r}")
+    path = os.fspath(path)
+    path_lower = path.lower()
+    if not (path_lower.endswith(".csv") or path_lower.endswith(".txt") or path_lower.endswith(".tsv")):
+        raise ValueError(f"Unsupported file format: {path}. Only .csv, .txt, and .tsv are supported.")
+    from .convert import to_pandas
+    df = to_pandas(frame)
+    df.to_csv(path, index=False, sep=delimiter, lineterminator=newline, quotechar=quote_char)
