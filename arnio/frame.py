@@ -24,8 +24,8 @@ class ArFrame:
 
     # --- Properties ---
     @classmethod
-    def from_dict(cls, data:dict) -> "ArFrame":
-        from .convert import from_dict as _from_dict 
+    def from_dict(cls, data: dict) -> "ArFrame":
+        from .convert import from_dict as _from_dict
         return _from_dict(data)
     
     @property

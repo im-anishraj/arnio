@@ -65,7 +65,6 @@ def from_dict(data):
     try:
         df = pd.DataFrame(data)
         return from_pandas(df)
-    
     except ValueError as e:
         raise ValueError(
             "All columns in from_dict() must have equal lengths."
