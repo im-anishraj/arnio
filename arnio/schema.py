@@ -908,7 +908,19 @@ def Int64(
     severity: str = "error",
     required_if: tuple[str, Any] | None = None,
 ) -> Field:
-    """Create an int64 schema field."""
+    """Create an int64 schema field.
+
+    Args:
+        nullable: Whether null values are allowed.
+        min: Minimum allowed value.
+        max: Maximum allowed value.
+        unique: Whether non-null values must be unique.
+        severity: Severity level for validation issues.
+        required_if: Conditional requirement as a column/value pair.
+
+    Returns:
+        Field: Configured int64 schema field.
+    """
 
     if min is not None and max is not None and min > max:
         raise ValueError("min must be less than or equal to max")
@@ -933,7 +945,19 @@ def Float64(
     severity: str = "error",
     required_if: tuple[str, Any] | None = None,
 ) -> Field:
-    """Create a float64 schema field."""
+    """Create a float64 schema field.
+
+    Args:
+        nullable: Whether null values are allowed.
+        min: Minimum allowed value.
+        max: Maximum allowed value.
+        unique: Whether non-null values must be unique.
+        severity: Severity level for validation issues.
+        required_if: Conditional requirement as a column/value pair.
+
+    Returns:
+        Field: Configured float64 schema field.
+    """
 
     if min is not None and max is not None and min > max:
         raise ValueError("min must be less than or equal to max")
@@ -960,7 +984,21 @@ def String(
     max_length: int | None = None,
     required_if: tuple[str, Any] | None = None,
 ) -> Field:
-    """Create a string schema field."""
+    """Create a string schema field.
+
+    Args:
+        nullable: Whether null values are allowed.
+        pattern: Regular expression pattern that non-null values must match.
+        allowed: Allowed values for the field.
+        unique: Whether non-null values must be unique.
+        severity: Severity level for validation issues.
+        min_length: Minimum allowed string length.
+        max_length: Maximum allowed string length.
+        required_if: Conditional requirement as a column/value pair.
+
+    Returns:
+        Field: Configured string schema field.
+    """
 
     if min_length is not None and max_length is not None and min_length > max_length:
         raise ValueError("min_length must be less than or equal to max_length")
@@ -986,7 +1024,16 @@ def Bool(
     severity: str = "error",
     required_if: tuple[str, Any] | None = None,
 ) -> Field:
-    """Create a bool schema field."""
+    """Create a bool schema field.
+
+    Args:
+        nullable: Whether null values are allowed.
+        severity: Severity level for validation issues.
+        required_if: Conditional requirement as a column/value pair.
+
+    Returns:
+        Field: Configured bool schema field.
+    """
     return Field(
         dtype="bool",
         nullable=nullable,
@@ -1003,7 +1050,18 @@ def Email(
     validation: str = "light",
     required_if: tuple[str, Any] | None = None,
 ) -> Field:
-    """Create an email-address schema field."""
+    """Create an email-address schema field.
+
+    Args:
+        nullable: Whether null values are allowed.
+        unique: Whether non-null values must be unique.
+        severity: Severity level for validation issues.
+        validation: Email validation mode, either "light" or "strict".
+        required_if: Conditional requirement as a column/value pair.
+
+    Returns:
+        Field: Configured email-address schema field.
+    """
     if validation not in {"light", "strict"}:
         raise ValueError("Email validation must be 'light' or 'strict'")
     return Field(
@@ -1023,7 +1081,17 @@ def URL(
     severity: str = "error",
     required_if: tuple[str, Any] | None = None,
 ) -> Field:
-    """Create a URL schema field."""
+    """Create a URL schema field.
+
+    Args:
+        nullable: Whether null values are allowed.
+        unique: Whether non-null values must be unique.
+        severity: Severity level for validation issues.
+        required_if: Conditional requirement as a column/value pair.
+
+    Returns:
+        Field: Configured URL schema field.
+    """
     return Field(
         dtype="string",
         nullable=nullable,
@@ -1041,7 +1109,17 @@ def PhoneNumber(
     severity: str = "error",
     required_if: tuple[str, Any] | None = None,
 ) -> Field:
-    """Create a phone-number schema field."""
+    """Create a phone-number schema field.
+
+    Args:
+        nullable: Whether null values are allowed.
+        unique: Whether non-null values must be unique.
+        severity: Severity level for validation issues.
+        required_if: Conditional requirement as a column/value pair.
+
+    Returns:
+        Field: Configured phone-number schema field.
+    """
     return Field(
         dtype="string",
         nullable=nullable,
@@ -1059,7 +1137,17 @@ def CountryCode(
     severity: str = "error",
     required_if: tuple[str, Any] | None = None,
 ) -> Field:
-    """Create an uppercase ISO alpha-2 country-code schema field."""
+    """Create an uppercase ISO alpha-2 country-code schema field.
+
+    Args:
+        nullable: Whether null values are allowed.
+        unique: Whether non-null values must be unique.
+        severity: Severity level for validation issues.
+        required_if: Conditional requirement as a column/value pair.
+
+    Returns:
+        Field: Configured uppercase ISO alpha-2 country-code schema field.
+    """
     return Field(
         dtype="string",
         nullable=nullable,
@@ -1071,7 +1159,15 @@ def CountryCode(
 
 
 def CurrencyCode(*, nullable: bool = True, unique: bool = False) -> Field:
-    """Create a schema field for 3-letter uppercase currency code formats."""
+    """Create a currency-code schema field.
+
+    Args:
+        nullable: Whether null values are allowed.
+        unique: Whether non-null values must be unique.
+
+    Returns:
+        Field: Configured 3-letter uppercase currency-code schema field.
+    """
     return Field(
         dtype="string",
         nullable=nullable,
@@ -1087,7 +1183,17 @@ def Date(
     severity: str = "error",
     required_if: tuple[str, Any] | None = None,
 ) -> Field:
-    """Create a date schema field."""
+    """Create a date schema field.
+
+    Args:
+        nullable: Whether null values are allowed.
+        unique: Whether non-null values must be unique.
+        severity: Severity level for validation issues.
+        required_if: Conditional requirement as a column/value pair.
+
+    Returns:
+        Field: Configured date schema field.
+    """
     return Field(
         dtype="string",
         nullable=nullable,
