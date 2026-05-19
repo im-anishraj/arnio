@@ -5,7 +5,10 @@ Pandas conversion functions.
 
 from __future__ import annotations
 
-import copy
+import copy as copylib
+import decimal
+import math
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -18,12 +21,82 @@ def _is_nested(value: object) -> bool:
     return isinstance(value, (list, dict, tuple, set, np.ndarray))
 
 
+def _to_binding_safe(value: Any) -> Any:
+    """
+    Internal helper that normalizes scalars for the C++ binding layer.
+
+    Parameters
+    ----------
+    value : Any
+        Input value to convert.
+
+    Returns
+    -------
+    Any
+        Value safe for C++ binding. Decimal inputs are preserved as exact
+        strings. Float inputs are converted to binary float. NaN/Infinity are
+        rejected.
+
+    Raises
+    ------
+    ValueError
+        If the value is NaN or infinite.
+    """
+    if isinstance(value, decimal.Decimal):
+        if value.is_nan() or value.is_infinite():
+            raise ValueError("Invalid financial value: NaN or Infinity.")
+        return str(value)
+
+    if isinstance(value, float):
+        if math.isnan(value) or math.isinf(value):
+            raise ValueError("Invalid financial value: NaN or Infinity.")
+        return float(value)
+
+    return value
+
+
+def _check_unsupported_dtype(col_name: object, series: pd.Series) -> None:
+    """Raise a clear TypeError for dtypes that arnio cannot convert."""
+    dtype = series.dtype
+    dtype_str = str(dtype)
+    name = repr(str(col_name))
+
+    if hasattr(dtype, "tz") or dtype_str.startswith("datetime64"):
+        raise TypeError(
+            f"Column {name} has unsupported dtype '{dtype_str}'.\n"
+            f"  Fix: df[{name}] = df[{name}].astype(str)  "
+            f"# or use .dt.strftime('%Y-%m-%d') for formatted dates"
+        )
+
+    if dtype_str.startswith("timedelta"):
+        raise TypeError(
+            f"Column {name} has unsupported dtype '{dtype_str}'.\n"
+            f"  Fix: df[{name}] = df[{name}].dt.total_seconds()"
+        )
+
+    if hasattr(dtype, "categories"):
+        raise TypeError(
+            f"Column {name} has unsupported dtype 'category'.\n"
+            f"  Fix: df[{name}] = df[{name}].astype(str)"
+        )
+
+    if dtype_str in ("complex128", "complex64"):
+        raise TypeError(
+            f"Column {name} has unsupported dtype '{dtype_str}'.\n"
+            f"  Fix: df[{name}] = df[{name}].apply(str)"
+        )
+
+
 def _normalize_scalar(value: object) -> object:
+    if isinstance(value, decimal.Decimal):
+        return _to_binding_safe(value)
     if pd.isna(value):
         return None
     if isinstance(value, np.generic):
-        return value.item()
-    if not isinstance(value, (bool, int, float, str)):
+        value = value.item()
+    if isinstance(value, float):
+        return _to_binding_safe(value)
+    if not isinstance(value, (bool, int, str)):
         return str(value)
     return value
 
@@ -67,13 +140,18 @@ def _series_to_python_values(series: pd.Series, col_name: object) -> list[object
     return values
 
 
-def to_pandas(frame: ArFrame) -> pd.DataFrame:
+def to_pandas(frame: ArFrame, *, copy: bool = False) -> pd.DataFrame:
     """Convert ArFrame to pandas.DataFrame.
 
     Parameters
     ----------
     frame : ArFrame
         Input ArFrame to convert.
+    copy : bool, default False
+        When False, preserve the fast zero-copy path where supported. Some
+        columns still require copies because of null-mask handling, Python
+        object creation, or binding limitations. When True, return defensive
+        pandas-owned copies of supported column buffers.
 
     Returns
     -------
@@ -86,7 +164,11 @@ def to_pandas(frame: ArFrame) -> pd.DataFrame:
     --------
     >>> frame = ar.read_csv("data.csv")
     >>> df = ar.to_pandas(frame)
+    >>> defensive_df = ar.to_pandas(frame, copy=True)
     """
+    if not isinstance(copy, bool):
+        raise TypeError("copy must be a bool")
+
     cpp_frame = frame._frame
     data = {}
 
@@ -98,21 +180,26 @@ def to_pandas(frame: ArFrame) -> pd.DataFrame:
 
         if dtype == _DType.INT64:
             arr = col.to_numpy_int()
-            # pandas Int64Dtype handles nulls via mask
+            if copy:
+                arr = arr.copy()
             series = pd.Series(arr, dtype=pd.Int64Dtype())
             series[mask] = pd.NA
             data[name] = series
         elif dtype == _DType.FLOAT64:
-            arr = col.to_numpy_float().copy()
-            arr[mask] = np.nan
+            arr = col.to_numpy_float()
+            if copy or mask.any():
+                arr = arr.copy()
+            if mask.any():
+                arr[mask] = np.nan
             data[name] = arr
         elif dtype == _DType.BOOL:
             arr = col.to_numpy_bool()
+            if copy:
+                arr = arr.copy()
             series = pd.Series(arr, dtype=pd.BooleanDtype())
             series[mask] = pd.NA
             data[name] = series
         else:
-            # STRING or unknown
             values = col.to_python_list()
             series = pd.Series(values, dtype=pd.StringDtype())
             series[mask] = pd.NA
@@ -120,14 +207,49 @@ def to_pandas(frame: ArFrame) -> pd.DataFrame:
 
     result = pd.DataFrame(data)
     if frame._attrs:
-        result.attrs = copy.deepcopy(frame._attrs)
+        result.attrs = copylib.deepcopy(frame._attrs)
     return result
 
 
 def _pandas_dtype_to_arnio(dtype: object) -> _DType | None:
     if dtype == pd.Int64Dtype():
         return _DType.INT64
+    if str(dtype) == "float64":
+        return _DType.FLOAT64
     return None
+
+
+def _validate_unique_column_labels(labels: pd.Index) -> None:
+    seen: set[object] = set()
+    dupes: list[object] = []
+    for label in labels:
+        if label in seen and label not in dupes:
+            dupes.append(label)
+        seen.add(label)
+    if dupes:
+        raise ValueError(
+            "from_pandas() does not support duplicate column labels: "
+            f"{[repr(label) for label in dupes]}"
+        )
+
+    normalized: dict[str, object] = {}
+    collisions: dict[str, list[object]] = {}
+    for label in labels:
+        name = str(label)
+        if name in normalized:
+            collisions.setdefault(name, [normalized[name]]).append(label)
+        else:
+            normalized[name] = label
+
+    if collisions:
+        details = ", ".join(
+            f"{name!r}: {[repr(label) for label in labels]}"
+            for name, labels in collisions.items()
+        )
+        raise ValueError(
+            "from_pandas() column labels must remain unique after string "
+            f"conversion: {details}"
+        )
 
 
 def from_pandas(df: pd.DataFrame) -> ArFrame:
@@ -154,12 +276,16 @@ def from_pandas(df: pd.DataFrame) -> ArFrame:
     >>> df = pd.DataFrame({"name": ["Alice"], "age": [25]})
     >>> frame = ar.from_pandas(df)
     """
+    _validate_unique_column_labels(df.columns)
+
     columns = {}
     dtype_hints = {}
 
     for col_name in df.columns:
         series = df[col_name]
         name = str(col_name)
+
+        _check_unsupported_dtype(col_name, series)  # NEW: check before converting
 
         columns[name] = _series_to_python_values(series, col_name)
 
@@ -168,5 +294,4 @@ def from_pandas(df: pd.DataFrame) -> ArFrame:
             dtype_hints[name] = dtype_hint
 
     cpp_frame = _Frame.from_dict(columns, dtype_hints)
-    return ArFrame(cpp_frame, attrs=copy.deepcopy(df.attrs))
-
+    return ArFrame(cpp_frame, attrs=copylib.deepcopy(df.attrs))

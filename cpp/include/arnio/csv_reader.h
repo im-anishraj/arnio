@@ -2,8 +2,7 @@
 
 #include <optional>
 #include <string>
-#include <unordered_map>
-#include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include "frame.h"
@@ -17,6 +16,10 @@ struct CsvConfig {
     std::optional<size_t> nrows = std::nullopt;
     std::string encoding = "utf-8";  // Currently only utf-8 supported
     bool trim_headers = true;        // for implementing the trim_headers option
+    std::optional<char> thousands_separator = std::nullopt;
+    std::optional<size_t> sample_size = std::nullopt;
+    std::optional<std::vector<std::string>> null_values = std::nullopt;
+    std::string mode = "strict";
 };
 
 class CsvReader {
@@ -27,7 +30,7 @@ class CsvReader {
     Frame read(const std::string& path) const;
 
     // Scan schema only (column names + inferred types)
-    std::unordered_map<std::string, std::string> scan_schema(const std::string& path) const;
+    std::vector<std::pair<std::string, std::string>> scan_schema(const std::string& path) const;
 
    private:
     CsvConfig config_;
@@ -35,14 +38,17 @@ class CsvReader {
     // Parse a single CSV line respecting quotes
     std::vector<std::string> parse_line(const std::string& line) const;
 
+    // Check if a string is a null sentinel
+    bool is_null_sentinel(const std::string& value) const;
+
     // Infer DType from a string value
-    static DType infer_type(const std::string& value);
+    DType infer_type(const std::string& value) const;
 
     // Promote dtype when merging inferences
     static DType promote_type(DType current, DType incoming);
 
     // Parse a string value into a CellValue given a target dtype
-    static CellValue parse_value(const std::string& raw, DType dtype);
+    CellValue parse_value(const std::string& raw, DType dtype) const;
 };
 
 }  // namespace arnio
