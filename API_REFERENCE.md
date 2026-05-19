@@ -88,6 +88,11 @@ ar.write_csv(frame, "output.csv")
 | `delimiter` | `str` | `","` | Single character field separator |
 | `write_header` | `bool` | `True` | Whether to write the column header row |
 | `line_terminator` | `str` | `"\n"` | Line terminator between rows |
+| `safe_for_spreadsheet` | `bool` | `False` | Prefix dangerous string cells with `'` to prevent CSV injection in Excel/Sheets |
+
+> **🔒 Security: CSV Injection Prevention**
+>
+> When `safe_for_spreadsheet=True`, any string cell starting with `=`, `+`, `-`, `@`, `\t`, or `\r` is prefixed with a single-quote (`'`). Spreadsheet applications treat the leading quote as a "display as text" signal, neutralising formula-injection attacks. Use this when the CSV is destined for human users opening it in a spreadsheet.
 
 #### Raises
 
@@ -111,6 +116,9 @@ ar.write_csv(frame, "output.csv", write_header=False)
 
 # Windows line endings
 ar.write_csv(frame, "output.csv", line_terminator="\r\n")
+
+# Safe for spreadsheet (prevents CSV injection)
+ar.write_csv(frame, "export.csv", safe_for_spreadsheet=True)
 ```
 
 ---

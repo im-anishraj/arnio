@@ -738,6 +738,122 @@ def write_csv(
     return ArFrame(cpp_frame)
 
 
+# Characters that spreadsheet applications (Excel, Sheets, LibreOffice Calc)
+# interpret as formula triggers when they appear at the start of a cell.
+_SPREADSHEET_FORMULA_PREFIXES: frozenset[str] = frozenset(
+    {"=", "+", "-", "@", "\t", "\r"}
+)
+
+
+def _sanitize_for_spreadsheet(frame: ArFrame) -> ArFrame:
+    """Return a copy of *frame* with dangerous string cells prefixed.
+
+    Any string cell whose first character is one of ``= + - @ \\t \\r``
+    is prefixed with a single-quote (``'``).  Spreadsheet applications
+    treat the leading single-quote as a "display as literal text" marker
+    without displaying it, which neutralises CSV-injection attacks.
+
+    Non-string columns and null values are left untouched.
+    """
+    import pandas as pd
+
+    from .convert import from_pandas, to_pandas
+
+    def _prefix_if_dangerous(val: object) -> object:
+        if isinstance(val, str) and val and val[0] in _SPREADSHEET_FORMULA_PREFIXES:
+            return "'" + val
+        return val
+
+    df = to_pandas(frame)
+
+    for col in df.columns:
+        if pd.api.types.is_string_dtype(df[col]):
+            df[col] = df[col].apply(_prefix_if_dangerous)
+
+    return from_pandas(df)
+
+
+def write_csv(
+    frame: ArFrame,
+    path: str | os.PathLike[str],
+    *,
+    delimiter: str = ",",
+    write_header: bool = True,
+    line_terminator: str = "\n",
+    safe_for_spreadsheet: bool = False,
+) -> None:
+    """Write an ArFrame to a CSV file via C++ backend.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        The data frame to write.
+    path : str
+        Destination file path. Supports .csv, .txt, and .tsv extensions.
+    delimiter : str, default ","
+        Field delimiter character.
+    write_header : bool, default True
+        Whether to write the column header row.
+    line_terminator : str, default "\\n"
+        Line terminator to use between rows.
+    safe_for_spreadsheet : bool, default False
+        When ``True``, prefix every string cell that starts with a
+        spreadsheet formula trigger (``= + - @ \\t \\r``) with a
+        single-quote (``'``).  This prevents CSV-injection attacks when
+        the file is opened in Excel, Google Sheets, or LibreOffice Calc.
+
+        The default is ``False`` so that raw data is preserved for
+        programmatic consumers.  Set to ``True`` when the CSV is
+        destined for human users opening it in a spreadsheet.
+
+    Raises
+    ------
+    ValueError
+        If file format is unsupported.
+    RuntimeError
+        If the file cannot be opened or written.
+
+    Examples
+    --------
+    >>> ar.write_csv(frame, "output.csv")
+    >>> ar.write_csv(frame, "output.tsv", delimiter="\\t")
+    >>> ar.write_csv(frame, "export.csv", safe_for_spreadsheet=True)
+    """
+    path = os.fspath(path)
+    path_lower = path.lower()
+    if not (
+        path_lower.endswith(".csv")
+        or path_lower.endswith(".txt")
+        or path_lower.endswith(".tsv")
+    ):
+        raise ValueError(
+            f"Unsupported file format: {path}. Only .csv, .txt, and .tsv are supported."
+        )
+
+    if len(delimiter) != 1:
+        raise ValueError(f"delimiter must be a single character, got {delimiter!r}")
+
+    if not isinstance(safe_for_spreadsheet, bool):
+        raise TypeError(
+            f"safe_for_spreadsheet must be True or False, "
+            f"got {type(safe_for_spreadsheet).__name__}"
+        )
+
+    if safe_for_spreadsheet:
+        frame = _sanitize_for_spreadsheet(frame)
+
+    config = _CsvWriteConfig()
+    config.delimiter = delimiter
+    config.write_header = write_header
+    config.line_terminator = line_terminator
+
+    writer = _CsvWriter(config)
+    try:
+        writer.write(frame._frame, path)
+    except RuntimeError as e:
+        raise RuntimeError(str(e)) from e
+
+
 def scan_csv(
     path: str | os.PathLike[str] | io.TextIOBase,
     *,
