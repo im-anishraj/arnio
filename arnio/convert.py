@@ -123,6 +123,29 @@ def _series_to_python_values(series: pd.Series, col_name: object) -> list[object
                 "Convert nested objects to strings or flatten them first."
             )
 
+        if isinstance(raw, pd.Timestamp):
+            raise TypeError(
+                f"Column '{col_name}' contains unsupported scalar value "
+                f"of type 'Timestamp' at value {raw!r}. "
+                f'Fix: df["{col_name}"] = df["{col_name}"].astype(str)'
+            )
+
+        if isinstance(raw, pd.Timedelta):
+            raise TypeError(
+                f"Column '{col_name}' contains unsupported scalar value "
+                f"of type 'Timedelta' at value {raw!r}. "
+                f'Fix: convert df["{col_name}"] to strings or a supported '
+                "numeric duration before from_pandas()"
+            )
+
+        if isinstance(raw, complex):
+            raise TypeError(
+                f"Column '{col_name}' contains unsupported scalar value "
+                f"of type 'complex' at value {raw!r}. "
+                f'Fix: split df["{col_name}"] into real/imag columns or '
+                "convert it to strings before from_pandas()"
+            )
+
         value = _normalize_scalar(raw)
         values.append(value)
         if value is not None:
