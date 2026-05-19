@@ -85,7 +85,10 @@ static CellValue coerce_value(const CellValue& value, DType target) {
                 size_t pos = 0;
                 int64_t parsed = std::stoll(s, &pos);
                 if (pos == s.size()) return parsed;
-            } catch (...) {
+            } catch (const std::invalid_argument&) {
+                throw std::invalid_argument("Invalid fill value: cannot convert string to integer");
+            } catch (const std::out_of_range&) {
+                throw std::invalid_argument("Fill value out of range for integer type");
             }
         }
     }
@@ -164,7 +167,12 @@ Frame fill_nulls(const Frame& frame, const CellValue& value,
         const auto& src = frame.column(ci);
         if (targets.count(ci)) {
             Column col(src.name(), src.dtype());
-            CellValue fill_value = coerce_value(value, src.dtype());
+            CellValue fill_value;
+            try {
+                fill_value = coerce_value(value, src.dtype());
+            } catch (const std::exception& e) {
+                throw std::invalid_argument(e.what());
+            }
             for (size_t r = 0; r < src.size(); ++r) {
                 if (src.is_null(r)) {
                     col.push_back(fill_value);
