@@ -992,8 +992,7 @@ def combine_columns(
 
     is_arframe = isinstance(frame, ArFrame)
     if not is_arframe and not isinstance(frame, pd.DataFrame):
-        # Allow implicit conversions via to_pandas behavior from original code
-        is_arframe = not isinstance(frame, pd.DataFrame)
+        raise TypeError("frame must be an ArFrame or a pandas DataFrame")
 
     column_names = list(frame.columns)
 

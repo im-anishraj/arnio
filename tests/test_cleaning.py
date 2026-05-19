@@ -1394,6 +1394,25 @@ class TestCombineColumnsNativeRegression:
         )
         assert list(result["combined"]) == ["13", "24"]
 
+    def test_native_numeric_formatting(self):
+        import pandas as pd
+
+        df = pd.DataFrame({"a": [123, 456], "b": [1.5, 0.0]})
+        frame = ar.from_pandas(df)
+        result = ar.to_pandas(
+            ar.combine_columns(frame, subset=["a", "b"], separator="|")
+        )
+        # Verify the exact formatting behavior of the C++ backend:
+        # Integers map to standard integer string representations.
+        # Doubles format using std::to_string, which defaults to 6 decimal places.
+        assert list(result["combined"]) == ["123|1.500000", "456|0.000000"]
+
+    def test_unsupported_input_type_raises(self):
+        with pytest.raises(
+            TypeError, match="frame must be an ArFrame or a pandas DataFrame"
+        ):
+            ar.combine_columns({"a": [1, 2]}, subset=["a"])
+
 
 class TestSafeDivideColumns:
     def test_normal_division(self, tmp_path):
