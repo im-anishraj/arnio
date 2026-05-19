@@ -1113,6 +1113,52 @@ class TestFilterRows:
         assert list(df["age"]) == [30, 40]
 
 
+class TestReplaceValues:
+    def test_replace_values_null_key_replaces_existing_nulls_in_target_column(self):
+        import numpy as np
+
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "name": ["Alice", None, pd.NA],
+                    "city": [None, "Paris", None],
+                }
+            )
+        )
+
+        result = ar.replace_values(frame, {np.nan: "Unknown"}, column="name")
+        df = ar.to_pandas(result)
+
+        assert list(df["name"]) == ["Alice", "Unknown", "Unknown"]
+        assert pd.isna(df.loc[0, "city"])
+        assert df.loc[1, "city"] == "Paris"
+        assert pd.isna(df.loc[2, "city"])
+
+    def test_replace_values_null_replacement_creates_real_nulls(self):
+        frame = ar.from_pandas(
+            pd.DataFrame({"status": ["active", "inactive", "active"]})
+        )
+
+        result = ar.replace_values(frame, {"inactive": None})
+        df = ar.to_pandas(result)
+
+        assert list(df["status"].iloc[[0, 2]]) == ["active", "active"]
+        assert pd.isna(df.loc[1, "status"])
+
+    def test_replace_values_supports_pd_na_key_and_value(self):
+        frame = ar.from_pandas(
+            pd.DataFrame({"score": [1, None, 3], "flag": ["ok", "missing", "ok"]})
+        )
+
+        result = ar.replace_values(frame, {pd.NA: 0, "missing": pd.NA})
+        df = ar.to_pandas(result)
+
+        assert list(df["score"]) == [1, 0, 3]
+        assert df.loc[0, "flag"] == "ok"
+        assert pd.isna(df.loc[1, "flag"])
+        assert df.loc[2, "flag"] == "ok"
+
+
 class TestRoundNumericColumns:
     def test_round_all_numeric(self):
         import pandas as pd

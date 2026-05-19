@@ -1229,18 +1229,22 @@ def replace_values(frame, mapping, column=None):
 
     if column:
         s = df[column]
+        original_null_mask = s.isna() if null_key_present else None
         if normalized_mapping:
             s = s.replace(normalized_mapping)
         if null_key_present:
-            # replace existing nulls (NaN/None/pd.NA) in the series
-            s = s.fillna(null_replacement)
+            # Replace only values that were already null before replacement so
+            # null-valued mapping results remain real nulls.
+            s = s.where(~original_null_mask, null_replacement)
         df[column] = s
     else:
+        original_null_mask = df.isna() if null_key_present else None
         if normalized_mapping:
             df = df.replace(normalized_mapping)
         if null_key_present:
-            # replace existing nulls anywhere in the dataframe
-            df = df.fillna(null_replacement)
+            # Replace only values that were already null before replacement so
+            # null-valued mapping results remain real nulls.
+            df = df.where(~original_null_mask, null_replacement)
 
     return from_pandas(df) if is_arframe else df
 
