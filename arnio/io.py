@@ -5,7 +5,6 @@ CSV reading and writing functions.
 
 from __future__ import annotations
 
-import csv
 import io
 import os
 import shutil
@@ -48,16 +47,63 @@ def _utf8_csv_path(
                 "w", encoding="utf-8", newline="", suffix=".csv", delete=False
             ) as tmp:
                 if sample_rows is not None:
-                    # Use csv.reader so we advance through complete CSV records
-                    # rather than raw physical lines. This prevents a quoted
-                    # multiline field from being split at the sampling boundary,
-                    # which would produce an invalid partial CSV for scan_schema.
-                    reader = csv.reader(src, delimiter=delimiter)
-                    writer = csv.writer(tmp, delimiter=delimiter)
-                    for row_count, row in enumerate(reader):
+                    # Preserve the original decoded CSV text while sampling
+                    # complete logical records so scan_schema does not see a
+                    # rewritten file with normalized quoting or line endings.
+                    row_count = 0
+                    in_quotes = False
+                    pending_quote = False
+                    last_char_was_terminator = False
+
+                    while chunk := src.read(8192):
+                        chunk_len = len(chunk)
+                        index = 0
+                        while index < chunk_len:
+                            char = chunk[index]
+                            tmp.write(char)
+
+                            if char == '"':
+                                if pending_quote:
+                                    pending_quote = False
+                                elif in_quotes:
+                                    pending_quote = True
+                                else:
+                                    in_quotes = True
+                                last_char_was_terminator = False
+                            else:
+                                if pending_quote:
+                                    in_quotes = False
+                                    pending_quote = False
+
+                                if not in_quotes and char in {"\n", "\r"}:
+                                    row_count += 1
+                                    last_char_was_terminator = True
+                                    if (
+                                        char == "\r"
+                                        and index + 1 < chunk_len
+                                        and chunk[index + 1] == "\n"
+                                    ):
+                                        tmp.write("\n")
+                                        index += 1
+                                    if row_count >= sample_rows:
+                                        break
+                                else:
+                                    last_char_was_terminator = False
+
+                            index += 1
+
                         if row_count >= sample_rows:
                             break
-                        writer.writerow(row)
+
+                    if (
+                        sample_rows > 0
+                        and not last_char_was_terminator
+                        and tmp.tell() > 0
+                    ):
+                        # Count a final record that reaches EOF without a line
+                        # terminator so sampling semantics match the previous
+                        # logical-record-based behavior.
+                        row_count += 1
                 else:
                     shutil.copyfileobj(src, tmp)
                 tmp_name = tmp.name
@@ -643,8 +689,7 @@ def scan_csv(
     try:
         # Schema inference only needs a sample, avoiding full-file transcode.
         # sample_rows is passed so _utf8_csv_path uses record-aware sampling
-        # via csv.reader, which correctly handles quoted multiline fields that
-        # straddle the boundary.
+        # without rewriting decoded CSV text before native parsing.
         with _utf8_csv_path(
             path,
             encoding,

@@ -647,6 +647,16 @@ class TestScanCsv:
         with _utf8_csv_path(str(csv_path), "latin-1", sample_rows=2) as native_path:
             assert Path(native_path).read_text(encoding="utf-8") == "name\nAndré\n"
 
+    def test_non_utf8_sampling_preserves_quoted_field_text(self, tmp_path):
+        csv_path = tmp_path / "latin1_quoted.csv"
+        source_text = 'name,notes\r\nAlice,"caf\xe9,\r\nline2"\r\nBob,done\r\n'
+        csv_path.write_bytes(source_text.encode("latin-1"))
+
+        with _utf8_csv_path(str(csv_path), "latin-1", sample_rows=2) as native_path:
+            assert Path(native_path).read_bytes().decode("utf-8") == (
+                'name,notes\r\nAlice,"café,\r\nline2"\r\n'
+            )
+
     def test_scan_sample_size_non_utf8_does_not_leak_later_type_evidence(
         self, tmp_path
     ):
@@ -878,6 +888,17 @@ def test_scan_csv_non_utf8_multiline_boundary(tmp_path):
     assert schema == {"id": "int64", "text": "string"}
 
 
+def test_scan_csv_non_utf8_quoted_field_schema_preserved(tmp_path):
+    csv_file = tmp_path / "quoted_latin1.csv"
+    csv_file.write_bytes(
+        'id,text\r\n1,"caf\xe9,\r\nline2"\r\n2,done\r\n'.encode("latin-1")
+    )
+
+    schema = ar.scan_csv(str(csv_file), encoding="latin-1")
+
+    assert schema == {"id": "int64", "text": "string"}
+
+
 def test_read_csv_non_utf8_quoted_multiline_round_trips(tmp_path):
     """read_csv must preserve quoted multiline records through non-UTF-8 transcoding."""
     csv_file = tmp_path / "test_multiline_latin1.csv"
@@ -890,6 +911,15 @@ def test_read_csv_non_utf8_quoted_multiline_round_trips(tmp_path):
     assert list(df["id"]) == [1, 2]
     assert df["text"].iloc[0] == "line1\ncafé\nline3"
     assert df["text"].iloc[1] == "done"
+
+
+def test_scan_csv_utf8_quoted_field_behavior_unchanged(tmp_path):
+    csv_file = tmp_path / "quoted_utf8.csv"
+    csv_file.write_bytes(b'id,text\r\n1,"cafe,\r\nline2"\r\n2,done\r\n')
+
+    schema = ar.scan_csv(str(csv_file))
+
+    assert schema == {"id": "int64", "text": "string"}
 
 
 def test_scan_csv_type_evidence_after_limit(tmp_path):
