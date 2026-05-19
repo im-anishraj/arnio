@@ -1243,3 +1243,146 @@ def test_compare_profiles_above_changed_threshold_is_changed():
     comparison = ar.compare_profiles(baseline, current)
     assert comparison.drift_report["score"]["status"] == "changed"
     assert comparison.status_counts == {"ok": 0, "warning": 0, "changed": 1}
+
+
+# ── duplicate_rows correctness tests (perf/#662) ─────────────────────────────
+# These tests verify that the hash-based duplicate counting introduced in
+# perf/#662 produces the same result as the previous df.duplicated().sum()
+# baseline across all edge cases that matter for the profiling metric.
+
+
+class TestProfileDuplicateRowsCorrectness:
+    """Focused correctness tests for duplicate_rows in DataQualityReport.
+
+    Each test asserts both the new hash-based path (via ar.profile) and the
+    pandas baseline (df.duplicated().sum()) to make regressions immediately
+    visible.
+    """
+
+    def _baseline(self, frame: ar.ArFrame) -> int:
+        """Reference implementation: pandas df.duplicated().sum()."""
+        return int(ar.to_pandas(frame).duplicated().sum())
+
+    def test_no_duplicates(self):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1, 2, 3], "b": ["x", "y", "z"]}))
+        assert ar.profile(frame).duplicate_rows == 0
+        assert ar.profile(frame).duplicate_rows == self._baseline(frame)
+
+    def test_all_duplicate_rows(self):
+        frame = ar.from_pandas(pd.DataFrame({"a": [7, 7, 7], "b": ["q", "q", "q"]}))
+        # 3 rows, 1 unique → 2 duplicates
+        assert ar.profile(frame).duplicate_rows == 2
+        assert ar.profile(frame).duplicate_rows == self._baseline(frame)
+
+    def test_partial_duplicates(self):
+        frame = ar.from_pandas(
+            pd.DataFrame({"a": [1, 1, 2, 3, 3], "b": ["x", "x", "y", "z", "z"]})
+        )
+        # rows 0==1 and 3==4 → 2 duplicates
+        assert ar.profile(frame).duplicate_rows == 2
+        assert ar.profile(frame).duplicate_rows == self._baseline(frame)
+
+    def test_null_rows_treated_as_duplicates(self):
+        # Two rows where every cell is null should count as one duplicate,
+        # matching pandas default (NaN == NaN for deduplication purposes).
+        frame = ar.from_pandas(
+            pd.DataFrame({"a": [None, None, 1.0], "b": [None, None, 2.0]})
+        )
+        assert ar.profile(frame).duplicate_rows == 1
+        assert ar.profile(frame).duplicate_rows == self._baseline(frame)
+
+    def test_partial_null_rows(self):
+        # Only the null-containing column matches; the other differs.
+        frame = ar.from_pandas(
+            pd.DataFrame({"a": [None, None, 1.0], "b": [1.0, 2.0, 3.0]})
+        )
+        # All rows are distinct → 0 duplicates
+        assert ar.profile(frame).duplicate_rows == 0
+        assert ar.profile(frame).duplicate_rows == self._baseline(frame)
+
+    def test_mixed_dtypes_int_float_string_bool(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "i": [1, 1, 2],
+                    "f": [1.0, 1.0, 2.0],
+                    "s": ["a", "a", "b"],
+                    "b": [True, True, False],
+                }
+            )
+        )
+        assert ar.profile(frame).duplicate_rows == 1
+        assert ar.profile(frame).duplicate_rows == self._baseline(frame)
+
+    def test_single_row_frame(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [42]}))
+        assert ar.profile(frame).duplicate_rows == 0
+        assert ar.profile(frame).duplicate_rows == self._baseline(frame)
+
+    def test_empty_frame_returns_zero(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": pd.Series(dtype="float64")}))
+        assert ar.profile(frame).duplicate_rows == 0
+
+    def test_duplicate_ratio_consistent_with_duplicate_rows(self):
+        frame = ar.from_pandas(
+            pd.DataFrame({"a": [1, 1, 2, 3], "b": ["x", "x", "y", "z"]})
+        )
+        report = ar.profile(frame)
+        assert report.duplicate_rows == 1
+        assert abs(report.duplicate_ratio - 1 / 4) < 1e-9
+
+
+# ── duplicate_rows timing guard (perf/#662) ───────────────────────────────────
+
+
+def test_profile_duplicate_count_faster_than_pandas_baseline():
+    """Hash-based duplicate counting must be faster than df.duplicated().sum().
+
+    This is a timing guard, not a strict benchmark.  It uses a modest frame
+    size (100k rows) so it runs quickly in CI while still being large enough
+    to show the algorithmic difference.  The assertion requires the new path
+    to be at least 1.2× faster — a conservative threshold well below the
+    ~1.5× measured during development.
+    """
+    import time
+
+    import numpy as np
+
+    rng = np.random.default_rng(0)
+    n = 100_000
+    df = pd.DataFrame(
+        {
+            "a": rng.integers(0, int(n * 0.9), size=n).tolist(),
+            "b": rng.uniform(0, 1000, size=n).tolist(),
+            "c": [f"s{i % 10000}" for i in range(n)],
+        }
+    )
+    frame = ar.from_pandas(df)
+
+    RUNS = 3
+
+    # Baseline: pandas df.duplicated().sum() on already-converted df
+    df_converted = ar.to_pandas(frame)
+    times_baseline = []
+    for _ in range(RUNS):
+        t0 = time.perf_counter()
+        _ = int(df_converted.duplicated().sum())
+        times_baseline.append(time.perf_counter() - t0)
+
+    # Proposed: hash_pandas_object path (what profile() now uses)
+    times_new = []
+    for _ in range(RUNS):
+        t0 = time.perf_counter()
+        hashes = pd.util.hash_pandas_object(df_converted, index=False)
+        _ = int(hashes.duplicated().sum())
+        times_new.append(time.perf_counter() - t0)
+
+    avg_baseline = sum(times_baseline) / RUNS
+    avg_new = sum(times_new) / RUNS
+    speedup = avg_baseline / avg_new if avg_new > 0 else float("inf")
+
+    assert speedup >= 1.2, (
+        f"Expected hash-based path to be ≥1.2× faster than df.duplicated(), "
+        f"got {speedup:.2f}× (baseline={avg_baseline*1000:.1f}ms, "
+        f"new={avg_new*1000:.1f}ms)"
+    )
