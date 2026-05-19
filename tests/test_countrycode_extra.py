@@ -1,7 +1,5 @@
 """Additional tests for CountryCode schema validation."""
 
-import pytest
-
 import arnio as ar
 
 
