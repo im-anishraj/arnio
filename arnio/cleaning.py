@@ -146,6 +146,51 @@ def drop_nulls(
     return ArFrame(result)
 
 
+def drop_columns(frame: ArFrame, columns: Sequence[str]) -> ArFrame:
+    """Return a new frame without the requested columns.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input data frame.
+    columns : sequence of str
+        Column names to remove.
+
+    Returns
+    -------
+    ArFrame
+        New frame with the requested columns removed.
+
+    Raises
+    ------
+    TypeError
+        If columns is a string/bytes value or contains non-string items.
+    ValueError
+        If any requested column is missing.
+
+    Examples
+    --------
+    >>> reduced = ar.drop_columns(frame, ["debug_col"])
+    """
+    requested_columns = _validate_column_sequence(columns, argument_name="columns")
+    if len(requested_columns) == 0:
+        return frame
+
+    missing = [column for column in requested_columns if column not in frame.columns]
+    if missing:
+        raise ValueError(f"Columns not found in frame: {missing}")
+
+    requested_set = set(requested_columns)
+    remaining_columns = [
+        column for column in frame.columns if column not in requested_set
+    ]
+
+    from .convert import from_pandas, to_pandas
+
+    df = to_pandas(frame)
+    return from_pandas(df.loc[:, remaining_columns])
+
+
 def keep_rows_with_nulls(
     frame: ArFrame,
     *,

@@ -192,6 +192,60 @@ class TestDropDuplicates:
         assert result.shape[0] == 3
 
 
+class TestDropColumns:
+    def test_drop_columns_removes_requested_columns_and_preserves_order(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "id": [1, 2],
+                    "debug": ["x", "y"],
+                    "name": ["Alice", "Bob"],
+                    "flag": [True, False],
+                }
+            )
+        )
+
+        result = ar.drop_columns(frame, ["debug", "flag"])
+        df = ar.to_pandas(result)
+
+        assert list(df.columns) == ["id", "name"]
+        assert list(df["name"]) == ["Alice", "Bob"]
+
+    def test_drop_columns_allows_empty_input_as_no_op(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        result = ar.drop_columns(frame, [])
+
+        assert result is frame
+
+    def test_drop_columns_rejects_missing_columns(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(ValueError, match="Columns not found in frame"):
+            ar.drop_columns(frame, ["missing"])
+
+    def test_drop_columns_rejects_string_input(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(TypeError, match="not a string"):
+            ar.drop_columns(frame, "age")
+
+    def test_drop_columns_rejects_non_string_items(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(TypeError, match="only string column names"):
+            ar.drop_columns(frame, ["age", 1])
+
+    def test_drop_columns_can_remove_all_columns(self):
+        frame = ar.from_pandas(pd.DataFrame({"id": [1, 2], "name": ["a", "b"]}))
+
+        result = ar.drop_columns(frame, ["id", "name"])
+        df = ar.to_pandas(result)
+
+        assert list(df.columns) == []
+        assert result.shape == (0, 0)
+
+
 class TestDropConstantColumns:
     def test_drop_constant_columns_removes_constant_columns(self):
         frame = ar.from_pandas(
