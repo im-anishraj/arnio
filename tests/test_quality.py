@@ -454,6 +454,32 @@ def test_auto_clean_rejects_unknown_mode(sample_csv):
         assert "mode must be" in str(exc)
 
 
+def test_auto_clean_strict_casts_ambiguous_numeric_strings():
+    df = pd.DataFrame(
+        {
+            "code": ["007", "008"],          # Not identifier-like, but has leading zeros
+            "user_id": ["001", "002"],       # Identifier-like, has leading zeros
+        }
+    )
+    frame = ar.from_pandas(df)
+
+    # Verify that without allow_lossy_casts, strict mode fails
+    with pytest.raises(ValueError, match="would apply type casts"):
+        ar.auto_clean(frame, mode="strict")
+
+    # Apply strict mode with allow_lossy_casts
+    clean = ar.auto_clean(frame, mode="strict", allow_lossy_casts=True)
+    result = ar.to_pandas(clean)
+
+    # "code" is cast to int64, losing leading zeros
+    assert list(result["code"]) == [7, 8]
+    assert pd.api.types.is_integer_dtype(result["code"])
+
+    # "user_id" is protected and retains leading zeros
+    assert list(result["user_id"]) == ["001", "002"]
+    assert pd.api.types.is_string_dtype(result["user_id"])
+
+
 def test_profile_sample_size(tmp_path):
     path = tmp_path / "sample.csv"
     path.write_text("id\n1\n2\n3\n4\n5\n6\n7\n")
