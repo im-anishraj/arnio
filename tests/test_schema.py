@@ -24,6 +24,24 @@ def test_schema_validation_passes_for_valid_frame(sample_csv):
     assert result.bad_rows == []
 
 
+def test_schema_rejects_invalid_field_values_string(sample_csv):
+    frame = ar.read_csv(sample_csv)
+    with pytest.raises(TypeError, match="must be a Field instance"):
+        ar.validate(frame, {"id": "int64"})
+
+
+def test_schema_rejects_invalid_field_values_dict(sample_csv):
+    frame = ar.read_csv(sample_csv)
+    with pytest.raises(TypeError, match="must be a Field instance"):
+        ar.validate(frame, {"id": {"type": "int64"}})
+
+
+def test_schema_rejects_invalid_field_values_none(sample_csv):
+    frame = ar.read_csv(sample_csv)
+    with pytest.raises(TypeError, match="must be a Field instance"):
+        ar.validate(frame, {"id": None})
+
+
 def test_schema_validation_collects_row_level_issues(tmp_path):
     path = tmp_path / "bad.csv"
     path.write_text(

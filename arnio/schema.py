@@ -68,6 +68,13 @@ class Schema:
     unique: list[str] | tuple[str, ...] | None = None
     rules: list[Callable[[pd.DataFrame], list[ValidationIssue]]] | None = None
 
+    def __post_init__(self) -> None:
+        for name, field_def in self.fields.items():
+            if not isinstance(field_def, Field):
+                raise TypeError(
+                    f"Schema value for column {name!r} must be a Field instance such as ar.Int64(), got {type(field_def).__name__}"
+                )
+
     def validate(self, frame: ArFrame) -> ValidationResult:
         """Validate a frame against this schema."""
         return validate(frame, self)
