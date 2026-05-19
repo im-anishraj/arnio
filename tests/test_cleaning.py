@@ -52,7 +52,7 @@ class TestKeepRowsWithNulls:
     def test_subset_unknown_column_raises(self, csv_with_nulls):
         # passing a column that doesn't exist should raise ValueError
         frame = ar.read_csv(csv_with_nulls)
-        with pytest.raises(ValueError, match="unknown column"):
+        with pytest.raises(KeyError):
             ar.keep_rows_with_nulls(frame, subset=["nonexistent"])
 
     def test_index_is_reset(self, csv_with_nulls):

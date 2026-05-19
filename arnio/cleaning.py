@@ -217,7 +217,7 @@ def keep_rows_with_nulls(
     ------
     TypeError
         If subset is passed as a string instead of a list.
-    ValueError
+    KeyError
         If any column in subset does not exist in the frame.
 
     Examples
@@ -243,11 +243,11 @@ def keep_rows_with_nulls(
     cols = subset if subset is not None else df.columns.tolist()
 
     # validate that all subset columns actually exist
-    unknown = [c for c in cols if c not in df.columns]
-    if unknown:
-        raise ValueError(
-            f"keep_rows_with_nulls: unknown column(s) in subset: {unknown}. "
-            f"Available columns: {df.columns.tolist()}"
+    if subset is not None:
+        validate_columns_exist(
+            frame,
+            _validate_column_sequence(subset, argument_name="subset"),
+            operation="keep_rows_with_nulls",
         )
 
     mask = df[cols].isnull().any(axis=1)
