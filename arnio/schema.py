@@ -774,6 +774,11 @@ def validate(frame: ArFrame, schema: Schema | dict[str, Field]) -> ValidationRes
     ValidationResult
         Validation result containing all issues and bad row indexes.
 
+    Raises
+    ------
+    TypeError
+        If schema.unique is provided but is not a list or tuple of strings.
+
     Examples
     --------
     >>> schema = ar.Schema({"email": ar.Email(nullable=False)})
@@ -811,7 +816,13 @@ def validate(frame: ArFrame, schema: Schema | dict[str, Field]) -> ValidationRes
                 )
 
     if schema.unique is not None:
-        if isinstance(schema.unique, (list, tuple)) and len(schema.unique) == 0:
+        if not isinstance(schema.unique, (list, tuple)):
+            raise TypeError(
+                "Schema 'unique' must be a list or tuple of strings (e.g., ['column_name']), "
+                f"got {type(schema.unique).__name__}."
+            )
+
+        if len(schema.unique) == 0:
             issues.append(
                 ValidationIssue(
                     column=None,
@@ -819,7 +830,7 @@ def validate(frame: ArFrame, schema: Schema | dict[str, Field]) -> ValidationRes
                     message="Composite unique columns cannot be empty",
                 )
             )
-        elif isinstance(schema.unique, (list, tuple)):
+        else:
             missing_cols = [c for c in schema.unique if c not in df.columns]
             if missing_cols:
                 for col in missing_cols:
