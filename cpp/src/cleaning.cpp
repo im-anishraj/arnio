@@ -57,6 +57,22 @@ static std::string cell_to_string(const CellValue& cell) {
         return std::to_string(std::get<int64_t>(cell));
     }
     if (std::holds_alternative<double>(cell)) {
+        return std::to_string(std::get<double>(cell));
+    }
+    if (std::holds_alternative<bool>(cell)) {
+        return std::get<bool>(cell) ? "true" : "false";
+    }
+    return "";
+}
+
+static std::string combine_cell_to_string(const CellValue& cell) {
+    if (std::holds_alternative<std::string>(cell)) {
+        return std::get<std::string>(cell);
+    }
+    if (std::holds_alternative<int64_t>(cell)) {
+        return std::to_string(std::get<int64_t>(cell));
+    }
+    if (std::holds_alternative<double>(cell)) {
         double v = std::get<double>(cell);
         // Use %.17g for shortest portable representation matching Python str(float):
         // %g strips trailing zeros; 17 significant digits ensures round-trip accuracy.
@@ -574,7 +590,7 @@ Frame combine_columns(const Frame& frame, const std::vector<std::string>& subset
                 row_str += separator;
             }
             if (!frame.column(ci).is_null(r)) {
-                row_str += cell_to_string(frame.column(ci).at(r));
+                row_str += combine_cell_to_string(frame.column(ci).at(r));
             }
         }
 
