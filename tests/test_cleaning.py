@@ -666,6 +666,23 @@ class TestParseBoolStrings:
         with pytest.raises(ValueError):
             ar.parse_bool_strings(frame, subset=[])
 
+    def test_parse_bool_strings_accepts_tuple_subset(self):
+        import pandas as pd
+
+        df = pd.DataFrame(
+            {
+                "active": ["YES", "no"],
+                "name": ["Alice", "Bob"],
+            }
+        )
+
+        frame = ar.from_pandas(df)
+        result = ar.parse_bool_strings(frame, subset=("active",))
+        out = ar.to_pandas(result)
+
+        assert out["active"].tolist() == [True, False]
+        assert out["name"].tolist() == ["Alice", "Bob"]
+
     def test_parse_bool_strings_missing_subset_column(self):
         import pandas as pd
 
