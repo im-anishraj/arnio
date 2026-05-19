@@ -1245,18 +1245,19 @@ def test_compare_profiles_above_changed_threshold_is_changed():
     assert comparison.status_counts == {"ok": 0, "warning": 0, "changed": 1}
 
 
-# ── duplicate_rows correctness tests (perf/#662) ─────────────────────────────
-# These tests verify that the hash-based duplicate counting introduced in
-# perf/#662 produces the same result as the previous df.duplicated().sum()
-# baseline across all edge cases that matter for the profiling metric.
+# ── duplicate_rows correctness tests (Refs #662) ─────────────────────────────
+# These tests verify the duplicate_rows field in DataQualityReport against
+# the pandas df.duplicated().sum() baseline.  profile() continues to use
+# df.duplicated().sum() as its default; the hash_pandas_object candidate
+# is covered separately below for future comparison only.
 
 
 class TestProfileDuplicateRowsCorrectness:
     """Focused correctness tests for duplicate_rows in DataQualityReport.
 
-    Each test asserts both the new hash-based path (via ar.profile) and the
-    pandas baseline (df.duplicated().sum()) to make regressions immediately
-    visible.
+    profile() uses df.duplicated().sum() as its default implementation.
+    Each test asserts ar.profile() against the pandas baseline directly so
+    any future change to the counting path is immediately caught.
     """
 
     def _baseline(self, frame: ar.ArFrame) -> int:
