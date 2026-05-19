@@ -90,13 +90,15 @@ print(metadata["step_timings"])
 ```
 
 ## Quick Example
+
+```python
 import arnio
 
 frame = arnio.read_csv("sample.csv")
 
 # Preview first 5 rows
 frame.preview(5)
-
+```
 
 ### Pipeline validation behavior
 
