@@ -176,10 +176,18 @@ def pipeline(
 
             started_at = perf_counter()
             if name == "rename_columns" and "mapping" not in kwargs:
-                result = fn(result, mapping=kwargs)
+                step_result = fn(result, mapping=kwargs)
+
+
+                if not dry_run:
+                    result = step_result
 
             elif name == "cast_types" and "mapping" not in kwargs:
-                result = fn(result, kwargs)
+                step_result = fn(result, kwargs)
+
+                if not dry_run:
+                    result = step_result
+                            
 
             else:
                 target_frame = result
