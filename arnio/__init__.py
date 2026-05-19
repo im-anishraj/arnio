@@ -33,11 +33,11 @@ from .cleaning import (
     validate_columns_exist,
 )
 from .convert import from_pandas, to_pandas
-from .exceptions import ArnioError, CsvReadError, TypeCastError, UnknownStepError
+from .exceptions import ArnioError, CsvReadError, TypeCastError, UnknownStepError,PipelineSerializationError
 from .frame import ArFrame
 from .integrations import ArnioPandasAccessor
 from .io import read_csv, scan_csv
-from .pipeline import pipeline, register_step
+from .pipeline import load_pipeline, pipeline, register_step, save_pipeline
 from .quality import (
     ColumnProfile,
     DataQualityReport,
@@ -120,4 +120,7 @@ __all__ = [
     "CsvReadError",
     "TypeCastError",
     "normalize_unicode",
+    "save_pipeline",
+    "load_pipeline",
+    "PipelineSerializationError",
 ]

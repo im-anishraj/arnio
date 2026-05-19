@@ -131,3 +131,56 @@ def pipeline(
 register_step("filter_rows", cleaning.filter_rows)
 register_step("safe_divide_columns", cleaning.safe_divide_columns)
 register_step("replace_values", cleaning.replace_values)
+def save_pipeline(steps: list[tuple], filepath: str | Path) -> None:
+    """Save a list of pipeline steps to a JSON or YAML file for reproducible jobs."""
+    from .exceptions import PipelineSerializationError
+
+    path = Path(filepath)
+    try:
+        if path.suffix == ".json":
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(steps, f, indent=4, sort_keys=True)
+        elif path.suffix in [".yaml", ".yml"]:
+            if not HAS_YAML:
+                raise PipelineSerializationError(
+                    "PyYAML is required for YAML support. Please install it."
+                )
+            with open(path, "w", encoding="utf-8") as f:
+                yaml.safe_dump(steps, f, sort_keys=True)
+        else:
+            raise PipelineSerializationError(
+                f"Unsupported format: {path.suffix}. Use .json or .yaml"
+            )
+    except Exception as e:
+        if isinstance(e, PipelineSerializationError):
+            raise
+        raise PipelineSerializationError(f"Failed to save pipeline: {e}")
+
+
+def load_pipeline(filepath: str | Path) -> list[tuple]:
+    """Load a list of pipeline steps from a JSON or YAML file."""
+    from .exceptions import PipelineSerializationError
+
+    path = Path(filepath)
+    if not path.exists():
+        raise PipelineSerializationError(f"File not found: {filepath}")
+    try:
+        if path.suffix == ".json":
+            with open(path, encoding="utf-8") as f:
+                loaded_steps = json.load(f)
+        elif path.suffix in [".yaml", ".yml"]:
+            if not HAS_YAML:
+                raise PipelineSerializationError(
+                    "PyYAML is required for YAML support. Please install it."
+                )
+            with open(path, encoding="utf-8") as f:
+                loaded_steps = yaml.safe_load(f)
+        else:
+            raise PipelineSerializationError(
+                f"Unsupported format: {path.suffix}. Use .json or .yaml"
+            )
+        return [tuple(step) for step in loaded_steps]
+    except Exception as e:
+        if isinstance(e, PipelineSerializationError):
+            raise
+        raise PipelineSerializationError(f"Failed to load pipeline: {e}")

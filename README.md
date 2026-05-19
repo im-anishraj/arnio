@@ -812,6 +812,25 @@ DataQualityReport(
 | **Duplicates** | 0 (0.0%) |
 <br>
 
+### Reproducible Jobs
+You can save pipelines to JSON or YAML so you can reuse them later:
+
+```python
+import arnio as ar
+
+# 1. Define your pipeline steps
+steps = [
+    ("drop_nulls", {"subset": ["age"]}),
+    ("strip_whitespace",)
+]
+
+# 2. Save the pipeline to a file
+ar.save_pipeline(steps, "my_pipeline.json")
+
+# 3. Load the pipeline later
+loaded_steps = ar.load_pipeline("my_pipeline.json")
+```
+
 ## 🗺️ Roadmap
 
 | Version | Focus | Status |

@@ -622,3 +622,35 @@ def test_replace_values_direct_pandas_does_not_mutate_input():
     assert list(df["status"]) == ["active", "inactive"]
     # output should be replaced
     assert list(out["status"]) == ["A", "inactive"]
+def test_pipeline_serialization_errors():
+    """Verify that serialization raises correct exceptions for bad files."""
+    with pytest.raises(PipelineSerializationError, match="Failed to load"):
+        load_pipeline("non_existent_file.json")
+
+
+def test_roundtrip_kwargs_determinism():
+    """Verify that kwargs (dictionaries) are saved deterministically and load identically."""
+    original_steps = [
+        ("cast_types", {"mapping": {"score": "float64", "age": "int64"}}),
+        ("rename_columns", {"mapping": {"old_name": "new_name", "a": "b"}}),
+    ]
+
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        filepath = os.path.join(tmpdirname, "kwargs_job.json")
+        save_pipeline(original_steps, filepath)
+
+        loaded_steps = load_pipeline(filepath)
+        assert loaded_steps == original_steps
+        assert loaded_steps[0][1]["mapping"]["score"] == "float64"
+
+
+def test_unknown_step_serialization():
+    """Verify that serialization successfully handles steps not registered in the pipeline."""
+    steps = [("this_step_does_not_exist", {"foo": "bar"})]
+
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        filepath = os.path.join(tmpdirname, "unknown_step.json")
+        save_pipeline(steps, filepath)
+
+        loaded_steps = load_pipeline(filepath)
+        assert loaded_steps == steps
