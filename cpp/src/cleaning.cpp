@@ -168,11 +168,14 @@ Frame fill_nulls(const Frame& frame, const CellValue& value,
             Column col(src.name(), src.dtype());
             CellValue fill_value;
             
-            fill_value = coerce_value(value, src.dtype());
-            
-            if (std::holds_alternative<std::monostate>(fill_value)) {
-            throw std::invalid_argument("Fill value is incompatible with target column type");
-        }
+            try {
+                fill_value = coerce_value(value, src.dtype());
+                if (std::holds_alternative<std::monostate>(fill_value) && !std::holds_alternative<std::monostate>(value)) {
+                    throw std::invalid_argument("Fill value is incompatible with target column type");
+                }
+            } catch (const std::exception& e) {
+                throw std::invalid_argument(e.what());
+            }
 
             for (size_t r = 0; r < src.size(); ++r) {
                 if (src.is_null(r)) {
