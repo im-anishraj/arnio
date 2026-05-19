@@ -180,17 +180,6 @@ std::string normalize_numeric(const std::string& value, const CsvConfig& config)
     return s;
 }
 
-bool looks_like_integer_literal(const std::string& value) {
-    if (value.empty()) return false;
-    size_t start = 0;
-    if (value[0] == '-' || value[0] == '+') {
-        start = 1;
-    }
-    if (start == value.size()) return false;
-    return std::all_of(value.begin() + static_cast<std::ptrdiff_t>(start), value.end(),
-                       [](unsigned char ch) { return std::isdigit(ch); });
-}
-
 void validate_row_width(size_t row_number, size_t expected, size_t actual) {
     if (actual == expected) return;
     throw std::runtime_error("CSV row " + std::to_string(row_number) + " has " +
@@ -298,10 +287,6 @@ DType CsvReader::infer_type(const std::string& value) const {
             if (errno == ERANGE) return DType::STRING;
 
             if (has_leading_zero_indicator(cleaned)) {
-                return DType::STRING;
-            }
-
-            if (looks_like_integer_literal(cleaned)) {
                 return DType::STRING;
             }
 
