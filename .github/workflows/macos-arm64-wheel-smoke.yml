@@ -23,8 +23,6 @@ jobs:
     name: Build arm64 wheel and smoke test (macOS)
     # macos-14 is the GitHub-hosted Apple Silicon (M1) runner.
     runs-on: macos-14
-    # Non-blocking while the job stabilises; remove once consistently green.
-    continue-on-error: true
 
     steps:
       - name: Checkout repository
