@@ -170,7 +170,7 @@ def drop_columns(frame: ArFrame, columns: Sequence[str]) -> ArFrame:
 
     Examples
     --------
-    >>> reduced = ar.drop_columns(frame, ["debug_col"])
+    >>> frame = ar.drop_columns(frame, ["debug_col"])
     """
     requested_columns = _validate_column_sequence(columns, argument_name="columns")
     if len(requested_columns) == 0:
@@ -179,6 +179,8 @@ def drop_columns(frame: ArFrame, columns: Sequence[str]) -> ArFrame:
     missing = [column for column in requested_columns if column not in frame.columns]
     if missing:
         raise ValueError(f"Columns not found in frame: {missing}")
+    if len(requested_columns) == len(frame.columns):
+        raise ValueError("drop_columns cannot remove all columns from the frame")
 
     requested_set = set(requested_columns)
     remaining_columns = [

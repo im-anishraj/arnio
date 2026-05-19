@@ -236,14 +236,11 @@ class TestDropColumns:
         with pytest.raises(TypeError, match="only string column names"):
             ar.drop_columns(frame, ["age", 1])
 
-    def test_drop_columns_can_remove_all_columns(self):
+    def test_drop_columns_rejects_removing_all_columns(self):
         frame = ar.from_pandas(pd.DataFrame({"id": [1, 2], "name": ["a", "b"]}))
 
-        result = ar.drop_columns(frame, ["id", "name"])
-        df = ar.to_pandas(result)
-
-        assert list(df.columns) == []
-        assert result.shape == (0, 0)
+        with pytest.raises(ValueError, match="drop_columns cannot remove all columns"):
+            ar.drop_columns(frame, ["id", "name"])
 
 
 class TestDropConstantColumns:
