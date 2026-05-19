@@ -822,6 +822,12 @@ def validate(frame: ArFrame, schema: Schema | dict[str, Field]) -> ValidationRes
                 f"got {type(schema.unique).__name__}."
             )
 
+        for item in schema.unique:
+            if not isinstance(item, str):
+                raise TypeError(
+                    f"Schema 'unique' members must be strings, got {type(item).__name__} for element {item!r}."
+                )
+
         if len(schema.unique) == 0:
             issues.append(
                 ValidationIssue(

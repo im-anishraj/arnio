@@ -2011,3 +2011,16 @@ def test_validate_unique_string_raises_type_error(tmp_path):
         TypeError, match="Schema 'unique' must be a list or tuple of strings"
     ):
         ar.validate(frame, schema)
+
+
+def test_validate_unique_invalid_member_type_raises_type_error(tmp_path):
+    schema = ar.Schema(fields={"id": ar.String()}, unique=["id"])
+
+    object.__setattr__(schema, "unique", ["id", 123])
+
+    path = tmp_path / "unique_member_test.csv"
+    path.write_text("id\nA\nB\n")
+    frame = ar.read_csv(path)
+
+    with pytest.raises(TypeError, match="Schema 'unique' members must be strings"):
+        ar.validate(frame, schema)
