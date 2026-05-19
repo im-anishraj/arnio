@@ -960,3 +960,148 @@ def test_data_quality_report_repr_html_snippet():
     assert "Data Quality Report" in html_out
     assert "&lt;script&gt;unsafe_col&lt;/script&gt;" in html_out
     assert "<script>unsafe_col</script>" not in html_out
+
+
+# ── explain mode tests ────────────────────────────────────────────────────────
+
+
+def test_auto_clean_explain_normal_clean(tmp_path):
+    """Normal auto_clean with explain=False and return_report=False should return ArFrame."""
+    path = tmp_path / "data.csv"
+    path.write_text("id,name\n1, Alice \n2, Bob \n")
+    frame = ar.read_csv(path)
+
+    result = ar.auto_clean(frame, explain=False, return_report=False)
+    assert isinstance(result, ar.ArFrame)
+
+
+def test_auto_clean_explain_return_report_only(tmp_path):
+    """return_report=True and explain=False should return (ArFrame, DataQualityReport)."""
+    path = tmp_path / "data.csv"
+    path.write_text("id,name\n1, Alice \n2, Bob \n")
+    frame = ar.read_csv(path)
+
+    result = ar.auto_clean(frame, explain=False, return_report=True)
+    assert isinstance(result, tuple)
+    assert len(result) == 2
+    cleaned, report = result
+    assert isinstance(cleaned, ar.ArFrame)
+    assert isinstance(report, ar.DataQualityReport)
+
+
+def test_auto_clean_explain_returns_tuple(tmp_path):
+    """explain=True and return_report=False should return (ArFrame, CleanExplanation)."""
+    path = tmp_path / "data.csv"
+    path.write_text("id,name\n1, Alice \n2, Alice \n")
+    frame = ar.read_csv(path)
+
+    result = ar.auto_clean(frame, mode="strict", explain=True, allow_lossy_casts=True)
+
+    assert isinstance(result, tuple)
+    assert len(result) == 2
+    cleaned, explanation = result
+    assert isinstance(cleaned, ar.ArFrame)
+    assert isinstance(explanation, ar.CleanExplanation)
+
+
+def test_auto_clean_explain_row_counts(tmp_path):
+    """CleanExplanation rows_before/after/removed should be accurate."""
+    path = tmp_path / "dups.csv"
+    path.write_text("id,name\n1,Alice\n1,Alice\n2,Bob\n")
+    frame = ar.read_csv(path)
+
+    cleaned, explanation = ar.auto_clean(
+        frame, mode="strict", explain=True, allow_lossy_casts=True
+    )
+
+    assert explanation.rows_before == 3
+    assert explanation.rows_after == 2
+    assert explanation.rows_removed == 1
+    assert explanation.mode == "strict"
+
+
+def test_auto_clean_explain_steps_recorded(tmp_path):
+    """Each applied step should produce a CleanStepRecord."""
+    path = tmp_path / "ws.csv"
+    path.write_text("id,name\n1, Alice \n2, Bob \n")
+    frame = ar.read_csv(path)
+
+    cleaned, explanation = ar.auto_clean(
+        frame, mode="safe", explain=True, allow_lossy_casts=True
+    )
+
+    assert len(explanation.steps) >= 1
+    step = explanation.steps[0]
+    assert isinstance(step, ar.CleanStepRecord)
+    assert step.step == "strip_whitespace"
+    assert step.rows_before == 2
+    assert step.rows_after == 2
+    assert step.rows_removed == 0
+    assert isinstance(step.reason, str)
+    assert len(step.reason) > 0
+
+
+def test_auto_clean_explain_with_return_report(tmp_path):
+    """explain=True and return_report=True should return (ArFrame, DataQualityReport, CleanExplanation)."""
+    path = tmp_path / "data.csv"
+    path.write_text("id,name\n1, Alice \n2, Bob \n")
+    frame = ar.read_csv(path)
+
+    result = ar.auto_clean(
+        frame,
+        mode="safe",
+        return_report=True,
+        explain=True,
+        allow_lossy_casts=True,
+    )
+
+    assert isinstance(result, tuple)
+    assert len(result) == 3
+    cleaned, report, explanation = result
+    assert isinstance(cleaned, ar.ArFrame)
+    assert isinstance(report, ar.DataQualityReport)
+    assert isinstance(explanation, ar.CleanExplanation)
+
+
+def test_auto_clean_explain_no_steps_clean_data(tmp_path):
+    """A perfectly clean dataset should result in zero steps applied."""
+    path = tmp_path / "clean.csv"
+    path.write_text("id,name\n1,Alice\n2,Bob\n")
+    frame = ar.read_csv(path)
+
+    cleaned, explanation = ar.auto_clean(
+        frame, mode="strict", explain=True, allow_lossy_casts=True
+    )
+
+    assert explanation.rows_removed == 0
+    assert explanation.rows_before == explanation.rows_after
+
+
+def test_auto_clean_explain_str_representation(tmp_path):
+    """CleanExplanation __str__ should be human-readable."""
+    path = tmp_path / "ws.csv"
+    path.write_text("id,name\n1, Alice \n2, Bob \n")
+    frame = ar.read_csv(path)
+
+    _, explanation = ar.auto_clean(
+        frame, mode="safe", explain=True, allow_lossy_casts=True
+    )
+    text = str(explanation)
+
+    assert "CleanExplanation" in text
+    assert "rows" in text
+    assert "steps applied" in text
+
+
+def test_auto_clean_explain_dry_run_error(tmp_path):
+    """Using explain=True with dry_run=True should raise a ValueError."""
+    path = tmp_path / "data.csv"
+    path.write_text("id,name\n1,Alice\n2,Bob\n")
+    frame = ar.read_csv(path)
+
+    import pytest
+
+    with pytest.raises(
+        ValueError, match="explain=True cannot be used with dry_run=True"
+    ):
+        ar.auto_clean(frame, explain=True, dry_run=True)

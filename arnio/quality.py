@@ -1345,6 +1345,60 @@ def suggest_cleaning(
     return suggestions
 
 
+@dataclass(frozen=True)
+class CleanStepRecord:
+    """Audit record for a single step applied by auto_clean."""
+
+    step: str
+    """Name of the cleaning step (e.g. ``strip_whitespace``)."""
+    kwargs: dict[str, Any]
+    """Keyword arguments passed to the step."""
+    rows_before: int
+    """Row count before this step was applied."""
+    rows_after: int
+    """Row count after this step was applied."""
+    rows_removed: int
+    """Number of rows removed by this step (0 for non-row-dropping steps)."""
+    reason: str
+    """Human-readable explanation of why this step was selected."""
+
+
+@dataclass(frozen=True)
+class CleanExplanation:
+    """Structured audit trail returned by ``auto_clean`` when ``explain=True``.
+
+    This object captures a before-and-after summary of every cleaning step
+    that was applied, making it easy to audit, log, or display what
+    ``auto_clean`` changed and why.
+    """
+
+    mode: str
+    """The cleaning mode that was used (``'safe'`` or ``'strict'``)."""
+    rows_before: int
+    """Total row count before any cleaning."""
+    rows_after: int
+    """Total row count after all cleaning steps."""
+    rows_removed: int
+    """Total rows removed across all steps."""
+    steps: list[CleanStepRecord]
+    """Ordered list of steps that were actually applied."""
+
+    def __str__(self) -> str:
+        lines: list[str] = [
+            f"CleanExplanation(mode={self.mode!r})",
+            f"  rows : {self.rows_before} -> {self.rows_after} ({self.rows_removed} removed)",
+            f"  steps applied ({len(self.steps)}):",
+        ]
+        for rec in self.steps:
+            lines.append(
+                f"    [{rec.step}] rows {rec.rows_before}->{rec.rows_after} "
+                f"(-{rec.rows_removed}) | reason: {rec.reason}"
+            )
+        if not self.steps:
+            lines.append("    (none)")
+        return "\n".join(lines)
+
+
 def auto_clean(
     frame: ArFrame,
     *,
@@ -1352,7 +1406,14 @@ def auto_clean(
     return_report: bool = False,
     dry_run: bool = False,
     allow_lossy_casts: bool = False,
-) -> ArFrame | DataQualityReport | tuple[ArFrame, DataQualityReport]:
+    explain: bool = False,
+) -> (
+    ArFrame
+    | DataQualityReport
+    | tuple[ArFrame, DataQualityReport]
+    | tuple[ArFrame, CleanExplanation]
+    | tuple[ArFrame, DataQualityReport, CleanExplanation]
+):
     """Apply built-in automatic cleaning.
 
     Parameters
@@ -1368,17 +1429,33 @@ def auto_clean(
         Return the proposed pre-cleaning report without mutating the frame.
     allow_lossy_casts : bool, default False
         Required before strict mode applies suggested type casts.
+    explain : bool, default False
+        When ``True``, return a :class:`CleanExplanation` object that records
+        which steps ran, before/after row counts for each step, and why each
+        step was selected. The cleaned frame is always the first element in the
+        returned tuple.
 
     Returns
     -------
-    ArFrame, DataQualityReport, or tuple[ArFrame, DataQualityReport]
-        Cleaned frame, the dry-run report, or a frame/report tuple.
+    ArFrame
+        Cleaned frame (when *return_report*, *dry_run*, and *explain* are all ``False``).
+    DataQualityReport
+        When *dry_run* is ``True`` and *return_report* is ``False``.
+    tuple[ArFrame, DataQualityReport]
+        When only *return_report* is ``True``.
+    tuple[ArFrame, CleanExplanation]
+        When only *explain* is ``True``.
+    tuple[ArFrame, DataQualityReport, CleanExplanation]
+        When both *return_report* and *explain* are ``True``.
 
     Examples
     --------
     >>> clean = ar.auto_clean(frame)
     >>> report = ar.auto_clean(frame, mode="strict", dry_run=True)
     >>> clean = ar.auto_clean(frame, mode="strict", allow_lossy_casts=True)
+    >>> clean, report = ar.auto_clean(frame, mode="strict", return_report=True)
+    >>> clean, explanation = ar.auto_clean(frame, explain=True)
+    >>> print(explanation)
     """
     if mode not in {"safe", "strict"}:
         raise ValueError("mode must be 'safe' or 'strict'")
@@ -1387,6 +1464,11 @@ def auto_clean(
         raise TypeError("dry_run must be a bool")
     if not isinstance(allow_lossy_casts, bool):
         raise TypeError("allow_lossy_casts must be a bool")
+    if not isinstance(explain, bool):
+        raise TypeError("explain must be a bool")
+
+    if dry_run and explain:
+        raise ValueError("explain=True cannot be used with dry_run=True")
 
     report = profile(frame)
     if dry_run:
@@ -1395,10 +1477,23 @@ def auto_clean(
         return report
 
     result = frame
+    step_records: list[CleanStepRecord] = []
+    rows_before_all = result.shape[0]
 
-    for step, kwargs in report.suggestions:
+    for suggestion in report.suggestions:
+        if isinstance(suggestion, CleaningSuggestion):
+            step = suggestion.step
+            kwargs = suggestion.kwargs
+            reason = suggestion.confidence_reason
+        else:
+            step, kwargs = suggestion
+            reason = step
+
         if mode == "safe" and step != "strip_whitespace":
             continue
+
+        rows_before_step = result.shape[0]
+
         if step == "strip_whitespace":
             result = strip_whitespace(result, **kwargs)
         elif step == "cast_types":
@@ -1411,6 +1506,34 @@ def auto_clean(
             result = cast_types(result, kwargs)
         elif step == "drop_duplicates":
             result = drop_duplicates(result, **kwargs)
+        else:
+            continue
+
+        rows_after_step = result.shape[0]
+        step_records.append(
+            CleanStepRecord(
+                step=step,
+                kwargs=kwargs,
+                rows_before=rows_before_step,
+                rows_after=rows_after_step,
+                rows_removed=rows_before_step - rows_after_step,
+                reason=reason,
+            )
+        )
+
+    rows_after_all = result.shape[0]
+
+    if explain:
+        explanation = CleanExplanation(
+            mode=mode,
+            rows_before=rows_before_all,
+            rows_after=rows_after_all,
+            rows_removed=rows_before_all - rows_after_all,
+            steps=step_records,
+        )
+        if return_report:
+            return result, report, explanation
+        return result, explanation
 
     if return_report:
         return result, report
