@@ -891,35 +891,32 @@ def test_replace_values_direct_pandas_does_not_mutate_input():
 def test_register_step_validates_callable():
     """Test that register_step raises TypeError immediately for non-callables."""
     import pytest
+
     from arnio.pipeline import register_step
 
     with pytest.raises(TypeError, match="expected a callable"):
-        register_step("bad_step_integer", 123)
+        register_step("bad", 123)
 
 
 def test_register_step_validates_name():
     """Test that register_step raises ValueError for invalid names."""
     import pytest
+
     from arnio.pipeline import register_step
 
-    with pytest.raises(ValueError, match="Expected a non-empty string"):
-        register_step("", lambda df: df)
-
-    with pytest.raises(ValueError, match="Expected a non-empty string"):
-        register_step("   ", lambda df: df)
-
-    with pytest.raises(ValueError, match="Expected a non-empty string"):
-        register_step(None, lambda df: df)
+    for invalid_name in ["", "   ", None]:
+        with pytest.raises(ValueError, match="Expected a non-empty string"):
+            register_step(invalid_name, lambda x: x)
 
 
 def test_register_step_execution_flow():
     """Test that a valid registered custom step executes cleanly in the pipeline."""
     import pandas as pd
-    from arnio.pipeline import register_step, pipeline
+
     from arnio.convert import from_pandas, to_pandas
+    from arnio.pipeline import pipeline, register_step
 
     def custom_add_col(df: pd.DataFrame) -> pd.DataFrame:
-        df = df.copy()
         df["verified"] = True
         return df
 
