@@ -180,6 +180,12 @@ class TestDropDuplicates:
         # Only Charlie is unique
         assert result.shape[0] == 1
 
+    @pytest.mark.parametrize("keep", ["invalid", True, None])
+    def test_drop_dupes_rejects_invalid_keep_values(self, csv_with_duplicates, keep):
+        frame = ar.read_csv(csv_with_duplicates)
+        with pytest.raises(ValueError, match="keep must be one of"):
+            ar.drop_duplicates(frame, keep=keep)
+
     def test_drop_dupes_subset(self, csv_with_duplicates):
         frame = ar.read_csv(csv_with_duplicates)
         result = ar.drop_duplicates(frame, subset=["name"])
