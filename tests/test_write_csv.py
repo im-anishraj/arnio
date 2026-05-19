@@ -86,7 +86,9 @@ class TestWriteCsv:
     @pytest.mark.parametrize("delimiter", ["\n", "\r"])
     def test_newline_delimiters_rejected(self, tmp_path, delimiter):
         frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
-        with pytest.raises(ValueError, match="delimiter must not be a newline character"):
+        with pytest.raises(
+            ValueError, match="delimiter must not be a newline character"
+        ):
             ar.write_csv(frame, str(tmp_path / "out.csv"), delimiter=delimiter)
 
 
