@@ -344,6 +344,20 @@ The primary function used to check an `ArFrame` against a `Schema`. It returns a
 
 The objects returned after calling `validate()`.
 
+**Row index convention:** `ValidationIssue.row_index` is **1-based** and refers to
+data rows only — the CSV header is not counted. So `row_index=1` means the first
+data row, `row_index=2` means the second, and so on.
+
+```python
+# CSV content:
+# name,age        ← header (not counted)
+# Alice,30        ← row 1
+# Bob,-1          ← row 2  ← row_index=2 will appear here for a min violation
+
+result = ar.validate(frame, {"age": ar.Int64(min=0)})
+print(result.issues[0].row_index)  # 2
+```
+
 #### Field Type Helpers
 
 Each helper maps to a specific data type rule.

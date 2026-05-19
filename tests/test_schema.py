@@ -1045,6 +1045,21 @@ def test_schema_rules_row_index_for_multiple_failing_rows(tmp_path):
     assert row_indexes == [1, 3]
 
 
+def test_row_index_convention_is_documented_and_correct(tmp_path):
+    """Regression: row_index is 1-based, header excluded, first data row = 1."""
+    path = tmp_path / "rows.csv"
+    path.write_text("name,age\nAlice,30\nBob,-1\nCarol,25\n")
+    frame = ar.read_csv(path)
+    result = ar.validate(frame, {"age": ar.Int64(min=0)})
+
+    assert not result.passed
+    assert len(result.issues) == 1
+    # Bob is the second data row → row_index must be 2, not 0 or 1
+    assert result.issues[0].row_index == 2
+    assert result.issues[0].column == "age"
+    assert result.issues[0].rule == "min"
+
+
 def test_schema_rules_missing_column_returns_validation_issue(tmp_path):
     path = tmp_path / "dates.csv"
     path.write_text("start_date,end_date\n2024-01-01,2024-06-01\n")

@@ -152,6 +152,9 @@ schema = ar.Schema(
 result = schema.validate(ar.read_csv("events.csv"))
 print(result.passed)
 ```
+> **Row index convention:** `ValidationIssue.row_index` values are **1-based** and
+> count data rows only. The header row is excluded. `row_index=1` is the first data
+> row in the file.
 
 ### Select specific columns
 
