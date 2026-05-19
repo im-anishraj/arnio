@@ -668,8 +668,8 @@ def sniff_delimiter(
         if len(counts[c]) > 1 and counts[c][-1] == 0:
             counts[c].pop()
 
-    # 5. Score Candidates
-    best_candidate = None
+    # 5. Score Candidates and Detect Ties/Ambiguity
+    best_candidates = []
     best_score = -1.0
 
     from collections import Counter
@@ -688,11 +688,18 @@ def sniff_delimiter(
 
         if score > best_score:
             best_score = score
-            best_candidate = delimiter
+            best_candidates = [delimiter]
+        elif abs(score - best_score) < 1e-9:
+            best_candidates.append(delimiter)
 
-    if best_candidate is None or best_score <= 0.0:
+    if not best_candidates or best_score <= 0.0:
         raise ValueError(
             f"Could not determine CSV delimiter from sample: no candidate delimiters found in {path!r}"
         )
 
-    return best_candidate
+    if len(best_candidates) > 1:
+        raise ValueError(
+            f"Could not determine CSV delimiter from sample: multiple candidate delimiters {best_candidates} have the same score"
+        )
+
+    return best_candidates[0]

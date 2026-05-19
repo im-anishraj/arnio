@@ -988,3 +988,13 @@ class TestSniffDelimiter:
     def test_sniff_missing_file_raises(self, tmp_path):
         with pytest.raises(FileNotFoundError):
             ar.sniff_delimiter(tmp_path / "nonexistent.csv")
+
+    def test_sniff_tie_ambiguity_raises(self, tmp_path):
+        csv_path = tmp_path / "tie.csv"
+        # Each line has exactly one comma and one semicolon, producing identical frequencies and consistency scores
+        csv_path.write_text("a,b;c\n1,2;3\n4,5;6\n")
+        with pytest.raises(
+            ValueError,
+            match="Could not determine CSV delimiter from sample: multiple candidate delimiters",
+        ):
+            ar.sniff_delimiter(csv_path)
