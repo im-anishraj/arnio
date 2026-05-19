@@ -115,7 +115,7 @@ class TestPipeline:
             dry_run=True,
         )
 
-        output = ar.to_pandas(result)                       
+        output = ar.to_pandas(result)
 
         pd.testing.assert_frame_equal(
             output,
@@ -123,7 +123,7 @@ class TestPipeline:
             check_dtype=False,
         )
         pytest
-        
+
     def test_pipeline_drop_constant_columns(self):
         import pandas as pd
 
