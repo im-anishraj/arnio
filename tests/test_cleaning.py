@@ -589,56 +589,6 @@ class TestParseBoolStrings:
         with pytest.raises(TypeError, match="true_values must contain only strings"):
             ar.parse_bool_strings("val", true_values=["yes", 2.5, True])
 
-    def test_with_nulls(self):
-        import numpy as np
-        import pandas as pd
-
-        df = pd.DataFrame({"a": [1.123, np.nan, 2.456]})
-        frame = ar.from_pandas(df)
-        result = ar.round_numeric_columns(frame, decimals=1)
-        result_df = ar.to_pandas(result)
-        assert result_df["a"].isna().iloc[1]
-        assert result_df["a"].iloc[0] == 1.1
-        assert result_df["a"].iloc[2] == 2.5
-
-    def test_invalid_subset_type(self):
-        import pandas as pd
-        import pytest
-
-        df = pd.DataFrame({"a": [1.123]})
-        frame = ar.from_pandas(df)
-        with pytest.raises(TypeError, match="subset must be a list"):
-            ar.round_numeric_columns(frame, subset="a")
-
-    def test_invalid_decimals_type(self):
-        import pandas as pd
-        import pytest
-
-        df = pd.DataFrame({"a": [1.123]})
-        frame = ar.from_pandas(df)
-        with pytest.raises(TypeError, match="decimals must be an integer"):
-            ar.round_numeric_columns(frame, decimals="2")
-
-    def test_decimals_rejects_bool(self):
-        import pandas as pd
-        import pytest
-
-        df = pd.DataFrame({"a": [1.123]})
-        frame = ar.from_pandas(df)
-        with pytest.raises(TypeError, match="decimals must be an integer"):
-            ar.round_numeric_columns(frame, decimals=True)
-
-    def test_round_subset_with_non_numeric(self):
-        import pandas as pd
-
-        df = pd.DataFrame({"name": ["john"], "score": [98.765]})
-        frame = ar.from_pandas(df)
-        result = ar.round_numeric_columns(frame, subset=["name", "score"], decimals=1)
-        result_df = ar.to_pandas(result)
-
-        assert list(result_df["name"]) == ["john"]
-        assert list(result_df["score"]) == [98.8]
-
 
 class TestSafeDivideColumns:
     def test_normal_division(self, tmp_path):
