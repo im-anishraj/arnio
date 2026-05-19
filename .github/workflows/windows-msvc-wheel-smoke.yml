@@ -1,0 +1,47 @@
+name: Windows MSVC Wheel Smoke Test
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - "pyproject.toml"
+      - "setup.py"
+      - "CMakeLists.txt"
+      - "bindings/**"
+      - "cpp/**"
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - "pyproject.toml"
+      - "setup.py"
+      - "CMakeLists.txt"
+      - "bindings/**"
+      - "cpp/**"
+
+jobs:
+  windows_msvc_wheel_smoke:
+    name: Windows MSVC Wheel Smoke Test
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: 'pip'
+
+      - name: Upgrade pip and setuptools
+        run: python -m pip install --upgrade pip setuptools wheel
+
+      - name: Build wheel
+        run: pip wheel . --no-deps -w dist/
+
+      - name: Install wheel in clean environment
+        run: pip install --find-links dist/ arnio --no-index
+
+      - name: Run smoke test
+        run: |
+          python -c "import arnio; print('arnio import OK on Windows MSVC')"
+          python -c "import arnio as ar; print(ar.__version__)"
