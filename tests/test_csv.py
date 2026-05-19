@@ -856,6 +856,37 @@ def test_strict_mode_rejects_missing_columns(tmp_path):
         ar.read_csv(csv_path, mode="strict")
 
 
+def test_read_csv_supports_stringio():
+    buffer = io.StringIO("id,name\n1,Alice\n2,Bob\n")
+
+    frame = ar.read_csv(buffer)
+
+    df = ar.to_pandas(frame)
+
+    assert list(df["name"]) == ["Alice", "Bob"]
+
+
+def test_read_csv_rejects_binary_buffer():
+    buffer = io.BytesIO(b"id,name\n1,Alice\n")
+
+    with pytest.raises(
+        TypeError,
+        match="must return text",
+    ):
+        ar.read_csv(buffer)
+
+
+def test_read_csv_path_behavior_unchanged(tmp_path):
+    csv_path = tmp_path / "data.csv"
+    csv_path.write_text("id,name\n1,Alice\n")
+
+    frame = ar.read_csv(csv_path)
+
+    df = ar.to_pandas(frame)
+
+    assert list(df["name"]) == ["Alice"]
+
+
 def test_permissive_mode_allows_missing_columns(tmp_path):
     csv_path = tmp_path / "permissive_missing.csv"
     csv_path.write_text("id,name\n1,Alice\n2\n")
