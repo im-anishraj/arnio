@@ -3,7 +3,10 @@ import pytest
 try:
     import arnio as ar
 except Exception:
-    pytest.skip("arnio C++ extension not available; skipping IO smoke tests", allow_module_level=True)
+    pytest.skip(
+        "arnio C++ extension not available; skipping IO smoke tests",
+        allow_module_level=True,
+    )
 
 
 def test_read_csv_smoke(tmp_path):
