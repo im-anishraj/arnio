@@ -43,7 +43,7 @@ _PYTHON_STEP_REGISTRY: dict[str, Callable] = {
 }
 
 
-def register_step(name: str, fn: Callable):
+def register_step(name: str, fn: Callable, overwrite: bool = False):
     """Register a custom Python pipeline step.
 
     Parameters
@@ -52,18 +52,36 @@ def register_step(name: str, fn: Callable):
         Name of the step for use in pipelines.
     fn : Callable
         Function to call for this step. Should accept (df, **kwargs) and return modified df.
+    overwrite : bool, default False
+        If True, allows replacing an existing custom Python step with the same name.
+        Cannot be used to overwrite built-in C++ steps.
+
+    Raises
+    ------
+    ValueError
+        If the step name conflicts with a built-in C++ step name, or if the name
+        conflicts with an existing custom Python step and `overwrite` is False.
 
     Examples
     --------
     >>> def custom_clean(df, threshold=0.5):
     ...     return df.dropna(thresh=threshold)
     >>> ar.register_step("custom_clean", custom_clean)
+    # Overwriting an existing custom step intentionally
+    >>> def new_custom_clean(df):
+    ...     return df
+    >>> ar.register_step("custom_clean", new_custom_clean, overwrite=True)
     """
     with _REGISTRY_LOCK:
         if name in _STEP_REGISTRY:
             raise ValueError(
                 f"Cannot register '{name}': conflicts with built-in C++ step. "
                 f"Use a different name."
+            )
+        if name in _PYTHON_STEP_REGISTRY and not overwrite:
+            raise ValueError(
+                f"Step '{name}' is already registered as a custom Python step. "
+                "To intentionally overwrite it, set 'overwrite=True'."
             )
         _PYTHON_STEP_REGISTRY[name] = fn
 

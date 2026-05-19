@@ -1056,3 +1056,49 @@ def test_register_step_success():
 
     processed_df = ar.to_pandas(result_frame)
     assert processed_df["name"].tolist() == ["BAR", "BOO", "BAZ"]
+
+
+def test_register_step_duplicate_custom_raises_value_error():
+    def step_v1(df):
+        return df
+
+    def step_v2(df):
+        return df
+
+    step_name = "test_policy_duplicate_reject"
+    ar.register_step(step_name, step_v1)
+
+    with pytest.raises(ValueError, match="already registered as a custom Python step"):
+        ar.register_step(step_name, step_v2)
+
+
+def test_register_step_explicit_overwrite_success():
+    import pandas as pd
+
+    def add_one(df):
+        df["val"] = df["val"] + 1
+        return df
+
+    def add_ten(df):
+        df["val"] = df["val"] + 10
+        return df
+
+    step_name = "test_policy_overwrite_mutation"
+
+    ar.register_step(step_name, add_one)
+    ar.register_step(step_name, add_ten, overwrite=True)
+
+    df = pd.DataFrame({"val": [0]})
+    frame = ar.from_pandas(df)
+    result = ar.pipeline(frame, [(step_name,)])
+
+    processed_df = ar.to_pandas(result)
+    assert processed_df["val"].tolist() == [10]
+
+
+def test_register_step_overwrite_cannot_bypass_builtin_protection():
+    def dummy_step(df):
+        return df
+
+    with pytest.raises(ValueError, match="conflicts with built-in C\\+\\+ step"):
+        ar.register_step("drop_nulls", dummy_step, overwrite=True)

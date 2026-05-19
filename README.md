@@ -381,6 +381,31 @@ Custom steps run through a pandas↔ArFrame conversion bridge. Prototype in Pyth
 </details>
 
 <details>
+<summary><b>🔄 Custom Step Overwrite Policy</b></summary>
+<br>
+
+By default, trying to register a custom step with a name that is already taken by another custom Python step will raise a `ValueError` to prevent silent overwriting.
+
+To intentionally replace an existing custom **Python** step, pass `overwrite=True`:
+
+```python
+def custom_logging(df):
+    print("Running step v1")
+    return df
+
+ar.register_step("log_data", custom_logging)
+
+# This will succeed and safely overwrite the original logic
+def custom_logging_v2(df):
+    print("Running step v2")
+    return df
+
+ar.register_step("log_data", custom_logging_v2, overwrite=True)
+```
+> Note: Built-in C++ pipeline steps (like "drop_nulls") can never be overwritten, even if overwrite=True is explicitly supplied.
+</details>
+
+<details>
 <summary><b>✂️ Slice rows with head() and tail()</b></summary>
 <br>
 
