@@ -1472,3 +1472,33 @@ class TestClipNumericNativeRegression:
         )
         # String column must be untouched
         assert native_df["label"].tolist() == ["x"] * n
+
+
+def test_drop_columns_matching_normal():
+    df = pd.DataFrame({"temp_a": [1], "temp_b": [2], "keep_c": [3]})
+    result = ar.drop_columns_matching(df, "^temp_")
+    assert list(result.columns) == ["keep_c"]
+
+
+def test_drop_columns_matching_no_match():
+    df = pd.DataFrame({"a": [1], "b": [2]})
+    result = ar.drop_columns_matching(df, "^temp_")
+    assert list(result.columns) == ["a", "b"]
+
+
+def test_drop_columns_matching_invalid_regex():
+    df = pd.DataFrame({"a": [1]})
+    with pytest.raises(Exception):
+        ar.drop_columns_matching(df, "[invalid")
+
+
+def test_drop_columns_matching_non_string_pattern():
+    df = pd.DataFrame({"a": [1]})
+    with pytest.raises(TypeError):
+        ar.drop_columns_matching(df, 123)
+
+
+def test_drop_columns_matching_all_columns():
+    df = pd.DataFrame({"a": [1, 2], "b": [3, 4]})
+    with pytest.raises(ValueError, match="Pattern matches all columns"):
+        ar.drop_columns_matching(df, ".*")
