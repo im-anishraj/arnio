@@ -104,10 +104,17 @@ def main() -> int:
 
         import_check = (
             "import arnio as ar; "
+            "import tempfile, pathlib; "
             "print('arnio import ok:', ar.__version__); "
             "assert hasattr(ar, 'read_csv'); "
             "assert hasattr(ar, 'pipeline'); "
-            "assert hasattr(ar, 'to_pandas')"
+            "assert hasattr(ar, 'to_pandas'); "
+            "tmp = tempfile.mkdtemp(); "
+            "csv = pathlib.Path(tmp) / 'smoke.csv'; "
+            "csv.write_text('name,age\\nAlice,30\\nBob,25\\n'); "
+            "frame = ar.read_csv(str(csv)); "
+            "assert frame is not None; "
+            "print('read_csv smoke test passed')"
         )
 
         run([str(python), "-c", import_check], cwd=tmp_dir)

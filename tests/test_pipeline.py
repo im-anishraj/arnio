@@ -1,8 +1,33 @@
 """Tests for the pipeline function."""
 
+import importlib
+import threading
+from concurrent.futures import ThreadPoolExecutor
+
+import pandas as pd
 import pytest
 
 import arnio as ar
+
+pipeline_module = importlib.import_module("arnio.pipeline")
+
+
+@pytest.fixture(autouse=True)
+def restore_python_step_registry():
+    """Restore custom pipeline steps after each test.
+
+    Tests may register temporary custom steps. This fixture prevents those
+    registrations from leaking into other tests while preserving any steps
+    that were already registered before the test started.
+    """
+    with pipeline_module._REGISTRY_LOCK:
+        original_registry = dict(pipeline_module._PYTHON_STEP_REGISTRY)
+
+    yield
+
+    with pipeline_module._REGISTRY_LOCK:
+        pipeline_module._PYTHON_STEP_REGISTRY.clear()
+        pipeline_module._PYTHON_STEP_REGISTRY.update(original_registry)
 
 
 class TestPipeline:
@@ -119,6 +144,19 @@ class TestPipeline:
         assert list(df["value"]) == [0, 2, 5]
         assert list(df["label"]) == ["a", "b", "c"]
 
+    def test_pipeline_standardize_missing_tokens(self):
+        frame = ar.from_pandas(pd.DataFrame({"value": [1, 2, "N/A"]}))
+
+        result = ar.pipeline(
+            frame,
+            [
+                ("standardize_missing_tokens",),
+            ],
+        )
+        df = ar.to_pandas(result)
+
+        assert pd.isna(df["value"].iloc[2])
+
     def test_pipeline_mapping_shorthand(self, sample_csv):
         frame = ar.read_csv(sample_csv)
         result = ar.pipeline(
@@ -163,6 +201,34 @@ class TestPipeline:
 
         assert result is frame
 
+    def test_pipeline_drop_columns(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        result = ar.pipeline(
+            frame,
+            [
+                ("drop_columns", {"columns": ["active"]}),
+            ],
+        )
+
+        assert result.columns == ["name", "age", "email"]
+
+    def test_pipeline_drop_columns_allows_empty_columns(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        result = ar.pipeline(frame, [("drop_columns", {"columns": []})])
+
+        assert result is frame
+
+    def test_pipeline_drop_columns_rejects_missing_columns(self, sample_csv):
+        import pytest
+
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(ValueError, match="Columns not found in frame"):
+            ar.pipeline(
+                frame,
+                [("drop_columns", {"columns": ["missing"]})],
+            )
+
     def test_pipeline_validate_columns_exist_rejects_missing_columns(self, sample_csv):
         import pytest
 
@@ -189,6 +255,152 @@ class TestPipeline:
         frame = ar.read_csv(sample_csv)
         result = ar.pipeline(frame, [])
         assert result.shape == frame.shape
+
+    def test_pipeline_return_metadata_disabled_by_default(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        result = ar.pipeline(
+            frame,
+            [
+                ("strip_whitespace",),
+            ],
+        )
+
+        assert isinstance(result, ar.ArFrame)
+
+    def test_pipeline_return_metadata_includes_step_timings(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        result, metadata = ar.pipeline(
+            frame,
+            [
+                ("strip_whitespace",),
+                ("normalize_case", {"case_type": "lower"}),
+            ],
+            return_metadata=True,
+        )
+
+        assert isinstance(result, ar.ArFrame)
+        assert list(metadata.keys()) == ["step_timings"]
+        assert len(metadata["step_timings"]) == 2
+        assert metadata["step_timings"][0]["step"] == "strip_whitespace"
+        assert metadata["step_timings"][1]["step"] == "normalize_case"
+        assert all(item["seconds"] >= 0 for item in metadata["step_timings"])
+
+    def test_pipeline_return_metadata_handles_python_steps(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        def add_marker(df, value="ok"):
+            df["marker"] = value
+            return df
+
+        ar.register_step("timed_python_step", add_marker)
+
+        result, metadata = ar.pipeline(
+            frame,
+            [
+                ("timed_python_step", {"value": "done"}),
+            ],
+            return_metadata=True,
+        )
+
+        df = ar.to_pandas(result)
+        assert set(df["marker"]) == {"done"}
+        assert len(metadata["step_timings"]) == 1
+        assert metadata["step_timings"][0]["step"] == "timed_python_step"
+        assert metadata["step_timings"][0]["seconds"] >= 0
+
+    def test_register_python_step(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        def add_marker(df, value="ok"):
+            df["marker"] = value
+            return df
+
+        ar.register_step("test_add_marker", add_marker)
+
+        result = ar.pipeline(
+            frame,
+            [
+                ("test_add_marker", {"value": "done"}),
+            ],
+        )
+
+        df = ar.to_pandas(result)
+        assert "marker" in df.columns
+        assert set(df["marker"]) == {"done"}
+
+    def test_concurrent_step_registration(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        def make_step(column_name):
+            def step(df):
+                df[column_name] = column_name
+                return df
+
+            return step
+
+        step_count = 25
+        step_names = [f"concurrent_step_{i}" for i in range(step_count)]
+
+        def register(name):
+            ar.register_step(name, make_step(name))
+
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            list(executor.map(register, step_names))
+
+        result = ar.pipeline(frame, [(name,) for name in step_names])
+        df = ar.to_pandas(result)
+
+        for name in step_names:
+            assert name in df.columns
+            assert set(df[name]) == {name}
+
+    def test_pipeline_uses_stable_registry_snapshot_during_execution(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        started = threading.Event()
+        continue_step = threading.Event()
+
+        def blocking_step(df):
+            started.set()
+            continue_step.wait(timeout=5)
+            df["blocking_step_done"] = True
+            return df
+
+        def late_step(df):
+            df["late_step_done"] = True
+            return df
+
+        ar.register_step("blocking_snapshot_step", blocking_step)
+
+        errors = []
+
+        def run_pipeline():
+            try:
+                ar.pipeline(
+                    frame,
+                    [
+                        ("blocking_snapshot_step",),
+                        ("late_snapshot_step",),
+                    ],
+                )
+            except Exception as exc:
+                errors.append(exc)
+
+        thread = threading.Thread(target=run_pipeline)
+        thread.start()
+
+        assert not started.is_set()
+
+        ar.register_step("late_snapshot_step", late_step)
+
+        continue_step.set()
+        thread.join(timeout=5)
+
+        assert len(errors) == 1
+        assert isinstance(errors[0], ar.UnknownStepError)
+        assert "late_snapshot_step" in str(errors[0])
 
     def test_invalid_step_name(self, sample_csv):
         frame = ar.read_csv(sample_csv)
@@ -326,14 +538,87 @@ def test_round_numeric_columns_pipeline():
     import arnio as ar
 
     df = pd.DataFrame({"price": [10.555, 20.123]})
+
     frame = ar.from_pandas(df)
 
     result = ar.pipeline(
-        frame, [("round_numeric_columns", {"subset": ["price"], "decimals": 2})]
+        frame,
+        [("round_numeric_columns", {"subset": ["price"], "decimals": 2})],
     )
 
     result_df = ar.to_pandas(result)
+
     assert list(result_df["price"]) == [10.56, 20.12]
+
+
+def test_pipeline_normalize_unicode():
+    import pandas as pd
+
+    import arnio as ar
+
+    df = pd.DataFrame({"text": ["cafe\u0301"]})
+
+    frame = ar.from_pandas(df)
+
+    result = ar.pipeline(
+        frame,
+        [
+            ("normalize_unicode",),
+        ],
+    )
+
+    result_df = ar.to_pandas(result)
+
+    assert result_df["text"].iloc[0] == "café"
+
+
+def test_normalize_unicode_invalid_form():
+    import pandas as pd
+    import pytest
+
+    import arnio as ar
+
+    df = pd.DataFrame({"text": ["cafe\u0301"]})
+
+    frame = ar.from_pandas(df)
+
+    with pytest.raises(ValueError):
+        ar.normalize_unicode(frame, form="INVALID")
+
+
+def test_normalize_unicode_subset():
+    import pandas as pd
+
+    import arnio as ar
+
+    df = pd.DataFrame(
+        {
+            "text": ["cafe\u0301"],
+            "other": ["test"],
+        }
+    )
+
+    frame = ar.from_pandas(df)
+
+    result = ar.normalize_unicode(frame, subset=["text"])
+
+    result_df = ar.to_pandas(result)
+
+    assert result_df["text"].iloc[0] == "café"
+
+
+def test_normalize_unicode_unknown_subset():
+    import pandas as pd
+    import pytest
+
+    import arnio as ar
+
+    df = pd.DataFrame({"text": ["cafe\u0301"]})
+
+    frame = ar.from_pandas(df)
+
+    with pytest.raises(KeyError):
+        ar.normalize_unicode(frame, subset=["missing"])
 
 
 def test_safe_divide_columns_pipeline():
@@ -355,14 +640,43 @@ def test_safe_divide_columns_pipeline():
                     "denominator": "cost",
                     "output_column": "ratio",
                 },
+            ),
+        ],
+    )
+
+    result_df = ar.to_pandas(result)
+
+    assert result_df["ratio"].iloc[0] == 2.0
+    assert result_df["ratio"].iloc[1] == 0.0  # division by zero → fill_value
+    assert result_df["ratio"].iloc[2] == 0.0  # zero numerator
+
+
+def test_pipeline_combine_columns():
+    import pandas as pd
+
+    import arnio as ar
+
+    df = pd.DataFrame({"first": ["Alice", "Bob"], "last": ["Smith", "Jones"]})
+
+    frame = ar.from_pandas(df)
+
+    result = ar.pipeline(
+        frame,
+        [
+            (
+                "combine_columns",
+                {
+                    "subset": ["first", "last"],
+                    "separator": " ",
+                    "output_column": "full_name",
+                },
             )
         ],
     )
 
     result_df = ar.to_pandas(result)
-    assert result_df["ratio"].iloc[0] == 2.0
-    assert result_df["ratio"].iloc[1] == 0.0  # division by zero → fill_value
-    assert result_df["ratio"].iloc[2] == 0.0  # zero numerator
+
+    assert list(result_df["full_name"]) == ["Alice Smith", "Bob Jones"]
 
 
 def test_replace_values_simple():
@@ -540,3 +854,18 @@ def test_replace_values_direct_pandas_does_not_mutate_input():
     assert list(df["status"]) == ["active", "inactive"]
     # output should be replaced
     assert list(out["status"]) == ["A", "inactive"]
+
+
+def test_pipeline_drop_columns_matching():
+    df = pd.DataFrame({"temp_a": [1], "temp_b": [2], "keep_c": [3]})
+    frame = ar.from_pandas(df)
+    result = ar.pipeline(frame, [("drop_columns_matching", {"pattern": "^temp_"})])
+    result_df = ar.to_pandas(result)
+    assert list(result_df.columns) == ["keep_c"]
+
+
+def test_pipeline_drop_columns_matching_all_columns():
+    df = pd.DataFrame({"a": [1, 2], "b": [3, 4]})
+    frame = ar.from_pandas(df)
+    with pytest.raises(ValueError, match="Pattern matches all columns"):
+        ar.pipeline(frame, [("drop_columns_matching", {"pattern": ".*"})])
