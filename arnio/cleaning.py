@@ -431,7 +431,7 @@ def clip_numeric(
         non_numeric_columns = [col for col in subset if not _is_supported_numeric(col)]
         if non_numeric_columns:
             raise ValueError(
-                "clip_numeric only supports numeric columns: " f"{non_numeric_columns}"
+                f"clip_numeric only supports numeric columns: {non_numeric_columns}"
             )
 
         # Empty subset — nothing to clip, return the frame unchanged.
@@ -1022,7 +1022,6 @@ def combine_columns(
         raise ValueError("subset must contain at least one column")
 
     if output_column in df.columns:
-
         raise ValueError(f"Output column '{output_column}' already exists.")
 
     combined = (
@@ -1115,7 +1114,6 @@ def safe_divide_columns(
     df[output_column] = result.fillna(fill_value)
 
     return from_pandas(df) if is_arframe else df
-
 
 
 def drop_columns_matching(frame, pattern):
@@ -1315,4 +1313,3 @@ def standardize_missing_tokens(frame, tokens=None, subset=None):
             df[subset] = df[subset].replace(tokens, float("nan"))
 
     return from_pandas(df) if is_arframe else df
-
