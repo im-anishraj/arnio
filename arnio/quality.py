@@ -231,13 +231,13 @@ class DataQualityReport:
                 warnings = ", ".join(column.warnings) if column.warnings else "-"
 
                 lines.append(
-                    f"| {column.name} "
-                    f"| {column.dtype} "
-                    f"| {column.semantic_type} "
-                    f"| {column.null_count} "
-                    f"| {column.unique_count} "
-                    f"| {column.unique_ratio:.2%} "
-                    f"| {warnings} |"
+                    f"| {_markdown_cell(column.name)} "
+                    f"| {_markdown_cell(column.dtype)} "
+                    f"| {_markdown_cell(column.semantic_type)} "
+                    f"| {_markdown_cell(column.null_count)} "
+                    f"| {_markdown_cell(column.unique_count)} "
+                    f"| {_markdown_cell(f'{column.unique_ratio:.2%}')} "
+                    f"| {_markdown_cell(warnings)} |"
                 )
 
             lines.append("")

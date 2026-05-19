@@ -844,6 +844,36 @@ def test_report_to_markdown_deterministic(tmp_path):
     assert report.to_markdown() == report.to_markdown()
 
 
+def test_report_to_markdown_escapes_pipe_characters_in_column_cells():
+    report = ar.DataQualityReport(
+        row_count=2,
+        column_count=1,
+        memory_usage=128,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={
+            "bad|name": ar.ColumnProfile(
+                name="bad|name",
+                dtype="string",
+                semantic_type="free|text",
+                row_count=2,
+                null_count=0,
+                null_ratio=0.0,
+                unique_count=2,
+                unique_ratio=1.0,
+                warnings=["contains | pipe"],
+            )
+        },
+        suggestions=[],
+    )
+
+    md = report.to_markdown()
+
+    assert "bad\\|name" in md
+    assert "free\\|text" in md
+    assert "contains \\| pipe" in md
+
+
 def test_report_to_markdown_empty_sections():
     report = ar.DataQualityReport(
         row_count=0,
