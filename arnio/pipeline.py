@@ -178,7 +178,6 @@ def pipeline(
             if name == "rename_columns" and "mapping" not in kwargs:
                 step_result = fn(result, mapping=kwargs)
 
-
                 if not dry_run:
                     result = step_result
 
@@ -187,7 +186,6 @@ def pipeline(
 
                 if not dry_run:
                     result = step_result
-                            
 
             else:
                 target_frame = result
