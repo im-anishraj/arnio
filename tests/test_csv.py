@@ -6,6 +6,7 @@ import pandas as pd
 import pytest
 
 import arnio as ar
+from arnio.io import _utf8_csv_path
 
 MESSY_CSV = str(Path(__file__).parent / "fixtures" / "messy_sales_data.csv")
 
@@ -26,6 +27,54 @@ class TestReadCsv:
         frame = ar.read_csv(sample_csv, nrows=2)
         assert frame.shape == (2, 4)
 
+    def test_invalid_delimiter(self, tmp_path):
+        csv_path = tmp_path / "test.csv"
+        csv_path.write_text("a,b\n1,2\n")
+
+        with pytest.raises(ValueError, match="delimiter must be exactly one character"):
+            ar.read_csv(csv_path, delimiter="::")
+
+        with pytest.raises(ValueError, match="delimiter must be exactly one character"):
+            ar.read_csv(csv_path, delimiter="")
+
+        with pytest.raises(TypeError, match="delimiter must be a string"):
+            ar.read_csv(csv_path, delimiter=1)
+
+    def test_invalid_usecols(self, tmp_path):
+        csv_path = tmp_path / "test.csv"
+        csv_path.write_text("id,name\n1,Alice\n")
+
+        with pytest.raises(
+            TypeError,
+            match="usecols must be a sequence of column names, not a string",
+        ):
+            ar.read_csv(csv_path, usecols="name")
+
+        with pytest.raises(
+            TypeError,
+            match="usecols must contain only strings",
+        ):
+            ar.read_csv(csv_path, usecols=[123])
+
+        with pytest.raises(
+            ValueError,
+            match="usecols must not contain duplicate column names",
+        ):
+            ar.read_csv(csv_path, usecols=["id", "id"])
+
+    def test_invalid_nrows(self, tmp_path):
+        csv_path = tmp_path / "test.csv"
+        csv_path.write_text("a,b\n1,2\n")
+
+        with pytest.raises(TypeError, match="nrows must be an integer"):
+            ar.read_csv(csv_path, nrows=True)
+
+        with pytest.raises(TypeError, match="nrows must be an integer"):
+            ar.read_csv(csv_path, nrows=1.5)
+
+        with pytest.raises(ValueError, match="nrows must be non-negative"):
+            ar.read_csv(csv_path, nrows=-1)
+
     def test_no_header(self, csv_no_header):
         frame = ar.read_csv(csv_no_header, has_header=False)
         assert frame.shape == (2, 3)
@@ -37,6 +86,187 @@ class TestReadCsv:
         assert dtypes["age"] == "int64"
         assert dtypes["name"] == "string"
         assert dtypes["active"] == "bool"
+
+    # ----------------------------
+    # Thousands separator tests
+    # ----------------------------
+
+    def test_thousands_separator_comma(self, tmp_path):
+        csv_path = tmp_path / "comma_thousands.csv"
+        csv_path.write_text('value\n"1,234"\n')
+        frame = ar.read_csv(csv_path, thousands_separator=",")
+        df = ar.to_pandas(frame)
+        assert df["value"].iloc[0] == 1234
+
+    def test_thousands_separator_space(self, tmp_path):
+        csv_path = tmp_path / "space_thousands.csv"
+        csv_path.write_text("value\n1 234\n")
+        frame = ar.read_csv(csv_path, thousands_separator=" ")
+        df = ar.to_pandas(frame)
+        assert df["value"].iloc[0] == 1234
+
+    def test_valid_float_thousands_separator(self, tmp_path):
+        csv_path = tmp_path / "float.csv"
+        csv_path.write_text('value\n"1,234.56"\n')
+        frame = ar.read_csv(csv_path, thousands_separator=",")
+        df = ar.to_pandas(frame)
+        assert df["value"].iloc[0] == 1234.56
+
+    def test_default_behavior_without_thousands_separator(self, tmp_path):
+        csv_path = tmp_path / "default_behavior.csv"
+        csv_path.write_text('value\n"1,234"\n')
+        frame = ar.read_csv(csv_path)
+        df = ar.to_pandas(frame)
+        assert df["value"].iloc[0] == "1,234"
+
+    @pytest.mark.parametrize(
+        "separator", ["", "a", "3", "ab", "\n", '"', ".", "+", "-"]
+    )
+    def test_invalid_thousands_separator(self, tmp_path, separator):
+        csv_path = tmp_path / "default_behavior.csv"
+        csv_path.write_text("value\n1234\n")
+        with pytest.raises(ValueError):
+            ar.read_csv(csv_path, thousands_separator=separator)
+        with pytest.raises(ValueError):
+            ar.scan_csv(csv_path, thousands_separator=separator)
+
+    @pytest.mark.parametrize("separator", [1, 1.5, True, [], {}])
+    def test_invalid_non_string_thousands_separator(self, tmp_path, separator):
+        csv_path = tmp_path / "test.csv"
+        csv_path.write_text("value\n1234\n")
+        with pytest.raises(TypeError):
+            ar.read_csv(csv_path, thousands_separator=separator)
+        with pytest.raises(TypeError):
+            ar.scan_csv(csv_path, thousands_separator=separator)
+
+    def test_thousands_separator_not_applied_to_strings(self, tmp_path):
+        csv_path = tmp_path / "string.csv"
+        csv_path.write_text('message\n"hello,world"\n')
+        frame = ar.read_csv(csv_path, thousands_separator=",")
+        df = ar.to_pandas(frame)
+        assert df["message"].iloc[0] == "hello,world"
+
+    @pytest.mark.parametrize(
+        "value",
+        ["12,34", "1,,234", "1234,", ",123"],
+    )
+    def test_invalid_thousands_grouping_remains_string(self, tmp_path, value):
+        csv_path = tmp_path / "invalid.csv"
+        csv_path.write_text(f'value\n"{value}"\n')
+        frame = ar.read_csv(csv_path, thousands_separator=",")
+        assert frame.dtypes["value"] == "string"
+
+    def test_unquoted_comma_value_with_comma_delimiter(self, tmp_path):
+        csv_path = tmp_path / "delimiter_interaction.csv"
+        csv_path.write_text("value\n1,234\n")
+        with pytest.raises(ar.CsvReadError, match="CSV row 2 has 2 fields; expected 1"):
+            ar.read_csv(csv_path)
+
+    def test_read_csv_rejects_missing_fields(self, tmp_path):
+        csv_path = tmp_path / "missing_fields.csv"
+        csv_path.write_text("a,b\n1,2\n3\n")
+
+        with pytest.raises(ar.CsvReadError, match="CSV row 3 has 1 fields; expected 2"):
+            ar.read_csv(csv_path)
+
+    def test_read_csv_rejects_extra_fields_without_header(self, tmp_path):
+        csv_path = tmp_path / "extra_fields_no_header.csv"
+        csv_path.write_text("1,2\n3,4,5\n")
+
+        with pytest.raises(ar.CsvReadError, match="CSV row 2 has 3 fields; expected 2"):
+            ar.read_csv(csv_path, has_header=False)
+
+    def test_large_integer_overflow_remains_string(self, tmp_path):
+        csv_path = tmp_path / "large_integer.csv"
+        csv_path.write_text("value\n9223372036854775808\n")
+
+        frame = ar.read_csv(csv_path)
+        df = ar.to_pandas(frame)
+
+        assert frame.dtypes["value"] == "string"
+        assert df["value"].iloc[0] == "9223372036854775808"
+
+    def test_mixed_integer_overflow_promotes_column_to_string(self, tmp_path):
+        csv_path = tmp_path / "mixed_large_integer.csv"
+        csv_path.write_text("value\n1\n9223372036854775808\n")
+
+        frame = ar.read_csv(csv_path)
+        df = ar.to_pandas(frame)
+
+        assert frame.dtypes["value"] == "string"
+        assert list(df["value"]) == ["1", "9223372036854775808"]
+
+    def test_thousands_separator_negative_numbers(self, tmp_path):
+        csv_path = tmp_path / "negative_numbers.csv"
+        csv_path.write_text('value\n"-1,234"\n')
+        frame = ar.read_csv(csv_path, thousands_separator=",")
+        df = ar.to_pandas(frame)
+        assert df["value"].iloc[0] == -1234
+
+    def test_thousands_separator_large_numbers(self, tmp_path):
+        csv_path = tmp_path / "large.csv"
+        csv_path.write_text('value\n"1,234,567,890"\n')
+        frame = ar.read_csv(csv_path, thousands_separator=",")
+        df = ar.to_pandas(frame)
+        assert df["value"].iloc[0] == 1234567890
+
+    def test_mixed_int_and_float_consistency(self, tmp_path):
+        csv_path = tmp_path / "mixed.csv"
+        csv_path.write_text('value\n"1,234"\n"2,345.67"\n"3,000"\n')
+        frame = ar.read_csv(csv_path, thousands_separator=",")
+        df = ar.to_pandas(frame)
+        assert df["value"].iloc[0] == 1234
+        assert df["value"].iloc[1] == 2345.67
+        assert df["value"].iloc[2] == 3000
+
+    def test_thousands_separator_with_whitespace(self, tmp_path):
+        csv_path = tmp_path / "ws.csv"
+        csv_path.write_text('value\n" 1,234 "\n')
+        frame = ar.read_csv(csv_path, thousands_separator=",")
+        df = ar.to_pandas(frame)
+        assert df["value"].iloc[0] == 1234
+
+    def test_thousands_separator_empty_values(self, tmp_path):
+        csv_path = tmp_path / "empty.csv"
+        csv_path.write_text('value\n""\n"1,234"\n')
+        frame = ar.read_csv(csv_path, thousands_separator=",")
+        df = ar.to_pandas(frame)
+        assert pd.isna(df["value"].iloc[0])
+        assert df["value"].iloc[1] == 1234
+
+    def test_invalid_grouped_integer_values_become_null(self, tmp_path):
+        csv_content = 'value\n"1,234"\n"+1,234"\n"-1,234"\n"12,34"\n"1,,234"\n"123,45"\n"-12,34"\n'
+        csv_file = tmp_path / "invalid_grouping.csv"
+        csv_file.write_text(csv_content)
+        frame = ar.read_csv(csv_file, thousands_separator=",")
+        df = ar.to_pandas(frame)
+        assert df["value"].iloc[0] == 1234
+        assert df["value"].iloc[1] == 1234
+        assert df["value"].iloc[2] == -1234
+        invalid_indices = [3, 4, 5, 6]
+        for idx in invalid_indices:
+            assert pd.isna(df["value"].iloc[idx])
+
+    def test_invalid_grouped_float_values_become_null(self, tmp_path):
+        csv_content = 'value\n"1,234.56"\n"12,34.56"\n"1,,234.56"\n"123,45.67"'
+        csv_file = tmp_path / "invalid_float_grouping.csv"
+        csv_file.write_text(csv_content)
+        frame = ar.read_csv(csv_file, thousands_separator=",")
+        df = ar.to_pandas(frame)
+        assert df["value"].iloc[0] == 1234.56
+        invalid_indices = [1, 2, 3]
+        for idx in invalid_indices:
+            assert pd.isna(df["value"].iloc[idx])
+
+    def test_alphanumeric_grouped_values_remain_string(self, tmp_path):
+        csv_content = 'value\n"1a,234"\n"123,abc"\n'
+        csv_file = tmp_path / "alnum.csv"
+        csv_file.write_text(csv_content)
+        frame = ar.read_csv(csv_file, thousands_separator=",")
+        df = ar.to_pandas(frame)
+        assert frame.dtypes["value"] == "string"
+        assert df["value"].iloc[0] == "1a,234"
+        assert df["value"].iloc[1] == "123,abc"
 
     def test_large_csv(self, large_csv):
         frame = ar.read_csv(large_csv)
@@ -55,8 +285,14 @@ class TestReadCsv:
         frame = ar.read_csv(sample_csv)
         assert len(frame) == 3
 
-    def test_header_whitespace(self, tmp_path):
+    def test_contains_operator(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
 
+        assert "name" in frame
+        assert "missing" not in frame
+        assert 123 not in frame
+
+    def test_header_whitespace(self, tmp_path):
         csv_path = str(tmp_path / "whitespace.csv")
         with open(csv_path, "w") as f:
             f.write("name ,  age\nAlice,25\n")
@@ -173,7 +409,7 @@ class TestReadCsv:
 
     def test_quoted_newline_record(self, tmp_path):
         csv_path = tmp_path / "quoted_newline.csv"
-        csv_path.write_text('id,text\n1,"hello\nworld"\n2,ok\n')
+        csv_path.write_bytes(b'id,text\n1,"hello\nworld"\n2,ok\n')
 
         frame = ar.read_csv(csv_path)
         df = ar.to_pandas(frame)
@@ -231,6 +467,20 @@ class TestScanCsv:
 
         assert schema == {"name": "string", "age": "int64"}
 
+    def test_scan_csv_with_thousands_separator(self, tmp_path):
+        csv_path = tmp_path / "scan_thousands.csv"
+        csv_path.write_text('value\n"1,234"\n')
+        schema = ar.scan_csv(csv_path, thousands_separator=",")
+        assert schema["value"] == "int64"
+
+    def test_scan_read_thousands_separator_parity(self, tmp_path):
+        csv_path = tmp_path / "parity.csv"
+        csv_path.write_text('value\n"1,234"\n')
+        schema = ar.scan_csv(csv_path, thousands_separator=",")
+        frame = ar.read_csv(csv_path, thousands_separator=",")
+        assert schema["value"] == frame.dtypes["value"]
+        assert schema["value"] == "int64"
+
     def test_scan_binary_file_rejection(self, tmp_path):
         file_path = str(tmp_path / "data.csv")
 
@@ -243,6 +493,63 @@ class TestScanCsv:
         ):
             ar.scan_csv(file_path)
 
+    def test_scan_sample_size(self, tmp_path):
+        csv_path = tmp_path / "sample.csv"
+        csv_path.write_text("id,value\n1,10\n2,20\n3,30\n4,hello\n")
+
+        schema_early = ar.scan_csv(csv_path, sample_size=2)
+        assert schema_early["value"] == "int64"
+
+        schema_full = ar.scan_csv(csv_path, sample_size=10)
+        assert schema_full["value"] == "string"
+
+    def test_scan_sample_size_invalid(self, sample_csv):
+
+        with pytest.raises(ValueError, match="sample_size must be a positive integer"):
+            ar.scan_csv(sample_csv, sample_size=0)
+
+        with pytest.raises(ValueError, match="sample_size must be a positive integer"):
+            ar.scan_csv(sample_csv, sample_size=-5)
+
+    def test_scan_sample_size_none_preserves_default(self, tmp_path):
+        csv_path = tmp_path / "sample_default.csv"
+        csv_path.write_text("id,val\n1,a\n2,b\n3,c\n")
+
+        res_implicit = ar.scan_csv(csv_path)
+        res_explicit = ar.scan_csv(csv_path, sample_size=None)
+
+        assert res_implicit == res_explicit
+
+    def test_scan_sample_size_invalid_types(self, sample_csv):
+        with pytest.raises(TypeError):
+            ar.scan_csv(sample_csv, sample_size=True)
+
+        with pytest.raises(TypeError):
+            ar.scan_csv(sample_csv, sample_size=1.5)
+
+        with pytest.raises(TypeError):
+            ar.scan_csv(sample_csv, sample_size="100")
+
+    def test_non_utf8_sampling_respects_requested_record_count(self, tmp_path):
+        csv_path = tmp_path / "latin1.csv"
+        csv_path.write_text("name\nAndré\nBeyoncé\n", encoding="latin-1")
+
+        with _utf8_csv_path(str(csv_path), "latin-1", sample_rows=2) as native_path:
+            assert Path(native_path).read_text(encoding="utf-8") == "name\nAndré\n"
+
+    def test_scan_invalid_delimiter(self, tmp_path):
+        csv_path = tmp_path / "test.csv"
+        csv_path.write_text("a,b\n1,2\n")
+
+        with pytest.raises(ValueError, match="delimiter must be exactly one character"):
+            ar.scan_csv(csv_path, delimiter="::")
+
+        with pytest.raises(ValueError, match="delimiter must be exactly one character"):
+            ar.scan_csv(csv_path, delimiter="")
+
+        with pytest.raises(TypeError, match="delimiter must be a string"):
+            ar.scan_csv(csv_path, delimiter=1)
+
     def test_scan_empty_file_raises(self, tmp_path):
         csv_path = tmp_path / "empty.csv"
         csv_path.write_text("")
@@ -252,3 +559,176 @@ class TestScanCsv:
     def test_scan_missing_file_passthrough(self, tmp_path):
         with pytest.raises(ar.CsvReadError):
             ar.scan_csv(str(tmp_path / "nonexistent.csv"))
+
+    def test_scan_schema_preserves_column_order(self, tmp_path):
+        csv_path = tmp_path / "order_test.csv"
+        csv_path.write_text("z,a,m\n1,2,3\n")
+
+        schema = ar.scan_csv(str(csv_path))
+        frame = ar.read_csv(str(csv_path))
+
+        assert list(schema.keys()) == ["z", "a", "m"]
+        assert list(frame.columns) == ["z", "a", "m"]
+
+    def test_scan_schema_order_matches_read_csv(self, sample_csv):
+        schema = ar.scan_csv(sample_csv)
+        frame = ar.read_csv(sample_csv)
+
+        assert list(schema.keys()) == list(frame.columns)
+
+    def test_scan_csv_rejects_inconsistent_row_width(self, tmp_path):
+        csv_path = tmp_path / "bad_scan.csv"
+        csv_path.write_text("a,b\n1,2,3\n")
+
+        with pytest.raises(ar.CsvReadError, match="CSV row 2 has 3 fields; expected 2"):
+            ar.scan_csv(csv_path)
+
+    def test_scan_csv_large_integer_overflow_remains_string(self, tmp_path):
+        csv_path = tmp_path / "large_integer_scan.csv"
+        csv_path.write_text("value\n9223372036854775808\n")
+
+        assert ar.scan_csv(csv_path) == {"value": "string"}
+
+
+# --- Issue #115: quoted multiline round-trip across line endings ---
+
+
+def test_quoted_field_with_embedded_lf(tmp_path):
+    """LF inside quotes must be preserved as field content."""
+    csv_file = tmp_path / "test.csv"
+    csv_file.write_bytes(b'name,note\nAlice,"line1\nline2"\n')
+    df = ar.to_pandas(ar.read_csv(str(csv_file)))
+    assert len(df) == 1
+    assert df["note"][0] == "line1\nline2"
+
+
+def test_quoted_field_with_embedded_crlf(tmp_path):
+    """CRLF inside quotes must be preserved, not treated as row delimiter."""
+    csv_file = tmp_path / "test.csv"
+    csv_file.write_bytes(b'name,note\r\nAlice,"line1\r\nline2"\r\n')
+    df = ar.to_pandas(ar.read_csv(str(csv_file)))
+    assert len(df) == 1
+    assert df["note"][0] == "line1\r\nline2"
+
+
+def test_quoted_field_with_embedded_cr(tmp_path):
+    """CR-only inside quotes must be preserved as field content."""
+    csv_file = tmp_path / "test.csv"
+    csv_file.write_bytes(b'name,note\nAlice,"line1\rline2"\n')
+    df = ar.to_pandas(ar.read_csv(str(csv_file)))
+    assert len(df) == 1
+    assert df["note"][0] == "line1\rline2"
+
+
+class TestArFrameHeadTail:
+    def test_head_default(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        result = frame.head()
+        assert isinstance(result, ar.ArFrame)
+        assert result.shape == (3, 4)
+
+    def test_head_custom_n(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        result = frame.head(2)
+        df = ar.to_pandas(result)
+        assert result.shape == (2, 4)
+        assert df["name"].tolist() == ["Alice", "Bob"]
+
+    def test_head_zero(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        result = frame.head(0)
+        assert isinstance(result, ar.ArFrame)
+        assert result.shape == (0, 4)
+
+    def test_head_large_n(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        result = frame.head(100)
+        assert result.shape == (3, 4)
+
+    def test_head_empty_frame(self, tmp_path):
+        csv_path = tmp_path / "empty_rows.csv"
+        csv_path.write_text("name,age\n")
+        frame = ar.read_csv(csv_path)
+        result = frame.head()
+        assert result.shape == (0, 2)
+
+    def test_tail_default(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        result = frame.tail()
+        assert isinstance(result, ar.ArFrame)
+        assert result.shape == (3, 4)
+
+    def test_tail_custom_n(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        result = frame.tail(2)
+        df = ar.to_pandas(result)
+        assert result.shape == (2, 4)
+        assert df["name"].tolist() == ["Bob", "Charlie"]
+
+    def test_tail_zero(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        result = frame.tail(0)
+        assert isinstance(result, ar.ArFrame)
+        assert result.shape == (0, 4)
+
+    def test_tail_large_n(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        result = frame.tail(100)
+        assert result.shape == (3, 4)
+
+    def test_tail_empty_frame(self, tmp_path):
+        csv_path = tmp_path / "empty_rows.csv"
+        csv_path.write_text("name,age\n")
+        frame = ar.read_csv(csv_path)
+        result = frame.tail()
+        assert result.shape == (0, 2)
+
+    def test_head_invalid_n(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        with pytest.raises(ValueError):
+            frame.head(-1)
+        with pytest.raises(ValueError):
+            frame.head(True)
+
+    def test_tail_invalid_n(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        with pytest.raises(ValueError):
+            frame.tail(-1)
+        with pytest.raises(ValueError):
+            frame.tail(True)
+
+
+def test_row_split_crlf_outside_quotes(tmp_path):
+    """CRLF outside quotes must correctly split into separate rows."""
+    csv_file = tmp_path / "test.csv"
+    csv_file.write_bytes(b"a,b\r\n1,2\r\n3,4\r\n")
+    df = ar.to_pandas(ar.read_csv(str(csv_file)))
+    assert len(df) == 2
+    assert list(df["a"]) == [1, 3]
+
+
+def test_scan_csv_non_utf8_multiline_boundary(tmp_path):
+    """scan_csv must not split a quoted multiline record at the sample boundary."""
+    csv_file = tmp_path / "test_multiline_boundary.csv"
+    content_lines = ["id,text"]
+    for i in range(1, 9999):
+        content_lines.append(f"{i},value")
+    content_lines.append('9999,"multiline\nrecord\ncafé"')
+    content_lines.append("10000,end")
+    csv_content = "\n".join(content_lines)
+    csv_file.write_bytes(csv_content.encode("latin-1"))
+    schema = ar.scan_csv(str(csv_file), encoding="latin-1")
+    assert schema == {"id": "int64", "text": "string"}
+
+
+def test_scan_csv_type_evidence_after_limit(tmp_path):
+    """Type evidence after sample window must not affect inference."""
+    csv_file = tmp_path / "test_type_evidence.csv"
+    content_lines = ["id,value"]
+    for i in range(1, 10005):
+        content_lines.append(f"{i},100")
+    content_lines.append("10006,3.14")
+    csv_content = "\n".join(content_lines)
+    csv_file.write_bytes(csv_content.encode("latin-1"))
+    schema = ar.scan_csv(str(csv_file), encoding="latin-1")
+    assert schema["value"] == "int64"
