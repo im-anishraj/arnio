@@ -21,6 +21,7 @@ from .cleaning import (
     fill_nulls,
     filter_rows,
     normalize_case,
+    parse_bool_strings,
     rename_columns,
     round_numeric_columns,
     safe_divide_columns,
@@ -75,6 +76,7 @@ __all__ = [
     "cast_types",
     "clean",
     "safe_divide_columns",
+    "parse_bool_strings",
     # Conversion
     "to_pandas",
     "from_pandas",
