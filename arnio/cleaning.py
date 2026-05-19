@@ -10,13 +10,13 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from ._core import (
-    _DType,
-    _Frame,
     _cast_types,
     _clip_numeric,
     _drop_duplicates,
     _drop_nulls,
+    _DType,
     _fill_nulls,
+    _Frame,
     _normalize_case,
     _rename_columns,
     _strip_whitespace,

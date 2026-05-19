@@ -691,17 +691,21 @@ class TestNormalizeUnicode:
 
         df = pd.DataFrame({"text": ["cafe\u0301"]})
 
-        frame = ar.from_pandas(df)
+        ar.from_pandas(df)
 
     def test_normalize_unicode_no_pandas_roundtrip(self):
         import pandas as pd
+
         import arnio as ar
         import arnio.cleaning as cleaning_mod
+
         df = pd.DataFrame({"text": ["café", "naïve"]})
         frame = ar.from_pandas(df)
         original = getattr(cleaning_mod, "to_pandas", None)
+
         def _should_not_be_called(*a, **kw):
             raise AssertionError("normalize_unicode called to_pandas!")
+
         if original is not None:
             cleaning_mod.to_pandas = _should_not_be_called
         try:
@@ -714,17 +718,25 @@ class TestNormalizeUnicode:
 
     def test_normalize_unicode_nfd_form(self):
         import unicodedata
+
         import pandas as pd
+
         import arnio as ar
+
         df = pd.DataFrame({"text": ["café"]})
         frame = ar.from_pandas(df)
         result = ar.normalize_unicode(frame, form="NFD")
         result_df = ar.to_pandas(result)
-        assert unicodedata.normalize("NFD", result_df["text"].iloc[0]) == result_df["text"].iloc[0]
+        assert (
+            unicodedata.normalize("NFD", result_df["text"].iloc[0])
+            == result_df["text"].iloc[0]
+        )
 
     def test_normalize_unicode_nfkc_form(self):
         import pandas as pd
+
         import arnio as ar
+
         df = pd.DataFrame({"text": ["ﬁle"]})
         frame = ar.from_pandas(df)
         result = ar.normalize_unicode(frame, form="NFKC")
@@ -733,7 +745,9 @@ class TestNormalizeUnicode:
 
     def test_normalize_unicode_preserves_nulls(self):
         import pandas as pd
+
         import arnio as ar
+
         df = pd.DataFrame({"text": ["café", None, "naïve"]})
         frame = ar.from_pandas(df)
         result = ar.normalize_unicode(frame)
@@ -744,19 +758,24 @@ class TestNormalizeUnicode:
 
     def test_normalize_unicode_non_string_columns_unchanged(self):
         import pandas as pd
+
         import arnio as ar
+
         df = pd.DataFrame({"text": ["café"], "score": [42], "flag": [True]})
         frame = ar.from_pandas(df)
         result = ar.normalize_unicode(frame)
         result_df = ar.to_pandas(result)
         assert result_df["score"].iloc[0] == 42
         assert (
-            result_df["flag"].iloc[0] is True or result_df["flag"].iloc[0] == True  # noqa: E712
+            result_df["flag"].iloc[0] is True
+            or result_df["flag"].iloc[0] == True  # noqa: E712
         )
 
     def test_normalize_unicode_subset_only_targets_specified_columns(self):
         import pandas as pd
+
         import arnio as ar
+
         raw_a = "café"
         raw_b = "résumé"
         df = pd.DataFrame({"a": [raw_a], "b": [raw_b]})
@@ -768,8 +787,10 @@ class TestNormalizeUnicode:
 
     def test_normalize_unicode_invalid_form_raises(self):
         import pandas as pd
-        import arnio as ar
         import pytest
+
+        import arnio as ar
+
         df = pd.DataFrame({"text": ["hello"]})
         frame = ar.from_pandas(df)
         with pytest.raises(ValueError, match="Unsupported Unicode normalization form"):
@@ -777,14 +798,15 @@ class TestNormalizeUnicode:
 
     def test_normalize_unicode_large_frame_no_pandas(self):
         import pandas as pd
+
         import arnio as ar
+
         n = 10_000
         df = pd.DataFrame({"text": ["café"] * n, "other": list(range(n))})
         frame = ar.from_pandas(df)
         result = ar.normalize_unicode(frame)
         result_df = ar.to_pandas(result)
         assert all(v == "café" for v in result_df["text"])
-
 
         result = ar.normalize_unicode(frame)
 
