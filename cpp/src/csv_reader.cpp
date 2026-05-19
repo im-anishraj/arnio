@@ -226,9 +226,8 @@ std::vector<std::string> CsvReader::parse_line(const std::string& line) const {
             } else if (c == config_.delimiter) {
                 fields.push_back(field);
                 field.clear();
-            } else if (c == '\r') {
-                // skip carriage return
-            } else {
+            }
+            else {
                 field += c;
             }
         }
