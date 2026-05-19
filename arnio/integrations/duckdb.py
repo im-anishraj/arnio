@@ -1,39 +1,57 @@
-"""Tests for DuckDB integration helpers."""
+"""
+arnio.integrations.duckdb
+DuckDB integration helpers for ArFrame.
+"""
 
-import pytest
+from __future__ import annotations
 
-import arnio as ar
+from typing import TYPE_CHECKING
 
+if TYPE_CHECKING:
+    import duckdb
 
-def test_register_duckdb_basic():
-    duckdb = pytest.importorskip("duckdb")
-    import pandas as pd
-
-    df = pd.DataFrame({"name": ["Alice", "Bob"], "age": [25, 30]})
-    frame = ar.from_pandas(df)
-    conn = duckdb.connect()
-
-    ar.register_duckdb(frame, conn, "users")
-    result = conn.execute("SELECT * FROM users").fetchdf()
-
-    assert list(result.columns) == ["name", "age"]
-    assert len(result) == 2
+from ..convert import to_pandas
+from ..frame import ArFrame
 
 
-def test_register_duckdb_invalid_frame():
-    duckdb = pytest.importorskip("duckdb")
-    conn = duckdb.connect()
+def register_duckdb(
+    frame: ArFrame,
+    conn: duckdb.DuckDBPyConnection,
+    name: str,
+) -> None:
+    """Register an ArFrame as a DuckDB relation.
 
-    with pytest.raises(TypeError):
-        ar.register_duckdb("not_a_frame", conn, "test")
+    Parameters
+    ----------
+    frame : ArFrame
+        The frame to register.
+    conn : duckdb.DuckDBPyConnection
+        An open DuckDB connection.
+    name : str
+        The relation name to use in SQL queries.
 
+    Raises
+    ------
+    TypeError
+        If frame is not an ArFrame or name is not a string.
+    ValueError
+        If name is empty.
 
-def test_register_duckdb_empty_name():
-    duckdb = pytest.importorskip("duckdb")
-    import pandas as pd
+    Examples
+    --------
+    >>> import duckdb
+    >>> import arnio as ar
+    >>> frame = ar.read_csv("data.csv")
+    >>> conn = duckdb.connect()
+    >>> ar.register_duckdb(frame, conn, "my_table")
+    >>> conn.execute("SELECT * FROM my_table").fetchdf()
+    """
+    if not isinstance(frame, ArFrame):
+        raise TypeError("frame must be an ArFrame")
+    if not isinstance(name, str):
+        raise TypeError("name must be a string")
+    if not name:
+        raise ValueError("name must not be empty")
 
-    frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
-    conn = duckdb.connect()
-
-    with pytest.raises(ValueError):
-        ar.register_duckdb(frame, conn, "")
+    df = to_pandas(frame)
+    conn.register(name, df)
