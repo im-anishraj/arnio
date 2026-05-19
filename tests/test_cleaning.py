@@ -1689,3 +1689,16 @@ def test_drop_columns_matching_all_columns():
     df = pd.DataFrame({"a": [1, 2], "b": [3, 4]})
     with pytest.raises(ValueError, match="Pattern matches all columns"):
         ar.drop_columns_matching(df, ".*")
+
+
+def test_rename_columns_invalid_mapping_type():
+    df = pd.DataFrame({"a": [1, 2]})
+    with pytest.raises(TypeError):
+        ar.rename_columns(df, ["a", "b"])
+
+
+
+def test_rename_columns_missing_source_column():
+    df = pd.DataFrame({"a": [1, 2]})
+    with pytest.raises(ValueError):
+        ar.rename_columns(df, {"z": "x"})
