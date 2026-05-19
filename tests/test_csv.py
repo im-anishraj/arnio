@@ -867,6 +867,30 @@ def test_permissive_mode_allows_missing_columns(tmp_path):
     assert df["name"].iloc[0] == "Alice"
     assert pd.isna(df["name"].iloc[1])
 
+def test_crlf_line_endings_do_not_preserve_trailing_carriage_return(tmp_path):
+    csv_path = tmp_path / "normal_crlf.csv"
+
+    csv_path.write_bytes(b"id,name\r\n1,Alice\r\n2,Bob\r\n")
+
+    frame = ar.read_csv(csv_path)
+
+    df = ar.to_pandas(frame)
+
+    assert df["name"].iloc[0] == "Alice"
+    assert df["name"].iloc[1] == "Bob"
+
+def test_embedded_quoted_crlf_is_preserved(tmp_path):
+    csv_path = tmp_path / "embedded_crlf.csv"
+
+    csv_path.write_bytes(
+        b'id,notes\r\n1,"hello\r\nworld"\r\n'
+    )
+
+    frame = ar.read_csv(csv_path)
+
+    df = ar.to_pandas(frame)
+
+    assert df["notes"].iloc[0] == "hello\r\nworld"    
 
 def test_crlf_line_endings_do_not_preserve_trailing_carriage_return(tmp_path):
     csv_path = tmp_path / "normal_crlf.csv"
