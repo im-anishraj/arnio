@@ -1105,6 +1105,29 @@ class TestFilterRows:
 
 
 class TestRoundNumericColumns:
+
+    def test_round_subset_missing_column_raises_clear_error(self):
+        import pandas as pd
+
+        df = pd.DataFrame(
+            {
+                "price": [1.234, 5.678],
+                "name": ["Alice", "Bob"],
+            }
+        )
+
+        frame = ar.from_pandas(df)
+
+        with pytest.raises(
+            ValueError,
+            match=r"round_numeric_columns: unknown column\(s\) in subset",
+        ):
+            ar.round_numeric_columns(
+                frame,
+                subset=["price", "missing_column"],
+                decimals=1,
+            )
+            
     def test_round_all_numeric(self):
         import pandas as pd
 
