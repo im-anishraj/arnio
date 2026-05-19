@@ -29,7 +29,7 @@ Use Arnio _before_ and _alongside_ pandas, NumPy, scikit-learn, DuckDB, and Arro
 <a href="https://gssoc.girlscript.tech/"><img src="https://img.shields.io/badge/GSSoC-2026-ff6b35?style=flat-square&labelColor=0d1117" alt="GSSoC 2026"></a>&nbsp;
 <a href="https://discord.gg/xsEw7r78M"><img src="https://img.shields.io/badge/Discord-Join%20Community-5865F2?style=flat-square&logo=discord&logoColor=white&labelColor=0d1117" alt="Join Discord"></a>
 [![PyPI Downloads](https://static.pepy.tech/personalized-badge/arnio?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads)](https://pepy.tech/projects/arnio)
-
+[![codecov](https://codecov.io/gh/data-engineering-org/arnio/branch/main/graph/badge.svg)](https://github.com/im-anishraj/arnio.git)
 <br><br>
 
 ```bash

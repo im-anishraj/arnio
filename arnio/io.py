@@ -196,6 +196,156 @@ def _comment_filtered_csv_path(path: str, encoding: str, comment: str | None) ->
                 pass
 
 
+def _validate_thousands_separator(
+    thousands_separator: str | None,
+) -> None:
+    if thousands_separator is None:
+        return
+    if not isinstance(thousands_separator, str):
+        raise TypeError("thousands_separator must be a string or None")
+    if len(thousands_separator) != 1:
+        raise ValueError("thousands_separator must be a single character")
+    if thousands_separator.isalnum() or thousands_separator in {'"', "\n", "\r"}:
+        raise ValueError(
+            "thousands_separator must be a single non-alphanumeric character"
+        )
+    if thousands_separator in {".", "+", "-"}:
+        raise ValueError(
+            "Invalid thousands_separator: '.', '+' and '-' are not allowed"
+        )
+
+
+def _validate_delimiter(delimiter: str) -> str:
+    """Validate CSV delimiter."""
+    if not isinstance(delimiter, str):
+        raise TypeError("delimiter must be a string")
+
+    if len(delimiter) != 1:
+        raise ValueError("delimiter must be exactly one character")
+
+    return delimiter
+
+
+def _validate_usecols(usecols: Sequence[str]) -> list[str]:
+    """Validate usecols parameter."""
+    if isinstance(usecols, str):
+        raise TypeError("usecols must be a sequence of column names, not a string")
+
+    if not isinstance(usecols, Sequence):
+        raise TypeError("usecols must be a sequence of strings")
+
+    for col in usecols:
+        if not isinstance(col, str):
+            raise TypeError("usecols must contain only strings")
+
+    if len(set(usecols)) != len(usecols):
+        raise ValueError("usecols must not contain duplicate column names")
+
+    return list(usecols)
+
+
+def _validate_nrows(nrows: int) -> int:
+    """Validate nrows parameter."""
+    if isinstance(nrows, bool) or not isinstance(nrows, int):
+        raise TypeError("nrows must be an integer")
+
+    if nrows < 0:
+        raise ValueError("nrows must be non-negative")
+
+    return nrows
+
+
+def _validate_skip_rows(skip_rows: int) -> int:
+    """Validate skip_rows parameter."""
+    if isinstance(skip_rows, bool) or not isinstance(skip_rows, int):
+        raise TypeError("skip_rows must be an integer")
+
+    if skip_rows < 0:
+        raise ValueError("skip_rows must be non-negative")
+
+    return skip_rows
+
+
+def _validate_chunksize(chunksize: int) -> int:
+    """Validate chunksize parameter."""
+    if isinstance(chunksize, bool) or not isinstance(chunksize, int):
+        raise TypeError("chunksize must be an integer")
+
+    if chunksize <= 0:
+        raise ValueError("chunksize must be a positive integer")
+
+    return chunksize
+
+
+def _validate_null_values(null_values: list[str]) -> list[str]:
+    """Validate null_values parameter."""
+    if isinstance(null_values, str):
+        raise TypeError("null_values must be a list of strings, not a bare string")
+
+    if not isinstance(null_values, list):
+        raise TypeError("null_values must be a list of strings")
+
+    for val in null_values:
+        if not isinstance(val, str):
+            raise TypeError("null_values must contain only strings")
+
+    return list(null_values)
+
+
+def _validate_parser_mode(mode: str) -> str:
+    """Validate CSV parser mode."""
+    if not isinstance(mode, str):
+        raise TypeError("mode must be a string")
+    if mode not in {"strict", "permissive"}:
+        raise ValueError("mode must be either 'strict' or 'permissive'")
+    return mode
+
+
+def _materialize_csv_input(
+    source: str | os.PathLike[str] | io.TextIOBase,
+) -> tuple[str, bool]:
+    """Convert supported CSV inputs into a filesystem path."""
+    if isinstance(source, (str, os.PathLike)):
+        return os.fspath(source), False
+    if isinstance(source, io.StringIO) or (
+        hasattr(source, "read") and callable(source.read)
+    ):
+        content = source.read()
+
+        if not isinstance(content, str):
+            raise TypeError("read_csv file-like objects must return text, not bytes")
+
+        tmp = tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            suffix=".csv",
+            delete=False,
+        )
+
+        try:
+            tmp.write(content)
+            tmp.close()
+            return tmp.name, True
+        except Exception:
+            os.unlink(tmp.name)
+            raise
+
+    raise TypeError("read_csv expected a filesystem path or text file-like object")
+
+
+def _reject_utf8_nul_bytes(path: str) -> None:
+    """Reject UTF-8 CSV inputs that contain NUL bytes anywhere in the file."""
+    try:
+        with open(path, "rb") as f:
+            while chunk := f.read(8192):
+                if b"\0" in chunk:
+                    raise CsvReadError(
+                        "CSV input contains NUL bytes and appears to be binary or corrupted"
+                    )
+    except FileNotFoundError:
+        pass  # Let C++ backend handle or raise standard error
+
+
 def read_csv(
     path: str | os.PathLike[str] | io.TextIOBase,
     *,
@@ -275,6 +425,8 @@ def read_csv(
     """
     native_path, should_cleanup, is_materialized_text = _materialize_csv_input(path)
 
+    if _is_utf8_encoding(encoding):
+        _reject_utf8_nul_bytes(path)
     try:
         # Explicitly validate the decompressed temp file (or local path) rather than the compressed bytes
         _validate_csv_path(native_path, encoding)
@@ -933,17 +1085,8 @@ def scan_csv(
     >>> schema = ar.scan_csv("data.dat")              # non-standard extension accepted
     """
 
-    native_path, should_cleanup, _ = _materialize_csv_input(path, caller="scan_csv")
-
     if _is_utf8_encoding(encoding):
-        try:
-            with open(path, "rb") as f:
-                if b"\0" in f.read(1024):
-                    raise CsvReadError(
-                        "CSV input contains NUL bytes and appears to be binary or corrupted"
-                    )
-        except FileNotFoundError:
-            pass  # Let C++ backend handle or raise standard error
+        _reject_utf8_nul_bytes(path)
     try:
         if os.path.getsize(path) == 0:
             raise CsvReadError(f"CSV file is empty: {path!r}")
