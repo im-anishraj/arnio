@@ -103,7 +103,7 @@ When a step is invoked, the system follows a priority-based dispatch model:
 
 The system first queries `_STEP_REGISTRY`.
 
-This built-in registry routes operations to highly optimized C++-backed steps (executing directly within the `Frame` / C++ core), while also housing Python-backed built-ins.
+This built-in registry routes operations to highly optimized native C++ backed steps executing directly within the `Frame` / C++ core.
 
 ### Custom Pipeline Steps
 
@@ -131,25 +131,37 @@ Core cleaning primitives should ideally be implemented as C++ built-ins to bypas
 
 ### Step Backend Execution Map
 
+This map reflects the current pipeline registry defined in `arnio/pipeline.py`.
+
+The current pipeline registry is split into native C++ backed steps and Python/pandas backed steps.
+
 | Step | Backend |
 |---|---|
 | drop_nulls | Native C++ |
+| fill_nulls | Native C++ |
+| validate_columns_exist | Native C++ |
+| drop_duplicates | Native C++ |
+| drop_constant_columns | Native C++ |
+| clip_numeric | Native C++ |
 | strip_whitespace | Native C++ |
 | normalize_case | Native C++ |
-| drop_duplicates | Native C++ |
-| fill_nulls | Native C++ |
-| filter_rows | Python-backed |
-| custom registered steps | Python-backed |
+| rename_columns | Native C++ |
+| cast_types | Native C++ |
+| round_numeric_columns | Native C++ |
+| filter_rows | Python/pandas |
+| safe_divide_columns | Python/pandas |
+| custom registered steps | Python/pandas |
 
 ### Why backend selection matters
 
-C++-backed steps execute directly inside the Arnio runtime and avoid unnecessary pandas conversion overhead.
+Native C++ backed steps execute directly inside the Arnio runtime and avoid pandas conversion overhead.
 
-Python-backed steps may require:
+Python/pandas backed steps use the slower conversion path:
 
 ```text
 Frame → to_pandas() → from_pandas() → Frame
 ```
+
 These roundtrips can introduce additional memory allocation and type re-inference overhead.
 
 ---
