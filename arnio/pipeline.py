@@ -10,6 +10,16 @@ from typing import Callable
 from . import cleaning
 from .frame import ArFrame
 
+import json
+from pathlib import Path
+
+try:
+    import yaml
+
+    HAS_YAML = True
+except ImportError:
+    HAS_YAML = False
+
 # Map step names to cleaning functions
 _STEP_REGISTRY: dict[str, Callable] = {
     "drop_nulls": cleaning.drop_nulls,
@@ -131,6 +141,8 @@ def pipeline(
 register_step("filter_rows", cleaning.filter_rows)
 register_step("safe_divide_columns", cleaning.safe_divide_columns)
 register_step("replace_values", cleaning.replace_values)
+
+
 def save_pipeline(steps: list[tuple], filepath: str | Path) -> None:
     """Save a list of pipeline steps to a JSON or YAML file for reproducible jobs."""
     from .exceptions import PipelineSerializationError

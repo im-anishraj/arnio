@@ -31,6 +31,8 @@ class TypeCastError(ArnioError):
     """Raised when cast_types encounters an incompatible type."""
 
     pass
+
+
 class PipelineSerializationError(ArnioError):
     """Raised when a declarative pipeline cannot be saved or loaded."""
 
