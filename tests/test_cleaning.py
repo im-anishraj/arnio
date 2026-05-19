@@ -741,7 +741,10 @@ class TestNormalizeUnicode:
         result = ar.normalize_unicode(frame, form="NFD")
         result_df = ar.to_pandas(result)
         # NFD decomposes é → e + combining accent
-        assert unicodedata.normalize("NFD", result_df["text"].iloc[0]) == result_df["text"].iloc[0]
+        assert (
+            unicodedata.normalize("NFD", result_df["text"].iloc[0])
+            == result_df["text"].iloc[0]
+        )
 
     def test_normalize_unicode_nfkc_form(self):
         """NFKC must handle compatibility decomposition followed by composition."""
@@ -778,14 +781,16 @@ class TestNormalizeUnicode:
         result = ar.normalize_unicode(frame)
         result_df = ar.to_pandas(result)
         assert result_df["score"].iloc[0] == 42
-        assert result_df["flag"].iloc[0] is True or result_df["flag"].iloc[0] == True  # noqa: E712
+        assert (
+            result_df["flag"].iloc[0] is True or result_df["flag"].iloc[0] == True
+        )  # noqa: E712
 
     def test_normalize_unicode_subset_only_targets_specified_columns(self):
         """With subset, only listed columns are normalized."""
         import pandas as pd
         import arnio as ar
 
-        raw_a = "cafe\u0301"   # NFD café
+        raw_a = "cafe\u0301"  # NFD café
         raw_b = "re\u0301sume\u0301"  # NFD résumé
         df = pd.DataFrame({"a": [raw_a], "b": [raw_b]})
         frame = ar.from_pandas(df)
