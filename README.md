@@ -527,39 +527,32 @@ The biggest performance wins are in:
 - **Parallel column processing** — `std::thread` across independent columns
 
 ### Getting started
-
 ```bash
-# macOS / Linux
-git clone https://github.com/im-anishraj/arnio.git && cd arnio
-make install   # pip install -e ".[dev]" + pre-commit
-make test      # pytest with coverage
-make lint      # ruff + black
+# Clone the repository
+git clone https://github.com/im-anishraj/arnio.git
+cd arnio
 
-# Windows
+# Ensure Python 3.12+ is installed
+python --version
+
+# Create and activate a virtual environment
+python -m venv .venv
+
+# Linux/macOS
+source .venv/bin/activate
+
+# Windows PowerShell
+.venv\Scripts\Activate.ps1
+
+# Upgrade pip
+python -m pip install -U pip
+
+# Install development dependencies
 pip install -e ".[dev]"
-pre-commit install
-pytest tests/ -v
+
+# Run tests
+python -m pytest tests -q
 ```
-
-> **PR titles must follow [Conventional Commits](https://www.conventionalcommits.org/)** — `feat:`, `fix:`, `docs:`, `chore:`. Our release pipeline auto-generates changelogs from these.
-
-For GSSoC contributors, please read **[GSSOC_GUIDE.md](GSSOC_GUIDE.md)** before asking to be assigned. It explains issue claiming, contribution levels, review expectations, and what maintainers look for in a strong PR. If you want a quick onboarding refresher, see the [GSSoC FAQ](GSSOC_GUIDE.md#gssoc-faq).
-If you are new to Arnio terms, see the [contributor glossary](.github/CONTRIBUTING.md#contributor-glossary).
-
-<p align="center">
-<a href=".github/CONTRIBUTING.md"><b>📖 Full Contributing Guide</b></a>&ensp;·&ensp;
-<a href="GSSOC_GUIDE.md"><b>GSSoC Guide</b></a>&ensp;·&ensp;
-<a href="https://github.com/im-anishraj/arnio/issues"><b>🐛 Open Issues</b></a>&ensp;·&ensp;
-<a href="https://github.com/im-anishraj/arnio/discussions"><b>💬 Discussions</b></a>&ensp;·&ensp;
-<a href="https://discord.gg/xsEw7r78M"><b>Discord</b></a>
-</p>
-
-<br>
-
----
-
-<br>
-
 ## 🚢 Release process
 
 Arnio releases are automated through Release Please and GitHub Actions.
@@ -645,45 +638,7 @@ arnio/
 <sub>Built with C++ and pybind11 · Licensed under MIT · Maintained by <a href="https://github.com/im-anishraj">@im-anishraj</a></sub>
 
 </div>
-## 🚀 Installation & Setup (For Contributors)
 
-This project is a Python/C++ package. It does NOT run as a Node.js app.
-
-### 1. Clone the repository
-
-```bash
-git clone https://github.com/im-anishraj/arnio.git
-cd arnio
 ```
 
-### 2. Create a virtual environment
 
-```bash
-python -m venv .venv
-```
-
-### 3. Activate the virtual environment
-
-**Windows (PowerShell):**
-
-```bash
-.venv\Scripts\Activate.ps1
-```
-
-**Linux/macOS:**
-
-```bash
-source .venv/bin/activate
-```
-
-### 4. Install development dependencies
-
-```bash
-pip install -e ".[dev]"
-```
-
-### 5. Run tests
-
-```bash
-python -m pytest tests -q
-```
