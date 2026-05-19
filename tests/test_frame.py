@@ -23,12 +23,12 @@ def test_from_dict_empty():
 
 def test_from_dict_invalid():
     with pytest.raises(TypeError):
-        ar.ArFrame.from_dict([1, 2, 3])
+        ar.from_dict([1, 2, 3])
 
 
 def test_from_dict_bad_length():
     with pytest.raises(ValueError):
-        ar.ArFrame.from_dict({
+        ar.from_dict({
             "name": ["A", "B"],
             "age": [20]
         })
