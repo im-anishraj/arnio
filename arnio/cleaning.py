@@ -891,7 +891,10 @@ def round_numeric_columns(
     if subset is not None:
         missing = [col for col in subset if col not in df.columns]
         if missing:
-            raise IndexError(f"Column not found: {missing[0]}")
+            raise ValueError(
+                f"round_numeric_columns: unknown column(s) in subset: {missing}. "
+                f"Available columns: {list(df.columns)}"
+            )
         cols_to_round = subset
     else:
         cols_to_round = df.select_dtypes(include=["number"]).columns

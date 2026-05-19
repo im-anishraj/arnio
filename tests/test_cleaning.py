@@ -1066,7 +1066,10 @@ class TestRoundNumericColumns:
 
         df = pd.DataFrame({"a": [1.123]})
         frame = ar.from_pandas(df)
-        with pytest.raises(IndexError, match="Column not found"):
+        with pytest.raises(
+            ValueError,
+            match=r"round_numeric_columns: unknown column\(s\) in subset: \['missing_col'\]",
+        ):
             ar.round_numeric_columns(frame, subset=["missing_col"])
 
     def test_with_nulls(self):
