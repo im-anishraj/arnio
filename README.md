@@ -61,6 +61,12 @@ import arnio as ar
 # Load CSV directly through C++ — no Python parsing overhead
 frame = ar.read_csv("messy_sales_data.csv")
 
+# Strict mode (default) fails on inconsistent row widths
+frame = ar.read_csv("messy_sales_data.csv", mode="strict")
+
+# Permissive mode fills missing trailing values with nulls
+frame = ar.read_csv("messy_sales_data.csv", mode="permissive")
+
 # Declare what clean data looks like — arnio handles the rest
 clean = ar.pipeline(frame, [
     ("strip_whitespace",),
@@ -76,6 +82,35 @@ df = ar.to_pandas(clean)
 # Use copy=True when you need defensive pandas-owned buffers
 safe_df = ar.to_pandas(clean, copy=True)
 ```
+
+Need step timings for debugging? Opt in without changing the default pipeline return type:
+
+```python
+clean, metadata = ar.pipeline(
+    frame,
+    [("strip_whitespace",), ("drop_duplicates",)],
+    return_metadata=True,
+)
+
+print(metadata["step_timings"])
+```
+### Pipeline validation behavior
+
+Pipeline step specifications are validated before execution begins.
+
+Malformed step tuples, invalid kwargs structures, or unknown step names fail early before any pipeline steps execute.
+
+```python
+ar.pipeline(
+    frame,
+    [
+        ("strip_whitespace",),
+        ("bad_step", "oops", "extra"),
+    ],
+)
+```
+
+This prevents partial pipeline execution when later pipeline steps are invalid.
 
 Already have a pandas `DataFrame`? Use Arnio in-place in your existing pandas
 workflow:
@@ -94,6 +129,58 @@ clean_df = df.arnio.clean([
 
 report = clean_df.arnio.profile()
 ```
+## Cross-field validation rules
+
+Pass a `rules` list to `Schema` for checks that span multiple columns.
+Each rule receives the full pandas `DataFrame` and must return a
+`list[ValidationIssue]` — an empty list means the rule passed.
+
+```python
+import arnio as ar
+
+def end_after_start(df):
+    return [
+        ar.ValidationIssue(
+            column="end_date",
+            rule="cross_field",
+            message="end_date must be >= start_date",
+            row_index=int(i) + 1,
+        )
+        for i, row in df.iterrows()
+        if row["end_date"] < row["start_date"]
+    ]
+
+schema = ar.Schema(
+    {"start_date": ar.String(), "end_date": ar.String()},
+    rules=[end_after_start],
+)
+
+result = schema.validate(ar.read_csv("events.csv"))
+print(result.passed)
+```
+
+## Schema diff reports
+
+Use `diff_schema()` to compare expected and observed data contracts across
+datasets, releases, or generated schemas.
+
+```python
+import arnio as ar
+
+expected = ar.Schema({
+    "id": ar.Int64(nullable=False, unique=True),
+    "email": ar.Email(nullable=False),
+})
+
+observed = ar.Schema({
+    "id": ar.Int64(nullable=False),
+    "created_at": ar.DateTime(format="%Y-%m-%d"),
+})
+
+diff = ar.diff_schema(expected, observed)
+print(diff.summary())
+print(diff.to_markdown())
+```
 
 ### Select specific columns
 
@@ -107,7 +194,40 @@ print(selected.columns)
 ```
 
 
+### Handling missing values
+
+Arnio supports configuring which strings are treated as null during CSV parsing using the `null_values` parameter in `read_csv` and `scan_csv`. By default, Arnio preserves its existing behavior and treats only empty cells as null. Custom matching is case-insensitive and applies to cell values only (not headers).
+
+```python
+# Default behavior: empty cells are null
+frame = ar.read_csv("data.csv")
+
+# Provide a custom list of sentinels (overrides the empty-cell default)
+frame = ar.read_csv("data.csv", null_values=["", "MISSING", "UNKNOWN"])
+
+# Disable null sentinel handling completely
+frame = ar.read_csv("data.csv", null_values=[])
+```
+
 > Every step above executes in C++. Your Python code is a _configuration_ — not the execution engine.
+
+<br>
+
+### Security note: CSV formula injection
+
+Arnio preserves cell values when reading CSV files. It does not rewrite strings that
+begin with spreadsheet formula prefixes such as `=`, `+`, `-`, or `@`.
+
+If you export Arnio-cleaned data back to CSV and expect users to open that file in
+Excel, Google Sheets, LibreOffice, or another spreadsheet application, treat
+untrusted text fields as potentially executable spreadsheet formulas. Before
+exporting, escape or neutralize formula-like strings in user-controlled columns,
+for example by prefixing a single quote or another project-approved escape marker.
+
+This is especially important for customer names, notes, comments, imported form
+fields, and any other free-text values that may come from outside your trust
+boundary. Arnio focuses on parsing, validation, profiling, and cleanup; final CSV
+export policy should stay explicit in the application that writes the file.
 
 <br>
 
@@ -118,11 +238,38 @@ print(selected.columns)
 `scan_csv` reads only the header + a sample to infer the schema. Zero data loaded.
 
 ```python
-schema = ar.scan_csv("100GB_file.csv")
+# Pass sample_size to control how many rows are evaluated for type inference
+schema = ar.scan_csv("100GB_file.csv", sample_size=500)
 # {'id': 'int64', 'name': 'string', 'is_active': 'bool', 'revenue': 'float64'}
 ```
 
 Useful for exploring datasets before committing memory.
+</details>
+
+<details>
+<summary><b>📄 Read JSON Lines (JSONL / NDJSON) files</b></summary>
+<br>
+
+`read_jsonl` parses one JSON object per line into an ArFrame. Blank lines are skipped, missing keys become nulls, and mixed-type columns are coerced to string — the same rules as `from_pandas`.
+
+```python
+# events.jsonl
+# {"user": "alice", "score": 9.5, "active": true}
+# {"user": "bob",   "score": 8.1, "active": false}
+
+frame = ar.read_jsonl("events.jsonl")
+
+# Limit rows
+frame = ar.read_jsonl("large.jsonl", nrows=1000)
+
+# Non-UTF-8 encoding
+frame = ar.read_jsonl("data.ndjson", encoding="latin-1")
+
+# Plug straight into the cleaning pipeline
+clean = ar.pipeline(frame, [("strip_whitespace",), ("drop_nulls",)])
+```
+
+Raises `ar.JsonlReadError` with the 1-based line number if a line contains invalid JSON.
 </details>
 
 <details>
@@ -139,6 +286,35 @@ print(frame.preview(n=10))  # first 10 rows
 ```
 
 Raises `ValueError` for invalid `n` (zero, negative, or non-integer).
+</details>
+
+<details>
+<summary><b>💰 Financial Decimal Support</b></summary>
+<br>
+
+`arnio` provides support for converting Python `decimal.Decimal` objects.
+
+* **Behavior**: Python `Decimal` objects are automatically preserved as high-precision strings during serialization/binding to prevent floating-point precision loss.
+* **Caveat**: When reading back into Pandas, `to_pandas()` returns these as string (`object` dtype) columns. You will need to explicitly cast them back to `Decimal` objects on the resulting DataFrame if you want to resume exact math.
+
+Example:
+
+```python
+from decimal import Decimal
+
+import pandas as pd
+
+import arnio as ar
+
+df = pd.DataFrame({
+    "price": [Decimal("19.99"), Decimal("29.95")]
+})
+
+frame = ar.from_pandas(df)  # Decimal values safely preserved as exact strings
+result = ar.to_pandas(frame)
+# result["price"] will be string objects ["19.99", "29.95"]
+```
+
 </details>
 
 <details>
@@ -164,6 +340,28 @@ clean = ar.pipeline(frame, [
 Custom steps run through a pandas↔ArFrame conversion bridge. Prototype in Python, then optionally migrate hot paths to C++ for full speed.
 </details>
 
+<details>
+<summary><b>✂️ Slice rows with head() and tail()</b></summary>
+<br>
+
+`head()` and `tail()` return the first or last `n` rows as a new `ArFrame`.
+```python
+frame = ar.read_csv("data.csv")
+
+frame.head()     # first 5 rows (default)
+frame.head(10)   # first 10 rows
+frame.tail(3)    # last 3 rows
+
+# n larger than row count returns all rows safely
+frame.head(1000)
+
+# n=0 returns an empty ArFrame
+frame.head(0)
+```
+
+Raises `ValueError` for negative or boolean `n`.
+</details>
+
 <br>
 
 ---
@@ -183,6 +381,28 @@ not to replace it.
 | **DuckDB / Arrow** | Validate and prepare data before analytics and columnar exchange. |
 | **notebooks** | Inspect quality issues and cleaning suggestions before analysis. |
 
+### Row-dropping pipeline behavior
+
+Some pipeline steps such as `drop_nulls` or `drop_duplicates`
+can change the number of rows returned during `transform`.
+
+By default, `ArnioCleaner` raises a `ValueError` if a pipeline
+changes row count during transform because many scikit-learn
+workflows expect input and output sample counts to remain aligned.
+
+If row-dropping behavior is intentional, pass
+`allow_row_count_change=True` when constructing `ArnioCleaner`.
+
+```python
+cleaner = ArnioCleaner(
+    steps=[
+        ("drop_nulls",),
+        ("strip_whitespace",),
+    ],
+    allow_row_count_change=True,
+)
+```
+
 ### Pandas accessor
 
 ```python
@@ -192,7 +412,9 @@ clean_df = df.arnio.clean(drop_duplicates=True)
 quality = clean_df.arnio.profile()
 validation = clean_df.arnio.validate({
     "email": ar.Email(nullable=False),
+    "user_code": ar.Regex(r"^USR-\d{4}$", nullable=False),
     "age": ar.Int64(nullable=True, min=0),
+    "score": ar.Custom("positive"),
 })
 ```
 
@@ -200,6 +422,46 @@ This keeps pandas as the analysis tool while Arnio handles the preparation,
 quality, and validation layer.
 
 > Product direction: **[PROJECT_DIRECTION.md](PROJECT_DIRECTION.md)**
+
+## 📘 Examples
+
+These examples demonstrate how Arnio integrates with the Python data ecosystem.
+
+They follow a simple workflow:
+
+**clean/validate data with Arnio → analyze with other tools**
+
+### 🔹 Interoperability Examples
+
+- **Arnio + pandas**
+  Clean and normalize messy tabular data using Arnio, then analyze it using pandas.
+  Run:
+```bash
+  python examples/arnio_with_pandas.py
+```
+
+- **Arnio + NumPy**
+  Prepare numeric data safely using Arnio, then perform computations using NumPy.
+  Run:
+```bash
+  python examples/arnio_with_numpy.py
+```
+
+- **Arnio + scikit-learn**
+  Prepare messy data with Arnio, then train a model with scikit-learn.
+  Run:
+```bash
+  python examples/arnio_with_sklearn.py
+```
+
+- **Arnio + DuckDB**
+  Clean data with Arnio, then run SQL queries using DuckDB.
+  Run:
+```bash
+  python examples/arnio_with_duckdb.py
+```
+
+
 
 <br>
 
@@ -269,29 +531,23 @@ df = ar.to_pandas(ar.pipeline(frame, [
 
 Arnio is not a pandas wrapper. It's a separate runtime with its own data model.
 
-```text
-┌──────────────────────────────────────────────────────────────┐
-│  Your Python Code                                            │
-│  frame = ar.read_csv("data.csv")                             │
-│  clean = ar.pipeline(frame, [...])                           │
-│  df = ar.to_pandas(clean)                                    │
-└────────────────────────┬─────────────────────────────────────┘
-                         │  pybind11 boundary
-┌────────────────────────▼─────────────────────────────────────┐
-│  C++ Runtime  (_arnio_cpp)                                   │
-│                                                              │
-│  ┌─────────────┐  ┌─────────────────┐  ┌──────────────────┐ │
-│  │  CsvReader   │  │  Frame/Column   │  │  Cleaning Engine │ │
-│  │  • RFC 4180  │  │  • Columnar     │  │  • drop_nulls    │ │
-│  │  • BOM strip │  │  • std::variant │  │  • fill_nulls    │ │
-│  │  • Type      │  │  • Bool null    │  │  • drop_dupes    │ │
-│  │    inference │  │    masks        │  │  • strip_ws      │ │
-│  │  • Quoted    │  │  • O(1) column  │  │  • normalize     │ │
-│  │    fields    │  │    lookup       │  │  • rename/cast   │ │
-│  └─────────────┘  └─────────────────┘  └──────────────────┘ │
-│                                                              │
-│  to_pandas() ──→ zero-copy NumPy buffer (numerics/bools)     │
-└──────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+  subgraph python["Your Python Code"]
+    PY["frame = ar.read_csv('data.csv')\nclean = ar.pipeline(frame, [...])\ndf = ar.to_pandas(clean)"]
+  end
+
+  python -->|"pybind11 boundary"| cpp
+
+  subgraph cpp["C++ Runtime (_arnio_cpp)"]
+    direction TB
+    CSV["CsvReader\n• RFC 4180\n• BOM strip\n• Type inference\n• Quoted fields"]
+    FRAME["Frame / Column\n• Columnar\n• std::variant\n• Bool null masks\n• O(1) column lookup"]
+    CLEAN["Cleaning Engine\n• drop_nulls\n• fill_nulls\n• drop_dupes\n• strip_ws\n• normalize\n• rename/cast"]
+    CSV --> FRAME --> CLEAN
+  end
+
+  cpp -->|"to_pandas() → zero-copy NumPy buffer (numerics/bools)"| OUT["pandas DataFrame"]
 ```
 
 ### Design decisions that matter
@@ -305,6 +561,7 @@ Arnio is not a pandas wrapper. It's a separate runtime with its own data model.
 | **Step registry** | Pipeline steps map to C++ function pointers. Adding a new cleaning primitive is a single function + one registry entry. |
 
 > Full architecture documentation: **[ARCHITECTURE.md](ARCHITECTURE.md)**
+> API reference guide: **[Arnio API Reference](./API_REFERENCE.md)**
 
 <br>
 
@@ -420,11 +677,12 @@ Total avg (Read+Strict)       0.077             4.52
 
 ## 🧰 Cleaning primitives
 
-Most operations below run natively in C++. Currently, `filter_rows` and `replace_values` run via the Python (pandas) backend and may be optimized in C++ later.
+Most operations below run natively in C++. Currently, `filter_rows`, `replace_values` and `standardize_missing_tokens` run via the Python (pandas) backend and may be optimized in C++ later.
 
 | Primitive | What it does | Example |
 |:---|:---|:---|
 | `drop_nulls` | Remove rows with null/empty values | `ar.drop_nulls(frame, subset=["age"])` |
+| `drop_columns` | Remove selected columns while preserving the remaining order | `frame = ar.drop_columns(frame, ["debug_col"])` |
 | `keep_rows_with_nulls` | Keep only rows that contain at least one null | `ar.keep_rows_with_nulls(frame, subset=["age"])` |
 | `validate_columns_exist` | Fail early when required columns are missing | `ar.validate_columns_exist(frame, ["age"])` |
 | `filter_rows` | Filter rows using comparison operators | `ar.filter_rows(frame, column="age", op=">", value=18)` |
@@ -433,6 +691,7 @@ Most operations below run natively in C++. Currently, `filter_rows` and `replace
 | `drop_constant_columns` | Remove columns with only one unique value | `ar.drop_constant_columns(frame)` |
 | `clip_numeric` | Clip numeric values to lower and/or upper bounds | `ar.clip_numeric(frame, lower=0, upper=100)` |
 | `strip_whitespace` | Trim leading/trailing spaces from strings | `ar.strip_whitespace(frame)` |
+| `standardize_missing_tokens` | Replace common missing-value strings with NaN | `ar.standardize_missing_tokens(frame)` |
 | `normalize_case` | Force lower/upper/title case | `ar.normalize_case(frame, case_type="title")` |
 | `rename_columns` | Rename columns via mapping | `ar.rename_columns(frame, {"old": "new"})` |
 | `cast_types` | Cast column types | `ar.cast_types(frame, {"age": "int64"})` |
@@ -440,6 +699,7 @@ Most operations below run natively in C++. Currently, `filter_rows` and `replace
 | `replace_values` | Replace values using a mapping (column or whole-frame). Handles `None`/`NaN`. | `ar.replace_values(frame, {"active": "A", "inactive": "I"}, column="status")` |
 | `clean` | Convenience shorthand | `ar.clean(frame, drop_nulls=True)` |
 | `safe_divide_columns` | Divide one column by another, handling zero/null denominators | `ar.safe_divide_columns(frame, numerator="revenue", denominator="cost", output_column="ratio")` |
+| `drop_columns_matching` | Drop columns whose names match a regex pattern | `ar.drop_columns_matching(frame, pattern="^temp_")` |
 | `trim_column_names` | Strip leading/trailing whitespace from column names | `ar.trim_column_names(frame)` |
 | `parse_numeric_strings` | Parse strings with currency/percentages into floats | `ar.parse_numeric_strings(frame, subset=["price"])` |
 
@@ -470,7 +730,9 @@ Or compose them all into a **pipeline**:
 ```python
 clean = ar.pipeline(frame, [
     ("validate_columns_exist", {"columns": ["name", "city", "revenue"]}),
+    ("drop_columns", {"columns": ["debug_notes"]}),
     ("strip_whitespace",),
+    ("standardize_missing_tokens",),
     ("normalize_case", {"case_type": "lower"}),
     ("fill_nulls", {"value": "unknown", "subset": ["city"]}),
     ("drop_duplicates", {"keep": "first"}),
@@ -554,6 +816,16 @@ result = ar.pipeline(frame, [
 
 Useful for data auditing — inspect what's missing before deciding how to fill or drop.
 
+### Boolean string normalization
+
+```python
+clean = ar.parse_bool_strings(frame)
+```
+
+This normalizes values such as `"yes"`, `"no"`, `"true"`, `"false"`, `"y"`, `"n"`, `"1"`, and `"0"` into boolean values while preserving unsupported values unchanged.
+
+Columns containing both parsed boolean values and unsupported string values may round-trip as strings because of ArFrame column typing semantics.
+
 <br>
 ### 🔢 Safe column division
 
@@ -626,17 +898,35 @@ clean = ar.pipeline(frame, suggestions)
 For production data contracts:
 
 ```python
+# Register a custom validator once, then reference it by name in any schema
+ar.register_validator("positive", lambda v: v > 0)
+
 schema = ar.Schema({
     "id": ar.Int64(nullable=False, unique=True),
     "email": ar.Email(nullable=False),
-    # CountryCode expects uppercase ISO alpha-2 values, for example IN, US, GB.
-    "country": ar.CountryCode(nullable=False),
+    "phone": ar.PhoneNumber(nullable=False),
+
+    "user_type": ar.String(nullable=False),
+
+    # country becomes required when user_type == "international"
+    "country": ar.String(
+        nullable=True,
+        required_if=("user_type", "international"),
+    ),
+
+    # CurrencyCode validates 3-letter uppercase formats (e.g., USD, EUR, INR).
+    "currency": ar.CurrencyCode(),
+
     "username": ar.String(min_length=3, max_length=20),
-    "revenue": ar.Float64(nullable=True, min=0),
+    "user_code": ar.Regex(r"^USR-\d{4}$", nullable=False),
+    "revenue": ar.Custom("positive", nullable=True),
+    "signup_date": ar.Date(nullable=False),
     "created_at": ar.DateTime(nullable=False, format="%Y-%m-%d"),
+
 })
 
 result = ar.validate(frame, schema)
+
 if not result.passed:
     summary = result.summary()
     print(summary["issues_by_rule"])
@@ -645,6 +935,49 @@ if not result.passed:
     print(result.to_pandas())
     print(result.to_markdown(max_issues=10))
 ```
+
+In this example, `country` becomes required only when
+`user_type == "international"`.
+
+Date validates strict YYYY-MM-DD calendar dates.
+
+### Phone number validation
+
+`PhoneNumber()` validates common international and formatted phone number strings.
+
+```python
+schema = ar.Schema({
+    "phone": ar.PhoneNumber(nullable=False),
+})
+
+result = ar.validate(frame, schema)
+print(result.passed)
+```
+
+Accepted examples include:
+- `+1-555-123-4567`
+- `+91 9876543210`
+- `5551234567`
+
+### Warning-only validation
+
+```python
+schema = ar.Schema(
+    {
+        "age": ar.Int64(
+            min=18,
+            severity="warning",
+        )
+    }
+)
+
+result = ar.validate(frame, schema)
+
+print(result.passed)  # True
+print(result.issue_count)  # Warning issues are still reported
+```
+
+Warning-level issues remain visible in validation results without failing the overall validation status.
 
 `ValidationResult.to_markdown()` is useful in CI logs, GitHub comments, or data quality reports because it renders a compact validation summary plus a GitHub-friendly issue table.
 
@@ -658,7 +991,7 @@ schema = ar.Schema({
 
 result = ar.validate(frame, schema)
 ```
-Severity counts are not included in `summary()` yet because `ValidationIssue` does not currently carry severity information.
+
 
 For low-risk automatic cleanup:
 
@@ -723,6 +1056,8 @@ Expected cleaned output with `mode="strict"`:
 
 See [examples/auto_clean_tutorial.py](examples/auto_clean_tutorial.py) for a runnable version of this walkthrough.
 
+> For strict mode data-loss risks and safe workflow, see [AUTO_CLEAN_GUIDE.md](AUTO_CLEAN_GUIDE.md).
+
 <br>
 
 ## Data Quality Reports
@@ -742,7 +1077,89 @@ data = {
 df = ar.from_pandas(pd.DataFrame(data))
 # Bounded profiling for large datasets (controls how many sample values are kept)
 report = ar.profile(df, sample_size=5)
+safe_report = report.to_dict(redact_sample_values=True)
 ```
+
+When `approx_top_values=True`, string columns with high cardinality use a
+deterministic sample to estimate top values. Each column includes
+`top_values_is_approximate`, `top_values_sample_count`, and
+`top_values_sample_ratio`, and the counts/ratios are sample-based.
+
+```python
+# Optional: approximate top values for high-cardinality string columns
+report = ar.profile(
+    df,
+    approx_top_values=True,
+    approx_top_values_min_unique=1000,
+    approx_top_values_min_ratio=0.2,
+    approx_top_values_sample_size=2000,
+)
+```
+
+### Notebook dashboard (Jupyter / Colab)
+
+`DataQualityReport` includes a notebook-friendly HTML dashboard. In a notebook, simply evaluate `report` in a cell to see a rich, static summary (quality score, duplicates, nulls, warnings, top values, and cleaning suggestions).
+
+If you want to embed or save the HTML explicitly:
+
+```python
+from IPython.display import HTML
+
+HTML(report.to_html())
+# or: report.to_html(file_path="data_quality_report.html")
+```
+
+Sample output now includes quantiles for numeric columns:
+
+```json
+{
+  "age": {
+    "dtype": "float64",
+    "mean": 35.2,
+    "std": 10.1,
+    "min": 18.0,
+    "max": 60.0,
+    "q25": 27.5,
+    "q50": 35.0,
+    "q75": 44.0,
+    "q95": 57.0,
+    "null_count": 0
+  }
+}
+```
+
+Use `report.to_dict(redact_sample_values=True)` when sharing reports outside your team and you want to avoid exposing raw example/sample values.
+
+### Compare Profiles
+Use `ar.compare_profiles()` to compare two `DataQualityReport` profiles and flag per-column drift.
+
+```python
+baseline = ar.profile(ar.read_csv("baseline.csv"))
+current  = ar.profile(ar.read_csv("current.csv"))
+
+comparison = ar.compare_profiles(baseline, current)
+print(comparison.drift_report["score"]["status"])  # "ok", "warning", or "changed"
+print(comparison.status_counts)  # {"ok": 2, "warning": 1, "changed": 0}
+```
+
+Use `ar.check_quality_gates()` when profile drift should become a pass/fail
+decision for CI, data releases, or monitoring.
+
+```python
+result = ar.check_quality_gates(
+    baseline,
+    current,
+    max_row_count_delta_ratio=0.10,
+    max_null_ratio_delta=0.05,
+    max_numeric_mean_delta_ratio=0.10,
+)
+
+if not result.passed:
+    print(result.to_markdown())
+    result.raise_for_failures()
+```
+
+> **Scoring Contract:** The `quality_score` starts at 100.0 and subtracts capped penalties for duplicates, nulls, and suggested dtype mismatches. The `score_components` field exposes these penalties as negative values. (Note: Semantic-validity penalties are intentionally out of scope for the current implementation.)
 
 ### 1. Terminal Representation (Simplified Example)
 *A simplified view of the standard string representation of the report object:*
@@ -753,9 +1170,11 @@ DataQualityReport(
     column_count=3,
     memory_usage=733,
     duplicate_rows=0,
+    quality_score=100.0,
+    score_components={},
     columns={
         'user_id': ColumnProfile(dtype='int64', semantic_type='identifier', unique_count=4),
-        'email': ColumnProfile(dtype='string', semantic_type='categorical', null_count=1, unique_ratio=0.666667),
+        'email': ColumnProfile(dtype='string', semantic_type='categorical', null_count=1, unique_ratio=0.666667, min=13, max=13, mean=13.0),
         'score': ColumnProfile(dtype='float64', semantic_type='numeric', mean=87.9, min=85.5, max=90.0)
     }
 )
@@ -771,6 +1190,8 @@ DataQualityReport(
   "memory_usage": 733,
   "duplicate_rows": 0,
   "duplicate_ratio": 0.0,
+  "quality_score": 100.0,
+  "score_components": {},
   "columns": {
     "user_id": {
       "dtype": "int64",
@@ -783,6 +1204,9 @@ DataQualityReport(
       "semantic_type": "categorical",
       "null_count": 1,
       "unique_ratio": 0.666667,
+      "min": 13,
+      "max": 13,
+      "mean": 13.0,
       "warnings": ["contains_nulls"]
     },
     "score": {
@@ -803,7 +1227,15 @@ DataQualityReport(
         {"value": "Paris", "count": 2, "ratio": 0.333}
       ]
     }
-  }
+  },
+  "suggestions": [
+    {
+      "step": "cast_types",
+      "kwargs": {"score": "float64"},
+      "confidence_score": 0.95,
+      "confidence_reason": "Column 'score' conforms perfectly to float64 structure."
+    }
+  ]
 }
 ```
 
@@ -816,7 +1248,30 @@ DataQualityReport(
 | **Column Count** | 3 |
 | **Memory Usage** | 733 bytes |
 | **Duplicates** | 0 (0.0%) |
+| **Quality Score** | 100.0 |
 <br>
+
+### Bootstrapping a Schema from a Quality Report
+
+After profiling a dataset, you can automatically generate a validation schema
+directly from the report:
+
+```python
+import arnio as ar
+
+frame = ar.from_pandas(df)
+report = ar.profile(frame)
+
+schema = ar.Schema.bootstrap_from_report(report)
+result = schema.validate(frame)
+
+print(result.passed)
+print(result.summary())
+```
+
+The inferred schema uses conservative defaults: column dtypes are mapped
+directly from the report, and a column is marked `nullable=True` if any
+null values were observed during profiling.
 
 ## 🗺️ Roadmap
 
@@ -828,6 +1283,7 @@ DataQualityReport(
 | **v1.3** | Chunked / streaming processing · Parquet & JSON readers | 📋 Planned |
 | **v1.4** | Parallel column processing · SIMD string operations | 💭 Exploring |
 
+> For CLI command reference and examples, see [CLI_REFERENCE.md](CLI_REFERENCE.md).
 <br>
 
 ---
@@ -962,7 +1418,7 @@ arnio/
 │   └── bind_arnio.cpp       # pybind11 module — the Python↔C++ bridge
 ├── arnio/
 │   ├── __init__.py          # Public API surface
-│   ├── io.py                # read_csv, scan_csv
+│   ├── io.py                # read_csv, read_jsonl, scan_csv, write_csv
 │   ├── cleaning.py          # Python wrappers for C++ cleaning functions
 │   ├── pipeline.py          # Step registry + pipeline executor
 │   ├── convert.py           # to_pandas (zero-copy), from_pandas

@@ -9,7 +9,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "arnio"
-version = "1.10.0"
+version = "1.14.0"
 description = "C++ accelerated data preparation for pandas and the Python data stack"
 readme = "README.md"
 license = { text = "MIT" }
@@ -40,9 +40,11 @@ dependencies = [
 
 [project.urls]
 Homepage = "https://github.com/im-anishraj/arnio"
+Documentation = "https://github.com/im-anishraj/arnio#readme"
 Repository = "https://github.com/im-anishraj/arnio"
 Issues = "https://github.com/im-anishraj/arnio/issues"
 Changelog = "https://github.com/im-anishraj/arnio/blob/main/CHANGELOG.md"
+Discord = "https://discord.gg/xsEw7r78M"
 
 [project.optional-dependencies]
 dev = [
@@ -52,6 +54,9 @@ dev = [
     "ruff>=0.4.0",
     "pre-commit>=3.0",
     "hypothesis>=6.0",
+]
+sklearn = [
+    "scikit-learn>=1.0",
 ]
 
 [tool.setuptools.package-data]
