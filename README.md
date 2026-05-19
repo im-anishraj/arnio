@@ -224,6 +224,36 @@ frame = ar.read_csv("data.csv", null_values=["", "MISSING", "UNKNOWN"])
 frame = ar.read_csv("data.csv", null_values=[])
 ```
 
+### Create an ArFrame from a dictionary
+
+Use `from_dict()` to quickly convert a Python dictionary into an ArFrame. Each key becomes a column, and each value must be a list (column data). All columns must have equal length.
+
+```python
+import arnio as ar
+
+frame = ar.from_dict({
+    "name": ["Alice", "Bob"],
+    "age": [25, 30]
+})
+
+print(frame.shape)
+# (2, 2)
+
+print(frame.columns)
+# ['name', 'age']
+```
+
+This is useful for quick testing, prototyping, or building small datasets without reading from a CSV.
+
+Empty dictionaries are supported and return an empty ArFrame.
+
+```python
+frame = ar.from_dict({})
+
+print(frame.shape)
+# (0, 0)
+```
+
 > Every step above executes in C++. Your Python code is a _configuration_ — not the execution engine.
 
 <br>

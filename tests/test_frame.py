@@ -9,6 +9,44 @@ import arnio as ar
 
 # ── Normal behaviour ──────────────────────────────────────────────────────────
 
+def test_from_dict_basic():
+    frame = ar.from_dict({"name": ["A", "B"], "age": [20, 21]})
+
+    assert frame.shape == (2, 2)
+    assert frame.columns == ["name", "age"]
+
+def test_from_dict_empty():
+    frame = ar.from_dict({})
+
+    assert frame.shape == (0, 0)
+    assert frame.columns == []
+
+def test_from_dict_invalid():
+    with pytest.raises(TypeError):
+        ar.from_dict([1, 2, 3])
+
+
+def test_from_dict_bad_length():
+    with pytest.raises(ValueError):
+        ar.from_dict({
+            "name": ["A", "B"],
+            "age": [20]
+        })
+        
+def test_from_dict_with_none():
+    frame = ar.from_dict({
+        "name": ["A", None]
+    })
+
+    assert frame.shape == (2, 1)
+
+
+def test_from_dict_dtype():
+    frame = ar.from_dict({
+        "age": [1, 2]
+    })
+
+    assert frame.shape == (2, 1)
 
 def test_preview_returns_string(sample_csv):
     frame = ar.read_csv(sample_csv)
@@ -48,6 +86,7 @@ def test_preview_n_equals_one(sample_csv):
     assert "showing 1 of 3" in result
 
 
+
 # ── Edge cases ────────────────────────────────────────────────────────────────
 
 
@@ -75,6 +114,7 @@ def test_preview_large_csv(large_csv):
     frame = ar.read_csv(large_csv)
     result = frame.preview()
     assert "showing 5 of 1000" in result
+
 
 
 # ── Invalid inputs ────────────────────────────────────────────────────────────

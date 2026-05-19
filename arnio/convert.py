@@ -54,6 +54,23 @@ def _to_binding_safe(value: Any) -> Any:
 
     return value
 
+def from_dict(data):
+    """Convert a Python dictionary into an ArFrame."""
+
+    if not isinstance(data, dict):
+        raise TypeError(
+            f"from_dict() expected a dict, but got {type(data).__name__}"
+        )
+
+    try:
+        df = pd.DataFrame(data)
+        return from_pandas(df)
+    except ValueError as e:
+        raise ValueError(
+            "All columns in from_dict() must have equal lengths."
+        ) from e
+    
+    
 
 def _check_unsupported_dtype(col_name: object, series: pd.Series) -> None:
     """Raise a clear TypeError for dtypes that arnio cannot convert."""
