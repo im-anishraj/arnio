@@ -244,19 +244,22 @@ class DataQualityReport:
 
         # Suggestions
         if self.suggestions:
+            import json
+
             lines.append("## Suggested Cleaning Steps")
             lines.append("")
 
             for step in self.suggestions:
+                kwargs_str = json.dumps(step[1], sort_keys=True)
                 conf_score = getattr(step, "confidence_score", None)
                 conf_reason = getattr(step, "confidence_reason", None)
                 if conf_score is not None and conf_reason is not None:
                     lines.append(
-                        f"- `{step[0]}`: `{step[1]}` "
+                        f"- `{step[0]}`: `{kwargs_str}` "
                         f"(Confidence: {conf_score:.2f} - {conf_reason})"
                     )
                 else:
-                    lines.append(f"- `{step[0]}`: `{step[1]}`")
+                    lines.append(f"- `{step[0]}`: `{kwargs_str}`")
 
             lines.append("")
 

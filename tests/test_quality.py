@@ -863,6 +863,38 @@ def test_report_to_markdown_empty_sections():
     assert "|---|---|" not in md
 
 
+def test_report_to_markdown_suggestions_stable_ordering():
+    unordered_kwargs = {"z_item": 100, "a_item": "test", "m_item": True}
+
+    report = ar.DataQualityReport(
+        row_count=10,
+        column_count=2,
+        memory_usage=128,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+        suggestions=[("custom_clean", unordered_kwargs)],
+    )
+
+    md = report.to_markdown()
+    expected_substring = (
+        '`custom_clean`: `{"a_item": "test", "m_item": true, "z_item": 100}`'
+    )
+    assert expected_substring in md
+
+
+def test_report_to_markdown_suggestions_normal_existing_output(tmp_path):
+    path = tmp_path / "sample_data.csv"
+    path.write_text("id,name\n1,Alice\n2,Bob\n2,Bob\n")
+
+    report = ar.profile(ar.read_csv(path))
+    md = report.to_markdown()
+
+    if report.suggestions:
+        assert '{"' in md
+        assert '"}' in md
+
+
 # ── quality score tests ───────────────────────────────────────────────────────
 
 
