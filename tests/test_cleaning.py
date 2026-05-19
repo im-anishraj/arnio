@@ -685,13 +685,17 @@ class TestNormalizeCase:
 
 class TestNormalizeUnicode:
     def test_normalize_unicode(self):
+        import unicodedata
+
         import pandas as pd
 
         import arnio as ar
 
         df = pd.DataFrame({"text": ["cafe\u0301"]})
-
-        ar.from_pandas(df)
+        frame = ar.from_pandas(df)
+        result = ar.normalize_unicode(frame, form="NFC")
+        result_df = ar.to_pandas(result)
+        assert result_df["text"].iloc[0] == unicodedata.normalize("NFC", "cafe\u0301")
 
     def test_normalize_unicode_no_pandas_roundtrip(self):
         import pandas as pd
@@ -802,17 +806,11 @@ class TestNormalizeUnicode:
         import arnio as ar
 
         n = 10_000
-        df = pd.DataFrame({"text": ["café"] * n, "other": list(range(n))})
+        df = pd.DataFrame({"text": ["café"] * n, "other": list(range(n))})
         frame = ar.from_pandas(df)
         result = ar.normalize_unicode(frame)
         result_df = ar.to_pandas(result)
         assert all(v == "café" for v in result_df["text"])
-
-        result = ar.normalize_unicode(frame)
-
-        result_df = ar.to_pandas(result)
-
-        assert result_df["text"].iloc[0] == "café"
 
 
 class TestParseBoolStrings:

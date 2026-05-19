@@ -702,7 +702,9 @@ def normalize_unicode(
             new_columns[name] = col.to_python_list()
             dtype_hints[name] = dtype
     new_cpp_frame = _Frame.from_dict(new_columns, dtype_hints)
-    return ArFrame(new_cpp_frame, attrs=frame._attrs)
+    return ArFrame(
+        new_cpp_frame, attrs=dict(frame._attrs) if frame._attrs is not None else None
+    )
 
 
 def rename_columns(
