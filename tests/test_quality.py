@@ -896,9 +896,11 @@ def test_report_to_markdown_suggestions_normal_existing_output(tmp_path):
 
 
 def test_report_to_markdown_suggestions_non_json_serializable():
-    from pathlib import Path
+    class DummyObject:
+        def __str__(self):
+            return "custom_val"
 
-    mixed_kwargs = {"output_path": Path("/tmp/data.csv"), "strategy": "mean"}
+    mixed_kwargs = {"custom_field": DummyObject(), "strategy": "mean"}
 
     report = ar.DataQualityReport(
         row_count=10,
@@ -913,7 +915,7 @@ def test_report_to_markdown_suggestions_non_json_serializable():
     md = report.to_markdown()
 
     expected_substring = (
-        '`custom_clean`: `{"output_path": "/tmp/data.csv", "strategy": "mean"}`'
+        '`custom_clean`: `{"custom_field": "custom_val", "strategy": "mean"}`'
     )
     assert expected_substring in md
 
