@@ -149,6 +149,8 @@ def _validate_null_values(null_values: list[str]) -> list[str]:
             raise TypeError("null_values must contain only strings")
 
     return list(null_values)
+
+
 def _validate_parser_mode(mode: str) -> str:
     """Validate CSV parser mode."""
     if not isinstance(mode, str):
