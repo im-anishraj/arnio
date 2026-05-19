@@ -44,6 +44,7 @@ class Field:
     format: str | None = None
     _datetime_min: pd.Timestamp | None = None
     _datetime_max: pd.Timestamp | None = None
+    required_if: tuple[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -251,7 +252,7 @@ def validate(frame: ArFrame, schema: Schema | dict[str, Field]) -> ValidationRes
                 )
             )
             continue
-        issues.extend(_validate_column(df[name], dtypes.get(name), name, field_def))
+        issues.extend(_validate_column(df, df[name], dtypes.get(name), name, field_def))
 
     if schema.strict:
         expected = set(schema.fields)
@@ -318,6 +319,7 @@ def Int64(
     min: int | None = None,
     max: int | None = None,
     unique: bool = False,
+    required_if: tuple[str, Any] | None = None,
 ) -> Field:
     """Create an int64 schema field."""
 
@@ -330,6 +332,7 @@ def Int64(
         min=min,
         max=max,
         unique=unique,
+        required_if=required_if,
     )
 
 
@@ -339,6 +342,7 @@ def Float64(
     min: float | None = None,
     max: float | None = None,
     unique: bool = False,
+    required_if: tuple[str, Any] | None = None,
 ) -> Field:
     """Create a float64 schema field."""
 
@@ -351,6 +355,7 @@ def Float64(
         min=min,
         max=max,
         unique=unique,
+        required_if=required_if,
     )
 
 
@@ -362,6 +367,7 @@ def String(
     unique: bool = False,
     min_length: int | None = None,
     max_length: int | None = None,
+    required_if: tuple[str, Any] | None = None,
 ) -> Field:
     """Create a string schema field."""
 
@@ -378,12 +384,17 @@ def String(
         unique=unique,
         min_length=min_length,
         max_length=max_length,
+        required_if=required_if,
     )
 
 
-def Bool(*, nullable: bool = True) -> Field:
+def Bool(
+    *,
+    nullable: bool = True,
+    required_if: tuple[str, Any] | None = None,
+) -> Field:
     """Create a bool schema field."""
-    return Field(dtype="bool", nullable=nullable)
+    return Field(dtype="bool", nullable=nullable, required_if=required_if)
 
 
 def Email(
@@ -391,6 +402,7 @@ def Email(
     nullable: bool = True,
     unique: bool = False,
     validation: str = "light",
+    required_if: tuple[str, Any] | None = None,
 ) -> Field:
     """Create an email-address schema field."""
     if validation not in {"light", "strict"}:
@@ -400,31 +412,58 @@ def Email(
         nullable=nullable,
         semantic="email" if validation == "light" else "email:strict",
         unique=unique,
+        required_if=required_if,
     )
 
 
-def URL(*, nullable: bool = True, unique: bool = False) -> Field:
+def URL(
+    *,
+    nullable: bool = True,
+    unique: bool = False,
+    required_if: tuple[str, Any] | None = None,
+) -> Field:
     """Create a URL schema field."""
-    return Field(dtype="string", nullable=nullable, semantic="url", unique=unique)
+    return Field(
+        dtype="string",
+        nullable=nullable,
+        semantic="url",
+        unique=unique,
+        required_if=required_if,
+    )
 
 
-def CountryCode(*, nullable: bool = True, unique: bool = False) -> Field:
+def CountryCode(
+    *,
+    nullable: bool = True,
+    unique: bool = False,
+    required_if: tuple[str, Any] | None = None,
+) -> Field:
     """Create an uppercase ISO alpha-2 country-code schema field."""
     return Field(
         dtype="string",
         nullable=nullable,
         semantic="country_code",
+
         unique=unique,
+
+        required_if=required_if,
+
     )
 
 
-def Date(*, nullable: bool = True, unique: bool = False) -> Field:
+def Date(
+    *,
+    nullable: bool = True,
+    unique: bool = False,
+    required_if: tuple[str, Any] | None = None,
+) -> Field:
     """Create a date schema field."""
     return Field(
         dtype="string",
         nullable=nullable,
         semantic="date",
         unique=unique,
+        required_if=required_if,
     )
 
 
@@ -433,6 +472,7 @@ def Regex(
     *,
     nullable: bool = True,
     unique: bool = False,
+    required_if: tuple[str, Any] | None = None,
 ) -> Field:
     """Create a regex-validated string schema field.
 
@@ -463,6 +503,7 @@ def Regex(
         nullable=nullable,
         pattern=pattern,
         unique=unique,
+        required_if=required_if,
     )
 
 
@@ -473,6 +514,7 @@ def DateTime(
     max: Any = None,
     unique: bool = False,
     format: str | None = None,
+    required_if: tuple[str, Any] | None = None,
 ) -> Field:
     """Create a datetime schema field for validating string timestamps."""
     if format is not None and not isinstance(format, str):
@@ -490,10 +532,12 @@ def DateTime(
         format=format,
         _datetime_min=min_val,
         _datetime_max=max_val,
+        required_if=required_if,
     )
 
 
 def _validate_column(
+    df: pd.DataFrame,
     series: pd.Series,
     actual_dtype: str | None,
     name: str,
@@ -525,6 +569,33 @@ def _validate_column(
         )
 
     non_null = series.dropna()
+
+    if field_def.required_if is not None:
+        condition_column, expected_value = field_def.required_if
+
+        if condition_column not in df.columns:
+            issues.append(
+                ValidationIssue(
+                    column=condition_column,
+                    rule="missing_column",
+                    message=f"Column {condition_column!r} not found",
+                )
+            )
+        else:
+            trigger_mask = df[condition_column] == expected_value
+            invalid = series[trigger_mask & series.isna()]
+
+            issues.extend(
+                _row_issues(
+                    invalid,
+                    column=name,
+                    rule="required_if",
+                    message=(
+                        f"Column {name!r} is required when "
+                        f"{condition_column!r} == {expected_value!r}"
+                    ),
+                )
+            )
 
     if field_def.unique:
         duplicate_mask = non_null.duplicated(keep=False)
@@ -595,33 +666,42 @@ def _validate_column(
         )
 
     if field_def.semantic is not None:
-        pattern = _SEMANTIC_PATTERNS.get(field_def.semantic)
-        if pattern is None:
-            issues.append(
-                ValidationIssue(
-                    column=name,
-                    rule="semantic",
-                    message=f"Unknown semantic type: {field_def.semantic}",
+        if field_def.semantic.startswith("custom:"):
+            validator_name = field_def.semantic[len("custom:") :]
+            fn = _CUSTOM_VALIDATORS.get(validator_name)
+            if fn is None:
+                issues.append(
+                    ValidationIssue(
+                        column=name,
+                        rule="custom",
+                        message=f"Custom validator {validator_name!r} is not registered",
+                    )
                 )
-            )
-        else:
-            if field_def.semantic == "date":
-                invalid_values = []
-
-                for index, value in non_null.items():
-                    value_str = str(value)
-
-                    if DATE_PATTERN.fullmatch(value_str) is None:
-                        invalid_values.append((index, value))
-                        continue
-
-                    try:
-                        datetime.strptime(value_str, "%Y-%m-%d")
-                    except ValueError:
-                        invalid_values.append((index, value))
-
-                invalid = pd.Series({index: value for index, value in invalid_values})
             else:
+                invalid = non_null[~non_null.map(fn).astype(bool)]
+                issues.extend(
+                    _row_issues(
+                        invalid,
+                        column=name,
+                        rule="custom",
+                        message=(
+                            f"Column {name!r} contains values that failed "
+                            f"the {validator_name!r} validator"
+                        ),
+                    )
+                )
+        else:
+            pattern = _SEMANTIC_PATTERNS.get(field_def.semantic)
+            if pattern is None:
+                issues.append(
+                    ValidationIssue(
+                        column=name,
+                        rule="semantic",
+                        message=f"Unknown semantic type: {field_def.semantic}",
+                    )
+                )
+            else:
+
                 # For most semantics we can use a regex fullmatch. For
                 # country codes we additionally check that the code is an
                 # assigned ISO 3166-1 alpha-2 value.
@@ -637,6 +717,28 @@ def _validate_column(
                         invalid = pd.concat([invalid, invalid_unassigned])
 
             if not invalid.empty:
+
+                if field_def.semantic == "date":
+                    invalid_values = []
+                    for index, value in non_null.items():
+                        value_str = str(value)
+                        if DATE_PATTERN.fullmatch(value_str) is None:
+                            invalid_values.append((index, value))
+                            continue
+                        try:
+                            datetime.strptime(value_str, "%Y-%m-%d")
+                        except ValueError:
+                            invalid_values.append((index, value))
+                    invalid = pd.Series(
+                        {index: value for index, value in invalid_values}
+                    )
+                else:
+                    # For non-date semantics the `invalid` Series was
+                    # computed above (and for country_code includes both
+                    # pattern mismatches and unassigned codes). Do not
+                    # overwrite it here.
+                    pass
+
                 issues.extend(
                     _row_issues(
                         invalid,
@@ -645,6 +747,9 @@ def _validate_column(
                         message=f"Column {name!r} contains invalid {field_def.semantic} values",
                     )
                 )
+
+
+
 
     if field_def.min_length is not None:
         invalid = non_null[text.str.len() < field_def.min_length]
@@ -778,6 +883,7 @@ _SEMANTIC_PATTERNS = {
     "date": r"\d{4}-\d{2}-\d{2}",
 }
 
+
 # ISO 3166-1 alpha-2 country codes. If `pycountry` is available we'll
 # build this set from it at import time; otherwise fall back to this static
 # list to allow deterministic validation in environments without the
@@ -814,3 +920,62 @@ except Exception:
         "UG","UA","AE","GB","US","UM","UY","UZ","VU","VE",
         "VN","VG","VI","WF","EH","YE","ZM","ZW",
     }
+# Registry for custom validators registered via register_validator()
+_CUSTOM_VALIDATORS: dict[str, callable] = {}
+
+
+def register_validator(name: str, fn: callable) -> None:
+    """Register a custom validator function for use with Custom().
+
+    Parameters
+    ----------
+    name : str
+        Unique name to identify this validator.
+    fn : callable
+        A function that accepts a scalar value and returns True if valid,
+        False otherwise.
+
+    Examples
+    --------
+    >>> def is_positive(value):
+    ...     return value > 0
+    >>> ar.register_validator("positive", is_positive)
+    """
+    if not callable(fn):
+        raise TypeError("fn must be callable")
+    if not isinstance(name, str) or not name:
+        raise ValueError("name must be a non-empty string")
+    _CUSTOM_VALIDATORS[name] = fn
+
+
+def Custom(
+    name: str,
+    *,
+    nullable: bool = True,
+    unique: bool = False,
+) -> Field:
+    """Create a field validated by a registered custom validator.
+
+    Parameters
+    ----------
+    name : str
+        Name of the validator registered via register_validator().
+    nullable : bool, default True
+        Whether null values are allowed.
+    unique : bool, default False
+        Whether all non-null values must be unique.
+
+    Examples
+    --------
+    >>> ar.register_validator("positive", lambda v: v > 0)
+    >>> schema = ar.Schema({"score": ar.Custom("positive", nullable=False)})
+    """
+    if name not in _CUSTOM_VALIDATORS:
+        raise ValueError(
+            f"No validator registered under {name!r}. "
+            "Call ar.register_validator() first."
+        )
+    return Field(
+        dtype=None, nullable=nullable, unique=unique, semantic=f"custom:{name}"
+    )
+
