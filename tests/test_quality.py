@@ -1109,13 +1109,9 @@ def test_auto_clean_explain_dry_run_error(tmp_path):
 
 def test_compare_profiles_under_threshold_is_ok():
     """Changes below warning thresholds should result in 'ok' status."""
-    baseline = ar.profile(
-        ar.from_pandas(pd.DataFrame({"score": [10.0, 11.0, 12.0]}))
-    )
+    baseline = ar.profile(ar.from_pandas(pd.DataFrame({"score": [10.0, 11.0, 12.0]})))
     # Shift values by 0.1 to keep std constant but shift mean slightly
-    current = ar.profile(
-        ar.from_pandas(pd.DataFrame({"score": [10.1, 11.1, 12.1]}))
-    )
+    current = ar.profile(ar.from_pandas(pd.DataFrame({"score": [10.1, 11.1, 12.1]})))
 
     comparison = ar.compare_profiles(baseline, current)
     assert comparison.drift_report["score"]["status"] == "ok"
@@ -1124,13 +1120,9 @@ def test_compare_profiles_under_threshold_is_ok():
 
 def test_compare_profiles_above_warning_threshold_is_warning():
     """Changes above warning but below changed threshold should result in 'warning' status."""
-    baseline = ar.profile(
-        ar.from_pandas(pd.DataFrame({"score": [10.0, 11.0, 12.0]}))
-    )
+    baseline = ar.profile(ar.from_pandas(pd.DataFrame({"score": [10.0, 11.0, 12.0]})))
     # Shift values by 1.8 to trigger warning status (approx 15% shift)
-    current = ar.profile(
-        ar.from_pandas(pd.DataFrame({"score": [11.8, 12.8, 13.8]}))
-    )
+    current = ar.profile(ar.from_pandas(pd.DataFrame({"score": [11.8, 12.8, 13.8]})))
 
     comparison = ar.compare_profiles(baseline, current)
     assert comparison.drift_report["score"]["status"] == "warning"
@@ -1139,13 +1131,9 @@ def test_compare_profiles_above_warning_threshold_is_warning():
 
 def test_compare_profiles_above_changed_threshold_is_changed():
     """Changes above changed threshold should result in 'changed' status."""
-    baseline = ar.profile(
-        ar.from_pandas(pd.DataFrame({"score": [10.0, 11.0, 12.0]}))
-    )
+    baseline = ar.profile(ar.from_pandas(pd.DataFrame({"score": [10.0, 11.0, 12.0]})))
     # Shift values by 5.0 to trigger changed status (approx 45% shift)
-    current = ar.profile(
-        ar.from_pandas(pd.DataFrame({"score": [15.0, 16.0, 17.0]}))
-    )
+    current = ar.profile(ar.from_pandas(pd.DataFrame({"score": [15.0, 16.0, 17.0]})))
 
     comparison = ar.compare_profiles(baseline, current)
     assert comparison.drift_report["score"]["status"] == "changed"
