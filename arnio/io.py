@@ -10,8 +10,8 @@ import os
 import shutil
 import tempfile
 from collections.abc import Iterator, Sequence
-from typing import cast
 from contextlib import contextmanager
+from typing import cast
 
 from ._core import _CsvConfig, _CsvReader, _CsvWriteConfig, _CsvWriter
 from .exceptions import CsvReadError
