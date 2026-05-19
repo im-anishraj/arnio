@@ -1172,7 +1172,7 @@ def _compare_column_profiles(
             "delta": _clean_scalar(delta),
         }
 
-        metric_status = "warning"
+        metric_status = "ok"
         if (
             changed_threshold is not None
             and delta is not None
@@ -1236,8 +1236,8 @@ def _compare_column_profiles(
                 metric,
                 value_a,
                 value_b,
-                warning_threshold=scale,
-                changed_threshold=scale * 2.0,
+                warning_threshold=scale * 0.1,
+                changed_threshold=scale * 0.25,
                 reason=f"numeric {metric} changed",
             )
 

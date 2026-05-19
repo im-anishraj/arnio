@@ -1105,3 +1105,37 @@ def test_auto_clean_explain_dry_run_error(tmp_path):
         ValueError, match="explain=True cannot be used with dry_run=True"
     ):
         ar.auto_clean(frame, explain=True, dry_run=True)
+
+
+def test_compare_profiles_under_threshold_is_ok():
+    """Changes below warning thresholds should result in 'ok' status."""
+    baseline = ar.profile(ar.from_pandas(pd.DataFrame({"score": [10.0, 10.0, 10.0]})))
+    # A tiny change (mean changes from 10.0 to 10.1, delta = 0.1, scale = 10.1, warning = 1.01)
+    current = ar.profile(ar.from_pandas(pd.DataFrame({"score": [10.3, 10.0, 10.0]})))
+
+    comparison = ar.compare_profiles(baseline, current)
+    assert comparison.drift_report["score"]["status"] == "ok"
+    assert comparison.status_counts == {"ok": 1, "warning": 0, "changed": 0}
+
+
+def test_compare_profiles_above_warning_threshold_is_warning():
+    """Changes above warning but below changed threshold should result in 'warning' status."""
+    baseline = ar.profile(ar.from_pandas(pd.DataFrame({"score": [10.0, 10.0, 10.0]})))
+    # Change mean by ~15% (mean from 10.0 to 11.5, delta = 1.5, scale = 11.5, warning = 1.15, changed = 2.875)
+    current = ar.profile(ar.from_pandas(pd.DataFrame({"score": [14.5, 10.0, 10.0]})))
+
+    comparison = ar.compare_profiles(baseline, current)
+    assert comparison.drift_report["score"]["status"] == "warning"
+    assert comparison.status_counts == {"ok": 0, "warning": 1, "changed": 0}
+
+
+def test_compare_profiles_above_changed_threshold_is_changed():
+    """Changes above changed threshold should result in 'changed' status."""
+    baseline = ar.profile(ar.from_pandas(pd.DataFrame({"score": [10.0, 10.0, 10.0]})))
+    # Change mean by ~50% (mean from 10.0 to 15.0, delta = 5.0, scale = 15.0, warning = 1.5, changed = 3.75)
+    current = ar.profile(ar.from_pandas(pd.DataFrame({"score": [25.0, 10.0, 10.0]})))
+
+    comparison = ar.compare_profiles(baseline, current)
+    assert comparison.drift_report["score"]["status"] == "changed"
+    assert comparison.status_counts == {"ok": 0, "warning": 0, "changed": 1}
+
