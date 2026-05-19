@@ -538,4 +538,48 @@ Frame clip_numeric(const Frame& frame, std::optional<double> lower, std::optiona
     return Frame(std::move(new_cols));
 }
 
+Frame combine_columns(const Frame& frame, const std::vector<std::string>& subset,
+                      const std::string& separator, const std::string& output_column) {
+    std::vector<size_t> col_indices;
+    col_indices.reserve(subset.size());
+    for (const auto& name : subset) {
+        col_indices.push_back(frame.column_index(name));
+    }
+
+    Column combined(output_column, DType::STRING);
+    size_t num_rows = frame.num_rows();
+
+    for (size_t r = 0; r < num_rows; ++r) {
+        bool all_null = true;
+        std::string row_str;
+        for (size_t i = 0; i < col_indices.size(); ++i) {
+            size_t ci = col_indices[i];
+            if (!frame.column(ci).is_null(r)) {
+                all_null = false;
+            }
+            if (i > 0) {
+                row_str += separator;
+            }
+            if (!frame.column(ci).is_null(r)) {
+                row_str += cell_to_string(frame.column(ci).at(r));
+            }
+        }
+
+        if (all_null) {
+            combined.push_null();
+        } else {
+            combined.push_back(row_str);
+        }
+    }
+
+    std::vector<Column> new_cols;
+    new_cols.reserve(frame.num_cols() + 1);
+    for (size_t ci = 0; ci < frame.num_cols(); ++ci) {
+        new_cols.push_back(frame.column(ci).clone());
+    }
+    new_cols.push_back(std::move(combined));
+
+    return Frame(std::move(new_cols));
+}
+
 }  // namespace arnio

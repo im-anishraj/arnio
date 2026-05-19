@@ -984,22 +984,27 @@ def combine_columns(
     import pandas as pd
 
     from .convert import from_pandas, to_pandas
+    from .frame import ArFrame
 
     if not isinstance(separator, str):
         raise TypeError("separator must be a string")
     if not isinstance(output_column, str) or not output_column.strip():
         raise ValueError("output_column must be a non-empty string")
 
-    is_arframe = not isinstance(frame, pd.DataFrame)
-    df = to_pandas(frame) if is_arframe else frame.copy()
+    is_arframe = isinstance(frame, ArFrame)
+    if not is_arframe and not isinstance(frame, pd.DataFrame):
+        # Allow implicit conversions via to_pandas behavior from original code
+        is_arframe = not isinstance(frame, pd.DataFrame)
+
+    column_names = frame.column_names if is_arframe else list(frame.columns)
 
     if subset is None:
-        subset_columns = list(df.columns)
+        subset_columns = list(column_names)
     else:
         subset_columns = _validate_column_sequence(subset, argument_name="subset")
-        missing = [column for column in subset_columns if column not in df.columns]
+        missing = [column for column in subset_columns if column not in column_names]
         if missing:
-            available = ", ".join(df.columns) or "<none>"
+            available = ", ".join(column_names) or "<none>"
             raise KeyError(
                 f"Missing columns for combine_columns: {missing}. Available columns: {available}"
             )
@@ -1007,20 +1012,28 @@ def combine_columns(
     if not subset_columns:
         raise ValueError("subset must contain at least one column")
 
-    if output_column in df.columns:
-
+    if output_column in column_names:
         raise ValueError(f"Output column '{output_column}' already exists.")
 
+    if is_arframe:
+        from ._arnio_cpp import combine_columns as _combine_columns
+
+        result = _combine_columns(
+            frame._frame, subset_columns, separator, output_column
+        )
+        return ArFrame(result)
+
+    # Pandas fallback
+    df = frame.copy()
     combined = (
         df[subset_columns].astype("string").fillna("").agg(separator.join, axis=1)
     )
     null_mask = df[subset_columns].isna().all(axis=1)
     combined = combined.mask(null_mask, pd.NA)
 
-    df = df.copy()
     df[output_column] = combined
 
-    return from_pandas(df) if is_arframe else df
+    return df
 
 
 def safe_divide_columns(

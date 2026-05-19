@@ -45,4 +45,8 @@ Frame cast_types(const Frame& frame, const std::unordered_map<std::string, std::
 Frame clip_numeric(const Frame& frame, std::optional<double> lower, std::optional<double> upper,
                    const std::optional<std::vector<std::string>>& subset = std::nullopt);
 
+// Combine multiple columns into a single string column
+Frame combine_columns(const Frame& frame, const std::vector<std::string>& subset,
+                      const std::string& separator, const std::string& output_column);
+
 }  // namespace arnio

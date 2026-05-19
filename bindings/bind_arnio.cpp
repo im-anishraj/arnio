@@ -330,4 +330,12 @@ PYBIND11_MODULE(_arnio_cpp, m) {
         },
         py::arg("frame"), py::arg("lower") = std::nullopt, py::arg("upper") = std::nullopt,
         py::arg("subset") = std::nullopt);
+    m.def(
+        "combine_columns",
+        [](const Frame& frame, const std::vector<std::string>& subset, const std::string& separator,
+           const std::string& output_column) {
+            py::gil_scoped_release release;
+            return combine_columns(frame, subset, separator, output_column);
+        },
+        py::arg("frame"), py::arg("subset"), py::arg("separator"), py::arg("output_column"));
 }
