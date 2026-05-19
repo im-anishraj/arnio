@@ -63,6 +63,10 @@ static bool getline_universal(std::istream& stream, std::string& line, std::stri
             }
             break;
         }
+        if (c == '\0') {
+            throw std::runtime_error(
+                "CSV input contains NUL bytes and appears to be binary or corrupted");
+        }
         line += c;
         if (!stream.get(c)) break;
     }

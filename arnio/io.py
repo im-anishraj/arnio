@@ -204,16 +204,6 @@ def read_csv(
             f"Unsupported file format: {path}. Only .csv, .txt, and .tsv are supported."
         )
 
-    if _is_utf8_encoding(encoding):
-        try:
-            with open(path, "rb") as f:
-                if b"\0" in f.read(1024):
-                    raise CsvReadError(
-                        "CSV input contains NUL bytes and appears to be binary or corrupted"
-                    )
-        except FileNotFoundError:
-            pass  # Let C++ backend handle or raise standard error
-
     try:
         if os.path.getsize(path) == 0:
             raise CsvReadError(f"CSV file is empty: {path!r}")
@@ -384,16 +374,6 @@ def scan_csv(
         raise ValueError(
             f"Unsupported file format: {path}. Only .csv, .txt, and .tsv are supported."
         )
-
-    if _is_utf8_encoding(encoding):
-        try:
-            with open(path, "rb") as f:
-                if b"\0" in f.read(1024):
-                    raise CsvReadError(
-                        "CSV input contains NUL bytes and appears to be binary or corrupted"
-                    )
-        except FileNotFoundError:
-            pass  # Let C++ backend handle or raise standard error
 
     try:
         if os.path.getsize(path) == 0:
