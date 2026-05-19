@@ -996,7 +996,7 @@ def combine_columns(
         # Allow implicit conversions via to_pandas behavior from original code
         is_arframe = not isinstance(frame, pd.DataFrame)
 
-    column_names = frame.column_names if is_arframe else list(frame.columns)
+    column_names = list(frame.columns)
 
     if subset is None:
         subset_columns = list(column_names)
