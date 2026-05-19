@@ -156,17 +156,6 @@ def _validate_parser_mode(mode: str) -> str:
     """Validate CSV parser mode."""
     if not isinstance(mode, str):
         raise TypeError("mode must be a string")
-
-    if mode not in {"strict", "permissive"}:
-        raise ValueError("mode must be either 'strict' or 'permissive'")
-
-    return mode
-
-
-def _validate_parser_mode(mode: str) -> str:
-    """Validate CSV parser mode."""
-    if not isinstance(mode, str):
-        raise TypeError("mode must be a string")
     if mode not in {"strict", "permissive"}:
         raise ValueError("mode must be either 'strict' or 'permissive'")
     return mode
