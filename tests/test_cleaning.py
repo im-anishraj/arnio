@@ -1475,6 +1475,18 @@ class TestCombineColumnsNativeRegression:
         # 1.5 stays "1.5", 0.0 becomes "0.0", integers stay as integers.
         assert list(result["combined"]) == ["123|1.5", "456|0.0"]
 
+    def test_native_bool_formatting(self):
+        import pandas as pd
+
+        df = pd.DataFrame({"a": [True, False], "b": [False, True]})
+        frame = ar.from_pandas(df)
+        result = ar.to_pandas(
+            ar.combine_columns(frame, subset=["a", "b"], separator="|")
+        )
+        # The native path should format booleans as True / False to match
+        # the pandas astype('string') contract.
+        assert list(result["combined"]) == ["True|False", "False|True"]
+
     def test_unsupported_input_type_raises(self):
         with pytest.raises(
             TypeError, match="frame must be an ArFrame or a pandas DataFrame"

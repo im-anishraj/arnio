@@ -72,7 +72,7 @@ static std::string cell_to_string(const CellValue& cell) {
         return s;
     }
     if (std::holds_alternative<bool>(cell)) {
-        return std::get<bool>(cell) ? "true" : "false";
+        return std::get<bool>(cell) ? "True" : "False";
     }
     return "";
 }
