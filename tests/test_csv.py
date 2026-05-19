@@ -160,21 +160,21 @@ class TestReadCsv:
         csv_path = tmp_path / "delimiter_interaction.csv"
         csv_path.write_text("value\n1,234\n")
         with pytest.raises(ar.CsvReadError, match="CSV row 2 has 2 fields; expected 1"):
-            ar.read_csv(csv_path, mode="strict")
+            ar.read_csv(csv_path)
 
     def test_read_csv_rejects_missing_fields(self, tmp_path):
         csv_path = tmp_path / "missing_fields.csv"
         csv_path.write_text("a,b\n1,2\n3\n")
 
         with pytest.raises(ar.CsvReadError, match="CSV row 3 has 1 fields; expected 2"):
-            ar.read_csv(csv_path, mode="strict")
+            ar.read_csv(csv_path)
 
     def test_read_csv_rejects_extra_fields_without_header(self, tmp_path):
         csv_path = tmp_path / "extra_fields_no_header.csv"
         csv_path.write_text("1,2\n3,4,5\n")
 
         with pytest.raises(ar.CsvReadError, match="CSV row 2 has 3 fields; expected 2"):
-            ar.read_csv(csv_path, has_header=False, mode="strict")
+            ar.read_csv(csv_path, has_header=False)
 
     def test_large_integer_overflow_remains_string(self, tmp_path):
         csv_path = tmp_path / "large_integer.csv"
@@ -879,16 +879,12 @@ def test_invalid_parser_mode(tmp_path):
         ar.read_csv(csv_path, mode="fast")
 
 
-def test_default_mode_preserves_backward_compatibility(tmp_path):
+def test_default_mode_preserves_strict_behavior(tmp_path):
     csv_path = tmp_path / "default_mode.csv"
     csv_path.write_text("id,name\n1,Alice\n2\n")
 
-    frame = ar.read_csv(csv_path)
-
-    assert frame.shape == (2, 2)
-
-    df = ar.to_pandas(frame)
-
-    assert df["id"].iloc[0] == 1
-    assert df["name"].iloc[0] == "Alice"
-    assert pd.isna(df["name"].iloc[1])
+    with pytest.raises(
+        ar.CsvReadError,
+        match="expected 2",
+    ):
+        ar.read_csv(csv_path)
