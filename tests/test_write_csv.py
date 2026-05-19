@@ -83,6 +83,12 @@ class TestWriteCsv:
         with pytest.raises(TypeError, match="delimiter must be a string"):
             ar.write_csv(frame, str(tmp_path / "out.csv"), delimiter=1)
 
+    @pytest.mark.parametrize("delimiter", ["\n", "\r"])
+    def test_newline_delimiters_rejected(self, tmp_path, delimiter):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
+        with pytest.raises(ValueError, match="delimiter must not be a newline character"):
+            ar.write_csv(frame, str(tmp_path / "out.csv"), delimiter=delimiter)
+
 
 class TestWriteCsvLineTerminatorBytes:
     """Raw-byte regression tests for line_terminator.
