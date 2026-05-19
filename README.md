@@ -982,6 +982,18 @@ df = ar.from_pandas(pd.DataFrame(data))
 # Bounded profiling for large datasets (controls how many sample values are kept)
 report = ar.profile(df, sample_size=5)
 safe_report = report.to_dict(redact_sample_values=True)
+
+When `approx_top_values=True`, string columns with high cardinality will use a
+deterministic sample to estimate top values. Each column includes
+`top_values_is_approximate` so consumers can distinguish sampled results.
+# Optional: approximate top values for high-cardinality string columns
+report = ar.profile(
+  df,
+  approx_top_values=True,
+  approx_top_values_min_unique=1000,
+  approx_top_values_min_ratio=0.2,
+  approx_top_values_sample_size=2000,
+)
 ```
 
 ### Notebook dashboard (Jupyter / Colab)

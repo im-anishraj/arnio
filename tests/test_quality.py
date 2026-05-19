@@ -403,6 +403,47 @@ def test_profile_sample_size_small_dataset_and_nulls(tmp_path):
     assert report.columns["id"].sample_values == [1.0, 3.0]
 
 
+def test_profile_approx_top_values_deterministic_high_cardinality():
+    values = [f"user_{i}" for i in range(2000)]
+    frame = ar.from_pandas(pd.DataFrame({"user": values}))
+
+    report = ar.profile(
+        frame,
+        approx_top_values=True,
+        approx_top_values_min_unique=1000,
+        approx_top_values_min_ratio=0.5,
+        approx_top_values_sample_size=200,
+    )
+    report_again = ar.profile(
+        frame,
+        approx_top_values=True,
+        approx_top_values_min_unique=1000,
+        approx_top_values_min_ratio=0.5,
+        approx_top_values_sample_size=200,
+    )
+
+    column = report.columns["user"]
+    assert column.top_values_is_approximate is True
+    assert column.top_values == report_again.columns["user"].top_values
+    assert len(column.top_values) <= 5
+
+
+def test_profile_approx_top_values_skips_low_cardinality():
+    frame = ar.from_pandas(pd.DataFrame({"city": ["a", "b", "a", "c"]}))
+
+    report = ar.profile(
+        frame,
+        approx_top_values=True,
+        approx_top_values_min_unique=10,
+        approx_top_values_min_ratio=0.9,
+    )
+
+    column = report.columns["city"]
+    assert column.top_values_is_approximate is False
+    assert column.top_values[0][0] == "a"
+    assert column.top_values[0][1] == 2
+
+
 def test_quality_to_dict_default_preserves_sample_values(tmp_path):
     path = tmp_path / "dict_default.csv"
     path.write_text("name\nAlice\nBob\n")

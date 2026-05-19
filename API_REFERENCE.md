@@ -335,6 +335,13 @@ ar.register_step("custom_func", custom_func)
 
 Analyze an `ArFrame` and get a structural `DataQualityReport`.
 
+Key options:
+- `sample_size`: number of non-null sample values stored per column.
+- `approx_top_values`: enable approximate top values for high-cardinality string columns.
+- `approx_top_values_min_unique`: minimum unique count to trigger approximation.
+- `approx_top_values_min_ratio`: minimum unique ratio to trigger approximation.
+- `approx_top_values_sample_size`: sample size for top-value estimation.
+
 ### suggest_cleaning
 
 Examine a report or frame and get a list of recommended cleaning steps.
