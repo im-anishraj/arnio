@@ -1214,6 +1214,10 @@ Discord is for fast conversation and support. GitHub remains the source of truth
 
 <br>
 
+## 📚 Documentation
+
+- [Troubleshooting Guide](docs/TROUBLESHOOTING.md)
+
 ## 🤝 Contribute
 
 Arnio is a **[GSSoC 2026](https://gssoc.girlscript.tech/)** project with a structured contributor backlog across beginner, intermediate, and advanced tracks.
