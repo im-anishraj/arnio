@@ -7,9 +7,6 @@
 #include <stdexcept>
 #include <unordered_set>
 
-#include <pybind11/pybind11.h>
-namespace py = pybind11;
-
 namespace arnio {
 
 // Helper: resolve subset columns or default to all
@@ -88,10 +85,8 @@ static CellValue coerce_value(const CellValue& value, DType target) {
                 size_t pos = 0;
                 int64_t parsed = std::stoll(s, &pos);
                 if (pos == s.size()) return parsed;
-            } catch (const std::invalid_argument&) {
-                throw std::invalid_argument("Invalid fill value: cannot convert string to integer");
-            } catch (const std::out_of_range&) {
-                throw std::invalid_argument("Fill value out of range for integer type");
+            } catch (...) {
+                return std::monostate{};
             }
         }
     }
@@ -108,8 +103,8 @@ static CellValue coerce_value(const CellValue& value, DType target) {
                 size_t pos = 0;
                 double parsed = std::stod(s, &pos);
                 if (pos == s.size()) return parsed;
-            } catch (const std::exception&) {
-                throw std::invalid_argument("Invalid fill value: cannot convert string to float");
+            } catch (...) {
+                return std::monostate{};
             }
         }
     }
@@ -172,11 +167,13 @@ Frame fill_nulls(const Frame& frame, const CellValue& value,
         if (targets.count(ci)) {
             Column col(src.name(), src.dtype());
             CellValue fill_value;
-            try {
-                fill_value = coerce_value(value, src.dtype());
-            } catch (const std::exception& e) {
-                throw py::value_error(e.what());
-            }
+            
+            fill_value = coerce_value(value, src.dtype());
+            
+            if (std::holds_alternative<std::monostate>(fill_value)) {
+            throw std::invalid_argument("Fill value is incompatible with target column type");
+        }
+
             for (size_t r = 0; r < src.size(); ++r) {
                 if (src.is_null(r)) {
                     col.push_back(fill_value);
