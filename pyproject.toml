@@ -67,7 +67,7 @@ wheel.expand-macos-universal-tags = false
 
 [tool.black]
 line-length = 88
-target-version = ["py39", "py310", "py311", "py312"]
+target-version = ["py311"]
 
 [tool.ruff]
 line-length = 88

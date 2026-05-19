@@ -17,6 +17,20 @@ from .exceptions import CsvReadError
 from .frame import ArFrame
 
 
+def _validate_utf8(path: str | os.PathLike[str], encoding: str) -> None:
+    """Raise CsvReadError immediately if the file contains invalid UTF-8."""
+    norm = encoding.lower().replace("-", "").replace("_", "")
+    if norm not in ("utf8", "utf8sig"):
+        return
+    try:
+        with open(path, "rb") as fh:
+            fh.read().decode(encoding)
+    except UnicodeDecodeError as exc:
+        raise CsvReadError(
+            f"{path}: invalid byte sequence for encoding {encoding!r}: {exc}"
+        ) from exc
+
+
 def _is_utf8_encoding(encoding: str) -> bool:
     """Return whether the encoding should be treated as raw UTF-8 input."""
     return encoding.lower().replace("_", "-") in {"utf-8", "utf8"}
@@ -193,7 +207,9 @@ def read_csv(
     --------
     >>> frame = ar.read_csv("data.csv", delimiter=",", has_header=True)
     """
+    _validate_utf8(path, encoding)
     path = os.fspath(path)
+
     path_lower = path.lower()
     if not (
         path_lower.endswith(".csv")
@@ -286,6 +302,7 @@ def write_csv(
     >>> ar.write_csv(frame, "output.tsv", delimiter="\\t")
     """
     path = os.fspath(path)
+
     path_lower = path.lower()
     if not (
         path_lower.endswith(".csv")
@@ -366,6 +383,7 @@ def scan_csv(
     >>> print(schema)
     {'name': 'string', 'age': 'int64'}
     """
+    _validate_utf8(path, encoding)
     path = os.fspath(path)
     path_lower = path.lower()
     if not (
