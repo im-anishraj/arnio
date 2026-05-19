@@ -1459,6 +1459,8 @@ def test_profile_duplicate_count_hash_path_matches_pandas_baseline_at_scale():
 
     assert hash_count == baseline_count
     assert ar.profile(frame).duplicate_rows == baseline_count
+
+
 def test_report_to_markdown_escapes_newlines_in_column_cells():
     report = ar.DataQualityReport(
         row_count=2,
@@ -1486,4 +1488,3 @@ def test_report_to_markdown_escapes_newlines_in_column_cells():
     assert "free<br>text" in md
     assert "contains<br>newline" in md
     assert "| multi\nline |" not in md
-    
