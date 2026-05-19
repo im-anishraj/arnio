@@ -908,6 +908,48 @@ class TestParseBoolStrings:
         with pytest.raises(ValueError):
             ar.parse_bool_strings(frame, subset=["missing"])
 
+    def test_parse_bool_strings_non_string_true_values_raises(self):
+        """Regression: non-string items in true_values must raise TypeError,
+        not crash with AttributeError on .strip().lower()."""
+        import pandas as pd
+
+        df = pd.DataFrame({"active": ["yes", "no"]}, dtype=object)
+        frame = ar.from_pandas(df)
+
+        with pytest.raises(TypeError, match="true_values must contain only strings"):
+            ar.parse_bool_strings(frame, true_values={1, "yes"})
+
+    def test_parse_bool_strings_non_string_false_values_raises(self):
+        """Regression: non-string items in false_values must raise TypeError,
+        not crash with AttributeError on .strip().lower()."""
+        import pandas as pd
+
+        df = pd.DataFrame({"active": ["yes", "no"]}, dtype=object)
+        frame = ar.from_pandas(df)
+
+        with pytest.raises(TypeError, match="false_values must contain only strings"):
+            ar.parse_bool_strings(frame, false_values={0, "no"})
+
+    def test_parse_bool_strings_none_in_custom_values_raises(self):
+        """Regression: None in true_values/false_values must raise TypeError."""
+        import pandas as pd
+
+        df = pd.DataFrame({"active": ["yes", "no"]}, dtype=object)
+        frame = ar.from_pandas(df)
+
+        with pytest.raises(TypeError, match="true_values must contain only strings"):
+            ar.parse_bool_strings(frame, true_values={"yes", None})
+
+    def test_parse_bool_strings_bool_in_custom_values_raises(self):
+        """Regression: bool items in true_values must raise TypeError."""
+        import pandas as pd
+
+        df = pd.DataFrame({"active": ["yes", "no"]}, dtype=object)
+        frame = ar.from_pandas(df)
+
+        with pytest.raises(TypeError, match="true_values must contain only strings"):
+            ar.parse_bool_strings(frame, true_values={True, "yes"})
+
 
 class TestRenameColumns:
     def test_rename(self, sample_csv):
@@ -1154,166 +1196,6 @@ class TestRoundNumericColumns:
             match=r"round_numeric_columns: unknown column\(s\) in subset: \['missing_col'\]",
         ):
             ar.round_numeric_columns(frame, subset=["missing_col"])
-
-
-class TestParseBoolStrings:
-    """Regression tests for parse_bool_strings function."""
-
-    def test_standard_true_values(self):
-        """Test standard true value recognition."""
-        assert ar.parse_bool_strings("true") is True
-        assert ar.parse_bool_strings("TRUE") is True
-        assert ar.parse_bool_strings("True") is True
-        assert ar.parse_bool_strings("1") is True
-        assert ar.parse_bool_strings("1.0") is True
-
-    def test_standard_false_values(self):
-        """Test standard false value recognition."""
-        assert ar.parse_bool_strings("false") is False
-        assert ar.parse_bool_strings("FALSE") is False
-        assert ar.parse_bool_strings("False") is False
-        assert ar.parse_bool_strings("0") is False
-        assert ar.parse_bool_strings("0.0") is False
-
-    def test_custom_true_values(self):
-        """Test custom true value tokens."""
-        assert (
-            ar.parse_bool_strings("yes", true_values=["yes"], false_values=["no"])
-            is True
-        )
-        assert (
-            ar.parse_bool_strings("YES", true_values=["yes"], false_values=["no"])
-            is True
-        )
-        assert (
-            ar.parse_bool_strings("  yes  ", true_values=["yes"], false_values=["no"])
-            is True
-        )
-
-    def test_custom_false_values(self):
-        """Test custom false value tokens."""
-        assert (
-            ar.parse_bool_strings("no", true_values=["yes"], false_values=["no"])
-            is False
-        )
-        assert (
-            ar.parse_bool_strings("NO", true_values=["yes"], false_values=["no"])
-            is False
-        )
-        assert (
-            ar.parse_bool_strings("  no  ", true_values=["yes"], false_values=["no"])
-            is False
-        )
-
-    def test_non_string_value_returns_none(self):
-        """Test that non-string values return None."""
-        assert ar.parse_bool_strings(1) is None
-        assert ar.parse_bool_strings(True) is None
-        assert ar.parse_bool_strings(1.0) is None
-        assert ar.parse_bool_strings([]) is None
-        assert ar.parse_bool_strings({}) is None
-
-    def test_empty_or_whitespace_returns_none(self):
-        """Test that empty or whitespace-only strings return None."""
-        assert ar.parse_bool_strings("") is None
-        assert ar.parse_bool_strings("   ") is None
-        assert ar.parse_bool_strings("\t\n") is None
-
-    def test_no_match_returns_none(self):
-        """Test that unrecognized values return None."""
-        assert ar.parse_bool_strings("maybe") is None
-        assert ar.parse_bool_strings("yup") is None
-        assert (
-            ar.parse_bool_strings("yup", true_values=["yes"], false_values=["no"])
-            is None
-        )
-
-    def test_validation_true_values_type_error(self):
-        """Test TypeError when true_values contains non-string items."""
-        with pytest.raises(TypeError, match="true_values must contain only strings"):
-            ar.parse_bool_strings("yes", true_values=[1, "yes"])
-
-        with pytest.raises(TypeError, match="true_values must contain only strings"):
-            ar.parse_bool_strings("yes", true_values=["yes", True])
-
-        with pytest.raises(TypeError, match="true_values must contain only strings"):
-            ar.parse_bool_strings("yes", true_values=["yes", 1.5])
-
-    def test_validation_false_values_type_error(self):
-        """Test TypeError when false_values contains non-string items."""
-        with pytest.raises(TypeError, match="false_values must contain only strings"):
-            ar.parse_bool_strings("no", false_values=[1, "no"])
-
-        with pytest.raises(TypeError, match="false_values must contain only strings"):
-            ar.parse_bool_strings("no", false_values=["no", False])
-
-        with pytest.raises(TypeError, match="false_values must contain only strings"):
-            ar.parse_bool_strings("no", false_values=["no", 2.5])
-
-    def test_validation_true_values_not_list(self):
-        """Test TypeError when true_values is not a list."""
-        with pytest.raises(TypeError, match="true_values must be a list"):
-            ar.parse_bool_strings("yes", true_values=("yes",))
-
-        with pytest.raises(TypeError, match="true_values must be a list"):
-            ar.parse_bool_strings("yes", true_values="yes")
-
-    def test_validation_false_values_not_list(self):
-        """Test TypeError when false_values is not a list."""
-        with pytest.raises(TypeError, match="false_values must be a list"):
-            ar.parse_bool_strings("no", false_values=("no",))
-
-        with pytest.raises(TypeError, match="false_values must be a list"):
-            ar.parse_bool_strings("no", false_values="no")
-
-    def test_custom_tokens_override_standard(self):
-        """Test that custom tokens are checked before standard tokens."""
-        # "true" as a custom false value should work
-        assert (
-            ar.parse_bool_strings("true", true_values=["yes"], false_values=["true"])
-            is False
-        )
-
-    def test_multiple_custom_tokens(self):
-        """Test with multiple custom tokens."""
-        assert (
-            ar.parse_bool_strings(
-                "oui", true_values=["yes", "oui"], false_values=["no", "non"]
-            )
-            is True
-        )
-        assert (
-            ar.parse_bool_strings(
-                "non", true_values=["yes", "oui"], false_values=["no", "non"]
-            )
-            is False
-        )
-        assert (
-            ar.parse_bool_strings(
-                "si", true_values=["yes", "oui", "si"], false_values=["no", "non"]
-            )
-            is True
-        )
-
-    def test_issue_596_regression_non_string_tokens_crash(self):
-        """
-        Regression test for issue #596: parse_bool_strings crashes on
-        non-string custom true or false tokens.
-
-        This test ensures that passing non-string items in true_values or
-        false_values raises TypeError instead of crashing with AttributeError.
-        """
-        # Integer in true_values should raise TypeError, not crash
-        with pytest.raises(TypeError, match="true_values must contain only strings"):
-            ar.parse_bool_strings("1", true_values=[1, "yes"])
-
-        # Boolean in false_values should raise TypeError, not crash
-        with pytest.raises(TypeError, match="false_values must contain only strings"):
-            ar.parse_bool_strings("0", false_values=[False, "no"])
-
-        # Mixed types should also fail gracefully
-        with pytest.raises(TypeError, match="true_values must contain only strings"):
-            ar.parse_bool_strings("val", true_values=["yes", 2.5, True])
 
 
 class TestCombineColumns:

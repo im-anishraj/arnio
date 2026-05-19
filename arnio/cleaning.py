@@ -554,9 +554,23 @@ def parse_bool_strings(
     df = to_pandas(frame).copy()
     if true_values is None:
         true_values = {"true", "yes", "y", "1"}
+    else:
+        invalid = [v for v in true_values if not isinstance(v, str)]
+        if invalid:
+            raise TypeError(
+                f"true_values must contain only strings, got "
+                f"{type(invalid[0]).__name__}"
+            )
 
     if false_values is None:
         false_values = {"false", "no", "n", "0"}
+    else:
+        invalid = [v for v in false_values if not isinstance(v, str)]
+        if invalid:
+            raise TypeError(
+                f"false_values must contain only strings, got "
+                f"{type(invalid[0]).__name__}"
+            )
 
     true_values = {v.strip().lower() for v in true_values}
     false_values = {v.strip().lower() for v in false_values}
@@ -1104,38 +1118,6 @@ def safe_divide_columns(
 
 
 
-def parse_bool_strings(
-    value: Any,
-    *,
-    true_values: list[str] | None = None,
-    false_values: list[str] | None = None,
-) -> bool | None:
-    """Parse a value as a boolean using custom true/false tokens.
-
-    Converts a string value to boolean using custom token lists. Standard
-    fallbacks ("true", "false", "1", "0") are always recognized. Non-string
-    values and null/empty strings return None.
-
-    All items in true_values and false_values must be strings; non-string
-    items raise TypeError.
-
-    Parameters
-    ----------
-    value : Any
-        Value to parse as boolean. Typically a string.
-    true_values : list[str], optional
-        Custom tokens to recognize as True. Compared case-insensitively
-        after whitespace stripping.
-    false_values : list[str], optional
-        Custom tokens to recognize as False. Compared case-insensitively
-        after whitespace stripping.
-
-    Returns
-    -------
-    bool or None
-        True if value matches a true token, False if it matches a false token,
-        None if value is null/empty or doesn't match any token.
-
 def drop_columns_matching(frame, pattern):
     """Drop columns whose names match a given pattern.
 
@@ -1151,74 +1133,9 @@ def drop_columns_matching(frame, pattern):
     ArFrame or pd.DataFrame
         Data frame with matching columns removed.
 
-
     Raises
     ------
     TypeError
-
-        If any item in true_values or false_values is not a string.
-
-    Examples
-    --------
-    >>> parse_bool_strings("yes", true_values=["yes"], false_values=["no"])
-    True
-    >>> parse_bool_strings("no", true_values=["yes"], false_values=["no"])
-    False
-    >>> parse_bool_strings("1")
-    True
-    >>> parse_bool_strings(None)
-    None
-    """
-    # Validate true_values parameter
-    if true_values is not None:
-        if not isinstance(true_values, list):
-            raise TypeError("true_values must be a list of strings")
-        invalid_true = [v for v in true_values if not isinstance(v, str)]
-        if invalid_true:
-            raise TypeError(
-                f"true_values must contain only strings, got {type(invalid_true[0]).__name__}"
-            )
-
-    # Validate false_values parameter
-    if false_values is not None:
-        if not isinstance(false_values, list):
-            raise TypeError("false_values must be a list of strings")
-        invalid_false = [v for v in false_values if not isinstance(v, str)]
-        if invalid_false:
-            raise TypeError(
-                f"false_values must contain only strings, got {type(invalid_false[0]).__name__}"
-            )
-
-    # Handle non-string values
-    if not isinstance(value, str):
-        return None
-
-    # Handle empty/whitespace-only strings
-    normalized = value.strip().lower()
-    if not normalized:
-        return None
-
-    # Check custom true_values
-    if true_values is not None:
-        normalized_true = [v.strip().lower() for v in true_values]
-        if normalized in normalized_true:
-            return True
-
-    # Check custom false_values
-    if false_values is not None:
-        normalized_false = [v.strip().lower() for v in false_values]
-        if normalized in normalized_false:
-            return False
-
-    # Standard boolean tokens (always recognized)
-    if normalized in ("true", "1", "1.0"):
-        return True
-    if normalized in ("false", "0", "0.0"):
-        return False
-
-    # No match found
-    return None
-
         If pattern is not a string.
     re.error
         If pattern is not a valid regex.
