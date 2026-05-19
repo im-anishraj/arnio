@@ -566,6 +566,7 @@ def test_phone_number_validation_fails():
 
     assert not result.passed
 
+
 def test_phone_number_nullable_true_accepts_nulls():
     import pandas as pd
 
@@ -590,6 +591,7 @@ def test_phone_number_nullable_true_accepts_nulls():
     result = ar.validate(frame, schema)
 
     assert result.passed
+
 
 def test_phone_number_nullable_false_rejects_nulls():
     import pandas as pd
@@ -617,6 +619,7 @@ def test_phone_number_nullable_false_rejects_nulls():
 
     assert any(issue.rule == "nullable" for issue in result.issues)
 
+
 def test_phone_number_unique_constraint():
     import pandas as pd
 
@@ -642,6 +645,7 @@ def test_phone_number_unique_constraint():
     assert not result.passed
 
     assert any(issue.rule == "unique" for issue in result.issues)
+
 
 def test_phone_number_formatted_and_invalid_edge_cases():
     import pandas as pd
@@ -673,6 +677,7 @@ def test_phone_number_formatted_and_invalid_edge_cases():
 
     assert "++1-555-123-4567" in invalid_values
     assert "123" in invalid_values
+
 
 def test_phone_number_mixed_object_column_behavior():
     import pandas as pd
