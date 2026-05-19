@@ -6,11 +6,12 @@ Data cleaning functions.
 from __future__ import annotations
 
 import unicodedata
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from ._core import (
     _cast_types,
+    _clip_numeric,
     _drop_duplicates,
     _drop_nulls,
     _fill_nulls,
@@ -82,6 +83,34 @@ def _validate_column_sequence(
     return normalized
 
 
+def _validate_string_mapping(
+    mapping: Mapping[str, str],
+    *,
+    argument_name: str,
+    allow_empty: bool = True,
+) -> dict[str, str]:
+    if not isinstance(mapping, Mapping):
+        raise TypeError(f"{argument_name} must be a mapping of string keys to strings")
+
+    normalized = dict(mapping)
+    if not normalized and not allow_empty:
+        raise ValueError(f"{argument_name} must not be empty")
+
+    invalid_keys = [key for key in normalized if not isinstance(key, str)]
+    if invalid_keys:
+        raise TypeError(f"{argument_name} keys must contain only string column names")
+
+    invalid_values = [
+        value
+        for value in normalized.values()
+        if not isinstance(value, str) or not value.strip()
+    ]
+    if invalid_values:
+        raise TypeError(f"{argument_name} values must be non-empty strings")
+
+    return normalized
+
+
 def drop_nulls(
     frame: ArFrame,
     *,
@@ -115,6 +144,53 @@ def drop_nulls(
         )
     result = _drop_nulls(frame._frame, subset=subset)
     return ArFrame(result)
+
+
+def drop_columns(frame: ArFrame, columns: Sequence[str]) -> ArFrame:
+    """Return a new frame without the requested columns.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input data frame.
+    columns : sequence of str
+        Column names to remove.
+
+    Returns
+    -------
+    ArFrame
+        New frame with the requested columns removed.
+
+    Raises
+    ------
+    TypeError
+        If columns is a string/bytes value or contains non-string items.
+    ValueError
+        If any requested column is missing.
+
+    Examples
+    --------
+    >>> frame = ar.drop_columns(frame, ["debug_col"])
+    """
+    requested_columns = _validate_column_sequence(columns, argument_name="columns")
+    if len(requested_columns) == 0:
+        return frame
+
+    missing = [column for column in requested_columns if column not in frame.columns]
+    if missing:
+        raise ValueError(f"Columns not found in frame: {missing}")
+    if len(requested_columns) == len(frame.columns):
+        raise ValueError("drop_columns cannot remove all columns from the frame")
+
+    requested_set = set(requested_columns)
+    remaining_columns = [
+        column for column in frame.columns if column not in requested_set
+    ]
+
+    from .convert import from_pandas, to_pandas
+
+    df = to_pandas(frame)
+    return from_pandas(df.loc[:, remaining_columns])
 
 
 def keep_rows_with_nulls(
@@ -252,6 +328,8 @@ def drop_duplicates(
             operation="drop_duplicates",
         )
     keep_arg = "none" if keep is False else keep
+    if keep_arg not in {"first", "last", "none"}:
+        raise ValueError("keep must be one of 'first', 'last', 'none', or False")
     result = _drop_duplicates(frame._frame, subset=subset, keep=keep_arg)
     return ArFrame(result)
 
@@ -331,45 +409,73 @@ def clip_numeric(
     >>> frame = ar.read_csv("data.csv")
     >>> clipped = ar.clip_numeric(frame, lower=0, upper=100)
     """
-    from pandas.api.types import is_bool_dtype, is_numeric_dtype
-
-    from .convert import from_pandas, to_pandas
-
     if lower is None and upper is None:
         raise ValueError("At least one of 'lower' or 'upper' must be provided")
     if lower is not None and upper is not None and lower > upper:
         raise ValueError("lower cannot be greater than upper")
 
-    df = to_pandas(frame)
+    # Validate subset columns and their types against the frame's own dtype map,
+    # avoiding any pandas conversion for the validation step.
+    dtypes = frame.dtypes  # dict[str, str] — pure C++ metadata, no round-trip
 
-    def _is_supported_numeric(column_name: str) -> bool:
-        series = df[column_name]
-        return is_numeric_dtype(series) and not is_bool_dtype(series)
+    def _is_supported_numeric(col_name: str) -> bool:
+        return dtypes.get(col_name) in ("int64", "float64")
 
-    if subset is None:
-        target_columns = [
-            column for column in df.columns if _is_supported_numeric(column)
-        ]
-    else:
-        unknown_columns = [column for column in subset if column not in df.columns]
+    if subset is not None:
+        unknown_columns = [col for col in subset if col not in dtypes]
         if unknown_columns:
             raise ValueError(f"Unknown columns in subset: {unknown_columns}")
 
-        non_numeric_columns = [
-            column for column in subset if not _is_supported_numeric(column)
-        ]
+        non_numeric_columns = [col for col in subset if not _is_supported_numeric(col)]
         if non_numeric_columns:
             raise ValueError(
                 "clip_numeric only supports numeric columns: " f"{non_numeric_columns}"
             )
-        target_columns = subset
 
-    if not target_columns:
-        return frame
+        # Empty subset — nothing to clip, return the frame unchanged.
+        # This preserves the behaviour of the previous pandas-based implementation
+        # which returned early when target_columns was empty.
+        if len(subset) == 0:
+            return frame
+    else:
+        # When no subset is given, check whether there are any clippable columns.
+        # If none exist, return the frame unchanged without touching C++.
+        if not any(_is_supported_numeric(col) for col in dtypes):
+            return frame
 
-    clipped = df.copy()
-    clipped[target_columns] = clipped[target_columns].clip(lower=lower, upper=upper)
-    return from_pandas(clipped)
+    # Validate that bounds supplied for INT64 columns are integral.
+    # The C++ path silently truncates float bounds via static_cast<int64_t>, which
+    # would change semantics (e.g. lower=1.5 becoming 1).  Raise early so callers
+    # get an explicit error rather than silent data mutation.
+    int64_cols = [
+        col
+        for col in (subset if subset is not None else dtypes)
+        if dtypes.get(col) == "int64"
+    ]
+    if int64_cols:
+        if lower is not None and lower != int(lower):
+            raise ValueError(
+                f"lower bound {lower!r} is not an integer value; "
+                "clip_numeric does not truncate bounds for int64 columns. "
+                "Cast the column to float64 first, or use an integral bound."
+            )
+        if upper is not None and upper != int(upper):
+            raise ValueError(
+                f"upper bound {upper!r} is not an integer value; "
+                "clip_numeric does not truncate bounds for int64 columns. "
+                "Cast the column to float64 first, or use an integral bound."
+            )
+
+    # Hot path: delegate entirely to the native C++ implementation.
+    # No pandas conversion, no DataFrame copy — operates directly on the
+    # columnar C++ Frame and returns a new Frame.
+    result = _clip_numeric(
+        frame._frame,
+        lower=float(lower) if lower is not None else None,
+        upper=float(upper) if upper is not None else None,
+        subset=subset,
+    )
+    return ArFrame(result)
 
 
 def strip_whitespace(
@@ -409,7 +515,7 @@ def strip_whitespace(
 def parse_bool_strings(
     frame: ArFrame,
     *,
-    subset: list[str] | None = None,
+    subset: Sequence[str] | None = None,
     true_values: set[str] | None = None,
     false_values: set[str] | None = None,
 ) -> ArFrame:
@@ -419,7 +525,7 @@ def parse_bool_strings(
     ----------
     frame : ArFrame
         Input Arnio frame.
-    subset : list[str], optional
+    subset : sequence of str, optional
         Columns to apply conversion on. If None, applies to all object/string columns.
     true_values : set[str], optional
         String values treated as True.
@@ -460,18 +566,15 @@ def parse_bool_strings(
         )
 
     if subset is not None:
-        if not isinstance(subset, list):
-            raise TypeError("subset must be a list of column names or None")
+        columns = _validate_column_sequence(subset, argument_name="subset")
 
-        if len(subset) == 0:
+        if len(columns) == 0:
             raise ValueError("subset cannot be empty")
 
-        missing = [col for col in subset if col not in df.columns]
+        missing = [col for col in columns if col not in df.columns]
 
         if missing:
             raise ValueError(f"Columns not found in frame: {missing}")
-
-        columns = subset
     else:
         columns = df.select_dtypes(include=["object", "string"]).columns.tolist()
 
@@ -497,7 +600,11 @@ def normalize_case(
     subset: list[str] | None = None,
     case_type: str = "lower",
 ) -> ArFrame:
-    """Normalize string columns to lower/upper/title case.
+    """Normalize ASCII letters in string columns to lower/upper/title case.
+
+    Non-ASCII UTF-8 bytes are preserved unchanged. This keeps accented text,
+    CJK characters, emoji, and other multibyte data valid while avoiding a
+    heavyweight Unicode case-folding dependency.
 
     Parameters
     ----------
@@ -589,11 +696,31 @@ def rename_columns(
     >>> frame = ar.read_csv("data.csv")
     >>> renamed = ar.rename_columns(frame, {"old_name": "new_name"})
     """
+    mapping = _validate_string_mapping(mapping, argument_name="mapping")
     validate_columns_exist(
         frame,
         _validate_column_sequence(list(mapping), argument_name="mapping keys"),
         operation="rename_columns",
     )
+
+    target_names = list(mapping.values())
+    duplicate_targets = sorted(
+        {name for name in target_names if target_names.count(name) > 1}
+    )
+    if duplicate_targets:
+        raise ValueError(
+            f"rename_columns target names would create duplicates: {duplicate_targets}"
+        )
+
+    mapped_sources = set(mapping)
+    unmapped_columns = set(frame.columns) - mapped_sources
+    collisions = sorted(name for name in target_names if name in unmapped_columns)
+    if collisions:
+        raise ValueError(
+            "rename_columns target names collide with existing columns that are not "
+            f"being renamed: {collisions}"
+        )
+
     result = _rename_columns(frame._frame, mapping)
     return ArFrame(result)
 
@@ -637,6 +764,8 @@ def trim_column_names(frame: ArFrame) -> ArFrame:
 def cast_types(
     frame: ArFrame,
     mapping: dict[str, str],
+    *,
+    errors: str = "raise",
 ) -> ArFrame:
     """Cast columns to specified types via {col: type_str} dict.
 
@@ -646,6 +775,8 @@ def cast_types(
         Input data frame.
     mapping : dict[str, str]
         Dictionary mapping column names to target type strings (e.g., "int64", "float64", "bool", "string").
+    errors : {"raise", "coerce"}, default "raise"
+        Whether invalid casts raise ``TypeCastError`` or become null values.
 
     Returns
     -------
@@ -657,13 +788,21 @@ def cast_types(
     >>> frame = ar.read_csv("data.csv")
     >>> casted = ar.cast_types(frame, {"age": "int64", "score": "float64"})
     """
+    if errors not in {"raise", "coerce"}:
+        raise ValueError("errors must be either 'raise' or 'coerce'")
+
+    mapping = _validate_string_mapping(mapping, argument_name="mapping")
     validate_columns_exist(
         frame,
         _validate_column_sequence(list(mapping), argument_name="mapping keys"),
         operation="cast_types",
     )
     try:
-        result = _cast_types(frame._frame, mapping)
+        result = _cast_types(
+            frame._frame,
+            mapping,
+            errors == "coerce",
+        )
     except ValueError as e:
         raise TypeCastError(str(e)) from e
     return ArFrame(result)
@@ -749,6 +888,8 @@ def filter_rows(frame, column, op, value):
     mask = getattr(df[column], ops[op])(value)
     mask = mask.fillna(False).astype(bool)
     filtered = df[mask]
+    if is_arframe:
+        filtered = filtered.reset_index(drop=True)
 
     return from_pandas(filtered) if is_arframe else filtered
 
@@ -797,7 +938,10 @@ def round_numeric_columns(
     if subset is not None:
         missing = [col for col in subset if col not in df.columns]
         if missing:
-            raise IndexError(f"Column not found: {missing[0]}")
+            raise ValueError(
+                f"round_numeric_columns: unknown column(s) in subset: {missing}. "
+                f"Available columns: {list(df.columns)}"
+            )
         cols_to_round = subset
     else:
         cols_to_round = df.select_dtypes(include=["number"]).columns
@@ -930,12 +1074,88 @@ def safe_divide_columns(
             stacklevel=2,
         )
 
-    safe_denom = df[denominator].replace(0, float("nan"))
-    result = df[numerator] / safe_denom
+    numerator_values = pd.to_numeric(df[numerator], errors="coerce")
+    denominator_values = pd.to_numeric(df[denominator], errors="coerce")
+
+    bad_numerator = numerator_values.isna() & df[numerator].notna()
+    bad_denominator = denominator_values.isna() & df[denominator].notna()
+    if bad_numerator.any():
+        bad_values = df.loc[bad_numerator, numerator].head(3).tolist()
+        raise ValueError(
+            f"Numerator column '{numerator}' contains non-numeric values: {bad_values}"
+        )
+    if bad_denominator.any():
+        bad_values = df.loc[bad_denominator, denominator].head(3).tolist()
+        raise ValueError(
+            f"Denominator column '{denominator}' contains non-numeric values: {bad_values}"
+        )
+
+    safe_denom = denominator_values.mask(
+        denominator_values.isna() | denominator_values.eq(0)
+    )
+    result = numerator_values / safe_denom
     df = df.copy()
     df[output_column] = result.fillna(fill_value)
 
     return from_pandas(df) if is_arframe else df
+
+
+def drop_columns_matching(frame, pattern):
+    """Drop columns whose names match a given pattern.
+
+    Parameters
+    ----------
+    frame : ArFrame or pd.DataFrame
+        Input data frame.
+    pattern : str
+        Regex pattern to match column names against.
+
+    Returns
+    -------
+    ArFrame or pd.DataFrame
+        Data frame with matching columns removed.
+
+    Raises
+    ------
+    TypeError
+        If pattern is not a string.
+    re.error
+        If pattern is not a valid regex.
+    ValueError
+        If pattern matches all columns.
+
+    Examples
+    --------
+    >>> frame = ar.read_csv("data.csv")
+    >>> cleaned = drop_columns_matching(frame, "^temp_")
+    """
+    import re
+
+    import pandas as pd
+
+    from .convert import from_pandas, to_pandas
+
+    if not isinstance(pattern, str):
+        raise TypeError(f"pattern must be a string, got {type(pattern).__name__}")
+
+    try:
+        re.compile(pattern)
+    except re.error as e:
+        raise re.error(f"Invalid regex pattern: {pattern!r}") from e
+
+    is_arframe = not isinstance(frame, pd.DataFrame)
+    df = to_pandas(frame) if is_arframe else frame
+
+    cols_to_drop = [col for col in df.columns if re.search(pattern, col)]
+
+    if len(cols_to_drop) == len(df.columns):
+        raise ValueError(
+            "Pattern matches all columns. At least one column must remain."
+        )
+
+    result = df.drop(columns=cols_to_drop)
+
+    return from_pandas(result) if is_arframe else result
 
 
 def replace_values(frame, mapping, column=None):

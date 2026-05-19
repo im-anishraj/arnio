@@ -16,6 +16,8 @@ from .cleaning import (
     clean,
     clip_numeric,
     combine_columns,
+    drop_columns,
+    drop_columns_matching,
     drop_constant_columns,
     drop_duplicates,
     drop_nulls,
@@ -35,15 +37,28 @@ from .cleaning import (
     validate_columns_exist,
 )
 from .convert import from_pandas, to_pandas
-from .exceptions import ArnioError, CsvReadError, TypeCastError, UnknownStepError
+from .exceptions import (
+    ArnioError,
+    CsvReadError,
+    PipelineStepError,
+    TypeCastError,
+    UnknownStepError,
+)
 from .frame import ArFrame
 from .integrations import ArnioPandasAccessor
 from .io import read_csv, scan_csv, write_csv
 from .pipeline import pipeline, register_step
 from .quality import (
+    CleanExplanation,
+    CleanStepRecord,
     ColumnProfile,
     DataQualityReport,
+    ProfileComparison,
+    QualityGateIssue,
+    QualityGateResult,
     auto_clean,
+    check_quality_gates,
+    compare_profiles,
     profile,
     suggest_cleaning,
 )
@@ -51,17 +66,23 @@ from .schema import (
     URL,
     Bool,
     CountryCode,
+    Custom,
     Date,
     DateTime,
     Email,
     Field,
     Float64,
     Int64,
+    PhoneNumber,
     Regex,
     Schema,
+    SchemaDiff,
+    SchemaDiffEntry,
     String,
     ValidationIssue,
     ValidationResult,
+    diff_schema,
+    register_validator,
     validate,
 )
 
@@ -74,6 +95,7 @@ __all__ = [
     "scan_csv",
     # Cleaning
     "drop_nulls",
+    "drop_columns",
     "keep_rows_with_nulls",
     "fill_nulls",
     "validate_columns_exist",
@@ -83,6 +105,7 @@ __all__ = [
     "drop_constant_columns",
     "clip_numeric",
     "combine_columns",
+    "drop_columns_matching",
     "strip_whitespace",
     "parse_bool_strings",
     "normalize_case",
@@ -103,16 +126,26 @@ __all__ = [
     "register_step",
     # Data quality
     "profile",
+    "compare_profiles",
+    "check_quality_gates",
     "suggest_cleaning",
     "auto_clean",
     "ColumnProfile",
     "DataQualityReport",
+    "CleanStepRecord",
+    "CleanExplanation",
+    "ProfileComparison",
+    "QualityGateIssue",
+    "QualityGateResult",
     # Schema validation
     "Schema",
+    "SchemaDiff",
+    "SchemaDiffEntry",
     "Field",
     "ValidationIssue",
     "ValidationResult",
     "validate",
+    "diff_schema",
     "Int64",
     "Float64",
     "String",
@@ -120,13 +153,17 @@ __all__ = [
     "Bool",
     "Email",
     "URL",
+    "PhoneNumber",
     "DateTime",
     # Exceptions
     "UnknownStepError",
     "ArnioError",
     "CsvReadError",
     "TypeCastError",
+    "PipelineStepError",
     "normalize_unicode",
     "Regex",
+    "Custom",
+    "register_validator",
     "Date",
 ]

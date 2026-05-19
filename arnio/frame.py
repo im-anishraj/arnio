@@ -87,6 +87,50 @@ class ArFrame:
         """
         return self._frame.memory_usage()
 
+    def head(self, n: int = 5) -> ArFrame:
+        """Return the first n rows as an ArFrame.
+
+        Parameters
+        ----------
+        n : int, optional
+            Number of rows to return. Defaults to 5.
+
+        Returns
+        -------
+        ArFrame
+            New ArFrame containing the first n rows.
+        """
+        if isinstance(n, bool) or not isinstance(n, int) or n < 0:
+            raise ValueError(f"`n` must be a non-negative integer, got {n!r}")
+
+        from .convert import from_pandas, to_pandas
+
+        df = to_pandas(self)
+
+        return from_pandas(df.head(n))
+
+    def tail(self, n: int = 5) -> ArFrame:
+        """Return the last n rows as an ArFrame.
+
+        Parameters
+        ----------
+        n : int, optional
+            Number of rows to return. Defaults to 5.
+
+        Returns
+        -------
+        ArFrame
+            New ArFrame containing the last n rows.
+        """
+        if isinstance(n, bool) or not isinstance(n, int) or n < 0:
+            raise ValueError(f"`n` must be a non-negative integer, got {n!r}")
+
+        from .convert import from_pandas, to_pandas
+
+        df = to_pandas(self)
+
+        return from_pandas(df.tail(n))
+
     def select_columns(self, columns: list[str]) -> ArFrame:
         """Return a new ArFrame with only the selected columns.
 
@@ -237,6 +281,12 @@ class ArFrame:
 
         return self.select_columns(matched)
 
+    def _truncate_column_names(self, max_length=20):
+        return [
+            col[:max_length] + "..." if len(col) > max_length else col
+            for col in self.columns
+        ]
+
     # --- Dunder methods ---
 
     def __len__(self) -> int:
@@ -251,7 +301,7 @@ class ArFrame:
     def __str__(self) -> str:
         """Return a detailed string summary of the ArFrame."""
         lines = [f"ArFrame: {self.shape[0]} rows × {self.shape[1]} columns"]
-        lines.append(f"Columns: {self.columns}")
+        lines.append(f"Columns: {self._truncate_column_names()}")
         lines.append(f"DTypes:  {self.dtypes}")
         lines.append(f"Memory:  {self.memory_usage()} bytes")
         return "\n".join(lines)

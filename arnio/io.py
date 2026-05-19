@@ -53,9 +53,9 @@ def _utf8_csv_path(
                     reader = csv.reader(src, delimiter=delimiter)
                     writer = csv.writer(tmp, delimiter=delimiter)
                     for row_count, row in enumerate(reader):
-                        writer.writerow(row)
                         if row_count >= sample_rows:
                             break
+                        writer.writerow(row)
                 else:
                     shutil.copyfileobj(src, tmp)
                 tmp_name = tmp.name
@@ -204,16 +204,6 @@ def read_csv(
             f"Unsupported file format: {path}. Only .csv, .txt, and .tsv are supported."
         )
 
-    if _is_utf8_encoding(encoding):
-        try:
-            with open(path, "rb") as f:
-                if b"\0" in f.read(1024):
-                    raise CsvReadError(
-                        "CSV input contains NUL bytes and appears to be binary or corrupted"
-                    )
-        except FileNotFoundError:
-            pass  # Let C++ backend handle or raise standard error
-
     try:
         if os.path.getsize(path) == 0:
             raise CsvReadError(f"CSV file is empty: {path!r}")
@@ -296,8 +286,18 @@ def write_csv(
             f"Unsupported file format: {path}. Only .csv, .txt, and .tsv are supported."
         )
 
+    if not isinstance(delimiter, str):
+        raise TypeError("delimiter must be a string")
     if len(delimiter) != 1:
         raise ValueError(f"delimiter must be a single character, got {delimiter!r}")
+    if delimiter in {"\n", "\r"}:
+        raise ValueError("delimiter must not be a newline character")
+    if delimiter == '"':
+        raise ValueError("delimiter must not be the CSV quote character")
+    if not isinstance(line_terminator, str):
+        raise TypeError("line_terminator must be a string")
+    if line_terminator == "":
+        raise ValueError("line_terminator must not be empty")
 
     config = _CsvWriteConfig()
     config.delimiter = delimiter
@@ -376,16 +376,6 @@ def scan_csv(
         raise ValueError(
             f"Unsupported file format: {path}. Only .csv, .txt, and .tsv are supported."
         )
-
-    if _is_utf8_encoding(encoding):
-        try:
-            with open(path, "rb") as f:
-                if b"\0" in f.read(1024):
-                    raise CsvReadError(
-                        "CSV input contains NUL bytes and appears to be binary or corrupted"
-                    )
-        except FileNotFoundError:
-            pass  # Let C++ backend handle or raise standard error
 
     try:
         if os.path.getsize(path) == 0:

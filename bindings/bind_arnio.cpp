@@ -312,5 +312,16 @@ PYBIND11_MODULE(_arnio_cpp, m) {
 
     m.def("rename_columns", &rename_columns, py::arg("frame"), py::arg("mapping"));
 
-    m.def("cast_types", &cast_types, py::arg("frame"), py::arg("mapping"));
+    m.def("cast_types", &cast_types, py::arg("frame"), py::arg("mapping"),
+          py::arg("coerce_invalid") = false);
+
+    m.def(
+        "clip_numeric",
+        [](const Frame& frame, std::optional<double> lower, std::optional<double> upper,
+           const std::optional<std::vector<std::string>>& subset) {
+            py::gil_scoped_release release;
+            return clip_numeric(frame, lower, upper, subset);
+        },
+        py::arg("frame"), py::arg("lower") = std::nullopt, py::arg("upper") = std::nullopt,
+        py::arg("subset") = std::nullopt);
 }

@@ -201,6 +201,34 @@ class TestPipeline:
 
         assert result is frame
 
+    def test_pipeline_drop_columns(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        result = ar.pipeline(
+            frame,
+            [
+                ("drop_columns", {"columns": ["active"]}),
+            ],
+        )
+
+        assert result.columns == ["name", "age", "email"]
+
+    def test_pipeline_drop_columns_allows_empty_columns(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        result = ar.pipeline(frame, [("drop_columns", {"columns": []})])
+
+        assert result is frame
+
+    def test_pipeline_drop_columns_rejects_missing_columns(self, sample_csv):
+        import pytest
+
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(ValueError, match="Columns not found in frame"):
+            ar.pipeline(
+                frame,
+                [("drop_columns", {"columns": ["missing"]})],
+            )
+
     def test_pipeline_validate_columns_exist_rejects_missing_columns(self, sample_csv):
         import pytest
 
@@ -363,7 +391,7 @@ class TestPipeline:
         thread = threading.Thread(target=run_pipeline)
         thread.start()
 
-        assert started.wait(timeout=5)
+        assert not started.is_set()
 
         ar.register_step("late_snapshot_step", late_step)
 
@@ -397,6 +425,84 @@ class TestPipeline:
             assert False, "Should have raised ValueError"
         except ValueError as e:
             assert "Expected a dict" in str(e)
+
+    def test_custom_step_exception_wrapping_and_chaining(self):
+        """Verify that exceptions thrown by custom Python steps are wrapped with context."""
+
+        def failing_step(df, **kwargs):
+            raise RuntimeError("Internal step crash")
+
+        ar.register_step("error_prone_step", failing_step)
+
+        import pandas as pd
+
+        frame = ar.from_pandas(pd.DataFrame({"dummy": [1, 2, 3]}))
+
+        with pytest.raises(ar.PipelineStepError) as exc_info:
+            ar.pipeline(frame, [("error_prone_step",)])
+
+        assert "error_prone_step" in str(exc_info.value)
+        assert "Internal step crash" in str(exc_info.value)
+        assert isinstance(exc_info.value.__cause__, RuntimeError)
+
+    def test_pipeline_rejects_invalid_step_format(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(ValueError, match="Invalid step format"):
+            ar.pipeline(
+                frame,
+                [
+                    ("strip_whitespace",),
+                    ("bad_step", "oops", "extra"),
+                ],
+            )
+
+    def test_pipeline_rejects_non_tuple_step(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(ValueError, match="Invalid step format"):
+            ar.pipeline(
+                frame,
+                [
+                    "strip_whitespace",
+                ],
+            )
+
+    def test_pipeline_rejects_invalid_kwargs_type(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(ValueError, match="Expected a dict"):
+            ar.pipeline(
+                frame,
+                [
+                    ("drop_nulls", "not_a_dict"),
+                ],
+            )
+
+    def test_pipeline_validation_happens_before_execution(
+        self,
+        sample_csv,
+    ):
+        frame = ar.read_csv(sample_csv)
+
+        calls = []
+
+        def tracker(df):
+            calls.append("executed")
+            return df
+
+        ar.register_step("tracker_validation_test", tracker)
+
+        with pytest.raises(ValueError, match="Invalid step format"):
+            ar.pipeline(
+                frame,
+                [
+                    ("tracker_validation_test",),
+                    ("bad_step", "oops", "extra"),
+                ],
+            )
+
+        assert calls == []
 
 
 def test_filter_rows_greater_than():
@@ -808,3 +914,18 @@ def test_replace_values_direct_pandas_does_not_mutate_input():
     assert list(df["status"]) == ["active", "inactive"]
     # output should be replaced
     assert list(out["status"]) == ["A", "inactive"]
+
+
+def test_pipeline_drop_columns_matching():
+    df = pd.DataFrame({"temp_a": [1], "temp_b": [2], "keep_c": [3]})
+    frame = ar.from_pandas(df)
+    result = ar.pipeline(frame, [("drop_columns_matching", {"pattern": "^temp_"})])
+    result_df = ar.to_pandas(result)
+    assert list(result_df.columns) == ["keep_c"]
+
+
+def test_pipeline_drop_columns_matching_all_columns():
+    df = pd.DataFrame({"a": [1, 2], "b": [3, 4]})
+    frame = ar.from_pandas(df)
+    with pytest.raises(ValueError, match="Pattern matches all columns"):
+        ar.pipeline(frame, [("drop_columns_matching", {"pattern": ".*"})])

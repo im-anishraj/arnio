@@ -2,6 +2,9 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cerrno>
+#include <cstddef>
+#include <cstdlib>
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
@@ -59,6 +62,10 @@ static bool getline_universal(std::istream& stream, std::string& line, std::stri
                 line_ending = "\r";
             }
             break;
+        }
+        if (c == '\0') {
+            throw std::runtime_error(
+                "CSV input contains NUL bytes and appears to be binary or corrupted");
         }
         line += c;
         if (!stream.get(c)) break;
@@ -173,6 +180,24 @@ std::string normalize_numeric(const std::string& value, const CsvConfig& config)
     return s;
 }
 
+bool looks_like_integer_literal(const std::string& value) {
+    if (value.empty()) return false;
+    size_t start = 0;
+    if (value[0] == '-' || value[0] == '+') {
+        start = 1;
+    }
+    if (start == value.size()) return false;
+    return std::all_of(value.begin() + static_cast<std::ptrdiff_t>(start), value.end(),
+                       [](unsigned char ch) { return std::isdigit(ch); });
+}
+
+void validate_row_width(size_t row_number, size_t expected, size_t actual) {
+    if (actual == expected) return;
+    throw std::runtime_error("CSV row " + std::to_string(row_number) + " has " +
+                             std::to_string(actual) + " fields; expected " +
+                             std::to_string(expected));
+}
+
 }  // namespace
 
 CsvReader::CsvReader(const CsvConfig& config) : config_(config) {}
@@ -226,10 +251,16 @@ DType CsvReader::infer_type(const std::string& value) const {
     {
         const char* start = cleaned.c_str();
         char* end = nullptr;
+        errno = 0;
         long long val = std::strtoll(start, &end, 10);
         (void)val;
-        if (end != start && *end == '\0') return DType::INT64;
+        if (end != start && *end == '\0') {
+            if (errno == ERANGE) return DType::STRING;
+            return DType::INT64;
+        }
     }
+
+    if (looks_like_integer_literal(cleaned)) return DType::STRING;
 
     // Try float64
     {
@@ -327,8 +358,11 @@ Frame CsvReader::read(const std::string& path) const {
     std::vector<std::string> header;
     std::vector<std::vector<std::string>> raw_data;
 
+    size_t record_number = 0;
+
     // Read header
     if (config_.has_header && read_record(file, line)) {
+        ++record_number;
         strip_utf8_bom(line);
         header = parse_line(line);
         for (auto& h : header) {
@@ -339,10 +373,19 @@ Frame CsvReader::read(const std::string& path) const {
 
     // Read all rows
     size_t row_count = 0;
+    std::optional<size_t> expected_cols =
+        config_.has_header ? std::optional<size_t>{header.size()} : std::nullopt;
     while (read_record(file, line)) {
+        ++record_number;
         if (config_.nrows.has_value() && row_count >= config_.nrows.value()) break;
         if (line.empty()) continue;
-        raw_data.push_back(parse_line(line));
+        auto fields = parse_line(line);
+        if (!expected_cols.has_value()) {
+            expected_cols = fields.size();
+        } else {
+            validate_row_width(record_number, expected_cols.value(), fields.size());
+        }
+        raw_data.push_back(std::move(fields));
         ++row_count;
     }
     file.close();
@@ -439,6 +482,7 @@ std::vector<std::pair<std::string, std::string>> CsvReader::scan_schema(
 
         if (line.empty()) continue;
         auto fields = parse_line(line);
+        validate_row_width(sample_count + 2, num_cols, fields.size());
         for (size_t i = 0; i < num_cols && i < fields.size(); ++i) {
             col_types[i] = promote_type(col_types[i], infer_type(fields[i]));
         }

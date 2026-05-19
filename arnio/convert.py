@@ -219,6 +219,39 @@ def _pandas_dtype_to_arnio(dtype: object) -> _DType | None:
     return None
 
 
+def _validate_unique_column_labels(labels: pd.Index) -> None:
+    seen: set[object] = set()
+    dupes: list[object] = []
+    for label in labels:
+        if label in seen and label not in dupes:
+            dupes.append(label)
+        seen.add(label)
+    if dupes:
+        raise ValueError(
+            "from_pandas() does not support duplicate column labels: "
+            f"{[repr(label) for label in dupes]}"
+        )
+
+    normalized: dict[str, object] = {}
+    collisions: dict[str, list[object]] = {}
+    for label in labels:
+        name = str(label)
+        if name in normalized:
+            collisions.setdefault(name, [normalized[name]]).append(label)
+        else:
+            normalized[name] = label
+
+    if collisions:
+        details = ", ".join(
+            f"{name!r}: {[repr(label) for label in labels]}"
+            for name, labels in collisions.items()
+        )
+        raise ValueError(
+            "from_pandas() column labels must remain unique after string "
+            f"conversion: {details}"
+        )
+
+
 def from_pandas(df: pd.DataFrame) -> ArFrame:
     """Convert pandas.DataFrame to ArFrame.
 
@@ -243,6 +276,8 @@ def from_pandas(df: pd.DataFrame) -> ArFrame:
     >>> df = pd.DataFrame({"name": ["Alice"], "age": [25]})
     >>> frame = ar.from_pandas(df)
     """
+    _validate_unique_column_labels(df.columns)
+
     columns = {}
     dtype_hints = {}
 
