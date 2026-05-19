@@ -1180,6 +1180,14 @@ class TestFilterRows:
         assert list(df.index) == [0, 1]
         assert list(df["age"]) == [30, 40]
 
+    def test_filter_rows_invalid_comparison_raises_column_aware_type_error(self):
+        df = pd.DataFrame({"name": ["Alice", "Bob"]})
+
+        with pytest.raises(
+            TypeError, match="filter_rows: cannot compare column 'name'"
+        ):
+            ar.filter_rows(df, "name", ">", 1)
+
 
 class TestReplaceValues:
     def test_replace_values_null_key_replaces_existing_nulls_in_target_column(self):

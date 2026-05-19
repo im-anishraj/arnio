@@ -676,6 +676,18 @@ def test_filter_rows_direct_api():
     assert list(result_df["age"]) == [30, 40]
 
 
+def test_filter_rows_pipeline_invalid_comparison_keeps_column_context():
+    import pandas as pd
+    import pytest
+
+    import arnio as ar
+
+    frame = ar.from_pandas(pd.DataFrame({"name": ["Alice", "Bob"]}))
+
+    with pytest.raises(TypeError, match="filter_rows: cannot compare column 'name'"):
+        ar.pipeline(frame, [("filter_rows", {"column": "name", "op": ">", "value": 1})])
+
+
 def test_round_numeric_columns_pipeline():
     import pandas as pd
 

@@ -902,7 +902,14 @@ def filter_rows(frame, column, op, value):
     if column not in df.columns:
         raise ValueError(f"Unknown column: {column}")
 
-    mask = getattr(df[column], ops[op])(value)
+    try:
+        mask = getattr(df[column], ops[op])(value)
+    except TypeError as exc:
+        raise TypeError(
+            f"filter_rows: cannot compare column {column!r} with value "
+            f"{value!r} using operator {op!r}: {exc}"
+        ) from exc
+
     mask = mask.fillna(False).astype(bool)
     filtered = df[mask]
     if is_arframe:
