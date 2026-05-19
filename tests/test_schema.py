@@ -69,6 +69,26 @@ def test_schema_validation_passes_for_valid_frame(sample_csv):
     assert result.bad_rows == []
 
 
+def test_dtype_validation_does_not_report_safe_conversion_for_empty_strings():
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "age": pd.Series(
+                    [None, None],
+                    dtype="string",
+                )
+            }
+        )
+    )
+
+    schema = ar.Schema({"age": ar.Int64()})
+
+    result = ar.validate(frame, schema)
+
+    assert not result.passed
+    assert "safely convertible" not in result.issues[0].message
+
+
 def test_schema_validation_collects_row_level_issues(tmp_path):
     path = tmp_path / "bad.csv"
     path.write_text(

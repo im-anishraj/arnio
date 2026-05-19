@@ -547,16 +547,18 @@ def _validate_column(
 
                 if not is_identifier_like:
                     try:
-                        numeric = pd.to_numeric(
-                            series.dropna(),
-                            errors="raise",
-                        )
+                        non_null = series.dropna()
 
-                        if (numeric % 1 == 0).all():
-                            compatible_dtype = "int64"
-                        else:
-                            compatible_dtype = "float64"
+                        if not non_null.empty:
+                            numeric = pd.to_numeric(
+                                non_null,
+                                errors="raise",
+                            )
 
+                            if (numeric % 1 == 0).all():
+                                compatible_dtype = "int64"
+                            else:
+                                compatible_dtype = "float64"
                     except Exception:
                         compatible_dtype = None
 
