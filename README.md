@@ -1424,3 +1424,15 @@ arnio/
 <sub>Built with C++ and pybind11 · Licensed under MIT · Maintained by <a href="https://github.com/im-anishraj">@im-anishraj</a></sub>
 
 </div>
+
+## Quick Example
+
+```python
+import arnio
+
+# Load CSV
+df = arnio.read_csv("sample.csv")
+
+# Show preview
+print(df.head())
+```
