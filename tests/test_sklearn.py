@@ -84,3 +84,30 @@ def test_arniocleaner_rejects_transform_column_order_mismatch():
 
     with pytest.raises(ValueError, match="columns must match"):
         cleaner.transform(test)
+
+
+def test_arniocleaner_rejects_transform_with_renamed_column():
+    train = pd.DataFrame({"A": [" x "], "B": [1]})
+    test = pd.DataFrame({"A": [" x "], "C": [1]})
+    cleaner = ArnioCleaner(steps=[("strip_whitespace",)])
+    cleaner.fit(train)
+    with pytest.raises(ValueError, match="columns must match"):
+        cleaner.transform(test)
+
+
+def test_arniocleaner_rejects_transform_with_extra_columns():
+    train = pd.DataFrame({"A": [" x "], "B": [1]})
+    test = pd.DataFrame({"A": [" x "], "B": [1], "C": [2]})
+    cleaner = ArnioCleaner(steps=[("strip_whitespace",)])
+    cleaner.fit(train)
+    with pytest.raises(ValueError, match="columns must match"):
+        cleaner.transform(test)
+
+
+def test_arniocleaner_rejects_transform_with_missing_columns():
+    train = pd.DataFrame({"A": [" x "], "B": [1]})
+    test = pd.DataFrame({"A": [" x "]})
+    cleaner = ArnioCleaner(steps=[("strip_whitespace",)])
+    cleaner.fit(train)
+    with pytest.raises(ValueError, match="columns must match"):
+        cleaner.transform(test)
