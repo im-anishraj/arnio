@@ -87,8 +87,8 @@ def test_dtype_validation_does_not_report_safe_conversion_for_empty_strings():
 
     assert not result.passed
     assert "safely convertible" not in result.issues[0].message
-    
-    
+
+
 def test_schema_rejects_invalid_field_values_string(sample_csv):
     frame = ar.read_csv(sample_csv)
     with pytest.raises(TypeError, match="must be a Field instance"):
