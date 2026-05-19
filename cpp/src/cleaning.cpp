@@ -1,7 +1,9 @@
 #include "arnio/cleaning.h"
 
 #include <algorithm>
+#include <array>
 #include <cctype>
+#include <charconv>
 #include <cmath>
 #include <functional>
 #include <limits>
@@ -56,7 +58,28 @@ static std::string cell_to_string(const CellValue& cell) {
         return std::to_string(std::get<int64_t>(cell));
     }
     if (std::holds_alternative<double>(cell)) {
-        return std::to_string(std::get<double>(cell));
+        double v = std::get<double>(cell);
+        // Use to_chars with general format to get shortest round-trip repr,
+        // matching Python's str(float) / pandas astype('string') output.
+        std::array<char, 32> buf;
+        auto [ptr, ec] =
+            std::to_chars(buf.data(), buf.data() + buf.size(), v, std::chars_format::general);
+        if (ec == std::errc{}) {
+            std::string s(buf.data(), ptr);
+            // If no decimal point or 'e', append nothing — already compact.
+            // Otherwise strip trailing zeros after the decimal point.
+            auto dot_pos = s.find('.');
+            auto e_pos = s.find('e');
+            if (dot_pos != std::string::npos && e_pos == std::string::npos) {
+                s.erase(s.find_last_not_of('0') + 1);
+                if (s.back() == '.') {
+                    s += '0';  // keep at least one digit: e.g. "1." -> "1.0"
+                }
+            }
+            return s;
+        }
+        // Fallback (should never happen for finite values)
+        return std::to_string(v);
     }
     if (std::holds_alternative<bool>(cell)) {
         return std::get<bool>(cell) ? "true" : "false";

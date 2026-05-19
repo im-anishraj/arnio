@@ -1470,10 +1470,10 @@ class TestCombineColumnsNativeRegression:
         result = ar.to_pandas(
             ar.combine_columns(frame, subset=["a", "b"], separator="|")
         )
-        # Verify the exact formatting behavior of the C++ backend:
-        # Integers map to standard integer string representations.
-        # Doubles format using std::to_string, which defaults to 6 decimal places.
-        assert list(result["combined"]) == ["123|1.500000", "456|0.000000"]
+        # The native path now uses shortest-round-trip float formatting (like Python's str()),
+        # which matches the pandas astype('string') contract.
+        # 1.5 stays "1.5", 0.0 becomes "0.0", integers stay as integers.
+        assert list(result["combined"]) == ["123|1.5", "456|0.0"]
 
     def test_unsupported_input_type_raises(self):
         with pytest.raises(
