@@ -1490,7 +1490,7 @@ def test_report_to_markdown_escapes_newlines_in_column_cells():
     assert "| multi\nline |" not in md
 
 
-def test_report_to_markdown_escapes_pipe_characters_in_column_cells():
+def test_quality_gate_markdown_escapes_pipe_characters():
     report = ar.DataQualityReport(
         row_count=2,
         column_count=1,
