@@ -1059,6 +1059,27 @@ class TestTrimColumnNames:
         assert result.columns == ["name"]
 
 
+def test_from_pandas_multiindex_columns_are_stringified():
+    df = pd.DataFrame(
+        [[1, 2]],
+        columns=pd.MultiIndex.from_tuples(
+            [
+                ("a", "x"),
+                ("b", "y"),
+            ]
+        ),
+    )
+
+    frame = ar.from_pandas(df)
+
+    result = ar.to_pandas(frame)
+
+    assert list(result.columns) == ["('a', 'x')", "('b', 'y')"]
+    assert not isinstance(result.columns, pd.MultiIndex)
+
+    assert result.iloc[0].tolist() == [1, 2]
+
+
 class TestCastTypes:
     def test_cast_int_to_string(self, sample_csv):
         frame = ar.read_csv(sample_csv)
