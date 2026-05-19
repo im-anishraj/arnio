@@ -470,6 +470,12 @@ def rename_columns(
         _validate_column_sequence(list(mapping), argument_name="mapping keys"),
         operation="rename_columns",
     )
+    for value in mapping.values():
+        if not isinstance(value, str):
+            raise TypeError(
+                "rename_columns target names must be strings"
+        )
+            
     result = _rename_columns(frame._frame, mapping)
     return ArFrame(result)
 
