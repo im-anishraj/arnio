@@ -7,6 +7,7 @@ try:
     from ._arnio_cpp import (  # type: ignore[import-not-found]  # noqa: I001
         Column as _Column,  # noqa: F401
         CsvConfig as _CsvConfig,  # noqa: F401
+        CsvChunkReader as _CsvChunkReader,  # noqa: F401
         CsvReader as _CsvReader,  # noqa: F401
         CsvWriteConfig as _CsvWriteConfig,  # noqa: F401
         CsvWriter as _CsvWriter,  # noqa: F401

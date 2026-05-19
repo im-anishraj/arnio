@@ -76,6 +76,53 @@ class TestPipeline:
         )
         assert result.shape[0] == 3
 
+    def test_pipeline_dry_run_validates_builtin_step_arguments(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "name": ["Alice", None],
+                }
+            )
+        )
+
+        with pytest.raises(KeyError, match="missing"):
+            ar.pipeline(
+                frame,
+                [
+                    ("strip_whitespace", {"subset": ["missing"]}),
+                ],
+                dry_run=True,
+            )
+
+    def test_pipeline_dry_run_mapping_shorthand_does_not_mutate(self):
+        original = pd.DataFrame(
+            {
+                "transaction_id": ["t001", "t002"],
+            }
+        )
+        frame = ar.from_pandas(original)
+
+        result = ar.pipeline(
+            frame,
+            [
+                (
+                    "rename_columns",
+                    {
+                        "transaction_id": "TRANSACTION_ID",
+                    },
+                ),
+            ],
+            dry_run=True,
+        )
+
+        output = ar.to_pandas(result)
+
+        pd.testing.assert_frame_equal(
+            output,
+            original,
+            check_dtype=False,
+        )
+
     def test_pipeline_drop_constant_columns(self):
         import pandas as pd
 
@@ -255,6 +302,43 @@ class TestPipeline:
         frame = ar.read_csv(sample_csv)
         result = ar.pipeline(frame, [])
         assert result.shape == frame.shape
+
+    def test_pipeline_dry_run_returns_original_frame(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        result = ar.pipeline(
+            frame,
+            [
+                ("strip_whitespace",),
+            ],
+            dry_run=True,
+        )
+
+        assert result is frame
+
+    def test_pipeline_dry_run_validates_unknown_steps(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(ar.UnknownStepError):
+            ar.pipeline(
+                frame,
+                [
+                    ("missing_step",),
+                ],
+                dry_run=True,
+            )
+
+    def test_pipeline_dry_run_validates_invalid_kwargs(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(ValueError, match="Expected a dict"):
+            ar.pipeline(
+                frame,
+                [
+                    ("drop_nulls", "subset=name"),
+                ],
+                dry_run=True,
+            )
 
     def test_pipeline_return_metadata_disabled_by_default(self, sample_csv):
         frame = ar.read_csv(sample_csv)
