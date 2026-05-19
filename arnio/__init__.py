@@ -26,7 +26,7 @@ from .cleaning import (
 from .convert import from_pandas, to_pandas
 from .exceptions import ArnioError, CsvReadError, TypeCastError, UnknownStepError
 from .frame import ArFrame
-from .io import read_csv, scan_csv
+from .io import read_csv, scan_csv, write_csv
 from .pipeline import pipeline, register_step
 from .quality import (
     ColumnProfile,
@@ -55,6 +55,7 @@ __all__ = [
     # I/O
     "read_csv",
     "scan_csv",
+    "write_csv",
     # Cleaning
     "drop_nulls",
     "fill_nulls",

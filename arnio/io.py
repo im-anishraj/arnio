@@ -203,3 +203,55 @@ def scan_csv(
             return reader.scan_schema(native_path)
     except RuntimeError as e:
         raise CsvReadError(str(e)) from e
+
+
+def write_csv(
+    frame: ArFrame,
+    path: str | os.PathLike[str],
+    *,
+    delimiter: str = ",",
+    newline: str = "\n",
+    quote_char: str = '"',
+) -> None:
+    """Write an ArFrame to a CSV file.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Data frame to write.
+    path : str
+        Output path. Must end in .csv, .txt, or .tsv.
+    delimiter : str, default ","
+        Field delimiter character. Must be a single character.
+    newline : str, default "\\n"
+        Row terminator. Must be one of "\\n", "\\r\\n", or "\\r".
+    quote_char : str, default '"'
+        Character used to quote fields. Must be a single character.
+
+    Raises
+    ------
+    ValueError
+        If delimiter, newline, or quote_char are invalid.
+    """
+    if len(delimiter) != 1:
+        raise ValueError(f"delimiter must be a single character, got: {delimiter!r}")
+    if newline not in ("\n", "\r\n", "\r"):
+        raise ValueError(f"newline must be one of '\\n', '\\r\\n', '\\r', got: {newline!r}")
+    if len(quote_char) != 1:
+        raise ValueError(f"quote_char must be a single character, got: {quote_char!r}")
+
+    path = os.fspath(path)
+    path_lower = path.lower()
+    if not (
+        path_lower.endswith(".csv")
+        or path_lower.endswith(".txt")
+        or path_lower.endswith(".tsv")
+    ):
+        raise ValueError(
+            f"Unsupported file format: {path}. Only .csv, .txt, and .tsv are supported."
+        )
+
+    import pandas as pd
+    from .convert import to_pandas
+    df = to_pandas(frame)
+    df.to_csv(path, index=False, sep=delimiter, lineterminator=newline, quotechar=quote_char)

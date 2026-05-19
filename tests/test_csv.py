@@ -187,3 +187,101 @@ class TestScanCsv:
             match="CSV input contains NUL bytes and appears to be binary or corrupted",
         ):
             ar.scan_csv(file_path)
+
+
+class TestWriteCsv:
+    """Tests for write_csv delimiter, newline, and quote validation."""
+
+    def test_write_basic(self, sample_csv, tmp_path):
+        """write_csv creates a readable CSV file."""
+        import arnio as ar
+        frame = ar.read_csv(sample_csv)
+        out = str(tmp_path / "out.csv")
+        ar.write_csv(frame, out)
+        result = ar.read_csv(out)
+        assert result.shape == frame.shape
+        assert result.columns == frame.columns
+
+    def test_write_custom_delimiter(self, sample_csv, tmp_path):
+        """write_csv respects custom delimiter."""
+        import arnio as ar
+        frame = ar.read_csv(sample_csv)
+        out = str(tmp_path / "out.tsv")
+        ar.write_csv(frame, out, delimiter="\t")
+        content = open(out).read()
+        assert "\t" in content
+
+    def test_write_invalid_delimiter_empty(self, sample_csv, tmp_path):
+        """write_csv raises ValueError for empty delimiter."""
+        import arnio as ar
+        frame = ar.read_csv(sample_csv)
+        out = str(tmp_path / "out.csv")
+        with pytest.raises(ValueError, match="delimiter"):
+            ar.write_csv(frame, out, delimiter="")
+
+    def test_write_invalid_delimiter_multi(self, sample_csv, tmp_path):
+        """write_csv raises ValueError for multi-char delimiter."""
+        import arnio as ar
+        frame = ar.read_csv(sample_csv)
+        out = str(tmp_path / "out.csv")
+        with pytest.raises(ValueError, match="delimiter"):
+            ar.write_csv(frame, out, delimiter=",,")
+
+    def test_write_newline_crlf(self, sample_csv, tmp_path):
+        """write_csv respects CRLF newline."""
+        import arnio as ar
+        frame = ar.read_csv(sample_csv)
+        out = str(tmp_path / "out.csv")
+        ar.write_csv(frame, out, newline="\r\n")
+        content = open(out, "rb").read()
+        assert b"\r\n" in content
+
+    def test_write_newline_cr(self, sample_csv, tmp_path):
+        """write_csv respects CR newline."""
+        import arnio as ar
+        frame = ar.read_csv(sample_csv)
+        out = str(tmp_path / "out.csv")
+        ar.write_csv(frame, out, newline="\r")
+        content = open(out, "rb").read()
+        assert b"\r" in content
+
+    def test_write_invalid_newline(self, sample_csv, tmp_path):
+        """write_csv raises ValueError for invalid newline."""
+        import arnio as ar
+        frame = ar.read_csv(sample_csv)
+        out = str(tmp_path / "out.csv")
+        with pytest.raises(ValueError, match="newline"):
+            ar.write_csv(frame, out, newline="\\n")
+
+    def test_write_custom_quote_char(self, sample_csv, tmp_path):
+        """write_csv respects custom quote character."""
+        import arnio as ar
+        frame = ar.read_csv(sample_csv)
+        out = str(tmp_path / "out.csv")
+        ar.write_csv(frame, out, quote_char="'")
+        content = open(out).read()
+        assert content  # file written successfully
+
+    def test_write_invalid_quote_char_empty(self, sample_csv, tmp_path):
+        """write_csv raises ValueError for empty quote_char."""
+        import arnio as ar
+        frame = ar.read_csv(sample_csv)
+        out = str(tmp_path / "out.csv")
+        with pytest.raises(ValueError, match="quote_char"):
+            ar.write_csv(frame, out, quote_char="")
+
+    def test_write_invalid_quote_char_multi(self, sample_csv, tmp_path):
+        """write_csv raises ValueError for multi-char quote_char."""
+        import arnio as ar
+        frame = ar.read_csv(sample_csv)
+        out = str(tmp_path / "out.csv")
+        with pytest.raises(ValueError, match="quote_char"):
+            ar.write_csv(frame, out, quote_char='""')
+
+    def test_write_unsupported_extension(self, sample_csv, tmp_path):
+        """write_csv raises ValueError for unsupported file extension."""
+        import arnio as ar
+        frame = ar.read_csv(sample_csv)
+        out = str(tmp_path / "out.xlsx")
+        with pytest.raises(ValueError, match="Unsupported file format"):
+            ar.write_csv(frame, out)
