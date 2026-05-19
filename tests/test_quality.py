@@ -1486,3 +1486,4 @@ def test_report_to_markdown_escapes_newlines_in_column_cells():
     assert "free<br>text" in md
     assert "contains<br>newline" in md
     assert "| multi\nline |" not in md
+    
