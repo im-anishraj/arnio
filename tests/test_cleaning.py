@@ -191,6 +191,12 @@ class TestDropDuplicates:
         result = ar.drop_duplicates(frame, subset=["name"])
         assert result.shape[0] == 3
 
+    def test_drop_dupes_regression_keep_true(self, csv_with_duplicates):
+        frame = ar.read_csv(csv_with_duplicates)
+
+        with pytest.raises(ValueError, match="keep must be one of"):
+            ar.drop_duplicates(frame, keep=True)
+
 
 class TestDropColumns:
     def test_drop_columns_removes_requested_columns_and_preserves_order(self):

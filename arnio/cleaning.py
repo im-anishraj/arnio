@@ -327,6 +327,8 @@ def drop_duplicates(
             _validate_column_sequence(subset, argument_name="subset"),
             operation="drop_duplicates",
         )
+    if keep is True:
+        raise ValueError("keep must be one of 'first', 'last', 'none', or False")
     keep_arg = "none" if keep is False else keep
     if keep_arg not in {"first", "last", "none"}:
         raise ValueError("keep must be one of 'first', 'last', 'none', or False")
