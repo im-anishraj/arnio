@@ -1,20 +1,11 @@
 """Tests for data quality profiling and smart cleaning."""
 
-<<<<<<< HEAD
+import pandas as pd
+import pytest
+
 import arnio as ar
 
-import pandas as pd
-
-import pytest
 from arnio.quality import _duplicate_count
-
-=======
-import pandas as pd
-import pytest
-
-import arnio as ar
-
->>>>>>> 4cd7d1d (updated subset-duplicate counting)
 
 def test_profile_reports_quality_signals(tmp_path):
     path = tmp_path / "quality.csv"
@@ -130,185 +121,7 @@ def test_profile_sample_size_validation(tmp_path):
     except TypeError as exc:
         assert "sample_size must be an integer" in str(exc)
 
-<<<<<<< HEAD
-def test_duplicate_count_rejects_string_subset():
-    df = pd.DataFrame([{"id": 1, "name": "A"}])
 
-    with pytest.raises(TypeError, match="subset must be a list of column names"):
-        _duplicate_count(df, subset="id")
-
-
-def test_duplicate_count_rejects_non_list_subset():
-    df = pd.DataFrame([{"id": 1, "name": "A"}])
-
-    with pytest.raises(TypeError, match="subset must be a list of column names or None"):
-        _duplicate_count(df, subset=123)
-
-
-def test_duplicate_count_rejects_non_string_subset_items():
-    df = pd.DataFrame([{"id": 1, "name": "A"}])
-
-    with pytest.raises(TypeError, match="subset must contain only strings"):
-        _duplicate_count(df, subset=["id", 1])
-
-
-
-# ── top_values tests ──────────────────────────────────────────────────────────
-
-
-def test_top_values_correct_order_and_ratio(tmp_path):
-    path = tmp_path / "tv.csv"
-    path.write_text("city\nLondon\nLondon\nLondon\nParis\nParis\nTokyo\n")
-    report = ar.profile(ar.read_csv(path))
-    tv = report.columns["city"].top_values
-
-    assert tv is not None
-    assert tv[0][0] == "London"
-    assert tv[0][1] == 3
-    assert tv[0][2] == pytest.approx(0.5, rel=1e-3)
-    assert tv[1][0] == "Paris"
-    assert tv[1][1] == 2
-    assert tv[2][0] == "Tokyo"
-    assert tv[2][1] == 1
-
-
-def test_top_values_nulls_excluded(tmp_path):
-    path = tmp_path / "nulls.csv"
-    path.write_text("city\nLondon\nLondon\n\nParis\n")
-    report = ar.profile(ar.read_csv(path))
-    tv = report.columns["city"].top_values
-
-    assert tv is not None
-    total_counts = sum(c for _, c, _ in tv)
-    # null row excluded — only 3 non-null rows
-    assert total_counts == 3
-    # ratios sum to 1.0 over non-null total
-    assert sum(r for _, _, r in tv) == pytest.approx(1.0, rel=1e-3)
-
-
-def test_top_values_all_unique(tmp_path):
-    path = tmp_path / "unique.csv"
-    path.write_text("code\nA\nB\nC\nD\n")
-    report = ar.profile(ar.read_csv(path))
-    tv = report.columns["code"].top_values
-
-    assert tv is not None
-    assert len(tv) == 4
-    for _, count, ratio in tv:
-        assert count == 1
-        assert ratio == pytest.approx(0.25, rel=1e-3)
-
-
-def test_top_values_single_value(tmp_path):
-    path = tmp_path / "single.csv"
-    path.write_text("status\nactive\nactive\nactive\n")
-    report = ar.profile(ar.read_csv(path))
-    tv = report.columns["status"].top_values
-
-    assert tv is not None
-    assert len(tv) == 1
-    assert tv[0] == ("active", 3, pytest.approx(1.0, rel=1e-3))
-
-
-def test_top_values_not_computed_for_numeric(tmp_path):
-    path = tmp_path / "numeric.csv"
-    path.write_text("score\n1\n2\n3\n")
-    report = ar.profile(ar.read_csv(path))
-
-    assert report.columns["score"].top_values is None
-
-
-def test_top_values_empty_column(tmp_path):
-    path = tmp_path / "empty.csv"
-    path.write_text("name\n\n\n\n")
-    report = ar.profile(ar.read_csv(path))
-    tv = report.columns["name"].top_values
-
-    # arnio parses blank rows as empty strings, not nulls
-    # top_values should still return without crashing
-    assert tv is not None
-    assert isinstance(tv, list)
-
-
-def test_top_values_in_to_dict(tmp_path):
-    path = tmp_path / "dict.csv"
-    path.write_text("city\nLondon\nParis\nLondon\n")
-    report = ar.profile(ar.read_csv(path))
-    d = report.columns["city"].to_dict()
-
-    assert "top_values" in d
-    assert d["top_values"][0]["value"] == "London"
-    assert d["top_values"][0]["count"] == 2
-
-
-def test_identifier_numeric_cast_prevention():
-    df = pd.DataFrame(
-        {
-            "id": ["001", "002", "003"],
-            "customer_id": ["00123", "00456", "00789"],
-            "zip_code": ["01234", "02345", "03456"],
-            "price": ["10.50", "20.00", "30.75"],
-            "quantity": ["1", "2", "3"],
-        }
-    )
-    frame = ar.from_pandas(df)
-    report = ar.profile(frame)
-
-    assert report.columns["id"].semantic_type == "identifier"
-    assert report.columns["customer_id"].semantic_type == "identifier"
-    assert report.columns["zip_code"].semantic_type == "identifier"
-
-    suggestions_list = ar.suggest_cleaning(frame)
-    suggestions = {}
-    for step, kwargs in suggestions_list:
-        if step == "cast_types":
-            suggestions.update(kwargs)
-
-    assert "price" in suggestions
-    assert "quantity" in suggestions
-    assert "id" not in suggestions
-    assert "customer_id" not in suggestions
-    assert "zip_code" not in suggestions
-
-    cleaned = ar.auto_clean(frame, mode="strict")
-    result = ar.to_pandas(cleaned)
-    assert list(result["id"]) == ["001", "002", "003"]
-    assert list(result["customer_id"]) == ["00123", "00456", "00789"]
-    assert list(result["zip_code"]) == ["01234", "02345", "03456"]
-
-def test_duplicate_count_rejects_string_subset():
-    df = pd.DataFrame([{"id": 1, "name": "A"}])
-
-    with pytest.raises(TypeError, match="subset must be a list of column names"):
-        _duplicate_count(df, subset="id")
-
-
-def test_duplicate_count_rejects_non_list_subset():
-    df = pd.DataFrame([{"id": 1, "name": "A"}])
-
-    with pytest.raises(TypeError, match="subset must be a list of column names or None"):
-        _duplicate_count(df, subset=123)
-
-
-def test_duplicate_count_rejects_non_string_subset_items():
-    df = pd.DataFrame([{"id": 1, "name": "A"}])
-
-    with pytest.raises(TypeError, match="subset must contain only strings"):
-        _duplicate_count(df, subset=["id", 1])
-
-def test_duplicate_count_for_full_rows():
-    df = pd.DataFrame([
-        {"id": 1, "name": "A"},
-        {"id": 1, "name": "A"},
-        {"id": 2, "name": "B"},
-    ])
-
-    assert _duplicate_count(df) == 1
-
-
-=======
-
->>>>>>> 4cd7d1d (updated subset-duplicate counting)
 def test_duplicate_count_for_full_rows():
     df = pd.DataFrame(
         [
@@ -318,12 +131,8 @@ def test_duplicate_count_for_full_rows():
         ]
     )
 
-<<<<<<< HEAD
     assert _duplicate_count(df) == 1
 
-=======
-    assert ar.duplicate_count(df) == 1
->>>>>>> 4cd7d1d (updated subset-duplicate counting)
 
 
 def test_duplicate_count_for_single_column():
@@ -334,15 +143,9 @@ def test_duplicate_count_for_single_column():
             {"id": 2, "name": "C"},
         ]
     )
-<<<<<<< HEAD
-
 
     assert _duplicate_count(df, subset=["id"]) == 1
 
-=======
-
-    assert ar.duplicate_count(df, subset=["id"]) == 1
->>>>>>> 4cd7d1d (updated subset-duplicate counting)
 
 
 def test_duplicate_count_for_multiple_columns():
@@ -353,12 +156,6 @@ def test_duplicate_count_for_multiple_columns():
             {"id": 1, "email": "b@test.com"},
         ]
     )
-
-<<<<<<< HEAD
-=======
-    assert ar.duplicate_count(df, subset=["id", "email"]) == 1
->>>>>>> 4cd7d1d (updated subset-duplicate counting)
-
     assert _duplicate_count(df, subset=["id", "email"]) == 1
 
 def test_duplicate_count_no_duplicates():
@@ -380,7 +177,6 @@ def test_duplicate_count_invalid_column():
     )
 
     with pytest.raises(ValueError, match="Unknown columns"):
-<<<<<<< HEAD
         _duplicate_count(df, subset=["email"])
 
 
@@ -528,6 +324,3 @@ def test_identifier_numeric_cast_prevention():
     assert list(result["id"]) == ["001", "002", "003"]
     assert list(result["customer_id"]) == ["00123", "00456", "00789"]
     assert list(result["zip_code"]) == ["01234", "02345", "03456"]
-=======
-        ar.duplicate_count(df, subset=["email"])
->>>>>>> 4cd7d1d (updated subset-duplicate counting)
