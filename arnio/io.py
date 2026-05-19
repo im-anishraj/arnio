@@ -498,6 +498,15 @@ def read_jsonl(
             raise TypeError("nrows must be an integer")
         if nrows < 0:
             raise ValueError("nrows must be non-negative")
+        if nrows == 0:
+            # Short-circuit: caller explicitly requested zero rows.
+            # Do not open or inspect the file at all — even malformed content
+            # must not raise when nrows=0.
+            import pandas as pd
+
+            from .convert import from_pandas
+
+            return from_pandas(pd.DataFrame())
 
     records: list[dict] = []
     try:
@@ -528,13 +537,6 @@ def read_jsonl(
         ) from exc
 
     if not records:
-        if nrows == 0:
-            # nrows=0 is a valid request for zero rows — return empty frame
-            import pandas as pd
-
-            from .convert import from_pandas
-
-            return from_pandas(pd.DataFrame())
         raise JsonlReadError(f"JSON Lines file is empty (no data rows): {path!r}")
 
     import pandas as pd

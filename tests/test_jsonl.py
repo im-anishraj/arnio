@@ -134,6 +134,14 @@ class TestReadJsonlNrows:
         frame = ar.read_jsonl(path, nrows=0)
         assert frame.shape[0] == 0
 
+    def test_nrows_zero_does_not_inspect_file_contents(self, tmp_path):
+        # nrows=0 must short-circuit before opening the file, so malformed
+        # content must never raise even when the first line is invalid JSON.
+        path = tmp_path / "bad.jsonl"
+        path.write_text("not valid json at all\n{also bad}\n", encoding="utf-8")
+        frame = ar.read_jsonl(path, nrows=0)
+        assert frame.shape[0] == 0
+
     def test_nrows_larger_than_file_reads_all(self, tmp_path):
         path = _write(tmp_path, "data.jsonl", [{"x": i} for i in range(5)])
         frame = ar.read_jsonl(path, nrows=100)
