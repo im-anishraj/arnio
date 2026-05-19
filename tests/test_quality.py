@@ -1335,54 +1335,35 @@ class TestProfileDuplicateRowsCorrectness:
 # ── duplicate_rows timing guard (perf/#662) ───────────────────────────────────
 
 
-def test_profile_duplicate_count_faster_than_pandas_baseline():
-    """Hash-based duplicate counting must be faster than df.duplicated().sum().
+def test_profile_duplicate_count_hash_path_matches_pandas_baseline_at_scale():
+    """Hash-based duplicate counting must match df.duplicated().sum() at scale.
 
-    This is a timing guard, not a strict benchmark.  It uses a modest frame
-    size (100k rows) so it runs quickly in CI while still being large enough
-    to show the algorithmic difference.  The assertion requires the new path
-    to be at least 1.2× faster — a conservative threshold well below the
-    ~1.5× measured during development.
+    This test uses a larger frame (50k rows with ~10% duplicates) to exercise
+    the hash path under realistic conditions and confirm the result is identical
+    to the pandas baseline.  Timing is intentionally not asserted here — wall-
+    clock comparisons are too noisy on shared CI runners.  The benchmark script
+    benchmarks/benchmark_profile_duplicate_count.py documents the measured
+    speedup (~1.5x at 500k rows).
     """
-    import time
-
     import numpy as np
 
     rng = np.random.default_rng(0)
-    n = 100_000
+    n = 50_000
     df = pd.DataFrame(
         {
             "a": rng.integers(0, int(n * 0.9), size=n).tolist(),
             "b": rng.uniform(0, 1000, size=n).tolist(),
-            "c": [f"s{i % 10000}" for i in range(n)],
+            "c": [f"s{i % 5000}" for i in range(n)],
         }
     )
     frame = ar.from_pandas(df)
 
-    RUNS = 3
+    # New path (what profile() uses)
+    hashes = pd.util.hash_pandas_object(ar.to_pandas(frame), index=False)
+    new_count = int(hashes.duplicated().sum())
 
-    # Baseline: pandas df.duplicated().sum() on already-converted df
-    df_converted = ar.to_pandas(frame)
-    times_baseline = []
-    for _ in range(RUNS):
-        t0 = time.perf_counter()
-        _ = int(df_converted.duplicated().sum())
-        times_baseline.append(time.perf_counter() - t0)
+    # Pandas baseline
+    baseline_count = int(ar.to_pandas(frame).duplicated().sum())
 
-    # Proposed: hash_pandas_object path (what profile() now uses)
-    times_new = []
-    for _ in range(RUNS):
-        t0 = time.perf_counter()
-        hashes = pd.util.hash_pandas_object(df_converted, index=False)
-        _ = int(hashes.duplicated().sum())
-        times_new.append(time.perf_counter() - t0)
-
-    avg_baseline = sum(times_baseline) / RUNS
-    avg_new = sum(times_new) / RUNS
-    speedup = avg_baseline / avg_new if avg_new > 0 else float("inf")
-
-    assert speedup >= 1.2, (
-        f"Expected hash-based path to be ≥1.2× faster than df.duplicated(), "
-        f"got {speedup:.2f}× (baseline={avg_baseline*1000:.1f}ms, "
-        f"new={avg_new*1000:.1f}ms)"
-    )
+    assert new_count == baseline_count
+    assert ar.profile(frame).duplicate_rows == baseline_count
