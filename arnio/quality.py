@@ -250,7 +250,7 @@ class DataQualityReport:
             lines.append("")
 
             for step in self.suggestions:
-                kwargs_str = json.dumps(step[1], sort_keys=True)
+                kwargs_str = json.dumps(step[1], sort_keys=True, default=str)
                 conf_score = getattr(step, "confidence_score", None)
                 conf_reason = getattr(step, "confidence_reason", None)
                 if conf_score is not None and conf_reason is not None:

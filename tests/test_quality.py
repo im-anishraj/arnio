@@ -895,6 +895,29 @@ def test_report_to_markdown_suggestions_normal_existing_output(tmp_path):
         assert '"}' in md
 
 
+def test_report_to_markdown_suggestions_non_json_serializable():
+    from pathlib import Path
+
+    mixed_kwargs = {"output_path": Path("/tmp/data.csv"), "strategy": "mean"}
+
+    report = ar.DataQualityReport(
+        row_count=10,
+        column_count=2,
+        memory_usage=128,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+        suggestions=[("custom_clean", mixed_kwargs)],
+    )
+
+    md = report.to_markdown()
+
+    expected_substring = (
+        '`custom_clean`: `{"output_path": "/tmp/data.csv", "strategy": "mean"}`'
+    )
+    assert expected_substring in md
+
+
 # ── quality score tests ───────────────────────────────────────────────────────
 
 
