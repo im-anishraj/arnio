@@ -342,6 +342,10 @@ Key options:
 - `approx_top_values_min_ratio`: minimum unique ratio to trigger approximation.
 - `approx_top_values_sample_size`: sample size for top-value estimation.
 
+When `approx_top_values` is enabled, `top_values` counts/ratios are computed on
+the sample, and `top_values_is_approximate`, `top_values_sample_count`, and
+`top_values_sample_ratio` are included in each `ColumnProfile`.
+
 ### suggest_cleaning
 
 Examine a report or frame and get a list of recommended cleaning steps.

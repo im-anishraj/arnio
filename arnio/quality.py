@@ -77,7 +77,9 @@ class ColumnProfile:
     therefore counted as empty.
 
     ``top_values_is_approximate`` indicates whether ``top_values`` were
-    estimated from a deterministic sample.
+    estimated from a deterministic sample. When ``True``,
+    ``top_values_sample_count`` and ``top_values_sample_ratio`` describe the
+    sample used for the counts/ratios.
     """
 
     name: str
@@ -103,6 +105,8 @@ class ColumnProfile:
     warnings: list[str] = field(default_factory=list)
     top_values: list[tuple[Any, int, float]] | None = None
     top_values_is_approximate: bool = False
+    top_values_sample_count: int | None = None
+    top_values_sample_ratio: float | None = None
 
     def to_dict(self, *, redact_sample_values: bool = False) -> dict[str, Any]:
         """Return a JSON-friendly dictionary."""
@@ -148,6 +152,8 @@ class ColumnProfile:
                 else None
             ),
             "top_values_is_approximate": self.top_values_is_approximate,
+            "top_values_sample_count": self.top_values_sample_count,
+            "top_values_sample_ratio": self.top_values_sample_ratio,
         }
 
 
@@ -530,6 +536,8 @@ class DataQualityReport:
                     "warnings": column.warnings,
                     "top_values": column.top_values,
                     "top_values_is_approximate": column.top_values_is_approximate,
+                    "top_values_sample_count": column.top_values_sample_count,
+                    "top_values_sample_ratio": column.top_values_sample_ratio,
                 }
                 for column in self.columns.values()
             ]
@@ -1608,6 +1616,8 @@ def _profile_column(
     whitespace_count = 0
     top_values = None
     top_values_is_approximate = False
+    top_values_sample_count = None
+    top_values_sample_ratio = None
     q25 = q50 = q75 = q95 = None
     std = None
     if dtype == "string" or pd.api.types.is_string_dtype(series.dtype):
@@ -1620,11 +1630,13 @@ def _profile_column(
             and unique_count >= approx_top_values_min_unique
             and unique_ratio >= approx_top_values_min_ratio
         ):
-            top_values = _approx_top_values(
+            top_values, sample_count, sample_ratio = _approx_top_values(
                 non_null,
                 sample_size=approx_top_values_sample_size,
             )
             top_values_is_approximate = True
+            top_values_sample_count = sample_count
+            top_values_sample_ratio = sample_ratio
         else:
             top_values = _top_values(non_null)
 
@@ -1684,6 +1696,8 @@ def _profile_column(
         warnings=warnings,
         top_values=top_values,
         top_values_is_approximate=top_values_is_approximate,
+        top_values_sample_count=top_values_sample_count,
+        top_values_sample_ratio=top_values_sample_ratio,
     )
 
 
@@ -1829,20 +1843,20 @@ def _approx_top_values(
     *,
     n: int = 5,
     sample_size: int = 2000,
-) -> list[tuple[Any, int, float]]:
+) -> tuple[list[tuple[Any, int, float]], int, float]:
     """Return approximate top-N value frequencies for a non-null series.
 
     Sampling uses a fixed seed for deterministic output.
     """
     if len(series) == 0:
-        return []
+        return [], 0, 0.0
     sample_n = min(len(series), sample_size)
     sampled = series.sample(n=sample_n, random_state=_APPROX_TOP_VALUES_SEED)
     counts = sampled.value_counts(dropna=True)
     total = int(counts.sum())
     return [
         (val, int(cnt), _ratio(int(cnt), total)) for val, cnt in counts.head(n).items()
-    ]
+    ], sample_n, _ratio(sample_n, len(series))
 
 
 _EMAIL_PATTERN = r"[^@\s]+@[^@\s]+\.[^@\s]+"
