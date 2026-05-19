@@ -1,37 +1,13 @@
 """Tests for the pipeline function."""
 
-import importlib
 import os
 import tempfile
-import threading
-from concurrent.futures import ThreadPoolExecutor
 
-import pandas as pd
 import pytest
 
 import arnio as ar
 from arnio.exceptions import PipelineSerializationError
 from arnio.pipeline import load_pipeline, save_pipeline
-
-pipeline_module = importlib.import_module("arnio.pipeline")
-
-
-@pytest.fixture(autouse=True)
-def restore_python_step_registry():
-    """Restore custom pipeline steps after each test.
-
-    Tests may register temporary custom steps. This fixture prevents those
-    registrations from leaking into other tests while preserving any steps
-    that were already registered before the test started.
-    """
-    with pipeline_module._REGISTRY_LOCK:
-        original_registry = dict(pipeline_module._PYTHON_STEP_REGISTRY)
-
-    yield
-
-    with pipeline_module._REGISTRY_LOCK:
-        pipeline_module._PYTHON_STEP_REGISTRY.clear()
-        pipeline_module._PYTHON_STEP_REGISTRY.update(original_registry)
 
 
 class TestPipeline:
@@ -193,8 +169,6 @@ class TestPipeline:
         assert result is frame
 
     def test_pipeline_validate_columns_exist_rejects_missing_columns(self, sample_csv):
-        import pytest
-
         frame = ar.read_csv(sample_csv)
 
         with pytest.raises(KeyError, match="Missing columns"):
@@ -204,8 +178,6 @@ class TestPipeline:
             )
 
     def test_pipeline_subset_step_rejects_missing_columns(self, sample_csv):
-        import pytest
-
         frame = ar.read_csv(sample_csv)
 
         with pytest.raises(KeyError, match="Missing columns for strip_whitespace"):
@@ -301,7 +273,6 @@ def test_filter_rows_bool():
 
 def test_filter_rows_invalid_operator():
     import pandas as pd
-    import pytest
 
     import arnio as ar
 
@@ -373,7 +344,6 @@ def test_pipeline_normalize_unicode():
 
 def test_normalize_unicode_invalid_form():
     import pandas as pd
-    import pytest
 
     import arnio as ar
 
@@ -408,7 +378,6 @@ def test_normalize_unicode_subset():
 
 def test_normalize_unicode_unknown_subset():
     import pandas as pd
-    import pytest
 
     import arnio as ar
 
@@ -580,7 +549,6 @@ def test_replace_values_direct_api():
 
 def test_replace_values_missing_column_raises_clear_error():
     import pandas as pd
-    import pytest
 
     import arnio as ar
 
@@ -600,7 +568,6 @@ def test_replace_values_missing_column_raises_clear_error():
 
 def test_replace_values_invalid_mapping_type_raises_clear_error():
     import pandas as pd
-    import pytest
 
     import arnio as ar
 
@@ -612,7 +579,6 @@ def test_replace_values_invalid_mapping_type_raises_clear_error():
 
 def test_replace_values_empty_mapping_rejected():
     import pandas as pd
-    import pytest
 
     import arnio as ar
 

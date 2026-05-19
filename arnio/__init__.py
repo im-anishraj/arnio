@@ -36,9 +36,9 @@ from .convert import from_pandas, to_pandas
 from .exceptions import (
     ArnioError,
     CsvReadError,
+    PipelineSerializationError,
     TypeCastError,
     UnknownStepError,
-    PipelineSerializationError,
 )
 from .frame import ArFrame
 from .integrations import ArnioPandasAccessor
