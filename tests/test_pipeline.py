@@ -122,7 +122,6 @@ class TestPipeline:
             original,
             check_dtype=False,
         )
-        pytest
 
     def test_pipeline_drop_constant_columns(self):
         import pandas as pd
