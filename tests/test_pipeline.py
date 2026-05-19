@@ -1013,3 +1013,34 @@ def test_pipeline_drop_columns_matching_all_columns():
     frame = ar.from_pandas(df)
     with pytest.raises(ValueError, match="Pattern matches all columns"):
         ar.pipeline(frame, [("drop_columns_matching", {"pattern": ".*"})])
+
+
+def test_register_step_conflict_raises_value_error():
+    def dummy_step(df):
+        return df
+
+    with pytest.raises(ValueError, match="conflicts with built-in C\\+\\+ step"):
+        ar.register_step("drop_nulls", dummy_step)
+
+
+def test_register_step_success():
+    import pandas as pd
+
+    from arnio.pipeline import _PYTHON_STEP_REGISTRY
+
+    def custom_uppercase_step(df, column_name: str):
+        df[column_name] = df[column_name].str.upper()
+        return df
+
+    step_name = "test_custom_upper_mutation"
+    ar.register_step(step_name, custom_uppercase_step)
+
+    assert step_name in _PYTHON_STEP_REGISTRY
+
+    df = pd.DataFrame({"name": ["bar", "boo", "baz"]})
+    frame = ar.from_pandas(df)
+
+    result_frame = ar.pipeline(frame, [(step_name, {"column_name": "name"})])
+
+    processed_df = ar.to_pandas(result_frame)
+    assert processed_df["name"].tolist() == ["BAR", "BOO", "BAZ"]

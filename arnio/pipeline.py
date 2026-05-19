@@ -60,7 +60,11 @@ def register_step(name: str, fn: Callable):
     >>> ar.register_step("custom_clean", custom_clean)
     """
     with _REGISTRY_LOCK:
-
+        if name in _STEP_REGISTRY:
+            raise ValueError(
+                f"Cannot register '{name}': conflicts with built-in C++ step. "
+                f"Use a different name."
+            )
         _PYTHON_STEP_REGISTRY[name] = fn
 
 
