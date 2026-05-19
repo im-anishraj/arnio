@@ -43,6 +43,7 @@ from .quality import (
 from .schema import (
     URL,
     Bool,
+    CountryCode,
     Email,
     Field,
     Float64,
@@ -99,6 +100,7 @@ __all__ = [
     "Float64",
     "String",
     "Bool",
+    "CountryCode",
     "Email",
     "URL",
     # Exceptions
