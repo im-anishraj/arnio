@@ -883,7 +883,6 @@ print(result.passed)
 
 Accepted examples include:
 - `+1-555-123-4567`
-- `(555) 123-4567`
 - `+91 9876543210`
 - `5551234567`
 

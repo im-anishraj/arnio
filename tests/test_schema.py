@@ -713,6 +713,32 @@ def test_phone_number_mixed_object_column_behavior():
     assert "invalid" in invalid_values
 
 
+def test_phone_number_warning_severity_does_not_fail_validation():
+    import pandas as pd
+
+    schema = ar.Schema(
+        {
+            "phone": ar.PhoneNumber(severity="warning"),
+        }
+    )
+
+    df = pd.DataFrame(
+        {
+            "phone": ["invalid-phone"],
+        }
+    )
+
+    frame = ar.from_pandas(df)
+
+    result = ar.validate(frame, schema)
+
+    assert result.passed
+
+    assert result.issue_count == 1
+
+    assert result.issues[0].severity == "warning"
+
+
 def test_country_code_validation_accepts_iso_alpha_2_codes(tmp_path):
     path = tmp_path / "countries.csv"
     path.write_text("country\nIN\nUS\nGB\nFR\n")
