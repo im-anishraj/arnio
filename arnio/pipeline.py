@@ -93,6 +93,11 @@ def pipeline(
 
     result = frame
     for step in steps:
+        if not isinstance(step, tuple):
+            raise ValueError(
+                f"Invalid step format: {step}. Expected (name,) or (name, kwargs)"
+            )
+
         if len(step) == 1:
             name = step[0]
             kwargs = {}

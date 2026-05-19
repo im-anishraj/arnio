@@ -1,5 +1,7 @@
 """Tests for the pipeline function."""
 
+import pytest
+
 import arnio as ar
 
 
@@ -211,6 +213,24 @@ class TestPipeline:
             assert False, "Should have raised ValueError"
         except ValueError as e:
             assert "Expected a dict" in str(e)
+
+    def test_pipeline_rejects_empty_step(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(ValueError, match="Invalid step format"):
+            ar.pipeline(frame, [()])
+
+    def test_pipeline_rejects_string_step(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(ValueError, match="Invalid step format"):
+            ar.pipeline(frame, ["drop_nulls"])
+
+    def test_pipeline_rejects_non_tuple_step(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(ValueError, match="Invalid step format"):
+            ar.pipeline(frame, [123])
 
 
 def test_filter_rows_greater_than():
