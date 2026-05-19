@@ -786,7 +786,7 @@ def CountryCode(
 
 
 def CurrencyCode(*, nullable: bool = True, unique: bool = False) -> Field:
-    """Create an uppercase ISO alpha-3 currency-code schema field."""
+    """Create a schema field for 3-letter uppercase currency code formats."""
     return Field(
         dtype="string",
         nullable=nullable,
