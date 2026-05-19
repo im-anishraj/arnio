@@ -73,6 +73,7 @@ from .schema import (
     Field,
     Float64,
     Int64,
+    PhoneNumber,
     Regex,
     Schema,
     SchemaDiff,
@@ -152,6 +153,7 @@ __all__ = [
     "Bool",
     "Email",
     "URL",
+    "PhoneNumber",
     "DateTime",
     # Exceptions
     "UnknownStepError",

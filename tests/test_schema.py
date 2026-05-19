@@ -515,6 +515,58 @@ def test_email_strict_validation_accepts_valid_emails(tmp_path):
     assert result.passed
 
 
+def test_phone_number_validation_passes():
+    import pandas as pd
+
+    schema = ar.Schema(
+        {
+            "phone": ar.PhoneNumber(),
+        }
+    )
+
+    df = pd.DataFrame(
+        {
+            "phone": [
+                "+1-555-123-4567",
+                "+1 (555) 123-4567",
+                "+91 9876543210",
+                "5551234567",
+            ]
+        }
+    )
+
+    frame = ar.from_pandas(df)
+    result = ar.validate(frame, schema)
+
+    assert result.passed
+
+
+def test_phone_number_validation_fails():
+    import pandas as pd
+
+    schema = ar.Schema(
+        {
+            "phone": ar.PhoneNumber(),
+        }
+    )
+
+    df = pd.DataFrame(
+        {
+            "phone": [
+                "abc123",
+                "12",
+                "++123456",
+                "phone-number",
+            ]
+        }
+    )
+
+    frame = ar.from_pandas(df)
+    result = ar.validate(frame, schema)
+
+    assert not result.passed
+
+
 def test_country_code_validation_accepts_iso_alpha_2_codes(tmp_path):
     path = tmp_path / "countries.csv"
     path.write_text("country\nIN\nUS\nGB\nFR\n")

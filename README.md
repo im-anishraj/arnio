@@ -834,6 +834,7 @@ ar.register_validator("positive", lambda v: v > 0)
 schema = ar.Schema({
     "id": ar.Int64(nullable=False, unique=True),
     "email": ar.Email(nullable=False),
+    "phone": ar.PhoneNumber(nullable=False),
 
     "user_type": ar.String(nullable=False),
 
