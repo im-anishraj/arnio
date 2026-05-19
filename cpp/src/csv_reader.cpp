@@ -438,15 +438,6 @@ Frame CsvReader::read(const std::string& path) const {
 
     size_t num_cols = header.size();
 
-    if (config_.mode == "strict") {
-        for (size_t i = 0; i < raw_data.size(); ++i) {
-            if (raw_data[i].size() < num_cols) {
-                throw std::runtime_error("CSV row has inconsistent column count at row " +
-                                         std::to_string(i + 2));
-            }
-        }
-    }
-
     // Determine which columns to keep
     std::vector<size_t> col_indices;
     if (config_.usecols.has_value()) {
