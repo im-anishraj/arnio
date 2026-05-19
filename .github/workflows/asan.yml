@@ -2,6 +2,9 @@ name: ASAN Checks
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - fix/fill-null-exception
 
 jobs:
   asan:
