@@ -1,10 +1,9 @@
 #include "arnio/cleaning.h"
 
 #include <algorithm>
-#include <array>
 #include <cctype>
-#include <charconv>
 #include <cmath>
+#include <cstdio>
 #include <functional>
 #include <limits>
 #include <sstream>
@@ -59,27 +58,18 @@ static std::string cell_to_string(const CellValue& cell) {
     }
     if (std::holds_alternative<double>(cell)) {
         double v = std::get<double>(cell);
-        // Use to_chars with general format to get shortest round-trip repr,
-        // matching Python's str(float) / pandas astype('string') output.
-        std::array<char, 32> buf;
-        auto [ptr, ec] =
-            std::to_chars(buf.data(), buf.data() + buf.size(), v, std::chars_format::general);
-        if (ec == std::errc{}) {
-            std::string s(buf.data(), ptr);
-            // If no decimal point or 'e', append nothing — already compact.
-            // Otherwise strip trailing zeros after the decimal point.
-            auto dot_pos = s.find('.');
-            auto e_pos = s.find('e');
-            if (dot_pos != std::string::npos && e_pos == std::string::npos) {
-                s.erase(s.find_last_not_of('0') + 1);
-                if (s.back() == '.') {
-                    s += '0';  // keep at least one digit: e.g. "1." -> "1.0"
-                }
-            }
-            return s;
+        // Use %.17g for shortest portable representation matching Python str(float):
+        // %g strips trailing zeros; 17 significant digits ensures round-trip accuracy.
+        char buf[32];
+        std::snprintf(buf, sizeof(buf), "%.17g", v);
+        std::string s(buf);
+        // If there is no decimal point and no exponent, Python would show "X.0".
+        if (s.find('.') == std::string::npos && s.find('e') == std::string::npos &&
+            s.find('E') == std::string::npos && s.find('n') == std::string::npos &&
+            s.find('i') == std::string::npos) {
+            s += ".0";
         }
-        // Fallback (should never happen for finite values)
-        return std::to_string(v);
+        return s;
     }
     if (std::holds_alternative<bool>(cell)) {
         return std::get<bool>(cell) ? "true" : "false";
