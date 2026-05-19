@@ -323,3 +323,34 @@ class ArFrame:
 
         label = f"ArFrame preview (showing {actual_n} of {num_rows} rows):"
         return "\n".join([label, header, separator] + rows)
+
+    def replace_values(self, mapping: dict) -> ArFrame:
+        """
+        Natively replaces scalar values using the input mapping dictionary
+        without converting the internal frames into Pandas.
+        """
+        if not mapping:
+            return self
+
+        num_rows, num_cols = self.shape
+
+        # Arnio ke har ek column array par loop chalayenge
+        for i in range(num_cols):
+            # Direct C++ reference uthayenge bina copy kiye
+            col = self._frame.column_by_index(i)
+            
+            # Har row par jaakar mapping check karenge
+            for r in range(num_rows):
+                current_val = col.at(r)
+                
+                # Agar current value humari mapping dictionary mein exist karti hai
+                if current_val in mapping:
+                    new_val = mapping[current_val]
+                    
+                    # C++ object mutation logic call karenge (Thread-safe assignment)
+                    if hasattr(col, 'set_at'):
+                        col.set_at(r, new_val)
+                    elif hasattr(col, 'replace_at'):
+                        col.replace_at(r, new_val)
+                        
+        return self
