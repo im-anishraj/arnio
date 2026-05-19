@@ -138,10 +138,10 @@ def _series_to_python_values(series: pd.Series, col_name: object) -> list[object
                 "numeric duration before from_pandas()"
             )
 
-        if isinstance(raw, complex):
+        if isinstance(raw, (complex, np.complexfloating)):
             raise TypeError(
                 f"Column '{col_name}' contains unsupported scalar value "
-                f"of type 'complex' at value {raw!r}. "
+                f"of type '{type(raw).__name__}' at value {raw!r}. "
                 f'Fix: split df["{col_name}"] into real/imag columns or '
                 "convert it to strings before from_pandas()"
             )

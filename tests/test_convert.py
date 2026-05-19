@@ -291,6 +291,14 @@ class TestFromPandas:
 
         assert "Fix:" in str(exc_info.value)
 
+    def test_from_pandas_object_numpy_complex_raises_clear_error(self):
+        df = pd.DataFrame({"signal": pd.Series([np.complex64(1 + 2j)], dtype=object)})
+
+        with pytest.raises(TypeError, match="Column 'signal'") as exc_info:
+            ar.from_pandas(df)
+
+        assert "Fix:" in str(exc_info.value)
+
     def test_from_pandas_preserves_column_order(self):
         df = pd.DataFrame(
             {
