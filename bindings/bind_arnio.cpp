@@ -219,6 +219,7 @@ PYBIND11_MODULE(_arnio_cpp, m) {
         .def_readwrite("has_header", &CsvConfig::has_header)
         .def_readwrite("usecols", &CsvConfig::usecols)
         .def_readwrite("nrows", &CsvConfig::nrows)
+        .def_readwrite("skip_rows", &CsvConfig::skip_rows)
         .def_readwrite("encoding", &CsvConfig::encoding)
         .def_readwrite("trim_headers", &CsvConfig::trim_headers)
         .def_readwrite("thousands_separator", &CsvConfig::thousands_separator)
@@ -245,6 +246,27 @@ PYBIND11_MODULE(_arnio_cpp, m) {
             }
             return schema;
         });
+
+    py::class_<CsvChunkReader>(m, "CsvChunkReader")
+        .def(py::init<const CsvConfig&>(), py::arg("config") = CsvConfig{})
+        .def("open",
+             [](CsvChunkReader& reader, const std::string& path) {
+                 py::gil_scoped_release release;
+                 reader.open(path);
+             })
+        .def("next_chunk",
+             [](CsvChunkReader& reader, size_t chunksize) -> py::object {
+                 std::optional<Frame> result;
+                 {
+                     py::gil_scoped_release release;
+                     result = reader.next_chunk(chunksize);
+                 }
+                 if (!result.has_value()) {
+                     return py::none();
+                 }
+                 return py::cast(std::move(*result));
+             })
+        .def("close", &CsvChunkReader::close);
 
     // --- CsvWriter ---
     py::class_<CsvWriteConfig>(m, "CsvWriteConfig")

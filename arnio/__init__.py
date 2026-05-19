@@ -47,7 +47,7 @@ from .exceptions import (
 )
 from .frame import ArFrame
 from .integrations import ArnioPandasAccessor
-from .io import read_csv, read_jsonl, scan_csv, sniff_delimiter, write_csv
+from .io import read_csv, read_csv_chunked, read_jsonl, scan_csv, sniff_delimiter, write_csv
 from .pipeline import pipeline, register_step
 from .quality import (
     CleanExplanation,
@@ -93,6 +93,7 @@ __all__ = [
     "ArFrame",
     # I/O
     "read_csv",
+    "read_csv_chunked",
     "read_jsonl",
     "write_csv",
     "scan_csv",
