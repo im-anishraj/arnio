@@ -453,11 +453,54 @@ class TestFromPandas:
         frame = ar.from_pandas(df)
         assert frame.columns == ["x", "y"]
 
+    def test_unique_non_string_labels_convert_cleanly(self):
+        df = pd.DataFrame([[1, 2]], columns=[0, 1])
+        frame = ar.from_pandas(df)
+        assert frame.columns == ["0", "1"]
+
     def test_duplicate_non_string_labels_raises(self):
         df = pd.DataFrame([[1, 2, 3]], columns=[0, 1, 0])
         with pytest.raises(ValueError, match="duplicate column labels") as exc_info:
             ar.from_pandas(df)
         assert "0" in str(exc_info.value)
+
+    def test_stringified_integer_label_collision_raises(self):
+        df = pd.DataFrame([[1, 2]], columns=[1, "1"])
+        with pytest.raises(ValueError, match="string conversion") as exc_info:
+            ar.from_pandas(df)
+
+        message = str(exc_info.value)
+        assert "'1'" in message
+        assert "1" in message
+
+    def test_stringified_bool_label_collision_raises(self):
+        df = pd.DataFrame([[1, 2]], columns=[True, "True"])
+        with pytest.raises(ValueError, match="string conversion") as exc_info:
+            ar.from_pandas(df)
+
+        message = str(exc_info.value)
+        assert "True" in message
+
+    def test_from_pandas_all_null_float64_extension(self):
+        df = pd.DataFrame({"score": pd.Series([pd.NA, pd.NA, pd.NA], dtype="Float64")})
+        result = ar.to_pandas(ar.from_pandas(df))
+        assert len(result) == 3
+        assert result["score"].isna().all()
+        assert str(result["score"].dtype) == "string"
+
+    def test_from_pandas_all_null_boolean_extension(self):
+        df = pd.DataFrame({"active": pd.Series([pd.NA, pd.NA, pd.NA], dtype="boolean")})
+        result = ar.to_pandas(ar.from_pandas(df))
+        assert len(result) == 3
+        assert result["active"].isna().all()
+        assert str(result["active"].dtype) == "string"
+
+    def test_from_pandas_all_null_string_extension(self):
+        df = pd.DataFrame({"name": pd.Series([pd.NA, pd.NA, pd.NA], dtype="string")})
+        result = ar.to_pandas(ar.from_pandas(df))
+        assert len(result) == 3
+        assert result["name"].isna().all()
+        assert str(result["name"].dtype) == "string"
 
 
 class TestAttrsPreservation:

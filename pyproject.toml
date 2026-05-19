@@ -40,9 +40,11 @@ dependencies = [
 
 [project.urls]
 Homepage = "https://github.com/im-anishraj/arnio"
+Documentation = "https://github.com/im-anishraj/arnio#readme"
 Repository = "https://github.com/im-anishraj/arnio"
 Issues = "https://github.com/im-anishraj/arnio/issues"
 Changelog = "https://github.com/im-anishraj/arnio/blob/main/CHANGELOG.md"
+Discord = "https://discord.gg/xsEw7r78M"
 
 [project.optional-dependencies]
 dev = [

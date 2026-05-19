@@ -2,6 +2,8 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
+#include <cstring>
+
 #include "arnio/cleaning.h"
 #include "arnio/column.h"
 #include "arnio/csv_reader.h"
@@ -59,19 +61,21 @@ PYBIND11_MODULE(_arnio_cpp, m) {
                  return py::none();
              })
         .def("to_numpy_float",
-             [](py::object col_obj) {
-                 const Column& col = col_obj.cast<const Column&>();
+             [](const Column& col) {
                  if (col.dtype() != DType::FLOAT64)
                      throw std::runtime_error("Not a FLOAT64 column");
                  const auto& vec = std::get<std::vector<double>>(col.data());
-                 return py::array_t<double>({vec.size()}, {sizeof(double)}, vec.data(), col_obj);
+                 auto result = py::array_t<double>(vec.size());
+                 std::memcpy(result.mutable_data(), vec.data(), vec.size() * sizeof(double));
+                 return result;
              })
         .def("to_numpy_int",
-             [](py::object col_obj) {
-                 const Column& col = col_obj.cast<const Column&>();
+             [](const Column& col) {
                  if (col.dtype() != DType::INT64) throw std::runtime_error("Not an INT64 column");
                  const auto& vec = std::get<std::vector<int64_t>>(col.data());
-                 return py::array_t<int64_t>({vec.size()}, {sizeof(int64_t)}, vec.data(), col_obj);
+                 auto result = py::array_t<int64_t>(vec.size());
+                 std::memcpy(result.mutable_data(), vec.data(), vec.size() * sizeof(int64_t));
+                 return result;
              })
         .def("to_numpy_bool",
              [](py::object col_obj) {
@@ -219,10 +223,13 @@ PYBIND11_MODULE(_arnio_cpp, m) {
         .def_readwrite("has_header", &CsvConfig::has_header)
         .def_readwrite("usecols", &CsvConfig::usecols)
         .def_readwrite("nrows", &CsvConfig::nrows)
+        .def_readwrite("skip_rows", &CsvConfig::skip_rows)
         .def_readwrite("encoding", &CsvConfig::encoding)
         .def_readwrite("trim_headers", &CsvConfig::trim_headers)
         .def_readwrite("thousands_separator", &CsvConfig::thousands_separator)
-        .def_readwrite("sample_size", &CsvConfig::sample_size);
+        .def_readwrite("sample_size", &CsvConfig::sample_size)
+        .def_readwrite("mode", &CsvConfig::mode)
+        .def_readwrite("null_values", &CsvConfig::null_values);
 
     py::class_<CsvReader>(m, "CsvReader")
         .def(py::init<const CsvConfig&>(), py::arg("config") = CsvConfig{})
@@ -243,6 +250,27 @@ PYBIND11_MODULE(_arnio_cpp, m) {
             }
             return schema;
         });
+
+    py::class_<CsvChunkReader>(m, "CsvChunkReader")
+        .def(py::init<const CsvConfig&>(), py::arg("config") = CsvConfig{})
+        .def("open",
+             [](CsvChunkReader& reader, const std::string& path) {
+                 py::gil_scoped_release release;
+                 reader.open(path);
+             })
+        .def("next_chunk",
+             [](CsvChunkReader& reader, size_t chunksize) -> py::object {
+                 std::optional<Frame> result;
+                 {
+                     py::gil_scoped_release release;
+                     result = reader.next_chunk(chunksize);
+                 }
+                 if (!result.has_value()) {
+                     return py::none();
+                 }
+                 return py::cast(std::move(*result));
+             })
+        .def("close", &CsvChunkReader::close);
 
     // --- CsvWriter ---
     py::class_<CsvWriteConfig>(m, "CsvWriteConfig")
@@ -312,5 +340,16 @@ PYBIND11_MODULE(_arnio_cpp, m) {
 
     m.def("rename_columns", &rename_columns, py::arg("frame"), py::arg("mapping"));
 
-    m.def("cast_types", &cast_types, py::arg("frame"), py::arg("mapping"));
+    m.def("cast_types", &cast_types, py::arg("frame"), py::arg("mapping"),
+          py::arg("coerce_invalid") = false);
+
+    m.def(
+        "clip_numeric",
+        [](const Frame& frame, std::optional<double> lower, std::optional<double> upper,
+           const std::optional<std::vector<std::string>>& subset) {
+            py::gil_scoped_release release;
+            return clip_numeric(frame, lower, upper, subset);
+        },
+        py::arg("frame"), py::arg("lower") = std::nullopt, py::arg("upper") = std::nullopt,
+        py::arg("subset") = std::nullopt);
 }

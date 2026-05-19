@@ -2,7 +2,9 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <functional>
+#include <limits>
 #include <sstream>
 #include <stdexcept>
 #include <unordered_set>
@@ -120,6 +122,12 @@ static CellValue coerce_value(const CellValue& value, DType target) {
     }
 
     throw std::invalid_argument("Fill value is incompatible with target column type");
+}
+
+static std::invalid_argument cast_error(const std::string& column, const std::string& value,
+                                        const std::string& target, size_t row) {
+    return std::invalid_argument("Cannot cast column '" + column + "' value '" + value +
+                                 "' at row " + std::to_string(row + 1) + " to " + target);
 }
 
 // Helper: build a new frame from selected row indices
@@ -260,22 +268,50 @@ Frame normalize_case(const Frame& frame, const std::optional<std::vector<std::st
                      const std::string& case_type) {
     auto target_indices_set = resolve_subset(frame, subset);
     std::unordered_set<size_t> targets(target_indices_set.begin(), target_indices_set.end());
+    auto ascii_lower = [](char c) -> char {
+        const auto uc = static_cast<unsigned char>(c);
+        if (uc >= 'A' && uc <= 'Z') {
+            return static_cast<char>(uc + ('a' - 'A'));
+        }
+        return c;
+    };
+    auto ascii_upper = [](char c) -> char {
+        const auto uc = static_cast<unsigned char>(c);
+        if (uc >= 'a' && uc <= 'z') {
+            return static_cast<char>(uc - ('a' - 'A'));
+        }
+        return c;
+    };
+    auto is_ascii_alpha = [](char c) -> bool {
+        const auto uc = static_cast<unsigned char>(c);
+        return (uc >= 'A' && uc <= 'Z') || (uc >= 'a' && uc <= 'z');
+    };
 
     std::function<std::string(const std::string&)> transform_fn;
     if (case_type == "lower") {
         transform_fn = [](const std::string& s) {
             std::string result = s;
-            std::transform(result.begin(), result.end(), result.begin(), ::tolower);
+            for (auto& c : result) {
+                const auto uc = static_cast<unsigned char>(c);
+                if (uc >= 'A' && uc <= 'Z') {
+                    c = static_cast<char>(uc + ('a' - 'A'));
+                }
+            }
             return result;
         };
     } else if (case_type == "upper") {
         transform_fn = [](const std::string& s) {
             std::string result = s;
-            std::transform(result.begin(), result.end(), result.begin(), ::toupper);
+            for (auto& c : result) {
+                const auto uc = static_cast<unsigned char>(c);
+                if (uc >= 'a' && uc <= 'z') {
+                    c = static_cast<char>(uc - ('a' - 'A'));
+                }
+            }
             return result;
         };
     } else if (case_type == "title") {
-        transform_fn = [](const std::string& s) {
+        transform_fn = [ascii_lower, ascii_upper, is_ascii_alpha](const std::string& s) {
             std::string result = s;
             bool next_upper = true;
             auto is_word_boundary = [](char c) -> bool {
@@ -285,11 +321,14 @@ Frame normalize_case(const Frame& frame, const std::optional<std::vector<std::st
             for (auto& c : result) {
                 if (is_word_boundary(c)) {
                     next_upper = true;
-                } else if (next_upper) {
-                    c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+                } else if (next_upper && is_ascii_alpha(c)) {
+                    c = ascii_upper(c);
                     next_upper = false;
                 } else {
-                    c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                    c = ascii_lower(c);
+                    if (is_ascii_alpha(c) || static_cast<unsigned char>(c) >= 0x80) {
+                        next_upper = false;
+                    }
                 }
             }
             return result;
@@ -334,7 +373,8 @@ Frame rename_columns(const Frame& frame,
     return Frame(std::move(new_cols));
 }
 
-Frame cast_types(const Frame& frame, const std::unordered_map<std::string, std::string>& mapping) {
+Frame cast_types(const Frame& frame, const std::unordered_map<std::string, std::string>& mapping,
+                 bool coerce_invalid) {
     std::vector<Column> new_cols;
     new_cols.reserve(frame.num_cols());
     for (size_t ci = 0; ci < frame.num_cols(); ++ci) {
@@ -377,22 +417,48 @@ Frame cast_types(const Frame& frame, const std::unordered_map<std::string, std::
                     break;
                 case DType::INT64:
                     try {
-                        col.push_back(static_cast<int64_t>(std::stoll(str_val)));
+                        size_t pos = 0;
+                        int64_t parsed = std::stoll(str_val, &pos);
+                        if (pos != str_val.size()) {
+                            throw cast_error(src.name(), str_val, it->second, r);
+                        }
+                        col.push_back(parsed);
                     } catch (...) {
-                        col.push_null();
+                        if (coerce_invalid) {
+                            col.push_null();
+                        } else {
+                            throw cast_error(src.name(), str_val, it->second, r);
+                        }
                     }
                     break;
                 case DType::FLOAT64:
                     try {
-                        col.push_back(std::stod(str_val));
+                        size_t pos = 0;
+                        double parsed = std::stod(str_val, &pos);
+                        if (pos != str_val.size() || !std::isfinite(parsed)) {
+                            throw cast_error(src.name(), str_val, it->second, r);
+                        }
+                        col.push_back(parsed);
                     } catch (...) {
-                        col.push_null();
+                        if (coerce_invalid) {
+                            col.push_null();
+                        } else {
+                            throw cast_error(src.name(), str_val, it->second, r);
+                        }
                     }
                     break;
                 case DType::BOOL: {
                     std::string lower = str_val;
                     std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
-                    col.push_back(lower == "true" || lower == "1");
+                    if (lower == "true" || lower == "1") {
+                        col.push_back(true);
+                    } else if (lower == "false" || lower == "0") {
+                        col.push_back(false);
+                    } else if (coerce_invalid) {
+                        col.push_null();
+                    } else {
+                        throw cast_error(src.name(), str_val, it->second, r);
+                    }
                     break;
                 }
                 default:
@@ -402,6 +468,73 @@ Frame cast_types(const Frame& frame, const std::unordered_map<std::string, std::
         }
         new_cols.push_back(std::move(col));
     }
+    return Frame(std::move(new_cols));
+}
+
+Frame clip_numeric(const Frame& frame, std::optional<double> lower, std::optional<double> upper,
+                   const std::optional<std::vector<std::string>>& subset) {
+    // Build the set of column indices to clip.
+    // When subset is given, only those columns are candidates; otherwise all.
+    std::unordered_set<size_t> target_set;
+    if (subset.has_value()) {
+        for (const auto& name : subset.value()) {
+            target_set.insert(frame.column_index(name));
+        }
+    } else {
+        for (size_t i = 0; i < frame.num_cols(); ++i) {
+            target_set.insert(i);
+        }
+    }
+
+    std::vector<Column> new_cols;
+    new_cols.reserve(frame.num_cols());
+
+    for (size_t ci = 0; ci < frame.num_cols(); ++ci) {
+        const auto& src = frame.column(ci);
+
+        // Only clip INT64 and FLOAT64; clone everything else unchanged.
+        if (!target_set.count(ci) ||
+            (src.dtype() != DType::INT64 && src.dtype() != DType::FLOAT64)) {
+            new_cols.push_back(src.clone());
+            continue;
+        }
+
+        if (src.dtype() == DType::INT64) {
+            const auto& vec = std::get<std::vector<int64_t>>(src.data());
+            Column col(src.name(), DType::INT64);
+            const int64_t lo = lower.has_value() ? static_cast<int64_t>(lower.value())
+                                                 : std::numeric_limits<int64_t>::min();
+            const int64_t hi = upper.has_value() ? static_cast<int64_t>(upper.value())
+                                                 : std::numeric_limits<int64_t>::max();
+            for (size_t r = 0; r < src.size(); ++r) {
+                if (src.is_null(r)) {
+                    col.push_null();
+                } else {
+                    int64_t v = vec[r];
+                    if (v < lo) v = lo;
+                    if (v > hi) v = hi;
+                    col.push_back(v);
+                }
+            }
+            new_cols.push_back(std::move(col));
+        } else {
+            // FLOAT64
+            const auto& vec = std::get<std::vector<double>>(src.data());
+            Column col(src.name(), DType::FLOAT64);
+            for (size_t r = 0; r < src.size(); ++r) {
+                if (src.is_null(r)) {
+                    col.push_null();
+                } else {
+                    double v = vec[r];
+                    if (lower.has_value() && v < lower.value()) v = lower.value();
+                    if (upper.has_value() && v > upper.value()) v = upper.value();
+                    col.push_back(v);
+                }
+            }
+            new_cols.push_back(std::move(col));
+        }
+    }
+
     return Frame(std::move(new_cols));
 }
 
