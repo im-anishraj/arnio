@@ -90,6 +90,23 @@ class Schema:
                     f"Schema value for column {name!r} must be a Field instance such as ar.Int64(), got {type(field_def).__name__}"
                 )
 
+        if self.unique is not None:
+            if isinstance(self.unique, str):
+                raise TypeError(
+                    "Schema 'unique' must be a list or tuple of strings (e.g., ['column_name']), "
+                    f"not a bare string: {self.unique!r}."
+                )
+            if not isinstance(self.unique, (list, tuple)):
+                raise TypeError(
+                    "Schema 'unique' must be a list or tuple of strings (e.g., ['column_name']), "
+                    f"got {type(self.unique).__name__}."
+                )
+            for item in self.unique:
+                if not isinstance(item, str):
+                    raise TypeError(
+                        f"Schema 'unique' members must be strings, got {type(item).__name__} for element {item!r}."
+                    )
+
     def validate(self, frame: ArFrame) -> ValidationResult:
         """Validate a frame against this schema."""
         return validate(frame, self)

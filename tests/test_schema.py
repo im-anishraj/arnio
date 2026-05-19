@@ -708,6 +708,70 @@ def test_schema_composite_unique_empty_columns(tmp_path):
     assert "cannot be empty" in issues[0].message
 
 
+def test_schema_unique_rejects_string():
+    with pytest.raises(TypeError) as exc:
+        ar.Schema(
+            {
+                "user_id": ar.Int64(),
+            },
+            unique="user_id",
+        )
+    assert "bare string" in str(exc.value)
+
+
+def test_schema_unique_rejects_invalid_type():
+    with pytest.raises(TypeError) as exc:
+        ar.Schema(
+            {
+                "user_id": ar.Int64(),
+            },
+            unique=123,  # type: ignore[arg-type]
+        )
+    assert "must be a list or tuple" in str(exc.value)
+
+
+def test_schema_unique_rejects_non_string_members():
+    with pytest.raises(TypeError) as exc:
+        ar.Schema(
+            {
+                "user_id": ar.Int64(),
+            },
+            unique=["col1", None],  # type: ignore[list-item]
+        )
+    assert "members must be strings" in str(exc.value)
+
+    with pytest.raises(TypeError) as exc:
+        ar.Schema(
+            {
+                "user_id": ar.Int64(),
+            },
+            unique=["col1", 123],  # type: ignore[list-item]
+        )
+    assert "members must be strings" in str(exc.value)
+
+
+def test_schema_unique_accepts_valid_types():
+    # Verify list of strings initializes successfully
+    schema_list = ar.Schema(
+        {
+            "user_id": ar.Int64(),
+            "course_id": ar.Int64(),
+        },
+        unique=["user_id", "course_id"],
+    )
+    assert schema_list.unique == ["user_id", "course_id"]
+
+    # Verify tuple of strings initializes successfully
+    schema_tuple = ar.Schema(
+        {
+            "user_id": ar.Int64(),
+            "course_id": ar.Int64(),
+        },
+        unique=("user_id", "course_id"),
+    )
+    assert schema_tuple.unique == ("user_id", "course_id")
+
+
 def test_email_default_keeps_backward_compatibility(sample_csv):
     frame = ar.read_csv(sample_csv)
 
