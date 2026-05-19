@@ -1459,3 +1459,62 @@ def test_schema_diff_summary_and_markdown_escape_cells():
     assert "notes\\|raw" in markdown
     assert "left\\|right" in markdown
     assert "left<br>right" in markdown
+
+
+def test_datetime_timezone_aware_within_bounds_passes(tmp_path):
+    path = tmp_path / "tz_datetimes.csv"
+    path.write_text("ts\n2026-06-01T12:00:00+05:30\n")
+    frame = ar.read_csv(path)
+    schema = ar.Schema(
+        {
+            "ts": ar.DateTime(
+                nullable=False,
+                format="%Y-%m-%dT%H:%M:%S%z",
+                min="2026-01-01T00:00:00+05:30",
+                max="2026-12-31T23:59:59+05:30",
+            )
+        }
+    )
+    result = schema.validate(frame)
+    assert result.passed
+    assert result.issue_count == 0
+
+
+def test_datetime_timezone_aware_below_min_fails(tmp_path):
+    path = tmp_path / "tz_datetimes.csv"
+    path.write_text("ts\n2025-12-31T23:59:59+05:30\n")
+    frame = ar.read_csv(path)
+    schema = ar.Schema(
+        {
+            "ts": ar.DateTime(
+                nullable=False,
+                format="%Y-%m-%dT%H:%M:%S%z",
+                min="2026-01-01T00:00:00+05:30",
+                max="2026-12-31T23:59:59+05:30",
+            )
+        }
+    )
+    result = schema.validate(frame)
+    assert not result.passed
+    assert any(i.rule == "min" for i in result.issues)
+    assert result.issues[0].row_index == 1
+
+
+def test_datetime_timezone_aware_above_max_fails(tmp_path):
+    path = tmp_path / "tz_datetimes.csv"
+    path.write_text("ts\n2027-01-01T00:00:00+05:30\n")
+    frame = ar.read_csv(path)
+    schema = ar.Schema(
+        {
+            "ts": ar.DateTime(
+                nullable=False,
+                format="%Y-%m-%dT%H:%M:%S%z",
+                min="2026-01-01T00:00:00+05:30",
+                max="2026-12-31T23:59:59+05:30",
+            )
+        }
+    )
+    result = schema.validate(frame)
+    assert not result.passed
+    assert any(i.rule == "max" for i in result.issues)
+    assert result.issues[0].row_index == 1
