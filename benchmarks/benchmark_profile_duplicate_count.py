@@ -1,15 +1,19 @@
 """
 Benchmark: hash_pandas_object vs df.duplicated() for duplicate counting
 ========================================================================
-Measures the wall-clock time for counting duplicate rows inside profile()
-using two approaches:
+Compares two approaches for counting duplicate rows inside profile():
 
-  * **current (baseline)** — df.duplicated().sum()
-  * **proposed (new)**     — pd.util.hash_pandas_object + Series.duplicated()
+  * **baseline** — df.duplicated().sum()  (current default in profile())
+  * **candidate** — pd.util.hash_pandas_object + Series.duplicated()
 
-This script documents the performance win from perf/#662.  It is NOT run
-as part of the test suite because wall-clock comparisons are too noisy on
-shared CI runners.
+Context (perf/#662):
+  The candidate path was proposed as a faster alternative.  Local benchmarks
+  showed ~1.5x speedup at 500k rows, but CI results were inconsistent
+  (0.72x–1.58x across Python versions and OS configurations).  The hot-path
+  change was therefore reverted; profile() continues to use df.duplicated().
+
+  Run this script manually to measure both approaches on your hardware before
+  re-enabling the candidate path.
 
 Run::
 
@@ -49,12 +53,12 @@ def _make_frame(n_rows: int) -> ar.ArFrame:
 def run(n_rows: int = 500_000, runs: int = 5) -> None:
     print(f"Building frame: {n_rows:,} rows × 3 columns (~10% duplicates) …")
     frame = _make_frame(n_rows)
-    # Pre-convert once — profile() already has df in hand at this point
+    # Pre-convert once — profile() already has df in hand at this point.
     df = to_pandas(frame)
     print(f"Frame memory: {frame.memory_usage() / 1024 / 1024:.1f} MB\n")
 
     times_baseline: list[float] = []
-    times_new: list[float] = []
+    times_candidate: list[float] = []
 
     for i in range(runs):
         t0 = time.perf_counter()
@@ -64,38 +68,40 @@ def run(n_rows: int = 500_000, runs: int = 5) -> None:
         t0 = time.perf_counter()
         hashes = pd.util.hash_pandas_object(df, index=False)
         _ = int(hashes.duplicated().sum())
-        times_new.append(time.perf_counter() - t0)
+        times_candidate.append(time.perf_counter() - t0)
 
         print(
             f"  run {i + 1}/{runs}  "
             f"baseline={times_baseline[-1] * 1000:.1f} ms  "
-            f"new={times_new[-1] * 1000:.1f} ms"
+            f"candidate={times_candidate[-1] * 1000:.1f} ms"
         )
 
     avg_b = sum(times_baseline) / runs
-    avg_n = sum(times_new) / runs
-    speedup = avg_b / avg_n if avg_n > 0 else float("inf")
+    avg_c = sum(times_candidate) / runs
+    speedup = avg_b / avg_c if avg_c > 0 else float("inf")
 
     print()
-    print(f"{'':=<60}")
+    print(f"{'':=<65}")
     print(f"  Rows:  {n_rows:>12,}")
     print(f"  Runs:  {runs:>12}")
-    print(f"{'':=<60}")
-    print(f"  {'Approach':<30} {'Avg time':>12}")
-    print(f"  {'-'*30} {'-'*12}")
-    print(f"  {'df.duplicated().sum()':<30} {avg_b * 1000:>10.1f} ms")
-    print(f"  {'hash_pandas_object path':<30} {avg_n * 1000:>10.1f} ms")
-    print(f"{'':=<60}")
-    print(f"  Speedup: {speedup:.2f}x")
-    print(f"{'':=<60}")
+    print(f"{'':=<65}")
+    print(f"  {'Approach':<35} {'Avg time':>12}")
+    print(f"  {'-'*35} {'-'*12}")
+    print(f"  {'df.duplicated().sum()  [current]':<35} {avg_b * 1000:>10.1f} ms")
+    print(f"  {'hash_pandas_object     [candidate]':<35} {avg_c * 1000:>10.1f} ms")
+    print(f"{'':=<65}")
+    print(
+        f"  Speedup: {speedup:.2f}x  {'✓ candidate faster' if speedup > 1 else '✗ baseline faster'}"
+    )
+    print(f"{'':=<65}")
 
     # Verify correctness
     baseline_count = int(df.duplicated().sum())
-    new_count = int(pd.util.hash_pandas_object(df, index=False).duplicated().sum())
-    assert (
-        baseline_count == new_count
-    ), f"Mismatch: baseline={baseline_count}, new={new_count}"
-    print(f"\n  duplicate_rows = {new_count}  ✓ matches pandas baseline")
+    candidate_count = int(
+        pd.util.hash_pandas_object(df, index=False).duplicated().sum()
+    )
+    match = "✓" if baseline_count == candidate_count else "✗ MISMATCH"
+    print(f"\n  duplicate_rows = {baseline_count}  {match}")
 
 
 if __name__ == "__main__":

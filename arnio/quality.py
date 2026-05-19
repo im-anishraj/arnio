@@ -738,22 +738,7 @@ def profile(
 
     df = to_pandas(frame)
     row_count, column_count = frame.shape
-    # Use pd.util.hash_pandas_object to compute a 64-bit MurmurHash3 per row,
-    # then call duplicated() on the resulting 1-D integer Series.  This is
-    # ~1.5× faster than df.duplicated() on large frames because the multi-column
-    # object hashing is done in a single vectorized C pass rather than row-by-row.
-    #
-    # Collision risk: MurmurHash3 produces 64-bit digests, giving a collision
-    # probability of ~n²/2⁶⁴ per frame.  At 10 million rows that is ≈5×10⁻⁹ —
-    # negligible for a profiling metric where an occasional off-by-one in
-    # duplicate_rows has no downstream data-correctness impact.  The semantics
-    # (NaN == NaN treated as duplicate, same as pandas default) are identical to
-    # df.duplicated().sum() as verified by the test suite.
-    if row_count:
-        _row_hashes = pd.util.hash_pandas_object(df, index=False)
-        duplicate_rows = int(_row_hashes.duplicated().sum())
-    else:
-        duplicate_rows = 0
+    duplicate_rows = int(df.duplicated().sum()) if row_count else 0
     duplicate_ratio = _ratio(duplicate_rows, row_count)
 
     columns = {

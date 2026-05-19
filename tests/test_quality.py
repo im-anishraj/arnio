@@ -1336,14 +1336,17 @@ class TestProfileDuplicateRowsCorrectness:
 
 
 def test_profile_duplicate_count_hash_path_matches_pandas_baseline_at_scale():
-    """Hash-based duplicate counting must match df.duplicated().sum() at scale.
+    """Verify hash_pandas_object produces the same duplicate count as df.duplicated().
 
-    This test uses a larger frame (50k rows with ~10% duplicates) to exercise
-    the hash path under realistic conditions and confirm the result is identical
-    to the pandas baseline.  Timing is intentionally not asserted here — wall-
-    clock comparisons are too noisy on shared CI runners.  The benchmark script
-    benchmarks/benchmark_profile_duplicate_count.py documents the measured
-    speedup (~1.5x at 500k rows).
+    This test documents the candidate faster implementation explored in #662.
+    The hash path is NOT currently used as the default in profile() — benchmark
+    results were inconsistent across CI configurations (0.72x–1.58x depending
+    on Python version and OS).  The correctness equivalence is preserved here so
+    the implementation can be re-enabled once stable benchmark evidence is
+    available across the full CI matrix.
+
+    See benchmarks/benchmark_profile_duplicate_count.py for the manual timing
+    comparison.
     """
     import numpy as np
 
@@ -1357,13 +1360,14 @@ def test_profile_duplicate_count_hash_path_matches_pandas_baseline_at_scale():
         }
     )
     frame = ar.from_pandas(df)
+    df_converted = ar.to_pandas(frame)
 
-    # New path (what profile() uses)
-    hashes = pd.util.hash_pandas_object(ar.to_pandas(frame), index=False)
-    new_count = int(hashes.duplicated().sum())
+    # Candidate path (not yet the default)
+    hashes = pd.util.hash_pandas_object(df_converted, index=False)
+    hash_count = int(hashes.duplicated().sum())
 
-    # Pandas baseline
-    baseline_count = int(ar.to_pandas(frame).duplicated().sum())
+    # Current baseline — what profile() uses
+    baseline_count = int(df_converted.duplicated().sum())
 
-    assert new_count == baseline_count
+    assert hash_count == baseline_count
     assert ar.profile(frame).duplicate_rows == baseline_count
