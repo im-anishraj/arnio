@@ -74,9 +74,6 @@ jobs:
           python -m pip install arnio
 
       - name: Validate CSV(s)
-        env:
-          # Optional, but recommended for rich PR summaries
-          GITHUB_STEP_SUMMARY: ${{ github.step_summary }}
         run: |
           python - <<'PY'
           from __future__ import annotations
@@ -125,6 +122,8 @@ jobs:
             drift = []
             for col, expected_dtype in expected.items():
               observed_dtype = observed.get(col)
+              if observed_dtype is None:
+                continue  # handled in missing_cols below
               if observed_dtype != expected_dtype:
                 drift.append((col, expected_dtype, observed_dtype))
 
