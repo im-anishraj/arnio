@@ -1,8 +1,16 @@
 import pytest
 
+# Only skip the module when the package or its native extension is missing.
 try:
     import arnio as ar
-except Exception:
+except ImportError:
+    pytest.skip("arnio not installed; skipping IO smoke tests", allow_module_level=True)
+
+# If the Python package imports but the native C++ extension isn't built, skip those
+# IO smoke tests specifically. This avoids hiding import/runtime errors that
+# should surface during CI while still allowing CI to skip these tests when the
+# native extension isn't available in the runner.
+if getattr(ar, "_arnio_cpp", None) is None:
     pytest.skip(
         "arnio C++ extension not available; skipping IO smoke tests",
         allow_module_level=True,
