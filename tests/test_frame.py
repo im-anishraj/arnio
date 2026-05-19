@@ -251,3 +251,14 @@ def test_str_truncates_long_column_names():
     assert "very_very_very_long_column_name_for_testing" not in columns_line
 
     assert frame.columns == ["very_very_very_long_column_name_for_testing"]
+
+
+def test_str_keeps_normal_column_names():
+    df = pd.DataFrame({"name": [1, 2]})
+
+    frame = ar.from_pandas(df)
+
+    result = str(frame)
+
+    assert "name" in result
+    assert "..." not in result

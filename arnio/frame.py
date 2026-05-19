@@ -258,8 +258,8 @@ class ArFrame:
         """Return a detailed string summary of the ArFrame."""
         lines = [f"ArFrame: {self.shape[0]} rows × {self.shape[1]} columns"]
         lines.append(f"Columns: {self._truncate_column_names()}")
-        lines.append(f"DTypes: {self.dtypes}")
-        lines.append(f"Memory: {self.memory_usage()} bytes")
+        lines.append(f"DTypes:  {self.dtypes}")
+        lines.append(f"Memory:  {self.memory_usage()} bytes")
         return "\n".join(lines)
 
     def preview(self, n: int = 5) -> str:
