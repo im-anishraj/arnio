@@ -24,6 +24,23 @@ struct CsvConfig {
     std::string mode = "strict";
 };
 
+// Shared CSV field parsing and type inference used by CsvReader and CsvChunkReader.
+class CsvParser {
+   public:
+    explicit CsvParser(const CsvConfig& config = CsvConfig{});
+
+    const CsvConfig& config() const { return config_; }
+
+    std::vector<std::string> parse_line(const std::string& line) const;
+    bool is_null_sentinel(const std::string& value) const;
+    DType infer_type(const std::string& value) const;
+    static DType promote_type(DType current, DType incoming);
+    CellValue parse_value(const std::string& raw, DType dtype) const;
+
+   private:
+    CsvConfig config_;
+};
+
 class CsvReader {
    public:
     explicit CsvReader(const CsvConfig& config = CsvConfig{});
@@ -35,22 +52,7 @@ class CsvReader {
     std::vector<std::pair<std::string, std::string>> scan_schema(const std::string& path) const;
 
    private:
-    CsvConfig config_;
-
-    // Parse a single CSV line respecting quotes
-    std::vector<std::string> parse_line(const std::string& line) const;
-
-    // Check if a string is a null sentinel
-    bool is_null_sentinel(const std::string& value) const;
-
-    // Infer DType from a string value
-    DType infer_type(const std::string& value) const;
-
-    // Promote dtype when merging inferences
-    static DType promote_type(DType current, DType incoming);
-
-    // Parse a string value into a CellValue given a target dtype
-    CellValue parse_value(const std::string& raw, DType dtype) const;
+    CsvParser parser_;
 };
 
 // Stateful CSV reader for chunked/streaming reads.
@@ -63,7 +65,7 @@ class CsvChunkReader {
     void close();
 
    private:
-    CsvConfig config_;
+    CsvParser parser_;
     std::ifstream file_;
     std::vector<std::string> header_;
     std::vector<size_t> col_indices_;
@@ -74,12 +76,6 @@ class CsvChunkReader {
     bool schema_locked_ = false;
     bool header_finalized_ = false;
     bool opened_ = false;
-
-    std::vector<std::string> parse_line(const std::string& line) const;
-    bool is_null_sentinel(const std::string& value) const;
-    DType infer_type(const std::string& value) const;
-    static DType promote_type(DType current, DType incoming);
-    CellValue parse_value(const std::string& raw, DType dtype) const;
 
     void resolve_col_indices();
     bool read_one_data_row(std::vector<std::string>& fields_out);

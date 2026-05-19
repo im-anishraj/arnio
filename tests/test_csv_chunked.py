@@ -4,10 +4,18 @@ import pandas as pd
 import pytest
 
 import arnio as ar
+from arnio.exceptions import CsvReadError
 
 
 def _chunked_rows(path: str, **kwargs) -> list[ar.ArFrame]:
     return list(ar.read_csv_chunked(path, **kwargs))
+
+
+def _chunked_concat(path: str, chunksize: int = 2, **kwargs) -> pd.DataFrame:
+    chunks = _chunked_rows(path, chunksize=chunksize, **kwargs)
+    if not chunks:
+        return pd.DataFrame()
+    return pd.concat([ar.to_pandas(c) for c in chunks], ignore_index=True)
 
 
 class TestReadCsvChunked:
@@ -69,11 +77,11 @@ class TestReadCsvChunked:
     def test_quoted_multiline_field(self, tmp_path):
         path = tmp_path / "multiline.csv"
         path.write_text(
-            'id,text\n'
+            "id,text\n"
             '1,"line one\nline two"\n'
-            '2,simple\n'
+            "2,simple\n"
             '3,"another\nquoted"\n'
-            '4,plain\n'
+            "4,plain\n"
         )
         chunks = _chunked_rows(str(path), chunksize=2)
         chunked_df = pd.concat([ar.to_pandas(c) for c in chunks], ignore_index=True)
@@ -96,3 +104,41 @@ class TestReadCsvChunked:
         path.write_text("a,b\n")
         chunks = _chunked_rows(str(path), chunksize=10)
         assert chunks == []
+
+
+class TestReadCsvChunkedParity:
+    """Chunked reads must match read_csv for parser options."""
+
+    def test_parity_has_header_false(self, csv_no_header):
+        chunked_df = _chunked_concat(csv_no_header, chunksize=1, has_header=False)
+        full_df = ar.to_pandas(ar.read_csv(csv_no_header, has_header=False))
+        pd.testing.assert_frame_equal(chunked_df, full_df)
+
+    def test_parity_null_values(self, tmp_path):
+        path = tmp_path / "nulls.csv"
+        path.write_text("a\n1\nNA\n3\n")
+        chunked_df = _chunked_concat(str(path), chunksize=1, null_values=["NA"])
+        full_df = ar.to_pandas(ar.read_csv(str(path), null_values=["NA"]))
+        pd.testing.assert_frame_equal(chunked_df, full_df)
+
+    def test_parity_thousands_separator(self, tmp_path):
+        path = tmp_path / "thousands.csv"
+        path.write_text('amount\n"1,234"\n500\n')
+        chunked_df = _chunked_concat(str(path), chunksize=1, thousands_separator=",")
+        full_df = ar.to_pandas(ar.read_csv(str(path), thousands_separator=","))
+        pd.testing.assert_frame_equal(chunked_df, full_df)
+
+    def test_parity_permissive_mode(self, tmp_path):
+        path = tmp_path / "permissive.csv"
+        path.write_text("id,name\n1,Alice\n2\n")
+        chunked_df = _chunked_concat(str(path), chunksize=1, mode="permissive")
+        full_df = ar.to_pandas(ar.read_csv(str(path), mode="permissive"))
+        pd.testing.assert_frame_equal(chunked_df, full_df)
+
+    def test_parity_strict_mode_raises(self, tmp_path):
+        path = tmp_path / "strict.csv"
+        path.write_text("id,name\n1,Alice\n2\n")
+        with pytest.raises(CsvReadError, match="expected 2"):
+            _chunked_concat(str(path), chunksize=1, mode="strict")
+        with pytest.raises(CsvReadError, match="expected 2"):
+            ar.read_csv(str(path), mode="strict")
