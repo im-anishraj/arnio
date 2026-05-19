@@ -401,8 +401,14 @@ Frame CsvReader::read(const std::string& path) const {
         auto fields = parse_line(line);
         if (!expected_cols.has_value()) {
             expected_cols = fields.size();
-        } else {
+        } else if (config_.mode == "strict") {
             validate_row_width(record_number, expected_cols.value(), fields.size());
+        }
+
+        if (expected_cols.has_value()) {
+            while (fields.size() < expected_cols.value()) {
+                fields.push_back("");
+            }
         }
         raw_data.push_back(std::move(fields));
         ++row_count;
@@ -418,15 +424,6 @@ Frame CsvReader::read(const std::string& path) const {
     }
 
     size_t num_cols = header.size();
-
-    if (config_.mode == "strict") {
-        for (size_t i = 0; i < raw_data.size(); ++i) {
-            if (raw_data[i].size() < num_cols) {
-                throw std::runtime_error("CSV row has inconsistent column count at row " +
-                                         std::to_string(i + 2));
-            }
-        }
-    }
 
     // Determine which columns to keep
     std::vector<size_t> col_indices;
