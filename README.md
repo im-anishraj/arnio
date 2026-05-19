@@ -253,6 +253,7 @@ frame = ar.from_dict({})
 print(frame.shape)
 # (0, 0)
 ```
+
 > Every step above executes in C++. Your Python code is a _configuration_ — not the execution engine.
 
 <br>
