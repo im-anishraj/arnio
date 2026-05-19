@@ -886,6 +886,8 @@ def test_replace_values_direct_pandas_does_not_mutate_input():
     assert list(df["status"]) == ["active", "inactive"]
     # output should be replaced
     assert list(out["status"]) == ["A", "inactive"]
+
+
 def test_register_step_validates_callable():
     """Test that register_step raises TypeError immediately for non-callables."""
     import pytest
@@ -925,9 +927,9 @@ def test_register_step_execution_flow():
 
     initial_df = pd.DataFrame({"id": [1, 2]})
     frame = from_pandas(initial_df)
-    
+
     result_frame = pipeline(frame, [("custom_add_col_step",)])
-    
+
     final_df = to_pandas(result_frame)
     assert "verified" in final_df.columns
-    assert final_df["verified"].all() == True
+    assert final_df["verified"].all()

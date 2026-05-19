@@ -74,7 +74,7 @@ def register_step(name: str, fn: Callable):
     with _REGISTRY_LOCK:
         _PYTHON_STEP_REGISTRY[name] = fn
 
-        
+
 def _validate_pipeline_steps(
     steps: list[tuple],
     python_step_registry: dict[str, Callable],
