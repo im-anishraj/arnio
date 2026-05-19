@@ -18,12 +18,7 @@ pipeline_module = importlib.import_module("arnio.pipeline")
 
 @pytest.fixture(autouse=True)
 def restore_python_step_registry():
-    """Restore custom pipeline steps after each test.
-
-    Tests may register temporary custom steps. This fixture prevents those
-    registrations from leaking into other tests while preserving any steps
-    that were already registered before the test started.
-    """
+    """Restore custom pipeline steps after each test."""
     with pipeline_module._REGISTRY_LOCK:
         original_registry = dict(pipeline_module._PYTHON_STEP_REGISTRY)
 
@@ -79,6 +74,31 @@ class TestPipeline:
             ],
         )
         assert result.shape[0] == 3
+
+    def test_pipeline_dry_run_validation(self, csv_with_nulls):
+        frame = ar.read_csv(csv_with_nulls)
+        result = ar.pipeline(
+            frame,
+            [
+                ("drop_nulls",),
+                ("strip_whitespace",),
+            ],
+            dry_run=True,
+        )
+        assert result.shape == frame.shape
+
+    def test_pipeline_dry_run_metadata(self, csv_with_nulls):
+        frame = ar.read_csv(csv_with_nulls)
+        result, metadata = ar.pipeline(
+            frame,
+            [
+                ("drop_nulls",),
+            ],
+            dry_run=True,
+            return_metadata=True,
+        )
+        assert metadata["dry_run"] is True
+        assert metadata["step_count"] == 1
 
     def test_pipeline_drop_constant_columns(self):
         import pandas as pd

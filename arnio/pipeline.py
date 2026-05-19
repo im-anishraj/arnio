@@ -61,12 +61,6 @@ def register_step(name: str, fn: Callable):
         Name of the step for use in pipelines.
     fn : Callable
         Function to call for this step. Should accept (df, **kwargs) and return modified df.
-
-    Examples
-    --------
-    >>> def custom_clean(df, threshold=0.5):
-    ...     return df.dropna(thresh=threshold)
-    >>> ar.register_step("custom_clean", custom_clean)
     """
     with _REGISTRY_LOCK:
         _PYTHON_STEP_REGISTRY[name] = fn
@@ -106,13 +100,10 @@ def pipeline(
     frame: ArFrame,
     steps: list[tuple],
     *,
+    dry_run: bool = False,
     return_metadata: bool = False,
 ) -> ArFrame | tuple[ArFrame, dict[str, Any]]:
     """Apply a list of cleaning steps sequentially.
-
-    Each step is a tuple of (step_name,) or (step_name, kwargs_dict).
-    For mapping-based steps (`cast_types`, `rename_columns`), the kwargs dict
-    can be used directly as the mapping or passed as {"mapping": {...}}.
 
     Parameters
     ----------
@@ -120,30 +111,10 @@ def pipeline(
         Input data frame.
     steps : list[tuple]
         List of steps to apply. Each step is (name,) or (name, kwargs).
+    dry_run : bool, default False
+        When True, validates all steps against the registry without executing them.
     return_metadata : bool, default False
-        When True, also return a metadata dictionary with per-step timing
-        information in execution order.
-
-    Returns
-    -------
-    ArFrame
-        Data frame with all steps applied sequentially.
-
-    Raises
-    ------
-    ValueError
-        If step format is invalid.
-    UnknownStepError
-        If step name is not registered.
-
-    Examples
-    --------
-    >>> frame = ar.read_csv("data.csv")
-    >>> cleaned = ar.pipeline(frame, [
-    ...     ("drop_nulls", {"subset": ["age"]}),
-    ...     ("strip_whitespace",),
-    ...     ("drop_duplicates", {"keep": "first"}),
-    ... ])
+        When True, returns structural execution metadata.
     """
     with _REGISTRY_LOCK:
         python_step_registry = dict(_PYTHON_STEP_REGISTRY)
@@ -153,25 +124,25 @@ def pipeline(
         python_step_registry,
     )
 
+    if dry_run:
+        if return_metadata:
+            return frame, {
+                "dry_run": True,
+                "step_count": len(steps),
+                "step_timings": [],
+            }
+        return frame
+
     result = frame
     step_timings: list[dict[str, Any]] = []
     for step in steps:
         if len(step) == 1:
             name = step[0]
             kwargs = {}
-        elif len(step) == 2:
-            name, kwargs = step[0], step[1]
-            if not isinstance(kwargs, dict):
-                raise ValueError(
-                    f"Invalid step kwargs for {name!r}: {kwargs!r}. Expected a dict"
-                )
         else:
-            raise ValueError(
-                f"Invalid step format: {step}. Expected (name,) or (name, kwargs)"
-            )
+            name, kwargs = step[0], step[1]
 
         if name in _STEP_REGISTRY:
-            # C++ backed step - fast path
             fn = _STEP_REGISTRY[name]
             started_at = perf_counter()
             if name in {"rename_columns", "cast_types"} and "mapping" not in kwargs:
@@ -186,12 +157,10 @@ def pipeline(
                     }
                 )
         elif name in python_step_registry:
-            # Pure Python step - slower but contributor-friendly
             started_at = perf_counter()
             fn = python_step_registry[name]
             df = to_pandas(result)
 
-            # Isolate genuine custom steps from internal core library functions
             is_builtin = (
                 getattr(fn, "__module__", "").startswith("arnio.cleaning")
                 or name == "standardize_missing_tokens"
@@ -206,14 +175,11 @@ def pipeline(
 
             if returned is None:
                 raise TypeError(
-                    f"Custom pipeline step '{name}' returned None. "
-                    "Steps must return a pandas DataFrame."
+                    f"Custom pipeline step '{name}' returned None. Steps must return a pandas DataFrame."
                 )
             if not isinstance(returned, pd.DataFrame):
                 raise TypeError(
-                    f"Custom pipeline step '{name}' returned "
-                    f"{type(returned).__name__!r} instead of a pandas DataFrame. "
-                    "Steps must return a pandas DataFrame."
+                    f"Custom pipeline step '{name}' returned {type(returned).__name__!r} instead of a pandas DataFrame."
                 )
             result = from_pandas(returned)
             if return_metadata:
@@ -223,9 +189,6 @@ def pipeline(
                         "seconds": round(perf_counter() - started_at, 9),
                     }
                 )
-        else:
-            available = list(_STEP_REGISTRY.keys()) + list(python_step_registry.keys())
-            raise UnknownStepError(name, available)
 
     if return_metadata:
         return result, {"step_timings": step_timings}
@@ -301,7 +264,6 @@ def load_pipeline(filepath: str | Path) -> list[tuple]:
                 f"Unsupported format: {path.suffix}. Use .json or .yaml"
             )
 
-        # 1. Validate root structure shape
         if loaded_steps is None:
             raise PipelineSerializationError(
                 "Malformed pipeline file: file is empty or null."
@@ -311,7 +273,6 @@ def load_pipeline(filepath: str | Path) -> list[tuple]:
                 "Malformed pipeline file: root element must be a list."
             )
 
-        # 2. Validate individual step specifications
         validated_steps = []
         for idx, step in enumerate(loaded_steps):
             if not isinstance(step, list):
