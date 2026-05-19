@@ -708,6 +708,21 @@ def test_identifier_numeric_cast_prevention():
 # ── string length statistics tests ───────────────────────────────────────────
 
 
+def test_decimal_looking_strings_suggest_float64_not_int64():
+    frame = ar.from_pandas(pd.DataFrame({"price": ["1.0", "2.50", "3.00"]}))
+
+    report = ar.profile(frame)
+
+    assert report.columns["price"].suggested_dtype == "float64"
+
+    suggestions = {}
+    for step, kwargs in ar.suggest_cleaning(report):
+        if step == "cast_types":
+            suggestions.update(kwargs)
+
+    assert suggestions["price"] == "float64"
+
+
 def test_profile_string_metrics():
     df = pd.DataFrame({"text": ["a", "abc", "abcde", "", "  ", None]})
     frame = ar.from_pandas(df)

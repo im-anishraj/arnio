@@ -1759,7 +1759,9 @@ def _suggest_column_dtype(series: pd.Series, dtype: str) -> str | None:
 
     numeric = pd.to_numeric(values, errors="coerce")
     if numeric.notna().all():
-        return "int64" if (numeric % 1 == 0).all() else "float64"
+        if values.str.fullmatch(r"[+-]?\d+").all():
+            return "int64"
+        return "float64"
     return None
 
 
