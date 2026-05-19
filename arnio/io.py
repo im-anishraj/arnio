@@ -298,6 +298,10 @@ def write_csv(
 
     if len(delimiter) != 1:
         raise ValueError(f"delimiter must be a single character, got {delimiter!r}")
+    if not isinstance(line_terminator, str):
+        raise TypeError("line_terminator must be a string")
+    if line_terminator == "":
+        raise ValueError("line_terminator must not be empty")
 
     config = _CsvWriteConfig()
     config.delimiter = delimiter
