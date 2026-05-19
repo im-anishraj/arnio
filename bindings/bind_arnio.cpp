@@ -360,4 +360,14 @@ PYBIND11_MODULE(_arnio_cpp, m) {
             return combine_columns(frame, subset, separator, output_column);
         },
         py::arg("frame"), py::arg("subset"), py::arg("separator"), py::arg("output_column"));
+
+    m.def(
+        "safe_divide_columns",
+        [](const Frame& frame, const std::string& numerator, const std::string& denominator,
+           const std::string& output_column, double fill_value) {
+            py::gil_scoped_release release;
+            return safe_divide_columns(frame, numerator, denominator, output_column, fill_value);
+        },
+        py::arg("frame"), py::arg("numerator"), py::arg("denominator"), py::arg("output_column"),
+        py::arg("fill_value") = 0.0);
 }

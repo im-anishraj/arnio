@@ -17,6 +17,7 @@ from ._core import (
     _fill_nulls,
     _normalize_case,
     _rename_columns,
+    _safe_divide_columns,
     _strip_whitespace,
 )
 from .exceptions import TypeCastError
@@ -1091,16 +1092,17 @@ def safe_divide_columns(
 
     from .convert import from_pandas, to_pandas
 
-    is_arframe = not isinstance(frame, pd.DataFrame)
-    df = to_pandas(frame) if is_arframe else frame
+    is_arframe = isinstance(frame, ArFrame)
 
-    if numerator not in df.columns:
+    columns = frame.columns if is_arframe else frame.columns
+
+    if numerator not in columns:
         raise ValueError(f"Numerator column '{numerator}' not found in frame.")
-    if denominator not in df.columns:
+    if denominator not in columns:
         raise ValueError(f"Denominator column '{denominator}' not found in frame.")
     if not isinstance(output_column, str) or not output_column.strip():
         raise ValueError("output_column must be a non-empty string.")
-    if output_column in df.columns:
+    if output_column in columns:
         import warnings
 
         warnings.warn(
@@ -1109,11 +1111,41 @@ def safe_divide_columns(
             stacklevel=2,
         )
 
-    numerator_values = pd.to_numeric(df[numerator], errors="coerce")
-    denominator_values = pd.to_numeric(df[denominator], errors="coerce")
+    if is_arframe:
+        numerator_dtype = frame.dtypes.get(numerator)
+        denominator_dtype = frame.dtypes.get(denominator)
 
-    bad_numerator = numerator_values.isna() & df[numerator].notna()
-    bad_denominator = denominator_values.isna() & df[denominator].notna()
+        numeric_types = {"int64", "float64"}
+
+        if numerator_dtype in numeric_types and denominator_dtype in numeric_types:
+            return ArFrame(
+                _safe_divide_columns(
+                    frame._frame,
+                    numerator,
+                    denominator,
+                    output_column,
+                    fill_value,
+                )
+            )
+
+    df = to_pandas(frame) if is_arframe else frame
+
+    numerator_series = df[numerator]
+    denominator_series = df[denominator]
+
+    if pd.api.types.is_numeric_dtype(
+        numerator_series
+    ) and pd.api.types.is_numeric_dtype(denominator_series):
+        numerator_values = numerator_series
+        denominator_values = denominator_series
+        bad_numerator = numerator_values.isna() & numerator_series.notna()
+        bad_denominator = denominator_values.isna() & denominator_series.notna()
+    else:
+        numerator_values = pd.to_numeric(numerator_series, errors="coerce")
+        denominator_values = pd.to_numeric(denominator_series, errors="coerce")
+
+        bad_numerator = numerator_values.isna() & numerator_series.notna()
+        bad_denominator = denominator_values.isna() & denominator_series.notna()
     if bad_numerator.any():
         bad_values = df.loc[bad_numerator, numerator].head(3).tolist()
         raise ValueError(

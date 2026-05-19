@@ -15,6 +15,7 @@ try:
         Frame as _Frame,  # noqa: F401
         cast_types as _cast_types,  # noqa: F401
         clip_numeric as _clip_numeric,  # noqa: F401
+        safe_divide_columns as _safe_divide_columns,  # noqa: F401
         drop_duplicates as _drop_duplicates,  # noqa: F401
         drop_nulls as _drop_nulls,  # noqa: F401
         fill_nulls as _fill_nulls,  # noqa: F401

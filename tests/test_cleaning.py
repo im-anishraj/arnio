@@ -1635,6 +1635,114 @@ class TestSafeDivideColumns:
                 output_column="ratio",
             )
 
+    def test_zero_and_null_semantics_are_preserved(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "revenue": [10, 10, 0, 0, None, 10, None],
+                    "cost": [2, 0, 10, 0, 10, None, None],
+                }
+            )
+        )
+
+        result = ar.safe_divide_columns(
+            frame,
+            numerator="revenue",
+            denominator="cost",
+            output_column="ratio",
+            fill_value=-1.0,
+        )
+        df = ar.to_pandas(result)
+
+        assert list(df["ratio"]) == [5.0, -1.0, 0.0, -1.0, -1.0, -1.0, -1.0]
+
+    def test_float_and_negative_values_are_preserved(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "revenue": [7.5, -9.0, 9.0],
+                    "cost": [2.5, 3.0, -3.0],
+                }
+            )
+        )
+
+        result = ar.safe_divide_columns(
+            frame,
+            numerator="revenue",
+            denominator="cost",
+            output_column="ratio",
+        )
+        df = ar.to_pandas(result)
+
+        assert list(df["ratio"]) == [3.0, -3.0, -3.0]
+
+    def test_pandas_dataframe_input_returns_pandas_dataframe(self):
+        frame = pd.DataFrame({"revenue": [100, 200], "cost": [25, 0]})
+
+        result = ar.safe_divide_columns(
+            frame,
+            numerator="revenue",
+            denominator="cost",
+            output_column="ratio",
+        )
+
+        assert isinstance(result, pd.DataFrame)
+        assert list(result["ratio"]) == [4.0, 0.0]
+
+    def test_native_numeric_arframe_path_avoids_pandas_roundtrip(self, monkeypatch):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "revenue": [100, 200],
+                    "cost": [10, 20],
+                }
+            )
+        )
+
+        from arnio import convert
+
+        original_to_pandas = convert.to_pandas
+
+        def fail_to_pandas(_):
+            raise AssertionError("native numeric path should avoid to_pandas")
+
+        monkeypatch.setattr(convert, "to_pandas", fail_to_pandas)
+
+        result = ar.safe_divide_columns(
+            frame,
+            numerator="revenue",
+            denominator="cost",
+            output_column="ratio",
+        )
+
+        df = original_to_pandas(result)
+
+        assert list(df["ratio"]) == [10.0, 10.0]
+
+    def test_native_output_column_overwrite_preserves_column_order(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "revenue": [100, 200],
+                    "ratio": [99, 99],
+                    "cost": [25, 50],
+                }
+            )
+        )
+
+        with pytest.warns(UserWarning, match="already exists"):
+            result = ar.safe_divide_columns(
+                frame,
+                numerator="revenue",
+                denominator="cost",
+                output_column="ratio",
+            )
+
+        df = ar.to_pandas(result)
+
+        assert list(df.columns) == ["revenue", "ratio", "cost"]
+        assert list(df["ratio"]) == [4.0, 4.0]
+
 
 class TestClipNumericNativeRegression:
     """Regression tests verifying the native C++ clip_numeric hot-path.
