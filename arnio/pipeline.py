@@ -5,6 +5,7 @@ Chained cleaning pipeline.
 
 from __future__ import annotations
 
+import inspect
 from threading import Lock
 from time import perf_counter
 from typing import Any, Callable
@@ -62,6 +63,35 @@ def register_step(name: str, fn: Callable):
     with _REGISTRY_LOCK:
 
         _PYTHON_STEP_REGISTRY[name] = fn
+
+
+def get_builtin_step_signatures() -> dict[str, inspect.Signature]:
+    """Return normalized signatures for built-in pipeline steps.
+
+    The returned signatures exclude the leading frame/dataframe positional
+    argument so callers can inspect the kwargs they are expected to pass in
+    pipeline step specs.
+    """
+    with _REGISTRY_LOCK:
+        python_step_registry = dict(_PYTHON_STEP_REGISTRY)
+
+    builtin_steps = dict(_STEP_REGISTRY)
+    builtin_steps.update(
+        {
+            name: fn
+            for name, fn in python_step_registry.items()
+            if getattr(fn, "__module__", "").startswith("arnio.cleaning")
+            or name == "standardize_missing_tokens"
+        }
+    )
+
+    signatures: dict[str, inspect.Signature] = {}
+    for name, fn in builtin_steps.items():
+        signature = inspect.signature(fn)
+        parameters = tuple(list(signature.parameters.values())[1:])
+        signatures[name] = signature.replace(parameters=parameters)
+
+    return dict(sorted(signatures.items()))
 
 
 def _validate_pipeline_steps(

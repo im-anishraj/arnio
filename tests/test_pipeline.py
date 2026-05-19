@@ -3,6 +3,7 @@
 import importlib
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from inspect import Signature
 
 import pandas as pd
 import pytest
@@ -587,6 +588,29 @@ class TestPipeline:
             )
 
         assert calls == []
+
+
+def test_get_builtin_step_signatures_returns_normalized_signatures():
+    signatures = ar.get_builtin_step_signatures()
+
+    assert isinstance(signatures, dict)
+    assert "drop_nulls" in signatures
+    assert isinstance(signatures["drop_nulls"], Signature)
+    assert "frame" not in signatures["drop_nulls"].parameters
+    assert list(signatures["drop_nulls"].parameters) == ["subset"]
+
+
+def test_get_builtin_step_signatures_includes_builtin_python_steps_only():
+    def custom_step(df, threshold=1):
+        return df
+
+    ar.register_step("custom_signature_probe", custom_step)
+
+    signatures = ar.get_builtin_step_signatures()
+
+    assert "filter_rows" in signatures
+    assert "replace_values" in signatures
+    assert "custom_signature_probe" not in signatures
 
 
 def test_filter_rows_greater_than():
