@@ -812,10 +812,23 @@ DataQualityReport(
 | **Duplicates** | 0 (0.0%) |
 <br>
 
-### Reproducible Jobs
-You can save pipelines to JSON or YAML so you can reuse them later:
+### Bootstrapping a Schema from a Quality Report
+
+After profiling a dataset, you can automatically generate a validation schema
+directly from the report:
 
 ```python
+import arnio as ar
+
+frame = ar.from_pandas(df)
+report = ar.profile(frame)
+
+schema = ar.Schema.bootstrap_from_report(report)
+result = schema.validate(frame)
+
+print(result.passed)
+print(result.summary())
+
 import arnio as ar
 
 # 1. Define your pipeline steps
