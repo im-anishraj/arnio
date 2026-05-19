@@ -1,6 +1,6 @@
 # Guide for troubleshooting
 
-## MemoryError when reading big CSV files
+## MemoryError when reading large CSV files
 
 ### The problem
 
@@ -19,50 +19,51 @@ Large datasets may not fully fit into memory, even if the machine appears to hav
 ### Quick example
 
 ```python
-import pandas as pd
+import arnio as ar
 
-for chunk in pd.read_csv("large.csv", chunksize = 10000):
-    print(chunk.head())
-
+df = ar.read_csv(
+    "large.csv",
+    usecols=["id", "name"],
+    chunksize=10000
+)
 ```
 
 ## Numeric columns inferred as strings
 
-### Problem
+### The Problem
 
 Sometimes a numeric column gets detected as a string, even when you expect it to contain only numbers.
 
 ### Why it happens
-
-Usually because the column has mixed values, a few missing entries , or some odd characters hiding around. And then the loader basically gives up and treats the whole column as text, even if most rows look fine.
+This usually happens when the column contains mixed values, missing entries, or unexpected characters.The loader may then treat the entire column as text instead of numeric data.
 
 ### What to do about it
 
 - Clean those inconsistent values before you load anything
-- When possible, pass explicit datatype definitions so pandas does not guess
+- pass explicit datatype definitions whenever possible
 - Also check for empty spaces, stray symbols, or any invalid tokens in numeric columns
 
 ### Quick example
 
 ```python
-import pandas as pd
+import arnio as ar
 
-df = pd.read_csv("data.csv", dtype={"age": int})
-print(df.dtypes)
+df = ar.read_csv(
+    "data.csv",
+    dtypes={"age": "int"}
+)
 ```
-
 
 ## ValidationResult.passed returning false 
 
 ### Problem 
 
-There are times when a dataset looks valid but when it goes through validation checks, it fails. 
+Sometimes a dataset may appear valid but still fail validation checks.
 
-### The Reason 
+### Why it happens
+This usually happens because: the dataset has missing or incorrect data types, there is an unexpected null value, or the schema of the dataset does not match what was expected based on the validation rules. 
 
-The main reasons this can occur are: the dataset has missing or incorrect data types, there is an unexpected null value, or the schema of the dataset does not match what was expected based on the validation rules. 
-
-### How to Fix the Issue 
+### What to do about it 
 
 - Review logs from the validations carefully 
 - Look for rows with null or unexpected values 
@@ -71,10 +72,11 @@ The main reasons this can occur are: the dataset has missing or incorrect data t
 
 ### Quick example
 
-```python 
-print(validation_result.errors) 
+```python
+result = ar.validate(df, schema)
+
+print(result.issues)
 ```
----
 
 ## Unknown or custom steps not running
 
@@ -87,17 +89,20 @@ Sometimes custom pipeline steps fail to execute or appear as unknown during runt
 This usually happens when the custom step is not registered correctly or required imports are missing.
 
 ### What to do about it
-- Confirm that the custom step is registered properly 
+- Verify that the custom step is registered correctly
 - Check any import statements for the customized steps and verify that the names/modules exist 
 - Always restart the environment if you've added a new step to the pipeline 
 - Validate that your configuration is referencing the proper step name in the pipeline
+
 ### Quick example
 
 ```python
-from pipeline.steps import CustomStep
-```
+ar.register_step("clean_data", clean_data)
 
----
+pipeline = ar.pipeline([
+    "clean_data"
+])
+```
 
 ##  Slow CSV parsing and performance issues
 
@@ -105,21 +110,24 @@ from pipeline.steps import CustomStep
 
 When attempting to load, or to process large CSV files from different sources, it can take a long time for the files to load, or for data within them to be processed.
 
-### Why?
+### Why it happens?
 
-When too many unnecessary columns are being loaded, and when Inference of Datatype has become expensive, and when the entire dataset is processed all at once, the performance of processing these files can be considerably affected.
+When too many unnecessary columns are being loaded, and when datatype inference has become expensive, and when the entire dataset is processed all at once, the performance of processing these files can be considerably affected.
 
-### How to overcome this problem
+### What to do about it?
 
 - Only load the columns that you actually require.
 - Avoid converting datatypes that are unnecessary.
 - Process large files in smaller sized chunks.
 - Remove unused data before processing.
 
-### Example
+### Quick example
 
 ```python
-# Read large csv file into a Pandas DataFrame
-import pandas as pd
-df = pd.read_csv('large.csv', usecols=['id', 'name'])
+import arnio as ar
+
+df = ar.read_csv(
+    "large.csv",
+    usecols=["id", "name"]
+)
 ```
