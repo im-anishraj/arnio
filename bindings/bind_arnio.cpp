@@ -2,6 +2,8 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
+#include <cstring>
+
 #include "arnio/cleaning.h"
 #include "arnio/column.h"
 #include "arnio/csv_reader.h"
@@ -59,19 +61,21 @@ PYBIND11_MODULE(_arnio_cpp, m) {
                  return py::none();
              })
         .def("to_numpy_float",
-             [](py::object col_obj) {
-                 const Column& col = col_obj.cast<const Column&>();
+             [](const Column& col) {
                  if (col.dtype() != DType::FLOAT64)
                      throw std::runtime_error("Not a FLOAT64 column");
                  const auto& vec = std::get<std::vector<double>>(col.data());
-                 return py::array_t<double>({vec.size()}, {sizeof(double)}, vec.data(), col_obj);
+                 auto result = py::array_t<double>(vec.size());
+                 std::memcpy(result.mutable_data(), vec.data(), vec.size() * sizeof(double));
+                 return result;
              })
         .def("to_numpy_int",
-             [](py::object col_obj) {
-                 const Column& col = col_obj.cast<const Column&>();
+             [](const Column& col) {
                  if (col.dtype() != DType::INT64) throw std::runtime_error("Not an INT64 column");
                  const auto& vec = std::get<std::vector<int64_t>>(col.data());
-                 return py::array_t<int64_t>({vec.size()}, {sizeof(int64_t)}, vec.data(), col_obj);
+                 auto result = py::array_t<int64_t>(vec.size());
+                 std::memcpy(result.mutable_data(), vec.data(), vec.size() * sizeof(int64_t));
+                 return result;
              })
         .def("to_numpy_bool",
              [](py::object col_obj) {
