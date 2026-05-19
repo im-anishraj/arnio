@@ -9,7 +9,30 @@ import arnio as ar
 
 # ── Normal behaviour ──────────────────────────────────────────────────────────
 
+def test_from_dict_basic():
+    frame = ar.from_dict({"name": ["A", "B"], "age": [20, 21]})
 
+    assert frame.shape == (2, 2)
+    assert frame.columns == ["name", "age"]
+
+def test_from_dict_empty():
+    frame = ar.from_dict({})
+
+    assert frame.shape == (0, 0)
+    assert frame.columns == []
+
+def test_from_dict_invalid():
+    with pytest.raises(TypeError):
+        ar.ArFrame.from_dict([1, 2, 3])
+
+
+def test_from_dict_bad_length():
+    with pytest.raises(ValueError):
+        ar.ArFrame.from_dict({
+            "name": ["A", "B"],
+            "age": [20]
+        })
+        
 def test_preview_returns_string(sample_csv):
     frame = ar.read_csv(sample_csv)
     result = frame.preview()

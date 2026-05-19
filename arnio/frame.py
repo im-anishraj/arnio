@@ -23,7 +23,10 @@ class ArFrame:
         self._attrs: dict = attrs if attrs is not None else {}
 
     # --- Properties ---
-
+    @classmethod
+    def from_dict(cls, data:dict) -> "ArFrame":
+        from .convert import from_dicti 
+        return from_dicti(data)
     @property
     def shape(self) -> tuple[int, int]:
         """Row and column count.
