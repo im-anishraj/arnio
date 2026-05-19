@@ -859,7 +859,7 @@ def test_country_code_validation_accepts_iso_alpha_2_codes(tmp_path):
 
 def test_country_code_validation_rejects_invalid_codes(tmp_path):
     path = tmp_path / "bad_countries.csv"
-    path.write_text("country\nIND\n1A\nA\nUSA\ngb\nFr\n\n")
+    path.write_text("country\nIND\n1A\nA\nUSA\ngb\nFr\nQQ\nZZ\nAA\n")
 
     result = ar.validate(
         ar.read_csv(path),
@@ -867,10 +867,47 @@ def test_country_code_validation_rejects_invalid_codes(tmp_path):
     )
 
     assert not result.passed
-    assert result.issue_count == 6
+    assert result.issue_count == 9
 
-    assert [issue.row_index for issue in result.issues] == [1, 2, 3, 4, 5, 6]
-    assert {issue.rule for issue in result.issues} == {"country_code"}
+    assert [issue.row_index for issue in result.issues] == [1, 2, 3, 4, 5, 6, 7, 8, 9]
+    assert all(issue.rule == "country_code" for issue in result.issues)
+
+
+def test_country_code_enforces_uniqueness(tmp_path):
+    path = tmp_path / "duplicate_countries.csv"
+    path.write_text("country\nIN\nUS\nIN\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"country": ar.CountryCode(unique=True)},
+    )
+
+    assert not result.passed
+    assert result.issue_count == 2
+    assert all(issue.rule == "unique" for issue in result.issues)
+    assert [issue.row_index for issue in result.issues] == [1, 3]
+
+
+def test_country_code_nullable_behavior(tmp_path):
+    path = tmp_path / "nullable_countries.csv"
+    path.write_text('country\nIN\n""\nUS\n')
+
+    # nullable=True should pass
+    result_nullable = ar.validate(
+        ar.read_csv(path),
+        {"country": ar.CountryCode(nullable=True)},
+    )
+    assert result_nullable.passed
+
+    # nullable=False should fail on row 2
+    result_not_nullable = ar.validate(
+        ar.read_csv(path),
+        {"country": ar.CountryCode(nullable=False)},
+    )
+    assert not result_not_nullable.passed
+    assert result_not_nullable.issue_count == 1
+    assert result_not_nullable.issues[0].rule == "nullable"
+    assert result_not_nullable.issues[0].row_index == 2
 
 
 def test_string_min_length_boundary(tmp_path):
