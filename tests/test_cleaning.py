@@ -933,6 +933,12 @@ class TestCastTypes:
         with pytest.raises(ValueError, match="errors must be either"):
             ar.cast_types(frame, {"age": "int64"}, errors="ignore")
 
+    def test_cast_rejects_non_mapping_with_clear_error(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(TypeError, match="mapping must be a mapping"):
+            ar.cast_types(frame, [("age", "int64")])
+
     def test_cast_bool_rejects_unknown_strings(self):
         frame = ar.from_pandas(pd.DataFrame({"active": ["true", "maybe"]}))
 
