@@ -192,7 +192,7 @@ print(selected.columns)
 
 <br>
 
-<<<<<<< HEAD
+
 ### Security note: CSV formula injection
 
 Arnio preserves cell values when reading CSV files. It does not rewrite strings that
@@ -210,7 +210,7 @@ boundary. Arnio focuses on parsing, validation, profiling, and cleanup; final CS
 export policy should stay explicit in the application that writes the file.
 
 <br>
-=======
+
 ## ⚠️ Error Handling
 
 ### `read_csv` and `scan_csv`
@@ -226,11 +226,22 @@ ar.read_csv("missing.csv")
 frame = ar.read_csv("sales_data.csv")
 ```
 
-**Empty or blank file** — raises `CsvReadError` if the file has no valid header:
+**Zero-byte file** — raises `CsvReadError`:
+
+```python
+# Bad: file has zero bytes
+ar.read_csv("zero.csv")
+# arnio.exceptions.CsvReadError: CSV file is empty: 'zero.csv'
+
+# Good: file has a valid header row
+frame = ar.read_csv("clean.csv")
+```
+
+**Blank line file** — raises `CsvReadError` when the header is empty:
 
 ```python
 # Bad: file contains only a blank line
-ar.read_csv("empty.csv")
+ar.read_csv("just_newline.csv")
 # arnio.exceptions.CsvReadError: CSV header contains an empty column name
 
 # Good: file has a valid header row
@@ -294,16 +305,14 @@ print(result.passed)   # True
 ```
 
 ### Pipeline Step Errors
+An unknown step name raises `UnknownStepError` immediately:
 
-An unknown step name raises `UnknownStepError` immediately and lists all valid step names:
 
 ```python
 # Bad: typo in step name
 ar.pipeline(frame, [("srtip_whitespace",)])
 # arnio.exceptions.UnknownStepError: Unknown pipeline step: 'srtip_whitespace'.
-# Available steps: ['cast_types', 'drop_constant_columns', 'drop_duplicates',
-# 'drop_nulls', 'fill_nulls', 'filter_rows', 'normalize_case',
-# 'rename_columns', 'strip_whitespace']
+
 
 # Good: valid step names only
 clean_frame = ar.pipeline(frame, [
@@ -311,7 +320,7 @@ clean_frame = ar.pipeline(frame, [
     ("drop_duplicates",),
 ])
 ```
->>>>>>> f6a9cb5 (docs: refine error handling documentation placement and examples)
+
 
 <details>
 <summary><b>📸 Peek at a 100 GB file without loading it</b></summary>
