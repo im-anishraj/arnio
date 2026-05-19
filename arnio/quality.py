@@ -45,6 +45,7 @@ class ColumnProfile:
     mean: float | None = None
     sample_values: list[Any] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    high_cardinality: bool = False
     top_values: list[tuple[Any, int, float]] | None = None
 
     def to_dict(self, *, redact_sample_values: bool = False) -> dict[str, Any]:
@@ -71,6 +72,7 @@ class ColumnProfile:
             "mean": self.mean,
             "sample_values": sample_values,
             "warnings": list(self.warnings),
+            "high_cardinality": self.high_cardinality,
             "top_values": (
                 [
                     {"value": _clean_scalar(v), "count": c, "ratio": r}
@@ -360,6 +362,7 @@ def _profile_column(
         unique_count=unique_count,
         whitespace_count=whitespace_count,
         empty_string_count=empty_string_count,
+        unique_ratio=unique_ratio,
     )
 
     return ColumnProfile(
@@ -379,6 +382,7 @@ def _profile_column(
         mean=mean,
         sample_values=sample_values,
         warnings=warnings,
+        high_cardinality=unique_ratio >= 0.9,
         top_values=top_values,
     )
 
@@ -452,6 +456,7 @@ def _column_warnings(
     unique_count: int,
     whitespace_count: int,
     empty_string_count: int,
+    unique_ratio: int,
 ) -> list[str]:
     warnings: list[str] = []
     if null_count:
@@ -464,6 +469,8 @@ def _column_warnings(
         warnings.append("leading_or_trailing_whitespace")
     if empty_string_count:
         warnings.append("empty_strings")
+    if unique_ratio >= 0.9:
+        warnings.append("high_cardinality")
     return warnings
 
 

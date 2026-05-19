@@ -383,3 +383,49 @@ def test_profile_string_metrics_to_pandas():
     assert row["min"] == 1
     assert row["max"] == 10
     assert row["mean"] == 5.0 + 1 / 3
+
+    # ── high cardinality warnings tests ──────────────────────────────────────────
+
+
+def test_high_cardinality_flagged_for_id_like_column(tmp_path):
+    path = tmp_path / "high_card.csv"
+    path.write_text(
+        "user_id\n1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n"
+    )
+    report = ar.profile(ar.read_csv(path))
+
+    assert report.columns["user_id"].high_cardinality is True
+    assert "high_cardinality" in report.columns["user_id"].warnings
+
+
+def test_high_cardinality_not_flagged_for_low_cardinality_column(tmp_path):
+    path = tmp_path / "low_card.csv"
+    path.write_text(
+        "status\nactive\nactive\ninactive\nactive\ninactive\n"
+    )
+    report = ar.profile(ar.read_csv(path))
+
+    assert report.columns["status"].high_cardinality is False
+    assert "high_cardinality" not in report.columns["status"].warnings
+
+
+def test_high_cardinality_appears_in_to_dict(tmp_path):
+    path = tmp_path / "card_dict.csv"
+    path.write_text(
+        "uid\na\nb\nc\nd\ne\nf\ng\nh\ni\nj\n"
+    )
+    report = ar.profile(ar.read_csv(path))
+    d = report.columns["uid"].to_dict()
+
+    assert "high_cardinality" in d
+    assert d["high_cardinality"] is True
+
+
+def test_high_cardinality_false_for_single_value_column(tmp_path):
+    path = tmp_path / "constant.csv"
+    path.write_text(
+        "flag\nyes\nyes\nyes\nyes\nyes\n"
+    )
+    report = ar.profile(ar.read_csv(path))
+
+    assert report.columns["flag"].high_cardinality is False
