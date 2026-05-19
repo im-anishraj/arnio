@@ -868,6 +868,25 @@ In this example, `country` becomes required only when
 
 Date validates strict YYYY-MM-DD calendar dates.
 
+### Phone number validation
+
+`PhoneNumber()` validates common international and formatted phone number strings.
+
+```python
+schema = ar.Schema({
+    "phone": ar.PhoneNumber(nullable=False),
+})
+
+result = ar.validate(frame, schema)
+print(result.passed)
+```
+
+Accepted examples include:
+- `+1-555-123-4567`
+- `(555) 123-4567`
+- `+91 9876543210`
+- `5551234567`
+
 ### Warning-only validation
 
 ```python
