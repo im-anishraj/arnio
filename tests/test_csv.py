@@ -913,3 +913,78 @@ def test_default_mode_preserves_strict_behavior(tmp_path):
         match="expected 2",
     ):
         ar.read_csv(csv_path)
+
+
+class TestSniffDelimiter:
+    def test_sniff_comma(self, tmp_path):
+        csv_path = tmp_path / "comma.csv"
+        csv_path.write_text("id,name,age\n1,Alice,30\n2,Bob,25\n")
+        assert ar.sniff_delimiter(csv_path) == ","
+
+    def test_sniff_semicolon(self, tmp_path):
+        csv_path = tmp_path / "semicolon.csv"
+        csv_path.write_text("id;name;age\n1;Alice;30\n2;Bob;25\n")
+        assert ar.sniff_delimiter(csv_path) == ";"
+
+    def test_sniff_tab(self, tmp_path):
+        csv_path = tmp_path / "tab.tsv"
+        csv_path.write_text("id\tname\tage\n1\tAlice\t30\n2\tBob\t25\n")
+        assert ar.sniff_delimiter(csv_path) == "\t"
+
+    def test_sniff_pipe(self, tmp_path):
+        csv_path = tmp_path / "pipe.txt"
+        csv_path.write_text("id|name|age\n1|Alice|30\n2|Bob|25\n")
+        assert ar.sniff_delimiter(csv_path) == "|"
+
+    def test_sniff_quoted_delimiters(self, tmp_path):
+        csv_path = tmp_path / "quoted.csv"
+        csv_path.write_text(
+            'id;name;notes\n1;Alice;"likes commas, tabs\tand pipes|"\n2;Bob;"no special characters"\n'
+        )
+        # Semicolon is the true delimiter, commas/tabs/pipes are only inside quotes
+        assert ar.sniff_delimiter(csv_path) == ";"
+
+    def test_sniff_empty_file_raises(self, tmp_path):
+        csv_path = tmp_path / "empty.csv"
+        csv_path.write_text("")
+        with pytest.raises(ar.CsvReadError, match="CSV file is empty"):
+            ar.sniff_delimiter(csv_path)
+
+    def test_sniff_ambiguous_no_delimiter_raises(self, tmp_path):
+        csv_path = tmp_path / "single_column.csv"
+        csv_path.write_text("only_column_name\nval1\nval2\n")
+        with pytest.raises(ValueError, match="Could not determine CSV delimiter"):
+            ar.sniff_delimiter(csv_path)
+
+    def test_sniff_binary_file_raises(self, tmp_path):
+        csv_path = tmp_path / "binary.csv"
+        with open(csv_path, "wb") as f:
+            f.write(b"col1,col2\n\0binary\0,data\n")
+        with pytest.raises(
+            ar.CsvReadError,
+            match="CSV input contains NUL bytes and appears to be binary or corrupted",
+        ):
+            ar.sniff_delimiter(csv_path)
+
+    def test_sniff_invalid_types(self, tmp_path):
+        csv_path = tmp_path / "dummy.csv"
+        csv_path.write_text("a,b\n1,2\n")
+
+        with pytest.raises(TypeError, match="encoding must be a string"):
+            ar.sniff_delimiter(csv_path, encoding=123)
+
+        with pytest.raises(TypeError, match="sample_size must be an integer"):
+            ar.sniff_delimiter(csv_path, sample_size=True)
+
+        with pytest.raises(TypeError, match="sample_size must be an integer"):
+            ar.sniff_delimiter(csv_path, sample_size="100")
+
+        with pytest.raises(ValueError, match="sample_size must be a positive integer"):
+            ar.sniff_delimiter(csv_path, sample_size=0)
+
+        with pytest.raises(ValueError, match="sample_size must be a positive integer"):
+            ar.sniff_delimiter(csv_path, sample_size=-5)
+
+    def test_sniff_missing_file_raises(self, tmp_path):
+        with pytest.raises(FileNotFoundError):
+            ar.sniff_delimiter(tmp_path / "nonexistent.csv")
