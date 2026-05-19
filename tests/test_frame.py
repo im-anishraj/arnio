@@ -235,11 +235,19 @@ class TestArFrame:
         assert len(frame) == 1
 
 
-def test_repr_returns_string():
+def test_str_truncates_long_column_names():
     df = pd.DataFrame({"very_very_very_long_column_name_for_testing": [1, 2]})
 
     frame = ar.from_pandas(df)
 
-    result = repr(frame)
+    result = str(frame)
 
-    assert isinstance(result, str)
+    assert "very_very_very_long_..." in result
+
+    columns_line = [line for line in result.split("\n") if line.startswith("Columns:")][
+        0
+    ]
+
+    assert "very_very_very_long_column_name_for_testing" not in columns_line
+
+    assert frame.columns == ["very_very_very_long_column_name_for_testing"]
