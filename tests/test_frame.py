@@ -47,6 +47,8 @@ def test_from_dict_dtype():
     })
 
     assert frame.shape == (2, 1)
+
+    assert frame.shape == (2, 1)
 def test_preview_returns_string(sample_csv):
     frame = ar.read_csv(sample_csv)
     result = frame.preview()
