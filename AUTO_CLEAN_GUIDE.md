@@ -10,54 +10,49 @@ and what data it may permanently remove.
 | `safe` | `strip_whitespace` only — no data removed |
 | `strict` | `strip_whitespace` + `cast_types` + `drop_duplicates` |
 
+## Preview before applying
+
+Use `ar.profile()` and `ar.suggest_cleaning()` to inspect
+what strict mode would change before applying it:
+
+```python
+import arnio as ar
+
+frame = ar.read_csv("data.csv")
+
+# Step 1 — preview suggested changes
+report = ar.profile(frame)
+suggestions = ar.suggest_cleaning(frame)
+print(suggestions)
+
+# Step 2 — apply if satisfied
+clean = ar.auto_clean(frame, mode="strict")
+```
+
 ## Data-loss risks in strict mode
 
-### 1. drop_duplicates — rows are permanently removed
+### 1. drop_duplicates — rows permanently removed
 
-`strict` mode drops exact duplicate rows. This is irreversible.
+Exact duplicate rows are dropped and cannot be recovered:
 
 ```python
 # These two rows are identical — one will be dropped
 # order_id  customer  city
 # 1002      Prasoon   London
 # 1002      Prasoon   London
+
+clean = ar.auto_clean(frame, mode="strict")
 ```
 
 ### 2. cast_types — lossy type conversion
 
-`strict` mode may cast string columns to `int64`, `float64`,
-or `bool`. This requires explicit opt-in:
+Strict mode may cast string columns to `int64`, `float64`,
+or `bool`. Leading zeros and mixed-type values can be lost:
 
 ```python
-# This raises ValueError without allow_lossy_casts=True
+# "007" may become 7 after cast
+# Mixed-type columns may partially fail
 clean = ar.auto_clean(frame, mode="strict")
-
-# This applies casts — data loss possible
-clean = ar.auto_clean(frame, mode="strict", allow_lossy_casts=True)
-```
-
-**What can be lost:**
-- Leading zeros in numeric-looking strings (`"007"` → `7`)
-- Mixed-type columns that partially parse
-
-## Always preview first with dry_run=True
-
-```python
-# See what strict mode would do — no changes applied
-report = ar.auto_clean(frame, mode="strict", dry_run=True)
-print(report.summary())
-```
-
-## Return the report alongside the cleaned frame
-
-```python
-clean, report = ar.auto_clean(
-    frame,
-    mode="strict",
-    allow_lossy_casts=True,
-    return_report=True,
-)
-print(report.summary())
 ```
 
 ## Safe workflow recommendation
@@ -67,20 +62,18 @@ import arnio as ar
 
 frame = ar.read_csv("data.csv")
 
-# Step 1 — preview first
-report = ar.auto_clean(frame, mode="strict", dry_run=True)
+# Always profile first
+report = ar.profile(frame)
 print(report.summary())
 
-# Step 2 — apply only if satisfied
-clean = ar.auto_clean(
-    frame,
-    mode="strict",
-    allow_lossy_casts=True,
-)
+suggestions = ar.suggest_cleaning(frame)
+print(suggestions)
+
+# Apply strict only after reviewing suggestions
+clean = ar.auto_clean(frame, mode="strict")
 ```
 
 ## Related docs
 
-- `README.md` — quickstart and auto_clean tutorial
-- `API_REFERENCE.md` — full auto_clean API reference
+- `README.md` — quickstart and auto-clean tutorial
 - `ARCHITECTURE.md` — pipeline and cleaning engine design
