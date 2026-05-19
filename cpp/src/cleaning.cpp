@@ -79,7 +79,13 @@ static CellValue coerce_value(const CellValue& value, DType target) {
             return std::get<bool>(value) ? int64_t{1} : int64_t{0};
         }
         if (std::holds_alternative<double>(value)) {
-            return static_cast<int64_t>(std::get<double>(value));
+            double d = std::get<double>(value);
+            if (std::isnan(d) || std::isinf(d) || d != std::floor(d)) {
+                throw std::invalid_argument(
+                    "Lossy or non-finite numeric fill values are not permitted for integer "
+                    "columns.");
+            }
+            return static_cast<int64_t>(d);
         }
         if (std::holds_alternative<std::string>(value)) {
             const auto& s = std::get<std::string>(value);
@@ -93,7 +99,14 @@ static CellValue coerce_value(const CellValue& value, DType target) {
     }
 
     if (target == DType::FLOAT64) {
-        if (std::holds_alternative<double>(value)) return std::get<double>(value);
+        if (std::holds_alternative<double>(value)) {
+            double d = std::get<double>(value);
+            if (std::isnan(d) || std::isinf(d)) {
+                throw std::invalid_argument(
+                    "Non-finite numeric fill values are not permitted for float columns.");
+            }
+            return d;
+        }
         if (std::holds_alternative<int64_t>(value)) {
             return static_cast<double>(std::get<int64_t>(value));
         }
@@ -103,6 +116,10 @@ static CellValue coerce_value(const CellValue& value, DType target) {
             try {
                 size_t pos = 0;
                 double parsed = std::stod(s, &pos);
+                if (std::isnan(parsed) || std::isinf(parsed)) {
+                    throw std::invalid_argument(
+                        "Non-finite numeric fill values are not permitted for float columns.");
+                }
                 if (pos == s.size()) return parsed;
             } catch (...) {
             }
@@ -123,7 +140,6 @@ static CellValue coerce_value(const CellValue& value, DType target) {
 
     throw std::invalid_argument("Fill value is incompatible with target column type");
 }
-
 static std::invalid_argument cast_error(const std::string& column, const std::string& value,
                                         const std::string& target, size_t row) {
     return std::invalid_argument("Cannot cast column '" + column + "' value '" + value +
