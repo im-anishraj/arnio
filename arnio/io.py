@@ -563,3 +563,143 @@ def read_jsonl(
 
     df = pd.DataFrame(records)
     return from_pandas(df)
+
+
+def sniff_delimiter(
+    path: str | os.PathLike[str],
+    *,
+    encoding: str = "utf-8",
+    sample_size: int = 2048,
+) -> str:
+    """Sniff and return the field delimiter character from a CSV file.
+
+    Parameters
+    ----------
+    path : str or os.PathLike[str]
+        Path to the CSV file.
+    encoding : str, default "utf-8"
+        File encoding.
+    sample_size : int, default 2048
+        Number of bytes to sample from the start of the file for sniffing.
+
+    Returns
+    -------
+    str
+        The detected delimiter (one of ",", ";", "\\t", "|").
+
+    Raises
+    ------
+    CsvReadError
+        If the file is empty or contains binary data.
+    ValueError
+        If the sample size is invalid or the delimiter is ambiguous.
+    """
+    path = os.fspath(path)
+
+    # 1. Parameter Validation
+    if not isinstance(encoding, str):
+        raise TypeError("encoding must be a string")
+    if isinstance(sample_size, bool) or not isinstance(sample_size, int):
+        raise TypeError("sample_size must be an integer")
+    if sample_size <= 0:
+        raise ValueError("sample_size must be a positive integer greater than 0")
+
+    # 2. Check File Exists and Check for Binary Content
+    try:
+        if os.path.getsize(path) == 0:
+            raise CsvReadError(f"CSV file is empty: {path!r}")
+    except FileNotFoundError as e:
+        raise FileNotFoundError(f"File not found: {path!r}") from e
+
+    try:
+        with open(path, "rb") as f:
+            if b"\0" in f.read(1024):
+                raise CsvReadError(
+                    "CSV input contains NUL bytes and appears to be binary or corrupted"
+                )
+    except FileNotFoundError:
+        pass
+
+    # 3. Read Sample
+    try:
+        with open(path, encoding=encoding, errors="replace") as f:
+            sample = f.read(sample_size)
+    except LookupError as e:
+        raise ValueError(f"Unknown encoding: {encoding}") from e
+
+    if not sample:
+        raise CsvReadError(f"CSV file is empty: {path!r}")
+
+    # 4. Analyze Sample with Quote-Aware Character Scanner
+    candidates = [",", ";", "\t", "|"]
+    counts = {c: [0] for c in candidates}
+
+    in_quotes = False
+    quote_char = None
+
+    i = 0
+    n = len(sample)
+    while i < n:
+        char = sample[i]
+        if in_quotes:
+            if char == quote_char:
+                # Check for escaped quote (e.g. standard CSV double-quote "")
+                if i + 1 < n and sample[i + 1] == quote_char:
+                    i += 1  # Skip the escaped quote
+                else:
+                    in_quotes = False
+                    quote_char = None
+        else:
+            if char in ('"', "'"):
+                in_quotes = True
+                quote_char = char
+            elif char in ("\n", "\r"):
+                # Line boundary outside quotes
+                if char == "\r" and i + 1 < n and sample[i + 1] == "\n":
+                    i += 1
+                for c in candidates:
+                    counts[c].append(0)
+            elif char in counts:
+                counts[char][-1] += 1
+        i += 1
+
+    # Remove the last line if it is empty (e.g., trailing newline)
+    for c in candidates:
+        if len(counts[c]) > 1 and counts[c][-1] == 0:
+            counts[c].pop()
+
+    # 5. Score Candidates and Detect Ties/Ambiguity
+    best_candidates = []
+    best_score = -1.0
+
+    from collections import Counter
+
+    for delimiter in candidates:
+        line_counts = counts[delimiter]
+        non_zero_counts = [c for c in line_counts if c > 0]
+        if not non_zero_counts:
+            continue
+
+        counter = Counter(non_zero_counts)
+        mode, mode_freq = counter.most_common(1)[0]
+
+        consistency = mode_freq / len(line_counts)
+        score = consistency * 10.0 + (mode * 0.1)
+
+        if score > best_score:
+            best_score = score
+            best_candidates = [delimiter]
+        elif abs(score - best_score) < 1e-9:
+            best_candidates.append(delimiter)
+
+    if not best_candidates or best_score <= 0.0:
+        raise ValueError(
+            f"Could not determine CSV delimiter from sample: no candidate delimiters found in {path!r}"
+        )
+
+    if len(best_candidates) > 1:
+        raise ValueError(
+            f"Could not determine CSV delimiter from sample: multiple candidate delimiters {best_candidates} have the same score"
+        )
+
+    return best_candidates[0]
