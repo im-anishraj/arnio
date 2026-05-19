@@ -6,6 +6,7 @@ CSV reading and writing functions.
 from __future__ import annotations
 
 import csv
+import io
 import os
 import shutil
 import tempfile
@@ -166,11 +167,41 @@ def _validate_parser_mode(mode: str) -> str:
     """Validate CSV parser mode."""
     if not isinstance(mode, str):
         raise TypeError("mode must be a string")
-
     if mode not in {"strict", "permissive"}:
         raise ValueError("mode must be either 'strict' or 'permissive'")
-
     return mode
+
+
+def _materialize_csv_input(
+    source: str | os.PathLike[str] | io.TextIOBase,
+) -> tuple[str, bool]:
+    """Convert supported CSV inputs into a filesystem path."""
+    if isinstance(source, (str, os.PathLike)):
+        return os.fspath(source), False
+    if isinstance(source, io.StringIO) or (
+        hasattr(source, "read") and callable(source.read)
+    ):
+        content = source.read()
+
+        if not isinstance(content, str):
+            raise TypeError("read_csv file-like objects must return text, not bytes")
+
+        tmp = tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            suffix=".csv",
+            delete=False,
+        )
+
+        try:
+            tmp.write(content)
+            tmp.close()
+            return tmp.name, True
+        except Exception:
+            os.unlink(tmp.name)
+            raise
+
+    raise TypeError("read_csv expected a filesystem path or text file-like object")
 
 
 def read_csv(
@@ -190,8 +221,9 @@ def read_csv(
 
     Parameters
     ----------
-    path : str
-        Path to the CSV file. Supports .csv, .txt, and .tsv extensions.
+    path : str or file-like object
+        Filesystem path or text file-like object containing CSV data.
+        Supports .csv, .txt, and .tsv extensions for path inputs.
     delimiter : str, default ","
         Field delimiter character.
     has_header : bool, default True
@@ -239,7 +271,7 @@ def read_csv(
     --------
     >>> frame = ar.read_csv("data.csv", delimiter=",", has_header=True)
     """
-    path = os.fspath(path)
+    path, should_cleanup = _materialize_csv_input(path)
     path_lower = path.lower()
     if not (
         path_lower.endswith(".csv")
@@ -277,9 +309,13 @@ def read_csv(
         config.nrows = _validate_nrows(nrows)
 
     reader = _CsvReader(config)
+
     try:
         with _utf8_csv_path(path, encoding, delimiter=delimiter) as native_path:
             cpp_frame = reader.read(native_path)
+
+        return ArFrame(cpp_frame)
+
     except ValueError:
         raise
     except CsvReadError:
@@ -287,7 +323,9 @@ def read_csv(
     except RuntimeError as e:
         raise CsvReadError(str(e)) from e
 
-    return ArFrame(cpp_frame)
+    finally:
+        if should_cleanup and os.path.exists(path):
+            os.unlink(path)
 
 
 def write_csv(
