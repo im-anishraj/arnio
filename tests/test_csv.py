@@ -866,6 +866,20 @@ def test_scan_csv_non_utf8_multiline_boundary(tmp_path):
     assert schema == {"id": "int64", "text": "string"}
 
 
+def test_read_csv_non_utf8_quoted_multiline_round_trips(tmp_path):
+    """read_csv must preserve quoted multiline records through non-UTF-8 transcoding."""
+    csv_file = tmp_path / "test_multiline_latin1.csv"
+    csv_file.write_bytes(
+        'id,text\n1,"line1\ncaf\xe9\nline3"\n2,done\n'.encode("latin-1")
+    )
+
+    df = ar.to_pandas(ar.read_csv(str(csv_file), encoding="latin-1"))
+
+    assert list(df["id"]) == [1, 2]
+    assert df["text"].iloc[0] == "line1\ncafé\nline3"
+    assert df["text"].iloc[1] == "done"
+
+
 def test_scan_csv_type_evidence_after_limit(tmp_path):
     """Type evidence after sample window must not affect inference."""
     csv_file = tmp_path / "test_type_evidence.csv"
