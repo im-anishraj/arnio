@@ -397,35 +397,35 @@ Frame CsvReader::read(const std::string& path) const {
     std::optional<size_t> expected_cols =
         config_.has_header ? std::optional<size_t>{header.size()} : std::nullopt;
     while (read_record(file, line)) {
-    ++record_number;
+        ++record_number;
 
-    if (config_.nrows.has_value() && row_count >= config_.nrows.value()) {
-        break;
-    }
-
-    if (line.empty()) {
-        continue;
-    }
-
-    auto fields = parse_line(line);
-
-    if (!config_.has_header && !expected_cols.has_value()) {
-        expected_cols = fields.size();
-    }
-
-    if (config_.mode == "strict" && expected_cols.has_value()) {
-        validate_row_width(record_number, expected_cols.value(), fields.size());
-    }
-
-    if (expected_cols.has_value()) {
-        while (fields.size() < expected_cols.value()) {
-            fields.push_back("");
+        if (config_.nrows.has_value() && row_count >= config_.nrows.value()) {
+            break;
         }
-    }
 
-    raw_data.push_back(std::move(fields));
-    ++row_count;
-}
+        if (line.empty()) {
+            continue;
+        }
+
+        auto fields = parse_line(line);
+
+        if (!config_.has_header && !expected_cols.has_value()) {
+            expected_cols = fields.size();
+        }
+
+        if (config_.mode == "strict" && expected_cols.has_value()) {
+            validate_row_width(record_number, expected_cols.value(), fields.size());
+        }
+
+        if (expected_cols.has_value()) {
+            while (fields.size() < expected_cols.value()) {
+                fields.push_back("");
+            }
+        }
+
+        raw_data.push_back(std::move(fields));
+        ++row_count;
+    }
     file.close();
 
     // If no header, generate column names
