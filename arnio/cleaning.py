@@ -1280,7 +1280,6 @@ def replace_values(frame, mapping, column=None):
         if normalized_mapping:
             s = s.replace(normalized_mapping)
         if null_key_present:
-
             # Replace only values that were already null before replacement so
             # null-valued mapping results remain real nulls.
             s = s.where(~original_null_mask, null_replacement)
@@ -1291,7 +1290,6 @@ def replace_values(frame, mapping, column=None):
         if normalized_mapping:
             df = df.replace(normalized_mapping)
         if null_key_present:
-
             # Replace only values that were already null before replacement so
             # null-valued mapping results remain real nulls.
             df = df.where(~original_null_mask, null_replacement)
@@ -1352,6 +1350,5 @@ def standardize_missing_tokens(frame, tokens=None, subset=None):
             df[subset] = df[subset].replace(default_tokens, float("nan"))
         else:
             df[subset] = df[subset].replace(tokens, float("nan"))
-
 
     return from_pandas(df) if is_arframe else df
