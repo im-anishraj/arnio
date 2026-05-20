@@ -122,6 +122,11 @@ def register_step(name: str, fn: Callable, overwrite: bool = False):
                 f"Cannot register '{name}': conflicts with built-in C++ step. "
                 f"Use a different name."
             )
+        if name in _DEPRECATED_STEP_ALIASES:
+            raise ValueError(
+                f"Cannot register '{name}': that name is reserved as a deprecated "
+                "pipeline step alias."
+            )
         if name in _PYTHON_STEP_REGISTRY and not overwrite:
             raise ValueError(
                 f"Step '{name}' is already registered as a custom Python step. "

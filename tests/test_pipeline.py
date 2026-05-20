@@ -279,6 +279,18 @@ class TestPipeline:
                 "strip_whitespace",
             )
 
+    def test_register_step_rejects_reserved_deprecated_alias_name(self):
+        pipeline_module._register_deprecated_step_alias(
+            "legacy_strip",
+            "strip_whitespace",
+        )
+
+        def custom_step(df):
+            return df
+
+        with pytest.raises(ValueError, match="deprecated pipeline step alias"):
+            ar.register_step("legacy_strip", custom_step)
+
     def test_pipeline_mapping_shorthand(self, sample_csv):
         frame = ar.read_csv(sample_csv)
         result = ar.pipeline(
