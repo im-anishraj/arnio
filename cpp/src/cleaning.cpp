@@ -292,13 +292,14 @@ Frame strip_whitespace(const Frame& frame, const std::optional<std::vector<std::
                 } else {
                     std::string val = std::get<std::string>(src.at(r));
                     // Trim leading whitespace in-place
-                    val.erase(val.begin(), std::find_if(val.begin(), val.end(), [](unsigned char c) {
-                        return !std::isspace(c);
-                    }));
+                    val.erase(val.begin(),
+                              std::find_if(val.begin(), val.end(),
+                                           [](unsigned char c) { return !std::isspace(c); }));
                     // Trim trailing whitespace in-place
-                    val.erase(std::find_if(val.rbegin(), val.rend(), [](unsigned char c) {
-                        return !std::isspace(c);
-                    }).base(), val.end());
+                    val.erase(std::find_if(val.rbegin(), val.rend(),
+                                           [](unsigned char c) { return !std::isspace(c); })
+                                  .base(),
+                              val.end());
                     col.push_back(std::move(val));
                 }
             }
@@ -309,7 +310,6 @@ Frame strip_whitespace(const Frame& frame, const std::optional<std::vector<std::
     }
     return Frame(frame.num_rows(), std::move(new_cols));
 }
-
 
 Frame normalize_case(const Frame& frame, const std::optional<std::vector<std::string>>& subset,
                      const std::string& case_type) {
