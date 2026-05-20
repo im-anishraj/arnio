@@ -406,6 +406,12 @@ def run_case(case, skip_correctness=False):
         print("No baseline found for regression comparison.")
 
     print()
+    return {
+        "case": case.name,
+        "pandas_exec_time": avg(pd_times),
+        "arnio_exec_time": avg(ar_times),
+        "speedup": avg(pd_times) / avg(ar_times),
+    }
 
 
 def run_child(engine, case_path):
@@ -450,5 +456,10 @@ if __name__ == "__main__":
         )
     elif rss_source == "unavailable":
         print("Note: Peak RSS unavailable (install psutil for process RSS).")
+    results = []
+
     for benchmark_case in BENCHMARKS:
-        run_case(benchmark_case)
+        results.append(run_case(benchmark_case))
+
+    with open("benchmark_results.json", "w") as f:
+        json.dump(results, f, indent=2)
