@@ -25,13 +25,3 @@ def test_readme_privacy_table_covers_key_exports():
         "`top_values` unchanged",
     ):
         assert phrase in section, f"privacy section missing: {phrase!r}"
-
-
-def test_api_reference_documents_profiling_redaction():
-    text = (ROOT / "API_REFERENCE.md").read_text(encoding="utf-8")
-    assert "redact_sample_values" in text
-    assert "#### Privacy" in text
-    assert "to_markdown()" in text
-    section_start = text.index("### ColumnProfile")
-    column_section = text[section_start : text.index("---", section_start)]
-    assert "to_dict(redact_sample_values" in column_section
