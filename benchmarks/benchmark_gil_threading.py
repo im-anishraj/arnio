@@ -9,14 +9,16 @@ import threading
 import time
 from pathlib import Path
 
+import os
 import arnio as ar
 
 CSV_FILE = "benchmarks/benchmark_1m.csv"
-FALLBACK_ROWS = 500_000
+DRY_RUN = os.getenv("ARNIO_BENCHMARK_DRY_RUN") == "1"
+FALLBACK_ROWS = 10 if DRY_RUN else 500_000
 
 
 def ensure_or_generate(path, tmp_path):
-    if Path(path).exists():
+    if Path(path).exists() and not DRY_RUN:
         return path
     print(f"[info] {path} not found, generating {FALLBACK_ROWS} rows...")
     lines = ["id,name,value,category"]

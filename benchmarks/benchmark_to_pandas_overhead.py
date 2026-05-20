@@ -77,7 +77,11 @@ def run_all_benchmarks():
         print("=" * 70)
         sys.exit(1)
 
-    scales = [10000, 100000, 1000000]  # 10k, 100k, 1M rows
+    import os
+    if os.getenv("ARNIO_BENCHMARK_DRY_RUN") == "1":
+        scales = [10]
+    else:
+        scales = [10000, 100000, 1000000]  # 10k, 100k, 1M rows
     dtypes = ["numeric", "bool", "string"]
 
     print("=" * 70)
