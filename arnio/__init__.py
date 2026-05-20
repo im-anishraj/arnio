@@ -37,7 +37,7 @@ from .cleaning import (
     trim_column_names,
     validate_columns_exist,
 )
-from .convert import from_pandas, to_pandas
+from .convert import from_dict, from_pandas, to_pandas
 from .exceptions import (
     ArnioError,
     CsvReadError,
@@ -141,6 +141,7 @@ __all__ = [
     # Conversion
     "to_pandas",
     "from_pandas",
+    "from_dict",
     # Integrations
     "ArnioPandasAccessor",
     # Pipeline

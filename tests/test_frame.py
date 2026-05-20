@@ -7,7 +7,24 @@ import pytest
 
 import arnio as ar
 
+
 # ── Normal behaviour ──────────────────────────────────────────────────────────
+def test_case_from_dict():
+    data = {"name": ["Alice", "Bob"], "age": [25, 30]}
+
+    frame = ar.from_dict(data)
+    assert frame.columns == ["name", "age"]
+    assert frame.shape == (2, 2)
+
+
+def test_case_from_nested_dict():
+    data = {
+        "name": ["Alice", "Bob"],
+        "info": [{"city": "NY", "age": 25}, {"city": "LA", "age": 30}],
+    }
+    frame = ar.from_dict(data)
+    df_out = ar.to_pandas(frame)
+    assert isinstance(df_out["info"][0], str)
 
 
 def test_preview_returns_string(sample_csv):
@@ -49,6 +66,21 @@ def test_preview_n_equals_one(sample_csv):
 
 
 # ── Edge cases ────────────────────────────────────────────────────────────────
+def test_case_nulldict():
+    data = {}
+    frame = ar.from_dict(data)
+
+    assert frame.shape == (0, 0)
+    assert frame.columns == []
+
+
+def test_case_noneincluded():
+    # Verifies that columns containing None/missing values are accepted
+    data = {"name": ["Alice", "Bob"], "age": [25, None]}
+
+    frame = ar.from_dict(data)
+    assert frame.shape == (2, 2)
+    assert frame.columns == ["name", "age"]
 
 
 def test_preview_n_exceeds_row_count(sample_csv):
@@ -78,6 +110,17 @@ def test_preview_large_csv(large_csv):
 
 
 # ── Invalid inputs ────────────────────────────────────────────────────────────
+def test_case_length_mismatch():
+    data = {"name": ["Alice", "Bob"], "age": [25]}  # Missing an age
+    with pytest.raises(ValueError):
+        ar.from_dict(data)
+
+
+def test_case_scalar_dict():
+    # Pandas pd.DataFrame({"a": 1}) fails because it requires an index.
+    data = {"name": "Alice", "age": 25}
+    with pytest.raises(ValueError):
+        ar.from_dict(data)
 
 
 def test_preview_invalid_n_zero(sample_csv):
@@ -95,13 +138,13 @@ def test_preview_invalid_n_negative(sample_csv):
 def test_preview_invalid_n_string(sample_csv):
     frame = ar.read_csv(sample_csv)
     with pytest.raises(ValueError):
-        frame.preview(n="five")
+        frame.preview(n="five")  # type: ignore
 
 
 def test_preview_invalid_n_float(sample_csv):
     frame = ar.read_csv(sample_csv)
     with pytest.raises(ValueError):
-        frame.preview(n=2.5)
+        frame.preview(n=2.5)  # type: ignore
 
 
 def test_preview_invalid_n_bool(sample_csv):
@@ -113,7 +156,7 @@ def test_preview_invalid_n_bool(sample_csv):
 def test_preview_invalid_n_none(sample_csv):
     frame = ar.read_csv(sample_csv)
     with pytest.raises(ValueError):
-        frame.preview(n=None)
+        frame.preview(n=None)  # type: ignore
 
 
 def test_select_columns_valid():
@@ -182,21 +225,21 @@ def test_select_columns_string_input():
     df = pd.DataFrame({"name": ["Alice"]})
     frame = ar.from_pandas(df)
     with pytest.raises(TypeError, match="not a string"):
-        frame.select_columns("name")
+        frame.select_columns("name")  # type: ignore
 
 
 def test_select_columns_non_string_items():
     df = pd.DataFrame({"name": ["Alice"]})
     frame = ar.from_pandas(df)
     with pytest.raises(TypeError, match="must be strings"):
-        frame.select_columns(["name", 123])
+        frame.select_columns(["name", 123])  # type: ignore
 
 
 def test_select_columns_invalid_container():
     df = pd.DataFrame({"name": ["Alice"]})
     frame = ar.from_pandas(df)
     with pytest.raises(TypeError, match="list or tuple"):
-        frame.select_columns({"name"})
+        frame.select_columns({"name"})  # type: ignore
 
 
 def test_select_columns_empty_frame():
@@ -291,7 +334,7 @@ def test_str_keeps_normal_column_names():
 
 
 def test_add_column_accepts_matching_lengths():
-    from arnio._arnio_cpp import Column, DType, Frame
+    from arnio._arnio_cpp import Column, DType, Frame  # type: ignore
 
     frame = Frame()
 
@@ -310,7 +353,7 @@ def test_add_column_accepts_matching_lengths():
 
 
 def test_add_column_rejects_mismatched_lengths():
-    from arnio._arnio_cpp import Column, DType, Frame
+    from arnio._arnio_cpp import Column, DType, Frame  # type: ignore
 
     frame = Frame()
 
@@ -329,7 +372,7 @@ def test_add_column_rejects_mismatched_lengths():
 
 
 def test_add_column_allows_first_column_in_empty_frame():
-    from arnio._arnio_cpp import Column, DType, Frame
+    from arnio._arnio_cpp import Column, DType, Frame  # type: ignore
 
     frame = Frame()
 
