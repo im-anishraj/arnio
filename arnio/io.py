@@ -180,9 +180,12 @@ def read_csv(
     Parameters
     ----------
     path : str
-        Path to the CSV file. Supports .csv, .txt, and .tsv extensions.
+        Path to the CSV file. The file extension restriction has been relaxed:
+        any extension is accepted. For ``.tsv`` files, the delimiter is
+        automatically set to ``\\t`` unless the caller supplies one explicitly.
     delimiter : str, default ","
-        Field delimiter character.
+        Field delimiter character. When reading a ``.tsv`` file and this
+        parameter is not supplied, it defaults to ``'\\t'`` automatically.
     has_header : bool, default True
         Whether the file has a header row.
     usecols : list[str], optional
@@ -216,7 +219,7 @@ def read_csv(
     Raises
     ------
     ValueError
-        If file format is unsupported or if thousands_separator is invalid.
+        If thousands_separator is invalid.
 
     TypeError
         If thousands_separator is not a string or None.
@@ -227,17 +230,15 @@ def read_csv(
     Examples
     --------
     >>> frame = ar.read_csv("data.csv", delimiter=",", has_header=True)
+    >>> frame = ar.read_csv("data.tsv")  # delimiter auto-set to tab
+    >>> frame = ar.read_csv("data.dat")  # non-standard extension accepted
     """
     path = os.fspath(path)
     path_lower = path.lower()
-    if not (
-        path_lower.endswith(".csv")
-        or path_lower.endswith(".txt")
-        or path_lower.endswith(".tsv")
-    ):
-        raise ValueError(
-            f"Unsupported file format: {path}. Only .csv, .txt, and .tsv are supported."
-        )
+
+    # Auto-detect tab delimiter for .tsv files when user has not supplied one.
+    if path_lower.endswith(".tsv") and delimiter == ",":
+        delimiter = "\t"
 
     try:
         if os.path.getsize(path) == 0:
@@ -365,9 +366,12 @@ def scan_csv(
     Parameters
     ----------
     path : str
-        Path to the CSV file. Supports .csv, .txt, and .tsv extensions.
+        Path to the CSV file. The file extension restriction has been relaxed:
+        any extension is accepted. For ``.tsv`` files, the delimiter is
+        automatically set to ``\\t`` unless the caller supplies one explicitly.
     delimiter : str, default ","
-        Field delimiter character.
+        Field delimiter character. When scanning a ``.tsv`` file and this
+        parameter is not supplied, it defaults to ``'\\t'`` automatically.
     encoding : str, default "utf-8"
         File encoding. For non-UTF-8 inputs, a sample of the file is
         transcoded to infer the schema.
@@ -392,7 +396,7 @@ def scan_csv(
     Raises
     ------
     ValueError
-        If file format is unsupported or if thousands_separator is invalid.
+        If thousands_separator is invalid.
 
     TypeError
         If thousands_separator is not a string or None.
@@ -405,17 +409,15 @@ def scan_csv(
     >>> schema = ar.scan_csv("data.csv")
     >>> print(schema)
     {'name': 'string', 'age': 'int64'}
+    >>> schema = ar.scan_csv("data.tsv")  # delimiter auto-set to tab
+    >>> schema = ar.scan_csv("data.dat")  # non-standard extension accepted
     """
     path = os.fspath(path)
     path_lower = path.lower()
-    if not (
-        path_lower.endswith(".csv")
-        or path_lower.endswith(".txt")
-        or path_lower.endswith(".tsv")
-    ):
-        raise ValueError(
-            f"Unsupported file format: {path}. Only .csv, .txt, and .tsv are supported."
-        )
+
+    # Auto-detect tab delimiter for .tsv files when user has not supplied one.
+    if path_lower.endswith(".tsv") and delimiter == ",":
+        delimiter = "\t"
 
     try:
         if os.path.getsize(path) == 0:

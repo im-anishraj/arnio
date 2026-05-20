@@ -325,15 +325,52 @@ class TestReadCsv:
         assert " score " in schema
         assert " active " in schema
 
-    def test_unsupported_extension(self, tmp_path):
-        import pytest
+    def test_unsupported_extension_now_allowed(self, tmp_path):
+        """Non-standard extensions are no longer rejected (Issue #34)."""
+        # .dat extension: should be parsed successfully
+        dat_path = tmp_path / "data.dat"
+        dat_path.write_text("name,age\nAlice,30\n")
+        frame = ar.read_csv(str(dat_path))
+        assert isinstance(frame, ar.ArFrame)
+        assert frame.shape == (1, 2)
 
-        file_path = str(tmp_path / "data.json")
-        with open(file_path, "w") as f:
-            f.write('{"a": 1}')
+        # .log extension: should be parsed successfully
+        log_path = tmp_path / "data.log"
+        log_path.write_text("x,y\n1,2\n")
+        frame = ar.read_csv(str(log_path))
+        assert isinstance(frame, ar.ArFrame)
+        assert frame.shape == (1, 2)
 
-        with pytest.raises(ValueError, match="Unsupported file format"):
-            ar.read_csv(file_path)
+        # .data extension: should be parsed successfully
+        data_path = tmp_path / "records.data"
+        data_path.write_text("col1,col2\nhello,world\n")
+        frame = ar.read_csv(str(data_path))
+        assert isinstance(frame, ar.ArFrame)
+        assert frame.shape == (1, 2)
+
+    def test_tsv_auto_delimiter_read_csv(self, tmp_path):
+        """TSV files should auto-use tab delimiter (Issue #34)."""
+        tsv_path = tmp_path / "data.tsv"
+        tsv_path.write_text("name\tage\nAlice\t30\nBob\t25\n")
+
+        # Without explicit delimiter -- should auto-detect tab
+        frame = ar.read_csv(str(tsv_path))
+        assert isinstance(frame, ar.ArFrame)
+        assert frame.columns == ["name", "age"]
+        assert frame.shape == (2, 2)
+        df = ar.to_pandas(frame)
+        assert df["name"].tolist() == ["Alice", "Bob"]
+        assert df["age"].tolist() == [30, 25]
+
+    def test_tsv_explicit_delimiter_not_overridden(self, tmp_path):
+        """Explicit delimiter must not be overridden for .tsv files (Issue #34)."""
+        tsv_path = tmp_path / "pipe.tsv"
+        tsv_path.write_text("name|age\nAlice|30\n")
+
+        # User explicitly sets pipe delimiter -- must be respected
+        frame = ar.read_csv(str(tsv_path), delimiter="|")
+        assert frame.columns == ["name", "age"]
+        assert frame.shape == (1, 2)
 
     def test_binary_file_rejection(self, tmp_path):
         file_path = str(tmp_path / "data.csv")
@@ -659,6 +696,37 @@ class TestScanCsv:
     def test_scan_missing_file_passthrough(self, tmp_path):
         with pytest.raises(ar.CsvReadError):
             ar.scan_csv(str(tmp_path / "nonexistent.csv"))
+
+    def test_scan_csv_non_standard_extensions_allowed(self, tmp_path):
+        """Non-standard extensions should not raise ValueError (Issue #34)."""
+        dat_path = tmp_path / "data.dat"
+        dat_path.write_text("name,age\nAlice,30\n")
+        schema = ar.scan_csv(str(dat_path))
+        assert "name" in schema
+        assert "age" in schema
+
+        log_path = tmp_path / "events.log"
+        log_path.write_text("x,y\n1,2\n")
+        schema = ar.scan_csv(str(log_path))
+        assert "x" in schema
+        assert "y" in schema
+
+    def test_scan_csv_tsv_auto_delimiter(self, tmp_path):
+        """TSV files should auto-use tab delimiter in scan_csv (Issue #34)."""
+        tsv_path = tmp_path / "data.tsv"
+        tsv_path.write_text("name\tage\nAlice\t30\nBob\t25\n")
+
+        schema = ar.scan_csv(str(tsv_path))
+        # Must return exactly 2 columns — confirms tab delimiter was used
+        assert set(schema.keys()) == {"name", "age"}
+
+    def test_scan_csv_tsv_explicit_delimiter_not_overridden(self, tmp_path):
+        """Explicit delimiter must not be overridden for .tsv files (Issue #34)."""
+        tsv_path = tmp_path / "pipe.tsv"
+        tsv_path.write_text("name|age\nAlice|30\n")
+
+        schema = ar.scan_csv(str(tsv_path), delimiter="|")
+        assert set(schema.keys()) == {"name", "age"}
 
     def test_scan_null_values_invalid_type(self):
         with pytest.raises(
