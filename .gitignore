@@ -219,7 +219,8 @@ __marimo__/
 
 # ── Arnio-specific ──────────────────────────────────
 # Generated benchmark data (regenerate with: python benchmarks/generate_data.py)
-benchmarks/benchmark_1m.csv
+benchmarks/*.csv
+benchmarks/benchmark_gil_temp.csv
 
 # Wheel build outputs
 wheelhouse/
@@ -228,7 +229,3 @@ wheelhouse/
 *.pyd
 *.dll
 _arnio_cpp*
-
-# csv
-/*.csv
-benchmarks/benchmark_gil_temp.csv
