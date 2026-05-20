@@ -30,9 +30,10 @@ class ArnioCleaner(BaseEstimator, TransformerMixin):
         >>> X_clean = pipe.fit_transform(df)
     """
 
-    def __init__(self, steps=None, copy=True):
+    def __init__(self, steps=None, copy=True, allow_row_count_change=False):
         self.steps = steps if steps is not None else []
         self.copy = copy
+        self.allow_row_count_change = allow_row_count_change
 
     def fit(self, X, y=None):
         if not isinstance(X, pd.DataFrame):
@@ -50,13 +51,26 @@ class ArnioCleaner(BaseEstimator, TransformerMixin):
         if not isinstance(X, pd.DataFrame):
             raise TypeError(f"ArnioCleaner requires a pandas DataFrame, got {type(X)}")
 
+        if list(X.columns) != list(self.feature_names_in_):
+            raise ValueError(
+                "ArnioCleaner transform input columns must match the columns seen "
+                "during fit, including order."
+            )
+
         X_in = X.copy() if self.copy else X
 
         ar_frame = from_pandas(X_in)
         cleaned_ar_frame = run_pipeline(ar_frame, self.steps)
         X_out = to_pandas(cleaned_ar_frame)
 
-        if not X_out.index.equals(X.index):
+        if len(X_out.index) != len(X.index):
+            if not self.allow_row_count_change:
+                raise ValueError(
+                    "ArnioCleaner pipeline changed the row count during transform. "
+                    "Pass allow_row_count_change=True to allow row-dropping steps."
+                )
+            X_out = X_out.reset_index(drop=True)
+        elif not X_out.index.equals(X.index):
             X_out.index = X.index
 
         return X_out

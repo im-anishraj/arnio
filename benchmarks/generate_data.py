@@ -1,13 +1,19 @@
 """Generate deterministic benchmark CSV files before benchmarking."""
 
+import os
+
 import numpy as np
 import pandas as pd
 
 DEFAULT_TALL_PATH = "benchmarks/benchmark_1m.csv"
 DEFAULT_WIDE_PATH = "benchmarks/benchmark_wide.csv"
 
+DRY_RUN = os.getenv("ARNIO_BENCHMARK_DRY_RUN") == "1"
+
 
 def generate(rows=1_000_000, path=DEFAULT_TALL_PATH):
+    if DRY_RUN:
+        rows = min(rows, 10)
     rng = np.random.default_rng(42)
     df = pd.DataFrame(
         {
@@ -36,6 +42,9 @@ def generate(rows=1_000_000, path=DEFAULT_TALL_PATH):
 
 
 def generate_wide(rows=5_000, columns=256, path=DEFAULT_WIDE_PATH):
+    if DRY_RUN:
+        rows = min(rows, 5)
+        columns = min(columns, 10)
     if rows < 1:
         raise ValueError("wide benchmark requires at least 1 row")
     if columns < 4:

@@ -1,0 +1,9 @@
+response_id,respondent,satisfaction,nps_score,comments,submitted_at
+1,Alice,Satisfied,8,great service,2024-02-01
+2,BOB,VERY SATISFIED,10,,2024-02-01
+3,carol,,, no comment ,2024-02-02
+4,Dave,dissatisfied,3,needs improvement,2024-02-02
+5,,neutral,6,okay experience,2024-02-03
+6,Frank,SATISFIED,8,Great Service,2024-02-03
+2,BOB,VERY SATISFIED,10,,2024-02-01
+7,Grace,very dissatisfied,1,terrible,2024-02-04
