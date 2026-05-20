@@ -1537,7 +1537,6 @@ def coalesce_columns(
         subset,
         available_columns=column_names,
         argument_name="subset",
-        allow_empty=False,
         missing_message=lambda missing, available: (
             f"Missing columns for coalesce_columns: {missing}. "
             f"Available columns: {available}"

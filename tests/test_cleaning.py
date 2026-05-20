@@ -268,6 +268,80 @@ class TestSharedColumnSequenceValidation:
         with pytest.raises(ValueError, match="subset must contain at least one column"):
             ar.coalesce_columns(frame, subset=[])
 
+    @pytest.mark.parametrize(
+        ("func", "kwargs", "message"),
+        [
+            ("drop_columns", {"columns": 123}, "must be a sequence of column names"),
+            (
+                "fill_nulls",
+                {"value": 0, "subset": 123},
+                "must be a sequence of column names",
+            ),
+            ("drop_duplicates", {"subset": 123}, "must be a sequence of column names"),
+            (
+                "strip_whitespace",
+                {"subset": 123},
+                "must be a sequence of column names",
+            ),
+            ("normalize_case", {"subset": 123}, "must be a sequence of column names"),
+            (
+                "normalize_unicode",
+                {"subset": 123},
+                "must be a sequence of column names",
+            ),
+            (
+                "combine_columns",
+                {"subset": 123, "separator": "-", "output_column": "combined"},
+                "must be a sequence of column names",
+            ),
+            (
+                "coalesce_columns",
+                {"subset": 123, "output_column": "combined"},
+                "must be a list of column names",
+            ),
+        ],
+    )
+    def test_shared_subset_validation_rejects_non_sequence_types(
+        self,
+        sample_csv,
+        func,
+        kwargs,
+        message,
+    ):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(TypeError, match=message):
+            getattr(ar, func)(frame, **kwargs)
+
+    def test_drop_columns_allows_duplicate_entries(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "id": [1, 2],
+                    "debug": ["x", "y"],
+                    "name": ["Alice", "Bob"],
+                }
+            )
+        )
+
+        result = ar.drop_columns(frame, ["debug", "debug"])
+        df = ar.to_pandas(result)
+
+        assert list(df.columns) == ["id", "name"]
+
+    def test_combine_columns_preserves_duplicate_subset_entries(self):
+        frame = ar.from_pandas(pd.DataFrame({"word": ["go"], "suffix": ["!"]}))
+
+        result = ar.combine_columns(
+            frame,
+            subset=["word", "word", "suffix"],
+            separator="-",
+            output_column="combined",
+        )
+        df = ar.to_pandas(result)
+
+        assert df["combined"].tolist() == ["go-go-!"]
+
 
 class TestDropDuplicates:
     def test_drop_dupes_first(self, csv_with_duplicates):
