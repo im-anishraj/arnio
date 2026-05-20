@@ -1843,7 +1843,7 @@ class TestSafeDivideColumns:
 
         assert list(df["ratio"]) == [10.0, 10.0]
 
-    def test_native_output_column_overwrite_preserves_column_order(self):
+    def test_native_output_column_overwrite_raises_value_error(self):
         frame = ar.from_pandas(
             pd.DataFrame(
                 {
@@ -1854,18 +1854,13 @@ class TestSafeDivideColumns:
             )
         )
 
-        with pytest.warns(UserWarning, match="already exists"):
-            result = ar.safe_divide_columns(
+        with pytest.raises(ValueError, match="already exists"):
+            ar.safe_divide_columns(
                 frame,
                 numerator="revenue",
                 denominator="cost",
                 output_column="ratio",
             )
-
-        df = ar.to_pandas(result)
-
-        assert list(df.columns) == ["revenue", "ratio", "cost"]
-        assert list(df["ratio"]) == [4.0, 4.0]
 
 
 class TestClipNumericNativeRegression:
