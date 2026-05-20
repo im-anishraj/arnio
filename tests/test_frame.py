@@ -349,3 +349,117 @@ def test_cpp_frame_explicit_zero_rows_rejects_nonempty_first_column():
 
     with pytest.raises(ValueError, match="row count"):
         frame.add_column(column)
+
+
+# ── Zero-column frame tests ───────────────────────────────────────────────────
+
+
+def test_cpp_frame_with_explicit_row_count_preserves_shape():
+    """Test that Frame(size_t row_count) creates a frame with correct row count."""
+    frame = _Frame(5)
+    assert frame.num_rows() == 5
+    assert frame.num_cols() == 0
+    assert frame.shape() == (5, 0)
+
+
+def test_cpp_frame_from_empty_vector_has_unknown_row_count():
+    """Test that Frame({}) initially has unknown row count and can accept first column."""
+    frame = _Frame([])
+    assert frame.num_rows() == 0
+    assert frame.num_cols() == 0
+
+    # First column should set the row count
+    column = _Column("a", _DType.INT64)
+    column.push_back(1)
+    column.push_back(2)
+    column.push_back(3)
+
+    frame.add_column(column)
+
+    assert frame.num_rows() == 3
+    assert frame.num_cols() == 1
+
+
+def test_cpp_frame_select_columns_preserves_row_count_with_zero_cols():
+    """Test that select_columns([]) preserves row count."""
+    column = _Column("a", _DType.INT64)
+    column.push_back(1)
+    column.push_back(2)
+
+    frame = _Frame([column])
+    assert frame.shape() == (2, 1)
+
+    # Select no columns - should preserve row count
+    empty_frame = frame.select_columns([])
+    assert empty_frame.shape() == (2, 0)
+    assert empty_frame.num_rows() == 2
+
+
+def test_cpp_frame_clone_preserves_row_count_with_zero_cols():
+    """Test that clone() preserves row count for zero-column frames."""
+    frame_with_rows = _Frame(3)
+    cloned = frame_with_rows.clone()
+    assert cloned.shape() == (3, 0)
+
+
+def test_arframe_pandas_roundtrip_zero_columns():
+    """Test that pandas round-trip preserves zero-column frames with row count."""
+    # Create an empty-column frame with 3 rows
+    df_empty = pd.DataFrame(index=range(3))
+    frame = ar.from_pandas(df_empty)
+    assert frame.shape == (3, 0)
+
+    # Convert back to pandas
+    df_result = ar.to_pandas(frame)
+    assert df_result.shape == (3, 0)
+    assert len(df_result.index) == 3
+
+
+def test_arframe_drop_all_constant_columns_preserves_shape():
+    """Test that drop_constant_columns preserves row count when all columns are dropped."""
+    # All columns are constant
+    frame = ar.from_pandas(pd.DataFrame({"a": [1, 1], "b": ["x", "x"]}))
+    assert frame.shape == (2, 2)
+
+    result = ar.drop_constant_columns(frame)
+    assert result.shape == (2, 0)
+    assert result.columns == []
+
+
+def test_arframe_drop_partial_constant_columns():
+    """Test drop_constant_columns with mixed constant and non-constant columns."""
+    df = pd.DataFrame({"const": [1, 1, 1], "var": [1, 2, 3], "const2": [None, None, None]})
+    frame = ar.from_pandas(df)
+
+    result = ar.drop_constant_columns(frame)
+    assert result.shape == (3, 1)
+    assert result.columns == ["var"]
+
+
+def test_arframe_zero_columns_shape_persists():
+    """Test that a zero-column frame maintains its shape through operations."""
+    df = pd.DataFrame({"c": [1, 1, 1]})  # Single constant column
+    frame = ar.from_pandas(df)
+
+    # Drop the only constant column
+    result = ar.drop_constant_columns(frame)
+    assert result.shape[0] == 3
+    assert result.shape[1] == 0
+
+    # Round-trip through pandas
+    df_roundtrip = ar.to_pandas(result)
+    assert df_roundtrip.shape == (3, 0)
+
+    # Convert back to ArFrame
+    frame_roundtrip = ar.from_pandas(df_roundtrip)
+    assert frame_roundtrip.shape == (3, 0)
+
+
+def test_arframe_select_columns_empty_on_multirow_frame():
+    """Test that selecting no columns from a multi-row frame preserves row count via C++ path."""
+    df = pd.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]})
+    frame = ar.from_pandas(df)
+
+    # The C++ select_columns should reject empty selection
+    with pytest.raises(ValueError, match="cannot be empty"):
+        frame.select_columns([])

@@ -12,8 +12,12 @@ Frame::Frame(std::vector<Column> columns) : columns_(std::move(columns)) {
         for (const auto& col : columns_) {
             validate_column_size(col);
         }
+        row_count_known_ = true;
+    } else {
+        // For empty column vector, leave row_count_known_ = false
+        // so that add_column() can properly set the row count from the first added column
+        row_count_known_ = false;
     }
-    row_count_known_ = true;
     rebuild_index();
 }
 
@@ -85,9 +89,11 @@ size_t Frame::column_index(const std::string& name) const {
 
 void Frame::add_column(Column col) {
     if (!row_count_known_) {
+        // First column added - set row count from its size
         row_count_ = col.size();
         row_count_known_ = true;
     } else {
+        // Row count already established - validate new column matches
         validate_column_size(col);
     }
     name_index_[col.name()] = columns_.size();

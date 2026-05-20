@@ -44,6 +44,9 @@ class Frame {
     std::vector<Column> columns_;
     std::unordered_map<std::string, size_t> name_index_;
     size_t row_count_ = 0;
+    // row_count_known_ tracks whether row_count_ has been explicitly set.
+    // - true: row_count_ is final and validated (set via explicit constructor or first add_column)
+    // - false: row_count_ is unknown and will be set when first column is added
     bool row_count_known_ = false;
     void validate_column_size(const Column& col) const;
     void rebuild_index();
