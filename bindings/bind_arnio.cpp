@@ -141,6 +141,7 @@ PYBIND11_MODULE(_arnio_cpp, m) {
 
     // --- Frame ---
     py::class_<Frame>(m, "Frame")
+        .def("select_columns", &Frame::select_columns)
         .def(py::init<>())
         .def("shape", &Frame::shape)
         .def("num_rows", &Frame::num_rows)

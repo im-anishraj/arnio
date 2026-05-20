@@ -89,6 +89,16 @@ Frame Frame::clone() const {
     return Frame(std::move(cloned));
 }
 
+Frame Frame::select_columns(const std::vector<std::string>& columns) const {
+    std::vector<Column> selected;
+    selected.reserve(columns.size());
+
+    for (const auto& name : columns) {
+        selected.push_back(column(name).clone());
+    }
+
+    return Frame(std::move(selected));
+}
 void Frame::rebuild_index() {
     name_index_.clear();
     for (size_t i = 0; i < columns_.size(); ++i) {

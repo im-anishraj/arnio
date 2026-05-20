@@ -207,6 +207,32 @@ def test_select_columns_empty_frame():
     assert selected.shape == (0, 1)
 
 
+def test_select_columns_native_path_avoids_pandas_roundtrip(monkeypatch):
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "name": ["alice", "bob"],
+                "salary": [100, 200],
+            }
+        )
+    )
+
+    from arnio import convert
+
+    original_to_pandas = convert.to_pandas
+
+    def fail_to_pandas(_):
+        raise AssertionError("native select_columns path should avoid to_pandas")
+
+    monkeypatch.setattr(convert, "to_pandas", fail_to_pandas)
+
+    selected = frame.select_columns(["salary", "name"])
+
+    df = original_to_pandas(selected)
+
+    assert list(df.columns) == ["salary", "name"]
+
+
 class TestArFrame:
     """Test ArFrame properties and methods."""
 
