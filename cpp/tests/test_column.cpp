@@ -52,6 +52,7 @@ TEST_CASE("Inconsistent column throws on operations", "[column]") {
     ColumnData bad_data = std::vector<std::string>{"hello"};
     Column bad("x", DType::INT64, std::move(bad_data), std::vector<bool>{false});
 
+    REQUIRE_THROWS_AS(bad.data(), std::logic_error);
     REQUIRE_THROWS_AS(bad.clone(), std::logic_error);
     REQUIRE_THROWS_AS(bad.at(0), std::logic_error);
     REQUIRE_THROWS_AS(bad.push_null(), std::logic_error);
