@@ -429,6 +429,21 @@ Frame CsvReader::read(const std::string& path) const {
             expected_cols = fields.size();
         }
 
+        if (expected_cols.has_value() && fields.size() > expected_cols.value()) {
+            bool trailing_empty_only = true;
+
+            for (size_t i = expected_cols.value(); i < fields.size(); ++i) {
+                if (!fields[i].empty()) {
+                    trailing_empty_only = false;
+                    break;
+                }
+            }
+
+            if (trailing_empty_only) {
+                fields.resize(expected_cols.value());
+            }
+        }
+
         if (config.mode == "strict" && expected_cols.has_value()) {
             validate_row_width(record_number, expected_cols.value(), fields.size());
         }
@@ -515,13 +530,28 @@ std::vector<std::pair<std::string, std::string>> CsvReader::scan_schema(
     std::string line;
     std::vector<std::string> header;
 
+    std::vector<std::string> first_row;
+
     if (read_record(file, line)) {
         strip_utf8_bom(line);
-        header = parser_.parse_line(line);
-        for (auto& h : header) {
-            if (config.trim_headers) trim_in_place(h);
+
+        if (config.has_header) {
+            header = parser_.parse_line(line);
+
+            for (auto& h : header) {
+                if (config.trim_headers) trim_in_place(h);
+            }
+
+            validate_header(header);
+        } else {
+            first_row = parser_.parse_line(line);
+
+            header.reserve(first_row.size());
+
+            for (size_t i = 0; i < first_row.size(); ++i) {
+                header.push_back("col_" + std::to_string(i));
+            }
         }
-        validate_header(header);
     }
 
     size_t num_cols = header.size();
@@ -530,6 +560,16 @@ std::vector<std::pair<std::string, std::string>> CsvReader::scan_schema(
 
     size_t max_samples = config.sample_size.value_or(100);
 
+    if (!config.has_header && !first_row.empty()) {
+        validate_row_width(1, num_cols, first_row.size());
+
+        for (size_t i = 0; i < num_cols && i < first_row.size(); ++i) {
+            col_types[i] = CsvParser::promote_type(col_types[i], parser_.infer_type(first_row[i]));
+        }
+
+        ++sample_count;
+    }
+
     while (read_record(file, line)) {
         if (sample_count >= max_samples) {
             break;
@@ -537,6 +577,20 @@ std::vector<std::pair<std::string, std::string>> CsvReader::scan_schema(
 
         if (line.empty()) continue;
         auto fields = parser_.parse_line(line);
+        if (fields.size() > num_cols) {
+            bool trailing_empty_only = true;
+
+            for (size_t i = num_cols; i < fields.size(); ++i) {
+                if (!fields[i].empty()) {
+                    trailing_empty_only = false;
+                    break;
+                }
+            }
+
+            if (trailing_empty_only) {
+                fields.resize(num_cols);
+            }
+        }
         validate_row_width(sample_count + 2, num_cols, fields.size());
         for (size_t i = 0; i < num_cols && i < fields.size(); ++i) {
             col_types[i] = CsvParser::promote_type(col_types[i], parser_.infer_type(fields[i]));
@@ -593,6 +647,21 @@ bool CsvChunkReader::read_one_data_row(std::vector<std::string>& fields_out) {
 
         if (!config.has_header && !expected_cols_.has_value()) {
             expected_cols_ = fields_out.size();
+        }
+
+        if (expected_cols_.has_value() && fields_out.size() > expected_cols_.value()) {
+            bool trailing_empty_only = true;
+
+            for (size_t i = expected_cols_.value(); i < fields_out.size(); ++i) {
+                if (!fields_out[i].empty()) {
+                    trailing_empty_only = false;
+                    break;
+                }
+            }
+
+            if (trailing_empty_only) {
+                fields_out.resize(expected_cols_.value());
+            }
         }
 
         if (config.mode == "strict" && expected_cols_.has_value()) {

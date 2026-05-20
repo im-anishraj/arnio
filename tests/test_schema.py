@@ -2024,3 +2024,49 @@ def test_validate_unique_invalid_member_type_raises_type_error(tmp_path):
 
     with pytest.raises(TypeError, match="Schema 'unique' members must be strings"):
         ar.validate(frame, schema)
+
+
+def test_schema_json_roundtrip_preserves_fields_and_options():
+    ar.register_validator("positive_json", lambda v: v > 0)
+
+    schema = ar.Schema(
+        fields={
+            "id": ar.String(nullable=False, min_length=3, max_length=8, unique=True),
+            "status": ar.String(
+                allowed={"active", "inactive"}, required_if=("id", "A1")
+            ),
+            "score": ar.Custom("positive_json", nullable=False),
+            "created_at": ar.DateTime(
+                nullable=False,
+                format="%Y-%m-%dT%H:%M:%S",
+                min="2026-01-01T00:00:00",
+                max="2026-12-31T23:59:59",
+            ),
+        },
+        strict=True,
+        unique=["id", "created_at"],
+    )
+
+    restored = ar.Schema.from_json(schema.to_json())
+
+    assert restored == schema
+
+
+def test_schema_from_json_rejects_invalid_json():
+    with pytest.raises(ValueError, match="Invalid schema JSON"):
+        ar.Schema.from_json("{bad json}")
+
+
+def test_schema_to_json_rejects_rules():
+    schema = ar.Schema(
+        {"id": ar.String()},
+        rules=[lambda df: []],
+    )
+
+    with pytest.raises(ValueError, match="not JSON serializable"):
+        schema.to_json()
+
+
+def test_schema_from_json_rejects_non_object_field_definition():
+    with pytest.raises(TypeError, match="must be an object"):
+        ar.Schema.from_json('{"fields":{"id":"string"},"strict":false,"unique":null}')

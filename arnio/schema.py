@@ -5,6 +5,7 @@ Production data contracts and validation.
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -363,6 +364,58 @@ class Schema:
     def validate(self, frame: ArFrame) -> ValidationResult:
         """Validate a frame against this schema."""
         return validate(frame, self)
+
+    def to_json(self) -> str:
+        """Serialize the schema to a stable JSON string."""
+        if self.rules:
+            raise ValueError(
+                "Schema rules are not JSON serializable. "
+                "Serialize only fields/strict/unique for now."
+            )
+
+        payload = {
+            "fields": {
+                name: _field_to_json_dict(field_def)
+                for name, field_def in sorted(self.fields.items())
+            },
+            "strict": self.strict,
+            "unique": list(self.unique) if self.unique is not None else None,
+        }
+        return json.dumps(payload, sort_keys=True)
+
+    @classmethod
+    def from_json(cls, value: str) -> Schema:
+        """Deserialize a schema from a JSON string produced by ``to_json()``."""
+        try:
+            payload = json.loads(value)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"Invalid schema JSON: {exc.msg}") from exc
+
+        if not isinstance(payload, dict):
+            raise TypeError(
+                "Schema JSON must decode to an object with 'fields', 'strict', and optional 'unique'."
+            )
+
+        fields_payload = payload.get("fields")
+        if not isinstance(fields_payload, dict):
+            raise TypeError(
+                "Schema JSON 'fields' must be an object mapping names to field definitions."
+            )
+
+        fields = {
+            name: _field_from_json_dict(name, field_payload)
+            for name, field_payload in fields_payload.items()
+        }
+
+        strict = payload.get("strict", False)
+        if not isinstance(strict, bool):
+            raise TypeError("Schema JSON 'strict' must be a boolean.")
+
+        unique = payload.get("unique")
+        if unique is not None and not isinstance(unique, list):
+            raise TypeError("Schema JSON 'unique' must be a list of strings or null.")
+
+        return cls(fields=fields, strict=strict, unique=unique)
 
     @classmethod
     def bootstrap_from_report(cls, report: Any) -> Schema:
@@ -1607,6 +1660,67 @@ def _field_to_dict(field_def: Field) -> dict[str, Any]:
         "datetime_max": _clean_scalar(field_def._datetime_max),
         "required_if": _normalize_sequence(field_def.required_if),
     }
+
+
+def _field_to_json_dict(field_def: Field) -> dict[str, Any]:
+    data = _field_to_dict(field_def)
+    data["severity"] = field_def.severity
+    data["datetime_min"] = (
+        field_def._datetime_min.isoformat()
+        if field_def._datetime_min is not None
+        else None
+    )
+    data["datetime_max"] = (
+        field_def._datetime_max.isoformat()
+        if field_def._datetime_max is not None
+        else None
+    )
+    return data
+
+
+def _field_from_json_dict(name: str, payload: Any) -> Field:
+    if not isinstance(payload, dict):
+        raise TypeError(
+            f"Schema JSON field for column {name!r} must be an object, got {type(payload).__name__}."
+        )
+
+    allowed = payload.get("allowed")
+    if allowed is not None:
+        if not isinstance(allowed, list):
+            raise TypeError(
+                f"Schema JSON field {name!r} 'allowed' must be a list or null."
+            )
+        allowed = set(allowed)
+
+    required_if = payload.get("required_if")
+    if required_if is not None:
+        if not isinstance(required_if, list) or len(required_if) != 2:
+            raise TypeError(
+                f"Schema JSON field {name!r} 'required_if' must be a 2-item list or null."
+            )
+        required_if = tuple(required_if)
+
+    return Field(
+        dtype=payload.get("dtype"),
+        nullable=payload.get("nullable", True),
+        min=payload.get("min"),
+        max=payload.get("max"),
+        pattern=payload.get("pattern"),
+        semantic=payload.get("semantic"),
+        allowed=allowed,
+        unique=payload.get("unique", False),
+        min_length=payload.get("min_length"),
+        max_length=payload.get("max_length"),
+        format=payload.get("format"),
+        _datetime_min=_parse_datetime_bound(
+            payload.get("datetime_min"), "datetime_min"
+        ),
+        _datetime_max=_parse_datetime_bound(
+            payload.get("datetime_max"), "datetime_max"
+        ),
+        required_if=required_if,
+        severity=payload.get("severity", "error"),
+    )
 
 
 def _normalize_unique(

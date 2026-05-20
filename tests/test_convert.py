@@ -299,6 +299,48 @@ class TestFromPandas:
 
         assert "Fix:" in str(exc_info.value)
 
+    def test_from_pandas_native_datetime64_raises_clear_error(self):
+        """Native datetime64 columns should raise a clear TypeError with a fix hint."""
+        df = pd.DataFrame({"timestamp": pd.date_range("2026-05-20", periods=3)})
+        with pytest.raises(
+            TypeError, match="Column 'timestamp' has unsupported dtype 'datetime64"
+        ) as exc_info:
+            ar.from_pandas(df)
+        assert "Fix:" in str(exc_info.value)
+        assert ".astype(str)" in str(exc_info.value)
+
+    def test_from_pandas_native_timedelta64_raises_clear_error(self):
+        """Native timedelta64 columns should raise a clear TypeError with a fix hint."""
+        df = pd.DataFrame({"duration": pd.to_timedelta(["1 days", "2 days"])})
+        with pytest.raises(
+            TypeError, match="Column 'duration' has unsupported dtype 'timedelta"
+        ) as exc_info:
+            ar.from_pandas(df)
+        assert "Fix:" in str(exc_info.value)
+        assert ".dt.total_seconds()" in str(exc_info.value)
+
+    def test_from_pandas_native_category_raises_clear_error(self):
+        """Native category columns should raise a clear TypeError with a fix hint."""
+        df = pd.DataFrame(
+            {"category_col": pd.Series(["a", "b", "a"], dtype="category")}
+        )
+        with pytest.raises(
+            TypeError, match="Column 'category_col' has unsupported dtype 'category'"
+        ) as exc_info:
+            ar.from_pandas(df)
+        assert "Fix:" in str(exc_info.value)
+        assert ".astype(str)" in str(exc_info.value)
+
+    def test_from_pandas_native_complex_raises_clear_error(self):
+        """Native complex columns should raise a clear TypeError with a fix hint."""
+        df = pd.DataFrame({"signal": pd.Series([1 + 2j, 3 + 4j], dtype=complex)})
+        with pytest.raises(
+            TypeError, match="Column 'signal' has unsupported dtype 'complex128'"
+        ) as exc_info:
+            ar.from_pandas(df)
+        assert "Fix:" in str(exc_info.value)
+        assert ".apply(str)" in str(exc_info.value)
+
     def test_from_pandas_preserves_column_order(self):
         df = pd.DataFrame(
             {
@@ -697,3 +739,72 @@ class TestToBindingSafeExtras:
             ValueError, match="Invalid financial value: NaN or Infinity."
         ):
             _to_binding_safe(float("nan"))
+
+
+class TestUInt64BoundaryConversion:
+    """Tests for pandas UInt64 and uint64 boundary conversions near signed 64-bit integer limits.
+
+    Links with Fixes #626.
+    """
+
+    def test_uint64_within_bounds(self):
+        # 9223372036854775807 is the maximum signed 64-bit integer.
+        df = pd.DataFrame(
+            {
+                "col_uint": pd.Series(
+                    [0, 12345, 9223372036854775807],
+                    dtype="UInt64",
+                )
+            }
+        )
+        frame = ar.from_pandas(df)
+        assert frame.dtypes["col_uint"] == "int64"
+
+        result = ar.to_pandas(frame)
+        assert list(result["col_uint"]) == [0, 12345, 9223372036854775807]
+
+    def test_uint64_out_of_bounds_raises(self):
+        # 9223372036854775808 exceeds the maximum signed 64-bit integer.
+        df = pd.DataFrame(
+            {
+                "col_uint": pd.Series(
+                    [9223372036854775808],
+                    dtype="UInt64",
+                )
+            }
+        )
+        with pytest.raises(
+            ValueError,
+            match="out of bounds for signed 64-bit integer",
+        ):
+            ar.from_pandas(df)
+
+    def test_numpy_uint64_within_bounds(self):
+        df = pd.DataFrame(
+            {
+                "col_uint": np.array(
+                    [0, 9223372036854775807],
+                    dtype=np.uint64,
+                )
+            }
+        )
+        frame = ar.from_pandas(df)
+        assert frame.dtypes["col_uint"] == "int64"
+
+        result = ar.to_pandas(frame)
+        assert list(result["col_uint"]) == [0, 9223372036854775807]
+
+    def test_numpy_uint64_out_of_bounds_raises(self):
+        df = pd.DataFrame(
+            {
+                "col_uint": np.array(
+                    [9223372036854775808],
+                    dtype=np.uint64,
+                )
+            }
+        )
+        with pytest.raises(
+            ValueError,
+            match="out of bounds for signed 64-bit integer",
+        ):
+            ar.from_pandas(df)

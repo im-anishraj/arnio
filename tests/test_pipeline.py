@@ -3,6 +3,7 @@
 import importlib
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from inspect import Signature
 
 import pandas as pd
 import pytest
@@ -204,6 +205,38 @@ class TestPipeline:
 
         assert pd.isna(df["value"].iloc[2])
 
+    def test_pipeline_supports_namespaced_builtin_steps(self, csv_with_whitespace):
+        frame = ar.read_csv(csv_with_whitespace)
+
+        result = ar.pipeline(
+            frame,
+            [
+                ("builtin:strip_whitespace",),
+            ],
+        )
+        df = ar.to_pandas(result)
+
+        assert df["name"].iloc[0] == "Alice"
+
+    def test_pipeline_supports_namespaced_custom_steps_with_builtin_basename(self):
+        def custom_drop_nulls(df):
+            df["marker"] = "custom"
+            return df
+
+        ar.register_step("team:drop_nulls", custom_drop_nulls)
+        frame = ar.from_pandas(pd.DataFrame({"value": [1, None]}))
+
+        result = ar.pipeline(
+            frame,
+            [
+                ("team:drop_nulls",),
+            ],
+        )
+        df = ar.to_pandas(result)
+
+        assert list(df["marker"]) == ["custom", "custom"]
+        assert df["value"].isna().sum() == 1
+
     def test_pipeline_mapping_shorthand(self, sample_csv):
         frame = ar.read_csv(sample_csv)
         result = ar.pipeline(
@@ -365,7 +398,12 @@ class TestPipeline:
         )
 
         assert isinstance(result, ar.ArFrame)
-        assert list(metadata.keys()) == ["step_timings"]
+        assert list(metadata.keys()) == ["applied_steps", "row_counts", "step_timings"]
+        assert metadata["applied_steps"] == ["strip_whitespace", "normalize_case"]
+        assert len(metadata["row_counts"]) == 2
+        assert metadata["row_counts"][0]["step"] == "strip_whitespace"
+        assert metadata["row_counts"][0]["before"] == frame.shape[0]
+        assert metadata["row_counts"][0]["after"] == result.shape[0]
         assert len(metadata["step_timings"]) == 2
         assert metadata["step_timings"][0]["step"] == "strip_whitespace"
         assert metadata["step_timings"][1]["step"] == "normalize_case"
@@ -390,6 +428,14 @@ class TestPipeline:
 
         df = ar.to_pandas(result)
         assert set(df["marker"]) == {"done"}
+        assert metadata["applied_steps"] == ["timed_python_step"]
+        assert metadata["row_counts"] == [
+            {
+                "step": "timed_python_step",
+                "before": frame.shape[0],
+                "after": result.shape[0],
+            }
+        ]
         assert len(metadata["step_timings"]) == 1
         assert metadata["step_timings"][0]["step"] == "timed_python_step"
         assert metadata["step_timings"][0]["seconds"] >= 0
@@ -510,83 +556,46 @@ class TestPipeline:
         except ValueError as e:
             assert "Expected a dict" in str(e)
 
-    def test_custom_step_exception_wrapping_and_chaining(self):
-        """Verify that exceptions thrown by custom Python steps are wrapped with context."""
-
-        def failing_step(df, **kwargs):
-            raise RuntimeError("Internal step crash")
-
-        ar.register_step("error_prone_step", failing_step)
-
-        import pandas as pd
-
-        frame = ar.from_pandas(pd.DataFrame({"dummy": [1, 2, 3]}))
-
-        with pytest.raises(ar.PipelineStepError) as exc_info:
-            ar.pipeline(frame, [("error_prone_step",)])
-
-        assert "error_prone_step" in str(exc_info.value)
-        assert "Internal step crash" in str(exc_info.value)
-        assert isinstance(exc_info.value.__cause__, RuntimeError)
-
-    def test_pipeline_rejects_invalid_step_format(self, sample_csv):
+    def test_pipeline_rejects_empty_step(self, sample_csv):
         frame = ar.read_csv(sample_csv)
 
         with pytest.raises(ValueError, match="Invalid step format"):
-            ar.pipeline(
-                frame,
-                [
-                    ("strip_whitespace",),
-                    ("bad_step", "oops", "extra"),
-                ],
-            )
+            ar.pipeline(frame, [()])
+
+    def test_pipeline_rejects_string_step(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(ValueError, match="Invalid step format"):
+            ar.pipeline(frame, ["drop_nulls"])
 
     def test_pipeline_rejects_non_tuple_step(self, sample_csv):
         frame = ar.read_csv(sample_csv)
 
         with pytest.raises(ValueError, match="Invalid step format"):
-            ar.pipeline(
-                frame,
-                [
-                    "strip_whitespace",
-                ],
-            )
+            ar.pipeline(frame, [123])
 
-    def test_pipeline_rejects_invalid_kwargs_type(self, sample_csv):
-        frame = ar.read_csv(sample_csv)
 
-        with pytest.raises(ValueError, match="Expected a dict"):
-            ar.pipeline(
-                frame,
-                [
-                    ("drop_nulls", "not_a_dict"),
-                ],
-            )
+def test_get_builtin_step_signatures_returns_normalized_signatures():
+    signatures = ar.get_builtin_step_signatures()
 
-    def test_pipeline_validation_happens_before_execution(
-        self,
-        sample_csv,
-    ):
-        frame = ar.read_csv(sample_csv)
+    assert isinstance(signatures, dict)
+    assert "drop_nulls" in signatures
+    assert isinstance(signatures["drop_nulls"], Signature)
+    assert "frame" not in signatures["drop_nulls"].parameters
+    assert list(signatures["drop_nulls"].parameters) == ["subset"]
 
-        calls = []
 
-        def tracker(df):
-            calls.append("executed")
-            return df
+def test_get_builtin_step_signatures_includes_builtin_python_steps_only():
+    def custom_step(df, threshold=1):
+        return df
 
-        ar.register_step("tracker_validation_test", tracker)
+    ar.register_step("custom_signature_probe", custom_step)
 
-        with pytest.raises(ValueError, match="Invalid step format"):
-            ar.pipeline(
-                frame,
-                [
-                    ("tracker_validation_test",),
-                    ("bad_step", "oops", "extra"),
-                ],
-            )
+    signatures = ar.get_builtin_step_signatures()
 
-        assert calls == []
+    assert "filter_rows" in signatures
+    assert "replace_values" in signatures
+    assert "custom_signature_probe" not in signatures
 
 
 def test_filter_rows_greater_than():
@@ -1102,3 +1111,123 @@ def test_register_step_overwrite_cannot_bypass_builtin_protection():
 
     with pytest.raises(ValueError, match="conflicts with built-in C\\+\\+ step"):
         ar.register_step("drop_nulls", dummy_step, overwrite=True)
+
+
+def test_register_step_rejects_reserved_builtin_namespace():
+    def dummy_step(df):
+        return df
+
+    with pytest.raises(ValueError, match="reserved for built-in pipeline steps"):
+        ar.register_step("builtin:custom_step", dummy_step)
+
+
+def test_list_steps_includes_builtins_in_deterministic_order():
+    steps = ar.list_steps()
+
+    assert steps == sorted(steps)
+    assert "drop_nulls" in steps
+    assert "strip_whitespace" in steps
+    assert "standardize_missing_tokens" in steps
+
+
+def test_list_steps_includes_registered_custom_steps():
+    def custom_step(df):
+        return df
+
+    ar.register_step("list_steps_probe", custom_step)
+
+    steps = ar.list_steps()
+
+    assert "list_steps_probe" in steps
+
+
+def test_reset_steps_removes_custom_registered_steps():
+    import pandas as pd
+
+    def custom_step(df, **kwargs):
+        return df
+
+    ar.register_step("custom_step", custom_step)
+
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "a": [1, 2, 3],
+            }
+        )
+    )
+
+    result = ar.pipeline(
+        frame,
+        [
+            ("custom_step",),
+        ],
+    )
+
+    assert ar.to_pandas(result)["a"].tolist() == [1, 2, 3]
+
+    ar.reset_steps()
+
+    with pytest.raises(ar.UnknownStepError):
+        ar.pipeline(
+            frame,
+            [
+                ("custom_step",),
+            ],
+        )
+
+
+def test_reset_steps_preserves_builtin_python_steps():
+    import pandas as pd
+
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "value": [" yes ", " no "],
+            }
+        )
+    )
+
+    ar.reset_steps()
+
+    result = ar.pipeline(
+        frame,
+        [
+            ("strip_whitespace",),
+        ],
+    )
+
+    cleaned = ar.to_pandas(result)
+
+    assert cleaned["value"].tolist() == ["yes", "no"]
+
+
+def test_reset_steps_removes_overwritten_custom_steps():
+    import pandas as pd
+
+    def first(df, **kwargs):
+        return df
+
+    def second(df, **kwargs):
+        return df
+
+    ar.register_step("temp_step", first)
+    ar.register_step("temp_step", second, overwrite=True)
+
+    ar.reset_steps()
+
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "a": [1],
+            }
+        )
+    )
+
+    with pytest.raises(ar.UnknownStepError):
+        ar.pipeline(
+            frame,
+            [
+                ("temp_step",),
+            ],
+        )

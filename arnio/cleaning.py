@@ -1388,3 +1388,62 @@ def standardize_missing_tokens(frame, tokens=None, subset=None):
             df[subset] = df[subset].replace(tokens, float("nan"))
 
     return from_pandas(df) if is_arframe else df
+
+
+def coalesce_columns(
+    frame,
+    *,
+    subset: list[str],
+    output_column: str = "coalesced",
+):
+    """Select the first non-null value from a list of columns.
+
+    Parameters
+    ----------
+    frame : ArFrame or pd.DataFrame
+        Input data frame.
+    subset : list[str]
+        List of columns to check in order.
+    output_column : str, default "coalesced"
+        Name of the new column to store coalesced values.
+
+    Returns
+    -------
+    ArFrame or pd.DataFrame
+        New frame with coalesced column.
+    """
+    import pandas as pd
+
+    from .convert import from_pandas, to_pandas
+    from .frame import ArFrame
+
+    if not isinstance(subset, list):
+        raise TypeError("subset must be a list of column names")
+    if not subset:
+        raise ValueError("subset must contain at least one column")
+    if not isinstance(output_column, str) or not output_column.strip():
+        raise ValueError("output_column must be a non-empty string")
+
+    is_arframe = isinstance(frame, ArFrame)
+    if not is_arframe and not isinstance(frame, pd.DataFrame):
+        raise TypeError("frame must be an ArFrame or a pandas DataFrame")
+
+    column_names = list(frame.columns)
+    subset_columns = _validate_column_sequence(subset, argument_name="subset")
+
+    missing = [column for column in subset_columns if column not in column_names]
+    if missing:
+        available = ", ".join(column_names) or "<none>"
+        raise KeyError(
+            f"Missing columns for coalesce_columns: {missing}. Available columns: {available}"
+        )
+
+    if output_column in column_names:
+        raise ValueError(f"Output column '{output_column}' already exists.")
+
+    df = to_pandas(frame) if is_arframe else frame.copy()
+
+    # Select the first non-null/non-NaN/non-None value per row
+    df[output_column] = df[subset_columns].bfill(axis=1).iloc[:, 0]
+
+    return from_pandas(df) if is_arframe else df

@@ -1727,3 +1727,64 @@ def test_profile_numeric_histogram_non_finite_values():
     report_all_inf = ar.profile(frame_all_inf)
     profile_all_inf = report_all_inf.columns["nums"]
     assert profile_all_inf.histogram is None
+
+
+def test_report_to_markdown_escapes_newlines_in_column_cells():
+    report = ar.DataQualityReport(
+        row_count=2,
+        column_count=1,
+        memory_usage=128,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={
+            "multi\nline": ar.ColumnProfile(
+                name="multi\nline",
+                dtype="string",
+                semantic_type="free\ntext",
+                row_count=2,
+                null_count=0,
+                null_ratio=0.0,
+                unique_count=2,
+                unique_ratio=1.0,
+                warnings=["contains\nnewline"],
+            )
+        },
+        suggestions=[],
+    )
+    md = report.to_markdown()
+    assert "multi<br>line" in md
+    assert "free<br>text" in md
+    assert "contains<br>newline" in md
+    assert "| multi\nline |" not in md
+
+
+def test_quality_gate_markdown_escapes_pipe_characters():
+    report = ar.DataQualityReport(
+        row_count=2,
+        column_count=1,
+        memory_usage=128,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={
+            "col|name": ar.ColumnProfile(
+                name="col|name",
+                dtype="str|ing",
+                semantic_type="cat|egory",
+                row_count=2,
+                null_count=0,
+                null_ratio=0.0,
+                unique_count=2,
+                unique_ratio=1.0,
+                warnings=["pipe|warning"],
+            )
+        },
+        suggestions=[],
+    )
+
+    md = report.to_markdown()
+
+    assert r"col\|name" in md
+    assert r"str\|ing" in md
+    assert r"cat\|egory" in md
+    assert r"pipe\|warning" in md
+    assert "| col|name |" not in md

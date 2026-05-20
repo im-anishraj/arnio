@@ -5,7 +5,6 @@ CSV reading and writing functions.
 
 from __future__ import annotations
 
-import csv
 import io
 import os
 import shutil
@@ -14,7 +13,13 @@ from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from typing import cast
 
-from ._core import _CsvChunkReader, _CsvConfig, _CsvReader, _CsvWriteConfig, _CsvWriter
+from ._core import (  # type: ignore
+    _CsvChunkReader,
+    _CsvConfig,
+    _CsvReader,
+    _CsvWriteConfig,
+    _CsvWriter,
+)
 from .exceptions import CsvReadError, JsonlReadError
 from .frame import ArFrame
 
@@ -48,16 +53,82 @@ def _utf8_csv_path(
                 "w", encoding="utf-8", newline="", suffix=".csv", delete=False
             ) as tmp:
                 if sample_rows is not None:
-                    # Use csv.reader so we advance through complete CSV records
-                    # rather than raw physical lines. This prevents a quoted
-                    # multiline field from being split at the sampling boundary,
-                    # which would produce an invalid partial CSV for scan_schema.
-                    reader = csv.reader(src, delimiter=delimiter)
-                    writer = csv.writer(tmp, delimiter=delimiter)
-                    for row_count, row in enumerate(reader):
-                        if row_count >= sample_rows:
+                    # Preserve the original decoded CSV text while sampling
+                    # complete logical records so scan_schema does not see a
+                    # rewritten file with normalized quoting or line endings.
+                    row_count = 0
+                    in_quotes = False
+                    pending_quote = False
+                    pending_cr = False
+                    last_char_was_terminator = False
+                    sample_complete = False
+
+                    while chunk := src.read(8192):
+                        chunk_len = len(chunk)
+                        index = 0
+                        while index < chunk_len:
+                            char = chunk[index]
+
+                            if sample_complete:
+                                if pending_cr and char == "\n":
+                                    tmp.write(char)
+                                pending_cr = False
+                                break
+
+                            tmp.write(char)
+
+                            if pending_cr:
+                                pending_cr = False
+                                if char == "\n":
+                                    last_char_was_terminator = True
+                                    index += 1
+                                    continue
+
+                            if char == '"':
+                                if pending_quote:
+                                    pending_quote = False
+                                elif in_quotes:
+                                    pending_quote = True
+                                else:
+                                    in_quotes = True
+                                last_char_was_terminator = False
+                            else:
+                                if pending_quote:
+                                    in_quotes = False
+                                    pending_quote = False
+
+                                if not in_quotes and char in {"\n", "\r"}:
+                                    row_count += 1
+                                    last_char_was_terminator = True
+                                    if char == "\r":
+                                        if (
+                                            index + 1 < chunk_len
+                                            and chunk[index + 1] == "\n"
+                                        ):
+                                            tmp.write("\n")
+                                            index += 1
+                                        else:
+                                            pending_cr = True
+                                    if row_count >= sample_rows:
+                                        sample_complete = True
+                                        break
+                                else:
+                                    last_char_was_terminator = False
+
+                            index += 1
+
+                        if sample_complete and not pending_cr:
                             break
-                        writer.writerow(row)
+
+                    if (
+                        sample_rows > 0
+                        and not last_char_was_terminator
+                        and tmp.tell() > 0
+                    ):
+                        # Count a final record that reaches EOF without a line
+                        # terminator so sampling semantics match the previous
+                        # logical-record-based behavior.
+                        row_count += 1
                 else:
                     shutil.copyfileobj(src, tmp)
                 tmp_name = tmp.name
@@ -554,6 +625,7 @@ def scan_csv(
     thousands_separator: str | None = None,
     sample_size: int | None = None,
     null_values: list[str] | None = None,
+    has_header: bool = True,
 ) -> dict[str, str]:
     """Return schema (column names + inferred types) without loading data.
 
@@ -578,6 +650,12 @@ def scan_csv(
         1,234 is interpreted as two separate fields.
     sample_size : int, optional
         Number of rows to read for type inference. If None, defaults to 100 rows.
+    has_header : bool, default True
+        Whether the CSV file contains a header row.
+
+        When False, synthetic column names are generated
+        in the form ``col_0``, ``col_1``, etc., matching
+        the behavior of ``read_csv(..., has_header=False)``.
 
     Returns
     -------
@@ -628,6 +706,7 @@ def scan_csv(
     config.encoding = encoding
     config.trim_headers = trim_headers
     config.thousands_separator = thousands_separator
+    config.has_header = has_header
 
     if null_values is not None:
         config.null_values = _validate_null_values(null_values)
@@ -643,8 +722,7 @@ def scan_csv(
     try:
         # Schema inference only needs a sample, avoiding full-file transcode.
         # sample_rows is passed so _utf8_csv_path uses record-aware sampling
-        # via csv.reader, which correctly handles quoted multiline fields that
-        # straddle the boundary.
+        # without rewriting decoded CSV text before native parsing.
         with _utf8_csv_path(
             path,
             encoding,
