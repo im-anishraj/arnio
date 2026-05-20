@@ -635,7 +635,7 @@ def scan_csv(
     config = _CsvConfig()
     config.delimiter = delimiter
     config.encoding = encoding
-    config.trim_headers = trim_headers
+    config.trim_headers = _validate_bool_option(trim_headers, "trim_headers")
     config.thousands_separator = thousands_separator
 
     if null_values is not None:
