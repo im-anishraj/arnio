@@ -1551,6 +1551,39 @@ pre-commit install
 pytest tests/ -v
 ```
 
+#### Windows build troubleshooting
+
+If `pip install -e ".[dev]"` fails on Windows, work through this checklist before retrying:
+
+1. Install [Visual Studio Build Tools 2022](https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2022) with the `Desktop development with C++` workload.
+2. Upgrade packaging tools:
+   ```bash
+   python -m pip install --upgrade pip setuptools wheel
+   ```
+3. Confirm the MSVC compiler is on `PATH` by running `cl` from a Developer Command Prompt.
+4. Retry the editable install:
+   ```bash
+   pip install -e ".[dev]"
+   pre-commit install
+   pytest tests/ -v
+   ```
+
+If you want a quick wheel-build smoke test before running the full suite, use:
+
+```bash
+pip wheel . --no-deps -w dist/
+python tests/smoke_wheel_install.py --wheelhouse dist
+```
+
+Common symptoms:
+
+- `Microsoft Visual C++ 14.x is required`: install the Build Tools workload above, then reopen your shell.
+- `'cl' is not recognized`: use a Developer Command Prompt or repair the Build Tools installation.
+- `pip install -e ".[dev]"` succeeds but `pre-commit` is missing: rerun `python -m pip install -e ".[dev]"` after upgrading `pip`, `setuptools`, and `wheel`.
+- The wheel build passes but tests fail: rerun `pytest tests/ -v` and debug the failing test output separately from the build step.
+
+If you prefer a Linux-like toolchain on Windows, WSL is also supported.
+
 > **PR titles must follow [Conventional Commits](https://www.conventionalcommits.org/)** — `feat:`, `fix:`, `docs:`, `chore:`. Our release pipeline auto-generates changelogs from these.
 
 For GSSoC contributors, please read **[GSSOC_GUIDE.md](GSSOC_GUIDE.md)** before asking to be assigned. It explains issue claiming, contribution levels, review expectations, and what maintainers look for in a strong PR. If you want a quick onboarding refresher, see the [GSSoC FAQ](GSSOC_GUIDE.md#gssoc-faq).

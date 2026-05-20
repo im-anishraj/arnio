@@ -30,6 +30,8 @@ pre-commit install
 ```
 Alternatively, use WSL for a faster setup experience.
 
+If the editable install or wheel build fails, see the Windows build troubleshooting section in the [README](../README.md#windows-build-troubleshooting).
+
 **Windows users:** Install `make` via [Chocolatey](https://chocolatey.org/): `choco install make`  
 Or run the commands manually — each `make` target is just one or two commands inside the `Makefile`.
 
