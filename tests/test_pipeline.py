@@ -1121,6 +1121,7 @@ def test_register_step_rejects_reserved_builtin_namespace():
         ar.register_step("builtin:custom_step", dummy_step)
 
 
+<<<<<<< HEAD
 def test_list_steps_includes_builtins_in_deterministic_order():
     steps = ar.list_steps()
 
@@ -1139,3 +1140,95 @@ def test_list_steps_includes_registered_custom_steps():
     steps = ar.list_steps()
 
     assert "list_steps_probe" in steps
+=======
+def test_reset_steps_removes_custom_registered_steps():
+    import pandas as pd
+
+    def custom_step(df, **kwargs):
+        return df
+
+    ar.register_step("custom_step", custom_step)
+
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "a": [1, 2, 3],
+            }
+        )
+    )
+
+    result = ar.pipeline(
+        frame,
+        [
+            ("custom_step",),
+        ],
+    )
+
+    assert ar.to_pandas(result)["a"].tolist() == [1, 2, 3]
+
+    ar.reset_steps()
+
+    with pytest.raises(ar.UnknownStepError):
+        ar.pipeline(
+            frame,
+            [
+                ("custom_step",),
+            ],
+        )
+
+
+def test_reset_steps_preserves_builtin_python_steps():
+    import pandas as pd
+
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "value": [" yes ", " no "],
+            }
+        )
+    )
+
+    ar.reset_steps()
+
+    result = ar.pipeline(
+        frame,
+        [
+            ("strip_whitespace",),
+        ],
+    )
+
+    cleaned = ar.to_pandas(result)
+
+    assert cleaned["value"].tolist() == ["yes", "no"]
+
+
+def test_reset_steps_removes_overwritten_custom_steps():
+    import pandas as pd
+
+    def first(df, **kwargs):
+        return df
+
+    def second(df, **kwargs):
+        return df
+
+    ar.register_step("temp_step", first)
+    ar.register_step("temp_step", second, overwrite=True)
+
+    ar.reset_steps()
+
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "a": [1],
+            }
+        )
+    )
+
+    with pytest.raises(ar.UnknownStepError):
+        ar.pipeline(
+            frame,
+            [
+                ("temp_step",),
+            ],
+        )
+>>>>>>> 738a0ef (feat: add reset_steps for pipeline test isolation)

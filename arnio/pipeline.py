@@ -394,3 +394,11 @@ register_step("filter_rows", cleaning.filter_rows)
 register_step("drop_columns_matching", cleaning.drop_columns_matching)
 register_step("safe_divide_columns", cleaning.safe_divide_columns)
 register_step("replace_values", cleaning.replace_values)
+_BUILTIN_PYTHON_STEP_REGISTRY = dict(_PYTHON_STEP_REGISTRY)
+
+
+def reset_steps() -> None:
+    """Restore the Python pipeline registry to built-in steps only."""
+    with _REGISTRY_LOCK:
+        _PYTHON_STEP_REGISTRY.clear()
+        _PYTHON_STEP_REGISTRY.update(_BUILTIN_PYTHON_STEP_REGISTRY)

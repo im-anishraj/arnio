@@ -61,6 +61,7 @@ from .pipeline import (
     list_steps,
     pipeline,
     register_step,
+    reset_steps,
 )
 from .quality import (
     CleanExplanation,
@@ -145,6 +146,7 @@ __all__ = [
     "register_step",
     "get_builtin_step_signatures",
     "list_steps",
+    "reset_steps",
     # Data quality
     "profile",
     "compare_profiles",
