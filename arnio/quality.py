@@ -183,9 +183,12 @@ class DataQualityReport:
             ],
         }
 
-    def to_json(self, **kwargs: Any) -> str:
-        """Return a JSON string representation of the report."""
-        return json.dumps(self.to_dict(), **kwargs)
+   def to_json(self, redact_sample_values=False, indent=None, sort_keys=False):
+        # 1. Generate the dict, passing the redaction flag
+        data = self.to_dict(redact_sample_values=redact_sample_values)
+
+        # 2. Serialize to JSON with formatting kwargs
+        return json.dumps(data, indent=indent, sort_keys=sort_keys)
 
     def to_markdown(self) -> str:
         """Return a GitHub-friendly Markdown report."""

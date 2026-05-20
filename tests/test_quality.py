@@ -750,3 +750,24 @@ def test_data_quality_report_to_html_focused(tmp_path):
     report.to_html(file_path=str(out_path))
     assert out_path.exists()
     assert out_path.read_text(encoding="utf-8").startswith("<!DOCTYPE html>")
+
+import json
+
+def test_to_json_matches_to_dict(sample_report):
+    json_output = sample_report.to_json()
+    parsed_json = json.loads(json_output)
+    assert parsed_json == sample_report.to_dict()
+
+def test_to_json_formatting_kwargs(sample_report):
+    json_output = sample_report.to_json(indent=4)
+    assert "    \"" in json_output
+
+    json_output_sorted = sample_report.to_json(sort_keys=True)
+    parsed_keys = list(json.loads(json_output_sorted).keys())
+    assert parsed_keys == sorted(parsed_keys)
+
+def test_to_json_redact_sample_values(sample_report):
+    json_output = sample_report.to_json(redact_sample_values=True)
+    parsed_json = json.loads(json_output)
+    expected_dict = sample_report.to_dict(redact_sample_values=True)
+    assert parsed_json == expected_dict
