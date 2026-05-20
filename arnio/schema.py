@@ -360,9 +360,14 @@ class Schema:
                         f"Schema 'unique' members must be strings, got {type(item).__name__} for element {item!r}."
                     )
 
-    def validate(self, frame: ArFrame) -> ValidationResult:
+    def validate(
+            self,
+            frame: ArFrame,
+            max_errors: int | None = None,
+    ) -> ValidationResult:
+                
         """Validate a frame against this schema."""
-        return validate(frame, self)
+        return validate(frame, self, max_errors=max_errors)
 
     @classmethod
     def bootstrap_from_report(cls, report: Any) -> Schema:
@@ -759,7 +764,12 @@ def diff_schema(
     return SchemaDiff(differences)
 
 
-def validate(frame: ArFrame, schema: Schema | dict[str, Field]) -> ValidationResult:
+def validate(
+        frame: ArFrame,
+        schema: Schema | dict[str, Field],
+        max_errors: int | None = None,
+) -> ValidationResult:        
+
     """Validate an ArFrame against a schema.
 
     Parameters
@@ -790,6 +800,9 @@ def validate(frame: ArFrame, schema: Schema | dict[str, Field]) -> ValidationRes
     dtypes = frame.dtypes
     issues: list[ValidationIssue] = []
 
+    def reached_limit() -> bool:
+        return max_errors is not None and len(issues) >= max_errors    
+
     for name, field_def in schema.fields.items():
         if name not in df.columns:
             issues.append(
@@ -800,8 +813,27 @@ def validate(frame: ArFrame, schema: Schema | dict[str, Field]) -> ValidationRes
                     severity=field_def.severity,
                 )
             )
+
+            if name not in df.columns:
+                break
+
             continue
-        issues.extend(_validate_column(df, df[name], dtypes.get(name), name, field_def))
+        column_issues = _validate_column(
+            df,
+            df[name],
+            dtypes.get(name),
+            name,
+            field_def,
+        )
+
+        remaining = None if max_errors is None else max_errors - len(issues)
+        if remaining is not None:
+            column_issues = column_issues[:remaining]
+
+        issues.extend(column_issues)
+
+        if reached_limit():
+            break        
 
     if schema.strict:
         expected = set(schema.fields)
