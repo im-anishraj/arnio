@@ -1222,6 +1222,56 @@ class TestCastTypes:
         with pytest.raises(ar.TypeCastError, match="Unknown target dtype"):
             ar.cast_types(frame, {"age": "decimal"})
 
+    def test_cast_string_to_int_with_invalid_content(self, tmp_path):
+        csv_path = tmp_path / "string_content.csv"
+        csv_path.write_text("id,name\n1,Alice\n2,Bob\n")
+        frame = ar.read_csv(str(csv_path))
+
+        with pytest.raises(ar.TypeCastError):
+            ar.cast_types(frame, {"name": "int64"})
+
+    def test_cast_string_to_float_with_invalid_content(self, tmp_path):
+        csv_path = tmp_path / "string_content.csv"
+        csv_path.write_text("id,text\n1,hello\n2,world\n")
+        frame = ar.read_csv(str(csv_path))
+
+        with pytest.raises(ar.TypeCastError):
+            ar.cast_types(frame, {"text": "float64"})
+
+    def test_cast_nonexistent_column(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(ValueError, match="Unknown column"):
+            ar.cast_types(frame, {"nonexistent": "int64"})
+
+    def test_cast_multiple_columns_with_one_invalid(self, tmp_path):
+        csv_path = tmp_path / "mixed.csv"
+        csv_path.write_text("id,name,age\n1,Alice,text\n2,Bob,invalid\n")
+        frame = ar.read_csv(str(csv_path))
+
+        with pytest.raises(ar.TypeCastError):
+            ar.cast_types(frame, {"name": "string", "age": "int64"})
+
+    def test_cast_bool_to_int_with_non_bool_content(self, tmp_path):
+        csv_path = tmp_path / "mixed_bool.csv"
+        csv_path.write_text("id,flag\n1,yes\n2,maybe\n3,no\n")
+        frame = ar.read_csv(str(csv_path))
+
+        with pytest.raises(ar.TypeCastError):
+            ar.cast_types(frame, {"flag": "bool"})
+
+    def test_cast_invalid_type_name(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(ar.TypeCastError, match="Unknown target dtype"):
+            ar.cast_types(frame, {"age": "int128"})
+
+    def test_cast_empty_mapping(self, sample_csv):
+        """Empty mapping should not modify frame."""
+        frame = ar.read_csv(sample_csv)
+        result = ar.cast_types(frame, {})
+
+        assert dict(frame.dtypes) == dict(result.dtypes)
     def test_cast_invalid_value_raises_by_default(self):
         frame = ar.from_pandas(pd.DataFrame({"age": ["1", "bad"]}))
 
@@ -1283,6 +1333,22 @@ class TestCleanAPI:
         # Drop nulls
         result = ar.clean(frame, strip_whitespace=False, drop_nulls=True)
         assert len(result) < len(frame)
+
+    def test_clean_invalid_cast_mapping_raises(self, csv_with_whitespace):
+        frame = ar.read_csv(csv_with_whitespace)
+
+        with pytest.raises(ar.TypeCastError):
+            ar.clean(frame, cast_mapping={"age": "invalid_dtype"})
+
+    def test_clean_empty_csv_raises(self, tmp_path):
+        csv_path = tmp_path / "empty.csv"
+        csv_path.write_text("name,age\n")
+
+        frame = ar.read_csv(str(csv_path))
+        assert frame.shape[0] == 0
+
+        with pytest.raises(ValueError):
+            ar.clean(frame)
 
 
 class TestFilterRows:
