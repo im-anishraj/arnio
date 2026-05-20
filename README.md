@@ -784,6 +784,7 @@ Most operations below run natively in C++. Currently, `filter_rows`, `replace_va
 |:---|:---|:---|
 | `drop_nulls` | Remove rows with null/empty values | `ar.drop_nulls(frame, subset=["age"])` |
 | `drop_columns` | Remove selected columns while preserving the remaining order | `frame = ar.drop_columns(frame, ["debug_col"])` |
+| `select_columns` | Keep only the requested columns in the requested order | `frame = ar.select_columns(frame, ["id", "name"])` |
 | `keep_rows_with_nulls` | Keep only rows that contain at least one null | `ar.keep_rows_with_nulls(frame, subset=["age"])` |
 | `validate_columns_exist` | Fail early when required columns are missing | `ar.validate_columns_exist(frame, ["age"])` |
 | `filter_rows` | Filter rows using comparison operators | `ar.filter_rows(frame, column="age", op=">", value=18)` |
@@ -830,7 +831,7 @@ Or compose them all into a **pipeline**:
 ```python
 clean = ar.pipeline(frame, [
     ("validate_columns_exist", {"columns": ["name", "city", "revenue"]}),
-    ("drop_columns", {"columns": ["debug_notes"]}),
+    ("select_columns", {"columns": ["name", "city", "revenue"]}),
     ("strip_whitespace",),
     ("standardize_missing_tokens",),
     ("normalize_case", {"case_type": "lower"}),

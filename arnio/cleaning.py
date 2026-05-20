@@ -150,6 +150,46 @@ def drop_nulls(
     return ArFrame(result)
 
 
+def select_columns(frame: ArFrame, columns: Sequence[str]) -> ArFrame:
+    """Return a new frame containing only the requested columns in their requested order.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input data frame.
+    columns : sequence of str
+        Column names to select and keep.
+
+    Returns
+    -------
+    ArFrame
+        New frame containing only the selected columns.
+
+    Raises
+    ------
+    TypeError
+        If columns is a string/bytes value or contains non-string items.
+    ValueError
+        If any requested column is missing from the frame.
+
+    Examples
+    --------
+    >>> frame = ar.select_columns(frame, ["id", "name"])
+    """
+    requested_columns = _validate_column_sequence(columns, argument_name="columns")
+    if not requested_columns:
+        raise ValueError("select_columns requires at least one column to be selected")
+
+    missing = [column for column in requested_columns if column not in frame.columns]
+    if missing:
+        raise ValueError(f"Columns not found in frame: {missing}")
+
+    from .convert import from_pandas, to_pandas
+
+    df = to_pandas(frame)
+    return from_pandas(df.loc[:, requested_columns])
+
+
 def drop_columns(frame: ArFrame, columns: Sequence[str]) -> ArFrame:
     """Return a new frame without the requested columns.
 

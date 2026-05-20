@@ -24,6 +24,7 @@ _STEP_NAMESPACE_SEPARATOR = ":"
 _STEP_REGISTRY: dict[str, Callable] = {
     "drop_nulls": cleaning.drop_nulls,
     "drop_columns": cleaning.drop_columns,
+    "select_columns": cleaning.select_columns,
     "keep_rows_with_nulls": cleaning.keep_rows_with_nulls,
     "fill_nulls": cleaning.fill_nulls,
     "validate_columns_exist": cleaning.validate_columns_exist,

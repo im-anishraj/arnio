@@ -31,6 +31,7 @@ from .cleaning import (
     replace_values,
     round_numeric_columns,
     safe_divide_columns,
+    select_columns,
     standardize_missing_tokens,
     strip_whitespace,
     trim_column_names,
@@ -113,6 +114,7 @@ __all__ = [
     # Cleaning
     "drop_nulls",
     "drop_columns",
+    "select_columns",
     "keep_rows_with_nulls",
     "fill_nulls",
     "validate_columns_exist",
