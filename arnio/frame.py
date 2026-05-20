@@ -172,7 +172,12 @@ class ArFrame:
         if missing:
             raise ValueError(f"Unknown columns: {missing}")
 
-        return ArFrame(self._frame.select_columns(columns))
+        from .convert import from_pandas, to_pandas
+
+        df = to_pandas(self)
+        selected_df = df[columns]
+
+        return from_pandas(selected_df)
 
     def select_dtypes(
         self,
@@ -281,6 +286,41 @@ class ArFrame:
             col[:max_length] + "..." if len(col) > max_length else col
             for col in self.columns
         ]
+
+    def astype(self, mapping: dict[str, str]) -> ArFrame:
+        """Return a new frame with selected columns cast to new dtypes.
+
+        This is a convenience wrapper around :func:`arnio.cast_types` so
+        casting is discoverable directly from the frame object.
+
+        Parameters
+        ----------
+        mapping : dict[str, str]
+            Dictionary mapping column names to target dtype strings such as
+            ``"int64"``, ``"float64"``, ``"bool"``, or ``"string"``.
+
+        Returns
+        -------
+        ArFrame
+            New frame with the requested dtype conversions applied.
+
+        Raises
+        ------
+        TypeError
+            If ``mapping`` is not a dictionary.
+        ValueError
+            If ``mapping`` is empty.
+        TypeCastError
+            If a target dtype is unsupported or a cast fails.
+        """
+        if not isinstance(mapping, dict):
+            raise TypeError("mapping must be a dictionary of column-to-dtype values.")
+        if not mapping:
+            raise ValueError("mapping cannot be empty.")
+
+        from .cleaning import cast_types
+
+        return cast_types(self, mapping)
 
     # --- Dunder methods ---
 

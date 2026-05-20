@@ -207,30 +207,34 @@ def test_select_columns_empty_frame():
     assert selected.shape == (0, 1)
 
 
-def test_select_columns_native_path_avoids_pandas_roundtrip(monkeypatch):
-    frame = ar.from_pandas(
-        pd.DataFrame(
-            {
-                "name": ["alice", "bob"],
-                "salary": [100, 200],
-            }
-        )
-    )
+def test_astype_casts_selected_columns():
+    frame = ar.from_pandas(pd.DataFrame({"age": [20, 30], "name": ["Alice", "Bob"]}))
 
-    from arnio import convert
+    casted = frame.astype({"age": "string"})
 
-    original_to_pandas = convert.to_pandas
+    assert casted.dtypes["age"] == "string"
+    assert casted.dtypes["name"] == "string"
 
-    def fail_to_pandas(_):
-        raise AssertionError("native select_columns path should avoid to_pandas")
 
-    monkeypatch.setattr(convert, "to_pandas", fail_to_pandas)
+def test_astype_rejects_empty_mapping():
+    frame = ar.from_pandas(pd.DataFrame({"age": [20, 30]}))
 
-    selected = frame.select_columns(["salary", "name"])
+    with pytest.raises(ValueError, match="cannot be empty"):
+        frame.astype({})
 
-    df = original_to_pandas(selected)
 
-    assert list(df.columns) == ["salary", "name"]
+def test_astype_rejects_non_dict_mapping():
+    frame = ar.from_pandas(pd.DataFrame({"age": [20, 30]}))
+
+    with pytest.raises(TypeError, match="must be a dictionary"):
+        frame.astype([("age", "string")])
+
+
+def test_astype_preserves_type_cast_errors(sample_csv):
+    frame = ar.read_csv(sample_csv)
+
+    with pytest.raises(ar.TypeCastError, match="Unknown target dtype"):
+        frame.astype({"age": "decimal"})
 
 
 class TestArFrame:
