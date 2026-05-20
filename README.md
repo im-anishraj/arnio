@@ -953,29 +953,27 @@ This table helps users understand which pandas dtypes and workflows are fully su
 
 If a dtype is partially supported, users may need conversion before processing. Unsupported dtypes should raise clear errors where applicable.
 
-| Pandas Dtype | Support Status | Notes |
+| Pandas Dtype | Support Status | Notes / Fix Hints |
 |---|---|---|
-| `int64` | ✅ Supported | Fully supported with native C++ columnar storage |
-| `float64` | ✅ Supported | Fully supported with zero-copy conversion where possible |
-| `bool` | ✅ Supported | Native supported boolean type |
-| `string` | ✅ Supported | Recommended over `object` dtype for text workflows |
-| `datetime64[ns]` | ❌ Unsupported for native storage | No native datetime parsing or conversion support yet. Use `ar.DateTime()` for schema validation of string timestamp columns. |
-| `category` | ⚠️ Limited | Converted to string/object during processing |
-| `object` (mixed columns) | ⚠️ Limited | Mixed object columns may coerce to string and reduce type inference reliability |
-| nullable pandas dtypes (`Int64`, `boolean`) | ⚠️ Limited | Supported through pandas extension dtypes with null-mask handling |
-| `timedelta64[ns]` | ❌ Unsupported | Not currently supported |
+| `int64` / `Int64` | ✅ Supported | Fully supported with native C++ columnar storage. Nulls mapped to `pd.NA`. |
+| `float64` / `Float64` | ✅ Supported | Fully supported with zero-copy conversion. Nulls mapped to `np.nan` or `pd.NA`. |
+| `bool` / `boolean` | ✅ Supported | Native booleans supported with C++ backing. Nulls mapped to `pd.NA`. |
+| `string` / `string[python]` | ✅ Supported | Native string extension type. Recommended for text. Nulls mapped to `pd.NA`. |
+| `object` (strings / scalars) | ✅ Supported | Handled as text or coerced to common type if mixed. |
+| `object` (nested / lists / dicts) | ❌ Unsupported | Nested structures not allowed in flat columnar storage. Raises `TypeError`. |
+| `category` | ❌ Unsupported | Raises `TypeError` with fix hint. Convert to string: `df["col"].astype(str)` |
+| `datetime64[ns]` / timezone-aware | ❌ Unsupported | Raises `TypeError` with fix hint. Use `df["col"].astype(str)` or string timestamps. |
+| `timedelta64[ns]` | ❌ Unsupported | Raises `TypeError` with fix hint. Use `df["col"].dt.total_seconds()`. |
+| `complex64` / `complex128` | ❌ Unsupported | Raises `TypeError` with fix hint. Split into real/imag columns or convert to strings. |
 
 ### Notes
 
-- Numeric columns are optimized for zero-copy conversion between C++ and pandas where supported.
-- Pass `copy=True` to `to_pandas()` when downstream pandas code needs defensive pandas-owned column buffers.
-- Boolean conversion is already copied by the binding because `std::vector<bool>` cannot be exposed as a zero-copy NumPy buffer in the current implementation.
-- Columns with null masks may require copies so pandas can apply nullable values safely.
-- String columns require Python string object creation during `to_pandas()` conversion.
-- `ar.DateTime()` validates string timestamp columns with optional `format`, `min`, and `max`; it does not add native `datetime64[ns]` storage or automatic datetime conversion.
-- Mixed `object` columns may reduce type inference accuracy and may require preprocessing.
-- Unsupported dtypes should raise clear user-facing errors instead of silent failures.
-> **Note:** pandas DataFrame indexes are currently not preserved during `from_pandas()` conversion. Converted frames receive a default `RangeIndex` when converted back via `to_pandas()`.
+- **Zero-copy Optimization**: Numeric columns (`int64`, `float64`) are optimized for fast zero-copy conversion between C++ and pandas where supported.
+- **Defensive Buffers**: Pass `copy=True` to `to_pandas()` when downstream pandas code needs defensive pandas-owned column buffers.
+- **Boolean Buffers**: Boolean conversion is copied because `std::vector<bool>` cannot be exposed as a zero-copy NumPy buffer.
+- **Null Handling**: Columns with null masks are automatically converted to pandas nullable Extension dtypes (`Int64`, `BooleanDtype`, `StringDtype`).
+- **Index Drop**: pandas DataFrame indexes are currently not preserved during `from_pandas()` conversion; converted frames receive a default `RangeIndex` when converted back via `to_pandas()`.
+- **Validation**: Attempting to convert any unsupported type will raise a clear, user-friendly `TypeError` detailing the column name and how to fix/preprocess it.
 
 <br>
 
