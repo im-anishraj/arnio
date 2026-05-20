@@ -520,6 +520,20 @@ not to replace it.
 | **DuckDB / Arrow** | Validate and prepare data before analytics and columnar exchange. |
 | **notebooks** | Inspect quality issues and cleaning suggestions before analysis. |
 
+### DuckDB registration
+
+Use `ar.register_duckdb(frame, conn, "table_name")` to register an ArFrame directly as a DuckDB relation without writing pandas conversion glue yourself. DuckDB is an optional dependency — install it with `pip install duckdb` when needed.
+
+```python
+import duckdb
+import arnio as ar
+
+frame = ar.read_csv("data.csv")
+conn = duckdb.connect()
+ar.register_duckdb(frame, conn, "my_table")
+result = conn.execute("SELECT * FROM my_table").fetchdf()
+```
+
 ### Row-dropping pipeline behavior
 
 Some pipeline steps such as `drop_nulls` or `drop_duplicates`
