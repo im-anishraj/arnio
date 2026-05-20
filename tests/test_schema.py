@@ -106,6 +106,29 @@ def test_dtype_validation_does_not_report_safe_conversion_for_empty_strings():
     assert "safely convertible" not in result.issues[0].message
 
 
+def test_dtype_validation_preserves_warning_severity_for_numeric_strings():
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "age": pd.Series(
+                    ["1", "2", "3"],
+                    dtype="string",
+                )
+            }
+        )
+    )
+
+    schema = ar.Schema(
+        {
+            "age": ar.Int64(severity="warning"),
+        }
+    )
+
+    result = ar.validate(frame, schema)
+
+    assert result.issues[0].severity == "warning"
+
+
 def test_schema_validation_passes_for_valid_frame(sample_csv):
     frame = ar.read_csv(sample_csv)
     schema = ar.Schema(

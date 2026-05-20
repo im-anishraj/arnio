@@ -15,7 +15,6 @@ import pandas as pd
 from .convert import to_pandas
 from .exceptions import ArnioError
 from .frame import ArFrame
-from .quality import _suggest_column_dtype
 
 ISSUE_COLUMNS = [
     "column",
@@ -877,6 +876,30 @@ def DateTime(
     )
 
 
+def _is_safely_convertible_to_dtype(
+    series: pd.Series,
+    expected_dtype: str,
+) -> bool:
+    try:
+        non_null = series.dropna()
+
+        if len(non_null) == 0:
+            return False
+
+        if expected_dtype == "int64":
+            pd.to_numeric(non_null, errors="raise").astype("int64")
+            return True
+
+        if expected_dtype == "float64":
+            pd.to_numeric(non_null, errors="raise").astype("float64")
+            return True
+
+    except Exception:
+        return False
+
+    return False
+
+
 def _validate_column(
     df: pd.DataFrame,
     series: pd.Series,
@@ -893,33 +916,16 @@ def _validate_column(
                 f"Column {name!r} has dtype {actual_dtype!r}; "
                 f"expected {field_def.dtype!r}"
             )
-
-            compatible_dtype = None
-
-            if actual_dtype == "string":
-                lower_name = name.lower()
-
-                is_identifier_like = (
-                    lower_name == "id"
-                    or lower_name.endswith("_id")
-                    or lower_name
-                    in {
-                        "uuid",
-                        "zip",
-                        "zipcode",
-                        "zip_code",
-                    }
+            if (
+                actual_dtype == "string"
+                and field_def.dtype in {"int64", "float64"}
+                and _is_safely_convertible_to_dtype(
+                    df[name],
+                    field_def.dtype,
                 )
-
-                if not is_identifier_like:
-                    compatible_dtype = _suggest_column_dtype(
-                        series,
-                        actual_dtype,
-                    )
-
-            if compatible_dtype == field_def.dtype:
+            ):
                 message += (
-                    f". Values appear safely convertible " f"to {field_def.dtype!r}"
+                    f". Values appear safely convertible " f"to '{field_def.dtype}'"
                 )
 
             issues.append(
@@ -927,6 +933,7 @@ def _validate_column(
                     column=name,
                     rule="dtype",
                     message=message,
+                    severity=field_def.severity,
                 )
             )
 
