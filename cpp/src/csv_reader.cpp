@@ -458,12 +458,10 @@ Frame CsvReader::read(const std::string& path) const {
     // Sets expected_cols on first headerless row.
     // Returns false when the row must be skipped.
     // -----------------------------------------------------------------
-    auto normalise_row = [&](std::vector<std::string>& fields,
-                              std::optional<size_t>& expected_cols,
-                              size_t rec_no) -> bool {
+    auto normalise_row = [&](std::vector<std::string>& fields, std::optional<size_t>& expected_cols,
+                             size_t rec_no) -> bool {
         if (fields.empty()) return false;
-        if (!config.has_header && !expected_cols.has_value())
-            expected_cols = fields.size();
+        if (!config.has_header && !expected_cols.has_value()) expected_cols = fields.size();
 
         // Integrate trailing empty fields trimming logic from upstream:
         if (expected_cols.has_value() && fields.size() > expected_cols.value()) {
@@ -482,8 +480,7 @@ Frame CsvReader::read(const std::string& path) const {
         if (config.mode == "strict" && expected_cols.has_value())
             validate_row_width(rec_no, expected_cols.value(), fields.size());
         if (expected_cols.has_value()) {
-            while (fields.size() < expected_cols.value())
-                fields.push_back("");
+            while (fields.size() < expected_cols.value()) fields.push_back("");
         }
         return true;
     };
@@ -506,8 +503,7 @@ Frame CsvReader::read(const std::string& path) const {
             config.has_header ? std::optional<size_t>{header.size()} : std::nullopt;
 
         // Size col_types eagerly for headed files; lazily for headerless.
-        if (config.has_header && !header.empty())
-            col_types.assign(header.size(), DType::NULL_TYPE);
+        if (config.has_header && !header.empty()) col_types.assign(header.size(), DType::NULL_TYPE);
 
         size_t row_count = 0;
         while (read_record(file, line)) {
@@ -519,13 +515,12 @@ Frame CsvReader::read(const std::string& path) const {
             if (!normalise_row(fields, expected_cols, rec_no)) continue;
 
             // For headerless files, size on the first data row.
-            if (col_types.empty())
-                col_types.assign(fields.size(), DType::NULL_TYPE);
+            if (col_types.empty()) col_types.assign(fields.size(), DType::NULL_TYPE);
 
             for (size_t ci = 0; ci < col_types.size(); ++ci) {
                 if (ci < fields.size())
-                    col_types[ci] = CsvParser::promote_type(
-                        col_types[ci], parser_.infer_type(fields[ci]));
+                    col_types[ci] =
+                        CsvParser::promote_type(col_types[ci], parser_.infer_type(fields[ci]));
             }
             ++row_count;
         }
@@ -538,8 +533,7 @@ Frame CsvReader::read(const std::string& path) const {
 
     // For headerless CSVs generate synthetic column names.
     if (!config.has_header && !col_types.empty()) {
-        for (size_t i = 0; i < col_types.size(); ++i)
-            header.push_back("col_" + std::to_string(i));
+        for (size_t i = 0; i < col_types.size(); ++i) header.push_back("col_" + std::to_string(i));
         validate_header(header);
     }
 
@@ -552,21 +546,17 @@ Frame CsvReader::read(const std::string& path) const {
     if (config.usecols.has_value()) {
         for (const auto& name : config.usecols.value()) {
             auto it = std::find(header.begin(), header.end(), name);
-            if (it == header.end())
-                throw std::runtime_error("Column not found: " + name);
-            col_indices.push_back(
-                static_cast<size_t>(std::distance(header.begin(), it)));
+            if (it == header.end()) throw std::runtime_error("Column not found: " + name);
+            col_indices.push_back(static_cast<size_t>(std::distance(header.begin(), it)));
         }
     } else {
-        for (size_t i = 0; i < num_cols; ++i)
-            col_indices.push_back(i);
+        for (size_t i = 0; i < num_cols; ++i) col_indices.push_back(i);
     }
 
     // Initialise output columns with the statically-known types.
     std::vector<Column> columns;
     columns.reserve(col_indices.size());
-    for (size_t ci : col_indices)
-        columns.push_back(Column(header[ci], col_types[ci]));
+    for (size_t ci : col_indices) columns.push_back(Column(header[ci], col_types[ci]));
 
     // =================================================================
     // PASS 2: Stream rows directly into typed columns.
@@ -595,8 +585,7 @@ Frame CsvReader::read(const std::string& path) const {
             for (size_t i = 0; i < col_indices.size(); ++i) {
                 size_t ci = col_indices[i];
                 if (ci < fields.size())
-                    columns[i].push_back(
-                        parser_.parse_value(fields[ci], col_types[ci]));
+                    columns[i].push_back(parser_.parse_value(fields[ci], col_types[ci]));
                 else
                     columns[i].push_null();
             }
@@ -606,8 +595,6 @@ Frame CsvReader::read(const std::string& path) const {
 
     return Frame(std::move(columns));
 }
-
-
 
 std::vector<std::pair<std::string, std::string>> CsvReader::scan_schema(
     const std::string& path) const {
