@@ -84,8 +84,6 @@ df = ar.to_pandas(clean)
 # Use copy=True when you need defensive pandas-owned buffers
 safe_df = ar.to_pandas(clean, copy=True)
 ```
-
-
 ### Dry Run Validation
 
 Use `dry_run=True` to validate pipeline configuration and
@@ -161,6 +159,8 @@ clean_df = df.arnio.clean([
 
 report = clean_df.arnio.profile()
 ```
+
+
 ## Cross-field validation rules
 
 Pass a `rules` list to `Schema` for checks that span multiple columns.
@@ -450,6 +450,31 @@ ar.reset_steps()
 print(ar.list_steps())
 # Only built-in steps remain
 ```
+### Nested objects are stringified safely
+
+<details>
+<summary><b>📦 Nested objects are stringified safely</b></summary>
+<br>
+
+```python
+import arnio as ar
+
+data = {
+    "name": ["Alice", "Bob"],
+    "info": [
+        {"city": "NY", "age": 25},
+        {"city": "LA", "age": 30}
+    ]
+}
+
+frame = ar.from_dict(data)
+df_out = ar.to_pandas(frame)
+
+print(df_out["info"][0])
+# "{'city': 'NY', 'age': 25}"
+```
+
+</details>
 
 Custom steps run through a pandas↔ArFrame conversion bridge. Prototype in Python, then optionally migrate hot paths to C++ for full speed.
 </details>
@@ -1000,8 +1025,8 @@ If a dtype is partially supported, users may need conversion before processing. 
 | `bool` / `boolean` | ✅ Supported | Native booleans supported with C++ backing. Nulls mapped to `pd.NA`. |
 | `string` / `string[python]` | ✅ Supported | Native string extension type. Recommended for text. Nulls mapped to `pd.NA`. |
 | `object` (strings / scalars) | ✅ Supported | Handled as text or coerced to common type if mixed. |
-| `object` (nested / lists / dicts) | ❌ Unsupported | Nested structures not allowed in flat columnar storage. Raises `TypeError`. |
-| `category` | ❌ Unsupported | Raises `TypeError` with fix hint. Convert to string: `df["col"].astype(str)` |
+| `object` (nested / lists / dicts) | ✅ Supported | Nested structures allowed in flat columnar storage. |
+| `category` | ⚠️ Limited | Converted to string/object during processing |
 | `datetime64[ns]` / timezone-aware | ❌ Unsupported | Raises `TypeError` with fix hint. Use `df["col"].astype(str)` or string timestamps. |
 | `timedelta64[ns]` | ❌ Unsupported | Raises `TypeError` with fix hint. Use `df["col"].dt.total_seconds()`. |
 | `complex64` / `complex128` | ❌ Unsupported | Raises `TypeError` with fix hint. Split into real/imag columns or convert to strings. |
