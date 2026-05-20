@@ -265,7 +265,7 @@ def test_str_keeps_normal_column_names():
 
 
 def test_add_column_accepts_matching_lengths():
-    from arnio._arnio_cpp import Frame, Column, DType
+    from arnio._arnio_cpp import Column, DType, Frame
 
     frame = Frame()
 
@@ -284,7 +284,7 @@ def test_add_column_accepts_matching_lengths():
 
 
 def test_add_column_rejects_mismatched_lengths():
-    from arnio._arnio_cpp import Frame, Column, DType
+    from arnio._arnio_cpp import Column, DType, Frame
 
     frame = Frame()
 
@@ -303,7 +303,7 @@ def test_add_column_rejects_mismatched_lengths():
 
 
 def test_add_column_allows_first_column_in_empty_frame():
-    from arnio._arnio_cpp import Frame, Column, DType
+    from arnio._arnio_cpp import Column, DType, Frame
 
     frame = Frame()
 
