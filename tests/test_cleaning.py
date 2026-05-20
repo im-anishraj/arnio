@@ -1113,7 +1113,9 @@ class TestRenameColumns:
     def test_rename_rejects_non_mapping(self, sample_csv):
         frame = ar.read_csv(sample_csv)
 
-        with pytest.raises(TypeError, match="mapping must be a mapping"):
+        with pytest.raises(
+            TypeError, match="mapping must be a mapping of string keys to strings"
+        ):
             ar.rename_columns(frame, [("name", "full_name")])
 
     def test_rename_rejects_non_string_target(self, sample_csv):
@@ -1256,7 +1258,9 @@ class TestCastTypes:
     def test_cast_rejects_non_mapping_with_clear_error(self, sample_csv, mapping):
         frame = ar.read_csv(sample_csv)
 
-        with pytest.raises(TypeError, match="mapping must be a mapping"):
+        with pytest.raises(
+            TypeError, match="mapping must be a mapping of string keys to strings"
+        ):
             ar.cast_types(frame, mapping)
 
     def test_cast_bool_rejects_unknown_strings(self):
@@ -1333,6 +1337,44 @@ class TestFilterRows:
             TypeError, match="filter_rows: cannot compare column 'name'"
         ):
             ar.filter_rows(df, "name", ">", 1)
+
+
+class TestMappingValidation:
+    def test_rename_columns_rejects_invalid_mapping_value_type(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(TypeError, match="mapping values must be non-empty strings"):
+            ar.rename_columns(frame, {"name": 123})
+
+    def test_replace_values_rejects_missing_column(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(KeyError, match="Column 'missing' not found"):
+            ar.replace_values(frame, {"Alice": "Alicia"}, column="missing")
+
+    def test_replace_values_rejects_non_mapping_input(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(TypeError, match="mapping must be a dict-like mapping"):
+            ar.replace_values(frame, [("Alice", "Alicia")])
+
+    def test_replace_values_rejects_empty_mapping(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(ValueError, match="mapping must not be empty"):
+            ar.replace_values(frame, {})
+
+    def test_rename_columns_rejects_non_mapping_input(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(TypeError, match="mapping must be a mapping"):
+            ar.rename_columns(frame, [("name", "full_name")])
+
+    def test_cast_types_rejects_non_mapping_input(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(TypeError, match="mapping must be a mapping"):
+            ar.cast_types(frame, [("age", "string")])
 
 
 class TestReplaceValues:

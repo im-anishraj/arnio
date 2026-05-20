@@ -87,18 +87,37 @@ def _validate_column_sequence(
     return normalized
 
 
+def _validate_mapping(
+    mapping: Mapping[Any, Any],
+    *,
+    argument_name: str,
+    allow_empty: bool = True,
+    non_mapping_message: str | None = None,
+) -> dict[Any, Any]:
+    if not isinstance(mapping, Mapping):
+        raise TypeError(non_mapping_message or f"{argument_name} must be a mapping")
+
+    normalized = dict(mapping)
+    if not normalized and not allow_empty:
+        raise ValueError(f"{argument_name} must not be empty")
+
+    return normalized
+
+
 def _validate_string_mapping(
     mapping: Mapping[str, str],
     *,
     argument_name: str,
     allow_empty: bool = True,
 ) -> dict[str, str]:
-    if not isinstance(mapping, Mapping):
-        raise TypeError(f"{argument_name} must be a mapping of string keys to strings")
-
-    normalized = dict(mapping)
-    if not normalized and not allow_empty:
-        raise ValueError(f"{argument_name} must not be empty")
+    normalized = _validate_mapping(
+        mapping,
+        argument_name=argument_name,
+        allow_empty=allow_empty,
+        non_mapping_message=(
+            f"{argument_name} must be a mapping of string keys to strings"
+        ),
+    )
 
     invalid_keys = [key for key in normalized if not isinstance(key, str)]
     if invalid_keys:
@@ -1281,14 +1300,15 @@ def replace_values(frame, mapping, column=None):
 
     from .convert import from_pandas, to_pandas
 
-    if not isinstance(mapping, dict):
-        raise TypeError(
+    mapping = _validate_mapping(
+        mapping,
+        argument_name="mapping",
+        allow_empty=False,
+        non_mapping_message=(
             "mapping must be a dict-like mapping of {old_value: new_value}, "
             f"not {type(mapping).__name__}."
-        )
-    if not mapping:
-        raise ValueError("mapping must not be empty")
-
+        ),
+    )
     is_arframe = not isinstance(frame, pd.DataFrame)
     # Avoid mutating the caller's DataFrame in the direct pandas API path.
     df = to_pandas(frame) if is_arframe else frame.copy()
