@@ -21,6 +21,8 @@ import arnio as ar
 CSV_FILE = "benchmarks/benchmark_1m.csv"
 WIDE_CSV_FILE = "benchmarks/benchmark_wide.csv"
 MULTILINE_CSV_FILE = "benchmarks/benchmark_multiline.csv"
+SPARSE_NULLS_FILE = "benchmarks/benchmark_sparse_nulls.csv"
+DENSE_NULLS_FILE = "benchmarks/benchmark_sparse_nulls_dense.csv"
 DRY_RUN = os.getenv("ARNIO_BENCHMARK_DRY_RUN") == "1"
 RUNS = 1 if DRY_RUN else 3
 
@@ -38,6 +40,12 @@ BENCHMARKS = (
     BenchmarkCase("Tall CSV (1,000,000 rows x 12 columns)", CSV_FILE),
     BenchmarkCase("Wide CSV (5,000 rows x 256 columns)", WIDE_CSV_FILE),
     BenchmarkCase("Multiline CSV (100,000 rows x 4 columns)", MULTILINE_CSV_FILE),
+    BenchmarkCase(
+        "Sparse-null CSV (1,000,000 rows x 6 columns, 1% nulls)", SPARSE_NULLS_FILE
+    ),
+    BenchmarkCase(
+        "Dense-null CSV (1,000,000 rows x 6 columns, 20% nulls)", DENSE_NULLS_FILE
+    ),
 )
 
 

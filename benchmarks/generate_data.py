@@ -163,3 +163,4 @@ if __name__ == "__main__":
     generate_wide()
     generate_multiline()
     generate_sparse_nulls()
+    generate_sparse_nulls(path="benchmarks/benchmark_sparse_nulls_dense.csv", null_density=0.2, seed=99)
