@@ -91,7 +91,7 @@ def run(n_rows: int = 500_000, runs: int = 5) -> None:
     print(f"  {'hash_pandas_object     [candidate]':<35} {avg_c * 1000:>10.1f} ms")
     print(f"{'':=<65}")
     print(
-        f"  Speedup: {speedup:.2f}x  {'✓ candidate faster' if speedup > 1 else '✗ baseline faster'}"
+        f"  Speedup: {speedup:.2f}x  {'(+) candidate faster' if speedup > 1 else '(-) baseline faster'}"
     )
     print(f"{'':=<65}")
 
