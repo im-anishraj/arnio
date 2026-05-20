@@ -223,6 +223,48 @@ class TestDropDuplicates:
 
         assert names == expected_names
 
+    def test_drop_duplicates_type_collision_int_vs_string(self):
+        """int 1 and string '1' must NOT be treated as duplicates (fixes #33)."""
+        frame = ar.from_pandas(pd.DataFrame({"id": [1, 2], "val": [1, "1"]}))
+        result = ar.drop_duplicates(frame)
+        assert result.shape[0] == 2
+
+    def test_drop_duplicates_null_vs_empty_string(self):
+        """None and '' must NOT be treated as duplicates (fixes #33)."""
+        frame = ar.from_pandas(pd.DataFrame({"col1": [None, "", None]}))
+        result = ar.drop_duplicates(frame)
+        assert result.shape[0] == 2
+
+    def test_drop_duplicates_separator_injection_unit_sep(self):
+        """Rows whose values shift around the \x1f boundary must stay distinct (fixes #33).
+
+        With the old row_key (no length prefixing):
+          row 0: col1='a'      col2='b\x1fc'  -> key 'a\x1fb\x1fc\x1f'  (BUG: same as row 1)
+          row 1: col1='a\x1fb' col2='c'       -> key 'a\x1fb\x1fc\x1f'  (BUG: same as row 0)
+        The two rows are distinct but were incorrectly treated as duplicates.
+        """
+        frame = ar.from_pandas(
+            pd.DataFrame({"col1": ["a", "a\x1fb"], "col2": ["b\x1fc", "c"]})
+        )
+        result = ar.drop_duplicates(frame)
+        assert result.shape[0] == 2
+
+    def test_drop_duplicates_separator_injection_colon(self):
+        """Values containing ':' must not produce false duplicates (fixes #33)."""
+        frame = ar.from_pandas(
+            pd.DataFrame({"col1": ["a:b", "a"], "col2": ["c", "b:c"]})
+        )
+        result = ar.drop_duplicates(frame)
+        assert result.shape[0] == 2
+
+    def test_drop_duplicates_separator_injection_synthetic_prefix(self):
+        """Values that look like serialized prefixes must not collide (fixes #33)."""
+        frame = ar.from_pandas(
+            pd.DataFrame({"col1": ["S1:a", ""], "col2": ["b", "S1:ab"]})
+        )
+        result = ar.drop_duplicates(frame)
+        assert result.shape[0] == 2
+
 
 class TestDropColumns:
     def test_drop_columns_removes_requested_columns_and_preserves_order(self):
