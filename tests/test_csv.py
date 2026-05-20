@@ -518,6 +518,43 @@ class TestReadCsv:
         with pytest.raises(TypeError, match="must contain only strings"):
             ar.read_csv("dummy.csv", null_values=[1])
 
+    def test_read_csv_handles_very_long_single_field(self, tmp_path):
+        long_text = "a" * 100000
+
+        csv_path = tmp_path / "long_field.csv"
+        csv_path.write_text(f"id,text\n1,{long_text}\n")
+
+        frame = ar.read_csv(csv_path)
+        df = ar.to_pandas(frame)
+
+        assert df["text"].iloc[0] == long_text
+        assert len(df["text"].iloc[0]) == 100000
+
+    def test_read_csv_handles_very_long_quoted_field(self, tmp_path):
+        long_text = "b" * 120000
+
+        csv_path = tmp_path / "quoted_long_field.csv"
+        csv_path.write_text(f'id,text\n1,"{long_text}"\n')
+
+        frame = ar.read_csv(csv_path)
+        df = ar.to_pandas(frame)
+
+        assert df["text"].iloc[0] == long_text
+        assert len(df["text"].iloc[0]) == 120000
+
+    def test_read_csv_handles_mixed_normal_and_large_fields(self, tmp_path):
+        long_text = "x" * 80000
+
+        csv_path = tmp_path / "mixed_large_fields.csv"
+        csv_path.write_text(f"id,text\n1,hello\n2,{long_text}\n3,world\n")
+
+        frame = ar.read_csv(csv_path)
+        df = ar.to_pandas(frame)
+
+        assert df["text"].iloc[0] == "hello"
+        assert df["text"].iloc[1] == long_text
+        assert df["text"].iloc[2] == "world"
+
 
 class TestScanCsv:
     def test_scan_schema(self, sample_csv):
