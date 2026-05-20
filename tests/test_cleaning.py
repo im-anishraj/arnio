@@ -1101,7 +1101,7 @@ class TestParseBoolStrings:
             ar.parse_bool_strings(frame, true_values={True, "yes"})
 
     def test_parse_bool_strings_other_non_string_types_in_custom_values_raises(self):
-        """Test that custom sets containing floats, dicts, lists, or custom objects raise TypeError."""
+        """Test that custom sets containing floats, ints, or None raise TypeError."""
         import pandas as pd
 
         df = pd.DataFrame({"active": ["yes", "no"]}, dtype=object)
@@ -1114,13 +1114,13 @@ class TestParseBoolStrings:
         with pytest.raises(TypeError, match="false_values must contain only strings, got float"):
             ar.parse_bool_strings(frame, false_values={1.5, "no"})
 
-        # Dict (not hashable/valid in set, but if they pass a list/tuple of dicts to true_values/false_values)
-        with pytest.raises(TypeError, match="true_values must contain only strings, got dict"):
-            ar.parse_bool_strings(frame, true_values=["yes", {"key": "val"}])
+        # Int
+        with pytest.raises(TypeError, match="true_values must contain only strings, got int"):
+            ar.parse_bool_strings(frame, true_values={42, "yes"})
 
-        # List
-        with pytest.raises(TypeError, match="true_values must contain only strings, got list"):
-            ar.parse_bool_strings(frame, true_values=["yes", ["list"]])
+        # NoneType
+        with pytest.raises(TypeError, match="true_values must contain only strings, got NoneType"):
+            ar.parse_bool_strings(frame, true_values={None, "yes"})
 
     def test_parse_bool_strings_non_iterable_custom_values_raises(self):
         """Test that passing a completely non-iterable type (like int, float, bool) to true_values/false_values raises TypeError."""
@@ -1129,10 +1129,10 @@ class TestParseBoolStrings:
         df = pd.DataFrame({"active": ["yes", "no"]}, dtype=object)
         frame = ar.from_pandas(df)
 
-        with pytest.raises(TypeError):
+        with pytest.raises(TypeError, match="'int' object is not iterable"):
             ar.parse_bool_strings(frame, true_values=123)
 
-        with pytest.raises(TypeError):
+        with pytest.raises(TypeError, match="'float' object is not iterable"):
             ar.parse_bool_strings(frame, false_values=45.6)
 
     def test_parse_bool_strings_overlap_whitespace_and_case_normalization(self):
