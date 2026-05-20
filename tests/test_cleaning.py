@@ -2274,6 +2274,19 @@ class TestFilterRows:
     def test_filter_rows_invalid_comparison_raises_column_aware_type_error(self):
         df = pd.DataFrame({"name": ["Alice", "Bob"]})
 
+class TestRoundNumericColumns:
+    def test_round_subset_missing_column_raises_clear_error(self):
+        import pandas as pd
+
+        df = pd.DataFrame(
+            {
+                "price": [1.234, 5.678],
+                "name": ["Alice", "Bob"],
+            }
+        )
+
+        frame = ar.from_pandas(df)
+
         with pytest.raises(
             TypeError, match="filter_rows: cannot compare column 'name'"
         ):
@@ -2404,6 +2417,7 @@ class TestReplaceValues:
 
 
 class TestRoundNumericColumns:
+
     def test_round_all_numeric(self):
         import pandas as pd
 
