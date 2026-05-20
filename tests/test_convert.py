@@ -657,3 +657,72 @@ class TestToBindingSafeExtras:
             ValueError, match="Invalid financial value: NaN or Infinity."
         ):
             _to_binding_safe(float("nan"))
+
+
+class TestUInt64BoundaryConversion:
+    """Tests for pandas UInt64 and uint64 boundary conversions near signed 64-bit integer limits.
+
+    Links with Fixes #626.
+    """
+
+    def test_uint64_within_bounds(self):
+        # 9223372036854775807 is the maximum signed 64-bit integer.
+        df = pd.DataFrame(
+            {
+                "col_uint": pd.Series(
+                    [0, 12345, 9223372036854775807],
+                    dtype="UInt64",
+                )
+            }
+        )
+        frame = ar.from_pandas(df)
+        assert frame.dtypes["col_uint"] == "int64"
+
+        result = ar.to_pandas(frame)
+        assert list(result["col_uint"]) == [0, 12345, 9223372036854775807]
+
+    def test_uint64_out_of_bounds_raises(self):
+        # 9223372036854775808 exceeds the maximum signed 64-bit integer.
+        df = pd.DataFrame(
+            {
+                "col_uint": pd.Series(
+                    [9223372036854775808],
+                    dtype="UInt64",
+                )
+            }
+        )
+        with pytest.raises(
+            ValueError,
+            match="out of bounds for signed 64-bit integer",
+        ):
+            ar.from_pandas(df)
+
+    def test_numpy_uint64_within_bounds(self):
+        df = pd.DataFrame(
+            {
+                "col_uint": np.array(
+                    [0, 9223372036854775807],
+                    dtype=np.uint64,
+                )
+            }
+        )
+        frame = ar.from_pandas(df)
+        assert frame.dtypes["col_uint"] == "int64"
+
+        result = ar.to_pandas(frame)
+        assert list(result["col_uint"]) == [0, 9223372036854775807]
+
+    def test_numpy_uint64_out_of_bounds_raises(self):
+        df = pd.DataFrame(
+            {
+                "col_uint": np.array(
+                    [9223372036854775808],
+                    dtype=np.uint64,
+                )
+            }
+        )
+        with pytest.raises(
+            ValueError,
+            match="out of bounds for signed 64-bit integer",
+        ):
+            ar.from_pandas(df)
