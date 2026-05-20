@@ -794,12 +794,13 @@ def validate(
     >>> result.passed
     """
     schema = schema if isinstance(schema, Schema) else Schema(schema)
-    if max_errors is not None and max_errors < 0:
-        raise ValueError("max_errors must be >= 0")
 
     df = to_pandas(frame)
     dtypes = frame.dtypes
     issues: list[ValidationIssue] = []
+
+    if max_errors is not None and max_errors < 0:
+        raise ValueError("max_errors must be >= 0")
 
     if max_errors == 0:
         return ValidationResult(
@@ -856,6 +857,7 @@ def validate(
 
     if schema.strict:
         expected = set(schema.fields)
+
         for name in df.columns:
             if name not in expected:
                 issues.append(
@@ -867,10 +869,12 @@ def validate(
                 )
 
                 if reached_limit():
+                    issues = issues[:max_errors]
+
                     return ValidationResult(
                         row_count=len(df),
-                        issue_count=len(issues[:max_errors]),
-                        issues=issues[:max_errors],
+                        issue_count=len(issues),
+                        issues=issues,
                         bad_rows=[],
                     )
 
@@ -915,7 +919,11 @@ def validate(
                         )
                     )
             else:
-                duplicate_mask = df.duplicated(subset=list(schema.unique), keep=False)
+                duplicate_mask = df.duplicated(
+                    subset=list(schema.unique),
+                    keep=False,
+                )
+
                 if duplicate_mask.any():
                     for index in df[duplicate_mask].index:
                         issues.append(
@@ -929,6 +937,17 @@ def validate(
                                 row_index=int(index) + 1,
                             )
                         )
+
+                        if reached_limit():
+                            issues = issues[:max_errors]
+
+                            return ValidationResult(
+                                row_count=len(df),
+                                issue_count=len(issues),
+                                issues=issues,
+                                bad_rows=[],
+                            )
+
     if schema.rules:
         for rule_fn in schema.rules:
             rule_name = getattr(rule_fn, "__name__", type(rule_fn).__name__)

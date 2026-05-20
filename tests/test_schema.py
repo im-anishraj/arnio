@@ -151,6 +151,83 @@ def test_validation_result_summary_counts_repeated_issues_in_one_column():
     assert summary["issues_by_column_and_rule"] == {"age": {"min": 3}}
 
 
+def test_schema_validation_max_errors_zero(tmp_path):
+    path = tmp_path / "data.csv"
+
+    path.write_text("name,age\njohn,\n")
+
+    frame = ar.read_csv(path)
+
+    schema = ar.Schema(
+        {
+            "name": ar.String(),
+            "age": ar.Int64(nullable=False),
+        }
+    )
+    result = ar.validate(frame, schema, max_errors=0)
+
+    assert result.issue_count == 0
+    assert result.issues == []
+
+
+def test_schema_validation_negative_max_errors(tmp_path):
+    path = tmp_path / "data.csv"
+
+    path.write_text("name\njohn\n")
+
+    frame = ar.read_csv(path)
+
+    schema = ar.Schema(
+        {
+            "name": ar.String(),
+        }
+    )
+
+    result = ar.validate(frame, schema, max_errors=-1)
+
+    assert result.issue_count >= 0
+
+
+def test_schema_validation_strict_max_errors_cap(tmp_path):
+    path = tmp_path / "data.csv"
+
+    path.write_text("name,extra1,extra2\njohn,a,b\n")
+
+    frame = ar.read_csv(path)
+
+    schema = ar.Schema(
+        {
+            "name": ar.String(),
+        },
+        strict=True,
+    )
+
+    result = ar.validate(frame, schema, max_errors=1)
+
+    assert result.issue_count == 2
+    assert len(result.issues) == 2
+
+
+def test_schema_validation_unique_max_errors_cap(tmp_path):
+    path = tmp_path / "data.csv"
+
+    path.write_text("id\n1\n1\n1\n")
+
+    frame = ar.read_csv(path)
+
+    schema = ar.Schema(
+        {
+            "id": ar.Int64(),
+        },
+        unique=["id"],
+    )
+
+    result = ar.validate(frame, schema, max_errors=1)
+
+    assert result.issue_count == 3
+    assert len(result.issues) == 3
+
+
 def test_validation_result_summary_counts_issues_across_multiple_columns():
     result = ar.ValidationResult(
         row_count=3,
