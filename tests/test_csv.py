@@ -85,10 +85,7 @@ class TestReadCsv:
 
     def test_read_csv_dtype_parse_failure_becomes_null(self, tmp_path):
         path = tmp_path / "parse_failure.csv"
-        path.write_text(
-            "quantity\n"
-            "abc\n"
-        )
+        path.write_text("quantity\n" "abc\n")
 
         frame = ar.read_csv(
             path,
@@ -99,6 +96,20 @@ class TestReadCsv:
 
         assert frame.dtypes["quantity"] == "int64"
         assert pdf["quantity"].isna().tolist() == [True]
+
+    def test_read_csv_dtype_non_selected_usecols_column(self, tmp_path):
+        path = tmp_path / "dtype_usecols_error.csv"
+        path.write_text("zip,price\n" "07001,12.5\n")
+
+        with pytest.raises(
+            ar.CsvReadError,
+            match="dtype specified for non-selected column",
+        ):
+            ar.read_csv(
+                path,
+                usecols=["zip"],
+                dtype={"price": "float64"},
+            )
 
     def test_read_csv_dtype_override_string_to_int64(self, tmp_path):
         path = tmp_path / "quantities.csv"

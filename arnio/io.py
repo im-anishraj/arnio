@@ -501,6 +501,18 @@ def read_csv_chunked(
         during numeric parsing.
     null_values : list[str], optional
         Strings treated as null values.
+
+    dtype : dict[str, str], optional
+        Explicit column dtype mapping. Specified columns skip automatic
+        type inference and use the requested dtype directly.
+
+        Supported dtypes:
+        - "string"
+        - "int64"
+        - "float64"
+        - "bool"
+
+
     mode : {"strict", "permissive"}, default "strict"
         Controls malformed row handling.
 

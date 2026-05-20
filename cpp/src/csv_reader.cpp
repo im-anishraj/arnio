@@ -486,10 +486,19 @@ Frame CsvReader::read(const std::string& path) const {
     }
     if (config.dtype.has_value()) {
         for (const auto& [column_name, dtype_name] : config.dtype.value()) {
-            auto it = std::find(header.begin(), header.end(), column_name);
+            auto header_it = std::find(header.begin(), header.end(), column_name);
 
-            if (it == header.end()) {
+            if (header_it == header.end()) {
                 throw std::runtime_error("Column not found in dtype mapping: " + column_name);
+            }
+
+            size_t column_index = static_cast<size_t>(std::distance(header.begin(), header_it));
+
+            bool selected = std::find(col_indices.begin(), col_indices.end(), column_index) !=
+                            col_indices.end();
+
+            if (!selected) {
+                throw std::runtime_error("dtype specified for non-selected column: " + column_name);
             }
         }
     }
