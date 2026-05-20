@@ -65,7 +65,8 @@ def test_run_case_benchmarks_the_selected_case_path(monkeypatch):
     monkeypatch.setattr(benchmark_vs_pandas, "run_subprocess", fake_run_subprocess)
 
     benchmark_vs_pandas.run_case(
-        benchmark_vs_pandas.BenchmarkCase("Wide fixture", "wide.csv")
+        benchmark_vs_pandas.BenchmarkCase("Wide fixture", "wide.csv"),
+        skip_correctness=True,
     )
 
     assert seen_calls == [

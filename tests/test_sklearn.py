@@ -4,9 +4,9 @@ import pytest
 
 pytest.importorskip("sklearn")
 
-from sklearn.pipeline import Pipeline
+from sklearn.pipeline import Pipeline  # noqa: E402
 
-from arnio.integrations.sklearn import ArnioCleaner
+from arnio.integrations.sklearn import ArnioCleaner  # noqa: E402
 
 
 def test_arniocleaner_non_dataframe_input():
@@ -50,3 +50,64 @@ def test_arniocleaner_in_pipeline():
     assert isinstance(result, pd.DataFrame)
     assert result.index.equals(df.index)
     assert list(result.columns) == ["A", "B"]
+
+
+def test_arniocleaner_rejects_row_dropping_by_default():
+    df = pd.DataFrame({"name": ["Alice", None], "age": [30, 40]})
+
+    cleaner = ArnioCleaner(steps=[("drop_nulls",)])
+
+    with pytest.raises(ValueError, match="changed the row count"):
+        cleaner.fit_transform(df)
+
+
+def test_arniocleaner_allows_row_dropping_when_enabled():
+    df = pd.DataFrame({"name": ["Alice", None], "age": [30, 40]}, index=[10, 20])
+
+    cleaner = ArnioCleaner(
+        steps=[("drop_nulls",)],
+        allow_row_count_change=True,
+    )
+    result = cleaner.fit_transform(df)
+
+    assert len(result) == 1
+    assert list(result.index) == [0]
+    assert result.iloc[0]["name"] == "Alice"
+
+
+def test_arniocleaner_rejects_transform_column_order_mismatch():
+    train = pd.DataFrame({"A": [" x "], "B": [1]})
+    test = pd.DataFrame({"B": [1], "A": [" x "]})
+
+    cleaner = ArnioCleaner(steps=[("strip_whitespace",)])
+    cleaner.fit(train)
+
+    with pytest.raises(ValueError, match="columns must match"):
+        cleaner.transform(test)
+
+
+def test_arniocleaner_rejects_transform_with_renamed_column():
+    train = pd.DataFrame({"A": [" x "], "B": [1]})
+    test = pd.DataFrame({"A": [" x "], "C": [1]})
+    cleaner = ArnioCleaner(steps=[("strip_whitespace",)])
+    cleaner.fit(train)
+    with pytest.raises(ValueError, match="columns must match"):
+        cleaner.transform(test)
+
+
+def test_arniocleaner_rejects_transform_with_extra_columns():
+    train = pd.DataFrame({"A": [" x "], "B": [1]})
+    test = pd.DataFrame({"A": [" x "], "B": [1], "C": [2]})
+    cleaner = ArnioCleaner(steps=[("strip_whitespace",)])
+    cleaner.fit(train)
+    with pytest.raises(ValueError, match="columns must match"):
+        cleaner.transform(test)
+
+
+def test_arniocleaner_rejects_transform_with_missing_columns():
+    train = pd.DataFrame({"A": [" x "], "B": [1]})
+    test = pd.DataFrame({"A": [" x "]})
+    cleaner = ArnioCleaner(steps=[("strip_whitespace",)])
+    cleaner.fit(train)
+    with pytest.raises(ValueError, match="columns must match"):
+        cleaner.transform(test)

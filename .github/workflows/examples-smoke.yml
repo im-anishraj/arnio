@@ -1,0 +1,81 @@
+name: Examples Smoke
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  examples-core:
+    name: Smoke – core examples
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pybind11 numpy pandas scikit-learn
+
+      - name: Install local checkout
+        run: python -m pip install -e .
+
+      - name: Run basic_usage.py
+        timeout-minutes: 2
+        run: python examples/basic_usage.py
+
+      - name: Run auto_clean_tutorial.py
+        timeout-minutes: 2
+        run: python examples/auto_clean_tutorial.py
+
+      - name: Run custom_step.py
+        timeout-minutes: 2
+        run: python examples/custom_step.py
+
+      - name: Run arnio_with_pandas.py
+        timeout-minutes: 2
+        run: python examples/arnio_with_pandas.py
+
+      - name: Run arnio_with_numpy.py
+        timeout-minutes: 2
+        run: python examples/arnio_with_numpy.py
+
+      - name: Run arnio_with_sklearn.py
+        timeout-minutes: 2
+        run: python examples/arnio_with_sklearn.py
+
+      - name: Run sklearn_pipeline.py
+        timeout-minutes: 2
+        run: python examples/sklearn_pipeline.py
+
+  examples-duckdb:
+    name: Smoke – duckdb example
+    runs-on: ubuntu-latest
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pybind11 numpy pandas duckdb
+
+      - name: Install local checkout
+        run: python -m pip install -e .
+
+      - name: Run arnio_with_duckdb.py
+        timeout-minutes: 2
+        run: python examples/arnio_with_duckdb.py
