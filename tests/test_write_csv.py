@@ -161,3 +161,65 @@ class TestWriteCsvLineTerminatorBytes:
         df = ar.to_pandas(frame2)
         assert df["note"].iloc[0] == "line1\nline2"
         assert df["note"].iloc[1] == "plain"
+
+
+class TestWriteCsvAppendMode:
+    """Unit tests for write_csv append mode."""
+
+    def test_append_mode_exists_and_non_empty(self, tmp_path):
+        frame1 = ar.from_pandas(pd.DataFrame({"a": [1, 2], "b": ["x", "y"]}))
+        frame2 = ar.from_pandas(pd.DataFrame({"a": [3, 4], "b": ["z", "w"]}))
+
+        out = tmp_path / "append.csv"
+        # First write: normal mode="w" (default)
+        ar.write_csv(frame1, out)
+
+        # Second write: append mode="a"
+        ar.write_csv(frame2, out, mode="a")
+
+        # Read back
+        res = ar.read_csv(out)
+        df = ar.to_pandas(res)
+
+        expected = pd.DataFrame({"a": [1, 2, 3, 4], "b": ["x", "y", "z", "w"]})
+        pd.testing.assert_frame_equal(df, expected, check_dtype=False)
+
+    def test_append_mode_non_existent(self, tmp_path):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1, 2]}))
+        out = tmp_path / "non_existent.csv"
+
+        # If file does not exist, mode="a" should write header and content
+        ar.write_csv(frame, out, mode="a")
+
+        res = ar.read_csv(out)
+        df = ar.to_pandas(res)
+        pd.testing.assert_frame_equal(df, ar.to_pandas(frame), check_dtype=False)
+
+    def test_append_mode_empty_file(self, tmp_path):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1, 2]}))
+        out = tmp_path / "empty.csv"
+        # Create empty file
+        out.touch()
+
+        # Append to empty file should write header
+        ar.write_csv(frame, out, mode="a")
+
+        res = ar.read_csv(out)
+        df = ar.to_pandas(res)
+        pd.testing.assert_frame_equal(df, ar.to_pandas(frame), check_dtype=False)
+
+    def test_append_mode_no_header(self, tmp_path):
+        frame1 = ar.from_pandas(pd.DataFrame({"a": [1]}))
+        frame2 = ar.from_pandas(pd.DataFrame({"a": [2]}))
+
+        out = tmp_path / "no_header_append.csv"
+        ar.write_csv(frame1, out, write_header=False)
+        ar.write_csv(frame2, out, mode="a", write_header=False)
+
+        content = out.read_text().splitlines()
+        assert content == ["1", "2"]
+
+    def test_invalid_mode_rejected(self, tmp_path):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
+        with pytest.raises(ValueError, match="mode must be 'w' or 'a'"):
+            ar.write_csv(frame, tmp_path / "out.csv", mode="invalid")

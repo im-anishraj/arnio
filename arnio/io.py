@@ -552,6 +552,7 @@ def write_csv(
     delimiter: str = ",",
     write_header: bool = True,
     line_terminator: str = "\n",
+    mode: str = "w",
 ) -> None:
     """Write an ArFrame to a CSV file via C++ backend.
 
@@ -567,18 +568,20 @@ def write_csv(
         Whether to write the column header row.
     line_terminator : str, default "\\n"
         Line terminator to use between rows.
+    mode : {"w", "a"}, default "w"
+        File writing mode. Use "w" to overwrite/create, and "a" to append.
 
     Raises
     ------
     ValueError
-        If file format is unsupported.
+        If file format is unsupported or mode is invalid.
     RuntimeError
         If the file cannot be opened or written.
 
     Examples
     --------
     >>> ar.write_csv(frame, "output.csv")
-    >>> ar.write_csv(frame, "output.tsv", delimiter="\\t")
+    >>> ar.write_csv(frame, "output.csv", mode="a")
     """
     path = os.fspath(path)
     path_lower = path.lower()
@@ -590,6 +593,9 @@ def write_csv(
         raise ValueError(
             f"Unsupported file format: {path}. Only .csv, .txt, and .tsv are supported."
         )
+
+    if mode not in {"w", "a"}:
+        raise ValueError("mode must be 'w' or 'a'")
 
     if not isinstance(delimiter, str):
         raise TypeError("delimiter must be a string")
@@ -604,16 +610,41 @@ def write_csv(
     if line_terminator == "":
         raise ValueError("line_terminator must not be empty")
 
+    should_append = mode == "a" and os.path.exists(path) and os.path.getsize(path) > 0
+
     config = _CsvWriteConfig()
     config.delimiter = delimiter
-    config.write_header = write_header
+    config.write_header = False if should_append else write_header
     config.line_terminator = line_terminator
 
     writer = _CsvWriter(config)
-    try:
-        writer.write(frame._frame, path)
-    except RuntimeError as e:
-        raise RuntimeError(str(e)) from e
+
+    if should_append:
+        import tempfile
+
+        with tempfile.NamedTemporaryFile("w", delete=False) as temp_file:
+            temp_path = temp_file.name
+
+        try:
+            writer.write(frame._frame, temp_path)
+            with open(path, "ab+") as dest, open(temp_path, "rb") as src:
+                dest.seek(0, os.SEEK_END)
+                if dest.tell() > 0:
+                    dest.seek(dest.tell() - 1)
+                    last_char = dest.read(1)
+                    if last_char not in (b"\n", b"\r"):
+                        dest.write(line_terminator.encode("utf-8"))
+                dest.write(src.read())
+        except RuntimeError as e:
+            raise RuntimeError(str(e)) from e
+        finally:
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)
+    else:
+        try:
+            writer.write(frame._frame, path)
+        except RuntimeError as e:
+            raise RuntimeError(str(e)) from e
 
 
 def scan_csv(
