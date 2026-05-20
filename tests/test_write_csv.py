@@ -161,3 +161,81 @@ class TestWriteCsvLineTerminatorBytes:
         df = ar.to_pandas(frame2)
         assert df["note"].iloc[0] == "line1\nline2"
         assert df["note"].iloc[1] == "plain"
+
+    
+class TestBooleanOptionValidation:
+    """Tests for strict bool validation on has_header, trim_headers, write_header."""
+
+    # --- write_csv: write_header ---
+
+    def test_write_header_none_rejected(self, tmp_path):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
+        with pytest.raises(TypeError, match="write_header"):
+            ar.write_csv(frame, str(tmp_path / "out.csv"), write_header=None)
+
+    def test_write_header_int_zero_rejected(self, tmp_path):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
+        with pytest.raises(TypeError, match="write_header"):
+            ar.write_csv(frame, str(tmp_path / "out.csv"), write_header=0)
+
+    def test_write_header_int_one_rejected(self, tmp_path):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
+        with pytest.raises(TypeError, match="write_header"):
+            ar.write_csv(frame, str(tmp_path / "out.csv"), write_header=1)
+
+    def test_write_header_string_rejected(self, tmp_path):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
+        with pytest.raises(TypeError, match="write_header"):
+            ar.write_csv(frame, str(tmp_path / "out.csv"), write_header="true")
+
+    def test_write_header_true_accepted(self, tmp_path):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
+        ar.write_csv(frame, str(tmp_path / "out.csv"), write_header=True)
+
+    def test_write_header_false_accepted(self, tmp_path):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
+        ar.write_csv(frame, str(tmp_path / "out.csv"), write_header=False)
+
+    # --- read_csv: has_header and trim_headers ---
+
+    def test_has_header_none_rejected(self, tmp_path):
+        p = tmp_path / "f.csv"
+        p.write_text("a,b\n1,2\n")
+        with pytest.raises(TypeError, match="has_header"):
+            ar.read_csv(str(p), has_header=None)
+
+    def test_has_header_int_rejected(self, tmp_path):
+        p = tmp_path / "f.csv"
+        p.write_text("a,b\n1,2\n")
+        with pytest.raises(TypeError, match="has_header"):
+            ar.read_csv(str(p), has_header=0)
+
+    def test_has_header_string_rejected(self, tmp_path):
+        p = tmp_path / "f.csv"
+        p.write_text("a,b\n1,2\n")
+        with pytest.raises(TypeError, match="has_header"):
+            ar.read_csv(str(p), has_header="yes")
+
+    def test_trim_headers_none_rejected(self, tmp_path):
+        p = tmp_path / "f.csv"
+        p.write_text("a,b\n1,2\n")
+        with pytest.raises(TypeError, match="trim_headers"):
+            ar.read_csv(str(p), trim_headers=None)
+
+    def test_trim_headers_int_rejected(self, tmp_path):
+        p = tmp_path / "f.csv"
+        p.write_text("a,b\n1,2\n")
+        with pytest.raises(TypeError, match="trim_headers"):
+            ar.read_csv(str(p), trim_headers=1)
+
+    def test_has_header_true_accepted(self, tmp_path):
+        p = tmp_path / "f.csv"
+        p.write_text("a,b\n1,2\n")
+        frame = ar.read_csv(str(p), has_header=True)
+        assert frame is not None
+
+    def test_has_header_false_accepted(self, tmp_path):
+        p = tmp_path / "f.csv"
+        p.write_text("1,2\n3,4\n")
+        frame = ar.read_csv(str(p), has_header=False)
+        assert frame is not None

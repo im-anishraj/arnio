@@ -173,6 +173,13 @@ def _validate_null_values(null_values: list[str]) -> list[str]:
 
     return list(null_values)
 
+def _validate_bool_option(value: bool, name: str) -> bool:
+    """Validate that a boolean option is strictly True or False."""
+    if not isinstance(value, bool):
+        raise TypeError(
+            f"{name} must be True or False, got {type(value).__name__}: {value!r}"
+        )
+    return value
 
 def _validate_parser_mode(mode: str) -> str:
     """Validate CSV parser mode."""
@@ -319,9 +326,9 @@ def read_csv(
     mode = _validate_parser_mode(mode)
     config = _CsvConfig()
     config.delimiter = delimiter
-    config.has_header = has_header
+    config.has_header = _validate_bool_option(has_header, "has_header")
     config.encoding = encoding
-    config.trim_headers = trim_headers
+    config.trim_headers = _validate_bool_option(trim_headers, "trim_headers")
     config.thousands_separator = thousands_separator
     config.mode = mode
 
@@ -439,9 +446,9 @@ def read_csv_chunked(
 
     config = _CsvConfig()
     config.delimiter = delimiter
-    config.has_header = has_header
+    config.has_header = _validate_bool_option(has_header, "has_header")
     config.encoding = encoding
-    config.trim_headers = trim_headers
+    config.trim_headers = _validate_bool_option(trim_headers, "trim_headers")
     config.thousands_separator = thousands_separator
     config.mode = mode
     config.skip_rows = skip_rows
@@ -535,7 +542,7 @@ def write_csv(
 
     config = _CsvWriteConfig()
     config.delimiter = delimiter
-    config.write_header = write_header
+    config.write_header = _validate_bool_option(write_header, "write_header")
     config.line_terminator = line_terminator
 
     writer = _CsvWriter(config)
