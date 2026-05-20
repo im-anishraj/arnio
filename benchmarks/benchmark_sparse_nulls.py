@@ -26,9 +26,12 @@ from __future__ import annotations
 
 import argparse
 import os
+import sys
 import time
 import tracemalloc
 from pathlib import Path
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
 
 import numpy as np
 import pandas as pd
@@ -47,6 +50,7 @@ DENSITY_LABELS = {
     0.2: "20 %",
 }
 
+DRY_RUN = os.getenv("ARNIO_BENCHMARK_DRY_RUN") == "1"
 TMP_DIR = Path("benchmarks")
 FILL_VALUE = 0
 
@@ -170,6 +174,9 @@ def _bench_op(
 
 
 def run(rows: int = 1_000_000, runs: int = 5) -> None:
+    if DRY_RUN:
+        rows = min(rows, 10)
+        runs = min(runs, 1)
     print(f"Sparse-null benchmark: {rows:,} rows, {runs} run(s) per density")
     print()
 
