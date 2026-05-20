@@ -284,23 +284,21 @@ Frame strip_whitespace(const Frame& frame, const std::optional<std::vector<std::
     for (size_t ci = 0; ci < frame.num_cols(); ++ci) {
         const auto& src = frame.column(ci);
         if (targets.count(ci) && src.dtype() == DType::STRING) {
-            Column col(src.name(), src.dtype());
+            auto vec = std::get<std::vector<std::string>>(src.data());
             for (size_t r = 0; r < src.size(); ++r) {
-                if (src.is_null(r)) {
-                    col.push_null();
-                } else {
-                    std::string val = std::get<std::string>(src.at(r));
-                    // Trim leading
+                if (!src.is_null(r)) {
+                    auto& val = vec[r];
                     size_t start = val.find_first_not_of(" \t\n\r");
-                    // Trim trailing
-                    size_t end = val.find_last_not_of(" \t\n\r");
                     if (start == std::string::npos) {
-                        col.push_back(std::string(""));
+                        val.clear();
                     } else {
-                        col.push_back(val.substr(start, end - start + 1));
+                        size_t end = val.find_last_not_of(" \t\n\r");
+                        val.erase(end + 1);
+                        val.erase(0, start);
                     }
                 }
             }
+            Column col(src.name(), src.dtype(), std::move(vec), src.null_mask());
             new_cols.push_back(std::move(col));
         } else {
             new_cols.push_back(src.clone());
