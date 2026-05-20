@@ -1192,7 +1192,8 @@ data = {
 }
 df = ar.from_pandas(pd.DataFrame(data))
 # Bounded profiling for large datasets (controls how many sample values are kept)
-report = ar.profile(df, sample_size=5)
+report = ar.profile(frame)
+print(report)
 safe_report = report.to_dict(redact_sample_values=True)
 ```
 

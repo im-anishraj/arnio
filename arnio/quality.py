@@ -186,17 +186,23 @@ class DataQualityReport:
             "quality_score": self.quality_score,
             "score_components": self.score_components,
             "columns": {
-                name: column.to_dict(redact_sample_values=redact_sample_values)
-                for name, column in self.columns.items()
+                name: self.columns[name].to_dict(
+                    redact_sample_values=redact_sample_values
+                )
+                for name in sorted(self.columns)
             },
+
             "suggestions": [
                 {
                     "step": s[0],
-                    "kwargs": dict(s[1]),
+                    "kwargs": dict(sorted(s[1].items())),
                     "confidence_score": getattr(s, "confidence_score", None),
                     "confidence_reason": getattr(s, "confidence_reason", None),
                 }
-                for s in self.suggestions
+                for s in sorted(
+                    self.suggestions,
+                    key=lambda item: (item[0], sorted(item[1].items())),
+                )
             ],
         }
 
@@ -639,6 +645,28 @@ class QualityGateResult:
             },
             "issues": [issue.to_dict() for issue in self.issues],
         }
+    def __repr__(self) -> str:
+        """Deterministic concise representation for terminals and notebooks."""
+
+        column_names = sorted(self.columns)
+
+        preview = ", ".join(column_names[:5])
+
+        if len(column_names) > 5:
+            preview += ", ..."
+
+        return (
+            "DataQualityReport("
+            f"rows={self.row_count}, "
+            f"columns={self.column_count}, "
+            f"duplicates={self.duplicate_rows}, "
+            f"quality_score={self.quality_score:.2f}, "
+            f"column_names=[{preview}]"
+            ")"
+        )
+
+    __str__ = __repr__
+
 
     def to_markdown(self) -> str:
         """Return a GitHub-friendly quality-gate report."""
