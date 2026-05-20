@@ -399,16 +399,6 @@ ar.register_step("team:drop_nulls", remove_outliers)  # namespaced custom step
 # Introspect built-in and custom step names without reaching into internals.
 print(ar.list_steps())
 
-Need to restore the registry to built-in steps only (for example in tests)?
-
-```python
-ar.reset_steps()
-
-print(ar.list_steps())  # only built-in steps remain
-```
-
-This removes all registered custom Python steps while preserving built-in pipeline steps.
-
 # Now use it in any pipeline alongside native C++ steps
 clean = ar.pipeline(frame, [
     ("builtin:strip_whitespace",),
@@ -423,6 +413,15 @@ Need to inspect the built-in kwargs a step accepts before assembling a pipeline?
 signatures = ar.get_builtin_step_signatures()
 print(list(signatures["drop_nulls"].parameters))  # ["subset"]
 print(list(signatures["filter_rows"].parameters))  # ["column", "op", "value"]
+```
+
+Need to restore the registry back to built-in steps only during tests?
+
+```python
+ar.reset_steps()
+
+print(ar.list_steps())
+# Only built-in steps remain
 ```
 
 Custom steps run through a pandas↔ArFrame conversion bridge. Prototype in Python, then optionally migrate hot paths to C++ for full speed.
