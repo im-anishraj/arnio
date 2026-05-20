@@ -866,12 +866,13 @@ def validate(
                     )
                 )
 
-                return ValidationResult(
-                    row_count=len(df),
-                    issue_count=len(issues[:max_errors]),
-                    issues=issues[:max_errors],
-                    bad_rows=[],
-                )
+                if reached_limit():
+                    return ValidationResult(
+                        row_count=len(df),
+                        issue_count=len(issues[:max_errors]),
+                        issues=issues[:max_errors],
+                        bad_rows=[],
+                    )
 
     if schema.unique is not None:
         if not isinstance(schema.unique, (list, tuple)):
