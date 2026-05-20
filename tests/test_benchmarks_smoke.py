@@ -23,6 +23,7 @@ CI_SAFE_BENCHMARKS = [
     "benchmark_clip_numeric.py",
     "benchmark_combine_columns.py",
     "benchmark_gil_threading.py",
+    "benchmark_numeric_parse.py",
     "benchmark_profile_duplicate_count.py",
     "benchmark_strip_whitespace.py",
     "benchmark_to_pandas_overhead.py",
@@ -33,6 +34,7 @@ CI_SAFE_BENCHMARKS = [
 BENCHMARK_ARGS = {
     "benchmark_auto_clean_memory.py": ["--rows", "10", "--repeat", "1"],
     "benchmark_clip_numeric.py": ["--rows", "10", "--runs", "1"],
+    "benchmark_numeric_parse.py": ["--rows", "10", "--runs", "1"],
     "benchmark_profile_duplicate_count.py": ["--rows", "10", "--runs", "1"],
 }
 
