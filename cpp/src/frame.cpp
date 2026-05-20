@@ -4,14 +4,30 @@
 
 namespace arnio {
 
-Frame::Frame(std::vector<Column> columns) : columns_(std::move(columns)) { rebuild_index(); }
+Frame::Frame(size_t row_count) : row_count_(row_count), row_count_known_(true) {}
+
+Frame::Frame(std::vector<Column> columns) : columns_(std::move(columns)) {
+    if (!columns_.empty()) {
+        row_count_ = columns_[0].size();
+        for (const auto& col : columns_) {
+            validate_column_size(col);
+        }
+    }
+    row_count_known_ = true;
+    rebuild_index();
+}
+
+Frame::Frame(size_t row_count, std::vector<Column> columns)
+    : columns_(std::move(columns)), row_count_(row_count), row_count_known_(true) {
+    for (const auto& col : columns_) {
+        validate_column_size(col);
+    }
+    rebuild_index();
+}
 
 std::pair<size_t, size_t> Frame::shape() const { return {num_rows(), num_cols()}; }
 
-size_t Frame::num_rows() const {
-    if (columns_.empty()) return 0;
-    return columns_[0].size();
-}
+size_t Frame::num_rows() const { return row_count_; }
 
 size_t Frame::num_cols() const { return columns_.size(); }
 
@@ -68,12 +84,12 @@ size_t Frame::column_index(const std::string& name) const {
 }
 
 void Frame::add_column(Column col) {
-    if (!columns_.empty() && col.size() != num_rows()) {
-        throw std::invalid_argument("Column '" + col.name() + "' has " +
-                                    std::to_string(col.size()) + " rows, expected " +
-                                    std::to_string(num_rows()));
+    if (!row_count_known_) {
+        row_count_ = col.size();
+        row_count_known_ = true;
+    } else {
+        validate_column_size(col);
     }
-
     name_index_[col.name()] = columns_.size();
     columns_.push_back(std::move(col));
 }
@@ -86,7 +102,15 @@ Frame Frame::clone() const {
     for (const auto& col : columns_) {
         cloned.push_back(col.clone());
     }
-    return Frame(std::move(cloned));
+    return Frame(row_count_, std::move(cloned));
+}
+
+void Frame::validate_column_size(const Column& col) const {
+    if (col.size() != row_count_) {
+        throw std::invalid_argument("Column '" + col.name() + "' has row count " +
+                                    std::to_string(col.size()) + "; expected " +
+                                    std::to_string(row_count_));
+    }
 }
 
 Frame Frame::select_columns(const std::vector<std::string>& columns) const {
@@ -97,8 +121,9 @@ Frame Frame::select_columns(const std::vector<std::string>& columns) const {
         selected.push_back(column(name).clone());
     }
 
-    return Frame(std::move(selected));
+    return Frame(row_count_, std::move(selected));
 }
+
 void Frame::rebuild_index() {
     name_index_.clear();
     for (size_t i = 0; i < columns_.size(); ++i) {

@@ -916,6 +916,54 @@ def test_extra_non_empty_field_still_rejected(tmp_path):
         ar.read_csv(csv_path)
 
 
+def test_extra_empty_field_is_rejected(tmp_path):
+    csv_path = tmp_path / "extra_empty.csv"
+
+    csv_path.write_text("id,name\n1,Alice,\n")
+
+    with pytest.raises(
+        ar.CsvReadError,
+        match="CSV row 2 has 3 fields; expected 2",
+    ):
+        ar.read_csv(csv_path)
+
+
+def test_permissive_mode_rejects_extra_fields(tmp_path):
+    csv_path = tmp_path / "permissive_extra.csv"
+
+    csv_path.write_text("id,name\n1,Alice,EXTRA\n")
+
+    with pytest.raises(
+        ar.CsvReadError,
+        match="CSV row 2 has 3 fields; expected 2",
+    ):
+        ar.read_csv(csv_path, mode="permissive")
+
+
+def test_scan_csv_rejects_extra_empty_field(tmp_path):
+    csv_path = tmp_path / "scan_extra_empty.csv"
+
+    csv_path.write_text("id,name\n1,Alice,\n")
+
+    with pytest.raises(
+        ar.CsvReadError,
+        match="CSV row 2 has 3 fields; expected 2",
+    ):
+        ar.scan_csv(csv_path)
+
+
+def test_read_csv_chunked_rejects_extra_empty_field(tmp_path):
+    csv_path = tmp_path / "chunked_extra_empty.csv"
+
+    csv_path.write_text("id,name\n1,Alice\n2,Bob,\n")
+
+    with pytest.raises(
+        ar.CsvReadError,
+        match="CSV row 3 has 3 fields; expected 2",
+    ):
+        list(ar.read_csv_chunked(csv_path, chunksize=1))
+
+
 class TestArFrameHeadTail:
     def test_head_default(self, sample_csv):
         frame = ar.read_csv(sample_csv)

@@ -345,6 +345,8 @@ def read_csv(
 
         - strict: raises CsvReadError on inconsistent row widths.
         - permissive: fills missing trailing fields with nulls.
+        - both modes reject extra fields because they would otherwise be
+          silently dropped.
 
     Returns
     -------
@@ -472,6 +474,8 @@ def read_csv_chunked(
         Strings treated as null values.
     mode : {"strict", "permissive"}, default "strict"
         Controls malformed row handling.
+        Both modes reject extra fields; permissive mode only allows missing
+        trailing fields, which are filled with nulls.
 
     Yields
     ------

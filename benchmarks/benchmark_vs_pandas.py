@@ -34,11 +34,12 @@ class BenchmarkCase:
     path: str
 
 
-BENCHMARKS = (
+ALL_BENCHMARKS = (
     BenchmarkCase("Tall CSV (1,000,000 rows x 12 columns)", CSV_FILE),
     BenchmarkCase("Wide CSV (5,000 rows x 256 columns)", WIDE_CSV_FILE),
     BenchmarkCase("Multiline CSV (100,000 rows x 4 columns)", MULTILINE_CSV_FILE),
 )
+BENCHMARKS = ALL_BENCHMARKS[:1] if DRY_RUN else ALL_BENCHMARKS
 
 
 _PSUTIL_PROCESS = None

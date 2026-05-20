@@ -348,9 +348,8 @@ def drop_constant_columns(frame: ArFrame) -> ArFrame:
     ``[1, 1, None]`` are kept. Empty columns in zero-row frames are also kept,
     since they have zero unique values rather than one.
 
-    If every column is dropped, the zero-column pandas result is converted back
-    to an ``ArFrame``. Arnio currently derives row count from stored columns, so
-    that converted frame may report zero rows.
+    If every column is dropped, the resulting zero-column frame preserves the
+    original row count.
 
     Parameters
     ----------

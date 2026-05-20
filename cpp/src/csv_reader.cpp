@@ -463,7 +463,7 @@ Frame CsvReader::read(const std::string& path) const {
         if (fields.empty()) return false;
         if (!config.has_header && !expected_cols.has_value()) expected_cols = fields.size();
 
-        // Integrate trailing empty fields trimming logic from upstream:
+        // Trim trailing empty fields before width validation (permissive mode).
         if (expected_cols.has_value() && fields.size() > expected_cols.value()) {
             bool trailing_empty_only = true;
             for (size_t i = expected_cols.value(); i < fields.size(); ++i) {
@@ -472,9 +472,7 @@ Frame CsvReader::read(const std::string& path) const {
                     break;
                 }
             }
-            if (trailing_empty_only) {
-                fields.resize(expected_cols.value());
-            }
+            if (trailing_empty_only) fields.resize(expected_cols.value());
         }
 
         if (config.mode == "strict" && expected_cols.has_value())
@@ -654,20 +652,6 @@ std::vector<std::pair<std::string, std::string>> CsvReader::scan_schema(
 
         if (line.empty()) continue;
         auto fields = parser_.parse_line(line);
-        if (fields.size() > num_cols) {
-            bool trailing_empty_only = true;
-
-            for (size_t i = num_cols; i < fields.size(); ++i) {
-                if (!fields[i].empty()) {
-                    trailing_empty_only = false;
-                    break;
-                }
-            }
-
-            if (trailing_empty_only) {
-                fields.resize(num_cols);
-            }
-        }
         validate_row_width(sample_count + 2, num_cols, fields.size());
         for (size_t i = 0; i < num_cols && i < fields.size(); ++i) {
             col_types[i] = CsvParser::promote_type(col_types[i], parser_.infer_type(fields[i]));
@@ -726,23 +710,11 @@ bool CsvChunkReader::read_one_data_row(std::vector<std::string>& fields_out) {
             expected_cols_ = fields_out.size();
         }
 
-        if (expected_cols_.has_value() && fields_out.size() > expected_cols_.value()) {
-            bool trailing_empty_only = true;
-
-            for (size_t i = expected_cols_.value(); i < fields_out.size(); ++i) {
-                if (!fields_out[i].empty()) {
-                    trailing_empty_only = false;
-                    break;
-                }
+        if (expected_cols_.has_value()) {
+            const size_t expected = expected_cols_.value();
+            if (fields_out.size() > expected || config.mode == "strict") {
+                validate_row_width(record_number_, expected, fields_out.size());
             }
-
-            if (trailing_empty_only) {
-                fields_out.resize(expected_cols_.value());
-            }
-        }
-
-        if (config.mode == "strict" && expected_cols_.has_value()) {
-            validate_row_width(record_number_, expected_cols_.value(), fields_out.size());
         }
 
         if (expected_cols_.has_value()) {
