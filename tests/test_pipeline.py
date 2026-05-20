@@ -1140,7 +1140,7 @@ def test_list_steps_includes_registered_custom_steps():
 
     assert "list_steps_probe" in steps
 
-    
+
 def test_reset_steps_removes_custom_registered_steps():
     import pandas as pd
 
