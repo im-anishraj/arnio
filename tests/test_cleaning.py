@@ -2200,28 +2200,27 @@ class TestSelectColumns:
             )
         )
 
-        result = ar.select_columns(frame, [])
-
-        df = ar.to_pandas(result)
-
-        assert list(df.columns) == []
+        with pytest.raises(ValueError, match="Column selection cannot be empty"):
+            ar.select_columns(frame, [])
 
     def test_select_columns_rejects_missing_columns(self, sample_csv):
         frame = ar.read_csv(sample_csv)
 
-        with pytest.raises(ValueError, match="Columns not found in frame"):
+        with pytest.raises(ValueError, match="Unknown columns"):
             ar.select_columns(frame, ["missing"])
 
     def test_select_columns_rejects_string_input(self, sample_csv):
         frame = ar.read_csv(sample_csv)
 
-        with pytest.raises(TypeError, match="not a string"):
+        with pytest.raises(
+            TypeError, match="columns must be a sequence of column names, not a string"
+        ):
             ar.select_columns(frame, "age")
 
     def test_select_columns_rejects_non_string_items(self, sample_csv):
         frame = ar.read_csv(sample_csv)
 
-        with pytest.raises(TypeError, match="only string column names"):
+        with pytest.raises(TypeError, match="All column names must be strings"):
             ar.select_columns(frame, ["age", 1])
 
     def test_select_columns_rejects_empty(self):
@@ -2234,7 +2233,7 @@ class TestSelectColumns:
             )
         )
 
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="Column selection cannot be empty"):
             ar.select_columns(frame, [])
 
     def test_select_columns_rejects_duplicates(self):
