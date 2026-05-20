@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Callable
 
+import numpy as np
 import pandas as pd
 
 from .convert import to_pandas
@@ -911,7 +912,12 @@ def _is_safely_convertible_to_dtype(
             if not values.str.match(r"^-?\d+$").all():
                 return False
 
-            pd.to_numeric(values, errors="raise")
+            parsed = pd.to_numeric(values, errors="raise")
+
+            int64_info = np.iinfo(np.int64)
+            if (parsed < int64_info.min).any() or (parsed > int64_info.max).any():
+                return False
+
             return True
 
         if expected_dtype == "float64":
