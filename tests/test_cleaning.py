@@ -123,8 +123,20 @@ class TestValidateColumnsExist:
     def test_raises_clear_error_for_missing_columns(self, sample_csv):
         frame = ar.read_csv(sample_csv)
 
-        with pytest.raises(KeyError, match="Missing columns for test_op"):
+        with pytest.raises(KeyError, match=r"Missing columns for test_op: .*Available columns:"):
             ar.validate_columns_exist(frame, ["missing"], operation="test_op")
+
+    def test_multiple_missing_columns(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        with pytest.raises(
+            KeyError,
+            match=r"Missing columns for test_op: .*Available columns:",
+        ):
+            ar.validate_columns_exist(
+                frame,
+                ["missing1", "missing2"],
+                operation="test_op",
+            )
 
     def test_rejects_string_columns_argument(self, sample_csv):
         frame = ar.read_csv(sample_csv)
@@ -193,6 +205,41 @@ class TestDropDuplicates:
         frame = ar.read_csv(csv_with_duplicates)
         result = ar.drop_duplicates(frame, subset=["name"])
         assert result.shape[0] == 3
+
+    def test_multiple_missing_columns(self,sample_csv):
+        frame = ar.read_csv(sample_csv)
+        with pytest.raises(KeyError,match=r"Missing columns for test_op: .*Available columns:"):
+            ar.validate_columns_exist(frame, ["missing1", "missing2"], operation="test_op")
+            
+    def test_drop_duplicates_empty_subset_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"id": [1, 2, 3], "name": ["a", "b", "c"]}))
+
+        with pytest.raises(ValueError, match="subset"):
+            ar.drop_duplicates(frame, subset=[])
+
+    def test_drop_duplicates_pipeline_empty_subset_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"id": [1, 2, 3], "name": ["a", "b", "c"]}))
+
+        with pytest.raises(ValueError, match="subset"):
+            ar.pipeline(frame, [("drop_duplicates", {"subset": []})])
+
+    def test_drop_duplicates_valid_subset_still_works(self):
+        frame = ar.from_pandas(
+            pd.DataFrame({"id": [1, 2, 3], "name": ["Alice", "Alice", "Bob"]})
+        )
+
+        result = ar.drop_duplicates(frame, subset=["name"])
+        df = ar.to_pandas(result)
+
+        assert result.shape[0] < frame.shape[0]
+        assert "name" in df.columns
+
+    def test_drop_duplicates_subset_none_still_works(self):
+        frame = ar.from_pandas(pd.DataFrame({"id": [1, 1, 2], "name": ["a", "a", "b"]}))
+
+        result = ar.drop_duplicates(frame)
+
+        assert result.shape[0] == 2
 
     def test_drop_dupes_regression_keep_true(self, csv_with_duplicates):
         frame = ar.read_csv(csv_with_duplicates)
