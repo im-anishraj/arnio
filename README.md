@@ -247,6 +247,7 @@ print(selected.columns)
 
 Arnio supports configuring which strings are treated as null during CSV parsing using the `null_values` parameter in `read_csv` and `scan_csv`. By default, Arnio preserves its existing behavior and treats only empty cells as null. Custom matching is case-insensitive and applies to cell values only (not headers).
 
+
 ```python
 # Default behavior: empty cells are null
 frame = ar.read_csv("data.csv")
@@ -348,7 +349,6 @@ export policy should stay explicit in the application that writes the file.
 ### Pipeline Step Errors
 
 Unknown step names raise `UnknownStepError` before execution begins.
-
 <details>
 <summary><b>📸 Peek at a 100 GB file without loading it</b></summary>
 <br>
@@ -359,6 +359,30 @@ Unknown step names raise `UnknownStepError` before execution begins.
 # Pass sample_size to control how many rows are evaluated for type inference
 schema = ar.scan_csv("100GB_file.csv", sample_size=500)
 # {'id': 'int64', 'name': 'string', 'is_active': 'bool', 'revenue': 'float64'}
+```
+
+```python
+schema_info = ar.scan_csv(
+    "100GB_file.csv",
+    sample_size=500,
+    return_metadata=True,
+)
+
+print(schema_info)
+
+# {
+#     "schema": {
+#         "id": "int64",
+#         "name": "string",
+#         "is_active": "bool",
+#         "revenue": "float64",
+#     },
+#     "metadata": {
+#         "delimiter": ",",
+#         "encoding": "utf-8",
+#         "sampled_rows": 500,
+#     },
+# }
 ```
 
 Useful for exploring datasets before committing memory.
