@@ -197,6 +197,34 @@ def _validate_usecols(usecols: Sequence[str]) -> list[str]:
     return list(usecols)
 
 
+def _validate_dtype_mapping(dtype: dict[str, str]) -> dict[str, str]:
+    if not isinstance(dtype, dict):
+        raise TypeError(
+            "dtype must be a dictionary mapping column names to dtype strings"
+        )
+
+    allowed = {"string", "int64", "float64", "bool"}
+
+    validated: dict[str, str] = {}
+
+    for column, dtype_name in dtype.items():
+        if not isinstance(column, str):
+            raise TypeError("dtype column names must be strings")
+
+        if not isinstance(dtype_name, str):
+            raise TypeError("dtype values must be strings")
+
+        if dtype_name not in allowed:
+            raise ValueError(
+                f"Unsupported dtype {dtype_name!r}. "
+                f"Expected one of: {sorted(allowed)}"
+            )
+
+        validated[column] = dtype_name
+
+    return validated
+
+
 def _validate_nrows(nrows: int) -> int:
     """Validate nrows parameter."""
     if isinstance(nrows, bool) or not isinstance(nrows, int):
@@ -310,6 +338,7 @@ def read_csv(
     trim_headers: bool = True,
     thousands_separator: str | None = None,
     null_values: list[str] | None = None,
+    dtype: dict[str, str] | None = None,
     mode: str = "strict",
 ) -> ArFrame:
     """Read a CSV file into an ArFrame via C++ backend.
@@ -398,6 +427,8 @@ def read_csv(
 
     if null_values is not None:
         config.null_values = _validate_null_values(null_values)
+    if dtype is not None:
+        config.dtype = _validate_dtype_mapping(dtype)
 
     if usecols is not None:
         config.usecols = _validate_usecols(usecols)

@@ -13,6 +13,66 @@ MESSY_CSV = str(Path(__file__).parent / "fixtures" / "messy_sales_data.csv")
 
 
 class TestReadCsv:
+    def test_read_csv_dtype_override_string(self, tmp_path):
+        path = tmp_path / "zip_codes.csv"
+        path.write_text("zip,quantity\n" "07001,5\n" "08002,10\n")
+
+        frame = ar.read_csv(
+            path,
+            dtype={"zip": "string"},
+        )
+
+        pdf = ar.to_pandas(frame)
+
+        assert frame.dtypes["zip"] == "string"
+        assert pdf["zip"].tolist() == ["07001", "08002"]
+
+    def test_read_csv_dtype_mixed_inference(self, tmp_path):
+        path = tmp_path / "mixed_types.csv"
+        path.write_text("zip,price\n" "07001,12.5\n" "08002,20.0\n")
+
+        frame = ar.read_csv(
+            path,
+            dtype={"zip": "string"},
+        )
+
+        assert frame.dtypes["zip"] == "string"
+        assert frame.dtypes["price"] == "float64"
+
+    def test_read_csv_dtype_override_string_to_int64(self, tmp_path):
+        path = tmp_path / "quantities.csv"
+        path.write_text("quantity,label\n" "5,small\n" "10,large\n")
+
+        frame = ar.read_csv(
+            path,
+            dtype={"quantity": "int64"},
+        )
+
+        pdf = ar.to_pandas(frame)
+
+        assert frame.dtypes["quantity"] == "int64"
+        assert pdf["quantity"].tolist() == [5, 10]
+
+    def test_read_csv_invalid_dtype_name(self, tmp_path):
+        path = tmp_path / "invalid_dtype.csv"
+        path.write_text("age\n" "25\n")
+
+        with pytest.raises(ValueError, match="Unsupported dtype"):
+            ar.read_csv(
+                path,
+                dtype={"age": "datetime"},
+            )
+
+    def test_read_csv_dtype_unknown_column(self, tmp_path):
+        path = tmp_path / "unknown_column.csv"
+        path.write_text("age,name\n" "25,Alice\n")
+
+        with pytest.raises(ar.CsvReadError, match="Column not found in dtype mapping"):
+            ar.read_csv(
+                path,
+                dtype={"salary": "float64"},
+            )
+
     def test_basic_read(self, sample_csv):
         frame = ar.read_csv(sample_csv)
         assert isinstance(frame, ar.ArFrame)
