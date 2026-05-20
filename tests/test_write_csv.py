@@ -77,3 +77,87 @@ class TestWriteCsv:
         frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
         with pytest.raises(ValueError, match="delimiter must be a single character"):
             ar.write_csv(frame, str(tmp_path / "out.csv"), delimiter=",,")
+
+    def test_non_string_delimiter_rejected(self, tmp_path):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
+        with pytest.raises(TypeError, match="delimiter must be a string"):
+            ar.write_csv(frame, str(tmp_path / "out.csv"), delimiter=1)
+
+    @pytest.mark.parametrize("delimiter", ["\n", "\r"])
+    def test_newline_delimiters_rejected(self, tmp_path, delimiter):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
+        with pytest.raises(
+            ValueError, match="delimiter must not be a newline character"
+        ):
+            ar.write_csv(frame, str(tmp_path / "out.csv"), delimiter=delimiter)
+
+    def test_quote_character_delimiter_rejected(self, tmp_path):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
+        with pytest.raises(
+            ValueError, match="delimiter must not be the CSV quote character"
+        ):
+            ar.write_csv(frame, str(tmp_path / "out.csv"), delimiter='"')
+
+
+class TestWriteCsvLineTerminatorBytes:
+    """Raw-byte regression tests for line_terminator.
+
+    These tests read the output file in binary mode and assert the exact bytes
+    written.  They guard against platform newline translation (e.g. Windows
+    text-mode expanding \\n to \\r\\n) and ensure the configured terminator is
+    emitted verbatim on every OS.
+    """
+
+    def test_default_lf_writes_exact_lf_bytes(self, tmp_path):
+        # Default line_terminator="\n" must produce LF bytes, not CRLF.
+        frame = ar.from_pandas(pd.DataFrame({"a": [1, 2]}))
+        out = tmp_path / "out.csv"
+        ar.write_csv(frame, out)
+        raw = out.read_bytes()
+        # Header + 2 data rows, each terminated by a single LF.
+        assert raw == b"a\n1\n2\n"
+        assert b"\r" not in raw
+
+    def test_crlf_terminator_writes_exact_crlf_bytes(self, tmp_path):
+        # line_terminator="\r\n" must produce exactly CRLF, not CRCRLF.
+        frame = ar.from_pandas(pd.DataFrame({"a": [1, 2]}))
+        out = tmp_path / "out.csv"
+        ar.write_csv(frame, out, line_terminator="\r\n")
+        raw = out.read_bytes()
+        assert raw == b"a\r\n1\r\n2\r\n"
+        # No double-CR corruption.
+        assert b"\r\r" not in raw
+
+    def test_custom_terminator_writes_exact_bytes(self, tmp_path):
+        # An arbitrary terminator (e.g. "|") must be written verbatim.
+        frame = ar.from_pandas(pd.DataFrame({"x": [7]}))
+        out = tmp_path / "out.csv"
+        ar.write_csv(frame, out, line_terminator="|")
+        raw = out.read_bytes()
+        assert raw == b"x|7|"
+
+    def test_empty_line_terminator_rejected(self, tmp_path):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1, 2]}))
+        with pytest.raises(ValueError, match="line_terminator must not be empty"):
+            ar.write_csv(frame, tmp_path / "out.csv", line_terminator="")
+
+    def test_non_string_line_terminator_rejected(self, tmp_path):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1, 2]}))
+        with pytest.raises(TypeError, match="line_terminator must be a string"):
+            ar.write_csv(frame, tmp_path / "out.csv", line_terminator=None)
+
+    def test_quoted_multiline_field_round_trips(self, tmp_path):
+        # A field containing an embedded newline must be quoted and survive a
+        # write → read round-trip with the default LF terminator.
+        frame = ar.from_pandas(pd.DataFrame({"note": ["line1\nline2", "plain"]}))
+        out = tmp_path / "out.csv"
+        ar.write_csv(frame, out)
+        raw = out.read_bytes()
+        # The embedded newline lives inside quotes; the row terminator is the
+        # bare LF that follows the closing quote.
+        assert b'"line1\nline2"' in raw
+        # Round-trip: values survive a read back.
+        frame2 = ar.read_csv(out)
+        df = ar.to_pandas(frame2)
+        assert df["note"].iloc[0] == "line1\nline2"
+        assert df["note"].iloc[1] == "plain"

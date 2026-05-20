@@ -19,15 +19,19 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: 'pip'
 
       - name: Install lint dependencies
-        run: pip install "black>=24.0" "ruff>=0.4.0"
+        run: pip install "black>=24.0" "ruff>=0.4.0" "mypy>=1.0" pandas-stubs types-setuptools
 
       - name: Black (check-only)
         run: black --check --diff .
 
       - name: Ruff (check-only)
         run: ruff check . --extend-exclude "*.ipynb"
+
+      - name: mypy (check-only)
+        run: mypy --config-file mypy.ini
 
       - name: Install clang-format
         run: |

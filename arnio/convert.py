@@ -94,6 +94,12 @@ def _normalize_scalar(value: object) -> object:
         return None
     if isinstance(value, np.generic):
         value = value.item()
+    if isinstance(value, int) and not isinstance(value, bool):
+        if value < -9223372036854775808 or value > 9223372036854775807:
+            raise ValueError(
+                f"Integer value {value} is out of bounds for signed 64-bit integer. "
+                "arnio only supports signed 64-bit integers (-9223372036854775808 to 9223372036854775807)."
+            )
     if isinstance(value, float):
         return _to_binding_safe(value)
     if not isinstance(value, (bool, int, str)):
@@ -121,6 +127,29 @@ def _series_to_python_values(series: pd.Series, col_name: object) -> list[object
                 f"Column '{col_name}' contains unsupported nested value "
                 f"of type '{type(raw).__name__}' at value {raw!r}. "
                 "Convert nested objects to strings or flatten them first."
+            )
+
+        if isinstance(raw, pd.Timestamp):
+            raise TypeError(
+                f"Column '{col_name}' contains unsupported scalar value "
+                f"of type 'Timestamp' at value {raw!r}. "
+                f'Fix: df["{col_name}"] = df["{col_name}"].astype(str)'
+            )
+
+        if isinstance(raw, pd.Timedelta):
+            raise TypeError(
+                f"Column '{col_name}' contains unsupported scalar value "
+                f"of type 'Timedelta' at value {raw!r}. "
+                f'Fix: convert df["{col_name}"] to strings or a supported '
+                "numeric duration before from_pandas()"
+            )
+
+        if isinstance(raw, (complex, np.complexfloating)):
+            raise TypeError(
+                f"Column '{col_name}' contains unsupported scalar value "
+                f"of type '{type(raw).__name__}' at value {raw!r}. "
+                f'Fix: split df["{col_name}"] into real/imag columns or '
+                "convert it to strings before from_pandas()"
             )
 
         value = _normalize_scalar(raw)
@@ -205,7 +234,10 @@ def to_pandas(frame: ArFrame, *, copy: bool = False) -> pd.DataFrame:
             series[mask] = pd.NA
             data[name] = series
 
-    result = pd.DataFrame(data)
+    if not data:
+        result = pd.DataFrame(index=pd.RangeIndex(cpp_frame.num_rows()))
+    else:
+        result = pd.DataFrame(data)
     if frame._attrs:
         result.attrs = copylib.deepcopy(frame._attrs)
     return result
@@ -217,6 +249,39 @@ def _pandas_dtype_to_arnio(dtype: object) -> _DType | None:
     if str(dtype) == "float64":
         return _DType.FLOAT64
     return None
+
+
+def _validate_unique_column_labels(labels: pd.Index) -> None:
+    seen: set[object] = set()
+    dupes: list[object] = []
+    for label in labels:
+        if label in seen and label not in dupes:
+            dupes.append(label)
+        seen.add(label)
+    if dupes:
+        raise ValueError(
+            "from_pandas() does not support duplicate column labels: "
+            f"{[repr(label) for label in dupes]}"
+        )
+
+    normalized: dict[str, object] = {}
+    collisions: dict[str, list[object]] = {}
+    for label in labels:
+        name = str(label)
+        if name in normalized:
+            collisions.setdefault(name, [normalized[name]]).append(label)
+        else:
+            normalized[name] = label
+
+    if collisions:
+        details = ", ".join(
+            f"{name!r}: {[repr(label) for label in labels]}"
+            for name, labels in collisions.items()
+        )
+        raise ValueError(
+            "from_pandas() column labels must remain unique after string "
+            f"conversion: {details}"
+        )
 
 
 def from_pandas(df: pd.DataFrame) -> ArFrame:
@@ -243,16 +308,7 @@ def from_pandas(df: pd.DataFrame) -> ArFrame:
     >>> df = pd.DataFrame({"name": ["Alice"], "age": [25]})
     >>> frame = ar.from_pandas(df)
     """
-    seen: set[object] = set()
-    dupes: list[object] = []
-    for label in df.columns:
-        if label in seen and label not in dupes:
-            dupes.append(label)
-        seen.add(label)
-    if dupes:
-        raise ValueError(
-            f"from_pandas() does not support duplicate column labels: {[repr(label) for label in dupes]}"
-        )
+    _validate_unique_column_labels(df.columns)
 
     columns = {}
     dtype_hints = {}
@@ -269,5 +325,5 @@ def from_pandas(df: pd.DataFrame) -> ArFrame:
         if dtype_hint is not None:
             dtype_hints[name] = dtype_hint
 
-    cpp_frame = _Frame.from_dict(columns, dtype_hints)
+    cpp_frame = _Frame.from_dict(columns, dtype_hints, len(df))
     return ArFrame(cpp_frame, attrs=copylib.deepcopy(df.attrs))

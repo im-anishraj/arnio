@@ -75,6 +75,246 @@ def test_profile_non_numeric_no_quantiles():
     assert "q95" not in profile
 
 
+def test_profile_email_and_url_validity_ratios():
+    df = pd.DataFrame(
+        {
+            "good_email": [
+                "alice@test.com",
+                "bob@test.com",
+                "cara@test.com",
+                "dave@test.com",
+                "eve@test.com",
+            ],
+            "mixed_email": [
+                "alice@test.com",
+                "bob@test.com",
+                "cara@test.com",
+                "dave@test.com",
+                "invalid-email",
+            ],
+            "good_url": [
+                "http://test.com",
+                "https://example.com/foo",
+                "https://another.org",
+                "http://a.b",
+                "https://last.com",
+            ],
+            "mixed_url": [
+                "http://test.com",
+                "https://example.com/foo",
+                "https://another.org",
+                "http://a.b",
+                "not-a-url",
+            ],
+            "generic": ["hello", "world", "foo", "bar", "baz"],
+        }
+    )
+
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+
+    assert report.columns["good_email"].semantic_type == "email"
+    assert report.columns["mixed_email"].semantic_type == "email"
+    assert report.columns["good_url"].semantic_type == "url"
+    assert report.columns["mixed_url"].semantic_type == "url"
+    assert report.columns["generic"].semantic_type == "categorical"
+
+    assert report.columns["good_email"].email_validity_ratio == 1.0
+    assert report.columns["good_email"].url_validity_ratio is None
+
+    assert report.columns["mixed_email"].email_validity_ratio == 0.8
+    assert report.columns["mixed_email"].url_validity_ratio is None
+
+    assert report.columns["good_url"].url_validity_ratio == 1.0
+    assert report.columns["good_url"].email_validity_ratio is None
+
+    assert report.columns["mixed_url"].url_validity_ratio == 0.8
+    assert report.columns["mixed_url"].email_validity_ratio is None
+
+    assert report.columns["generic"].email_validity_ratio is None
+    assert report.columns["generic"].url_validity_ratio is None
+
+    good_email_dict = report.columns["good_email"].to_dict()
+    assert good_email_dict["email_validity_ratio"] == 1.0
+    assert good_email_dict["url_validity_ratio"] is None
+
+    mixed_url_dict = report.columns["mixed_url"].to_dict()
+    assert mixed_url_dict["url_validity_ratio"] == 0.8
+    assert mixed_url_dict["email_validity_ratio"] is None
+
+    pdf = report.to_pandas()
+    good_email_row = pdf[pdf["name"] == "good_email"].iloc[0]
+    assert good_email_row["email_validity_ratio"] == 1.0
+    assert (
+        pd.isna(good_email_row["url_validity_ratio"])
+        or good_email_row["url_validity_ratio"] is None
+    )
+
+
+def test_compare_profiles_identical_profiles_are_ok():
+    frame = ar.from_pandas(
+        pd.DataFrame({"score": [10.0, 11.0, 12.0], "city": ["a", "b", "a"]})
+    )
+
+    comparison = ar.compare_profiles(ar.profile(frame), ar.profile(frame))
+
+    assert set(comparison.drift_report) == {"score", "city"}
+    assert all(entry["status"] == "ok" for entry in comparison.drift_report.values())
+    assert comparison.status_counts == {"ok": 2, "warning": 0, "changed": 0}
+
+
+def test_compare_profiles_detects_numeric_drift():
+    baseline = ar.profile(ar.from_pandas(pd.DataFrame({"score": [10.0, 10.0, 10.0]})))
+    current = ar.profile(ar.from_pandas(pd.DataFrame({"score": [20.0, 20.0, 20.0]})))
+
+    comparison = ar.compare_profiles(baseline, current)
+
+    assert comparison.drift_report["score"]["status"] in {"warning", "changed"}
+    assert comparison.drift_report["score"]["changes"]["mean"]["baseline"] == 10.0
+    assert comparison.drift_report["score"]["changes"]["mean"]["comparison"] == 20.0
+
+
+def test_compare_profiles_rejects_schema_mismatch():
+    left = ar.profile(ar.from_pandas(pd.DataFrame({"score": [1.0, 2.0]})))
+    right = ar.profile(
+        ar.from_pandas(pd.DataFrame({"score": [1.0, 2.0], "city": ["a", "b"]}))
+    )
+
+    with pytest.raises(ValueError, match="incompatible schemas"):
+        ar.compare_profiles(left, right)
+
+
+def test_compare_profiles_handles_empty_profiles():
+    empty = ar.profile(ar.from_pandas(pd.DataFrame()))
+
+    comparison = ar.compare_profiles(empty, empty)
+
+    assert comparison.drift_report == {}
+    assert comparison.status_counts == {"ok": 0, "warning": 0, "changed": 0}
+
+
+def test_compare_profiles_handles_single_column_profiles():
+    frame = ar.from_pandas(pd.DataFrame({"name": ["Alice", "Bob"]}))
+
+    comparison = ar.compare_profiles(ar.profile(frame), ar.profile(frame))
+
+    assert comparison.drift_report["name"]["status"] == "ok"
+    assert comparison.status_counts == {"ok": 1, "warning": 0, "changed": 0}
+
+
+def test_check_quality_gates_passes_identical_profiles():
+    frame = ar.from_pandas(
+        pd.DataFrame({"score": [10.0, 11.0, 12.0], "city": ["a", "b", "a"]})
+    )
+
+    result = ar.check_quality_gates(ar.profile(frame), ar.profile(frame))
+
+    assert result.passed is True
+    assert result.issues == []
+    assert result.summary()["passed"] is True
+    assert result.to_dict()["passed"] is True
+    assert result.to_dict()["summary"]["issue_count"] == 0
+    assert "All configured quality gates passed" in result.to_markdown()
+
+
+def test_check_quality_gates_detects_row_duplicate_null_and_numeric_drift():
+    baseline = ar.profile(
+        ar.from_pandas(
+            pd.DataFrame({"score": [10.0, 10.0, 10.0], "city": ["a", "b", "c"]})
+        )
+    )
+    current = ar.profile(
+        ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "score": [20.0, 20.0, None, None, 20.0],
+                    "city": ["a", "a", "a", "a", "a"],
+                }
+            )
+        )
+    )
+
+    result = ar.check_quality_gates(
+        baseline,
+        current,
+        max_row_count_delta_ratio=0.2,
+        max_duplicate_ratio_delta=0.1,
+        max_null_ratio_delta=0.1,
+        max_numeric_mean_delta_ratio=0.5,
+    )
+
+    metrics = {issue.metric for issue in result.issues}
+    assert result.passed is False
+    assert {"row_count", "duplicate_ratio", "null_ratio", "numeric_mean"} <= metrics
+    assert any(issue.column == "score" for issue in result.issues)
+
+
+def test_check_quality_gates_detects_schema_and_dtype_changes():
+    baseline = ar.profile(
+        ar.from_pandas(pd.DataFrame({"score": [1, 2], "city": ["a", "b"]}))
+    )
+    current = ar.profile(
+        ar.from_pandas(pd.DataFrame({"score": ["1", "2"], "state": ["a", "b"]}))
+    )
+
+    result = ar.check_quality_gates(baseline, current)
+
+    issues = {(issue.metric, issue.column) for issue in result.issues}
+    assert ("missing_column", "city") in issues
+    assert ("new_column", "state") in issues
+    assert ("dtype", "score") in issues
+
+
+def test_check_quality_gates_can_allow_schema_changes_and_disable_thresholds():
+    baseline = ar.profile(ar.from_pandas(pd.DataFrame({"score": [1.0, 2.0]})))
+    current = ar.profile(
+        ar.from_pandas(pd.DataFrame({"score": [100.0, 200.0], "extra": ["x", "y"]}))
+    )
+
+    result = ar.check_quality_gates(
+        baseline,
+        current,
+        allow_new_columns=True,
+        max_numeric_mean_delta_ratio=None,
+        max_numeric_std_delta_ratio=None,
+    )
+
+    assert result.passed is True
+
+
+def test_check_quality_gates_markdown_escapes_table_cells():
+    baseline = ar.profile(ar.from_pandas(pd.DataFrame({"bad|name": [1, 2]})))
+    current = ar.profile(ar.from_pandas(pd.DataFrame({"other": [1, 2]})))
+
+    markdown = ar.check_quality_gates(baseline, current).to_markdown()
+
+    assert "bad\\|name" in markdown
+
+
+def test_check_quality_gates_validates_thresholds_and_flags():
+    report = ar.profile(ar.from_pandas(pd.DataFrame({"score": [1.0, 2.0]})))
+
+    with pytest.raises(ValueError, match="finite non-negative"):
+        ar.check_quality_gates(report, report, max_null_ratio_delta=-0.1)
+
+    with pytest.raises(TypeError, match="allow_new_columns must be a bool"):
+        ar.check_quality_gates(report, report, allow_new_columns="yes")
+
+
+def test_quality_gate_result_raise_for_failures():
+    baseline = ar.profile(ar.from_pandas(pd.DataFrame({"score": [1.0, 2.0]})))
+    current = ar.profile(ar.from_pandas(pd.DataFrame({"score": [100.0, 200.0]})))
+
+    result = ar.check_quality_gates(
+        baseline,
+        current,
+        max_numeric_mean_delta_ratio=0.1,
+    )
+
+    with pytest.raises(ValueError, match="data quality gate"):
+        result.raise_for_failures()
+
+
 def test_suggest_cleaning_returns_pipeline_compatible_steps(csv_with_duplicates):
     frame = ar.read_csv(csv_with_duplicates)
     suggestions = ar.suggest_cleaning(frame)
@@ -214,6 +454,32 @@ def test_auto_clean_rejects_unknown_mode(sample_csv):
         assert "mode must be" in str(exc)
 
 
+def test_auto_clean_strict_casts_ambiguous_numeric_strings():
+    df = pd.DataFrame(
+        {
+            "code": ["007", "008"],  # Not identifier-like, but has leading zeros
+            "user_id": ["001", "002"],  # Identifier-like, has leading zeros
+        }
+    )
+    frame = ar.from_pandas(df)
+
+    # Verify that without allow_lossy_casts, strict mode fails
+    with pytest.raises(ValueError, match="would apply type casts"):
+        ar.auto_clean(frame, mode="strict")
+
+    # Apply strict mode with allow_lossy_casts
+    clean = ar.auto_clean(frame, mode="strict", allow_lossy_casts=True)
+    result = ar.to_pandas(clean)
+
+    # "code" is cast to int64, losing leading zeros
+    assert list(result["code"]) == [7, 8]
+    assert pd.api.types.is_integer_dtype(result["code"])
+
+    # "user_id" is protected and retains leading zeros
+    assert list(result["user_id"]) == ["001", "002"]
+    assert pd.api.types.is_string_dtype(result["user_id"])
+
+
 def test_profile_sample_size(tmp_path):
     path = tmp_path / "sample.csv"
     path.write_text("id\n1\n2\n3\n4\n5\n6\n7\n")
@@ -237,6 +503,74 @@ def test_profile_sample_size_small_dataset_and_nulls(tmp_path):
     report = ar.profile(frame, sample_size=5)
     assert len(report.columns["id"].sample_values) == 2
     assert report.columns["id"].sample_values == [1.0, 3.0]
+
+
+def test_profile_approx_top_values_deterministic_high_cardinality():
+    values = [f"user_{i}" for i in range(2000)]
+    frame = ar.from_pandas(pd.DataFrame({"user": values}))
+
+    report = ar.profile(
+        frame,
+        approx_top_values=True,
+        approx_top_values_min_unique=1000,
+        approx_top_values_min_ratio=0.5,
+        approx_top_values_sample_size=200,
+    )
+    report_again = ar.profile(
+        frame,
+        approx_top_values=True,
+        approx_top_values_min_unique=1000,
+        approx_top_values_min_ratio=0.5,
+        approx_top_values_sample_size=200,
+    )
+
+    column = report.columns["user"]
+    assert column.top_values_is_approximate is True
+    assert column.top_values == report_again.columns["user"].top_values
+    assert len(column.top_values) <= 5
+    assert column.top_values_sample_count == 200
+    assert column.top_values_sample_ratio == pytest.approx(0.1, rel=1e-3)
+
+    payload = report.to_dict()
+    col_dict = payload["columns"]["user"]
+    assert col_dict["top_values_is_approximate"] is True
+    assert col_dict["top_values_sample_count"] == 200
+
+
+def test_profile_approx_top_values_skips_low_cardinality():
+    frame = ar.from_pandas(pd.DataFrame({"city": ["a", "b", "a", "c"]}))
+
+    report = ar.profile(
+        frame,
+        approx_top_values=True,
+        approx_top_values_min_unique=10,
+        approx_top_values_min_ratio=0.9,
+    )
+
+    column = report.columns["city"]
+    assert column.top_values_is_approximate is False
+    assert column.top_values[0][0] == "a"
+    assert column.top_values[0][1] == 2
+
+
+def test_profile_approx_top_values_avoids_exact_counts(monkeypatch):
+    values = [f"user_{i}" for i in range(1500)]
+    frame = ar.from_pandas(pd.DataFrame({"user": values}))
+
+    def raise_exact(*_args, **_kwargs):
+        raise AssertionError("exact top_values should not be called")
+
+    monkeypatch.setattr("arnio.quality._top_values", raise_exact)
+
+    report = ar.profile(
+        frame,
+        approx_top_values=True,
+        approx_top_values_min_unique=1000,
+        approx_top_values_min_ratio=0.5,
+        approx_top_values_sample_size=200,
+    )
+
+    assert report.columns["user"].top_values_is_approximate is True
 
 
 def test_quality_to_dict_default_preserves_sample_values(tmp_path):
@@ -310,6 +644,43 @@ def test_profile_sample_size_validation(tmp_path):
         assert False, "Expected TypeError"
     except TypeError as exc:
         assert "sample_size must be an integer" in str(exc)
+
+
+def test_profile_approx_top_values_validation(tmp_path):
+    path = tmp_path / "sample.csv"
+    path.write_text("id\n1\n")
+    frame = ar.read_csv(path)
+
+    with pytest.raises(TypeError, match="approx_top_values must be a bool"):
+        ar.profile(frame, approx_top_values="yes")
+
+    with pytest.raises(
+        TypeError, match="approx_top_values_min_unique must be an integer"
+    ):
+        ar.profile(frame, approx_top_values_min_unique="5")
+
+    with pytest.raises(
+        ValueError, match="approx_top_values_min_unique must be non-negative"
+    ):
+        ar.profile(frame, approx_top_values_min_unique=-1)
+
+    with pytest.raises(TypeError, match="approx_top_values_min_ratio must be a float"):
+        ar.profile(frame, approx_top_values_min_ratio="0.5")
+
+    with pytest.raises(
+        ValueError, match="approx_top_values_min_ratio must be between 0 and 1"
+    ):
+        ar.profile(frame, approx_top_values_min_ratio=1.5)
+
+    with pytest.raises(
+        TypeError, match="approx_top_values_sample_size must be an integer"
+    ):
+        ar.profile(frame, approx_top_values_sample_size="10")
+
+    with pytest.raises(
+        ValueError, match="approx_top_values_sample_size must be positive"
+    ):
+        ar.profile(frame, approx_top_values_sample_size=0)
 
 
 # ── top_values tests ──────────────────────────────────────────────────────────
@@ -437,6 +808,21 @@ def test_identifier_numeric_cast_prevention():
 
 
 # ── string length statistics tests ───────────────────────────────────────────
+
+
+def test_decimal_looking_strings_suggest_float64_not_int64():
+    frame = ar.from_pandas(pd.DataFrame({"price": ["1.0", "2.50", "3.00"]}))
+
+    report = ar.profile(frame)
+
+    assert report.columns["price"].suggested_dtype == "float64"
+
+    suggestions = {}
+    for step, kwargs in ar.suggest_cleaning(report):
+        if step == "cast_types":
+            suggestions.update(kwargs)
+
+    assert suggestions["price"] == "float64"
 
 
 def test_profile_string_metrics():
@@ -575,6 +961,36 @@ def test_report_to_markdown_deterministic(tmp_path):
     assert report.to_markdown() == report.to_markdown()
 
 
+def test_report_to_markdown_escapes_pipe_characters_in_column_cells():
+    report = ar.DataQualityReport(
+        row_count=2,
+        column_count=1,
+        memory_usage=128,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={
+            "bad|name": ar.ColumnProfile(
+                name="bad|name",
+                dtype="string",
+                semantic_type="free|text",
+                row_count=2,
+                null_count=0,
+                null_ratio=0.0,
+                unique_count=2,
+                unique_ratio=1.0,
+                warnings=["contains | pipe"],
+            )
+        },
+        suggestions=[],
+    )
+
+    md = report.to_markdown()
+
+    assert "bad\\|name" in md
+    assert "free\\|text" in md
+    assert "contains \\| pipe" in md
+
+
 def test_report_to_markdown_empty_sections():
     report = ar.DataQualityReport(
         row_count=0,
@@ -592,6 +1008,63 @@ def test_report_to_markdown_empty_sections():
     assert "## Overview" in md
     assert "## Columns" not in md
     assert "|---|---|" not in md
+
+
+def test_report_to_markdown_suggestions_stable_ordering():
+    unordered_kwargs = {"z_item": 100, "a_item": "test", "m_item": True}
+
+    report = ar.DataQualityReport(
+        row_count=10,
+        column_count=2,
+        memory_usage=128,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+        suggestions=[("custom_clean", unordered_kwargs)],
+    )
+
+    md = report.to_markdown()
+    expected_substring = (
+        '`custom_clean`: `{"a_item": "test", "m_item": true, "z_item": 100}`'
+    )
+    assert expected_substring in md
+
+
+def test_report_to_markdown_suggestions_normal_existing_output(tmp_path):
+    path = tmp_path / "sample_data.csv"
+    path.write_text("id,name\n1,Alice\n2,Bob\n2,Bob\n")
+
+    report = ar.profile(ar.read_csv(path))
+    md = report.to_markdown()
+
+    if report.suggestions:
+        assert '{"' in md
+        assert '"}' in md
+
+
+def test_report_to_markdown_suggestions_non_json_serializable():
+    class DummyObject:
+        def __str__(self):
+            return "custom_val"
+
+    mixed_kwargs = {"custom_field": DummyObject(), "strategy": "mean"}
+
+    report = ar.DataQualityReport(
+        row_count=10,
+        column_count=2,
+        memory_usage=128,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+        suggestions=[("custom_clean", mixed_kwargs)],
+    )
+
+    md = report.to_markdown()
+
+    expected_substring = (
+        '`custom_clean`: `{"custom_field": "custom_val", "strategy": "mean"}`'
+    )
+    assert expected_substring in md
 
 
 # ── quality score tests ───────────────────────────────────────────────────────
@@ -693,7 +1166,13 @@ def test_data_quality_report_to_html_focused(tmp_path):
         unique_ratio=0.5,
         empty_string_count=0,
         whitespace_count=0,
+        suggested_dtype="<script>unsafe_dtype</script>",
         warnings=["<script>unsafe_warning</script>"],
+        top_values=[
+            ("<script>unsafe_val</script>", 7, 0.7),
+            ("B", 2, 0.2),
+            ("C", 1, 0.1),
+        ],
     )
 
     # 2. Construct a CleaningSuggestion with HTML characters
@@ -742,11 +1221,570 @@ def test_data_quality_report_to_html_focused(tmp_path):
     assert "<script>unsafe_step</script>" not in html_out
     assert "&lt;script&gt;unsafe_val&lt;/script&gt;" in html_out
     assert "<script>unsafe_val</script>" not in html_out
-    # Note: confidence_reason is not rendered in to_html output (only score is rendered)
+    assert "&lt;script&gt;unsafe_reason&lt;/script&gt;" in html_out
+    assert "<script>unsafe_reason</script>" not in html_out
     assert "0.95" in html_out  # confidence_score is rendered
+    assert "&lt;script&gt;unsafe_dtype&lt;/script&gt;" in html_out
+
+    # Verify proper HTML escaping of top_values
+    assert "&lt;script&gt;unsafe_val&lt;/script&gt;" in html_out
+    assert "<script>unsafe_val</script>" not in html_out
 
     # Verify file writing
     out_path = tmp_path / "report_focused.html"
     report.to_html(file_path=str(out_path))
     assert out_path.exists()
     assert out_path.read_text(encoding="utf-8").startswith("<!DOCTYPE html>")
+
+
+def test_data_quality_report_repr_html_snippet():
+    from arnio.quality import ColumnProfile, DataQualityReport
+
+    col = ColumnProfile(
+        name="<script>unsafe_col</script>",
+        dtype="object",
+        semantic_type="string",
+        row_count=3,
+        null_count=1,
+        null_ratio=1 / 3,
+        unique_count=2,
+        unique_ratio=2 / 3,
+        warnings=["<script>unsafe_warning</script>"],
+        top_values=[("<script>unsafe_val</script>", 2, 2 / 3)],
+    )
+    report = DataQualityReport(
+        row_count=3,
+        column_count=1,
+        memory_usage=1234,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={"x": col},
+        quality_score=88.0,
+        score_components={"null_penalty": -10.0},
+    )
+
+    html_out = report._repr_html_()
+    assert "<!DOCTYPE html>" not in html_out
+    assert 'class="arnio-dqr"' in html_out
+    assert "Data Quality Report" in html_out
+    assert "&lt;script&gt;unsafe_col&lt;/script&gt;" in html_out
+    assert "<script>unsafe_col</script>" not in html_out
+
+
+# ── explain mode tests ────────────────────────────────────────────────────────
+
+
+def test_auto_clean_explain_normal_clean(tmp_path):
+    """Normal auto_clean with explain=False and return_report=False should return ArFrame."""
+    path = tmp_path / "data.csv"
+    path.write_text("id,name\n1, Alice \n2, Bob \n")
+    frame = ar.read_csv(path)
+
+    result = ar.auto_clean(frame, explain=False, return_report=False)
+    assert isinstance(result, ar.ArFrame)
+
+
+def test_auto_clean_explain_return_report_only(tmp_path):
+    """return_report=True and explain=False should return (ArFrame, DataQualityReport)."""
+    path = tmp_path / "data.csv"
+    path.write_text("id,name\n1, Alice \n2, Bob \n")
+    frame = ar.read_csv(path)
+
+    result = ar.auto_clean(frame, explain=False, return_report=True)
+    assert isinstance(result, tuple)
+    assert len(result) == 2
+    cleaned, report = result
+    assert isinstance(cleaned, ar.ArFrame)
+    assert isinstance(report, ar.DataQualityReport)
+
+
+def test_auto_clean_explain_returns_tuple(tmp_path):
+    """explain=True and return_report=False should return (ArFrame, CleanExplanation)."""
+    path = tmp_path / "data.csv"
+    path.write_text("id,name\n1, Alice \n2, Alice \n")
+    frame = ar.read_csv(path)
+
+    result = ar.auto_clean(frame, mode="strict", explain=True, allow_lossy_casts=True)
+
+    assert isinstance(result, tuple)
+    assert len(result) == 2
+    cleaned, explanation = result
+    assert isinstance(cleaned, ar.ArFrame)
+    assert isinstance(explanation, ar.CleanExplanation)
+
+
+def test_auto_clean_explain_row_counts(tmp_path):
+    """CleanExplanation rows_before/after/removed should be accurate."""
+    path = tmp_path / "dups.csv"
+    path.write_text("id,name\n1,Alice\n1,Alice\n2,Bob\n")
+    frame = ar.read_csv(path)
+
+    cleaned, explanation = ar.auto_clean(
+        frame, mode="strict", explain=True, allow_lossy_casts=True
+    )
+
+    assert explanation.rows_before == 3
+    assert explanation.rows_after == 2
+    assert explanation.rows_removed == 1
+    assert explanation.mode == "strict"
+
+
+def test_auto_clean_explain_steps_recorded(tmp_path):
+    """Each applied step should produce a CleanStepRecord."""
+    path = tmp_path / "ws.csv"
+    path.write_text("id,name\n1, Alice \n2, Bob \n")
+    frame = ar.read_csv(path)
+
+    cleaned, explanation = ar.auto_clean(
+        frame, mode="safe", explain=True, allow_lossy_casts=True
+    )
+
+    assert len(explanation.steps) >= 1
+    step = explanation.steps[0]
+    assert isinstance(step, ar.CleanStepRecord)
+    assert step.step == "strip_whitespace"
+    assert step.rows_before == 2
+    assert step.rows_after == 2
+    assert step.rows_removed == 0
+    assert isinstance(step.reason, str)
+    assert len(step.reason) > 0
+
+
+def test_auto_clean_explain_with_return_report(tmp_path):
+    """explain=True and return_report=True should return (ArFrame, DataQualityReport, CleanExplanation)."""
+    path = tmp_path / "data.csv"
+    path.write_text("id,name\n1, Alice \n2, Bob \n")
+    frame = ar.read_csv(path)
+
+    result = ar.auto_clean(
+        frame,
+        mode="safe",
+        return_report=True,
+        explain=True,
+        allow_lossy_casts=True,
+    )
+
+    assert isinstance(result, tuple)
+    assert len(result) == 3
+    cleaned, report, explanation = result
+    assert isinstance(cleaned, ar.ArFrame)
+    assert isinstance(report, ar.DataQualityReport)
+    assert isinstance(explanation, ar.CleanExplanation)
+
+
+def test_auto_clean_explain_no_steps_clean_data(tmp_path):
+    """A perfectly clean dataset should result in zero steps applied."""
+    path = tmp_path / "clean.csv"
+    path.write_text("id,name\n1,Alice\n2,Bob\n")
+    frame = ar.read_csv(path)
+
+    cleaned, explanation = ar.auto_clean(
+        frame, mode="strict", explain=True, allow_lossy_casts=True
+    )
+
+    assert explanation.rows_removed == 0
+    assert explanation.rows_before == explanation.rows_after
+
+
+def test_auto_clean_explain_str_representation(tmp_path):
+    """CleanExplanation __str__ should be human-readable."""
+    path = tmp_path / "ws.csv"
+    path.write_text("id,name\n1, Alice \n2, Bob \n")
+    frame = ar.read_csv(path)
+
+    _, explanation = ar.auto_clean(
+        frame, mode="safe", explain=True, allow_lossy_casts=True
+    )
+    text = str(explanation)
+
+    assert "CleanExplanation" in text
+    assert "rows" in text
+    assert "steps applied" in text
+
+
+def test_auto_clean_explain_dry_run_error(tmp_path):
+    """Using explain=True with dry_run=True should raise a ValueError."""
+    path = tmp_path / "data.csv"
+    path.write_text("id,name\n1,Alice\n2,Bob\n")
+    frame = ar.read_csv(path)
+
+    import pytest
+
+    with pytest.raises(
+        ValueError, match="explain=True cannot be used with dry_run=True"
+    ):
+        ar.auto_clean(frame, explain=True, dry_run=True)
+
+
+def test_compare_profiles_under_threshold_is_ok():
+    """Changes below warning thresholds should result in 'ok' status."""
+    baseline = ar.profile(ar.from_pandas(pd.DataFrame({"score": [10.0, 11.0, 12.0]})))
+    # Shift values by 0.1 to keep std constant but shift mean slightly
+    current = ar.profile(ar.from_pandas(pd.DataFrame({"score": [10.1, 11.1, 12.1]})))
+
+    comparison = ar.compare_profiles(baseline, current)
+    assert comparison.drift_report["score"]["status"] == "ok"
+    assert comparison.status_counts == {"ok": 1, "warning": 0, "changed": 0}
+
+
+def test_compare_profiles_above_warning_threshold_is_warning():
+    """Changes above warning but below changed threshold should result in 'warning' status."""
+    baseline = ar.profile(ar.from_pandas(pd.DataFrame({"score": [10.0, 11.0, 12.0]})))
+    # Shift values by 1.8 to trigger warning status (approx 15% shift)
+    current = ar.profile(ar.from_pandas(pd.DataFrame({"score": [11.8, 12.8, 13.8]})))
+
+    comparison = ar.compare_profiles(baseline, current)
+    assert comparison.drift_report["score"]["status"] == "warning"
+    assert comparison.status_counts == {"ok": 0, "warning": 1, "changed": 0}
+
+
+def test_compare_profiles_above_changed_threshold_is_changed():
+    """Changes above changed threshold should result in 'changed' status."""
+    baseline = ar.profile(ar.from_pandas(pd.DataFrame({"score": [10.0, 11.0, 12.0]})))
+    # Shift values by 5.0 to trigger changed status (approx 45% shift)
+    current = ar.profile(ar.from_pandas(pd.DataFrame({"score": [15.0, 16.0, 17.0]})))
+
+    comparison = ar.compare_profiles(baseline, current)
+    assert comparison.drift_report["score"]["status"] == "changed"
+    assert comparison.status_counts == {"ok": 0, "warning": 0, "changed": 1}
+
+
+# ── duplicate_rows correctness tests (Refs #662) ─────────────────────────────
+# These tests verify the duplicate_rows field in DataQualityReport against
+# the pandas df.duplicated().sum() baseline.  profile() continues to use
+# df.duplicated().sum() as its default; the hash_pandas_object candidate
+# is covered separately below for future comparison only.
+
+
+class TestProfileDuplicateRowsCorrectness:
+    """Focused correctness tests for duplicate_rows in DataQualityReport.
+
+    profile() uses df.duplicated().sum() as its default implementation.
+    Each test asserts ar.profile() against the pandas baseline directly so
+    any future change to the counting path is immediately caught.
+    """
+
+    def _baseline(self, frame: ar.ArFrame) -> int:
+        """Reference implementation: pandas df.duplicated().sum()."""
+        return int(ar.to_pandas(frame).duplicated().sum())
+
+    def test_no_duplicates(self):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1, 2, 3], "b": ["x", "y", "z"]}))
+        assert ar.profile(frame).duplicate_rows == 0
+        assert ar.profile(frame).duplicate_rows == self._baseline(frame)
+
+    def test_all_duplicate_rows(self):
+        frame = ar.from_pandas(pd.DataFrame({"a": [7, 7, 7], "b": ["q", "q", "q"]}))
+        # 3 rows, 1 unique → 2 duplicates
+        assert ar.profile(frame).duplicate_rows == 2
+        assert ar.profile(frame).duplicate_rows == self._baseline(frame)
+
+    def test_partial_duplicates(self):
+        frame = ar.from_pandas(
+            pd.DataFrame({"a": [1, 1, 2, 3, 3], "b": ["x", "x", "y", "z", "z"]})
+        )
+        # rows 0==1 and 3==4 → 2 duplicates
+        assert ar.profile(frame).duplicate_rows == 2
+        assert ar.profile(frame).duplicate_rows == self._baseline(frame)
+
+    def test_null_rows_treated_as_duplicates(self):
+        # Two rows where every cell is null should count as one duplicate,
+        # matching pandas default (NaN == NaN for deduplication purposes).
+        frame = ar.from_pandas(
+            pd.DataFrame({"a": [None, None, 1.0], "b": [None, None, 2.0]})
+        )
+        assert ar.profile(frame).duplicate_rows == 1
+        assert ar.profile(frame).duplicate_rows == self._baseline(frame)
+
+    def test_partial_null_rows(self):
+        # Only the null-containing column matches; the other differs.
+        frame = ar.from_pandas(
+            pd.DataFrame({"a": [None, None, 1.0], "b": [1.0, 2.0, 3.0]})
+        )
+        # All rows are distinct → 0 duplicates
+        assert ar.profile(frame).duplicate_rows == 0
+        assert ar.profile(frame).duplicate_rows == self._baseline(frame)
+
+    def test_mixed_dtypes_int_float_string_bool(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "i": [1, 1, 2],
+                    "f": [1.0, 1.0, 2.0],
+                    "s": ["a", "a", "b"],
+                    "b": [True, True, False],
+                }
+            )
+        )
+        assert ar.profile(frame).duplicate_rows == 1
+        assert ar.profile(frame).duplicate_rows == self._baseline(frame)
+
+    def test_single_row_frame(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [42]}))
+        assert ar.profile(frame).duplicate_rows == 0
+        assert ar.profile(frame).duplicate_rows == self._baseline(frame)
+
+    def test_empty_frame_returns_zero(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": pd.Series(dtype="float64")}))
+        assert ar.profile(frame).duplicate_rows == 0
+
+    def test_duplicate_ratio_consistent_with_duplicate_rows(self):
+        frame = ar.from_pandas(
+            pd.DataFrame({"a": [1, 1, 2, 3], "b": ["x", "x", "y", "z"]})
+        )
+        report = ar.profile(frame)
+        assert report.duplicate_rows == 1
+        assert abs(report.duplicate_ratio - 1 / 4) < 1e-9
+
+
+# ── duplicate_rows timing guard (perf/#662) ───────────────────────────────────
+
+
+def test_profile_duplicate_count_hash_path_matches_pandas_baseline_at_scale():
+    """Verify hash_pandas_object produces the same duplicate count as df.duplicated().
+
+    This test documents the candidate faster implementation explored in #662.
+    The hash path is NOT currently used as the default in profile() — benchmark
+    results were inconsistent across CI configurations (0.72x–1.58x depending
+    on Python version and OS).  The correctness equivalence is preserved here so
+    the implementation can be re-enabled once stable benchmark evidence is
+    available across the full CI matrix.
+
+    See benchmarks/benchmark_profile_duplicate_count.py for the manual timing
+    comparison.
+    """
+    import numpy as np
+
+    rng = np.random.default_rng(0)
+    n = 50_000
+    df = pd.DataFrame(
+        {
+            "a": rng.integers(0, int(n * 0.9), size=n).tolist(),
+            "b": rng.uniform(0, 1000, size=n).tolist(),
+            "c": [f"s{i % 5000}" for i in range(n)],
+        }
+    )
+    frame = ar.from_pandas(df)
+    df_converted = ar.to_pandas(frame)
+
+    # Candidate path (not yet the default)
+    hashes = pd.util.hash_pandas_object(df_converted, index=False)
+    hash_count = int(hashes.duplicated().sum())
+
+    # Current baseline — what profile() uses
+    baseline_count = int(df_converted.duplicated().sum())
+
+    assert hash_count == baseline_count
+    assert ar.profile(frame).duplicate_rows == baseline_count
+
+
+# ── numeric histogram tests ──────────────────────────────────────────────────
+
+
+def test_profile_numeric_histogram_normal():
+    # Test normal distribution / sequence
+    df = pd.DataFrame({"nums": list(range(1, 101))})
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+    profile = report.columns["nums"]
+
+    assert profile.histogram is not None
+    assert len(profile.histogram) == 10
+
+    # Check that counts sum to 100
+    counts = [c for _, _, c, _ in profile.histogram]
+    ratios = [r for _, _, _, r in profile.histogram]
+    assert sum(counts) == 100
+    assert abs(sum(ratios) - 1.0) < 1e-9
+
+    # Check bounds
+    assert profile.histogram[0][0] == 1.0
+    assert profile.histogram[-1][1] == 100.0
+
+    # Serialization test
+    dct = profile.to_dict()
+    assert "histogram" in dct
+    assert len(dct["histogram"]) == 10
+    assert dct["histogram"][0]["bucket_start"] == 1.0
+    assert dct["histogram"][0]["count"] == 10
+    assert abs(dct["histogram"][0]["ratio"] - 0.1) < 1e-9
+
+
+def test_profile_numeric_histogram_constant_values():
+    # Test constant values
+    df = pd.DataFrame({"nums": [5.0] * 20})
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+    profile = report.columns["nums"]
+
+    assert profile.histogram is not None
+    assert len(profile.histogram) == 10
+
+    counts = [c for _, _, c, _ in profile.histogram]
+    assert sum(counts) == 20
+
+    # numpy.histogram handles constant values by setting bin boundaries offset by a small delta (typically +/- 0.5)
+    # let's assert the counts are correct and serialize properly
+    dct = profile.to_dict()
+    assert "histogram" in dct
+    assert len(dct["histogram"]) == 10
+
+
+def test_profile_numeric_histogram_empty_and_all_nulls():
+    # All nulls
+    df = pd.DataFrame({"nums": [None, None, None]})
+    df["nums"] = df["nums"].astype("float64")
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+    profile = report.columns["nums"]
+    assert profile.histogram is None
+
+    # Empty column (0 rows)
+    df_empty = pd.DataFrame({"nums": pd.Series(dtype="float64")})
+    frame_empty = ar.from_pandas(df_empty)
+    report_empty = ar.profile(frame_empty)
+    profile_empty = report_empty.columns["nums"]
+    assert profile_empty.histogram is None
+
+
+def test_profile_numeric_histogram_missing_values():
+    # Mix of nulls and numeric values
+    df = pd.DataFrame({"nums": [10.0, None, 20.0, None, 30.0]})
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+    profile = report.columns["nums"]
+
+    assert profile.histogram is not None
+    assert len(profile.histogram) == 10
+    counts = [c for _, _, c, _ in profile.histogram]
+    assert sum(counts) == 3  # only non-null values are counted
+
+    ratios = [r for _, _, _, r in profile.histogram]
+    assert abs(sum(ratios) - 1.0) < 1e-5
+
+
+def test_profile_numeric_histogram_small_sample():
+    # Just 1 value
+    df = pd.DataFrame({"nums": [42.0]})
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+    profile = report.columns["nums"]
+
+    assert profile.histogram is not None
+    assert len(profile.histogram) == 10
+    counts = [c for _, _, c, _ in profile.histogram]
+    assert sum(counts) == 1
+
+
+def test_profile_numeric_histogram_non_numeric():
+    # String column should have histogram = None
+    df = pd.DataFrame({"names": ["Alice", "Bob", "Charlie"]})
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+    profile = report.columns["names"]
+
+    assert profile.histogram is None
+    assert "histogram" in profile.to_dict()
+    assert profile.to_dict()["histogram"] is None
+
+
+def test_profile_numeric_histogram_to_pandas():
+    df = pd.DataFrame({"nums": [1, 2, 3]})
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+
+    pdf = report.to_pandas()
+    assert "histogram" in pdf.columns
+    assert pdf.loc[pdf["name"] == "nums", "histogram"].values[0] is not None
+
+
+def test_profile_numeric_histogram_non_finite_values():
+    # Test handling of infinite values in histogram calculation
+    from arnio._core import _DType, _Frame
+    from arnio.frame import ArFrame
+
+    cpp_frame = _Frame.from_dict(
+        {"nums": [1.0, 2.0, float("inf"), float("-inf"), None, 3.0]},
+        {"nums": _DType.FLOAT64},
+    )
+    frame = ArFrame(cpp_frame)
+    report = ar.profile(frame)
+    profile = report.columns["nums"]
+
+    # The histogram should filter out +/- inf and NaNs, binning only [1.0, 2.0, 3.0]
+    assert profile.histogram is not None
+    assert len(profile.histogram) == 10
+
+    counts = [c for _, _, c, _ in profile.histogram]
+    assert sum(counts) == 3
+
+    # All infinities (no finite values to bin)
+    cpp_frame_all_inf = _Frame.from_dict(
+        {"nums": [float("inf"), float("-inf")]},
+        {"nums": _DType.FLOAT64},
+    )
+    frame_all_inf = ArFrame(cpp_frame_all_inf)
+    report_all_inf = ar.profile(frame_all_inf)
+    profile_all_inf = report_all_inf.columns["nums"]
+    assert profile_all_inf.histogram is None
+
+
+def test_report_to_markdown_escapes_newlines_in_column_cells():
+    report = ar.DataQualityReport(
+        row_count=2,
+        column_count=1,
+        memory_usage=128,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={
+            "multi\nline": ar.ColumnProfile(
+                name="multi\nline",
+                dtype="string",
+                semantic_type="free\ntext",
+                row_count=2,
+                null_count=0,
+                null_ratio=0.0,
+                unique_count=2,
+                unique_ratio=1.0,
+                warnings=["contains\nnewline"],
+            )
+        },
+        suggestions=[],
+    )
+    md = report.to_markdown()
+    assert "multi<br>line" in md
+    assert "free<br>text" in md
+    assert "contains<br>newline" in md
+    assert "| multi\nline |" not in md
+
+
+def test_quality_gate_markdown_escapes_pipe_characters():
+    report = ar.DataQualityReport(
+        row_count=2,
+        column_count=1,
+        memory_usage=128,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={
+            "col|name": ar.ColumnProfile(
+                name="col|name",
+                dtype="str|ing",
+                semantic_type="cat|egory",
+                row_count=2,
+                null_count=0,
+                null_ratio=0.0,
+                unique_count=2,
+                unique_ratio=1.0,
+                warnings=["pipe|warning"],
+            )
+        },
+        suggestions=[],
+    )
+
+    md = report.to_markdown()
+
+    assert r"col\|name" in md
+    assert r"str\|ing" in md
+    assert r"cat\|egory" in md
+    assert r"pipe\|warning" in md
+    assert "| col|name |" not in md
