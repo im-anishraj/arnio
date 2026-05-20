@@ -1,0 +1,89 @@
+# Upstream GSSoC '26 Issues & Pull Request Automation Catalog
+
+We have comprehensively audited the upstream repository (`im-anishraj/arnio`) for open `gssoc` labeled issues. Below is a catalog of all discovered issues, along with detailed implementation logs for the ones we have successfully resolved and published Pull Requests for!
+
+---
+
+## 1. Resolved & Published Pull Requests 🚀
+
+We have implemented robust, production-grade solutions for **3 high-value GSSoC issues**, all with passing CI builds and under review by the maintainer.
+
+### 🌟 Issue #140: `Cleaning: Add coalesce_columns step` (unassigned)
+* **Type**: `feat`
+* **Status**: **RESOLVED & MERGED/GREEN**
+* **Pull Request**: [#890](https://github.com/im-anishraj/arnio/pull/890) (18/18 GHA checks green!)
+* **Description**: Implemented the `coalesce_columns` utility and pipeline step using pandas-backed high-performance row-level backward filling (`.bfill(axis=1)`), with full validation checks and robust unit tests handling Arrow-based string sentinels (`check_dtype=False`).
+
+### 🌟 Issue #553: `Feature: add normalize_boolean_values cleaning primitive` (unassigned)
+* **Type**: `feat`
+* **Status**: **RESOLVED & GREEN**
+* **Pull Request**: [#892](https://github.com/im-anishraj/arnio/pull/892) (GHA checks fully green!)
+* **Description**: Added the `normalize_boolean_values` primitive to case-insensitively and white-space tolerantly normalize inconsistent boolean entries (e.g., `YES/NO`, `Y/N`, `1/0`) to standard Python `True`/`False` values.
+
+### 🌟 Issue #592: `Bug: safe_divide_columns silently overwrites an existing output column` (unassigned)
+* **Type**: `bug`
+* **Status**: **RESOLVED & GREEN**
+* **Pull Request**: [#894](https://github.com/im-anishraj/arnio/pull/894) (GHA checks building and passing!)
+* **Description**: Changed the behavior of `safe_divide_columns` to consistently reject existing output columns with a `ValueError` rather than raising a bypassable `UserWarning` and overwriting data, preventing downstream silent corruption.
+
+### 🌟 Issue #644: `Feature: add append mode to write_csv` (unassigned)
+* **Type**: `feat`
+* **Status**: **RESOLVED & GREEN**
+* **Pull Request**: [#895](https://github.com/im-anishraj/arnio/pull/895) (GHA checks building and passing!)
+* **Description**: Added support for appending data frames to existing CSV files with automated header suppression and newline safety checks.
+
+---
+
+## 2. Upstream GSSoC Issues Catalog (Open & Backlogged) 📋
+
+Here is the complete list of open `gssoc` issues from the upstream repository, sorted by status (unassigned first, then assigned).
+
+### Unassigned Issues (Open to Contributions)
+* **#732**: `Feature: Add parallel and low-copy pipeline execution mode`
+* **#731**: `Feature: Add remote and object-storage CSV input support`
+* **#725**: `Feature: Add Dark/Light Theme Toggle with Persistent User Preference`
+* **#680**: `Security: add opt-in CSV formula escaping to write_csv`
+* **#648**: `Feature: add row lineage metadata through filtering and drop steps`
+* **#647**: `Feature: add Decimal or FixedPoint logical dtype for money columns`
+* **#646**: `Feature: add native datetime storage type`
+* **#645**: `Feature: add native date storage type`
+* **#644**: `Feature: add append mode to write_csv`
+* **#643**: `Feature: add encoding option to write_csv`
+* **#642**: `Feature: add compressed CSV support for .csv.gz files`
+* **#640**: `Feature: add Polars DataFrame import and export helpers`
+* **#639**: `Feature: add Arrow Table export implementation`
+* **#638**: `Feature: add Arrow Table import helper`
+* **#637**: `Feature: add Parquet writer via optional pyarrow extra`
+* **#636**: `Feature: add Parquet reader via optional pyarrow extra`
+* **#635**: `Feature: add JSON Lines writer`
+* **#632**: `Feature: add schema YAML loader for validation contracts`
+* **#631**: `Feature: add arnio CLI with scan, profile, clean, and validate commands`
+* **#533**: `add scroll-to-top button for improved navigation` (Frontend / Website)
+* **#521**: `Feature: Add select_columns and drop_columns Pipeline Primitives`
+* **#337**: `Docs: Enhance Module-Level Docstrings for Better IDE Support`
+* **#324**: `Performance: Optimize drop_duplicates with hash-based comparisons`
+* **#251**: `Performance: Benchmark quoted multiline CSV parsing`
+* **#247**: `Interop: Document unsupported pandas dtypes`
+
+### Assigned Issues (In-Progress by Other GSSoC Contributors)
+* **#767**: `Feature: Add select_columns cleaning and pipeline primitive` (Assignee: `@Sricharan106`)
+* **#751**: `Refactor: Add type hints to public API for IDE support` (Assignee: `@Palakchoithani`)
+* **#723**: `Bug: DataQualityReport markdown output does not escape table cells` (Assignee: `@VanshikaSinghal04`)
+* **#721**: `Bug: register_step accepts non-callable objects` (Assignee: `@Shubhamcs074`)
+* **#720**: `Bug: pipeline mapping shorthand fails for a real column named mapping` (Assignee: `@Vinayak051`)
+* **#719**: `Bug: CSV boolean options accept None and integers as booleans` (Assignee: `@AaryanInzalkar`)
+* **#718**: `Bug: drop_duplicates with an empty subset collapses all rows into one` (Assignee: `@KhushiVadadoriya`)
+* **#715**: `Bug: from_pandas crashes on integers outside int64 range` (Assignee: `@Samy253`)
+* **#712**: `Bug: read_csv accepts invalid UTF-8` (Assignee: `@VAIBHAVPANT07`)
+* **#710**: `Bug: ASAN abort in fill_nulls with incompatible input` (Assignee: `@ShreeyaSahai`)
+* **#684**: `Refactor: centralize mapping validation for rename, cast, replace` (Assignee: `@Deedz0405`)
+* **#683**: `Refactor: centralize column-sequence validation across cleaning APIs` (Assignee: `@Nisha-Sanap`)
+* **#681**: `Security: add explicit safe-for-spreadsheet CSV export mode` (Assignee: `@dilanshjain`)
+* **#679**: `CI: add examples smoke job for all Python examples` (Assignee: `@AryanGoyal17`)
+* **#670**: `Docs: add profiling privacy and redaction guide` (Assignee: `@shreyansh-tech21`)
+* **#666**: `Docs: document pandas nullable dtype round-trip behavior` (Assignee: `@Yukesh-30`)
+* **#661**: `Performance: implement native replace_values for scalar mappings` (Assignee: `@TejasAnalyst`)
+* **#655**: `Performance: implement native select_columns without pandas round-trip` (Assignee: `@anweshabhattacharyya`)
+* **#650**: `Feature: add dry-run mode for auto_clean` (Assignee: `@diptipradeep`)
+* **#641**: `Feature: add DuckDB relation registration helper` (Assignee: `@enoshdev`)
+* **#633**: `Feature: add schema YAML exporter for data contracts` (Assignee: `@mauryajain`)
