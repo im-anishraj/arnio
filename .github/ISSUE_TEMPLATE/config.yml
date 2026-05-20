@@ -1,5 +1,8 @@
 blank_issues_enabled: false
 contact_links:
+  - name: Arnio Discord Community
+    url: https://discord.gg/xsEw7r78M
+    about: Get quick setup help, onboarding support, and contributor guidance.
   - name: Questions and discussion
     url: https://github.com/im-anishraj/arnio/discussions
     about: Ask questions or start a discussion instead of opening an issue.

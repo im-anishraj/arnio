@@ -1,8 +1,13 @@
 """Tests for pandas conversion."""
 
+from decimal import Decimal
+
+import numpy as np
 import pandas as pd
+import pytest
 
 import arnio as ar
+from arnio.convert import _to_binding_safe
 
 
 class TestToPandas:
@@ -22,6 +27,79 @@ class TestToPandas:
         frame = ar.read_csv(csv_with_nulls)
         df = ar.to_pandas(frame)
         assert df.isna().any().any()  # Should have some NaN/NA values
+
+    def test_copy_option_returns_equivalent_dataframe(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        zero_copy = ar.to_pandas(frame)
+        defensive = ar.to_pandas(frame, copy=True)
+
+        pd.testing.assert_frame_equal(defensive, zero_copy)
+        assert defensive is not zero_copy
+
+    def test_copy_option_rejects_non_bool(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(TypeError, match="copy must be a bool"):
+            ar.to_pandas(frame, copy="yes")
+
+    def test_copy_option_preserves_null_masks(self, csv_with_nulls):
+        frame = ar.read_csv(csv_with_nulls)
+
+        df = ar.to_pandas(frame, copy=True)
+
+        assert df.isna().any().any()
+
+    def test_copy_option_isolates_integer_buffers(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        zero_copy = ar.to_pandas(frame)
+        defensive = ar.to_pandas(frame, copy=True)
+        original_age = zero_copy.loc[0, "age"]
+
+        assert not np.shares_memory(
+            zero_copy["age"].to_numpy(copy=False),
+            defensive["age"].to_numpy(copy=False),
+        )
+
+        defensive.loc[0, "age"] = 99
+
+        assert zero_copy.loc[0, "age"] == original_age
+        assert ar.to_pandas(frame).loc[0, "age"] == original_age
+
+    def test_copy_option_isolates_float_buffers(self, tmp_path):
+        csv_path = tmp_path / "floats.csv"
+        csv_path.write_text("score\n1.5\n2.5\n3.5\n")
+        frame = ar.read_csv(csv_path)
+
+        zero_copy = ar.to_pandas(frame)
+        defensive = ar.to_pandas(frame, copy=True)
+
+        assert not np.shares_memory(
+            zero_copy["score"].to_numpy(copy=False),
+            defensive["score"].to_numpy(copy=False),
+        )
+
+        defensive.loc[0, "score"] = 99.5
+
+        assert zero_copy.loc[0, "score"] == 1.5
+        assert ar.to_pandas(frame).loc[0, "score"] == 1.5
+
+    def test_boolean_conversion_is_already_isolated(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        first = ar.to_pandas(frame)
+        second = ar.to_pandas(frame)
+
+        assert not np.shares_memory(
+            first["active"].to_numpy(copy=False),
+            second["active"].to_numpy(copy=False),
+        )
+
+        second.loc[0, "active"] = False
+
+        assert first.loc[0, "active"] is np.True_
+        assert ar.to_pandas(frame).loc[0, "active"] is np.True_
 
     def test_to_python_list_with_nulls(self):
         frame = ar.from_pandas(
@@ -71,6 +149,68 @@ class TestFromPandas:
         assert "y" in frame.columns
         assert "z" in frame.columns
 
+    def test_string_dtype_roundtrip_with_missing_value(self):
+        df = pd.DataFrame(
+            {
+                "name": pd.Series(
+                    ["a", pd.NA],
+                    dtype=pd.StringDtype(),
+                )
+            }
+        )
+
+        result = ar.to_pandas(ar.from_pandas(df))
+
+        assert str(result["name"].dtype) == "string"
+        assert list(result["name"]) == ["a", pd.NA]
+
+    def test_string_dtype_roundtrip_all_nulls(self):
+        df = pd.DataFrame(
+            {
+                "name": pd.Series(
+                    [pd.NA, pd.NA],
+                    dtype=pd.StringDtype(),
+                )
+            }
+        )
+
+        result = ar.to_pandas(ar.from_pandas(df))
+
+        assert str(result["name"].dtype) == "string"
+        assert result["name"].isna().tolist() == [True, True]
+
+    def test_plain_object_string_column_behavior_unchanged(self):
+        df = pd.DataFrame({"name": ["a", "b"]}, dtype=object)
+
+        result = ar.to_pandas(ar.from_pandas(df))
+
+        assert list(result["name"]) == ["a", "b"]
+        assert str(result["name"].dtype) == "string"
+
+    def test_nullable_int64_roundtrip_mixed_values(self):
+        df = pd.DataFrame({"id": pd.Series([1, pd.NA, 3], dtype=pd.Int64Dtype())})
+
+        result = ar.to_pandas(ar.from_pandas(df))
+
+        pd.testing.assert_series_equal(result["id"], df["id"])
+
+    def test_nullable_int64_roundtrip_all_nulls(self):
+        df = pd.DataFrame({"id": pd.Series([pd.NA, pd.NA], dtype=pd.Int64Dtype())})
+
+        frame = ar.from_pandas(df)
+        result = ar.to_pandas(frame)
+
+        assert frame.dtypes["id"] == "int64"
+        assert str(result["id"].dtype) == "Int64"
+        assert result["id"].isna().tolist() == [True, True]
+
+    def test_nullable_int64_roundtrip_without_nulls(self):
+        df = pd.DataFrame({"id": pd.Series([1, 2, 3], dtype=pd.Int64Dtype())})
+
+        result = ar.to_pandas(ar.from_pandas(df))
+
+        pd.testing.assert_series_equal(result["id"], df["id"])
+
     def test_roundtrip_values(self):
         df = pd.DataFrame(
             {
@@ -84,14 +224,16 @@ class TestFromPandas:
         assert list(df2["score"]) == [95.5, 87.0]
 
     def test_from_pandas_nested_data(self):
-        import pytest
-
         df_list = pd.DataFrame({"a": [[1, 2], [3, 4]]})
-        with pytest.raises(TypeError, match="Unsupported nested/complex type"):
+        with pytest.raises(
+            TypeError, match="Column 'a' contains unsupported nested value"
+        ):
             ar.from_pandas(df_list)
 
         df_dict = pd.DataFrame({"a": [{"x": 1}, {"y": 2}]})
-        with pytest.raises(TypeError, match="Unsupported nested/complex type"):
+        with pytest.raises(
+            TypeError, match="Column 'a' contains unsupported nested value"
+        ):
             ar.from_pandas(df_dict)
 
     def test_from_pandas_mixed_object_column(self):
@@ -101,10 +243,526 @@ class TestFromPandas:
 
         assert list(df2["a"]) == ["1", "x", "3"]
 
-    def test_from_pandas_unsupported_scalar_object_column(self):
-        timestamp = pd.Timestamp("2026-05-14 12:30:00")
-        frame = ar.from_pandas(pd.DataFrame({"created_at": [timestamp]}))
+    def test_from_pandas_mixed_object_column_with_nested_value(self):
+        df = pd.DataFrame({"mixed": [1, "hello", {"a": 1}]}, dtype=object)
 
-        assert frame._frame.column_by_name("created_at").to_python_list() == [
-            str(timestamp)
-        ]
+        with pytest.raises(
+            TypeError,
+            match="Column 'mixed' contains unsupported nested value",
+        ):
+            ar.from_pandas(df)
+
+    def test_from_pandas_unsupported_scalar_object_column(self):
+        """datetime64 columns now raise a clear TypeError with a fix hint."""
+        timestamp = pd.Timestamp("2026-05-14 12:30:00")
+        df = pd.DataFrame({"created_at": [timestamp]})
+        with pytest.raises(TypeError, match="Column 'created_at'"):
+            ar.from_pandas(df)
+
+    def test_from_pandas_object_timestamp_raises_clear_error(self):
+        df = pd.DataFrame(
+            {
+                "created_at": pd.Series(
+                    [pd.Timestamp("2026-05-14 12:30:00")], dtype=object
+                )
+            }
+        )
+
+        with pytest.raises(TypeError, match="Column 'created_at'") as exc_info:
+            ar.from_pandas(df)
+
+        assert "Fix:" in str(exc_info.value)
+
+    def test_from_pandas_object_timedelta_raises_clear_error(self):
+        df = pd.DataFrame(
+            {"duration": pd.Series([pd.Timedelta("2 days")], dtype=object)}
+        )
+
+        with pytest.raises(TypeError, match="Column 'duration'") as exc_info:
+            ar.from_pandas(df)
+
+        assert "Fix:" in str(exc_info.value)
+
+    def test_from_pandas_object_complex_raises_clear_error(self):
+        df = pd.DataFrame({"signal": pd.Series([1 + 2j], dtype=object)})
+
+        with pytest.raises(TypeError, match="Column 'signal'") as exc_info:
+            ar.from_pandas(df)
+
+        assert "Fix:" in str(exc_info.value)
+
+    def test_from_pandas_object_numpy_complex_raises_clear_error(self):
+        df = pd.DataFrame({"signal": pd.Series([np.complex64(1 + 2j)], dtype=object)})
+
+        with pytest.raises(TypeError, match="Column 'signal'") as exc_info:
+            ar.from_pandas(df)
+
+        assert "Fix:" in str(exc_info.value)
+
+    def test_from_pandas_preserves_column_order(self):
+        df = pd.DataFrame(
+            {
+                "name": ["Alice"],
+                "age": [20],
+                "city": ["Delhi"],
+            }
+        )
+
+        frame = ar.from_pandas(df)
+        result = ar.to_pandas(frame)
+
+        assert list(result.columns) == ["name", "age", "city"]
+
+    def test_cleaning_preserves_column_order(self):
+        df = pd.DataFrame(
+            {
+                "name": [" Alice "],
+                "age": [20],
+                "city": ["Delhi"],
+            }
+        )
+
+        frame = ar.from_pandas(df)
+
+        result = ar.strip_whitespace(frame)
+        result_df = ar.to_pandas(result)
+
+        assert list(result_df.columns) == ["name", "age", "city"]
+
+    def test_pipeline_preserves_column_order(self):
+        df = pd.DataFrame(
+            {
+                "name": [" Alice "],
+                "age": [20],
+                "city": ["Delhi"],
+            }
+        )
+
+        frame = ar.from_pandas(df)
+
+        result = ar.pipeline(
+            frame,
+            [
+                ("strip_whitespace",),
+                ("normalize_case", {"case_type": "lower"}),
+            ],
+        )
+
+        result_df = ar.to_pandas(result)
+
+        assert list(result_df.columns) == ["name", "age", "city"]
+
+    def test_nullable_boolean_roundtrip(self):
+        df = pd.DataFrame(
+            {
+                "active": pd.Series(
+                    [True, False, pd.NA],
+                    dtype="boolean",
+                )
+            }
+        )
+
+        frame = ar.from_pandas(df)
+        result = ar.to_pandas(frame)
+
+        assert str(result["active"].dtype) == "boolean"
+        assert list(result["active"]) == [True, False, pd.NA]
+
+    def test_nullable_string_roundtrip(self):
+        df = pd.DataFrame(
+            {
+                "name": pd.Series(
+                    ["Alice", pd.NA, "Bob"],
+                    dtype="string",
+                )
+            }
+        )
+        result = ar.to_pandas(ar.from_pandas(df))
+
+        assert str(result["name"].dtype) == "string"
+
+        pd.testing.assert_series_equal(
+            result["name"],
+            df["name"],
+        )
+
+    def test_nullable_float_roundtrip(self):
+        df = pd.DataFrame(
+            {
+                "score": pd.Series(
+                    [1.5, pd.NA, 3.7],
+                    dtype="Float64",
+                )
+            }
+        )
+
+        result = ar.to_pandas(ar.from_pandas(df))
+
+        assert str(result["score"].dtype) == "float64"
+        assert result["score"].tolist()[0] == 1.5
+        assert pd.isna(result["score"].tolist()[1])
+        assert result["score"].tolist()[2] == 3.7
+
+    def test_bool_null_mask_roundtrip(self):
+        df = pd.DataFrame(
+            {
+                "flag": pd.Series(
+                    [True, False, pd.NA],
+                    dtype="boolean",
+                )
+            }
+        )
+
+        frame = ar.from_pandas(df)
+        result = ar.to_pandas(frame)
+
+        assert list(result["flag"]) == [True, False, pd.NA]
+
+    def test_dataframe_index_is_dropped(self):
+        """pandas index is not preserved during from_pandas conversion."""
+        df = pd.DataFrame({"a": [1, 2, 3]}, index=["x", "y", "z"])
+        frame = ar.from_pandas(df)
+        result = ar.to_pandas(frame)
+        assert isinstance(result.index, pd.RangeIndex)
+
+    def test_datetime_raises_clear_error(self):
+        df = pd.DataFrame({"created_at": pd.to_datetime(["2021-01-01", "2022-06-15"])})
+        with pytest.raises(TypeError, match="Column 'created_at'"):
+            ar.from_pandas(df)
+
+    def test_timedelta_raises_clear_error(self):
+        df = pd.DataFrame({"duration": pd.to_timedelta(["1 days", "2 days"])})
+        with pytest.raises(TypeError, match="Column 'duration'"):
+            ar.from_pandas(df)
+
+    def test_categorical_raises_clear_error(self):
+        df = pd.DataFrame({"status": pd.Categorical(["active", "inactive", "active"])})
+        with pytest.raises(TypeError, match="Column 'status'"):
+            ar.from_pandas(df)
+
+    def test_complex_raises_clear_error(self):
+        df = pd.DataFrame({"signal": np.array([1 + 2j, 3 + 4j, 5 + 6j])})
+        with pytest.raises(TypeError, match="Column 'signal'"):
+            ar.from_pandas(df)
+
+    def test_error_message_contains_fix_hint_datetime(self):
+        df = pd.DataFrame({"ts": pd.to_datetime(["2023-01-01"])})
+        with pytest.raises(TypeError, match="Fix:"):
+            ar.from_pandas(df)
+
+    def test_error_message_contains_fix_hint_timedelta(self):
+        df = pd.DataFrame({"td": pd.to_timedelta(["3 days"])})
+        with pytest.raises(TypeError, match="Fix:"):
+            ar.from_pandas(df)
+
+    def test_error_message_contains_fix_hint_category(self):
+        df = pd.DataFrame({"cat": pd.Categorical(["a", "b"])})
+        with pytest.raises(TypeError, match="Fix:"):
+            ar.from_pandas(df)
+
+    def test_error_message_contains_fix_hint_complex(self):
+        df = pd.DataFrame({"cx": np.array([1 + 1j])})
+        with pytest.raises(TypeError, match="Fix:"):
+            ar.from_pandas(df)
+
+    def test_mixed_valid_and_invalid_raises_on_bad_column(self):
+        df = pd.DataFrame(
+            {
+                "name": ["Alice", "Bob"],
+                "joined": pd.to_datetime(["2020-01-01", "2021-06-01"]),
+            }
+        )
+        with pytest.raises(TypeError, match="Column 'joined'"):
+            ar.from_pandas(df)
+
+    def test_duplicate_single_label_raises(self):
+        df = pd.DataFrame([[1, 2]], columns=["id", "id"])
+        with pytest.raises(ValueError, match="duplicate column labels") as exc_info:
+            ar.from_pandas(df)
+        assert "id" in str(exc_info.value)
+
+    def test_duplicate_multiple_labels_raises(self):
+        df = pd.DataFrame([[1, 2, 3, 4]], columns=["a", "b", "a", "b"])
+        with pytest.raises(ValueError, match="duplicate column labels") as exc_info:
+            ar.from_pandas(df)
+        assert "a" in str(exc_info.value)
+        assert "b" in str(exc_info.value)
+
+    def test_unique_labels_converts_cleanly(self):
+        df = pd.DataFrame({"x": [1], "y": [2]})
+        frame = ar.from_pandas(df)
+        assert frame.columns == ["x", "y"]
+
+    def test_unique_non_string_labels_convert_cleanly(self):
+        df = pd.DataFrame([[1, 2]], columns=[0, 1])
+        frame = ar.from_pandas(df)
+        assert frame.columns == ["0", "1"]
+
+    def test_duplicate_non_string_labels_raises(self):
+        df = pd.DataFrame([[1, 2, 3]], columns=[0, 1, 0])
+        with pytest.raises(ValueError, match="duplicate column labels") as exc_info:
+            ar.from_pandas(df)
+        assert "0" in str(exc_info.value)
+
+    def test_stringified_integer_label_collision_raises(self):
+        df = pd.DataFrame([[1, 2]], columns=[1, "1"])
+        with pytest.raises(ValueError, match="string conversion") as exc_info:
+            ar.from_pandas(df)
+
+        message = str(exc_info.value)
+        assert "'1'" in message
+        assert "1" in message
+
+    def test_stringified_bool_label_collision_raises(self):
+        df = pd.DataFrame([[1, 2]], columns=[True, "True"])
+        with pytest.raises(ValueError, match="string conversion") as exc_info:
+            ar.from_pandas(df)
+
+        message = str(exc_info.value)
+        assert "True" in message
+
+    def test_from_pandas_all_null_float64_extension(self):
+        df = pd.DataFrame({"score": pd.Series([pd.NA, pd.NA, pd.NA], dtype="Float64")})
+        result = ar.to_pandas(ar.from_pandas(df))
+        assert len(result) == 3
+        assert result["score"].isna().all()
+        assert str(result["score"].dtype) == "string"
+
+    def test_from_pandas_all_null_boolean_extension(self):
+        df = pd.DataFrame({"active": pd.Series([pd.NA, pd.NA, pd.NA], dtype="boolean")})
+        result = ar.to_pandas(ar.from_pandas(df))
+        assert len(result) == 3
+        assert result["active"].isna().all()
+        assert str(result["active"].dtype) == "string"
+
+    def test_from_pandas_all_null_string_extension(self):
+        df = pd.DataFrame({"name": pd.Series([pd.NA, pd.NA, pd.NA], dtype="string")})
+        result = ar.to_pandas(ar.from_pandas(df))
+        assert len(result) == 3
+        assert result["name"].isna().all()
+        assert str(result["name"].dtype) == "string"
+
+
+class TestAttrsPreservation:
+    def test_attrs_roundtrip(self):
+        """attrs set on input DataFrame survive from_pandas -> to_pandas."""
+        df = pd.DataFrame({"x": [1, 2, 3]})
+        df.attrs = {"source": "test_db", "version": 2}
+        frame = ar.from_pandas(df)
+        result = ar.to_pandas(frame)
+        assert result.attrs == {"source": "test_db", "version": 2}
+
+    def test_empty_attrs_roundtrip(self):
+        """Empty attrs stay empty — no pollution."""
+        df = pd.DataFrame({"x": [1, 2, 3]})
+        df.attrs = {}
+        frame = ar.from_pandas(df)
+        result = ar.to_pandas(frame)
+        assert result.attrs == {}
+
+    def test_attrs_not_shared(self):
+        """Mutating result.attrs must not affect the ArFrame's stored attrs."""
+        df = pd.DataFrame({"x": [1, 2]})
+        df.attrs = {"key": "original"}
+        frame = ar.from_pandas(df)
+        result = ar.to_pandas(frame)
+        result.attrs["key"] = "mutated"
+        assert frame._attrs["key"] == "original"
+
+
+class TestDecimalConversion:
+    """Test support for Python Decimal objects in financial datasets."""
+
+    def test_decimal_normal_conversion(self):
+        """Normal financial value conversion."""
+        dec_val = Decimal("123.45")
+        assert _to_binding_safe(dec_val) == "123.45"
+        assert isinstance(_to_binding_safe(dec_val), str)
+
+    def test_decimal_edge_cases(self):
+        """Zero and negative values."""
+        assert _to_binding_safe(Decimal("0.00")) == "0.00"
+        assert _to_binding_safe(Decimal("-0.01")) == "-0.01"
+        assert _to_binding_safe(Decimal("999.999")) == "999.999"
+
+    def test_decimal_precision_loss_awareness(self):
+        """Large precision decimal is perfectly preserved as string."""
+        large_dec = Decimal("1.234567890123456789")
+        result = _to_binding_safe(large_dec)
+        assert result == "1.234567890123456789"
+
+    def test_invalid_cases_infinity(self):
+        """Invalid floating/decimal boundaries like infinity."""
+        with pytest.raises(
+            ValueError, match="Invalid financial value: NaN or Infinity."
+        ):
+            _to_binding_safe(float("inf"))
+
+        with pytest.raises(
+            ValueError, match="Invalid financial value: NaN or Infinity."
+        ):
+            _to_binding_safe(float("-inf"))
+
+    def test_decimal_from_pandas_roundtrip(self):
+        """Decimal columns convert to exact strings during from_pandas."""
+        df = pd.DataFrame(
+            {"price": [Decimal("19.99"), Decimal("29.95"), Decimal("15.50")]}
+        )
+        frame = ar.from_pandas(df)
+        result = ar.to_pandas(frame)
+        # Result should be preserved as exact strings
+        assert list(result["price"]) == ["19.99", "29.95", "15.50"]
+        assert result["price"].dtype == "string"
+
+    def test_decimal_with_nulls(self):
+        """Decimal columns with null values."""
+        df = pd.DataFrame({"amount": [Decimal("100.50"), None, Decimal("50.25")]})
+        frame = ar.from_pandas(df)
+        result = ar.to_pandas(frame)
+        assert result["amount"].iloc[0] == "100.50"
+        assert pd.isna(result["amount"].iloc[1])
+        assert result["amount"].iloc[2] == "50.25"
+
+    def test_from_pandas_rejects_decimal_infinity(self):
+        """from_pandas() must reject Decimal infinity during conversion."""
+        df = pd.DataFrame({"value": [Decimal("100.50"), Decimal("Infinity")]})
+        with pytest.raises(
+            ValueError, match="Invalid financial value: NaN or Infinity."
+        ):
+            ar.from_pandas(df)
+
+    def test_from_pandas_rejects_decimal_nan(self):
+        """from_pandas() must reject Decimal NaN during conversion."""
+        df = pd.DataFrame({"value": [Decimal("100.50"), Decimal("NaN")]})
+        with pytest.raises(
+            ValueError, match="Invalid financial value: NaN or Infinity."
+        ):
+            ar.from_pandas(df)
+
+    def test_from_pandas_rejects_float_infinity(self):
+        """from_pandas() must reject native float infinity during conversion."""
+        df = pd.DataFrame({"value": [100.50, float("inf")]})
+        with pytest.raises(
+            ValueError, match="Invalid financial value: NaN or Infinity."
+        ):
+            ar.from_pandas(df)
+
+    def test_attrs_through_pipeline(self):
+        """attrs survive a direct round-trip — pipeline frames are out of scope."""
+        df = pd.DataFrame({"name": [" Alice ", " Bob "]})
+        df.attrs = {"owner": "data_team"}
+        frame = ar.from_pandas(df)
+        result = ar.to_pandas(frame)
+        assert result.attrs.get("owner") == "data_team"
+
+    def test_read_csv_has_no_attrs(self, sample_csv):
+        """ArFrames from read_csv start with empty attrs — no junk metadata."""
+        frame = ar.read_csv(sample_csv)
+        result = ar.to_pandas(frame)
+        assert result.attrs == {}
+
+    def test_nested_mutable_attrs_are_deep_copied(self):
+        """Nested mutable values in attrs are deep-copied, not shared."""
+        df = pd.DataFrame({"x": [1, 2]})
+        df.attrs = {"meta": {"version": 1, "tags": ["a", "b"]}}
+        frame = ar.from_pandas(df)
+        # mutate the original nested object
+        df.attrs["meta"]["tags"].append("c")
+        result = ar.to_pandas(frame)
+        # stored copy must be unaffected
+        assert result.attrs["meta"]["tags"] == ["a", "b"]
+
+
+class TestToBindingSafeExtras:
+    """Additional focused tests for to_binding_safe Decimal/float handling."""
+
+    def test_decimal_infinity_and_nan_raise(self):
+        with pytest.raises(
+            ValueError, match="Invalid financial value: NaN or Infinity."
+        ):
+            _to_binding_safe(Decimal("Infinity"))
+
+        with pytest.raises(
+            ValueError, match="Invalid financial value: NaN or Infinity."
+        ):
+            _to_binding_safe(Decimal("NaN"))
+
+    def test_float_infinite_and_nan_raise(self):
+        with pytest.raises(
+            ValueError, match="Invalid financial value: NaN or Infinity."
+        ):
+            _to_binding_safe(float("inf"))
+
+        with pytest.raises(
+            ValueError, match="Invalid financial value: NaN or Infinity."
+        ):
+            _to_binding_safe(float("nan"))
+
+
+class TestUInt64BoundaryConversion:
+    """Tests for pandas UInt64 and uint64 boundary conversions near signed 64-bit integer limits.
+
+    Links with Fixes #626.
+    """
+
+    def test_uint64_within_bounds(self):
+        # 9223372036854775807 is the maximum signed 64-bit integer.
+        df = pd.DataFrame(
+            {
+                "col_uint": pd.Series(
+                    [0, 12345, 9223372036854775807],
+                    dtype="UInt64",
+                )
+            }
+        )
+        frame = ar.from_pandas(df)
+        assert frame.dtypes["col_uint"] == "int64"
+
+        result = ar.to_pandas(frame)
+        assert list(result["col_uint"]) == [0, 12345, 9223372036854775807]
+
+    def test_uint64_out_of_bounds_raises(self):
+        # 9223372036854775808 exceeds the maximum signed 64-bit integer.
+        df = pd.DataFrame(
+            {
+                "col_uint": pd.Series(
+                    [9223372036854775808],
+                    dtype="UInt64",
+                )
+            }
+        )
+        with pytest.raises(
+            ValueError,
+            match="out of bounds for signed 64-bit integer",
+        ):
+            ar.from_pandas(df)
+
+    def test_numpy_uint64_within_bounds(self):
+        df = pd.DataFrame(
+            {
+                "col_uint": np.array(
+                    [0, 9223372036854775807],
+                    dtype=np.uint64,
+                )
+            }
+        )
+        frame = ar.from_pandas(df)
+        assert frame.dtypes["col_uint"] == "int64"
+
+        result = ar.to_pandas(frame)
+        assert list(result["col_uint"]) == [0, 9223372036854775807]
+
+    def test_numpy_uint64_out_of_bounds_raises(self):
+        df = pd.DataFrame(
+            {
+                "col_uint": np.array(
+                    [9223372036854775808],
+                    dtype=np.uint64,
+                )
+            }
+        )
+        with pytest.raises(
+            ValueError,
+            match="out of bounds for signed 64-bit integer",
+        ):
+            ar.from_pandas(df)

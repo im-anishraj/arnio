@@ -1,0 +1,51 @@
+name: Refactor task
+description: Propose a code refactor to improve maintainability, performance, or clarity.
+title: "Refactor: "
+labels: ["type: refactor", "status: needs triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Refactoring helps keep Arnio's codebase healthy. Please describe the area you want to improve.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Current situation
+      description: What is the current state of the code that needs refactoring?
+      placeholder: "The logic in src/cleaning.cpp for strip_whitespace is repeated..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: How do you propose to refactor the code?
+      placeholder: "Extract the common logic into a separate utility function..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: benefit
+    attributes:
+      label: Expected benefit
+      description: Why is this refactor important? (e.g., performance, readability, reduced duplication)
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: risk
+    attributes:
+      label: Risk assessment
+      options:
+        - label: This change is backwards-compatible.
+          required: true
+        - label: This change does not alter the public API.
+          required: true
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Any other information or related issues.
