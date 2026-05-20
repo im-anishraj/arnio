@@ -10,10 +10,22 @@ import sys
 
 # Map import name to (install package name, description)
 DEPENDENCIES = {
-    "numpy": ("numpy", "Required for basic array operations and benchmark data generation."),
-    "pandas": ("pandas", "Required for pandas DataFrame export and conversion examples."),
-    "duckdb": ("duckdb", "Required for high-performance database integration examples."),
-    "sklearn": ("scikit-learn", "Required for scikit-learn pipeline integration examples."),
+    "numpy": (
+        "numpy",
+        "Required for basic array operations and benchmark data generation.",
+    ),
+    "pandas": (
+        "pandas",
+        "Required for pandas DataFrame export and conversion examples.",
+    ),
+    "duckdb": (
+        "duckdb",
+        "Required for high-performance database integration examples.",
+    ),
+    "sklearn": (
+        "scikit-learn",
+        "Required for scikit-learn pipeline integration examples.",
+    ),
     "pytest": ("pytest", "Required for running the integration and unit test suites."),
 }
 
