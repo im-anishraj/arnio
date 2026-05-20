@@ -6,6 +6,7 @@ import pandas as pd
 import pytest
 
 import arnio as ar
+from arnio._core import _Column, _DType, _Frame
 
 
 # ── Normal behaviour ──────────────────────────────────────────────────────────
@@ -382,3 +383,12 @@ def test_add_column_allows_first_column_in_empty_frame():
     frame.add_column(c1)
 
     assert frame.shape() == (1, 1)
+
+
+def test_cpp_frame_explicit_zero_rows_rejects_nonempty_first_column():
+    frame = _Frame(0)
+    column = _Column("a", _DType.INT64)
+    column.push_back(1)
+
+    with pytest.raises(ValueError, match="row count"):
+        frame.add_column(column)
