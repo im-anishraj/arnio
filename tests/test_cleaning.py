@@ -1127,6 +1127,20 @@ class TestRoundNumericColumns:
                 decimals=1,
             )
 
+    def test_round_subset_with_non_numeric(self):
+        import pandas as pd
+
+        df = pd.DataFrame({"name": ["john"], "score": [98.765]})
+        frame = ar.from_pandas(df)
+        result = ar.round_numeric_columns(
+            frame,
+            subset=["name", "score"],
+            decimals=1,
+        )
+        result_df = ar.to_pandas(result)
+        assert list(result_df["name"]) == ["john"]
+        assert list(result_df["score"]) == [98.8]
+    
     def test_round_all_numeric(self):
         import pandas as pd
 
@@ -1206,18 +1220,6 @@ class TestRoundNumericColumns:
         frame = ar.from_pandas(df)
         with pytest.raises(TypeError, match="decimals must be an integer"):
             ar.round_numeric_columns(frame, decimals=True)
-
-    def test_round_subset_with_non_numeric(self):
-        import pandas as pd
-
-        df = pd.DataFrame({"name": ["john"], "score": [98.765]})
-        frame = ar.from_pandas(df)
-        result = ar.round_numeric_columns(frame, subset=["name", "score"], decimals=1)
-        result_df = ar.to_pandas(result)
-
-        assert list(result_df["name"]) == ["john"]
-        assert list(result_df["score"]) == [98.8]
-
 
 class TestCombineColumns:
     def test_combines_columns_with_separator(self):
