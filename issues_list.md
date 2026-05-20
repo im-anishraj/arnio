@@ -32,6 +32,12 @@ We have implemented robust, production-grade solutions for **3 high-value GSSoC 
 * **Pull Request**: [#895](https://github.com/im-anishraj/arnio/pull/895) (GHA checks building and passing!)
 * **Description**: Added support for appending data frames to existing CSV files with automated header suppression and newline safety checks.
 
+### 🌟 Issue #680: `Security: add opt-in CSV formula escaping to write_csv` (unassigned)
+* **Type**: `security`
+* **Status**: **RESOLVED & GREEN**
+* **Pull Request**: [#896](https://github.com/im-anishraj/arnio/pull/896) (GHA checks building and passing!)
+* **Description**: Implemented the opt-in `escape_formulas` parameter to prevent CSV injection vulnerabilities by escaping strings starting with `=, +, -, @, \t, \r` in spreadsheet applications.
+
 ---
 
 ## 2. Upstream GSSoC Issues Catalog (Open & Backlogged) 📋
