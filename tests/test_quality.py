@@ -75,6 +75,82 @@ def test_profile_non_numeric_no_quantiles():
     assert "q95" not in profile
 
 
+def test_profile_email_and_url_validity_ratios():
+    df = pd.DataFrame(
+        {
+            "good_email": [
+                "alice@test.com",
+                "bob@test.com",
+                "cara@test.com",
+                "dave@test.com",
+                "eve@test.com",
+            ],
+            "mixed_email": [
+                "alice@test.com",
+                "bob@test.com",
+                "cara@test.com",
+                "dave@test.com",
+                "invalid-email",
+            ],
+            "good_url": [
+                "http://test.com",
+                "https://example.com/foo",
+                "https://another.org",
+                "http://a.b",
+                "https://last.com",
+            ],
+            "mixed_url": [
+                "http://test.com",
+                "https://example.com/foo",
+                "https://another.org",
+                "http://a.b",
+                "not-a-url",
+            ],
+            "generic": ["hello", "world", "foo", "bar", "baz"],
+        }
+    )
+
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+
+    assert report.columns["good_email"].semantic_type == "email"
+    assert report.columns["mixed_email"].semantic_type == "email"
+    assert report.columns["good_url"].semantic_type == "url"
+    assert report.columns["mixed_url"].semantic_type == "url"
+    assert report.columns["generic"].semantic_type == "categorical"
+
+    assert report.columns["good_email"].email_validity_ratio == 1.0
+    assert report.columns["good_email"].url_validity_ratio is None
+
+    assert report.columns["mixed_email"].email_validity_ratio == 0.8
+    assert report.columns["mixed_email"].url_validity_ratio is None
+
+    assert report.columns["good_url"].url_validity_ratio == 1.0
+    assert report.columns["good_url"].email_validity_ratio is None
+
+    assert report.columns["mixed_url"].url_validity_ratio == 0.8
+    assert report.columns["mixed_url"].email_validity_ratio is None
+
+    assert report.columns["generic"].email_validity_ratio is None
+    assert report.columns["generic"].url_validity_ratio is None
+
+    good_email_dict = report.columns["good_email"].to_dict()
+    assert good_email_dict["email_validity_ratio"] == 1.0
+    assert good_email_dict["url_validity_ratio"] is None
+
+    mixed_url_dict = report.columns["mixed_url"].to_dict()
+    assert mixed_url_dict["url_validity_ratio"] == 0.8
+    assert mixed_url_dict["email_validity_ratio"] is None
+
+    pdf = report.to_pandas()
+    good_email_row = pdf[pdf["name"] == "good_email"].iloc[0]
+    assert good_email_row["email_validity_ratio"] == 1.0
+    assert (
+        pd.isna(good_email_row["url_validity_ratio"])
+        or good_email_row["url_validity_ratio"] is None
+    )
+
+
 def test_compare_profiles_identical_profiles_are_ok():
     frame = ar.from_pandas(
         pd.DataFrame({"score": [10.0, 11.0, 12.0], "city": ["a", "b", "a"]})
@@ -376,6 +452,32 @@ def test_auto_clean_rejects_unknown_mode(sample_csv):
         assert False, "Expected ValueError"
     except ValueError as exc:
         assert "mode must be" in str(exc)
+
+
+def test_auto_clean_strict_casts_ambiguous_numeric_strings():
+    df = pd.DataFrame(
+        {
+            "code": ["007", "008"],  # Not identifier-like, but has leading zeros
+            "user_id": ["001", "002"],  # Identifier-like, has leading zeros
+        }
+    )
+    frame = ar.from_pandas(df)
+
+    # Verify that without allow_lossy_casts, strict mode fails
+    with pytest.raises(ValueError, match="would apply type casts"):
+        ar.auto_clean(frame, mode="strict")
+
+    # Apply strict mode with allow_lossy_casts
+    clean = ar.auto_clean(frame, mode="strict", allow_lossy_casts=True)
+    result = ar.to_pandas(clean)
+
+    # "code" is cast to int64, losing leading zeros
+    assert list(result["code"]) == [7, 8]
+    assert pd.api.types.is_integer_dtype(result["code"])
+
+    # "user_id" is protected and retains leading zeros
+    assert list(result["user_id"]) == ["001", "002"]
+    assert pd.api.types.is_string_dtype(result["user_id"])
 
 
 def test_profile_sample_size(tmp_path):

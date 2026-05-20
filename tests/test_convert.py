@@ -259,6 +259,46 @@ class TestFromPandas:
         with pytest.raises(TypeError, match="Column 'created_at'"):
             ar.from_pandas(df)
 
+    def test_from_pandas_object_timestamp_raises_clear_error(self):
+        df = pd.DataFrame(
+            {
+                "created_at": pd.Series(
+                    [pd.Timestamp("2026-05-14 12:30:00")], dtype=object
+                )
+            }
+        )
+
+        with pytest.raises(TypeError, match="Column 'created_at'") as exc_info:
+            ar.from_pandas(df)
+
+        assert "Fix:" in str(exc_info.value)
+
+    def test_from_pandas_object_timedelta_raises_clear_error(self):
+        df = pd.DataFrame(
+            {"duration": pd.Series([pd.Timedelta("2 days")], dtype=object)}
+        )
+
+        with pytest.raises(TypeError, match="Column 'duration'") as exc_info:
+            ar.from_pandas(df)
+
+        assert "Fix:" in str(exc_info.value)
+
+    def test_from_pandas_object_complex_raises_clear_error(self):
+        df = pd.DataFrame({"signal": pd.Series([1 + 2j], dtype=object)})
+
+        with pytest.raises(TypeError, match="Column 'signal'") as exc_info:
+            ar.from_pandas(df)
+
+        assert "Fix:" in str(exc_info.value)
+
+    def test_from_pandas_object_numpy_complex_raises_clear_error(self):
+        df = pd.DataFrame({"signal": pd.Series([np.complex64(1 + 2j)], dtype=object)})
+
+        with pytest.raises(TypeError, match="Column 'signal'") as exc_info:
+            ar.from_pandas(df)
+
+        assert "Fix:" in str(exc_info.value)
+
     def test_from_pandas_preserves_column_order(self):
         df = pd.DataFrame(
             {

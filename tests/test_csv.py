@@ -1,5 +1,6 @@
 """Tests for CSV reading functionality."""
 
+import io
 from pathlib import Path
 
 import pandas as pd
@@ -576,8 +577,11 @@ class TestScanCsv:
             f.write(b"a,b\n" * 400)
             f.write(b"\0binary,data\n")
 
-        schema = ar.scan_csv(file_path)
-        assert schema == {"col1": "string", "col2": "string"}
+        with pytest.raises(
+            ar.CsvReadError,
+            match="CSV input contains NUL bytes and appears to be binary or corrupted",
+        ):
+            ar.scan_csv(file_path)
 
     def test_scan_late_binary_file_rejection_with_larger_sample(self, tmp_path):
         file_path = str(tmp_path / "data.csv")
@@ -586,6 +590,12 @@ class TestScanCsv:
             f.write(b"col1,col2\n")
             f.write(b"a,b\n" * 400)
             f.write(b"\0binary,data\n")
+
+        with pytest.raises(
+            ar.CsvReadError,
+            match="CSV input contains NUL bytes and appears to be binary or corrupted",
+        ):
+            ar.scan_csv(file_path)
 
         with pytest.raises(
             ar.CsvReadError,
@@ -636,6 +646,18 @@ class TestScanCsv:
 
         with _utf8_csv_path(str(csv_path), "latin-1", sample_rows=2) as native_path:
             assert Path(native_path).read_text(encoding="utf-8") == "name\nAndré\n"
+
+    def test_scan_sample_size_non_utf8_does_not_leak_later_type_evidence(
+        self, tmp_path
+    ):
+        csv_path = tmp_path / "latin1_sample_limit.csv"
+        csv_path.write_bytes("id,value\n1,100\n2,200\n3,ol\xe1\n".encode("latin-1"))
+
+        schema_limited = ar.scan_csv(csv_path, encoding="latin-1", sample_size=2)
+        schema_full = ar.scan_csv(csv_path, encoding="latin-1", sample_size=4)
+
+        assert schema_limited["value"] == "int64"
+        assert schema_full["value"] == "string"
 
     def test_scan_invalid_delimiter(self, tmp_path):
         csv_path = tmp_path / "test.csv"
@@ -719,6 +741,31 @@ def test_quoted_field_with_embedded_crlf(tmp_path):
     df = ar.to_pandas(ar.read_csv(str(csv_file)))
     assert len(df) == 1
     assert df["note"][0] == "line1\r\nline2"
+
+
+def test_crlf_line_endings_do_not_preserve_trailing_carriage_return(tmp_path):
+    csv_path = tmp_path / "normal_crlf.csv"
+
+    csv_path.write_bytes(b"id,name\r\n1,Alice\r\n2,Bob\r\n")
+
+    frame = ar.read_csv(csv_path)
+
+    df = ar.to_pandas(frame)
+
+    assert df["name"].iloc[0] == "Alice"
+    assert df["name"].iloc[1] == "Bob"
+
+
+def test_embedded_quoted_crlf_is_preserved(tmp_path):
+    csv_path = tmp_path / "embedded_crlf.csv"
+
+    csv_path.write_bytes(b'id,notes\r\n1,"hello\r\nworld"\r\n')
+
+    frame = ar.read_csv(csv_path)
+
+    df = ar.to_pandas(frame)
+
+    assert df["notes"].iloc[0] == "hello\r\nworld"
 
 
 def test_quoted_field_with_embedded_cr(tmp_path):
@@ -831,6 +878,20 @@ def test_scan_csv_non_utf8_multiline_boundary(tmp_path):
     assert schema == {"id": "int64", "text": "string"}
 
 
+def test_read_csv_non_utf8_quoted_multiline_round_trips(tmp_path):
+    """read_csv must preserve quoted multiline records through non-UTF-8 transcoding."""
+    csv_file = tmp_path / "test_multiline_latin1.csv"
+    csv_file.write_bytes(
+        'id,text\n1,"line1\ncaf\xe9\nline3"\n2,done\n'.encode("latin-1")
+    )
+
+    df = ar.to_pandas(ar.read_csv(str(csv_file), encoding="latin-1"))
+
+    assert list(df["id"]) == [1, 2]
+    assert df["text"].iloc[0] == "line1\ncafé\nline3"
+    assert df["text"].iloc[1] == "done"
+
+
 def test_scan_csv_type_evidence_after_limit(tmp_path):
     """Type evidence after sample window must not affect inference."""
     csv_file = tmp_path / "test_type_evidence.csv"
@@ -855,6 +916,37 @@ def test_strict_mode_rejects_missing_columns(tmp_path):
         ar.read_csv(csv_path, mode="strict")
 
 
+def test_read_csv_supports_stringio():
+    buffer = io.StringIO("id,name\n1,Alice\n2,Bob\n")
+
+    frame = ar.read_csv(buffer)
+
+    df = ar.to_pandas(frame)
+
+    assert list(df["name"]) == ["Alice", "Bob"]
+
+
+def test_read_csv_rejects_binary_buffer():
+    buffer = io.BytesIO(b"id,name\n1,Alice\n")
+
+    with pytest.raises(
+        TypeError,
+        match="must return text",
+    ):
+        ar.read_csv(buffer)
+
+
+def test_read_csv_path_behavior_unchanged(tmp_path):
+    csv_path = tmp_path / "data.csv"
+    csv_path.write_text("id,name\n1,Alice\n")
+
+    frame = ar.read_csv(csv_path)
+
+    df = ar.to_pandas(frame)
+
+    assert list(df["name"]) == ["Alice"]
+
+
 def test_permissive_mode_allows_missing_columns(tmp_path):
     csv_path = tmp_path / "permissive_missing.csv"
     csv_path.write_text("id,name\n1,Alice\n2\n")
@@ -866,31 +958,6 @@ def test_permissive_mode_allows_missing_columns(tmp_path):
     assert df["id"].iloc[0] == 1
     assert df["name"].iloc[0] == "Alice"
     assert pd.isna(df["name"].iloc[1])
-
-
-def test_crlf_line_endings_do_not_preserve_trailing_carriage_return(tmp_path):
-    csv_path = tmp_path / "normal_crlf.csv"
-
-    csv_path.write_bytes(b"id,name\r\n1,Alice\r\n2,Bob\r\n")
-
-    frame = ar.read_csv(csv_path)
-
-    df = ar.to_pandas(frame)
-
-    assert df["name"].iloc[0] == "Alice"
-    assert df["name"].iloc[1] == "Bob"
-
-
-def test_embedded_quoted_crlf_is_preserved(tmp_path):
-    csv_path = tmp_path / "embedded_crlf.csv"
-
-    csv_path.write_bytes(b'id,notes\r\n1,"hello\r\nworld"\r\n')
-
-    frame = ar.read_csv(csv_path)
-
-    df = ar.to_pandas(frame)
-
-    assert df["notes"].iloc[0] == "hello\r\nworld"
 
 
 def test_invalid_parser_mode(tmp_path):
@@ -913,3 +980,250 @@ def test_default_mode_preserves_strict_behavior(tmp_path):
         match="expected 2",
     ):
         ar.read_csv(csv_path)
+
+
+# --- Issue #119: Preserve leading-zero identifier columns ---
+
+
+class TestLeadingZeroIdentifiers:
+    """Test type inference for identifier-like values with leading zeros.
+
+    These tests ensure that columns with leading-zero identifiers (ZIP codes,
+    account IDs, product codes) are preserved as strings, not converted to
+    integers that lose the leading zeros.
+    """
+
+    def test_zip_code_leading_zeros_preserved(self, tmp_path):
+        """ZIP codes with leading zeros should remain strings."""
+        csv_path = tmp_path / "zips.csv"
+        csv_path.write_text("zip_code\n00123\n00045\n12345\n")
+        frame = ar.read_csv(str(csv_path))
+        df = ar.to_pandas(frame)
+
+        # All values should be strings to preserve leading zeros
+        assert frame.dtypes["zip_code"] == "string"
+        assert df["zip_code"].iloc[0] == "00123"
+        assert df["zip_code"].iloc[1] == "00045"
+        assert df["zip_code"].iloc[2] == "12345"
+
+    def test_account_id_with_leading_zeros(self, tmp_path):
+        """Account IDs with leading zeros should remain strings."""
+        csv_path = tmp_path / "accounts.csv"
+        csv_path.write_text("account_id\n00001\n00002\n00010\n")
+        frame = ar.read_csv(str(csv_path))
+        df = ar.to_pandas(frame)
+
+        assert frame.dtypes["account_id"] == "string"
+        assert df["account_id"].iloc[0] == "00001"
+        assert df["account_id"].iloc[1] == "00002"
+        assert df["account_id"].iloc[2] == "00010"
+
+    def test_product_code_leading_zeros(self, tmp_path):
+        """Product codes starting with zero should remain strings."""
+        csv_path = tmp_path / "products.csv"
+        csv_path.write_text("product_code\n012345\n012346\n112347\n")
+        frame = ar.read_csv(str(csv_path))
+        df = ar.to_pandas(frame)
+
+        assert frame.dtypes["product_code"] == "string"
+        assert df["product_code"].iloc[0] == "012345"
+        assert df["product_code"].iloc[1] == "012346"
+        assert df["product_code"].iloc[2] == "112347"
+
+    def test_mixed_leading_zeros_in_identifier_column(self, tmp_path):
+        """Column with mix of leading-zero and non-leading values should be string."""
+        csv_path = tmp_path / "mixed_ids.csv"
+        csv_path.write_text("id\n00001\n00999\n12345\n")
+        frame = ar.read_csv(str(csv_path))
+        df = ar.to_pandas(frame)
+
+        # Once we see a leading-zero value, the column should infer as string
+        assert frame.dtypes["id"] == "string"
+        assert df["id"].iloc[0] == "00001"
+        assert df["id"].iloc[2] == "12345"
+
+    def test_single_zero_still_numeric(self, tmp_path):
+        """Single '0' should still infer as numeric (not identifier-like)."""
+        csv_path = tmp_path / "zeros.csv"
+        csv_path.write_text("value\n0\n1\n2\n")
+        frame = ar.read_csv(str(csv_path))
+
+        assert frame.dtypes["value"] == "int64"
+
+    def test_multiple_zeros_like_postal_code(self, tmp_path):
+        """Multiple leading zeros (00, 000, etc.) should infer as string."""
+        csv_path = tmp_path / "postal.csv"
+        csv_path.write_text("code\n00\n000\n0001\n")
+        frame = ar.read_csv(str(csv_path))
+        df = ar.to_pandas(frame)
+
+        # Multiple leading zeros in context with more digits = identifier-like
+        assert frame.dtypes["code"] == "string"
+        assert df["code"].iloc[0] == "00"
+        assert df["code"].iloc[1] == "000"
+
+    def test_leading_zeros_quoted_values(self, tmp_path):
+        """Quoted leading-zero values should be preserved as strings."""
+        csv_path = tmp_path / "quoted.csv"
+        csv_path.write_text('id\n"00123"\n"00456"\n')
+        frame = ar.read_csv(str(csv_path))
+        df = ar.to_pandas(frame)
+
+        assert frame.dtypes["id"] == "string"
+        assert df["id"].iloc[0] == "00123"
+        assert df["id"].iloc[1] == "00456"
+
+    def test_genuine_numeric_column_still_works(self, tmp_path):
+        """Purely numeric columns without leading zeros should remain int64."""
+        csv_path = tmp_path / "pure_numeric.csv"
+        csv_path.write_text("value\n123\n456\n789\n")
+        frame = ar.read_csv(str(csv_path))
+
+        assert frame.dtypes["value"] == "int64"
+
+    def test_float_column_unaffected(self, tmp_path):
+        """Float columns should infer correctly regardless of zeros."""
+        csv_path = tmp_path / "floats.csv"
+        csv_path.write_text("value\n1.5\n2.7\n3.14\n")
+        frame = ar.read_csv(str(csv_path))
+
+        assert frame.dtypes["value"] == "float64"
+
+    def test_multiple_columns_with_leading_zeros(self, tmp_path):
+        """Multiple ID columns with leading zeros should all be strings."""
+        csv_path = tmp_path / "multi_ids.csv"
+        csv_path.write_text(
+            "zip,account,product\n00123,00001,012345\n00456,00002,012346\n"
+        )
+        frame = ar.read_csv(str(csv_path))
+
+        assert frame.dtypes["zip"] == "string"
+        assert frame.dtypes["account"] == "string"
+        assert frame.dtypes["product"] == "string"
+
+    def test_leading_zeros_with_nulls(self, tmp_path):
+        """Leading-zero identifiers mixed with empty cells should infer correctly."""
+        csv_path = tmp_path / "ids_nulls.csv"
+        # Use a second column to ensure the empty field is preserved as a row
+        csv_path.write_text("id,value\n00123,abc\n,def\n00456,ghi\n")
+        frame = ar.read_csv(str(csv_path))
+        df = ar.to_pandas(frame)
+
+        assert frame.dtypes["id"] == "string"
+        assert df["id"].iloc[0] == "00123"
+        assert pd.isna(df["id"].iloc[1])
+        assert df["id"].iloc[2] == "00456"
+
+    def test_scan_csv_leading_zeros(self, tmp_path):
+        """scan_csv should also preserve leading-zero identifier inference."""
+        csv_path = tmp_path / "scan_ids.csv"
+        csv_path.write_text("zip\n00123\n00456\n")
+        schema = ar.scan_csv(str(csv_path))
+
+        assert schema["zip"] == "string"
+
+    def test_leading_zeros_with_thousands_separator(self, tmp_path):
+        """Leading zeros should not interfere with thousands separator handling."""
+        csv_path = tmp_path / "leading_thousands.csv"
+        csv_path.write_text('value\n"1,000"\n"2,000"\n')
+        frame = ar.read_csv(str(csv_path), thousands_separator=",")
+        df = ar.to_pandas(frame)
+
+        # No leading zeros here, should still infer as int64
+        assert frame.dtypes["value"] == "int64"
+        assert df["value"].iloc[0] == 1000
+
+    def test_leading_zeros_uppercase_letters(self, tmp_path):
+        """Leading zeros with letters should remain string (already handled)."""
+        csv_path = tmp_path / "alphanumeric.csv"
+        csv_path.write_text("code\n00A1B\n00C2D\n")
+        frame = ar.read_csv(str(csv_path))
+        df = ar.to_pandas(frame)
+
+        assert frame.dtypes["code"] == "string"
+        assert df["code"].iloc[0] == "00A1B"
+
+
+class TestSniffDelimiter:
+    def test_sniff_comma(self, tmp_path):
+        csv_path = tmp_path / "comma.csv"
+        csv_path.write_text("id,name,age\n1,Alice,30\n2,Bob,25\n")
+        assert ar.sniff_delimiter(csv_path) == ","
+
+    def test_sniff_semicolon(self, tmp_path):
+        csv_path = tmp_path / "semicolon.csv"
+        csv_path.write_text("id;name;age\n1;Alice;30\n2;Bob;25\n")
+        assert ar.sniff_delimiter(csv_path) == ";"
+
+    def test_sniff_tab(self, tmp_path):
+        csv_path = tmp_path / "tab.tsv"
+        csv_path.write_text("id\tname\tage\n1\tAlice\t30\n2\tBob\t25\n")
+        assert ar.sniff_delimiter(csv_path) == "\t"
+
+    def test_sniff_pipe(self, tmp_path):
+        csv_path = tmp_path / "pipe.txt"
+        csv_path.write_text("id|name|age\n1|Alice|30\n2|Bob|25\n")
+        assert ar.sniff_delimiter(csv_path) == "|"
+
+    def test_sniff_quoted_delimiters(self, tmp_path):
+        csv_path = tmp_path / "quoted.csv"
+        csv_path.write_text(
+            'id;name;notes\n1;Alice;"likes commas, tabs\tand pipes|"\n2;Bob;"no special characters"\n'
+        )
+        # Semicolon is the true delimiter, commas/tabs/pipes are only inside quotes
+        assert ar.sniff_delimiter(csv_path) == ";"
+
+    def test_sniff_empty_file_raises(self, tmp_path):
+        csv_path = tmp_path / "empty.csv"
+        csv_path.write_text("")
+        with pytest.raises(ar.CsvReadError, match="CSV file is empty"):
+            ar.sniff_delimiter(csv_path)
+
+    def test_sniff_ambiguous_no_delimiter_raises(self, tmp_path):
+        csv_path = tmp_path / "single_column.csv"
+        csv_path.write_text("only_column_name\nval1\nval2\n")
+        with pytest.raises(ValueError, match="Could not determine CSV delimiter"):
+            ar.sniff_delimiter(csv_path)
+
+    def test_sniff_binary_file_raises(self, tmp_path):
+        csv_path = tmp_path / "binary.csv"
+        with open(csv_path, "wb") as f:
+            f.write(b"col1,col2\n\0binary\0,data\n")
+        with pytest.raises(
+            ar.CsvReadError,
+            match="CSV input contains NUL bytes and appears to be binary or corrupted",
+        ):
+            ar.sniff_delimiter(csv_path)
+
+    def test_sniff_invalid_types(self, tmp_path):
+        csv_path = tmp_path / "dummy.csv"
+        csv_path.write_text("a,b\n1,2\n")
+
+        with pytest.raises(TypeError, match="encoding must be a string"):
+            ar.sniff_delimiter(csv_path, encoding=123)
+
+        with pytest.raises(TypeError, match="sample_size must be an integer"):
+            ar.sniff_delimiter(csv_path, sample_size=True)
+
+        with pytest.raises(TypeError, match="sample_size must be an integer"):
+            ar.sniff_delimiter(csv_path, sample_size="100")
+
+        with pytest.raises(ValueError, match="sample_size must be a positive integer"):
+            ar.sniff_delimiter(csv_path, sample_size=0)
+
+        with pytest.raises(ValueError, match="sample_size must be a positive integer"):
+            ar.sniff_delimiter(csv_path, sample_size=-5)
+
+    def test_sniff_missing_file_raises(self, tmp_path):
+        with pytest.raises(FileNotFoundError):
+            ar.sniff_delimiter(tmp_path / "nonexistent.csv")
+
+    def test_sniff_tie_ambiguity_raises(self, tmp_path):
+        csv_path = tmp_path / "tie.csv"
+        # Each line has exactly one comma and one semicolon, producing identical frequencies and consistency scores
+        csv_path.write_text("a,b;c\n1,2;3\n4,5;6\n")
+        with pytest.raises(
+            ValueError,
+            match="Could not determine CSV delimiter from sample: multiple candidate delimiters",
+        ):
+            ar.sniff_delimiter(csv_path)

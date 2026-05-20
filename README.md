@@ -76,11 +76,29 @@ clean = ar.pipeline(frame, [
     ("drop_duplicates",),
 ])
 
+
+
 # Out comes a standard pandas DataFrame — use it like you always have
 df = ar.to_pandas(clean)
 
 # Use copy=True when you need defensive pandas-owned buffers
 safe_df = ar.to_pandas(clean, copy=True)
+```
+
+
+### Dry Run Validation
+
+Use `dry_run=True` to validate pipeline configuration and
+step execution without returning transformed output.
+
+```python
+ar.pipeline(
+    frame,
+    [
+        ("drop_nulls",),
+    ],
+    dry_run=True,
+)
 ```
 
 Need step timings for debugging? Opt in without changing the default pipeline return type:
@@ -94,6 +112,18 @@ clean, metadata = ar.pipeline(
 
 print(metadata["step_timings"])
 ```
+
+## Quick Example
+
+```python
+import arnio
+
+frame = arnio.read_csv("sample.csv")
+
+# Preview first 5 rows
+frame.preview(5)
+```
+
 ### Pipeline validation behavior
 
 Pipeline step specifications are validated before execution begins.
@@ -158,6 +188,9 @@ schema = ar.Schema(
 result = schema.validate(ar.read_csv("events.csv"))
 print(result.passed)
 ```
+> **Row index convention:** `ValidationIssue.row_index` values are **1-based** and
+> count data rows only. The header row is excluded. `row_index=1` is the first data
+> row in the file.
 
 ## Schema diff reports
 
@@ -181,6 +214,13 @@ diff = ar.diff_schema(expected, observed)
 print(diff.summary())
 print(diff.to_markdown())
 ```
+
+## CI data contracts (GitHub Actions)
+
+If you want to **block schema drift** or **invalid rows** in pull requests, see
+`DATA_CONTRACT_CI.md` for an **inert copy-paste** GitHub Actions workflow example.
+
+Example contract files are included under `examples/contracts/`.
 
 ### Select specific columns
 
@@ -338,6 +378,31 @@ clean = ar.pipeline(frame, [
 ```
 
 Custom steps run through a pandas↔ArFrame conversion bridge. Prototype in Python, then optionally migrate hot paths to C++ for full speed.
+</details>
+
+<details>
+<summary><b>🔄 Custom Step Overwrite Policy</b></summary>
+<br>
+
+By default, trying to register a custom step with a name that is already taken by another custom Python step will raise a `ValueError` to prevent silent overwriting.
+
+To intentionally replace an existing custom **Python** step, pass `overwrite=True`:
+
+```python
+def custom_logging(df):
+    print("Running step v1")
+    return df
+
+ar.register_step("log_data", custom_logging)
+
+# This will succeed and safely overwrite the original logic
+def custom_logging_v2(df):
+    print("Running step v2")
+    return df
+
+ar.register_step("log_data", custom_logging_v2, overwrite=True)
+```
+> Note: Built-in C++ pipeline steps (like "drop_nulls") can never be overwritten, even if overwrite=True is explicitly supplied.
 </details>
 
 <details>
@@ -1306,6 +1371,10 @@ Discord is for fast conversation and support. GitHub remains the source of truth
 
 <br>
 
+## 📚 Documentation
+
+- [Troubleshooting Guide](docs/TROUBLESHOOTING.md)
+
 ## 🤝 Contribute
 
 Arnio is a **[GSSoC 2026](https://gssoc.girlscript.tech/)** project with a structured contributor backlog across beginner, intermediate, and advanced tracks.
@@ -1460,3 +1529,4 @@ arnio/
 <sub>Built with C++ and pybind11 · Licensed under MIT · Maintained by <a href="https://github.com/im-anishraj">@im-anishraj</a></sub>
 
 </div>
+

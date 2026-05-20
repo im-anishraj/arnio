@@ -44,5 +44,14 @@ Frame cast_types(const Frame& frame, const std::unordered_map<std::string, std::
 // unchanged.  Null values are preserved as-is.
 Frame clip_numeric(const Frame& frame, std::optional<double> lower, std::optional<double> upper,
                    const std::optional<std::vector<std::string>>& subset = std::nullopt);
+// Combine multiple columns into a single string column
+Frame combine_columns(const Frame& frame, const std::vector<std::string>& subset,
+                      const std::string& separator, const std::string& output_column);
 
+// Safely divide one numeric column by another.
+// Denominator nulls/zero values produce fill_value.
+// Output is stored as FLOAT64.
+Frame safe_divide_columns(const Frame& frame, const std::string& numerator,
+                          const std::string& denominator, const std::string& output_column,
+                          double fill_value);
 }  // namespace arnio

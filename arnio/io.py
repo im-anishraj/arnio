@@ -6,6 +6,7 @@ CSV reading and writing functions.
 from __future__ import annotations
 
 import csv
+import io
 import os
 import shutil
 import tempfile
@@ -13,7 +14,7 @@ from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from typing import cast
 
-from ._core import _CsvConfig, _CsvReader, _CsvWriteConfig, _CsvWriter
+from ._core import _CsvChunkReader, _CsvConfig, _CsvReader, _CsvWriteConfig, _CsvWriter
 from .exceptions import CsvReadError, JsonlReadError
 from .frame import ArFrame
 
@@ -136,6 +137,28 @@ def _validate_nrows(nrows: int) -> int:
     return nrows
 
 
+def _validate_skip_rows(skip_rows: int) -> int:
+    """Validate skip_rows parameter."""
+    if isinstance(skip_rows, bool) or not isinstance(skip_rows, int):
+        raise TypeError("skip_rows must be an integer")
+
+    if skip_rows < 0:
+        raise ValueError("skip_rows must be non-negative")
+
+    return skip_rows
+
+
+def _validate_chunksize(chunksize: int) -> int:
+    """Validate chunksize parameter."""
+    if isinstance(chunksize, bool) or not isinstance(chunksize, int):
+        raise TypeError("chunksize must be an integer")
+
+    if chunksize <= 0:
+        raise ValueError("chunksize must be a positive integer")
+
+    return chunksize
+
+
 def _validate_null_values(null_values: list[str]) -> list[str]:
     """Validate null_values parameter."""
     if isinstance(null_values, str):
@@ -155,11 +178,54 @@ def _validate_parser_mode(mode: str) -> str:
     """Validate CSV parser mode."""
     if not isinstance(mode, str):
         raise TypeError("mode must be a string")
-
     if mode not in {"strict", "permissive"}:
         raise ValueError("mode must be either 'strict' or 'permissive'")
-
     return mode
+
+
+def _materialize_csv_input(
+    source: str | os.PathLike[str] | io.TextIOBase,
+) -> tuple[str, bool]:
+    """Convert supported CSV inputs into a filesystem path."""
+    if isinstance(source, (str, os.PathLike)):
+        return os.fspath(source), False
+    if isinstance(source, io.StringIO) or (
+        hasattr(source, "read") and callable(source.read)
+    ):
+        content = source.read()
+
+        if not isinstance(content, str):
+            raise TypeError("read_csv file-like objects must return text, not bytes")
+
+        tmp = tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            suffix=".csv",
+            delete=False,
+        )
+
+        try:
+            tmp.write(content)
+            tmp.close()
+            return tmp.name, True
+        except Exception:
+            os.unlink(tmp.name)
+            raise
+
+    raise TypeError("read_csv expected a filesystem path or text file-like object")
+
+
+def _reject_utf8_nul_bytes(path: str) -> None:
+    """Reject UTF-8 CSV inputs that contain NUL bytes anywhere in the file."""
+    try:
+        with open(path, "rb") as f:
+            while chunk := f.read(8192):
+                if b"\0" in chunk:
+                    raise CsvReadError(
+                        "CSV input contains NUL bytes and appears to be binary or corrupted"
+                    )
+    except FileNotFoundError:
+        pass  # Let C++ backend handle or raise standard error
 
 
 def read_csv(
@@ -179,8 +245,9 @@ def read_csv(
 
     Parameters
     ----------
-    path : str
-        Path to the CSV file. Supports .csv, .txt, and .tsv extensions.
+    path : str or file-like object
+        Filesystem path or text file-like object containing CSV data.
+        Supports .csv, .txt, and .tsv extensions for path inputs.
     delimiter : str, default ","
         Field delimiter character.
     has_header : bool, default True
@@ -228,7 +295,7 @@ def read_csv(
     --------
     >>> frame = ar.read_csv("data.csv", delimiter=",", has_header=True)
     """
-    path = os.fspath(path)
+    path, should_cleanup = _materialize_csv_input(path)
     path_lower = path.lower()
     if not (
         path_lower.endswith(".csv")
@@ -239,6 +306,8 @@ def read_csv(
             f"Unsupported file format: {path}. Only .csv, .txt, and .tsv are supported."
         )
 
+    if _is_utf8_encoding(encoding):
+        _reject_utf8_nul_bytes(path)
     try:
         if os.path.getsize(path) == 0:
             raise CsvReadError(f"CSV file is empty: {path!r}")
@@ -266,9 +335,13 @@ def read_csv(
         config.nrows = _validate_nrows(nrows)
 
     reader = _CsvReader(config)
+
     try:
         with _utf8_csv_path(path, encoding, delimiter=delimiter) as native_path:
             cpp_frame = reader.read(native_path)
+
+        return ArFrame(cpp_frame)
+
     except ValueError:
         raise
     except CsvReadError:
@@ -276,7 +349,129 @@ def read_csv(
     except RuntimeError as e:
         raise CsvReadError(str(e)) from e
 
-    return ArFrame(cpp_frame)
+    finally:
+        if should_cleanup and os.path.exists(path):
+            os.unlink(path)
+
+
+def read_csv_chunked(
+    path: str | os.PathLike[str],
+    *,
+    chunksize: int = 10_000,
+    delimiter: str = ",",
+    has_header: bool = True,
+    usecols: list[str] | None = None,
+    nrows: int | None = None,
+    skip_rows: int = 0,
+    encoding: str = "utf-8",
+    trim_headers: bool = True,
+    thousands_separator: str | None = None,
+    null_values: list[str] | None = None,
+    mode: str = "strict",
+) -> Iterator[ArFrame]:
+    """Read a CSV file in chunks, yielding ArFrame objects.
+
+    Column types are inferred from the first chunk and applied consistently
+    to all subsequent chunks. Memory use is bounded by the chunk size.
+
+    Parameters
+    ----------
+    path : str
+        Path to the CSV file. Supports .csv, .txt, and .tsv extensions.
+    chunksize : int, default 10_000
+        Maximum number of data rows per yielded chunk.
+    delimiter : str, default ","
+        Field delimiter character.
+    has_header : bool, default True
+        Whether the file has a header row.
+    usecols : list[str], optional
+        Columns to read. If None, reads all columns.
+    nrows : int, optional
+        Maximum total number of data rows to read across all chunks.
+    skip_rows : int, default 0
+        Number of data rows to skip after the header row.
+    encoding : str, default "utf-8"
+        File encoding.
+    trim_headers : bool, default True
+        Strip leading/trailing whitespace from column names.
+    thousands_separator : str, optional
+        Single non-alphanumeric character used as a thousands separator
+        during numeric parsing.
+    null_values : list[str], optional
+        Strings treated as null values.
+    mode : {"strict", "permissive"}, default "strict"
+        Controls malformed row handling.
+
+    Yields
+    ------
+    ArFrame
+        Successive chunks of the CSV data.
+
+    Examples
+    --------
+    >>> for chunk in ar.read_csv_chunked("huge.csv", chunksize=100_000):
+    ...     clean = ar.pipeline(chunk, [("drop_nulls",)])
+    ...     df = ar.to_pandas(clean)
+    ...     process(df)
+    """
+    path = os.fspath(path)
+    path_lower = path.lower()
+    if not (
+        path_lower.endswith(".csv")
+        or path_lower.endswith(".txt")
+        or path_lower.endswith(".tsv")
+    ):
+        raise ValueError(
+            f"Unsupported file format: {path}. Only .csv, .txt, and .tsv are supported."
+        )
+
+    try:
+        if os.path.getsize(path) == 0:
+            raise CsvReadError(f"CSV file is empty: {path!r}")
+    except FileNotFoundError:
+        pass
+
+    _validate_thousands_separator(thousands_separator)
+    delimiter = _validate_delimiter(delimiter)
+    mode = _validate_parser_mode(mode)
+    chunksize = _validate_chunksize(chunksize)
+    skip_rows = _validate_skip_rows(skip_rows)
+
+    config = _CsvConfig()
+    config.delimiter = delimiter
+    config.has_header = has_header
+    config.encoding = encoding
+    config.trim_headers = trim_headers
+    config.thousands_separator = thousands_separator
+    config.mode = mode
+    config.skip_rows = skip_rows
+
+    if null_values is not None:
+        config.null_values = _validate_null_values(null_values)
+
+    if usecols is not None:
+        config.usecols = _validate_usecols(usecols)
+
+    if nrows is not None:
+        config.nrows = _validate_nrows(nrows)
+
+    reader = _CsvChunkReader(config)
+    try:
+        with _utf8_csv_path(path, encoding, delimiter=delimiter) as native_path:
+            reader.open(native_path)
+            while True:
+                cpp_frame = reader.next_chunk(chunksize)
+                if cpp_frame is None:
+                    break
+                yield ArFrame(cpp_frame)
+    except ValueError:
+        raise
+    except CsvReadError:
+        raise
+    except RuntimeError as e:
+        raise CsvReadError(str(e)) from e
+    finally:
+        reader.close()
 
 
 def write_csv(
@@ -417,6 +612,8 @@ def scan_csv(
             f"Unsupported file format: {path}. Only .csv, .txt, and .tsv are supported."
         )
 
+    if _is_utf8_encoding(encoding):
+        _reject_utf8_nul_bytes(path)
     try:
         if os.path.getsize(path) == 0:
             raise CsvReadError(f"CSV file is empty: {path!r}")
@@ -563,3 +760,143 @@ def read_jsonl(
 
     df = pd.DataFrame(records)
     return from_pandas(df)
+
+
+def sniff_delimiter(
+    path: str | os.PathLike[str],
+    *,
+    encoding: str = "utf-8",
+    sample_size: int = 2048,
+) -> str:
+    """Sniff and return the field delimiter character from a CSV file.
+
+    Parameters
+    ----------
+    path : str or os.PathLike[str]
+        Path to the CSV file.
+    encoding : str, default "utf-8"
+        File encoding.
+    sample_size : int, default 2048
+        Number of bytes to sample from the start of the file for sniffing.
+
+    Returns
+    -------
+    str
+        The detected delimiter (one of ",", ";", "\\t", "|").
+
+    Raises
+    ------
+    CsvReadError
+        If the file is empty or contains binary data.
+    ValueError
+        If the sample size is invalid or the delimiter is ambiguous.
+    """
+    path = os.fspath(path)
+
+    # 1. Parameter Validation
+    if not isinstance(encoding, str):
+        raise TypeError("encoding must be a string")
+    if isinstance(sample_size, bool) or not isinstance(sample_size, int):
+        raise TypeError("sample_size must be an integer")
+    if sample_size <= 0:
+        raise ValueError("sample_size must be a positive integer greater than 0")
+
+    # 2. Check File Exists and Check for Binary Content
+    try:
+        if os.path.getsize(path) == 0:
+            raise CsvReadError(f"CSV file is empty: {path!r}")
+    except FileNotFoundError as e:
+        raise FileNotFoundError(f"File not found: {path!r}") from e
+
+    try:
+        with open(path, "rb") as f:
+            if b"\0" in f.read(1024):
+                raise CsvReadError(
+                    "CSV input contains NUL bytes and appears to be binary or corrupted"
+                )
+    except FileNotFoundError:
+        pass
+
+    # 3. Read Sample
+    try:
+        with open(path, encoding=encoding, errors="replace") as f:
+            sample = f.read(sample_size)
+    except LookupError as e:
+        raise ValueError(f"Unknown encoding: {encoding}") from e
+
+    if not sample:
+        raise CsvReadError(f"CSV file is empty: {path!r}")
+
+    # 4. Analyze Sample with Quote-Aware Character Scanner
+    candidates = [",", ";", "\t", "|"]
+    counts = {c: [0] for c in candidates}
+
+    in_quotes = False
+    quote_char = None
+
+    i = 0
+    n = len(sample)
+    while i < n:
+        char = sample[i]
+        if in_quotes:
+            if char == quote_char:
+                # Check for escaped quote (e.g. standard CSV double-quote "")
+                if i + 1 < n and sample[i + 1] == quote_char:
+                    i += 1  # Skip the escaped quote
+                else:
+                    in_quotes = False
+                    quote_char = None
+        else:
+            if char in ('"', "'"):
+                in_quotes = True
+                quote_char = char
+            elif char in ("\n", "\r"):
+                # Line boundary outside quotes
+                if char == "\r" and i + 1 < n and sample[i + 1] == "\n":
+                    i += 1
+                for c in candidates:
+                    counts[c].append(0)
+            elif char in counts:
+                counts[char][-1] += 1
+        i += 1
+
+    # Remove the last line if it is empty (e.g., trailing newline)
+    for c in candidates:
+        if len(counts[c]) > 1 and counts[c][-1] == 0:
+            counts[c].pop()
+
+    # 5. Score Candidates and Detect Ties/Ambiguity
+    best_candidates = []
+    best_score = -1.0
+
+    from collections import Counter
+
+    for delimiter in candidates:
+        line_counts = counts[delimiter]
+        non_zero_counts = [c for c in line_counts if c > 0]
+        if not non_zero_counts:
+            continue
+
+        counter = Counter(non_zero_counts)
+        mode, mode_freq = counter.most_common(1)[0]
+
+        consistency = mode_freq / len(line_counts)
+        score = consistency * 10.0 + (mode * 0.1)
+
+        if score > best_score:
+            best_score = score
+            best_candidates = [delimiter]
+        elif abs(score - best_score) < 1e-9:
+            best_candidates.append(delimiter)
+
+    if not best_candidates or best_score <= 0.0:
+        raise ValueError(
+            f"Could not determine CSV delimiter from sample: no candidate delimiters found in {path!r}"
+        )
+
+    if len(best_candidates) > 1:
+        raise ValueError(
+            f"Could not determine CSV delimiter from sample: multiple candidate delimiters {best_candidates} have the same score"
+        )
+
+    return best_candidates[0]

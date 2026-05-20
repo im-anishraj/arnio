@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <cstdio>
 #include <functional>
 #include <limits>
 #include <sstream>
@@ -64,6 +65,34 @@ static std::string cell_to_string(const CellValue& cell) {
     return "";
 }
 
+static std::string combine_cell_to_string(const CellValue& cell) {
+    if (std::holds_alternative<std::string>(cell)) {
+        return std::get<std::string>(cell);
+    }
+    if (std::holds_alternative<int64_t>(cell)) {
+        return std::to_string(std::get<int64_t>(cell));
+    }
+    if (std::holds_alternative<double>(cell)) {
+        double v = std::get<double>(cell);
+        // Use %.17g for shortest portable representation matching Python str(float):
+        // %g strips trailing zeros; 17 significant digits ensures round-trip accuracy.
+        char buf[32];
+        std::snprintf(buf, sizeof(buf), "%.17g", v);
+        std::string s(buf);
+        // If there is no decimal point and no exponent, Python would show "X.0".
+        if (s.find('.') == std::string::npos && s.find('e') == std::string::npos &&
+            s.find('E') == std::string::npos && s.find('n') == std::string::npos &&
+            s.find('i') == std::string::npos) {
+            s += ".0";
+        }
+        return s;
+    }
+    if (std::holds_alternative<bool>(cell)) {
+        return std::get<bool>(cell) ? "True" : "False";
+    }
+    return "";
+}
+
 static CellValue coerce_value(const CellValue& value, DType target) {
     if (std::holds_alternative<std::monostate>(value)) {
         return std::monostate{};
@@ -79,7 +108,13 @@ static CellValue coerce_value(const CellValue& value, DType target) {
             return std::get<bool>(value) ? int64_t{1} : int64_t{0};
         }
         if (std::holds_alternative<double>(value)) {
-            return static_cast<int64_t>(std::get<double>(value));
+            double d = std::get<double>(value);
+            if (std::isnan(d) || std::isinf(d) || d != std::floor(d)) {
+                throw std::invalid_argument(
+                    "Lossy or non-finite numeric fill values are not permitted for integer "
+                    "columns.");
+            }
+            return static_cast<int64_t>(d);
         }
         if (std::holds_alternative<std::string>(value)) {
             const auto& s = std::get<std::string>(value);
@@ -93,7 +128,14 @@ static CellValue coerce_value(const CellValue& value, DType target) {
     }
 
     if (target == DType::FLOAT64) {
-        if (std::holds_alternative<double>(value)) return std::get<double>(value);
+        if (std::holds_alternative<double>(value)) {
+            double d = std::get<double>(value);
+            if (std::isnan(d) || std::isinf(d)) {
+                throw std::invalid_argument(
+                    "Non-finite numeric fill values are not permitted for float columns.");
+            }
+            return d;
+        }
         if (std::holds_alternative<int64_t>(value)) {
             return static_cast<double>(std::get<int64_t>(value));
         }
@@ -103,6 +145,10 @@ static CellValue coerce_value(const CellValue& value, DType target) {
             try {
                 size_t pos = 0;
                 double parsed = std::stod(s, &pos);
+                if (std::isnan(parsed) || std::isinf(parsed)) {
+                    throw std::invalid_argument(
+                        "Non-finite numeric fill values are not permitted for float columns.");
+                }
                 if (pos == s.size()) return parsed;
             } catch (...) {
             }
@@ -123,7 +169,6 @@ static CellValue coerce_value(const CellValue& value, DType target) {
 
     throw std::invalid_argument("Fill value is incompatible with target column type");
 }
-
 static std::invalid_argument cast_error(const std::string& column, const std::string& value,
                                         const std::string& target, size_t row) {
     return std::invalid_argument("Cannot cast column '" + column + "' value '" + value +
@@ -537,5 +582,115 @@ Frame clip_numeric(const Frame& frame, std::optional<double> lower, std::optiona
 
     return Frame(std::move(new_cols));
 }
+Frame safe_divide_columns(const Frame& frame, const std::string& numerator,
+                          const std::string& denominator, const std::string& output_column,
+                          double fill_value) {
+    const auto numerator_index = frame.column_index(numerator);
+    const auto denominator_index = frame.column_index(denominator);
 
+    const auto& numerator_col = frame.column(numerator_index);
+    const auto& denominator_col = frame.column(denominator_index);
+
+    if ((numerator_col.dtype() != DType::INT64 && numerator_col.dtype() != DType::FLOAT64) ||
+        (denominator_col.dtype() != DType::INT64 && denominator_col.dtype() != DType::FLOAT64)) {
+        throw std::invalid_argument(
+            "safe_divide_columns native path requires INT64 or FLOAT64 columns");
+    }
+
+    Column result_col(output_column, DType::FLOAT64);
+
+    for (size_t r = 0; r < frame.num_rows(); ++r) {
+        if (numerator_col.is_null(r) || denominator_col.is_null(r)) {
+            result_col.push_back(fill_value);
+            continue;
+        }
+
+        double numerator_value = 0.0;
+        double denominator_value = 0.0;
+
+        if (numerator_col.dtype() == DType::INT64) {
+            numerator_value =
+                static_cast<double>(std::get<std::vector<int64_t>>(numerator_col.data())[r]);
+        } else {
+            numerator_value = std::get<std::vector<double>>(numerator_col.data())[r];
+        }
+
+        if (denominator_col.dtype() == DType::INT64) {
+            denominator_value =
+                static_cast<double>(std::get<std::vector<int64_t>>(denominator_col.data())[r]);
+        } else {
+            denominator_value = std::get<std::vector<double>>(denominator_col.data())[r];
+        }
+
+        if (denominator_value == 0.0) {
+            result_col.push_back(fill_value);
+        } else {
+            result_col.push_back(numerator_value / denominator_value);
+        }
+    }
+
+    std::vector<Column> new_cols;
+    new_cols.reserve(frame.num_cols() + 1);
+
+    bool replaced_existing_output = false;
+
+    for (size_t ci = 0; ci < frame.num_cols(); ++ci) {
+        if (frame.column(ci).name() == output_column) {
+            new_cols.push_back(result_col.clone());
+            replaced_existing_output = true;
+        } else {
+            new_cols.push_back(frame.column(ci).clone());
+        }
+    }
+
+    if (!replaced_existing_output) {
+        new_cols.push_back(std::move(result_col));
+    }
+
+    return Frame(std::move(new_cols));
+}
+
+Frame combine_columns(const Frame& frame, const std::vector<std::string>& subset,
+                      const std::string& separator, const std::string& output_column) {
+    std::vector<size_t> col_indices;
+    col_indices.reserve(subset.size());
+    for (const auto& name : subset) {
+        col_indices.push_back(frame.column_index(name));
+    }
+
+    Column combined(output_column, DType::STRING);
+    size_t num_rows = frame.num_rows();
+
+    for (size_t r = 0; r < num_rows; ++r) {
+        bool all_null = true;
+        std::string row_str;
+        for (size_t i = 0; i < col_indices.size(); ++i) {
+            size_t ci = col_indices[i];
+            if (!frame.column(ci).is_null(r)) {
+                all_null = false;
+            }
+            if (i > 0) {
+                row_str += separator;
+            }
+            if (!frame.column(ci).is_null(r)) {
+                row_str += combine_cell_to_string(frame.column(ci).at(r));
+            }
+        }
+
+        if (all_null) {
+            combined.push_null();
+        } else {
+            combined.push_back(row_str);
+        }
+    }
+
+    std::vector<Column> new_cols;
+    new_cols.reserve(frame.num_cols() + 1);
+    for (size_t ci = 0; ci < frame.num_cols(); ++ci) {
+        new_cols.push_back(frame.column(ci).clone());
+    }
+    new_cols.push_back(std::move(combined));
+
+    return Frame(std::move(new_cols));
+}
 }  // namespace arnio

@@ -180,17 +180,6 @@ std::string normalize_numeric(const std::string& value, const CsvConfig& config)
     return s;
 }
 
-bool looks_like_integer_literal(const std::string& value) {
-    if (value.empty()) return false;
-    size_t start = 0;
-    if (value[0] == '-' || value[0] == '+') {
-        start = 1;
-    }
-    if (start == value.size()) return false;
-    return std::all_of(value.begin() + static_cast<std::ptrdiff_t>(start), value.end(),
-                       [](unsigned char ch) { return std::isdigit(ch); });
-}
-
 void validate_row_width(size_t row_number, size_t expected, size_t actual) {
     if (actual == expected) return;
     throw std::runtime_error("CSV row " + std::to_string(row_number) + " has " +
@@ -198,11 +187,32 @@ void validate_row_width(size_t row_number, size_t expected, size_t actual) {
                              std::to_string(expected));
 }
 
+// Detect if a numeric string has leading zeros that indicate it's likely an
+// identifier (ZIP code, account ID, product code, etc.) rather than a true
+// numeric value. Identifiers with leading zeros should be preserved as strings.
+static bool has_leading_zero_indicator(const std::string& cleaned) {
+    // Must be longer than a single zero
+    if (cleaned.size() <= 1) {
+        return false;
+    }
+
+    // Must start with leading zero
+    if (cleaned[0] != '0') {
+        return false;
+    }
+
+    // Every character must be a digit
+    return std::all_of(cleaned.begin(), cleaned.end(),
+                       [](unsigned char ch) { return std::isdigit(ch); });
+}
+
 }  // namespace
 
-CsvReader::CsvReader(const CsvConfig& config) : config_(config) {}
+CsvParser::CsvParser(const CsvConfig& config) : config_(config) {}
 
-std::vector<std::string> CsvReader::parse_line(const std::string& line) const {
+CsvReader::CsvReader(const CsvConfig& config) : parser_(config) {}
+
+std::vector<std::string> CsvParser::parse_line(const std::string& line) const {
     std::vector<std::string> fields;
     std::string field;
     bool in_quotes = false;
@@ -237,7 +247,7 @@ std::vector<std::string> CsvReader::parse_line(const std::string& line) const {
     return fields;
 }
 
-bool CsvReader::is_null_sentinel(const std::string& value) const {
+bool CsvParser::is_null_sentinel(const std::string& value) const {
     if (config_.null_values.has_value()) {
         const auto& sentinels = config_.null_values.value();
         for (const auto& sentinel : sentinels) {
@@ -258,7 +268,7 @@ bool CsvReader::is_null_sentinel(const std::string& value) const {
     return value.empty();
 }
 
-DType CsvReader::infer_type(const std::string& value) const {
+DType CsvParser::infer_type(const std::string& value) const {
     if (is_null_sentinel(value)) return DType::NULL_TYPE;
 
     // Try bool
@@ -277,11 +287,14 @@ DType CsvReader::infer_type(const std::string& value) const {
         (void)val;
         if (end != start && *end == '\0') {
             if (errno == ERANGE) return DType::STRING;
+
+            if (has_leading_zero_indicator(cleaned)) {
+                return DType::STRING;
+            }
+
             return DType::INT64;
         }
     }
-
-    if (looks_like_integer_literal(cleaned)) return DType::STRING;
 
     // Try float64
     {
@@ -312,7 +325,7 @@ DType CsvReader::infer_type(const std::string& value) const {
     return DType::STRING;
 }
 
-DType CsvReader::promote_type(DType current, DType incoming) {
+DType CsvParser::promote_type(DType current, DType incoming) {
     if (current == incoming) return current;
     if (current == DType::NULL_TYPE) return incoming;
     if (incoming == DType::NULL_TYPE) return current;
@@ -327,7 +340,7 @@ DType CsvReader::promote_type(DType current, DType incoming) {
     return DType::STRING;
 }
 
-CellValue CsvReader::parse_value(const std::string& raw, DType dtype) const {
+CellValue CsvParser::parse_value(const std::string& raw, DType dtype) const {
     if (is_null_sentinel(raw)) return std::monostate{};
 
     switch (dtype) {
@@ -362,14 +375,17 @@ CellValue CsvReader::parse_value(const std::string& raw, DType dtype) const {
                 return std::monostate{};
             }
         }
-        case DType::STRING:
+        case DType::STRING: {
+            // Keep raw string values exactly as they appear in the CSV
             return raw;
+        }
         default:
             return std::monostate{};
     }
 }
 
 Frame CsvReader::read(const std::string& path) const {
+    const CsvConfig& config = parser_.config();
     std::ifstream file(path, std::ios::binary);
     if (!file.is_open()) {
         throw std::runtime_error("Cannot open file: " + path);
@@ -382,12 +398,12 @@ Frame CsvReader::read(const std::string& path) const {
     size_t record_number = 0;
 
     // Read header
-    if (config_.has_header && read_record(file, line)) {
+    if (config.has_header && read_record(file, line)) {
         ++record_number;
         strip_utf8_bom(line);
-        header = parse_line(line);
+        header = parser_.parse_line(line);
         for (auto& h : header) {
-            if (config_.trim_headers) trim_in_place(h);
+            if (config.trim_headers) trim_in_place(h);
         }
         validate_header(header);
     }
@@ -395,11 +411,11 @@ Frame CsvReader::read(const std::string& path) const {
     // Read all rows
     size_t row_count = 0;
     std::optional<size_t> expected_cols =
-        config_.has_header ? std::optional<size_t>{header.size()} : std::nullopt;
+        config.has_header ? std::optional<size_t>{header.size()} : std::nullopt;
     while (read_record(file, line)) {
         ++record_number;
 
-        if (config_.nrows.has_value() && row_count >= config_.nrows.value()) {
+        if (config.nrows.has_value() && row_count >= config.nrows.value()) {
             break;
         }
 
@@ -407,13 +423,13 @@ Frame CsvReader::read(const std::string& path) const {
             continue;
         }
 
-        auto fields = parse_line(line);
+        auto fields = parser_.parse_line(line);
 
-        if (!config_.has_header && !expected_cols.has_value()) {
+        if (!config.has_header && !expected_cols.has_value()) {
             expected_cols = fields.size();
         }
 
-        if (config_.mode == "strict" && expected_cols.has_value()) {
+        if (config.mode == "strict" && expected_cols.has_value()) {
             validate_row_width(record_number, expected_cols.value(), fields.size());
         }
 
@@ -429,7 +445,7 @@ Frame CsvReader::read(const std::string& path) const {
     file.close();
 
     // If no header, generate column names
-    if (!config_.has_header && !raw_data.empty()) {
+    if (!config.has_header && !raw_data.empty()) {
         for (size_t i = 0; i < raw_data[0].size(); ++i) {
             header.push_back("col_" + std::to_string(i));
         }
@@ -440,8 +456,8 @@ Frame CsvReader::read(const std::string& path) const {
 
     // Determine which columns to keep
     std::vector<size_t> col_indices;
-    if (config_.usecols.has_value()) {
-        for (const auto& name : config_.usecols.value()) {
+    if (config.usecols.has_value()) {
+        for (const auto& name : config.usecols.value()) {
             auto it = std::find(header.begin(), header.end(), name);
             if (it == header.end()) {
                 throw std::runtime_error("Column not found: " + name);
@@ -459,8 +475,8 @@ Frame CsvReader::read(const std::string& path) const {
     for (const auto& row : raw_data) {
         for (size_t ci : col_indices) {
             if (ci < row.size()) {
-                DType inferred = infer_type(row[ci]);
-                col_types[ci] = promote_type(col_types[ci], inferred);
+                DType inferred = parser_.infer_type(row[ci]);
+                col_types[ci] = CsvParser::promote_type(col_types[ci], inferred);
             }
         }
     }
@@ -477,7 +493,7 @@ Frame CsvReader::read(const std::string& path) const {
         Column col(header[ci], col_types[ci]);
         for (const auto& row : raw_data) {
             if (ci < row.size()) {
-                col.push_back(parse_value(row[ci], col_types[ci]));
+                col.push_back(parser_.parse_value(row[ci], col_types[ci]));
             } else {
                 col.push_null();
             }
@@ -490,6 +506,7 @@ Frame CsvReader::read(const std::string& path) const {
 
 std::vector<std::pair<std::string, std::string>> CsvReader::scan_schema(
     const std::string& path) const {
+    const CsvConfig& config = parser_.config();
     std::ifstream file(path, std::ios::binary);
     if (!file.is_open()) {
         throw std::runtime_error("Cannot open file: " + path);
@@ -500,9 +517,9 @@ std::vector<std::pair<std::string, std::string>> CsvReader::scan_schema(
 
     if (read_record(file, line)) {
         strip_utf8_bom(line);
-        header = parse_line(line);
+        header = parser_.parse_line(line);
         for (auto& h : header) {
-            if (config_.trim_headers) trim_in_place(h);
+            if (config.trim_headers) trim_in_place(h);
         }
         validate_header(header);
     }
@@ -511,7 +528,7 @@ std::vector<std::pair<std::string, std::string>> CsvReader::scan_schema(
     std::vector<DType> col_types(num_cols, DType::NULL_TYPE);
     size_t sample_count = 0;
 
-    size_t max_samples = config_.sample_size.value_or(100);
+    size_t max_samples = config.sample_size.value_or(100);
 
     while (read_record(file, line)) {
         if (sample_count >= max_samples) {
@@ -519,10 +536,10 @@ std::vector<std::pair<std::string, std::string>> CsvReader::scan_schema(
         }
 
         if (line.empty()) continue;
-        auto fields = parse_line(line);
+        auto fields = parser_.parse_line(line);
         validate_row_width(sample_count + 2, num_cols, fields.size());
         for (size_t i = 0; i < num_cols && i < fields.size(); ++i) {
-            col_types[i] = promote_type(col_types[i], infer_type(fields[i]));
+            col_types[i] = CsvParser::promote_type(col_types[i], parser_.infer_type(fields[i]));
         }
         ++sample_count;
     }
@@ -537,6 +554,192 @@ std::vector<std::pair<std::string, std::string>> CsvReader::scan_schema(
         schema.emplace_back(header[i], dtype_to_string(col_types[i]));
     }
     return schema;
+}
+
+// --- CsvChunkReader (streaming) ---
+
+CsvChunkReader::CsvChunkReader(const CsvConfig& config) : parser_(config) {}
+
+void CsvChunkReader::resolve_col_indices() {
+    const CsvConfig& config = parser_.config();
+    col_indices_.clear();
+    const size_t num_cols = header_.size();
+    if (config.usecols.has_value()) {
+        for (const auto& name : config.usecols.value()) {
+            auto it = std::find(header_.begin(), header_.end(), name);
+            if (it == header_.end()) {
+                throw std::runtime_error("Column not found: " + name);
+            }
+            col_indices_.push_back(static_cast<size_t>(std::distance(header_.begin(), it)));
+        }
+    } else {
+        for (size_t i = 0; i < num_cols; ++i) {
+            col_indices_.push_back(i);
+        }
+    }
+}
+
+bool CsvChunkReader::read_one_data_row(std::vector<std::string>& fields_out) {
+    const CsvConfig& config = parser_.config();
+    std::string line;
+    while (read_record(file_, line)) {
+        ++record_number_;
+
+        if (line.empty()) {
+            continue;
+        }
+
+        fields_out = parser_.parse_line(line);
+
+        if (!config.has_header && !expected_cols_.has_value()) {
+            expected_cols_ = fields_out.size();
+        }
+
+        if (config.mode == "strict" && expected_cols_.has_value()) {
+            validate_row_width(record_number_, expected_cols_.value(), fields_out.size());
+        }
+
+        if (expected_cols_.has_value()) {
+            while (fields_out.size() < expected_cols_.value()) {
+                fields_out.push_back("");
+            }
+        }
+
+        return true;
+    }
+    return false;
+}
+
+Frame CsvChunkReader::build_frame(const std::vector<std::vector<std::string>>& raw_data) const {
+    std::vector<Column> columns;
+    columns.reserve(col_indices_.size());
+    for (size_t ci : col_indices_) {
+        Column col(header_[ci], col_types_[ci]);
+        for (const auto& row : raw_data) {
+            if (ci < row.size()) {
+                col.push_back(parser_.parse_value(row[ci], col_types_[ci]));
+            } else {
+                col.push_null();
+            }
+        }
+        columns.push_back(std::move(col));
+    }
+    return Frame(std::move(columns));
+}
+
+void CsvChunkReader::open(const std::string& path) {
+    const CsvConfig& config = parser_.config();
+    close();
+
+    file_.open(path, std::ios::binary);
+    if (!file_.is_open()) {
+        throw std::runtime_error("Cannot open file: " + path);
+    }
+
+    opened_ = true;
+    record_number_ = 0;
+    rows_read_total_ = 0;
+    schema_locked_ = false;
+    header_finalized_ = config.has_header;
+    header_.clear();
+    col_indices_.clear();
+    col_types_.clear();
+    expected_cols_ = std::nullopt;
+
+    std::string line;
+    if (config.has_header && read_record(file_, line)) {
+        ++record_number_;
+        strip_utf8_bom(line);
+        header_ = parser_.parse_line(line);
+        for (auto& h : header_) {
+            if (config.trim_headers) trim_in_place(h);
+        }
+        validate_header(header_);
+        expected_cols_ = header_.size();
+        resolve_col_indices();
+        col_types_.assign(header_.size(), DType::NULL_TYPE);
+    }
+
+    const size_t skip_target = config.skip_rows.value_or(0);
+    size_t skipped = 0;
+    while (skipped < skip_target) {
+        std::vector<std::string> fields;
+        if (!read_one_data_row(fields)) {
+            break;
+        }
+        ++skipped;
+    }
+}
+
+std::optional<Frame> CsvChunkReader::next_chunk(size_t chunksize) {
+    if (!opened_) {
+        throw std::runtime_error("CsvChunkReader is not open");
+    }
+
+    if (chunksize == 0) {
+        throw std::runtime_error("chunksize must be greater than 0");
+    }
+
+    const CsvConfig& config = parser_.config();
+    size_t limit = chunksize;
+    if (config.nrows.has_value()) {
+        const size_t nrows = config.nrows.value();
+        if (rows_read_total_ >= nrows) {
+            return std::nullopt;
+        }
+        limit = std::min(limit, nrows - rows_read_total_);
+    }
+
+    std::vector<std::vector<std::string>> raw_data;
+    raw_data.reserve(limit);
+
+    while (raw_data.size() < limit) {
+        std::vector<std::string> fields;
+        if (!read_one_data_row(fields)) {
+            break;
+        }
+        raw_data.push_back(std::move(fields));
+    }
+
+    if (raw_data.empty()) {
+        return std::nullopt;
+    }
+
+    if (!header_finalized_) {
+        for (size_t i = 0; i < raw_data[0].size(); ++i) {
+            header_.push_back("col_" + std::to_string(i));
+        }
+        validate_header(header_);
+        header_finalized_ = true;
+        expected_cols_ = header_.size();
+        resolve_col_indices();
+        col_types_.assign(header_.size(), DType::NULL_TYPE);
+    }
+
+    if (!schema_locked_) {
+        for (const auto& row : raw_data) {
+            for (size_t ci : col_indices_) {
+                if (ci < row.size()) {
+                    DType inferred = parser_.infer_type(row[ci]);
+                    col_types_[ci] = CsvParser::promote_type(col_types_[ci], inferred);
+                }
+            }
+        }
+        for (auto& dt : col_types_) {
+            if (dt == DType::NULL_TYPE) dt = DType::STRING;
+        }
+        schema_locked_ = true;
+    }
+
+    rows_read_total_ += raw_data.size();
+    return build_frame(raw_data);
+}
+
+void CsvChunkReader::close() {
+    if (file_.is_open()) {
+        file_.close();
+    }
+    opened_ = false;
 }
 
 }  // namespace arnio
