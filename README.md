@@ -375,6 +375,9 @@ ar.register_step("team:drop_nulls", remove_outliers)  # namespaced custom step
 # Use builtin: for an explicit built-in step, and your own prefixes
 # like team: or plugin_name: to avoid name collisions.
 
+# Introspect built-in and custom step names without reaching into internals.
+print(ar.list_steps())
+
 # Now use it in any pipeline alongside native C++ steps
 clean = ar.pipeline(frame, [
     ("builtin:strip_whitespace",),

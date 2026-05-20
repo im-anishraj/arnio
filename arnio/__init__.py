@@ -55,7 +55,12 @@ from .io import (
     sniff_delimiter,
     write_csv,
 )
-from .pipeline import get_builtin_step_signatures, pipeline, register_step
+from .pipeline import (
+    get_builtin_step_signatures,
+    list_steps,
+    pipeline,
+    register_step,
+)
 from .quality import (
     CleanExplanation,
     CleanStepRecord,
@@ -137,6 +142,7 @@ __all__ = [
     "pipeline",
     "register_step",
     "get_builtin_step_signatures",
+    "list_steps",
     # Data quality
     "profile",
     "compare_profiles",

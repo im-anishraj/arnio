@@ -1179,3 +1179,23 @@ def test_register_step_rejects_reserved_builtin_namespace():
 
     with pytest.raises(ValueError, match="reserved for built-in pipeline steps"):
         ar.register_step("builtin:custom_step", dummy_step)
+
+
+def test_list_steps_includes_builtins_in_deterministic_order():
+    steps = ar.list_steps()
+
+    assert steps == sorted(steps)
+    assert "drop_nulls" in steps
+    assert "strip_whitespace" in steps
+    assert "standardize_missing_tokens" in steps
+
+
+def test_list_steps_includes_registered_custom_steps():
+    def custom_step(df):
+        return df
+
+    ar.register_step("list_steps_probe", custom_step)
+
+    steps = ar.list_steps()
+
+    assert "list_steps_probe" in steps

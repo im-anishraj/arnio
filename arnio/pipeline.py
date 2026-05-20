@@ -157,6 +157,14 @@ def get_builtin_step_signatures() -> dict[str, inspect.Signature]:
     return dict(sorted(signatures.items()))
 
 
+def list_steps() -> list[str]:
+    """Return available pipeline step names in deterministic order."""
+    with _REGISTRY_LOCK:
+        python_step_names = list(_PYTHON_STEP_REGISTRY)
+
+    return sorted(set(_STEP_REGISTRY) | set(python_step_names))
+
+
 def _validate_pipeline_steps(
     steps: list[tuple],
     python_step_registry: dict[str, Callable],
