@@ -552,6 +552,7 @@ def write_csv(
     delimiter: str = ",",
     write_header: bool = True,
     line_terminator: str = "\n",
+    escape_formulas: bool = False,
 ) -> None:
     """Write an ArFrame to a CSV file via C++ backend.
 
@@ -567,11 +568,16 @@ def write_csv(
         Whether to write the column header row.
     line_terminator : str, default "\\n"
         Line terminator to use between rows.
+    escape_formulas : bool, default False
+        Whether to escape formula trigger characters (=, +, -, @, \\t, \\r)
+        in string values to prevent CSV injection in spreadsheet software.
 
     Raises
     ------
     ValueError
         If file format is unsupported.
+    TypeError
+        If escape_formulas is not a boolean.
     RuntimeError
         If the file cannot be opened or written.
 
@@ -579,6 +585,7 @@ def write_csv(
     --------
     >>> ar.write_csv(frame, "output.csv")
     >>> ar.write_csv(frame, "output.tsv", delimiter="\\t")
+    >>> ar.write_csv(frame, "output.csv", escape_formulas=True)
     """
     path = os.fspath(path)
     path_lower = path.lower()
@@ -590,6 +597,9 @@ def write_csv(
         raise ValueError(
             f"Unsupported file format: {path}. Only .csv, .txt, and .tsv are supported."
         )
+
+    if not isinstance(escape_formulas, bool):
+        raise TypeError("escape_formulas must be a boolean")
 
     if not isinstance(delimiter, str):
         raise TypeError("delimiter must be a string")
@@ -603,6 +613,24 @@ def write_csv(
         raise TypeError("line_terminator must be a string")
     if line_terminator == "":
         raise ValueError("line_terminator must not be empty")
+
+    if escape_formulas:
+        from typing import Any
+
+        from .convert import from_pandas, to_pandas
+
+        df = to_pandas(frame).copy()
+
+        def escape_val(x: Any) -> Any:
+            if isinstance(x, str) and x:
+                if x[0] in ("=", "+", "-", "@", "\t", "\r"):
+                    return "'" + x
+            return x
+
+        for col in df.columns:
+            df[col] = df[col].apply(escape_val)
+
+        frame = from_pandas(df)
 
     config = _CsvWriteConfig()
     config.delimiter = delimiter

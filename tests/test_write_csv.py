@@ -161,3 +161,77 @@ class TestWriteCsvLineTerminatorBytes:
         df = ar.to_pandas(frame2)
         assert df["note"].iloc[0] == "line1\nline2"
         assert df["note"].iloc[1] == "plain"
+
+
+class TestWriteCsvFormulaEscaping:
+    """Unit tests for write_csv formula escaping security feature."""
+
+    def test_formula_escaping_opt_in(self, tmp_path):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "formula": ["=SUM(A1:A2)", "+10", "-5", "@Excel", "normal"],
+                }
+            )
+        )
+        out = tmp_path / "escaped.csv"
+
+        # Write with formula escaping enabled
+        ar.write_csv(frame, out, escape_formulas=True)
+
+        res = ar.read_csv(out)
+        df = ar.to_pandas(res)
+
+        expected = pd.DataFrame(
+            {
+                "formula": [
+                    "'=SUM(A1:A2)",
+                    "'+10",
+                    "'-5",
+                    "'@Excel",
+                    "normal",
+                ],
+            }
+        )
+        pd.testing.assert_frame_equal(df, expected)
+
+    def test_formula_escaping_tabs_and_returns(self, tmp_path):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "formula": ["\t=1+1", "\r-5"],
+                }
+            )
+        )
+        out = tmp_path / "escaped_white.csv"
+
+        ar.write_csv(frame, out, escape_formulas=True)
+
+        res = ar.read_csv(out)
+        df = ar.to_pandas(res)
+
+        expected = pd.DataFrame(
+            {
+                "formula": [
+                    "'\t=1+1",
+                    "'\r-5",
+                ],
+            }
+        )
+        pd.testing.assert_frame_equal(df, expected)
+
+    def test_formula_escaping_default_disabled(self, tmp_path):
+        frame = ar.from_pandas(pd.DataFrame({"formula": ["=1+1"]}))
+        out = tmp_path / "not_escaped.csv"
+
+        # By default, should not escape
+        ar.write_csv(frame, out)
+
+        res = ar.read_csv(out)
+        df = ar.to_pandas(res)
+        assert df["formula"].iloc[0] == "=1+1"
+
+    def test_invalid_escape_formulas_rejected(self, tmp_path):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
+        with pytest.raises(TypeError, match="escape_formulas must be a boolean"):
+            ar.write_csv(frame, tmp_path / "out.csv", escape_formulas="not_a_bool")
