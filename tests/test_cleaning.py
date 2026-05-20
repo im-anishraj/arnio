@@ -195,9 +195,9 @@ class TestDropDuplicates:
         assert result.shape[0] == 3
 
     def test_multiple_missing_columns(self,sample_csv):
-        frame= ar.read_csv(sample_csv)
+        frame = ar.read_csv(sample_csv)
         with pytest.raises(KeyError,match=r"Missing columns for test_op: .*Available columns:"):
-            ar.validate_columns_exist(frame,["missing1","missing2"],operation="test_op")
+            ar.validate_columns_exist(frame, ["missing1", "missing2"], operation="test_op")
 
     def test_drop_dupes_regression_keep_true(self, csv_with_duplicates):
         frame = ar.read_csv(csv_with_duplicates)
