@@ -322,6 +322,10 @@ def read_csv(
         Columns to read. If None, reads all columns.
     nrows : int, optional
         Number of rows to read. If None, reads all rows.
+    skiprows : int, optional
+        Number of lines to skip before reading the header. Useful for
+        CSV files with metadata preambles before the actual data.
+        If None, no lines are skipped.
     encoding : str, default "utf-8"
         File encoding.
     trim_headers : bool, default True
@@ -401,7 +405,7 @@ def read_csv(
         config.nrows = _validate_nrows(nrows)
 
     if skiprows is not None:
-        config.skip_rows = _validate_nrows(skiprows)
+        config.skip_rows = _validate_skip_rows(skiprows)
 
     reader = _CsvReader(config)
 

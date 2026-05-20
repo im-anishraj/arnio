@@ -1401,12 +1401,11 @@ class TestReadCsvSkipRows:
         assert frame.shape == (1, 2)
 
     def test_skiprows_skips_all_data_rows(self, tmp_path):
-        """Skipping past all data rows yields an empty frame with correct columns."""
+        """Skipping more rows than exist yields an empty frame."""
         csv_path = tmp_path / "skipall.csv"
-        csv_path.write_text("name,age\nAlice,30\n")
-        frame = ar.read_csv(csv_path, skiprows=0)
-        assert frame.shape == (1, 2)
-        assert frame.columns == ["name", "age"]
+        csv_path.write_text("skip1\nskip2\nname,age\nAlice,30\n")
+        frame = ar.read_csv(csv_path, skiprows=10)
+        assert frame.shape == (0, 0)
 
     def test_skiprows_invalid_negative(self, tmp_path):
         csv_path = tmp_path / "data.csv"
