@@ -204,6 +204,38 @@ class TestPipeline:
 
         assert pd.isna(df["value"].iloc[2])
 
+    def test_pipeline_supports_namespaced_builtin_steps(self, csv_with_whitespace):
+        frame = ar.read_csv(csv_with_whitespace)
+
+        result = ar.pipeline(
+            frame,
+            [
+                ("builtin:strip_whitespace",),
+            ],
+        )
+        df = ar.to_pandas(result)
+
+        assert df["name"].iloc[0] == "Alice"
+
+    def test_pipeline_supports_namespaced_custom_steps_with_builtin_basename(self):
+        def custom_drop_nulls(df):
+            df["marker"] = "custom"
+            return df
+
+        ar.register_step("team:drop_nulls", custom_drop_nulls)
+        frame = ar.from_pandas(pd.DataFrame({"value": [1, None]}))
+
+        result = ar.pipeline(
+            frame,
+            [
+                ("team:drop_nulls",),
+            ],
+        )
+        df = ar.to_pandas(result)
+
+        assert list(df["marker"]) == ["custom", "custom"]
+        assert df["value"].isna().sum() == 1
+
     def test_pipeline_mapping_shorthand(self, sample_csv):
         frame = ar.read_csv(sample_csv)
         result = ar.pipeline(
@@ -1102,3 +1134,11 @@ def test_register_step_overwrite_cannot_bypass_builtin_protection():
 
     with pytest.raises(ValueError, match="conflicts with built-in C\\+\\+ step"):
         ar.register_step("drop_nulls", dummy_step, overwrite=True)
+
+
+def test_register_step_rejects_reserved_builtin_namespace():
+    def dummy_step(df):
+        return df
+
+    with pytest.raises(ValueError, match="reserved for built-in pipeline steps"):
+        ar.register_step("builtin:custom_step", dummy_step)

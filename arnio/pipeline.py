@@ -16,6 +16,9 @@ from .convert import from_pandas, to_pandas
 from .exceptions import PipelineStepError, UnknownStepError
 from .frame import ArFrame
 
+_BUILTIN_STEP_NAMESPACE = "builtin"
+_STEP_NAMESPACE_SEPARATOR = ":"
+
 # Map step names to cleaning functions
 _STEP_REGISTRY: dict[str, Callable] = {
     "drop_nulls": cleaning.drop_nulls,
@@ -41,6 +44,38 @@ _REGISTRY_LOCK = Lock()
 _PYTHON_STEP_REGISTRY: dict[str, Callable] = {
     "standardize_missing_tokens": cleaning.standardize_missing_tokens
 }
+
+
+def _is_builtin_python_step(name: str, fn: Callable) -> bool:
+    """Return True when a Python-registered step is part of Arnio core."""
+    return getattr(fn, "__module__", "").startswith("arnio.cleaning") or (
+        name == "standardize_missing_tokens"
+    )
+
+
+def _get_builtin_step_registry(
+    python_step_registry: dict[str, Callable],
+) -> dict[str, Callable]:
+    """Return all built-in pipeline steps, including Python-backed ones."""
+    builtin_steps = dict(_STEP_REGISTRY)
+    builtin_steps.update(
+        {
+            name: fn
+            for name, fn in python_step_registry.items()
+            if _is_builtin_python_step(name, fn)
+        }
+    )
+    return builtin_steps
+
+
+def _get_namespaced_builtin_steps(
+    python_step_registry: dict[str, Callable],
+) -> dict[str, str]:
+    """Map namespaced built-in step names to canonical step names."""
+    return {
+        f"{_BUILTIN_STEP_NAMESPACE}{_STEP_NAMESPACE_SEPARATOR}{name}": name
+        for name in _get_builtin_step_registry(python_step_registry)
+    }
 
 
 def register_step(name: str, fn: Callable, overwrite: bool = False):
@@ -73,6 +108,12 @@ def register_step(name: str, fn: Callable, overwrite: bool = False):
     >>> ar.register_step("custom_clean", new_custom_clean, overwrite=True)
     """
     with _REGISTRY_LOCK:
+        if name.startswith(f"{_BUILTIN_STEP_NAMESPACE}{_STEP_NAMESPACE_SEPARATOR}"):
+            raise ValueError(
+                f"Cannot register '{name}': "
+                f"'{_BUILTIN_STEP_NAMESPACE}{_STEP_NAMESPACE_SEPARATOR}' "
+                "is reserved for built-in pipeline steps."
+            )
         if name in _STEP_REGISTRY:
             raise ValueError(
                 f"Cannot register '{name}': conflicts with built-in C++ step. "
@@ -92,7 +133,11 @@ def _validate_pipeline_steps(
 ) -> None:
     """Validate pipeline steps before execution begins."""
 
-    available_steps = set(_STEP_REGISTRY) | set(python_step_registry)
+    available_steps = (
+        set(_STEP_REGISTRY)
+        | set(python_step_registry)
+        | set(_get_namespaced_builtin_steps(python_step_registry))
+    )
 
     for step in steps:
         if not isinstance(step, tuple) or not (1 <= len(step) <= 2):
@@ -169,6 +214,7 @@ def pipeline(
     """
     with _REGISTRY_LOCK:
         python_step_registry = dict(_PYTHON_STEP_REGISTRY)
+        namespaced_builtin_steps = _get_namespaced_builtin_steps(python_step_registry)
 
     _validate_pipeline_steps(
         steps,
@@ -192,6 +238,8 @@ def pipeline(
             raise ValueError(
                 f"Invalid step format: {step}. Expected (name,) or (name, kwargs)"
             )
+
+        name = namespaced_builtin_steps.get(name, name)
 
         if name in _STEP_REGISTRY:
             # C++ backed step - fast path
@@ -234,10 +282,7 @@ def pipeline(
             df = to_pandas(result)
 
             # Isolate genuine custom steps from internal core library functions
-            is_builtin = (
-                getattr(fn, "__module__", "").startswith("arnio.cleaning")
-                or name == "standardize_missing_tokens"
-            )
+            is_builtin = _is_builtin_python_step(name, fn)
 
             try:
                 returned = fn(df, **kwargs)

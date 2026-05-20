@@ -368,10 +368,14 @@ def remove_outliers(df, column="revenue", threshold=100_000):
     return df[df[column] <= threshold]
 
 ar.register_step("remove_outliers", remove_outliers)
+ar.register_step("team:drop_nulls", remove_outliers)  # namespaced custom step
+
+# Use builtin: for an explicit built-in step, and your own prefixes
+# like team: or plugin_name: to avoid name collisions.
 
 # Now use it in any pipeline alongside native C++ steps
 clean = ar.pipeline(frame, [
-    ("strip_whitespace",),
+    ("builtin:strip_whitespace",),
     ("remove_outliers", {"column": "revenue", "threshold": 50000}),
     ("drop_duplicates",),
 ])
