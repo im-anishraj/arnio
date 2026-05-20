@@ -480,6 +480,8 @@ Frame CsvReader::read(const std::string& path) const {
 
             if (trailing_empty_only) {
                 fields.resize(expected_cols.value());
+            } else {
+                validate_row_width(record_number, expected_cols.value(), fields.size());
             }
         }
 

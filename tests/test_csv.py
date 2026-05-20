@@ -1119,6 +1119,17 @@ def test_permissive_mode_allows_missing_columns(tmp_path):
     assert pd.isna(df["name"].iloc[1])
 
 
+def test_permissive_mode_rejects_extra_columns(tmp_path):
+    csv_path = tmp_path / "permissive_extra.csv"
+    csv_path.write_text("id,name\n1,Alice,extra\n")
+
+    with pytest.raises(
+        ar.CsvReadError,
+        match="CSV row 2 has 3 fields; expected 2",
+    ):
+        ar.read_csv(csv_path, mode="permissive")
+
+
 def test_invalid_parser_mode(tmp_path):
     csv_path = tmp_path / "invalid_mode.csv"
     csv_path.write_text("id,name\n1,Alice\n")
