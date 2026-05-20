@@ -75,6 +75,82 @@ def test_profile_non_numeric_no_quantiles():
     assert "q95" not in profile
 
 
+def test_profile_email_and_url_validity_ratios():
+    df = pd.DataFrame(
+        {
+            "good_email": [
+                "alice@test.com",
+                "bob@test.com",
+                "cara@test.com",
+                "dave@test.com",
+                "eve@test.com",
+            ],
+            "mixed_email": [
+                "alice@test.com",
+                "bob@test.com",
+                "cara@test.com",
+                "dave@test.com",
+                "invalid-email",
+            ],
+            "good_url": [
+                "http://test.com",
+                "https://example.com/foo",
+                "https://another.org",
+                "http://a.b",
+                "https://last.com",
+            ],
+            "mixed_url": [
+                "http://test.com",
+                "https://example.com/foo",
+                "https://another.org",
+                "http://a.b",
+                "not-a-url",
+            ],
+            "generic": ["hello", "world", "foo", "bar", "baz"],
+        }
+    )
+
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+
+    assert report.columns["good_email"].semantic_type == "email"
+    assert report.columns["mixed_email"].semantic_type == "email"
+    assert report.columns["good_url"].semantic_type == "url"
+    assert report.columns["mixed_url"].semantic_type == "url"
+    assert report.columns["generic"].semantic_type == "categorical"
+
+    assert report.columns["good_email"].email_validity_ratio == 1.0
+    assert report.columns["good_email"].url_validity_ratio is None
+
+    assert report.columns["mixed_email"].email_validity_ratio == 0.8
+    assert report.columns["mixed_email"].url_validity_ratio is None
+
+    assert report.columns["good_url"].url_validity_ratio == 1.0
+    assert report.columns["good_url"].email_validity_ratio is None
+
+    assert report.columns["mixed_url"].url_validity_ratio == 0.8
+    assert report.columns["mixed_url"].email_validity_ratio is None
+
+    assert report.columns["generic"].email_validity_ratio is None
+    assert report.columns["generic"].url_validity_ratio is None
+
+    good_email_dict = report.columns["good_email"].to_dict()
+    assert good_email_dict["email_validity_ratio"] == 1.0
+    assert good_email_dict["url_validity_ratio"] is None
+
+    mixed_url_dict = report.columns["mixed_url"].to_dict()
+    assert mixed_url_dict["url_validity_ratio"] == 0.8
+    assert mixed_url_dict["email_validity_ratio"] is None
+
+    pdf = report.to_pandas()
+    good_email_row = pdf[pdf["name"] == "good_email"].iloc[0]
+    assert good_email_row["email_validity_ratio"] == 1.0
+    assert (
+        pd.isna(good_email_row["url_validity_ratio"])
+        or good_email_row["url_validity_ratio"] is None
+    )
+
+
 def test_compare_profiles_identical_profiles_are_ok():
     frame = ar.from_pandas(
         pd.DataFrame({"score": [10.0, 11.0, 12.0], "city": ["a", "b", "a"]})
@@ -376,6 +452,32 @@ def test_auto_clean_rejects_unknown_mode(sample_csv):
         assert False, "Expected ValueError"
     except ValueError as exc:
         assert "mode must be" in str(exc)
+
+
+def test_auto_clean_strict_casts_ambiguous_numeric_strings():
+    df = pd.DataFrame(
+        {
+            "code": ["007", "008"],  # Not identifier-like, but has leading zeros
+            "user_id": ["001", "002"],  # Identifier-like, has leading zeros
+        }
+    )
+    frame = ar.from_pandas(df)
+
+    # Verify that without allow_lossy_casts, strict mode fails
+    with pytest.raises(ValueError, match="would apply type casts"):
+        ar.auto_clean(frame, mode="strict")
+
+    # Apply strict mode with allow_lossy_casts
+    clean = ar.auto_clean(frame, mode="strict", allow_lossy_casts=True)
+    result = ar.to_pandas(clean)
+
+    # "code" is cast to int64, losing leading zeros
+    assert list(result["code"]) == [7, 8]
+    assert pd.api.types.is_integer_dtype(result["code"])
+
+    # "user_id" is protected and retains leading zeros
+    assert list(result["user_id"]) == ["001", "002"]
+    assert pd.api.types.is_string_dtype(result["user_id"])
 
 
 def test_profile_sample_size(tmp_path):
@@ -708,6 +810,21 @@ def test_identifier_numeric_cast_prevention():
 # ── string length statistics tests ───────────────────────────────────────────
 
 
+def test_decimal_looking_strings_suggest_float64_not_int64():
+    frame = ar.from_pandas(pd.DataFrame({"price": ["1.0", "2.50", "3.00"]}))
+
+    report = ar.profile(frame)
+
+    assert report.columns["price"].suggested_dtype == "float64"
+
+    suggestions = {}
+    for step, kwargs in ar.suggest_cleaning(report):
+        if step == "cast_types":
+            suggestions.update(kwargs)
+
+    assert suggestions["price"] == "float64"
+
+
 def test_profile_string_metrics():
     df = pd.DataFrame({"text": ["a", "abc", "abcde", "", "  ", None]})
     frame = ar.from_pandas(df)
@@ -842,6 +959,36 @@ def test_report_to_markdown_deterministic(tmp_path):
     report = ar.profile(ar.read_csv(path))
 
     assert report.to_markdown() == report.to_markdown()
+
+
+def test_report_to_markdown_escapes_pipe_characters_in_column_cells():
+    report = ar.DataQualityReport(
+        row_count=2,
+        column_count=1,
+        memory_usage=128,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={
+            "bad|name": ar.ColumnProfile(
+                name="bad|name",
+                dtype="string",
+                semantic_type="free|text",
+                row_count=2,
+                null_count=0,
+                null_ratio=0.0,
+                unique_count=2,
+                unique_ratio=1.0,
+                warnings=["contains | pipe"],
+            )
+        },
+        suggestions=[],
+    )
+
+    md = report.to_markdown()
+
+    assert "bad\\|name" in md
+    assert "free\\|text" in md
+    assert "contains \\| pipe" in md
 
 
 def test_report_to_markdown_empty_sections():
@@ -1300,3 +1447,132 @@ def test_compare_profiles_above_changed_threshold_is_changed():
     comparison = ar.compare_profiles(baseline, current)
     assert comparison.drift_report["score"]["status"] == "changed"
     assert comparison.status_counts == {"ok": 0, "warning": 0, "changed": 1}
+
+
+# ── duplicate_rows correctness tests (Refs #662) ─────────────────────────────
+# These tests verify the duplicate_rows field in DataQualityReport against
+# the pandas df.duplicated().sum() baseline.  profile() continues to use
+# df.duplicated().sum() as its default; the hash_pandas_object candidate
+# is covered separately below for future comparison only.
+
+
+class TestProfileDuplicateRowsCorrectness:
+    """Focused correctness tests for duplicate_rows in DataQualityReport.
+
+    profile() uses df.duplicated().sum() as its default implementation.
+    Each test asserts ar.profile() against the pandas baseline directly so
+    any future change to the counting path is immediately caught.
+    """
+
+    def _baseline(self, frame: ar.ArFrame) -> int:
+        """Reference implementation: pandas df.duplicated().sum()."""
+        return int(ar.to_pandas(frame).duplicated().sum())
+
+    def test_no_duplicates(self):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1, 2, 3], "b": ["x", "y", "z"]}))
+        assert ar.profile(frame).duplicate_rows == 0
+        assert ar.profile(frame).duplicate_rows == self._baseline(frame)
+
+    def test_all_duplicate_rows(self):
+        frame = ar.from_pandas(pd.DataFrame({"a": [7, 7, 7], "b": ["q", "q", "q"]}))
+        # 3 rows, 1 unique → 2 duplicates
+        assert ar.profile(frame).duplicate_rows == 2
+        assert ar.profile(frame).duplicate_rows == self._baseline(frame)
+
+    def test_partial_duplicates(self):
+        frame = ar.from_pandas(
+            pd.DataFrame({"a": [1, 1, 2, 3, 3], "b": ["x", "x", "y", "z", "z"]})
+        )
+        # rows 0==1 and 3==4 → 2 duplicates
+        assert ar.profile(frame).duplicate_rows == 2
+        assert ar.profile(frame).duplicate_rows == self._baseline(frame)
+
+    def test_null_rows_treated_as_duplicates(self):
+        # Two rows where every cell is null should count as one duplicate,
+        # matching pandas default (NaN == NaN for deduplication purposes).
+        frame = ar.from_pandas(
+            pd.DataFrame({"a": [None, None, 1.0], "b": [None, None, 2.0]})
+        )
+        assert ar.profile(frame).duplicate_rows == 1
+        assert ar.profile(frame).duplicate_rows == self._baseline(frame)
+
+    def test_partial_null_rows(self):
+        # Only the null-containing column matches; the other differs.
+        frame = ar.from_pandas(
+            pd.DataFrame({"a": [None, None, 1.0], "b": [1.0, 2.0, 3.0]})
+        )
+        # All rows are distinct → 0 duplicates
+        assert ar.profile(frame).duplicate_rows == 0
+        assert ar.profile(frame).duplicate_rows == self._baseline(frame)
+
+    def test_mixed_dtypes_int_float_string_bool(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "i": [1, 1, 2],
+                    "f": [1.0, 1.0, 2.0],
+                    "s": ["a", "a", "b"],
+                    "b": [True, True, False],
+                }
+            )
+        )
+        assert ar.profile(frame).duplicate_rows == 1
+        assert ar.profile(frame).duplicate_rows == self._baseline(frame)
+
+    def test_single_row_frame(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [42]}))
+        assert ar.profile(frame).duplicate_rows == 0
+        assert ar.profile(frame).duplicate_rows == self._baseline(frame)
+
+    def test_empty_frame_returns_zero(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": pd.Series(dtype="float64")}))
+        assert ar.profile(frame).duplicate_rows == 0
+
+    def test_duplicate_ratio_consistent_with_duplicate_rows(self):
+        frame = ar.from_pandas(
+            pd.DataFrame({"a": [1, 1, 2, 3], "b": ["x", "x", "y", "z"]})
+        )
+        report = ar.profile(frame)
+        assert report.duplicate_rows == 1
+        assert abs(report.duplicate_ratio - 1 / 4) < 1e-9
+
+
+# ── duplicate_rows timing guard (perf/#662) ───────────────────────────────────
+
+
+def test_profile_duplicate_count_hash_path_matches_pandas_baseline_at_scale():
+    """Verify hash_pandas_object produces the same duplicate count as df.duplicated().
+
+    This test documents the candidate faster implementation explored in #662.
+    The hash path is NOT currently used as the default in profile() — benchmark
+    results were inconsistent across CI configurations (0.72x–1.58x depending
+    on Python version and OS).  The correctness equivalence is preserved here so
+    the implementation can be re-enabled once stable benchmark evidence is
+    available across the full CI matrix.
+
+    See benchmarks/benchmark_profile_duplicate_count.py for the manual timing
+    comparison.
+    """
+    import numpy as np
+
+    rng = np.random.default_rng(0)
+    n = 50_000
+    df = pd.DataFrame(
+        {
+            "a": rng.integers(0, int(n * 0.9), size=n).tolist(),
+            "b": rng.uniform(0, 1000, size=n).tolist(),
+            "c": [f"s{i % 5000}" for i in range(n)],
+        }
+    )
+    frame = ar.from_pandas(df)
+    df_converted = ar.to_pandas(frame)
+
+    # Candidate path (not yet the default)
+    hashes = pd.util.hash_pandas_object(df_converted, index=False)
+    hash_count = int(hashes.duplicated().sum())
+
+    # Current baseline — what profile() uses
+    baseline_count = int(df_converted.duplicated().sum())
+
+    assert hash_count == baseline_count
+    assert ar.profile(frame).duplicate_rows == baseline_count

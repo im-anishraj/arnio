@@ -61,6 +61,12 @@ import arnio as ar
 # Load CSV directly through C++ — no Python parsing overhead
 frame = ar.read_csv("messy_sales_data.csv")
 
+# Strict mode (default) fails on inconsistent row widths
+frame = ar.read_csv("messy_sales_data.csv", mode="strict")
+
+# Permissive mode fills missing trailing values with nulls
+frame = ar.read_csv("messy_sales_data.csv", mode="permissive")
+
 # Declare what clean data looks like — arnio handles the rest
 clean = ar.pipeline(frame, [
     ("strip_whitespace",),
@@ -70,11 +76,29 @@ clean = ar.pipeline(frame, [
     ("drop_duplicates",),
 ])
 
+
+
 # Out comes a standard pandas DataFrame — use it like you always have
 df = ar.to_pandas(clean)
 
 # Use copy=True when you need defensive pandas-owned buffers
 safe_df = ar.to_pandas(clean, copy=True)
+```
+
+
+### Dry Run Validation
+
+Use `dry_run=True` to validate pipeline configuration and
+step execution without returning transformed output.
+
+```python
+ar.pipeline(
+    frame,
+    [
+        ("drop_nulls",),
+    ],
+    dry_run=True,
+)
 ```
 
 Need step timings for debugging? Opt in without changing the default pipeline return type:
@@ -88,6 +112,18 @@ clean, metadata = ar.pipeline(
 
 print(metadata["step_timings"])
 ```
+
+## Quick Example
+
+```python
+import arnio
+
+frame = arnio.read_csv("sample.csv")
+
+# Preview first 5 rows
+frame.preview(5)
+```
+
 ### Pipeline validation behavior
 
 Pipeline step specifications are validated before execution begins.
@@ -152,6 +188,9 @@ schema = ar.Schema(
 result = schema.validate(ar.read_csv("events.csv"))
 print(result.passed)
 ```
+> **Row index convention:** `ValidationIssue.row_index` values are **1-based** and
+> count data rows only. The header row is excluded. `row_index=1` is the first data
+> row in the file.
 
 ## Schema diff reports
 
@@ -176,6 +215,13 @@ print(diff.summary())
 print(diff.to_markdown())
 ```
 
+## CI data contracts (GitHub Actions)
+
+If you want to **block schema drift** or **invalid rows** in pull requests, see
+`DATA_CONTRACT_CI.md` for an **inert copy-paste** GitHub Actions workflow example.
+
+Example contract files are included under `examples/contracts/`.
+
 ### Select specific columns
 
 Use `select_columns()` to create a new `ArFrame` with only the required columns before converting to pandas.
@@ -187,6 +233,21 @@ print(selected.columns)
 # ['name', 'revenue']
 ```
 
+
+### Handling missing values
+
+Arnio supports configuring which strings are treated as null during CSV parsing using the `null_values` parameter in `read_csv` and `scan_csv`. By default, Arnio preserves its existing behavior and treats only empty cells as null. Custom matching is case-insensitive and applies to cell values only (not headers).
+
+```python
+# Default behavior: empty cells are null
+frame = ar.read_csv("data.csv")
+
+# Provide a custom list of sentinels (overrides the empty-cell default)
+frame = ar.read_csv("data.csv", null_values=["", "MISSING", "UNKNOWN"])
+
+# Disable null sentinel handling completely
+frame = ar.read_csv("data.csv", null_values=[])
+```
 
 > Every step above executes in C++. Your Python code is a _configuration_ — not the execution engine.
 
@@ -223,6 +284,32 @@ schema = ar.scan_csv("100GB_file.csv", sample_size=500)
 ```
 
 Useful for exploring datasets before committing memory.
+</details>
+
+<details>
+<summary><b>📄 Read JSON Lines (JSONL / NDJSON) files</b></summary>
+<br>
+
+`read_jsonl` parses one JSON object per line into an ArFrame. Blank lines are skipped, missing keys become nulls, and mixed-type columns are coerced to string — the same rules as `from_pandas`.
+
+```python
+# events.jsonl
+# {"user": "alice", "score": 9.5, "active": true}
+# {"user": "bob",   "score": 8.1, "active": false}
+
+frame = ar.read_jsonl("events.jsonl")
+
+# Limit rows
+frame = ar.read_jsonl("large.jsonl", nrows=1000)
+
+# Non-UTF-8 encoding
+frame = ar.read_jsonl("data.ndjson", encoding="latin-1")
+
+# Plug straight into the cleaning pipeline
+clean = ar.pipeline(frame, [("strip_whitespace",), ("drop_nulls",)])
+```
+
+Raises `ar.JsonlReadError` with the 1-based line number if a line contains invalid JSON.
 </details>
 
 <details>
@@ -294,6 +381,31 @@ Custom steps run through a pandas↔ArFrame conversion bridge. Prototype in Pyth
 </details>
 
 <details>
+<summary><b>🔄 Custom Step Overwrite Policy</b></summary>
+<br>
+
+By default, trying to register a custom step with a name that is already taken by another custom Python step will raise a `ValueError` to prevent silent overwriting.
+
+To intentionally replace an existing custom **Python** step, pass `overwrite=True`:
+
+```python
+def custom_logging(df):
+    print("Running step v1")
+    return df
+
+ar.register_step("log_data", custom_logging)
+
+# This will succeed and safely overwrite the original logic
+def custom_logging_v2(df):
+    print("Running step v2")
+    return df
+
+ar.register_step("log_data", custom_logging_v2, overwrite=True)
+```
+> Note: Built-in C++ pipeline steps (like "drop_nulls") can never be overwritten, even if overwrite=True is explicitly supplied.
+</details>
+
+<details>
 <summary><b>✂️ Slice rows with head() and tail()</b></summary>
 <br>
 
@@ -333,6 +445,28 @@ not to replace it.
 | **scikit-learn** | Use Arnio cleaning as a preprocessing layer before model training. |
 | **DuckDB / Arrow** | Validate and prepare data before analytics and columnar exchange. |
 | **notebooks** | Inspect quality issues and cleaning suggestions before analysis. |
+
+### Row-dropping pipeline behavior
+
+Some pipeline steps such as `drop_nulls` or `drop_duplicates`
+can change the number of rows returned during `transform`.
+
+By default, `ArnioCleaner` raises a `ValueError` if a pipeline
+changes row count during transform because many scikit-learn
+workflows expect input and output sample counts to remain aligned.
+
+If row-dropping behavior is intentional, pass
+`allow_row_count_change=True` when constructing `ArnioCleaner`.
+
+```python
+cleaner = ArnioCleaner(
+    steps=[
+        ("drop_nulls",),
+        ("strip_whitespace",),
+    ],
+    allow_row_count_change=True,
+)
+```
 
 ### Pandas accessor
 
@@ -834,6 +968,7 @@ ar.register_validator("positive", lambda v: v > 0)
 schema = ar.Schema({
     "id": ar.Int64(nullable=False, unique=True),
     "email": ar.Email(nullable=False),
+    "phone": ar.PhoneNumber(nullable=False),
 
     "user_type": ar.String(nullable=False),
 
@@ -842,6 +977,9 @@ schema = ar.Schema({
         nullable=True,
         required_if=("user_type", "international"),
     ),
+
+    # CurrencyCode validates 3-letter uppercase formats (e.g., USD, EUR, INR).
+    "currency": ar.CurrencyCode(),
 
     "username": ar.String(min_length=3, max_length=20),
     "user_code": ar.Regex(r"^USR-\d{4}$", nullable=False),
@@ -866,6 +1004,24 @@ In this example, `country` becomes required only when
 `user_type == "international"`.
 
 Date validates strict YYYY-MM-DD calendar dates.
+
+### Phone number validation
+
+`PhoneNumber()` validates common international and formatted phone number strings.
+
+```python
+schema = ar.Schema({
+    "phone": ar.PhoneNumber(nullable=False),
+})
+
+result = ar.validate(frame, schema)
+print(result.passed)
+```
+
+Accepted examples include:
+- `+1-555-123-4567`
+- `+91 9876543210`
+- `5551234567`
 
 ### Warning-only validation
 
@@ -1268,6 +1424,10 @@ Discord is for fast conversation and support. GitHub remains the source of truth
 
 <br>
 
+## 📚 Documentation
+
+- [Troubleshooting Guide](docs/TROUBLESHOOTING.md)
+
 ## 🤝 Contribute
 
 Arnio is a **[GSSoC 2026](https://gssoc.girlscript.tech/)** project with a structured contributor backlog across beginner, intermediate, and advanced tracks.
@@ -1380,7 +1540,7 @@ arnio/
 │   └── bind_arnio.cpp       # pybind11 module — the Python↔C++ bridge
 ├── arnio/
 │   ├── __init__.py          # Public API surface
-│   ├── io.py                # read_csv, scan_csv
+│   ├── io.py                # read_csv, read_jsonl, scan_csv, write_csv
 │   ├── cleaning.py          # Python wrappers for C++ cleaning functions
 │   ├── pipeline.py          # Step registry + pipeline executor
 │   ├── convert.py           # to_pandas (zero-copy), from_pandas
@@ -1422,3 +1582,4 @@ arnio/
 <sub>Built with C++ and pybind11 · Licensed under MIT · Maintained by <a href="https://github.com/im-anishraj">@im-anishraj</a></sub>
 
 </div>
+

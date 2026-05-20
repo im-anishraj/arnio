@@ -93,6 +93,8 @@ class ColumnProfile:
     empty_string_count: int = 0
     whitespace_count: int = 0
     suggested_dtype: str | None = None
+    email_validity_ratio: float | None = None
+    url_validity_ratio: float | None = None
     min: Any = None
     max: Any = None
     mean: float | None = None
@@ -127,6 +129,8 @@ class ColumnProfile:
             "empty_string_count": self.empty_string_count,
             "whitespace_count": self.whitespace_count,
             "suggested_dtype": self.suggested_dtype,
+            "email_validity_ratio": self.email_validity_ratio,
+            "url_validity_ratio": self.url_validity_ratio,
             "min": _clean_scalar(self.min),
             "max": _clean_scalar(self.max),
             "mean": self.mean,
@@ -231,13 +235,13 @@ class DataQualityReport:
                 warnings = ", ".join(column.warnings) if column.warnings else "-"
 
                 lines.append(
-                    f"| {column.name} "
-                    f"| {column.dtype} "
-                    f"| {column.semantic_type} "
-                    f"| {column.null_count} "
-                    f"| {column.unique_count} "
-                    f"| {column.unique_ratio:.2%} "
-                    f"| {warnings} |"
+                    f"| {_markdown_cell(column.name)} "
+                    f"| {_markdown_cell(column.dtype)} "
+                    f"| {_markdown_cell(column.semantic_type)} "
+                    f"| {_markdown_cell(column.null_count)} "
+                    f"| {_markdown_cell(column.unique_count)} "
+                    f"| {_markdown_cell(f'{column.unique_ratio:.2%}')} "
+                    f"| {_markdown_cell(warnings)} |"
                 )
 
             lines.append("")
@@ -522,6 +526,8 @@ class DataQualityReport:
                     "empty_string_count": column.empty_string_count,
                     "whitespace_count": column.whitespace_count,
                     "suggested_dtype": column.suggested_dtype,
+                    "email_validity_ratio": column.email_validity_ratio,
+                    "url_validity_ratio": column.url_validity_ratio,
                     "min": _clean_scalar(column.min),
                     "max": _clean_scalar(column.max),
                     "mean": column.mean,
@@ -1667,6 +1673,19 @@ def _profile_column(
 
     semantic_type = _detect_semantic_type(name, series, dtype)
     suggested_dtype = _suggest_column_dtype(series, dtype)
+
+    email_validity_ratio = None
+    url_validity_ratio = None
+    if len(non_null) > 0:
+        if semantic_type == "email":
+            email_validity_ratio = _match_ratio(
+                non_null.astype("string").str.strip(), _EMAIL_PATTERN
+            )
+        elif semantic_type == "url":
+            url_validity_ratio = _match_ratio(
+                non_null.astype("string").str.strip(), _URL_PATTERN
+            )
+
     warnings = _column_warnings(
         null_count=null_count,
         row_count=row_count,
@@ -1687,6 +1706,8 @@ def _profile_column(
         empty_string_count=empty_string_count,
         whitespace_count=whitespace_count,
         suggested_dtype=suggested_dtype,
+        email_validity_ratio=email_validity_ratio,
+        url_validity_ratio=url_validity_ratio,
         min=min_value,
         max=max_value,
         mean=mean,
@@ -1762,7 +1783,9 @@ def _suggest_column_dtype(series: pd.Series, dtype: str) -> str | None:
 
     numeric = pd.to_numeric(values, errors="coerce")
     if numeric.notna().all():
-        return "int64" if (numeric % 1 == 0).all() else "float64"
+        if values.str.fullmatch(r"[+-]?\d+").all():
+            return "int64"
+        return "float64"
     return None
 
 

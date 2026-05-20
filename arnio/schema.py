@@ -50,6 +50,259 @@ _DTYPE_MAP = {
 }
 
 
+ISO_3166_1_ALPHA_2 = {
+    "AD",
+    "AE",
+    "AF",
+    "AG",
+    "AI",
+    "AL",
+    "AM",
+    "AO",
+    "AQ",
+    "AR",
+    "AS",
+    "AT",
+    "AU",
+    "AW",
+    "AX",
+    "AZ",
+    "BA",
+    "BB",
+    "BD",
+    "BE",
+    "BF",
+    "BG",
+    "BH",
+    "BI",
+    "BJ",
+    "BL",
+    "BM",
+    "BN",
+    "BO",
+    "BQ",
+    "BR",
+    "BS",
+    "BT",
+    "BV",
+    "BW",
+    "BY",
+    "BZ",
+    "CA",
+    "CC",
+    "CD",
+    "CF",
+    "CG",
+    "CH",
+    "CI",
+    "CK",
+    "CL",
+    "CM",
+    "CN",
+    "CO",
+    "CR",
+    "CU",
+    "CV",
+    "CW",
+    "CX",
+    "CY",
+    "CZ",
+    "DE",
+    "DJ",
+    "DK",
+    "DM",
+    "DO",
+    "DZ",
+    "EC",
+    "EE",
+    "EG",
+    "EH",
+    "ER",
+    "ES",
+    "ET",
+    "FI",
+    "FJ",
+    "FK",
+    "FM",
+    "FO",
+    "FR",
+    "GA",
+    "GB",
+    "GD",
+    "GE",
+    "GF",
+    "GG",
+    "GH",
+    "GI",
+    "GL",
+    "GM",
+    "GN",
+    "GP",
+    "GQ",
+    "GR",
+    "GS",
+    "GT",
+    "GU",
+    "GW",
+    "GY",
+    "HK",
+    "HM",
+    "HN",
+    "HR",
+    "HT",
+    "HU",
+    "ID",
+    "IE",
+    "IL",
+    "IM",
+    "IN",
+    "IO",
+    "IQ",
+    "IR",
+    "IS",
+    "IT",
+    "JE",
+    "JM",
+    "JO",
+    "JP",
+    "KE",
+    "KG",
+    "KH",
+    "KI",
+    "KM",
+    "KN",
+    "KP",
+    "KR",
+    "KW",
+    "KY",
+    "KZ",
+    "LA",
+    "LB",
+    "LC",
+    "LI",
+    "LK",
+    "LR",
+    "LS",
+    "LT",
+    "LU",
+    "LV",
+    "LY",
+    "MA",
+    "MC",
+    "MD",
+    "ME",
+    "MF",
+    "MG",
+    "MH",
+    "MK",
+    "ML",
+    "MM",
+    "MN",
+    "MO",
+    "MP",
+    "MQ",
+    "MR",
+    "MS",
+    "MT",
+    "MU",
+    "MV",
+    "MW",
+    "MX",
+    "MY",
+    "MZ",
+    "NA",
+    "NC",
+    "NE",
+    "NF",
+    "NG",
+    "NI",
+    "NL",
+    "NO",
+    "NP",
+    "NR",
+    "NU",
+    "NZ",
+    "OM",
+    "PA",
+    "PE",
+    "PF",
+    "PG",
+    "PH",
+    "PK",
+    "PL",
+    "PM",
+    "PN",
+    "PR",
+    "PS",
+    "PT",
+    "PW",
+    "PY",
+    "QA",
+    "RE",
+    "RO",
+    "RS",
+    "RU",
+    "RW",
+    "SA",
+    "SB",
+    "SC",
+    "SD",
+    "SE",
+    "SG",
+    "SH",
+    "SI",
+    "SJ",
+    "SK",
+    "SL",
+    "SM",
+    "SN",
+    "SO",
+    "SR",
+    "SS",
+    "ST",
+    "SV",
+    "SX",
+    "SY",
+    "SZ",
+    "TC",
+    "TD",
+    "TF",
+    "TG",
+    "TH",
+    "TJ",
+    "TK",
+    "TL",
+    "TM",
+    "TN",
+    "TO",
+    "TR",
+    "TT",
+    "TV",
+    "TW",
+    "TZ",
+    "UA",
+    "UG",
+    "UM",
+    "US",
+    "UY",
+    "UZ",
+    "VA",
+    "VC",
+    "VE",
+    "VG",
+    "VI",
+    "VN",
+    "VU",
+    "WF",
+    "WS",
+    "YE",
+    "YT",
+    "ZA",
+    "ZM",
+    "ZW",
+}
+
+
 @dataclass(frozen=True)
 class Field:
     """Validation rules for one column."""
@@ -89,6 +342,23 @@ class Schema:
                 raise TypeError(
                     f"Schema value for column {name!r} must be a Field instance such as ar.Int64(), got {type(field_def).__name__}"
                 )
+
+        if self.unique is not None:
+            if isinstance(self.unique, str):
+                raise TypeError(
+                    "Schema 'unique' must be a list or tuple of strings (e.g., ['column_name']), "
+                    f"not a bare string: {self.unique!r}."
+                )
+            if not isinstance(self.unique, (list, tuple)):
+                raise TypeError(
+                    "Schema 'unique' must be a list or tuple of strings (e.g., ['column_name']), "
+                    f"got {type(self.unique).__name__}."
+                )
+            for item in self.unique:
+                if not isinstance(item, str):
+                    raise TypeError(
+                        f"Schema 'unique' members must be strings, got {type(item).__name__} for element {item!r}."
+                    )
 
     def validate(self, frame: ArFrame) -> ValidationResult:
         """Validate a frame against this schema."""
@@ -216,7 +486,12 @@ class ValidationResult:
 
         return pd.DataFrame([issue.to_dict() for issue in self.issues])
 
-    def to_markdown(self, *, max_issues: int | None = None) -> str:
+    def to_markdown(
+        self,
+        *,
+        max_issues: int | None = None,
+        redact_values: bool = False,
+    ) -> str:
         """Return a GitHub-friendly Markdown validation report.
 
         Parameters
@@ -224,6 +499,10 @@ class ValidationResult:
         max_issues : int, optional
             Maximum number of issues to include in the table. When omitted, all
             issues are shown.
+        redact_values : bool, default False
+            When True, the *Value* column in the issue table is replaced with
+            ``[REDACTED]`` so that invalid/sensitive data is not exposed in
+            reports. Set to ``False`` (the default) to keep original behavior.
         """
         if max_issues is not None and (
             not isinstance(max_issues, int) or isinstance(max_issues, bool)
@@ -258,13 +537,18 @@ class ValidationResult:
             ]
         )
         for issue in visible_issues:
+            value_cell = (
+                "[REDACTED]"
+                if redact_values
+                else _markdown_cell(_clean_scalar(issue.value))
+            )
             lines.append(
                 "| "
                 f"{_markdown_cell(issue.column)} | "
                 f"{_markdown_cell(issue.rule)} | "
                 f"{_markdown_cell(issue.severity)} | "
                 f"{_markdown_cell(issue.row_index)} | "
-                f"{_markdown_cell(_clean_scalar(issue.value))} | "
+                f"{value_cell} | "
                 f"{_markdown_cell(issue.message)} |"
             )
 
@@ -490,6 +774,11 @@ def validate(frame: ArFrame, schema: Schema | dict[str, Field]) -> ValidationRes
     ValidationResult
         Validation result containing all issues and bad row indexes.
 
+    Raises
+    ------
+    TypeError
+        If schema.unique is provided but is not a list or tuple of strings.
+
     Examples
     --------
     >>> schema = ar.Schema({"email": ar.Email(nullable=False)})
@@ -527,7 +816,19 @@ def validate(frame: ArFrame, schema: Schema | dict[str, Field]) -> ValidationRes
                 )
 
     if schema.unique is not None:
-        if isinstance(schema.unique, (list, tuple)) and len(schema.unique) == 0:
+        if not isinstance(schema.unique, (list, tuple)):
+            raise TypeError(
+                "Schema 'unique' must be a list or tuple of strings (e.g., ['column_name']), "
+                f"got {type(schema.unique).__name__}."
+            )
+
+        for item in schema.unique:
+            if not isinstance(item, str):
+                raise TypeError(
+                    f"Schema 'unique' members must be strings, got {type(item).__name__} for element {item!r}."
+                )
+
+        if len(schema.unique) == 0:
             issues.append(
                 ValidationIssue(
                     column=None,
@@ -535,7 +836,7 @@ def validate(frame: ArFrame, schema: Schema | dict[str, Field]) -> ValidationRes
                     message="Composite unique columns cannot be empty",
                 )
             )
-        elif isinstance(schema.unique, (list, tuple)):
+        else:
             missing_cols = [c for c in schema.unique if c not in df.columns]
             if missing_cols:
                 for col in missing_cols:
@@ -558,7 +859,7 @@ def validate(frame: ArFrame, schema: Schema | dict[str, Field]) -> ValidationRes
                                     "Duplicate rows found for columns"
                                     f" {list(schema.unique)}"
                                 ),
-                                row_index=int(index),
+                                row_index=int(index) + 1,
                             )
                         )
     if schema.rules:
@@ -607,7 +908,19 @@ def Int64(
     severity: str = "error",
     required_if: tuple[str, Any] | None = None,
 ) -> Field:
-    """Create an int64 schema field."""
+    """Create an int64 schema field.
+
+    Args:
+        nullable: Whether null values are allowed.
+        min: Minimum allowed value.
+        max: Maximum allowed value.
+        unique: Whether non-null values must be unique.
+        severity: Severity level for validation issues.
+        required_if: Conditional requirement as a column/value pair.
+
+    Returns:
+        Field: Configured int64 schema field.
+    """
 
     if min is not None and max is not None and min > max:
         raise ValueError("min must be less than or equal to max")
@@ -632,7 +945,19 @@ def Float64(
     severity: str = "error",
     required_if: tuple[str, Any] | None = None,
 ) -> Field:
-    """Create a float64 schema field."""
+    """Create a float64 schema field.
+
+    Args:
+        nullable: Whether null values are allowed.
+        min: Minimum allowed value.
+        max: Maximum allowed value.
+        unique: Whether non-null values must be unique.
+        severity: Severity level for validation issues.
+        required_if: Conditional requirement as a column/value pair.
+
+    Returns:
+        Field: Configured float64 schema field.
+    """
 
     if min is not None and max is not None and min > max:
         raise ValueError("min must be less than or equal to max")
@@ -659,7 +984,21 @@ def String(
     max_length: int | None = None,
     required_if: tuple[str, Any] | None = None,
 ) -> Field:
-    """Create a string schema field."""
+    """Create a string schema field.
+
+    Args:
+        nullable: Whether null values are allowed.
+        pattern: Regular expression pattern that non-null values must match.
+        allowed: Allowed values for the field.
+        unique: Whether non-null values must be unique.
+        severity: Severity level for validation issues.
+        min_length: Minimum allowed string length.
+        max_length: Maximum allowed string length.
+        required_if: Conditional requirement as a column/value pair.
+
+    Returns:
+        Field: Configured string schema field.
+    """
 
     if min_length is not None and max_length is not None and min_length > max_length:
         raise ValueError("min_length must be less than or equal to max_length")
@@ -685,7 +1024,16 @@ def Bool(
     severity: str = "error",
     required_if: tuple[str, Any] | None = None,
 ) -> Field:
-    """Create a bool schema field."""
+    """Create a bool schema field.
+
+    Args:
+        nullable: Whether null values are allowed.
+        severity: Severity level for validation issues.
+        required_if: Conditional requirement as a column/value pair.
+
+    Returns:
+        Field: Configured bool schema field.
+    """
     return Field(
         dtype="bool",
         nullable=nullable,
@@ -702,7 +1050,18 @@ def Email(
     validation: str = "light",
     required_if: tuple[str, Any] | None = None,
 ) -> Field:
-    """Create an email-address schema field."""
+    """Create an email-address schema field.
+
+    Args:
+        nullable: Whether null values are allowed.
+        unique: Whether non-null values must be unique.
+        severity: Severity level for validation issues.
+        validation: Email validation mode, either "light" or "strict".
+        required_if: Conditional requirement as a column/value pair.
+
+    Returns:
+        Field: Configured email-address schema field.
+    """
     if validation not in {"light", "strict"}:
         raise ValueError("Email validation must be 'light' or 'strict'")
     return Field(
@@ -722,11 +1081,49 @@ def URL(
     severity: str = "error",
     required_if: tuple[str, Any] | None = None,
 ) -> Field:
-    """Create a URL schema field."""
+    """Create a URL schema field.
+
+    Args:
+        nullable: Whether null values are allowed.
+        unique: Whether non-null values must be unique.
+        severity: Severity level for validation issues.
+        required_if: Conditional requirement as a column/value pair.
+
+    Returns:
+        Field: Configured URL schema field.
+    """
     return Field(
         dtype="string",
         nullable=nullable,
         semantic="url",
+        unique=unique,
+        required_if=required_if,
+        severity=severity,
+    )
+
+
+def PhoneNumber(
+    *,
+    nullable: bool = True,
+    unique: bool = False,
+    severity: str = "error",
+    required_if: tuple[str, Any] | None = None,
+) -> Field:
+    """Create a phone-number schema field.
+
+    Args:
+        nullable: Whether null values are allowed.
+        unique: Whether non-null values must be unique.
+        severity: Severity level for validation issues.
+        required_if: Conditional requirement as a column/value pair.
+
+    Returns:
+        Field: Configured phone-number schema field.
+    """
+    return Field(
+        dtype="string",
+        nullable=nullable,
+        semantic="phone",
         unique=unique,
         required_if=required_if,
         severity=severity,
@@ -740,13 +1137,42 @@ def CountryCode(
     severity: str = "error",
     required_if: tuple[str, Any] | None = None,
 ) -> Field:
-    """Create an uppercase ISO alpha-2 country-code schema field."""
+    """Create an uppercase ISO alpha-2 country-code schema field.
+
+    Args:
+        nullable: Whether null values are allowed.
+        unique: Whether non-null values must be unique.
+        severity: Severity level for validation issues.
+        required_if: Conditional requirement as a column/value pair.
+
+    Returns:
+        Field: Configured uppercase ISO alpha-2 country-code schema field.
+    """
     return Field(
         dtype="string",
         nullable=nullable,
         semantic="country_code",
+        unique=unique,
         required_if=required_if,
         severity=severity,
+    )
+
+
+def CurrencyCode(*, nullable: bool = True, unique: bool = False) -> Field:
+    """Create a currency-code schema field.
+
+    Args:
+        nullable: Whether null values are allowed.
+        unique: Whether non-null values must be unique.
+
+    Returns:
+        Field: Configured 3-letter uppercase currency-code schema field.
+    """
+    return Field(
+        dtype="string",
+        nullable=nullable,
+        semantic="currency_code",
+        unique=unique,
     )
 
 
@@ -757,7 +1183,17 @@ def Date(
     severity: str = "error",
     required_if: tuple[str, Any] | None = None,
 ) -> Field:
-    """Create a date schema field."""
+    """Create a date schema field.
+
+    Args:
+        nullable: Whether null values are allowed.
+        unique: Whether non-null values must be unique.
+        severity: Severity level for validation issues.
+        required_if: Conditional requirement as a column/value pair.
+
+    Returns:
+        Field: Configured date schema field.
+    """
     return Field(
         dtype="string",
         nullable=nullable,
@@ -1030,6 +1466,8 @@ def _validate_column(
                     invalid = pd.Series(
                         {index: value for index, value in invalid_values}
                     )
+                elif field_def.semantic == "country_code":
+                    invalid = non_null[~non_null.isin(ISO_3166_1_ALPHA_2)]
                 else:
                     invalid = non_null[~text.str.fullmatch(pattern, na=False)]
 
@@ -1217,6 +1655,7 @@ _SEMANTIC_PATTERNS = {
     "url": r"https?://[^\s]+",
     "phone": r"\+?[0-9][0-9 .()\-]{6,}[0-9]",
     "country_code": r"[A-Z]{2}",
+    "currency_code": r"[A-Z]{3}",
     "date": r"\d{4}-\d{2}-\d{2}",
 }
 

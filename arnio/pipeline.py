@@ -43,7 +43,7 @@ _PYTHON_STEP_REGISTRY: dict[str, Callable] = {
 }
 
 
-def register_step(name: str, fn: Callable):
+def register_step(name: str, fn: Callable, overwrite: bool = False):
     """Register a custom Python pipeline step.
 
     Parameters
@@ -52,15 +52,37 @@ def register_step(name: str, fn: Callable):
         Name of the step for use in pipelines.
     fn : Callable
         Function to call for this step. Should accept (df, **kwargs) and return modified df.
+    overwrite : bool, default False
+        If True, allows replacing an existing custom Python step with the same name.
+        Cannot be used to overwrite built-in C++ steps.
+
+    Raises
+    ------
+    ValueError
+        If the step name conflicts with a built-in C++ step name, or if the name
+        conflicts with an existing custom Python step and `overwrite` is False.
 
     Examples
     --------
     >>> def custom_clean(df, threshold=0.5):
     ...     return df.dropna(thresh=threshold)
     >>> ar.register_step("custom_clean", custom_clean)
+    # Overwriting an existing custom step intentionally
+    >>> def new_custom_clean(df):
+    ...     return df
+    >>> ar.register_step("custom_clean", new_custom_clean, overwrite=True)
     """
     with _REGISTRY_LOCK:
-
+        if name in _STEP_REGISTRY:
+            raise ValueError(
+                f"Cannot register '{name}': conflicts with built-in C++ step. "
+                f"Use a different name."
+            )
+        if name in _PYTHON_STEP_REGISTRY and not overwrite:
+            raise ValueError(
+                f"Step '{name}' is already registered as a custom Python step. "
+                "To intentionally overwrite it, set 'overwrite=True'."
+            )
         _PYTHON_STEP_REGISTRY[name] = fn
 
 
@@ -102,6 +124,7 @@ def pipeline(
     steps: list[tuple],
     *,
     return_metadata: bool = False,
+    dry_run: bool = False,
 ) -> ArFrame | tuple[ArFrame, dict[str, Any]]:
     """Apply a list of cleaning steps sequentially.
 
@@ -118,6 +141,10 @@ def pipeline(
     return_metadata : bool, default False
         When True, also return a metadata dictionary with per-step timing
         information in execution order.
+
+    dry_run : bool, default False
+        Validates pipeline structure and step execution without
+        returning transformed output.
 
     Returns
     -------
@@ -149,6 +176,7 @@ def pipeline(
     )
 
     result = frame
+
     step_timings: list[dict[str, Any]] = []
     for step in steps:
         if len(step) == 1:
@@ -168,11 +196,28 @@ def pipeline(
         if name in _STEP_REGISTRY:
             # C++ backed step - fast path
             fn = _STEP_REGISTRY[name]
+
             started_at = perf_counter()
-            if name in {"rename_columns", "cast_types"} and "mapping" not in kwargs:
-                result = fn(result, kwargs)
+            if name == "rename_columns" and "mapping" not in kwargs:
+                step_result = fn(result, mapping=kwargs)
+
+                if not dry_run:
+                    result = step_result
+
+            elif name == "cast_types" and "mapping" not in kwargs:
+                step_result = fn(result, kwargs)
+
+                if not dry_run:
+                    result = step_result
+
             else:
-                result = fn(result, **kwargs)
+                target_frame = result
+
+                step_result = fn(target_frame, **kwargs)
+
+                if not dry_run:
+                    result = step_result
+
             if return_metadata:
                 step_timings.append(
                     {
@@ -183,7 +228,9 @@ def pipeline(
         elif name in python_step_registry:
             # Pure Python step - slower but contributor-friendly
             started_at = perf_counter()
+
             fn = python_step_registry[name]
+
             df = to_pandas(result)
 
             # Isolate genuine custom steps from internal core library functions
@@ -210,7 +257,10 @@ def pipeline(
                     f"{type(returned).__name__!r} instead of a pandas DataFrame. "
                     "Steps must return a pandas DataFrame."
                 )
-            result = from_pandas(returned)
+            step_result = from_pandas(returned)
+            if not dry_run:
+                result = step_result
+
             if return_metadata:
                 step_timings.append(
                     {

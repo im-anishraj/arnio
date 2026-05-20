@@ -76,6 +76,53 @@ class TestPipeline:
         )
         assert result.shape[0] == 3
 
+    def test_pipeline_dry_run_validates_builtin_step_arguments(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "name": ["Alice", None],
+                }
+            )
+        )
+
+        with pytest.raises(KeyError, match="missing"):
+            ar.pipeline(
+                frame,
+                [
+                    ("strip_whitespace", {"subset": ["missing"]}),
+                ],
+                dry_run=True,
+            )
+
+    def test_pipeline_dry_run_mapping_shorthand_does_not_mutate(self):
+        original = pd.DataFrame(
+            {
+                "transaction_id": ["t001", "t002"],
+            }
+        )
+        frame = ar.from_pandas(original)
+
+        result = ar.pipeline(
+            frame,
+            [
+                (
+                    "rename_columns",
+                    {
+                        "transaction_id": "TRANSACTION_ID",
+                    },
+                ),
+            ],
+            dry_run=True,
+        )
+
+        output = ar.to_pandas(result)
+
+        pd.testing.assert_frame_equal(
+            output,
+            original,
+            check_dtype=False,
+        )
+
     def test_pipeline_drop_constant_columns(self):
         import pandas as pd
 
@@ -255,6 +302,43 @@ class TestPipeline:
         frame = ar.read_csv(sample_csv)
         result = ar.pipeline(frame, [])
         assert result.shape == frame.shape
+
+    def test_pipeline_dry_run_returns_original_frame(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        result = ar.pipeline(
+            frame,
+            [
+                ("strip_whitespace",),
+            ],
+            dry_run=True,
+        )
+
+        assert result is frame
+
+    def test_pipeline_dry_run_validates_unknown_steps(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(ar.UnknownStepError):
+            ar.pipeline(
+                frame,
+                [
+                    ("missing_step",),
+                ],
+                dry_run=True,
+            )
+
+    def test_pipeline_dry_run_validates_invalid_kwargs(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(ValueError, match="Expected a dict"):
+            ar.pipeline(
+                frame,
+                [
+                    ("drop_nulls", "subset=name"),
+                ],
+                dry_run=True,
+            )
 
     def test_pipeline_return_metadata_disabled_by_default(self, sample_csv):
         frame = ar.read_csv(sample_csv)
@@ -590,6 +674,18 @@ def test_filter_rows_direct_api():
     result_df = ar.to_pandas(result)
 
     assert list(result_df["age"]) == [30, 40]
+
+
+def test_filter_rows_pipeline_invalid_comparison_keeps_column_context():
+    import pandas as pd
+    import pytest
+
+    import arnio as ar
+
+    frame = ar.from_pandas(pd.DataFrame({"name": ["Alice", "Bob"]}))
+
+    with pytest.raises(TypeError, match="filter_rows: cannot compare column 'name'"):
+        ar.pipeline(frame, [("filter_rows", {"column": "name", "op": ">", "value": 1})])
 
 
 def test_round_numeric_columns_pipeline():
@@ -929,3 +1025,80 @@ def test_pipeline_drop_columns_matching_all_columns():
     frame = ar.from_pandas(df)
     with pytest.raises(ValueError, match="Pattern matches all columns"):
         ar.pipeline(frame, [("drop_columns_matching", {"pattern": ".*"})])
+
+
+def test_register_step_conflict_raises_value_error():
+    def dummy_step(df):
+        return df
+
+    with pytest.raises(ValueError, match="conflicts with built-in C\\+\\+ step"):
+        ar.register_step("drop_nulls", dummy_step)
+
+
+def test_register_step_success():
+    import pandas as pd
+
+    from arnio.pipeline import _PYTHON_STEP_REGISTRY
+
+    def custom_uppercase_step(df, column_name: str):
+        df[column_name] = df[column_name].str.upper()
+        return df
+
+    step_name = "test_custom_upper_mutation"
+    ar.register_step(step_name, custom_uppercase_step)
+
+    assert step_name in _PYTHON_STEP_REGISTRY
+
+    df = pd.DataFrame({"name": ["bar", "boo", "baz"]})
+    frame = ar.from_pandas(df)
+
+    result_frame = ar.pipeline(frame, [(step_name, {"column_name": "name"})])
+
+    processed_df = ar.to_pandas(result_frame)
+    assert processed_df["name"].tolist() == ["BAR", "BOO", "BAZ"]
+
+
+def test_register_step_duplicate_custom_raises_value_error():
+    def step_v1(df):
+        return df
+
+    def step_v2(df):
+        return df
+
+    step_name = "test_policy_duplicate_reject"
+    ar.register_step(step_name, step_v1)
+
+    with pytest.raises(ValueError, match="already registered as a custom Python step"):
+        ar.register_step(step_name, step_v2)
+
+
+def test_register_step_explicit_overwrite_success():
+    import pandas as pd
+
+    def add_one(df):
+        df["val"] = df["val"] + 1
+        return df
+
+    def add_ten(df):
+        df["val"] = df["val"] + 10
+        return df
+
+    step_name = "test_policy_overwrite_mutation"
+
+    ar.register_step(step_name, add_one)
+    ar.register_step(step_name, add_ten, overwrite=True)
+
+    df = pd.DataFrame({"val": [0]})
+    frame = ar.from_pandas(df)
+    result = ar.pipeline(frame, [(step_name,)])
+
+    processed_df = ar.to_pandas(result)
+    assert processed_df["val"].tolist() == [10]
+
+
+def test_register_step_overwrite_cannot_bypass_builtin_protection():
+    def dummy_step(df):
+        return df
+
+    with pytest.raises(ValueError, match="conflicts with built-in C\\+\\+ step"):
+        ar.register_step("drop_nulls", dummy_step, overwrite=True)

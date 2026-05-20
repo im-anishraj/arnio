@@ -40,13 +40,21 @@ from .convert import from_pandas, to_pandas
 from .exceptions import (
     ArnioError,
     CsvReadError,
+    JsonlReadError,
     PipelineStepError,
     TypeCastError,
     UnknownStepError,
 )
 from .frame import ArFrame
 from .integrations import ArnioPandasAccessor
-from .io import read_csv, scan_csv, write_csv
+from .io import (
+    read_csv,
+    read_csv_chunked,
+    read_jsonl,
+    scan_csv,
+    sniff_delimiter,
+    write_csv,
+)
 from .pipeline import pipeline, register_step
 from .quality import (
     CleanExplanation,
@@ -66,6 +74,7 @@ from .schema import (
     URL,
     Bool,
     CountryCode,
+    CurrencyCode,
     Custom,
     Date,
     DateTime,
@@ -73,6 +82,7 @@ from .schema import (
     Field,
     Float64,
     Int64,
+    PhoneNumber,
     Regex,
     Schema,
     SchemaDiff,
@@ -90,8 +100,11 @@ __all__ = [
     "ArFrame",
     # I/O
     "read_csv",
+    "read_csv_chunked",
+    "read_jsonl",
     "write_csv",
     "scan_csv",
+    "sniff_delimiter",
     # Cleaning
     "drop_nulls",
     "drop_columns",
@@ -149,14 +162,17 @@ __all__ = [
     "Float64",
     "String",
     "CountryCode",
+    "CurrencyCode",
     "Bool",
     "Email",
     "URL",
+    "PhoneNumber",
     "DateTime",
     # Exceptions
     "UnknownStepError",
     "ArnioError",
     "CsvReadError",
+    "JsonlReadError",
     "TypeCastError",
     "PipelineStepError",
     "normalize_unicode",

@@ -265,6 +265,7 @@ def test_validation_result_to_markdown_includes_issue_table(sample_csv):
         {"age": ar.Int64(min=31), "missing": ar.String()},
     )
 
+    # Default: redact_values=False — raw values are shown
     markdown = result.to_markdown()
 
     assert "- Status: **failed**" in markdown
@@ -303,11 +304,17 @@ def test_validation_result_to_markdown_escapes_table_cells():
         bad_rows=[0],
     )
 
+    # Column, value, and message cells are escaped (default: redact_values=False)
     markdown = result.to_markdown()
-
     assert "notes\\|raw" in markdown
     assert "left\\|right<br>next" in markdown
     assert "Expected one\\|two<br>lines" in markdown
+
+    # Opt-in to redaction — value is replaced with [REDACTED]
+    markdown_redacted = result.to_markdown(redact_values=True)
+    assert "notes\\|raw" in markdown_redacted
+    assert "[REDACTED]" in markdown_redacted
+    assert "Expected one\\|two<br>lines" in markdown_redacted
 
 
 def test_validation_result_to_markdown_rejects_negative_max_issues(sample_csv):
@@ -331,6 +338,104 @@ def test_validation_result_to_markdown_rejects_non_integer_max_issues(sample_csv
             assert "max_issues must be an integer or None" in str(exc)
         else:
             raise AssertionError(f"Expected max_issues={invalid!r} to raise")
+
+
+# ---------------------------------------------------------------------------
+# Regression tests: redaction policy for ValidationResult.to_markdown
+# ---------------------------------------------------------------------------
+
+
+def test_validation_result_to_markdown_does_not_redact_by_default():
+    """Value column must contain raw value when redact_values=False (default)."""
+    result = ar.ValidationResult(
+        row_count=1,
+        issue_count=1,
+        issues=[
+            ar.ValidationIssue(
+                column="email",
+                rule="email",
+                row_index=1,
+                value="secret@internal.example.com",
+                message="Invalid email",
+            )
+        ],
+        bad_rows=[1],
+    )
+
+    markdown = result.to_markdown()  # default: redact_values=False
+
+    assert "[REDACTED]" not in markdown
+    assert "secret@internal.example.com" in markdown
+
+
+def test_validation_result_to_markdown_redacts_when_opted_in():
+    """Value column must contain [REDACTED] when redact_values=True."""
+    result = ar.ValidationResult(
+        row_count=1,
+        issue_count=1,
+        issues=[
+            ar.ValidationIssue(
+                column="email",
+                rule="email",
+                row_index=1,
+                value="secret@internal.example.com",
+                message="Invalid email",
+            )
+        ],
+        bad_rows=[1],
+    )
+
+    markdown = result.to_markdown(redact_values=True)
+
+    assert "[REDACTED]" in markdown
+    assert "secret@internal.example.com" not in markdown
+
+
+def test_validation_result_to_markdown_redacted_output_is_deterministic():
+    """to_markdown() must return identical output on repeated calls."""
+    result = ar.ValidationResult(
+        row_count=2,
+        issue_count=2,
+        issues=[
+            ar.ValidationIssue(
+                column="age", rule="min", row_index=1, value=-5, message="below 0"
+            ),
+            ar.ValidationIssue(
+                column="age", rule="max", row_index=2, value=999, message="above 120"
+            ),
+        ],
+        bad_rows=[1, 2],
+    )
+
+    assert result.to_markdown() == result.to_markdown()
+    assert result.to_markdown(redact_values=True) == result.to_markdown(
+        redact_values=True
+    )
+
+
+def test_validation_result_to_markdown_none_value_redacted():
+    """None/missing values are also replaced with [REDACTED] when redaction is enabled."""
+    result = ar.ValidationResult(
+        row_count=1,
+        issue_count=1,
+        issues=[
+            ar.ValidationIssue(
+                column="col",
+                rule="nullable",
+                row_index=1,
+                value=None,
+                message="Null not allowed",
+            )
+        ],
+        bad_rows=[1],
+    )
+
+    markdown = result.to_markdown(redact_values=True)  # explicit redaction
+    assert "[REDACTED]" in markdown
+
+    markdown_raw = result.to_markdown()  # default redaction is False
+    # None -> empty cell in raw mode
+    assert "[REDACTED]" not in markdown_raw
 
 
 def test_custom_pattern_validation(tmp_path):
@@ -515,6 +620,230 @@ def test_email_strict_validation_accepts_valid_emails(tmp_path):
     assert result.passed
 
 
+def test_phone_number_validation_passes():
+    import pandas as pd
+
+    schema = ar.Schema(
+        {
+            "phone": ar.PhoneNumber(),
+        }
+    )
+
+    df = pd.DataFrame(
+        {
+            "phone": [
+                "+1-555-123-4567",
+                "+1 (555) 123-4567",
+                "+91 9876543210",
+                "5551234567",
+            ]
+        }
+    )
+
+    frame = ar.from_pandas(df)
+    result = ar.validate(frame, schema)
+
+    assert result.passed
+
+
+def test_phone_number_validation_fails():
+    import pandas as pd
+
+    schema = ar.Schema(
+        {
+            "phone": ar.PhoneNumber(),
+        }
+    )
+
+    df = pd.DataFrame(
+        {
+            "phone": [
+                "abc123",
+                "12",
+                "++123456",
+                "phone-number",
+            ]
+        }
+    )
+
+    frame = ar.from_pandas(df)
+    result = ar.validate(frame, schema)
+
+    assert not result.passed
+
+
+def test_phone_number_nullable_true_accepts_nulls():
+    import pandas as pd
+
+    schema = ar.Schema(
+        {
+            "phone": ar.PhoneNumber(nullable=True),
+        }
+    )
+
+    df = pd.DataFrame(
+        {
+            "phone": [
+                "+1-555-123-4567",
+                None,
+                pd.NA,
+            ]
+        }
+    )
+
+    frame = ar.from_pandas(df)
+
+    result = ar.validate(frame, schema)
+
+    assert result.passed
+
+
+def test_phone_number_nullable_false_rejects_nulls():
+    import pandas as pd
+
+    schema = ar.Schema(
+        {
+            "phone": ar.PhoneNumber(nullable=False),
+        }
+    )
+
+    df = pd.DataFrame(
+        {
+            "phone": [
+                "+1-555-123-4567",
+                None,
+            ]
+        }
+    )
+
+    frame = ar.from_pandas(df)
+
+    result = ar.validate(frame, schema)
+
+    assert not result.passed
+
+    assert any(issue.rule == "nullable" for issue in result.issues)
+
+
+def test_phone_number_unique_constraint():
+    import pandas as pd
+
+    schema = ar.Schema(
+        {
+            "phone": ar.PhoneNumber(unique=True),
+        }
+    )
+
+    df = pd.DataFrame(
+        {
+            "phone": [
+                "555-123-4567",
+                "555-123-4567",
+            ]
+        }
+    )
+
+    frame = ar.from_pandas(df)
+
+    result = ar.validate(frame, schema)
+
+    assert not result.passed
+
+    assert any(issue.rule == "unique" for issue in result.issues)
+
+
+def test_phone_number_formatted_and_invalid_edge_cases():
+    import pandas as pd
+
+    schema = ar.Schema(
+        {
+            "phone": ar.PhoneNumber(),
+        }
+    )
+
+    df = pd.DataFrame(
+        {
+            "phone": [
+                "+1 (555) 123-4567",
+                "555-123-4567",
+                "++1-555-123-4567",
+                "123",
+            ]
+        }
+    )
+
+    frame = ar.from_pandas(df)
+
+    result = ar.validate(frame, schema)
+
+    assert not result.passed
+
+    invalid_values = {issue.value for issue in result.issues}
+
+    assert "++1-555-123-4567" in invalid_values
+    assert "123" in invalid_values
+
+
+def test_phone_number_mixed_object_column_behavior():
+    import pandas as pd
+
+    schema = ar.Schema(
+        {
+            "phone": ar.PhoneNumber(nullable=True),
+        }
+    )
+
+    df = pd.DataFrame(
+        {
+            "phone": [
+                "+1-555-123-4567",
+                1234567890,
+                True,
+                None,
+                "invalid",
+            ]
+        },
+        dtype=object,
+    )
+
+    frame = ar.from_pandas(df)
+
+    result = ar.validate(frame, schema)
+
+    assert not result.passed
+
+    invalid_values = {str(issue.value) for issue in result.issues}
+
+    assert "True" in invalid_values
+    assert "invalid" in invalid_values
+
+
+def test_phone_number_warning_severity_does_not_fail_validation():
+    import pandas as pd
+
+    schema = ar.Schema(
+        {
+            "phone": ar.PhoneNumber(severity="warning"),
+        }
+    )
+
+    df = pd.DataFrame(
+        {
+            "phone": ["invalid-phone"],
+        }
+    )
+
+    frame = ar.from_pandas(df)
+
+    result = ar.validate(frame, schema)
+
+    assert result.passed
+
+    assert result.issue_count == 1
+
+    assert result.issues[0].severity == "warning"
+
+
 def test_country_code_validation_accepts_iso_alpha_2_codes(tmp_path):
     path = tmp_path / "countries.csv"
     path.write_text("country\nIN\nUS\nGB\nFR\n")
@@ -530,7 +859,7 @@ def test_country_code_validation_accepts_iso_alpha_2_codes(tmp_path):
 
 def test_country_code_validation_rejects_invalid_codes(tmp_path):
     path = tmp_path / "bad_countries.csv"
-    path.write_text("country\nIND\n1A\nA\nUSA\ngb\nFr\n\n")
+    path.write_text("country\nIND\n1A\nA\nUSA\ngb\nFr\nQQ\nZZ\nAA\n")
 
     result = ar.validate(
         ar.read_csv(path),
@@ -538,10 +867,47 @@ def test_country_code_validation_rejects_invalid_codes(tmp_path):
     )
 
     assert not result.passed
-    assert result.issue_count == 6
+    assert result.issue_count == 9
 
-    assert [issue.row_index for issue in result.issues] == [1, 2, 3, 4, 5, 6]
-    assert {issue.rule for issue in result.issues} == {"country_code"}
+    assert [issue.row_index for issue in result.issues] == [1, 2, 3, 4, 5, 6, 7, 8, 9]
+    assert all(issue.rule == "country_code" for issue in result.issues)
+
+
+def test_country_code_enforces_uniqueness(tmp_path):
+    path = tmp_path / "duplicate_countries.csv"
+    path.write_text("country\nIN\nUS\nIN\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"country": ar.CountryCode(unique=True)},
+    )
+
+    assert not result.passed
+    assert result.issue_count == 2
+    assert all(issue.rule == "unique" for issue in result.issues)
+    assert [issue.row_index for issue in result.issues] == [1, 3]
+
+
+def test_country_code_nullable_behavior(tmp_path):
+    path = tmp_path / "nullable_countries.csv"
+    path.write_text('country\nIN\n""\nUS\n')
+
+    # nullable=True should pass
+    result_nullable = ar.validate(
+        ar.read_csv(path),
+        {"country": ar.CountryCode(nullable=True)},
+    )
+    assert result_nullable.passed
+
+    # nullable=False should fail on row 2
+    result_not_nullable = ar.validate(
+        ar.read_csv(path),
+        {"country": ar.CountryCode(nullable=False)},
+    )
+    assert not result_not_nullable.passed
+    assert result_not_nullable.issue_count == 1
+    assert result_not_nullable.issues[0].rule == "nullable"
+    assert result_not_nullable.issues[0].row_index == 2
 
 
 def test_string_min_length_boundary(tmp_path):
@@ -667,8 +1033,8 @@ def test_schema_composite_unique_fails(tmp_path):
     assert not result.passed
     issues = [i for i in result.issues if i.rule == "composite_unique"]
     assert len(issues) == 2
-    assert issues[0].row_index == 0
-    assert issues[1].row_index == 2
+    assert issues[0].row_index == 1
+    assert issues[1].row_index == 3
     assert "['user_id', 'course_id']" in issues[0].message
 
 
@@ -706,6 +1072,70 @@ def test_schema_composite_unique_empty_columns(tmp_path):
     issues = [i for i in result.issues if i.rule == "composite_unique"]
     assert len(issues) == 1
     assert "cannot be empty" in issues[0].message
+
+
+def test_schema_unique_rejects_string():
+    with pytest.raises(TypeError) as exc:
+        ar.Schema(
+            {
+                "user_id": ar.Int64(),
+            },
+            unique="user_id",
+        )
+    assert "bare string" in str(exc.value)
+
+
+def test_schema_unique_rejects_invalid_type():
+    with pytest.raises(TypeError) as exc:
+        ar.Schema(
+            {
+                "user_id": ar.Int64(),
+            },
+            unique=123,  # type: ignore[arg-type]
+        )
+    assert "must be a list or tuple" in str(exc.value)
+
+
+def test_schema_unique_rejects_non_string_members():
+    with pytest.raises(TypeError) as exc:
+        ar.Schema(
+            {
+                "user_id": ar.Int64(),
+            },
+            unique=["col1", None],  # type: ignore[list-item]
+        )
+    assert "members must be strings" in str(exc.value)
+
+    with pytest.raises(TypeError) as exc:
+        ar.Schema(
+            {
+                "user_id": ar.Int64(),
+            },
+            unique=["col1", 123],  # type: ignore[list-item]
+        )
+    assert "members must be strings" in str(exc.value)
+
+
+def test_schema_unique_accepts_valid_types():
+    # Verify list of strings initializes successfully
+    schema_list = ar.Schema(
+        {
+            "user_id": ar.Int64(),
+            "course_id": ar.Int64(),
+        },
+        unique=["user_id", "course_id"],
+    )
+    assert schema_list.unique == ["user_id", "course_id"]
+
+    # Verify tuple of strings initializes successfully
+    schema_tuple = ar.Schema(
+        {
+            "user_id": ar.Int64(),
+            "course_id": ar.Int64(),
+        },
+        unique=("user_id", "course_id"),
+    )
+    assert schema_tuple.unique == ("user_id", "course_id")
 
 
 def test_email_default_keeps_backward_compatibility(sample_csv):
@@ -1158,6 +1588,21 @@ def test_schema_rules_row_index_for_multiple_failing_rows(tmp_path):
     assert row_indexes == [1, 3]
 
 
+def test_row_index_convention_is_documented_and_correct(tmp_path):
+    """Regression: row_index is 1-based, header excluded, first data row = 1."""
+    path = tmp_path / "rows.csv"
+    path.write_text("name,age\nAlice,30\nBob,-1\nCarol,25\n")
+    frame = ar.read_csv(path)
+    result = ar.validate(frame, {"age": ar.Int64(min=0)})
+
+    assert not result.passed
+    assert len(result.issues) == 1
+    # Bob is the second data row → row_index must be 2, not 0 or 1
+    assert result.issues[0].row_index == 2
+    assert result.issues[0].column == "age"
+    assert result.issues[0].rule == "min"
+
+
 def test_schema_rules_missing_column_returns_validation_issue(tmp_path):
     path = tmp_path / "dates.csv"
     path.write_text("start_date,end_date\n2024-01-01,2024-06-01\n")
@@ -1314,6 +1759,39 @@ def test_schema_rules_none_by_default(tmp_path):
     result = schema.validate(frame)
     assert result.passed
     assert result.issue_count == 0
+
+
+def test_currency_code_valid(tmp_path):
+    path = tmp_path / "currencies.csv"
+    path.write_text("currency\nUSD\nEUR\nINR\nJPY\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"currency": ar.CurrencyCode(nullable=False)},
+    )
+
+    assert result.passed
+    assert result.issue_count == 0
+
+
+def test_currency_code_invalid(tmp_path):
+    path = tmp_path / "bad_currencies.csv"
+    # We add a dummy column so the empty currency row isn't skipped as a blank line
+    path.write_text("currency,dummy\nUS,1\nUSDD,2\nusd,3\nUS1,4\nEur,5\n,6\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"currency": ar.CurrencyCode(nullable=False)},
+    )
+
+    assert not result.passed
+    assert result.issue_count == 6
+
+    assert sorted([issue.row_index for issue in result.issues]) == [1, 2, 3, 4, 5, 6]
+
+    rules = {issue.rule for issue in result.issues}
+    assert "currency_code" in rules
+    assert "nullable" in rules
 
 
 def test_schema_rules_issue_shape_matches_validation_issue(tmp_path):
@@ -1518,3 +1996,31 @@ def test_datetime_timezone_aware_above_max_fails(tmp_path):
     assert not result.passed
     assert any(i.rule == "max" for i in result.issues)
     assert result.issues[0].row_index == 1
+
+
+def test_validate_unique_string_raises_type_error(tmp_path):
+    schema = ar.Schema(fields={"id": ar.String()}, unique=["id"])
+
+    object.__setattr__(schema, "unique", "id")
+
+    path = tmp_path / "unique_test.csv"
+    path.write_text("id\nA\nB\nA\n")
+    frame = ar.read_csv(path)
+
+    with pytest.raises(
+        TypeError, match="Schema 'unique' must be a list or tuple of strings"
+    ):
+        ar.validate(frame, schema)
+
+
+def test_validate_unique_invalid_member_type_raises_type_error(tmp_path):
+    schema = ar.Schema(fields={"id": ar.String()}, unique=["id"])
+
+    object.__setattr__(schema, "unique", ["id", 123])
+
+    path = tmp_path / "unique_member_test.csv"
+    path.write_text("id\nA\nB\n")
+    frame = ar.read_csv(path)
+
+    with pytest.raises(TypeError, match="Schema 'unique' members must be strings"):
+        ar.validate(frame, schema)
