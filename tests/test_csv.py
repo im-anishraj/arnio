@@ -1454,6 +1454,44 @@ class TestScanCsv:
         with pytest.raises(ar.CsvReadError):
             ar.read_csv(csv_file, encoding="utf-8", encoding_errors="strict")
 
+    def test_scan_csv_returns_metadata(self, tmp_path):
+        csv_path = tmp_path / "metadata.csv"
+        csv_path.write_text("id,name\n1,Alice\n2,Bob\n")
+
+        result = ar.scan_csv(csv_path, return_metadata=True)
+
+        assert "schema" in result
+        assert "metadata" in result
+
+        assert result["schema"] == {
+            "id": "int64",
+            "name": "string",
+        }
+
+        metadata = result["metadata"]
+
+        assert metadata["delimiter"] == ","
+        assert metadata["encoding"] == "utf-8"
+        assert metadata["sampled_rows"] == 100
+
+    def test_scan_csv_returns_custom_metadata_values(self, tmp_path):
+        csv_path = tmp_path / "custom_metadata.csv"
+        csv_path.write_text("id;value\n1;100\n2;200\n")
+
+        result = ar.scan_csv(
+            csv_path,
+            delimiter=";",
+            encoding="utf-8",
+            sample_size=50,
+            return_metadata=True,
+        )
+
+        metadata = result["metadata"]
+
+        assert metadata["delimiter"] == ";"
+        assert metadata["encoding"] == "utf-8"
+        assert metadata["sampled_rows"] == 50
+
 
 # --- Issue #115: quoted multiline round-trip across line endings ---
 
