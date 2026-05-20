@@ -6,6 +6,7 @@ import sys
 import types
 
 import pytest
+
 # Create fake arnio package and submodules to satisfy relative imports
 arnio_pkg = types.ModuleType("arnio")
 arnio_pkg.__path__ = []
