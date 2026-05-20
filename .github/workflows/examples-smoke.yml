@@ -1,0 +1,90 @@
+# .github/workflows/examples-smoke.yml
+#
+# Smoke-tests every Python example script to make sure they run
+# without errors on every push and pull request.
+#
+# Skipped scripts (with reasons):
+#   - arnio_with_duckdb.py        : requires 'duckdb', an optional dependency
+#                                   not included in core. Tested in a separate
+#                                   optional job below.
+#   - financial_csv_example.ipynb : requires a Jupyter runtime — not a
+#                                   plain Python script, out of scope for smoke CI.
+
+name: Examples Smoke Test
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  # -----------------------------------------------------------------------
+  # Job 1: Core examples — only need arnio + pandas + numpy + scikit-learn
+  # -----------------------------------------------------------------------
+  examples-core:
+    name: Smoke – core examples
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install core dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install arnio pandas numpy scikit-learn
+
+      - name: Smoke – basic_usage.py
+        run: python examples/basic_usage.py
+
+      - name: Smoke – auto_clean_tutorial.py
+        run: python examples/auto_clean_tutorial.py
+
+      - name: Smoke – custom_step.py
+        run: python examples/custom_step.py
+
+      - name: Smoke – arnio_with_pandas.py
+        run: python examples/arnio_with_pandas.py
+
+      - name: Smoke – arnio_with_numpy.py
+        run: python examples/arnio_with_numpy.py
+
+      - name: Smoke – arnio_with_sklearn.py
+        run: python examples/arnio_with_sklearn.py
+
+      - name: Smoke – sklearn_pipeline.py
+        run: python examples/sklearn_pipeline.py
+
+  # -----------------------------------------------------------------------
+  # Job 2: Optional DuckDB example — runs separately so a missing optional
+  # dependency never blocks the core smoke job.
+  # -----------------------------------------------------------------------
+  examples-duckdb:
+    name: Smoke – duckdb example (optional)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install core + duckdb
+        run: |
+          python -m pip install --upgrade pip
+          pip install arnio pandas duckdb
+
+      - name: Smoke – arnio_with_duckdb.py
+        run: python examples/arnio_with_duckdb.py
