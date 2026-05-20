@@ -35,7 +35,7 @@ def get_example_scripts():
     """Locate all runnable python files in the examples directory that are CI-safe."""
     if not EXAMPLES_DIR.exists():
         return []
-    
+
     scripts = []
     for name in sorted(CI_SAFE_EXAMPLES.keys()):
         script_path = EXAMPLES_DIR / name
@@ -62,7 +62,9 @@ def test_example_script_runs_successfully(script_path):
     # Check if optional dependencies are missing
     required_deps = CI_SAFE_EXAMPLES.get(script_path.name, [])
     if not has_dependencies(required_deps):
-        pytest.skip(f"Skipping {script_path.name} due to missing optional dependencies: {required_deps}")
+        pytest.skip(
+            f"Skipping {script_path.name} due to missing optional dependencies: {required_deps}"
+        )
 
     # Run the script in a subprocess using the same python interpreter with a timeout
     try:
@@ -74,11 +76,12 @@ def test_example_script_runs_successfully(script_path):
             timeout=15,  # Add timeout to prevent hangs in CI
         )
     except subprocess.TimeoutExpired as e:
-        pytest.fail(f"Example {script_path.name} timed out after 15 seconds.\nOutput so far:\n{e.stdout}")
+        pytest.fail(
+            f"Example {script_path.name} timed out after 15 seconds.\nOutput so far:\n{e.stdout}"
+        )
 
     assert result.returncode == 0, (
         f"Example {script_path.name} failed with return code {result.returncode}.\n"
         f"Stdout:\n{result.stdout}\n"
         f"Stderr:\n{result.stderr}"
     )
-
