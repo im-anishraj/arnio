@@ -432,7 +432,6 @@ Frame CsvReader::read(const std::string& path) const {
 
     std::string line;
     std::vector<std::string> header;
-    std::vector<std::vector<std::string>> raw_data;
 
     size_t record_number = 0;
 
@@ -447,16 +446,19 @@ Frame CsvReader::read(const std::string& path) const {
         validate_header(header);
     }
 
-    // Read all rows
     size_t row_count = 0;
     std::optional<size_t> expected_cols =
         config.has_header ? std::optional<size_t>{header.size()} : std::nullopt;
+
+    // Phase 1: Sample the first N rows
+    std::vector<std::vector<std::string>> sample_data;
+    size_t max_samples = config.sample_size.value_or(100);
+    if (config.nrows.has_value()) {
+        max_samples = std::min(max_samples, config.nrows.value());
+    }
+
     while (read_record(file, line)) {
         ++record_number;
-
-        if (config.nrows.has_value() && row_count >= config.nrows.value()) {
-            break;
-        }
 
         if (line.empty()) {
             continue;
@@ -493,14 +495,17 @@ Frame CsvReader::read(const std::string& path) const {
             }
         }
 
-        raw_data.push_back(std::move(fields));
+        sample_data.push_back(std::move(fields));
         ++row_count;
+
+        if (row_count >= max_samples) {
+            break;
+        }
     }
-    file.close();
 
     // If no header, generate column names
-    if (!config.has_header && !raw_data.empty()) {
-        for (size_t i = 0; i < raw_data[0].size(); ++i) {
+    if (!config.has_header && !sample_data.empty()) {
+        for (size_t i = 0; i < sample_data[0].size(); ++i) {
             header.push_back("col_" + std::to_string(i));
         }
         validate_header(header);
@@ -524,9 +529,9 @@ Frame CsvReader::read(const std::string& path) const {
         }
     }
 
-    // Infer types (first pass)
+    // Infer types based only on the sample data
     std::vector<DType> col_types(num_cols, DType::NULL_TYPE);
-    for (const auto& row : raw_data) {
+    for (const auto& row : sample_data) {
         for (size_t ci : col_indices) {
             if (ci < row.size()) {
                 DType inferred = parser_.infer_type(row[ci]);
@@ -540,20 +545,65 @@ Frame CsvReader::read(const std::string& path) const {
         if (dt == DType::NULL_TYPE) dt = DType::STRING;
     }
 
-    // Build columns (second pass)
+    // Initialize columns
     std::vector<Column> columns;
     columns.reserve(col_indices.size());
     for (size_t ci : col_indices) {
-        Column col(header[ci], col_types[ci]);
-        for (const auto& row : raw_data) {
+        columns.push_back(Column(header[ci], col_types[ci]));
+    }
+
+    // Phase 2: Flush sample data to columns
+    for (const auto& row : sample_data) {
+        for (size_t i = 0; i < col_indices.size(); ++i) {
+            size_t ci = col_indices[i];
             if (ci < row.size()) {
-                col.push_back(parser_.parse_value(row[ci], col_types[ci]));
+                columns[i].push_back(parser_.parse_value(row[ci], col_types[ci]));
             } else {
-                col.push_null();
+                columns[i].push_null();
             }
         }
-        columns.push_back(std::move(col));
     }
+
+    // Free sample data explicitly since we no longer need it
+    sample_data.clear();
+    sample_data.shrink_to_fit();
+
+    // Phase 3: Stream the rest of the file directly into columns
+    while (read_record(file, line)) {
+        ++record_number;
+
+        if (config.nrows.has_value() && row_count >= config.nrows.value()) {
+            break;
+        }
+
+        if (line.empty()) {
+            continue;
+        }
+
+        auto fields = parser_.parse_line(line);
+
+        if (config.mode == "strict" && expected_cols.has_value()) {
+            validate_row_width(record_number, expected_cols.value(), fields.size());
+        }
+
+        if (expected_cols.has_value()) {
+            while (fields.size() < expected_cols.value()) {
+                fields.push_back("");
+            }
+        }
+
+        for (size_t i = 0; i < col_indices.size(); ++i) {
+            size_t ci = col_indices[i];
+            if (ci < fields.size()) {
+                columns[i].push_back(parser_.parse_value(fields[ci], col_types[ci]));
+            } else {
+                columns[i].push_null();
+            }
+        }
+        ++row_count;
+    }
+
+    file.close();
 
     return Frame(std::move(columns));
 }
