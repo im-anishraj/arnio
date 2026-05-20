@@ -1428,6 +1428,155 @@ class TestScanCsv:
 
         assert ar.scan_csv(csv_path) == {"value": "string"}
 
+    def test_scan_csv_has_header_false_generates_synthetic_columns(self, tmp_path):
+        csv_content = "1,Alice\n2,Bob\n"
+
+        csv_file = tmp_path / "headerless.csv"
+        csv_file.write_text(csv_content)
+
+        schema = ar.scan_csv(csv_file, has_header=False)
+
+        assert schema == {
+            "col_0": "int64",
+            "col_1": "string",
+        }
+
+    def test_scan_csv_default_has_header_behavior(self, tmp_path):
+        csv_content = "id,name\n1,Alice\n"
+
+        csv_file = tmp_path / "with_header.csv"
+        csv_file.write_text(csv_content)
+
+        schema = ar.scan_csv(csv_file)
+
+        assert schema == {
+            "id": "int64",
+            "name": "string",
+        }
+
+    def test_scan_csv_has_header_false_matches_read_csv(self, tmp_path):
+        csv_content = "1,Alice\n2,Bob\n"
+
+        csv_file = tmp_path / "headerless_match.csv"
+        csv_file.write_text(csv_content)
+
+        frame = ar.read_csv(csv_file, has_header=False)
+        schema = ar.scan_csv(csv_file, has_header=False)
+
+        assert list(frame.columns) == list(schema.keys())
+
+    def test_read_csv_encoding_errors_preserve_valid_utf8(
+        self,
+        tmp_path,
+    ):
+        csv_file = tmp_path / "mixed_utf8.csv"
+
+        csv_file.write_bytes(b"name\ncaf\xc3\xa9\xff\n")
+
+        frame = ar.read_csv(
+            csv_file,
+            encoding="utf-8",
+            encoding_errors="replace",
+        )
+
+        value = frame["name"][0]
+
+        assert value == "café�"
+
+    def test_read_csv_encoding_errors_ignore_preserves_numeric_inference(
+        self, tmp_path
+    ):
+        csv_file = tmp_path / "numeric_ignore.csv"
+
+        csv_file.write_bytes(b"value\n1\xff\n2\n")
+
+        frame = ar.read_csv(
+            csv_file,
+            encoding="utf-8",
+            encoding_errors="ignore",
+        )
+
+        values = frame["value"]
+
+        assert values == [1, 2]
+
+    def test_read_csv_encoding_errors_rejects_overlong_utf8(self, tmp_path):
+        csv_file = tmp_path / "overlong.csv"
+
+        csv_file.write_bytes(b"name\n\xc0\xaf\n")
+
+        with pytest.raises(ar.CsvReadError):
+            ar.read_csv(csv_file, encoding="utf-8", encoding_errors="strict")
+
+    def test_scan_csv_returns_metadata(self, tmp_path):
+        csv_path = tmp_path / "metadata.csv"
+        csv_path.write_text("id,name\n1,Alice\n2,Bob\n")
+
+        result = ar.scan_csv(csv_path, return_metadata=True)
+
+        assert "schema" in result
+        assert "metadata" in result
+
+        assert result["schema"] == {
+            "id": "int64",
+            "name": "string",
+        }
+
+        metadata = result["metadata"]
+
+        assert metadata["delimiter"] == ","
+        assert metadata["encoding"] == "utf-8"
+        assert metadata["sampled_rows"] == 2
+
+    def test_scan_csv_sample_metadata_counts_requested_rows_with_header(self, tmp_path):
+        csv_path = tmp_path / "sample_metadata_header.csv"
+        rows = ["id,name"] + [f"{i},row{i}" for i in range(700)]
+        csv_path.write_text("\n".join(rows) + "\n")
+
+        result = ar.scan_csv(
+            csv_path,
+            sample_size=500,
+            return_metadata=True,
+        )
+
+        assert result["metadata"]["sampled_rows"] == 500
+        assert result["schema"] == {
+            "id": "int64",
+            "name": "string",
+        }
+
+    def test_scan_csv_returns_custom_metadata_values(self, tmp_path):
+        csv_path = tmp_path / "custom_metadata.csv"
+        csv_path.write_text("id;value\n1;100\n2;200\n")
+
+        result = ar.scan_csv(
+            csv_path,
+            delimiter=";",
+            encoding="utf-8",
+            sample_size=50,
+            return_metadata=True,
+        )
+
+        metadata = result["metadata"]
+
+        assert metadata["delimiter"] == ";"
+        assert metadata["encoding"] == "utf-8"
+        assert metadata["sampled_rows"] == 2
+
+    def test_scan_csv_metadata_reports_actual_sampled_rows(self, tmp_path):
+        csv_path = tmp_path / "actual_rows.csv"
+        csv_path.write_text("id,name\n1,Alice\n2,Bob\n")
+
+        result = ar.scan_csv(
+            csv_path,
+            sample_size=100,
+            return_metadata=True,
+        )
+
+        metadata = result["metadata"]
+
+        assert metadata["sampled_rows"] == 2
+
 
 # --- Issue #115: quoted multiline round-trip across line endings ---
 

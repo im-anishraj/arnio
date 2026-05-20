@@ -16,9 +16,9 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import warnings
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
-from typing import cast
+from typing import Protocol, cast
 
 from ._core import (
     _CsvChunkReader,
@@ -161,25 +161,99 @@ def _utf8_csv_path(
 
 
 @contextmanager
-def _comment_filtered_csv_path(path: str, encoding: str, comment: str | None) -> Iterator[str]:
-    """Return a path with full-line comments removed before native parsing."""
-    if comment is None:
-        with _utf8_csv_path(path, encoding) as native_path:
-            yield native_path
-        return
+def _utf8_csv_path_sampled(
+    path: str,
+    encoding: str,
+    delimiter: str = ",",
+    sample_rows: int | None = None,
+    has_header: bool = True,
+    encoding_errors: str = "strict",
+) -> Iterator[tuple[str, int]]:
+    """Return a UTF-8 sampled CSV path and the actual sampled row count.
+
+    The native reader only consumes UTF-8 bytes. When sampling is requested,
+    this helper writes a temporary UTF-8 file containing at most
+    ``sample_rows`` complete logical records and tracks the number of records
+    written.
+    """
+    if sample_rows is None:
+        raise ValueError("sample_rows must not be None")
 
     tmp_name: str | None = None
+    row_count = 0
+    effective_limit = sample_rows + 1 if has_header else sample_rows
     try:
-        with open(path, encoding=encoding, newline="") as src:
+        with open(path, encoding=encoding, errors=encoding_errors, newline="") as src:
             with tempfile.NamedTemporaryFile(
                 "w", encoding="utf-8", newline="", suffix=".csv", delete=False
             ) as tmp:
+                in_quotes = False
+                pending_quote = False
+                pending_cr = False
+                last_char_was_terminator = False
+                sample_complete = False
+
+                while chunk := src.read(8192):
+                    chunk_len = len(chunk)
+                    index = 0
+                    while index < chunk_len:
+                        char = chunk[index]
+
+                        if sample_complete:
+                            if pending_cr and char == "\n":
+                                tmp.write(char)
+                            pending_cr = False
+                            break
+
+                        tmp.write(char)
+
+                        if pending_cr:
+                            pending_cr = False
+                            if char == "\n":
+                                last_char_was_terminator = True
+                                index += 1
+                                continue
+
+                        if char == '"':
+                            if pending_quote:
+                                pending_quote = False
+                            elif in_quotes:
+                                pending_quote = True
+                            else:
+                                in_quotes = True
+                            last_char_was_terminator = False
+                        else:
+                            if pending_quote:
+                                in_quotes = False
+                                pending_quote = False
+
+                            if not in_quotes and char in {"\n", "\r"}:
+                                row_count += 1
+                                last_char_was_terminator = True
+                                if char == "\r":
+                                    if (
+                                        index + 1 < chunk_len
+                                        and chunk[index + 1] == "\n"
+                                    ):
+                                        tmp.write("\n")
+                                        index += 1
+                                    else:
+                                        pending_cr = True
+                                if row_count >= effective_limit:
+                                    sample_complete = True
+                                    break
+                            else:
+                                last_char_was_terminator = False
+
+                        index += 1
+
+                    if sample_complete and not pending_cr:
+                        break
+
+                if sample_rows > 0 and not last_char_was_terminator and tmp.tell() > 0:
+                    row_count += 1
                 tmp_name = tmp.name
-                for line in src:
-                    if line.lstrip().startswith(comment):
-                        continue
-                    tmp.write(line)
-        yield tmp_name
+        yield tmp_name, row_count
     except LookupError as e:
         raise ValueError(f"Unknown encoding: {encoding}") from e
     except UnicodeDecodeError as e:
@@ -253,6 +327,37 @@ def _validate_nrows(nrows: int) -> int:
         raise ValueError("nrows must be non-negative")
 
     return nrows
+
+
+_PREVIEW_BAD_ROWS = 10
+
+
+class _BadRow(Protocol):
+    row: int
+    actual: int
+    expected: int
+
+
+def _warn_bad_rows(bad_rows: Sequence[object]) -> None:
+    """Emit a UserWarning summarizing rows dropped by on_bad_lines='warn'."""
+    if not bad_rows:
+        return
+
+    def format_bad_row(br: object) -> str:
+        if isinstance(br, str):
+            return f"  {br}"
+        row_bad = cast(_BadRow, br)
+        return f"  CSV row {row_bad.row} has {row_bad.actual} fields; expected {row_bad.expected}"
+
+    lines = [format_bad_row(br) for br in bad_rows[:_PREVIEW_BAD_ROWS]]
+    extra = len(bad_rows) - _PREVIEW_BAD_ROWS
+    if extra > 0:
+        lines.append(f"  (+{extra} more)")
+    warnings.warn(
+        f"{len(bad_rows)} malformed CSV row(s):\n" + "\n".join(lines),
+        UserWarning,
+        stacklevel=3,
+    )
 
 
 def _validate_skip_rows(skip_rows: int) -> int:
@@ -456,7 +561,7 @@ def read_csv(
         raise
 
     try:
-        effective_encoding = "utf-8" if is_materialized_text else encoding
+        native_path: str
         with _utf8_csv_path(
             native_path,
             effective_encoding,
@@ -700,18 +805,14 @@ def read_csv_chunked(
             os.unlink(native_path)
         raise
     try:
-        effective_encoding = "utf-8" if is_materialized_text else encoding
-        with _utf8_csv_path(
-            native_path, effective_encoding, delimiter=delimiter
-        ) as native_csv_path:
-            reader.open(native_csv_path)
-            yielded_nonempty_chunk = False
-            try:
-                while True:
-                    chunk = reader.next_chunk(chunksize, on_bad_lines)
-                    if chunk is None:
-                        break
-                    cpp_frame, bad_rows = chunk
+        native_path: str
+        with _utf8_csv_path(path, encoding, delimiter=delimiter) as native_path:
+            reader.open(native_path)
+            while True:
+                chunk = reader.next_chunk(chunksize, on_bad_lines)
+                if chunk is None:
+                    break
+                cpp_frame, bad_rows = chunk
 
                     if on_bad_lines == "warn" and bad_rows:
                         _warn_bad_rows(bad_rows)
@@ -996,7 +1097,15 @@ def scan_csv(
     delimiter: str | None = None,
     encoding: str = "utf-8",
     trim_headers: bool = True,
-) -> dict[str, str]:
+    decimal_separator: str = ".",
+    thousands_separator: str | None = None,
+    sample_size: int | None = None,
+    null_values: list[str] | None = None,
+    has_header: bool = True,
+    encoding_errors: str = "strict",
+    on_bad_lines: str = "error",
+    return_metadata: bool = False,
+) -> dict[str, str] | dict[str, object]:
     """Return schema (column names + inferred types) without loading data.
 
     Parameters
@@ -1042,10 +1151,17 @@ def scan_csv(
         ``"error"`` raises :exc:`CsvReadError` immediately (default).
         ``"warn"`` skips the bad row and emits a :class:`UserWarning`.
         ``"skip"`` silently skips the bad row without any warning.
+    return_metadata : bool, default False
+        Whether to return lightweight scan metadata along with
+        inferred schema information.
     Returns
     -------
-    dict[str, str]
-        Dictionary mapping column names to inferred type strings.
+    dict[str, str] | dict[str, object]
+        By default, returns a dictionary mapping column names
+        to inferred type strings.
+
+        When ``return_metadata=True``, returns a dictionary
+        containing both inferred schema and lightweight scan metadata.
 
     Raises
     ------
@@ -1069,8 +1185,242 @@ def scan_csv(
     >>> schema = ar.scan_csv("data.dat")              # non-standard extension accepted
     """
 
-    if _is_utf8_encoding(encoding):
-        _reject_utf8_nul_bytes(path)
+    path = os.fspath(path)
+
+    _validate_csv_path(path, encoding)
+
+    path_lower = path.lower()
+
+    # Resolve the sentinel: auto-detect tab for .tsv only when the caller
+    # truly omitted delimiter (None).  An explicit delimiter="," is always
+    # honoured, even for .tsv paths.
+    if delimiter is None:
+        delimiter = "\t" if path_lower.endswith(".tsv") else ","
+
+    decimal_separator = _validate_decimal_separator(decimal_separator)
+    _validate_thousands_separator(thousands_separator, decimal_separator)
+    delimiter = _validate_delimiter(delimiter)
+    encoding_errors = _validate_encoding_errors(encoding_errors)
+    on_bad_lines = _validate_on_bad_lines(on_bad_lines)
+    config = _CsvConfig()
+    config.delimiter = delimiter
+    config.encoding = encoding
+    config.trim_headers = _validate_bool_option(trim_headers, "trim_headers")
+    config.decimal_separator = decimal_separator
+    config.thousands_separator = thousands_separator
+    config.has_header = has_header
+    config.encoding_errors = encoding_errors
+
+    if null_values is not None:
+        config.null_values = _validate_null_values(null_values)
+
+    if sample_size is not None:
+        if not isinstance(sample_size, int) or isinstance(sample_size, bool):
+            raise TypeError("sample_size must be an integer.")
+        if sample_size <= 0:
+            raise ValueError("sample_size must be a positive integer greater than 0.")
+        config.sample_size = sample_size
+
+    reader = _CsvReader(config)
+    try:
+        # Schema inference only needs a sample, avoiding full-file transcode.
+        # sample_rows is passed so _utf8_csv_path uses record-aware sampling
+        # without rewriting decoded CSV text before native parsing.
+        with _utf8_csv_path_sampled(
+            path,
+            encoding,
+            encoding_errors=encoding_errors,
+            delimiter=delimiter,
+            sample_rows=100 if sample_size is None else sample_size,
+            has_header=has_header,
+        ) as (native_path, sampled_rows):
+            # reader.scan_schema returns schema and optionally a list of
+            # bad-row messages when on_bad_lines is in effect.
+            schema: dict[str, str]
+            bad_row_msgs: Sequence[object]
+            try:
+                schema_result = reader.scan_schema(native_path, on_bad_lines)
+            except TypeError:
+                # Older C++ extension exposes a single-argument scan_schema
+                # returning only the schema dict. Normalize to a two-tuple.
+                schema = dict(cast(Mapping[str, str], reader.scan_schema(native_path)))
+                bad_row_msgs = []
+            else:
+                if isinstance(schema_result, tuple):
+                    typed_result = cast(
+                        tuple[Mapping[str, str], Sequence[object]], schema_result
+                    )
+                    schema = dict(typed_result[0])
+                    bad_row_msgs = typed_result[1]
+                else:
+                    schema = dict(cast(Mapping[str, str], schema_result))
+                    bad_row_msgs = []
+
+            if on_bad_lines == "warn" and bad_row_msgs:
+                _warn_bad_rows(bad_row_msgs)
+
+            if has_header and sampled_rows > 0:
+                sampled_rows -= 1
+
+            if return_metadata:
+                metadata: dict[str, object] = {
+                    "delimiter": delimiter,
+                    "encoding": encoding,
+                    "sampled_rows": sampled_rows,
+                }
+                return {"schema": schema, "metadata": metadata}
+
+            return schema
+    except RuntimeError as e:
+        raise CsvReadError(str(e)) from e
+
+
+def read_jsonl(
+    path: str | os.PathLike[str],
+    *,
+    encoding: str = "utf-8",
+    nrows: int | None = None,
+) -> ArFrame:
+    """Read a JSON Lines file into an ArFrame.
+
+    Each non-blank line must be a complete JSON object (``{...}``).  Column
+    names are taken from the union of all keys found in the file.  Missing
+    keys in a row become null values.  Type inference follows the same rules
+    as :func:`from_pandas`: the first non-null value in a column determines
+    its dtype; mixed-type columns are coerced to string.
+
+    Parameters
+    ----------
+    path : str or path-like
+        Path to the ``.jsonl`` or ``.ndjson`` file.
+    encoding : str, default ``"utf-8"``
+        File encoding.
+    nrows : int, optional
+        Maximum number of data rows to read.  If ``None``, all rows are read.
+
+    Returns
+    -------
+    ArFrame
+        Data frame containing the parsed records.
+
+    Raises
+    ------
+    ValueError
+        If the file extension is not ``.jsonl`` or ``.ndjson``, or if
+        ``nrows`` is not a non-negative integer.
+    JsonlReadError
+        If the file is empty (no data rows), or if a line contains invalid
+        JSON.  The error message includes the 1-based line number.
+
+    Examples
+    --------
+    >>> frame = ar.read_jsonl("events.jsonl")
+    >>> frame = ar.read_jsonl("data.ndjson", nrows=1000)
+    """
+    import json
+
+    from .convert import from_pandas
+
+    path = os.fspath(path)
+    path_lower = path.lower()
+    if not (path_lower.endswith(".jsonl") or path_lower.endswith(".ndjson")):
+        raise ValueError(
+            f"Unsupported file format: {path}. "
+            "read_jsonl only supports .jsonl and .ndjson files."
+        )
+
+    if nrows is not None:
+        if isinstance(nrows, bool) or not isinstance(nrows, int):
+            raise TypeError("nrows must be an integer")
+        if nrows < 0:
+            raise ValueError("nrows must be non-negative")
+        if nrows == 0:
+            # Short-circuit: caller explicitly requested zero rows.
+            # Do not open or inspect the file at all — even malformed content
+            # must not raise when nrows=0.
+            import pandas as pd
+
+            from .convert import from_pandas
+
+            return from_pandas(pd.DataFrame())
+
+    records: list[dict] = []
+    try:
+        with open(path, encoding=encoding) as fh:
+            for lineno, raw_line in enumerate(fh, start=1):
+                line = raw_line.rstrip("\r\n")
+                if not line.strip():
+                    continue  # skip blank / whitespace-only lines
+                if nrows is not None and len(records) >= nrows:
+                    break
+                try:
+                    obj = json.loads(line)
+                except json.JSONDecodeError as exc:
+                    raise JsonlReadError(
+                        f"Invalid JSON on line {lineno} of {path!r}: {exc}"
+                    ) from exc
+                if not isinstance(obj, dict):
+                    raise JsonlReadError(
+                        f"Expected a JSON object on line {lineno} of {path!r}, "
+                        f"got {type(obj).__name__}"
+                    )
+                records.append(obj)
+    except OSError as exc:
+        raise JsonlReadError(str(exc)) from exc
+    except UnicodeDecodeError as exc:
+        raise JsonlReadError(
+            f"Could not decode {path!r} using encoding {encoding!r}: {exc}"
+        ) from exc
+
+    if not records:
+        raise JsonlReadError(f"JSON Lines file is empty (no data rows): {path!r}")
+
+    import pandas as pd
+
+    df = pd.DataFrame(records)
+    return from_pandas(df)
+
+
+def sniff_delimiter(
+    path: str | os.PathLike[str],
+    *,
+    encoding: str = "utf-8",
+    sample_size: int = 2048,
+) -> str:
+    """Sniff and return the field delimiter character from a CSV file.
+
+    Parameters
+    ----------
+    path : str or os.PathLike[str]
+        Path to the CSV file.
+    encoding : str, default "utf-8"
+        File encoding.
+    sample_size : int, default 2048
+        Number of bytes to sample from the start of the file for sniffing.
+
+    Returns
+    -------
+    str
+        The detected delimiter (one of ",", ";", "\\t", "|").
+
+    Raises
+    ------
+    CsvReadError
+        If the file is empty or contains binary data.
+    ValueError
+        If the sample size is invalid or the delimiter is ambiguous.
+    """
+    path = os.fspath(path)
+
+    # 1. Parameter Validation
+    if not isinstance(encoding, str):
+        raise TypeError("encoding must be a string")
+    if isinstance(sample_size, bool) or not isinstance(sample_size, int):
+        raise TypeError("sample_size must be an integer")
+    if sample_size <= 0:
+        raise ValueError("sample_size must be a positive integer greater than 0")
+
+    # 2. Check File Exists and Check for Binary Content
     try:
         if os.path.getsize(path) == 0:
             raise CsvReadError(f"CSV file is empty: {path!r}")
