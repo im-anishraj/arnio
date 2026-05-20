@@ -1105,7 +1105,6 @@ class TestFilterRows:
 
 
 class TestRoundNumericColumns:
-
     def test_round_subset_missing_column_raises_clear_error(self):
         import pandas as pd
 
@@ -1127,7 +1126,7 @@ class TestRoundNumericColumns:
                 subset=["price", "missing_column"],
                 decimals=1,
             )
-            
+
     def test_round_all_numeric(self):
         import pandas as pd
 
