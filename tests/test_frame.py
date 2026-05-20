@@ -1,36 +1,56 @@
-import pandas as pd
+from arnio.frame import ArFrame
+import html
 
-import arnio as ar
+
+class DummyFrame:
+    def shape(self):
+        return (5, 2)
+
+    def column_names(self):
+        return ["name", "age"]
+
+    def dtypes(self):
+        return {"name": "str", "age": "int"}
+
+    def memory_usage(self):
+        return 100
+
+    def num_rows(self):
+        return 5
 
 
 def test_repr_html():
-    df = pd.DataFrame(
-        {
-            "name": ["Alice", "Bob"],
-            "age": [25, 30],
-        }
-    )
+    frame = ArFrame(DummyFrame())
 
-    frame = ar.from_pandas(df)
+    output = frame._repr_html_()
 
-    html = frame._repr_html_()
-
-    assert "ArFrame Preview" in html
-    assert "2 rows × 2 columns" in html
-    assert "name" in html
-    assert "age" in html
+    assert "ArFrame Preview" in output
+    assert "5 rows × 2 columns" in output
+    assert "name" in output
+    assert "age" in output
 
 
-def test_repr_html_escapes_special_characters():
-    df = pd.DataFrame(
-        {
-            "<script>": ["value"],
-        }
-    )
+class EscapeFrame:
+    def shape(self):
+        return (1, 1)
 
-    frame = ar.from_pandas(df)
+    def column_names(self):
+        return ["<script>"]
 
-    html = frame._repr_html_()
+    def dtypes(self):
+        return {"<script>": "str"}
 
-    assert "<script>" not in html
-    assert "&lt;script&gt;" in html
+    def memory_usage(self):
+        return 10
+
+    def num_rows(self):
+        return 1
+
+
+def test_repr_html_escapes_html():
+    frame = ArFrame(EscapeFrame())
+
+    output = frame._repr_html_()
+
+    assert html.escape("<script>") in output
+    assert "<script>" not in output
