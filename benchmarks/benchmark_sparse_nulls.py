@@ -33,18 +33,57 @@ from __future__ import annotations
 
 import argparse
 import os
-import sys
 import time
 import tracemalloc
 from pathlib import Path
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
-
+import numpy as np
 import pandas as pd
 
 import arnio as ar
 
-from generate_data import generate_sparse_nulls
+# ---------------------------------------------------------------------------
+# Data generation  (inlined to avoid cross-module import workaround)
+# ---------------------------------------------------------------------------
+
+
+def _generate_csv(rows, path, null_density, seed=42):
+    """Generate a deterministic CSV with controlled null density."""
+    if DRY_RUN:
+        rows = min(rows, 10)
+    rng = np.random.default_rng(seed)
+    data = {
+        "id": rng.integers(1, 999999, rows).tolist(),
+        "age": np.where(
+            rng.random(rows) < null_density, None, rng.integers(18, 80, rows)
+        ).tolist(),
+        "salary": np.where(
+            rng.random(rows) < null_density,
+            None,
+            rng.uniform(30000, 150000, rows).round(2),
+        ).tolist(),
+        "name": np.where(
+            rng.random(rows) < null_density,
+            None,
+            rng.choice(["Alice", "Bob", "Charlie", "Diana"], rows),
+        ).tolist(),
+        "city": np.where(
+            rng.random(rows) < null_density,
+            None,
+            rng.choice(["New York", "London", "Paris", "Tokyo"], rows),
+        ).tolist(),
+        "active": np.where(
+            rng.random(rows) < null_density,
+            None,
+            rng.choice([True, False], rows),
+        ).tolist(),
+    }
+    pd.DataFrame(data).to_csv(path, index=False, lineterminator="\n")
+    label = f"null_density={null_density:.1%}"
+    if DRY_RUN:
+        label += " (dry-run)"
+    print(f"Generated {rows:,} row sparse-null CSV ({label}) -> {path}")
+
 
 # Five densities spanning sparse -> dense
 NULL_DENSITIES = [0.001, 0.005, 0.01, 0.05, 0.2]
@@ -177,17 +216,16 @@ def run(rows: int = 1_000_000, runs: int = 5) -> None:
     header_lines = [
         f"  {'Operation':<{OP_WIDTH}}  {'Density':>7}"
         f"  {'arnio (ms)':>10}  {'pandas (ms)':>11}  {'speedup':>8}",
-        f"  {'':<{OP_WIDTH}}  {'':>7}"
-        f"  {'PyHeap MB':>10}  {'PyHeap MB':>11}",
+        f"  {'':<{OP_WIDTH}}  {'':>7}" f"  {'PyHeap MB':>10}  {'PyHeap MB':>11}",
     ]
     sep = "  " + "-" * (len(header_lines[0]) - 2)
 
     for density in NULL_DENSITIES:
         path = str(TMP_DIR / f"benchmark_sparse_nulls_{density}.csv")
-        generate_sparse_nulls(rows=rows, path=path, null_density=density)
+        _generate_csv(rows=rows, path=path, null_density=density)
 
         # Pre-load data once for all non-read operations
-        frame = ar.read_csv(path) if rows > 0 else ar.read_csv(path)
+        frame = ar.read_csv(path)
         df = pd.read_csv(path)
 
         label = DENSITY_LABELS.get(density, f"{density:.1%}")
@@ -210,9 +248,7 @@ def run(rows: int = 1_000_000, runs: int = 5) -> None:
         )
 
         # drop_nulls (data-based, time only)
-        ar_t, pd_t = _bench_data(
-            _drop_nulls_arnio, _drop_nulls_pandas, frame, df, runs
-        )
+        ar_t, pd_t = _bench_data(_drop_nulls_arnio, _drop_nulls_pandas, frame, df, runs)
         avg_ar = sum(ar_t) / runs
         avg_pd = sum(pd_t) / runs
         sp_str = f"{avg_pd / avg_ar:.1f}x" if avg_ar > 0 else "-"
@@ -223,9 +259,7 @@ def run(rows: int = 1_000_000, runs: int = 5) -> None:
         )
 
         # fill_nulls (data-based, time only)
-        ar_t, pd_t = _bench_data(
-            _fill_nulls_arnio, _fill_nulls_pandas, frame, df, runs
-        )
+        ar_t, pd_t = _bench_data(_fill_nulls_arnio, _fill_nulls_pandas, frame, df, runs)
         avg_ar = sum(ar_t) / runs
         avg_pd = sum(pd_t) / runs
         sp_str = f"{avg_pd / avg_ar:.1f}x" if avg_ar > 0 else "-"
@@ -236,9 +270,7 @@ def run(rows: int = 1_000_000, runs: int = 5) -> None:
         )
 
         # keep_rows_with_nulls (data-based, time only)
-        ar_t, pd_t = _bench_data(
-            _keep_nulls_arnio, _keep_nulls_pandas, frame, df, runs
-        )
+        ar_t, pd_t = _bench_data(_keep_nulls_arnio, _keep_nulls_pandas, frame, df, runs)
         avg_ar = sum(ar_t) / runs
         avg_pd = sum(pd_t) / runs
         sp_str = f"{avg_pd / avg_ar:.1f}x" if avg_ar > 0 else "-"

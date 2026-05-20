@@ -126,15 +126,14 @@ def test_benchmark_sparse_nulls_dry_run_cleans_up_temp_files():
         timeout=30,
     )
 
-    assert result.returncode == 0, (
-        f"Dry-run failed.\nStdout:\n{result.stdout}\nStderr:\n{result.stderr}"
-    )
+    assert (
+        result.returncode == 0
+    ), f"Dry-run failed.\nStdout:\n{result.stdout}\nStderr:\n{result.stderr}"
 
     # Verify all density-specific temp CSV files were removed
     post_files = [
-        f for f in BENCHMARKS_DIR.glob("benchmark_sparse_nulls_*.csv")
+        f
+        for f in BENCHMARKS_DIR.glob("benchmark_sparse_nulls_*.csv")
         if f.name != "benchmark_sparse_nulls.csv"
     ]
-    assert len(post_files) == 0, (
-        f"Temp files not cleaned up: {post_files}"
-    )
+    assert len(post_files) == 0, f"Temp files not cleaned up: {post_files}"
