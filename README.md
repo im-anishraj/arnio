@@ -988,10 +988,66 @@ report = ar.profile(df, sample_size=5)
 safe_report = report.to_dict(redact_sample_values=True)
 ```
 
-When `approx_top_values=True`, string columns with high cardinality use a
-deterministic sample to estimate top values. Each column includes
+### Profiling privacy and redaction
+
+Profiling helps you understand data, but some report fields can still expose
+real emails, names, IDs, or other sensitive values. Before you paste output into
+GitHub issues, Slack, public notebooks, or shared logs, check whether you are
+sharing **aggregate statistics only** or **raw/sample cell values**.
+
+**What is aggregate-only vs may expose raw values**
+
+| Field or export | Aggregate-only? | May expose raw / sample data? |
+| --- | --- | --- |
+| `row_count`, `column_count`, `duplicate_rows`, `duplicate_ratio`, `quality_score`, `score_components` | Yes | No |
+| `null_count`, `null_ratio`, `unique_count`, `unique_ratio`, whitespace / empty-string counts | Yes | No |
+| Numeric `min` / `max` / `mean` / `std` / `q25`–`q95` | Statistics only | Uncommon on large datasets; small tables can still be identifying |
+| `semantic_type`, `suggested_dtype`, `warnings` | Metadata / hints | Can imply PII type (for example email-like), not redaction |
+| `ColumnProfile.sample_values` (in-memory) | No | **Yes** — first *N* non-null values (`sample_size` on `ar.profile()`) |
+| `ColumnProfile.top_values` | Includes counts / ratios | **Yes** — frequent **actual** values (exact or approximate; see below) |
+| `report.to_dict()` | Mixed | **Yes** — includes `sample_values` and `top_values` unless you redact samples |
+| `report.to_dict(redact_sample_values=True)` | Mixed | `sample_values` → `"[REDACTED]"` (same list length); **`top_values` unchanged** |
+| `report.to_markdown()`, `report.summary()` | Yes | No raw cell values in output |
+| `report.to_html()` / notebook display of `report` | Partial | **Shows `top_values`** chips; does not list `sample_values` |
+| `report.to_pandas()` | Partial | Includes **`top_values`**, not `sample_values` |
+| `ProfileComparison.to_dict()` | Nested profiles | **Yes** — embeds `left_profile` / `right_profile` via default `to_dict()` |
+
+Arnio does **not** auto-mask emails, phone numbers, or IDs by column type. Use the
+controls below for safer sharing.
+
+**Safe sharing practices**
+
+- **JSON logs and artifacts:** `report.to_dict(redact_sample_values=True)` before writing or uploading.
+- **Collect fewer samples:** `ar.profile(frame, sample_size=0)` skips `sample_values` (defaults still apply to `top_values` on string columns).
+- **Text summaries for CI or comments:** prefer `report.to_markdown()` or `report.summary()` when you do not need per-value examples.
+- **Notebooks and HTML exports:** avoid evaluating `report` or saving `report.to_html()` for sensitive data; HTML still shows `top_values`.
+- **GitHub bug reports and examples:** use synthetic data (`user@example.com`, `ID-001`), a minimal CSV, and redacted `to_dict()` output — not production dumps.
+- **Pandas export:** `ar.to_pandas(frame)` returns full table data; redaction applies to **quality reports**, not the underlying frame.
+- **Profile comparison:** `ProfileComparison.to_dict()` nests full profiles; build shared artifacts with `profile.to_dict(redact_sample_values=True)` if needed.
+
+```python
+import arnio as ar
+import pandas as pd
+
+df = ar.from_pandas(pd.DataFrame({
+    "email": ["user@example.com", "bad-email", None],
+    "user_id": [101, 102, 103],
+}))
+report = ar.profile(df, sample_size=2)
+
+# Safer JSON for sharing (sample_values only; top_values still present)
+safe_json = report.to_dict(redact_sample_values=True)
+
+# Safer text summary (no sample_values or top_values in output)
+print(report.to_markdown())
+```
+
+When `approx_top_values=True`, high-cardinality string columns estimate
+`top_values` from a deterministic sample. Each column may set
 `top_values_is_approximate`, `top_values_sample_count`, and
-`top_values_sample_ratio`, and the counts/ratios are sample-based.
+`top_values_sample_ratio`. Counts and ratios are sample-based, but displayed
+**values are still real strings from your data** — treat them like `top_values`
+for privacy.
 
 ```python
 # Optional: approximate top values for high-cardinality string columns
@@ -1035,8 +1091,6 @@ Sample output now includes quantiles for numeric columns:
   }
 }
 ```
-
-Use `report.to_dict(redact_sample_values=True)` when sharing reports outside your team and you want to avoid exposing raw example/sample values.
 
 ### Compare Profiles
 Use `ar.compare_profiles()` to compare two `DataQualityReport` profiles and flag per-column drift.
