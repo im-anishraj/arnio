@@ -114,12 +114,8 @@ def run(n_rows: int = 500_000, runs: int = 5) -> None:
         print(f"{'':=<55}")
         print(f"  {'Engine':<20} {'Avg time':>12}  {'Peak heap':>12}")
         print(f"  {'-'*20} {'-'*12}  {'-'*12}")
-        print(
-            f"  {'arnio':<20} {avg_arn * 1000:>10.1f} ms  {avg_arn_peak:>10.1f} MB"
-        )
-        print(
-            f"  {'pandas':<20} {avg_pd * 1000:>10.1f} ms  {avg_pd_peak:>10.1f} MB"
-        )
+        print(f"  {'arnio':<20} {avg_arn * 1000:>10.1f} ms  {avg_arn_peak:>10.1f} MB")
+        print(f"  {'pandas':<20} {avg_pd * 1000:>10.1f} ms  {avg_pd_peak:>10.1f} MB")
         print(f"{'':=<55}")
         print(f"  Speedup vs pandas: {speedup:>10.2f}x")
         print(f"  Heap reduction:    {mem_reduction:>10.1f} %")

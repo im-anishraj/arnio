@@ -147,22 +147,15 @@ static CellValue coerce_value(const CellValue& value, DType target) {
         if (std::holds_alternative<bool>(value)) return std::get<bool>(value) ? 1.0 : 0.0;
         if (std::holds_alternative<std::string>(value)) {
             const auto& s = std::get<std::string>(value);
-            // from_chars may not parse inf/nan in C++17, so check explicitly
-            std::string lower = s;
-            std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
-            if (lower == "inf" || lower == "+inf" || lower == "-inf" || lower == "nan" ||
-                lower == "infinity" || lower == "+infinity" || lower == "-infinity") {
-                throw std::invalid_argument(
-                    "Non-finite numeric fill values are not permitted for float columns.");
-            }
-            double parsed = 0.0;
-            const char* start = s.data();
-            const char* end = s.data() + s.size();
-            while (start < end && std::isspace(static_cast<unsigned char>(*start))) ++start;
-            if (start < end && *start == '+') ++start;
-            if (start < end) {
-                auto [ptr, ec] = std::from_chars(start, end, parsed);
-                if (ec == std::errc() && ptr == end) return parsed;
+            try {
+                size_t pos = 0;
+                double parsed = std::stod(s, &pos);
+                if (std::isnan(parsed) || std::isinf(parsed)) {
+                    throw std::invalid_argument(
+                        "Non-finite numeric fill values are not permitted for float columns.");
+                }
+                if (pos == s.size()) return parsed;
+            } catch (...) {
             }
         }
     }
@@ -492,26 +485,22 @@ Frame cast_types(const Frame& frame, const std::unordered_map<std::string, std::
                     }
                     break;
                 }
-                case DType::FLOAT64: {
-                    double parsed = 0.0;
-                    const char* st = str_val.data();
-                    const char* en = str_val.data() + str_val.size();
-                    while (st < en && std::isspace(static_cast<unsigned char>(*st))) ++st;
-                    if (st < en && *st == '+') ++st;
-                    bool ok = false;
-                    if (st < en) {
-                        auto [ptr, ec] = std::from_chars(st, en, parsed);
-                        ok = (ec == std::errc() && ptr == en && std::isfinite(parsed));
-                    }
-                    if (ok) {
+                case DType::FLOAT64:
+                    try {
+                        size_t pos = 0;
+                        double parsed = std::stod(str_val, &pos);
+                        if (pos != str_val.size() || !std::isfinite(parsed)) {
+                            throw cast_error(src.name(), str_val, it->second, r);
+                        }
                         col.push_back(parsed);
-                    } else if (coerce_invalid) {
-                        col.push_null();
-                    } else {
-                        throw cast_error(src.name(), str_val, it->second, r);
+                    } catch (...) {
+                        if (coerce_invalid) {
+                            col.push_null();
+                        } else {
+                            throw cast_error(src.name(), str_val, it->second, r);
+                        }
                     }
                     break;
-                }
                 case DType::BOOL: {
                     std::string lower = str_val;
                     std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);

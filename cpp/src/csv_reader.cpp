@@ -9,6 +9,8 @@
 #include <cstdlib>
 #include <fstream>
 #include <limits>
+#include <locale>
+#include <sstream>
 #include <stdexcept>
 #include <system_error>
 #include <unordered_set>
@@ -252,12 +254,13 @@ inline bool try_parse_float64(const std::string& cleaned, double& out) {
         }
         return true;
     }
-    const char* start = cleaned.data();
-    const char* end = cleaned.data() + cleaned.size();
-    if (*start == '+') ++start;
-    if (start >= end) return false;
-    auto [ptr, ec] = std::from_chars(start, end, out);
-    return ec == std::errc() && ptr == end;
+    std::istringstream iss(cleaned);
+    iss.imbue(std::locale::classic());
+    double val = 0.0;
+    iss >> val;
+    if (iss.fail() || !iss.eof()) return false;
+    out = val;
+    return true;
 }
 }  // namespace
 
