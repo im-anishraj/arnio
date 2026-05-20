@@ -300,6 +300,7 @@ def read_csv(
     has_header: bool = True,
     usecols: list[str] | None = None,
     nrows: int | None = None,
+    skiprows: int | None = None,
     encoding: str = "utf-8",
     trim_headers: bool = True,
     thousands_separator: str | None = None,
@@ -398,6 +399,9 @@ def read_csv(
 
     if nrows is not None:
         config.nrows = _validate_nrows(nrows)
+
+    if skiprows is not None:
+        config.skip_rows = _validate_nrows(skiprows)
 
     reader = _CsvReader(config)
 

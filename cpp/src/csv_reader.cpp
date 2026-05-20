@@ -397,6 +397,15 @@ Frame CsvReader::read(const std::string& path) const {
 
     size_t record_number = 0;
 
+    if (config.skip_rows.has_value()) {
+        size_t to_skip = config.skip_rows.value();
+        size_t skipped = 0;
+        while (skipped < to_skip && read_record(file, line)) {
+            ++record_number;
+            ++skipped;
+        }
+    }
+
     // Read header
     if (config.has_header && read_record(file, line)) {
         ++record_number;
