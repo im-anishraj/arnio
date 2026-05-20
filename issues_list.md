@@ -45,31 +45,39 @@ We have implemented robust, production-grade solutions for **3 high-value GSSoC 
 Here is the complete list of open `gssoc` issues from the upstream repository, sorted by status (unassigned first, then assigned).
 
 ### Unassigned Issues (Open to Contributions)
-* **#732**: `Feature: Add parallel and low-copy pipeline execution mode`
-* **#731**: `Feature: Add remote and object-storage CSV input support`
-* **#725**: `Feature: Add Dark/Light Theme Toggle with Persistent User Preference`
-* **#680**: `Security: add opt-in CSV formula escaping to write_csv`
-* **#648**: `Feature: add row lineage metadata through filtering and drop steps`
-* **#647**: `Feature: add Decimal or FixedPoint logical dtype for money columns`
-* **#646**: `Feature: add native datetime storage type`
-* **#645**: `Feature: add native date storage type`
-* **#644**: `Feature: add append mode to write_csv`
-* **#643**: `Feature: add encoding option to write_csv`
-* **#642**: `Feature: add compressed CSV support for .csv.gz files`
-* **#640**: `Feature: add Polars DataFrame import and export helpers`
-* **#639**: `Feature: add Arrow Table export implementation`
-* **#638**: `Feature: add Arrow Table import helper`
-* **#637**: `Feature: add Parquet writer via optional pyarrow extra`
-* **#636**: `Feature: add Parquet reader via optional pyarrow extra`
-* **#635**: `Feature: add JSON Lines writer`
-* **#632**: `Feature: add schema YAML loader for validation contracts`
-* **#631**: `Feature: add arnio CLI with scan, profile, clean, and validate commands`
-* **#533**: `add scroll-to-top button for improved navigation` (Frontend / Website)
-* **#521**: `Feature: Add select_columns and drop_columns Pipeline Primitives`
-* **#337**: `Docs: Enhance Module-Level Docstrings for Better IDE Support`
+
+#### ⚠️ Issues Flagged with `status: needs maintainer` or `status: needs triage`
+These issues require design decisions, validation, or confirmation from a maintainer before implementation:
+* **#732**: `Feature: Add parallel and low-copy pipeline execution mode` — ⚠️ `status: needs maintainer`
+* **#731**: `Feature: Add remote and object-storage CSV input support` — ⚠️ `status: needs maintainer`
+* **#725**: `Feature: Add Dark/Light Theme Toggle with Persistent User Preference` — ⚠️ `status: needs triage`
+* **#648**: `Feature: add row lineage metadata through filtering and drop steps` — ⚠️ `status: needs maintainer`
+* **#647**: `Feature: add Decimal or FixedPoint logical dtype for money columns` — ⚠️ `status: needs maintainer`
+* **#646**: `Feature: add native datetime storage type` — ⚠️ `status: needs maintainer`
+* **#645**: `Feature: add native date storage type` — ⚠️ `status: needs maintainer`
+* **#643**: `Feature: add encoding option to write_csv` — ⚠️ `status: needs maintainer`
+* **#642**: `Feature: add compressed CSV support for .csv.gz files` — ⚠️ `status: needs maintainer`
+* **#640**: `Feature: add Polars DataFrame import and export helpers` — ⚠️ `status: needs maintainer`
+* **#639**: `Feature: add Arrow Table export implementation` — ⚠️ `status: needs maintainer`
+* **#638**: `Feature: add Arrow Table import helper` — ⚠️ `status: needs maintainer`
+* **#637**: `Feature: add Parquet writer via optional pyarrow extra` — ⚠️ `status: needs maintainer`
+* **#636**: `Feature: add Parquet reader via optional pyarrow extra` — ⚠️ `status: needs maintainer`
+* **#635**: `Feature: add JSON Lines writer` — ⚠️ `status: needs maintainer`
+* **#632**: `Feature: add schema YAML loader for validation contracts` — ⚠️ `status: needs maintainer`
+* **#631**: `Feature: add arnio CLI with scan, profile, clean, and validate commands` — ⚠️ `status: needs maintainer`
+* **#601**: `Bug: auto_clean strict mode can apply lossy casts` — ⚠️ `status: needs maintainer`
+* **#589**: `Bug: filter_rows drops original row labels without recording lineage` — ⚠️ `status: needs maintainer`
+* **#546**: `Docs: Align feature card icons and contents to the centre` — ⚠️ `status: needs triage`
+* **#533**: `add scroll-to-top button for improved navigation` — ⚠️ `status: needs triage`
+* **#521**: `Feature: Add select_columns and drop_columns Pipeline Primitives` — ⚠️ `status: needs triage`
+* **#337**: `Docs: Enhance Module-Level Docstrings for Better IDE Support` — ⚠️ `status: needs triage`
+
+#### Other Unassigned Issues
+These are ready to be claimed and resolved:
 * **#324**: `Performance: Optimize drop_duplicates with hash-based comparisons`
 * **#251**: `Performance: Benchmark quoted multiline CSV parsing`
 * **#247**: `Interop: Document unsupported pandas dtypes`
+
 
 ### Assigned Issues (In-Progress by Other GSSoC Contributors)
 * **#767**: `Feature: Add select_columns cleaning and pipeline primitive` (Assignee: `@Sricharan106`)
