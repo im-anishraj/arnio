@@ -141,9 +141,14 @@ def drop_nulls(
     >>> clean = ar.drop_nulls(frame, subset=["age", "name"])
     """
     if subset is not None:
+        requested_columns = _validate_column_sequence(subset, argument_name="subset")
+        if len(requested_columns) == 0:
+            raise ValueError(
+                "drop_nulls: subset cannot be empty; pass subset=None to check all columns"
+            )
         validate_columns_exist(
             frame,
-            _validate_column_sequence(subset, argument_name="subset"),
+            requested_columns,
             operation="drop_nulls",
         )
     result = _drop_nulls(frame._frame, subset=subset)
@@ -326,9 +331,14 @@ def drop_duplicates(
     >>> unique = ar.drop_duplicates(frame, subset=["name"], keep="first")
     """
     if subset is not None:
+        requested_columns = _validate_column_sequence(subset, argument_name="subset")
+        if len(requested_columns) == 0:
+            raise ValueError(
+                "drop_duplicates: subset cannot be empty; pass subset=None to compare all columns"
+            )
         validate_columns_exist(
             frame,
-            _validate_column_sequence(subset, argument_name="subset"),
+            requested_columns,
             operation="drop_duplicates",
         )
     if keep is True:

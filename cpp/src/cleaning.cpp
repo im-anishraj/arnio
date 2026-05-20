@@ -191,6 +191,10 @@ static Frame select_rows(const Frame& frame, const std::vector<size_t>& row_indi
 }
 
 Frame drop_nulls(const Frame& frame, const std::optional<std::vector<std::string>>& subset) {
+    if (subset.has_value() && subset->empty()) {
+        throw std::invalid_argument("drop_nulls subset cannot be empty");
+    }
+
     auto col_indices = resolve_subset(frame, subset);
     std::vector<size_t> keep_rows;
     for (size_t r = 0; r < frame.num_rows(); ++r) {
@@ -235,6 +239,10 @@ Frame fill_nulls(const Frame& frame, const CellValue& value,
 
 Frame drop_duplicates(const Frame& frame, const std::optional<std::vector<std::string>>& subset,
                       const std::string& keep) {
+    if (subset.has_value() && subset->empty()) {
+        throw std::invalid_argument("drop_duplicates subset cannot be empty");
+    }
+
     auto col_indices = resolve_subset(frame, subset);
 
     if (keep == "first") {
