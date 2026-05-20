@@ -1,3 +1,12 @@
+include(FetchContent)
+
+FetchContent_Declare(
+    Catch2
+    GIT_REPOSITORY https://github.com/catchorg/Catch2.git
+    GIT_TAG        v3.5.3
+)
+FetchContent_MakeAvailable(Catch2)
+
 add_library(arnio_core STATIC
     src/column.cpp
     src/frame.cpp
@@ -5,20 +14,18 @@ add_library(arnio_core STATIC
     src/cleaning.cpp
     src/csv_writer.cpp
 )
-
 target_include_directories(arnio_core PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
-
 target_compile_features(arnio_core PUBLIC cxx_std_17)
 
-add_executable(test_column_consistency
-    tests/test_column_consistency.cpp
-)
+macro(arnio_test target source)
+    add_executable(${target} ${source})
+    target_link_libraries(${target} PRIVATE arnio_core Catch2::Catch2WithMain)
+    add_test(NAME ${target} COMMAND $<TARGET_FILE:${target}>)
+endmacro()
 
-target_link_libraries(test_column_consistency PRIVATE arnio_core)
-
-add_test(
-    NAME test_column_consistency
-    COMMAND $<TARGET_FILE:test_column_consistency>
-)
+arnio_test(test_column     tests/test_column.cpp)
+arnio_test(test_frame      tests/test_frame.cpp)
+arnio_test(test_cleaning   tests/test_cleaning.cpp)
+arnio_test(test_csv_parser tests/test_csv_parser.cpp)
