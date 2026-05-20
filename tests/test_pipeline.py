@@ -365,7 +365,12 @@ class TestPipeline:
         )
 
         assert isinstance(result, ar.ArFrame)
-        assert list(metadata.keys()) == ["step_timings"]
+        assert list(metadata.keys()) == ["applied_steps", "row_counts", "step_timings"]
+        assert metadata["applied_steps"] == ["strip_whitespace", "normalize_case"]
+        assert len(metadata["row_counts"]) == 2
+        assert metadata["row_counts"][0]["step"] == "strip_whitespace"
+        assert metadata["row_counts"][0]["before"] == frame.shape[0]
+        assert metadata["row_counts"][0]["after"] == result.shape[0]
         assert len(metadata["step_timings"]) == 2
         assert metadata["step_timings"][0]["step"] == "strip_whitespace"
         assert metadata["step_timings"][1]["step"] == "normalize_case"
@@ -390,6 +395,14 @@ class TestPipeline:
 
         df = ar.to_pandas(result)
         assert set(df["marker"]) == {"done"}
+        assert metadata["applied_steps"] == ["timed_python_step"]
+        assert metadata["row_counts"] == [
+            {
+                "step": "timed_python_step",
+                "before": frame.shape[0],
+                "after": result.shape[0],
+            }
+        ]
         assert len(metadata["step_timings"]) == 1
         assert metadata["step_timings"][0]["step"] == "timed_python_step"
         assert metadata["step_timings"][0]["seconds"] >= 0

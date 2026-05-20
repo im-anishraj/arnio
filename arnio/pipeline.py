@@ -178,6 +178,8 @@ def pipeline(
     result = frame
 
     step_timings: list[dict[str, Any]] = []
+    applied_steps: list[str] = []
+    row_counts: list[dict[str, int]] = []
     for step in steps:
         if len(step) == 1:
             name = step[0]
@@ -196,6 +198,7 @@ def pipeline(
         if name in _STEP_REGISTRY:
             # C++ backed step - fast path
             fn = _STEP_REGISTRY[name]
+            rows_before = result.shape[0]
 
             started_at = perf_counter()
             if name == "rename_columns" and "mapping" not in kwargs:
@@ -219,6 +222,14 @@ def pipeline(
                     result = step_result
 
             if return_metadata:
+                applied_steps.append(name)
+                row_counts.append(
+                    {
+                        "step": name,
+                        "before": rows_before,
+                        "after": step_result.shape[0],
+                    }
+                )
                 step_timings.append(
                     {
                         "step": name,
@@ -228,6 +239,7 @@ def pipeline(
         elif name in python_step_registry:
             # Pure Python step - slower but contributor-friendly
             started_at = perf_counter()
+            rows_before = result.shape[0]
 
             fn = python_step_registry[name]
 
@@ -262,6 +274,14 @@ def pipeline(
                 result = step_result
 
             if return_metadata:
+                applied_steps.append(name)
+                row_counts.append(
+                    {
+                        "step": name,
+                        "before": rows_before,
+                        "after": step_result.shape[0],
+                    }
+                )
                 step_timings.append(
                     {
                         "step": name,
@@ -273,7 +293,11 @@ def pipeline(
             raise UnknownStepError(name, available)
 
     if return_metadata:
-        return result, {"step_timings": step_timings}
+        return result, {
+            "applied_steps": applied_steps,
+            "row_counts": row_counts,
+            "step_timings": step_timings,
+        }
     return result
 
 
