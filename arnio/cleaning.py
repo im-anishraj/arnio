@@ -1246,9 +1246,10 @@ def drop_columns_matching(frame, pattern):
 
 from pandas.api.types import is_scalar
 import pandas as pd
+
 def _is_null_mapping_key(value):
     """
-    Safely determine whether a mapping key represents a null value.
+    Return True when a mapping key represents a scalar null value.
 
     Prevents ambiguous truth-value evaluation for tuple/list/array-like
     objects when using pandas.isna().
@@ -1321,7 +1322,8 @@ def replace_values(frame, mapping, column=None):
     normalized_mapping = {}
 
     for k, v in mapping.items():
-        # detect null-like keys (None, NaN, pd.NA)
+        # Handle scalar null-like keys safely without evaluating
+        # tuple/list/array-like objects in boolean context.
         if _is_null_mapping_key(k):
             null_key_present = True
             null_replacement = v
