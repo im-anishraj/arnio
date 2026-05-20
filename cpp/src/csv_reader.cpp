@@ -489,9 +489,7 @@ Frame CsvReader::read(const std::string& path) const {
             auto it = std::find(header.begin(), header.end(), column_name);
 
             if (it == header.end()) {
-                throw std::runtime_error(
-                "Column not found in dtype mapping: " + column_name
-                );
+                throw std::runtime_error("Column not found in dtype mapping: " + column_name);
             }
         }
     }

@@ -39,6 +39,67 @@ class TestReadCsv:
         assert frame.dtypes["zip"] == "string"
         assert frame.dtypes["price"] == "float64"
 
+    def test_read_csv_dtype_rejects_non_string_mapping_entries(self, tmp_path):
+        path = tmp_path / "bad_dtype_mapping.csv"
+        path.write_text("age\n25\n")
+
+        with pytest.raises(TypeError, match="dtype column names must be strings"):
+            ar.read_csv(path, dtype={1: "int64"})
+
+        with pytest.raises(TypeError, match="dtype values must be strings"):
+            ar.read_csv(path, dtype={"age": int})
+
+    def test_read_csv_dtype_with_generated_column_names(self, tmp_path):
+        path = tmp_path / "no_header.csv"
+        path.write_text("07001,5\n" "08002,10\n")
+
+        frame = ar.read_csv(
+            path,
+            has_header=False,
+            dtype={"col_0": "string", "col_1": "int64"},
+        )
+
+        pdf = ar.to_pandas(frame)
+
+        assert frame.dtypes["col_0"] == "string"
+        assert frame.dtypes["col_1"] == "int64"
+        assert pdf["col_0"].tolist() == ["07001", "08002"]
+        assert pdf["col_1"].tolist() == [5, 10]
+
+    def test_read_csv_dtype_with_usecols(self, tmp_path):
+        path = tmp_path / "usecols_dtype.csv"
+        path.write_text("zip,quantity,price\n" "07001,5,12.5\n" "08002,10,20.0\n")
+
+        frame = ar.read_csv(
+            path,
+            usecols=["zip", "price"],
+            dtype={"zip": "string"},
+        )
+
+        pdf = ar.to_pandas(frame)
+
+        assert list(pdf.columns) == ["zip", "price"]
+        assert frame.dtypes["zip"] == "string"
+        assert frame.dtypes["price"] == "float64"
+        assert pdf["zip"].tolist() == ["07001", "08002"]
+
+    def test_read_csv_dtype_parse_failure_becomes_null(self, tmp_path):
+        path = tmp_path / "parse_failure.csv"
+        path.write_text(
+            "quantity\n"
+            "abc\n"
+        )
+
+        frame = ar.read_csv(
+            path,
+            dtype={"quantity": "int64"},
+        )
+
+        pdf = ar.to_pandas(frame)
+
+        assert frame.dtypes["quantity"] == "int64"
+        assert pdf["quantity"].isna().tolist() == [True]
+
     def test_read_csv_dtype_override_string_to_int64(self, tmp_path):
         path = tmp_path / "quantities.csv"
         path.write_text("quantity,label\n" "5,small\n" "10,large\n")
