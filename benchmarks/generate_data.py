@@ -83,4 +83,3 @@ def generate_wide(rows=5_000, columns=256, path=DEFAULT_WIDE_PATH):
 if __name__ == "__main__":
     generate()
     generate_wide()
-

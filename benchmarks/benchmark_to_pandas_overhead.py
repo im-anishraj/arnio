@@ -78,6 +78,7 @@ def run_all_benchmarks():
         sys.exit(1)
 
     import os
+
     if os.getenv("ARNIO_BENCHMARK_DRY_RUN") == "1":
         scales = [10]
     else:

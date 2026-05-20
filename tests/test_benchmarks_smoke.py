@@ -41,7 +41,7 @@ def get_benchmark_scripts():
     """Locate all runnable CI-safe benchmark scripts."""
     if not BENCHMARKS_DIR.exists():
         return []
-    
+
     scripts = []
     for name in CI_SAFE_BENCHMARKS:
         script_path = BENCHMARKS_DIR / name
@@ -87,11 +87,12 @@ def test_benchmark_script_runs_successfully(script_path):
             timeout=15,  # Add timeout to prevent hangs in CI
         )
     except subprocess.TimeoutExpired as e:
-        pytest.fail(f"Benchmark {script_path.name} timed out after 15 seconds.\nOutput so far:\n{e.stdout}")
+        pytest.fail(
+            f"Benchmark {script_path.name} timed out after 15 seconds.\nOutput so far:\n{e.stdout}"
+        )
 
     assert result.returncode == 0, (
         f"Benchmark {script_path.name} failed with return code {result.returncode}.\n"
         f"Stdout:\n{result.stdout}\n"
         f"Stderr:\n{result.stderr}"
     )
-
