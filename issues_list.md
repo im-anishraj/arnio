@@ -38,6 +38,24 @@ We have implemented robust, production-grade solutions for **3 high-value GSSoC 
 * **Pull Request**: [#896](https://github.com/im-anishraj/arnio/pull/896) (GHA checks building and passing!)
 * **Description**: Implemented the opt-in `escape_formulas` parameter to prevent CSV injection vulnerabilities by escaping strings starting with `=, +, -, @, \t, \r` in spreadsheet applications.
 
+### 🌟 Issue #247: `Interop: Document unsupported pandas dtypes` (unassigned)
+* **Type**: `docs`
+* **Status**: **RESOLVED & GREEN**
+* **Pull Request**: [#898](https://github.com/im-anishraj/arnio/pull/898) (GHA checks building and passing!)
+* **Description**: Updated the **📊 Pandas Dtype Support Matrix** in `README.md` to perfectly align with current Python validation behaviors in `arnio/convert.py` (which correctly raises clear `TypeError`s with helpful fix hints when attempting to convert unsupported types).
+
+### 🌟 Issue #251: `Performance: Benchmark quoted multiline CSV parsing` (unassigned)
+* **Type**: `perf`
+* **Status**: **RESOLVED & GREEN**
+* **Pull Request**: [#899](https://github.com/im-anishraj/arnio/pull/899) (GHA checks building and passing!)
+* **Description**: Added a 100,000-row quoted multiline CSV data generator and integrated a corresponding benchmark suite case into `benchmarks/benchmark_vs_pandas.py` to profile and prevent regressions.
+
+### 🌟 Issue #324: `Performance: Optimize drop_duplicates with hash-based comparisons` (unassigned)
+* **Type**: `perf`
+* **Status**: **RESOLVED & GREEN**
+* **Pull Request**: [#901](https://github.com/im-anishraj/arnio/pull/901) (GHA checks building and passing!)
+* **Description**: Optimized `drop_duplicates` in the native C++ engine by replacing slow `std::ostringstream` row key serialization with an allocation-free custom `RowRef` struct and hashing/comparison operator overloads.
+
 ---
 
 ## 2. Upstream GSSoC Issues Catalog (Open & Backlogged) 📋
@@ -73,10 +91,7 @@ These issues require design decisions, validation, or confirmation from a mainta
 * **#337**: `Docs: Enhance Module-Level Docstrings for Better IDE Support` — ⚠️ `status: needs triage`
 
 #### Other Unassigned Issues
-These are ready to be claimed and resolved:
-* **#324**: `Performance: Optimize drop_duplicates with hash-based comparisons`
-* **#251**: `Performance: Benchmark quoted multiline CSV parsing`
-* **#247**: `Interop: Document unsupported pandas dtypes`
+All previously backlogged, fully ready unassigned GSSoC issues have been successfully resolved! We are now waiting for the maintainer to review and merge them.
 
 
 ### Assigned Issues (In-Progress by Other GSSoC Contributors)
