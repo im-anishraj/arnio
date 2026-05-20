@@ -8,20 +8,20 @@ can be run.
 
 import sys
 
-# Define the optional dependencies and their purpose
+# Map import name to (install package name, description)
 DEPENDENCIES = {
-    "numpy": "Required for basic array operations and benchmark data generation.",
-    "pandas": "Required for pandas DataFrame export and conversion examples.",
-    "duckdb": "Required for high-performance database integration examples.",
-    "sklearn": "Required for scikit-learn pipeline integration examples.",
-    "pytest": "Required for running the integration and unit test suites.",
+    "numpy": ("numpy", "Required for basic array operations and benchmark data generation."),
+    "pandas": ("pandas", "Required for pandas DataFrame export and conversion examples."),
+    "duckdb": ("duckdb", "Required for high-performance database integration examples."),
+    "sklearn": ("scikit-learn", "Required for scikit-learn pipeline integration examples."),
+    "pytest": ("pytest", "Required for running the integration and unit test suites."),
 }
 
 
 def check_dependencies():
     """Verify presence of optional dependencies."""
     results = {}
-    for lib, desc in DEPENDENCIES.items():
+    for lib in DEPENDENCIES:
         try:
             __import__(lib)
             results[lib] = (True, "Installed")
@@ -51,7 +51,7 @@ def print_dashboard(results):
     print("-" * 70)
 
     for lib, (status, status_str) in results.items():
-        desc = DEPENDENCIES[lib]
+        package, desc = DEPENDENCIES[lib]
         mark = "[OK]" if status else "[X]"
         print(f"{lib:<15} | {mark:<15} | {desc}")
 
@@ -96,7 +96,12 @@ def print_dashboard(results):
         "[Ready]" if results["pandas"][0] else "[Missing pandas]",
     )
 
-    missing = [lib for lib, (status, _) in results.items() if not status]
+    missing = []
+    for lib, (status, _) in results.items():
+        if not status:
+            package, _ = DEPENDENCIES[lib]
+            missing.append(package)
+
     if missing:
         print("\n[TIP] To install all missing optional dependencies, run:")
         print(f"  pip install {' '.join(missing)}")
