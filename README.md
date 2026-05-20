@@ -1511,8 +1511,18 @@ def remove_special_chars(df, columns=None):
 ar.register_step("remove_special_chars", remove_special_chars)
 
 # 3. Write tests, open a PR. That's it.
-```
 
+## Writing CSV Files
+
+from arnio import write_csv
+
+data = [
+    ["Name", "Age"],
+    ["Rishi", 21]
+]
+
+write_csv(data, "output.csv")
+```
 ### If you do know C++
 
 The biggest performance wins are in:
