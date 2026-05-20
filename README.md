@@ -1001,6 +1001,10 @@ Arnio now includes built-in dataset understanding before you analyze in pandas.
 ```python
 report = ar.profile(frame)
 print(report.summary())
+# Detect high-cardinality columns (e.g. IDs, leaks)
+for name, col in report.columns.items():
+    if col.high_cardinality:
+        print(f"⚠️ {name} may be an ID or data leak (unique ratio: {col.unique_ratio:.0%})")
 
 suggestions = ar.suggest_cleaning(frame)
 clean = ar.pipeline(frame, suggestions)
