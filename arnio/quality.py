@@ -1200,10 +1200,10 @@ def _markdown_cell(value: Any) -> str:
     text = str(_clean_scalar(value))
     return (
         text.replace("\\", "\\\\")
-            .replace("|", "\\|")
-            .replace("\r\n", "<br>")
-            .replace("\r", "<br>")
-            .replace("\n", "<br>")
+        .replace("|", "\\|")
+        .replace("\r\n", "<br>")
+        .replace("\r", "<br>")
+        .replace("\n", "<br>")
     )
 
 

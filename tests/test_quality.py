@@ -888,6 +888,7 @@ def test_report_to_markdown_escapes_pipe_characters_in_column_cells():
     assert "free\\|text" in md
     assert "contains \\| pipe" in md
 
+
 def test_report_to_markdown_escapes_newlines_in_cell_values():
     """Newlines in column names or warnings must not break Markdown table rows."""
     from arnio.quality import ColumnProfile, DataQualityReport
