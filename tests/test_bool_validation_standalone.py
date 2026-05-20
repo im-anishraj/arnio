@@ -1,11 +1,11 @@
 """Standalone tests for _validate_bool_option in arnio/io.py."""
 
-import sys
-import types
-import pytest
 import importlib.util
 import pathlib
+import sys
+import types
 
+import pytest
 # Create fake arnio package and submodules to satisfy relative imports
 arnio_pkg = types.ModuleType("arnio")
 arnio_pkg.__path__ = []
