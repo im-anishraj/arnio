@@ -53,14 +53,30 @@ def _utf8_csv_path(
                     row_count = 0
                     in_quotes = False
                     pending_quote = False
+                    pending_cr = False
                     last_char_was_terminator = False
+                    sample_complete = False
 
                     while chunk := src.read(8192):
                         chunk_len = len(chunk)
                         index = 0
                         while index < chunk_len:
                             char = chunk[index]
+
+                            if sample_complete:
+                                if pending_cr and char == "\n":
+                                    tmp.write(char)
+                                pending_cr = False
+                                break
+
                             tmp.write(char)
+
+                            if pending_cr:
+                                pending_cr = False
+                                if char == "\n":
+                                    last_char_was_terminator = True
+                                    index += 1
+                                    continue
 
                             if char == '"':
                                 if pending_quote:
@@ -78,21 +94,24 @@ def _utf8_csv_path(
                                 if not in_quotes and char in {"\n", "\r"}:
                                     row_count += 1
                                     last_char_was_terminator = True
-                                    if (
-                                        char == "\r"
-                                        and index + 1 < chunk_len
-                                        and chunk[index + 1] == "\n"
-                                    ):
-                                        tmp.write("\n")
-                                        index += 1
+                                    if char == "\r":
+                                        if (
+                                            index + 1 < chunk_len
+                                            and chunk[index + 1] == "\n"
+                                        ):
+                                            tmp.write("\n")
+                                            index += 1
+                                        else:
+                                            pending_cr = True
                                     if row_count >= sample_rows:
+                                        sample_complete = True
                                         break
                                 else:
                                     last_char_was_terminator = False
 
                             index += 1
 
-                        if row_count >= sample_rows:
+                        if sample_complete and not pending_cr:
                             break
 
                     if (

@@ -657,6 +657,18 @@ class TestScanCsv:
                 'name,notes\r\nAlice,"café,\r\nline2"\r\n'
             )
 
+    def test_scan_non_utf8_crlf_split_across_chunk_boundary(self, tmp_path):
+        csv_path = tmp_path / "latin1_crlf_boundary.csv"
+        header = "pad,value\r\n"
+        row1 = f'{"x" * 8176},100\r\n'
+        row2 = "y,hello\r\n"
+        row3 = "z,200\r\n"
+        csv_path.write_bytes((header + row1 + row2 + row3).encode("latin-1"))
+
+        schema = ar.scan_csv(csv_path, encoding="latin-1", sample_size=3)
+
+        assert schema == {"pad": "string", "value": "string"}
+
     def test_scan_sample_size_non_utf8_does_not_leak_later_type_evidence(
         self, tmp_path
     ):
