@@ -879,6 +879,7 @@ def DateTime(
 def _is_safely_convertible_to_dtype(
     series: pd.Series,
     expected_dtype: str,
+    column_name: str,
 ) -> bool:
     try:
         non_null = series.dropna()
@@ -886,12 +887,35 @@ def _is_safely_convertible_to_dtype(
         if len(non_null) == 0:
             return False
 
+        values = non_null.astype(str)
+
+        lower_name = column_name.lower()
+
+        is_identifier_like = (
+            lower_name == "id"
+            or lower_name.endswith("_id")
+            or lower_name
+            in {
+                "uuid",
+                "zip",
+                "zipcode",
+                "zip_code",
+            }
+        )
+
+        if is_identifier_like:
+            if values.str.match(r"^0\d+$").any():
+                return False
+
         if expected_dtype == "int64":
-            pd.to_numeric(non_null, errors="raise").astype("int64")
+            if not values.str.match(r"^-?\d+$").all():
+                return False
+
+            pd.to_numeric(values, errors="raise")
             return True
 
         if expected_dtype == "float64":
-            pd.to_numeric(non_null, errors="raise").astype("float64")
+            pd.to_numeric(values, errors="raise")
             return True
 
     except Exception:
@@ -922,6 +946,7 @@ def _validate_column(
                 and _is_safely_convertible_to_dtype(
                     df[name],
                     field_def.dtype,
+                    name,
                 )
             ):
                 message += (
