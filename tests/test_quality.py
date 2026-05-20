@@ -888,6 +888,47 @@ def test_report_to_markdown_escapes_pipe_characters_in_column_cells():
     assert "free\\|text" in md
     assert "contains \\| pipe" in md
 
+def test_report_to_markdown_escapes_newlines_in_cell_values():
+    """Newlines in column names or warnings must not break Markdown table rows."""
+    from arnio.quality import ColumnProfile, DataQualityReport
+
+    report = DataQualityReport(
+        row_count=2,
+        column_count=1,
+        memory_usage=128,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={
+            "col\nname": ColumnProfile(
+                name="col\nname",
+                dtype="string\r\nwith newline",
+                semantic_type="text\rwith CR",
+                row_count=2,
+                null_count=0,
+                null_ratio=0.0,
+                unique_count=2,
+                unique_ratio=1.0,
+                warnings=["warn\nwith newline", "warn\r\nwith CRLF"],
+            )
+        },
+        suggestions=[],
+    )
+
+    md = report.to_markdown()
+
+    # Newlines must be replaced with <br>
+    assert "<br>" in md
+    assert "col\nname" not in md
+    assert "warn\nwith newline" not in md
+    assert "warn\r\nwith CRLF" not in md
+    assert "string\r\nwith newline" not in md
+    assert "text\rwith CR" not in md
+
+    # col name and warning content should still appear, escaped
+    assert "col<br>name" in md
+    assert "warn<br>with newline" in md
+    assert "warn<br>with CRLF" in md
+
 
 def test_report_to_markdown_empty_sections():
     report = ar.DataQualityReport(
