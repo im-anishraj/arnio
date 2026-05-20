@@ -262,3 +262,54 @@ def test_str_keeps_normal_column_names():
 
     assert "name" in result
     assert "..." not in result
+
+
+def test_add_column_accepts_matching_lengths():
+    from arnio._arnio_cpp import Frame, Column, DType
+
+    frame = Frame()
+
+    c1 = Column("a", DType.INT64)
+    c1.push_back(1)
+    c1.push_back(2)
+
+    c2 = Column("b", DType.INT64)
+    c2.push_back(10)
+    c2.push_back(20)
+
+    frame.add_column(c1)
+    frame.add_column(c2)
+
+    assert frame.shape() == (2, 2)
+
+
+def test_add_column_rejects_mismatched_lengths():
+    from arnio._arnio_cpp import Frame, Column, DType
+
+    frame = Frame()
+
+    c1 = Column("a", DType.INT64)
+    c1.push_back(1)
+    c1.push_back(2)
+    c1.push_back(3)
+
+    c2 = Column("b", DType.INT64)
+    c2.push_back(10)
+
+    frame.add_column(c1)
+
+    with pytest.raises(ValueError, match="expected"):
+        frame.add_column(c2)
+
+
+def test_add_column_allows_first_column_in_empty_frame():
+    from arnio._arnio_cpp import Frame, Column, DType
+
+    frame = Frame()
+
+    c1 = Column("a", DType.INT64)
+    c1.push_back(1)
+
+    frame.add_column(c1)
+
+    assert frame.shape() == (1, 1)
