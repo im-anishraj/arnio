@@ -7,8 +7,9 @@ This script shows an end-to-end schema validation workflow:
 - inspect ValidationResult summaries and markdown output
 """
 
-import arnio as ar
 import pandas as pd
+
+import arnio as ar
 
 
 def main():
