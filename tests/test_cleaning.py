@@ -223,6 +223,48 @@ class TestDropDuplicates:
 
         assert names == expected_names
 
+    def test_drop_duplicates_type_collision(self):
+        # 1 (int) vs "1" (str) vs 1.0 (float) vs True (bool)
+        df = pd.DataFrame({
+            "col1": [1, "1", 1.0, True]
+        })
+        frame = ar.from_pandas(df)
+        result = ar.drop_duplicates(frame)
+        assert result.shape[0] == 4
+
+    def test_drop_duplicates_null_vs_empty_string(self):
+        df = pd.DataFrame({
+            "col1": [None, "", None]
+        })
+        frame = ar.from_pandas(df)
+        result = ar.drop_duplicates(frame)
+        assert result.shape[0] == 2
+
+    def test_drop_duplicates_separator_injection(self):
+        df1 = pd.DataFrame({
+            "col1": ["a:b", "a"],
+            "col2": ["c", "b:c"]
+        })
+        frame1 = ar.from_pandas(df1)
+        result1 = ar.drop_duplicates(frame1)
+        assert result1.shape[0] == 2
+
+        df2 = pd.DataFrame({
+            "col1": ["S1:a", ""],
+            "col2": ["b", "S1:ab"]
+        })
+        frame2 = ar.from_pandas(df2)
+        result2 = ar.drop_duplicates(frame2)
+        assert result2.shape[0] == 2
+
+        df3 = pd.DataFrame({
+            "col1": ["a\x1Fb", "a"],
+            "col2": ["c", "\x1Fbc"]
+        })
+        frame3 = ar.from_pandas(df3)
+        result3 = ar.drop_duplicates(frame3)
+        assert result3.shape[0] == 2
+
 
 class TestDropColumns:
     def test_drop_columns_removes_requested_columns_and_preserves_order(self):

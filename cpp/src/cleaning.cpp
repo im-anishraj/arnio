@@ -28,22 +28,29 @@ static std::vector<size_t> resolve_subset(const Frame& frame,
     return indices;
 }
 
+static void serialize_cell(std::ostream& os, const CellValue& cell) {
+    if (std::holds_alternative<std::monostate>(cell)) {
+        os << "N";
+    } else if (std::holds_alternative<std::string>(cell)) {
+        const std::string& s = std::get<std::string>(cell);
+        os << "S" << s.size() << ":" << s;
+    } else if (std::holds_alternative<int64_t>(cell)) {
+        std::string s = std::to_string(std::get<int64_t>(cell));
+        os << "I" << s.size() << ":" << s;
+    } else if (std::holds_alternative<double>(cell)) {
+        std::string s = combine_cell_to_string(cell);
+        os << "F" << s.size() << ":" << s;
+    } else if (std::holds_alternative<bool>(cell)) {
+        os << (std::get<bool>(cell) ? "BT" : "BF");
+    }
+}
+
 // Helper: build a row hash for deduplication
 static std::string row_key(const Frame& frame, size_t row, const std::vector<size_t>& cols) {
     std::ostringstream oss;
     for (size_t ci : cols) {
         auto cell = frame.column(ci).at(row);
-        if (std::holds_alternative<std::monostate>(cell)) {
-            oss << "\x00";
-        } else if (std::holds_alternative<std::string>(cell)) {
-            oss << std::get<std::string>(cell);
-        } else if (std::holds_alternative<int64_t>(cell)) {
-            oss << std::get<int64_t>(cell);
-        } else if (std::holds_alternative<double>(cell)) {
-            oss << std::get<double>(cell);
-        } else if (std::holds_alternative<bool>(cell)) {
-            oss << (std::get<bool>(cell) ? "T" : "F");
-        }
+        serialize_cell(oss, cell);
         oss << "\x1F";  // unit separator
     }
     return oss.str();
