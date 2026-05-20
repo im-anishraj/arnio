@@ -544,7 +544,7 @@ Frame CsvReader::read(const std::string& path) const {
     }
 
     // Zero-data-row edge case (headerless empty body).
-    if (header.empty() && col_types.empty()) return Frame({});
+    if (header.empty() && col_types.empty()) return Frame(std::vector<Column>{});
 
     // Resolve which column indices to materialise (usecols filter).
     size_t num_cols = header.size();
