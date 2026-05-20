@@ -53,7 +53,7 @@ def test_negative_int_inference(tmp_path):
     df = read_csv(str(csv_file))
 
     assert df.dtypes["a"] == "int64"
-    vals = df["a"].to_list()
+    vals = df["a"]
     assert vals == [-123, -456, -789]
 
 
@@ -64,7 +64,7 @@ def test_explicit_positive_float(tmp_path):
     df = read_csv(str(csv_file))
 
     assert df.dtypes["a"] == "float64"
-    vals = df["a"].to_list()
+    vals = df["a"]
     assert vals == [1.5, 2.75, 3.0]
 
 
@@ -102,7 +102,7 @@ def test_negative_float_inference(tmp_path):
     df = read_csv(str(csv_file))
 
     assert df.dtypes["a"] == "float64"
-    vals = df["a"].to_list()
+    vals = df["a"]
     assert vals == [-1.5, -2.75]
 
 
@@ -122,7 +122,7 @@ def test_scientific_notation_float(tmp_path):
     df = read_csv(str(csv_file))
 
     assert df.dtypes["a"] == "float64"
-    vals = df["a"].to_list()
+    vals = df["a"]
     assert vals[0] == 1500.0
     assert abs(vals[1] - (-0.025)) < 1e-12
 

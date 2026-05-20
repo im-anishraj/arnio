@@ -3,8 +3,8 @@
 #include <algorithm>
 #include <cctype>
 #include <cerrno>
-#include <cmath>
 #include <charconv>
+#include <cmath>
 #include <cstddef>
 #include <cstdlib>
 #include <fstream>
@@ -348,6 +348,13 @@ DType CsvParser::infer_type(const std::string& value) const {
     }
 
     if (looks_like_integer_token(cleaned)) {
+        // This token is shaped like an integer, but it did not fit in int64.
+        // Preserve previous behavior by attempting float parsing before
+        // falling back to string.
+        double f64 = 0.0;
+        if (try_parse_float64(cleaned, f64)) {
+            return DType::FLOAT64;
+        }
         return DType::STRING;
     }
 
