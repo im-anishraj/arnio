@@ -1442,6 +1442,7 @@ DataQualityReport(
       "dtype": "string",
       "semantic_type": "categorical",
       "null_count": 0,
+      "warnings": ["near_constant"],
       "top_values": [
         {"value": "London", "count": 3, "ratio": 0.5},
         {"value": "Paris", "count": 2, "ratio": 0.333}
