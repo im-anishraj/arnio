@@ -38,7 +38,7 @@ struct RowRef {
         for (size_t ci : *cols) {
             const auto& col1 = frame->column(ci);
             const auto& col2 = other.frame->column(ci);
-            
+
             bool null1 = col1.is_null(row);
             bool null2 = col2.is_null(other.row);
             if (null1 != null2) return false;
