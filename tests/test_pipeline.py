@@ -514,6 +514,55 @@ class TestPipeline:
         assert "marker" in df.columns
         assert set(df["marker"]) == {"done"}
 
+    def test_pipeline_passes_context_to_opt_in_python_steps(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        seen = {}
+
+        def capture_context(df, context=None):
+            seen["context"] = context
+            df["step_seen"] = context.step_name
+            return df
+
+        ar.register_step("context_capture_step", capture_context)
+
+        result = ar.pipeline(
+            frame,
+            [
+                ("strip_whitespace",),
+                ("context_capture_step",),
+            ],
+            dry_run=True,
+        )
+
+        context = seen["context"]
+        assert isinstance(context, ar.PipelineContext)
+        assert context.step_name == "context_capture_step"
+        assert context.step_index == 1
+        assert context.total_steps == 2
+        assert context.dry_run is True
+        assert isinstance(result, ar.ArFrame)
+
+    def test_pipeline_does_not_require_context_for_existing_python_steps(
+        self, sample_csv
+    ):
+        frame = ar.read_csv(sample_csv)
+
+        def legacy_step(df, value="ok"):
+            df["marker"] = value
+            return df
+
+        ar.register_step("legacy_context_free_step", legacy_step)
+
+        result = ar.pipeline(
+            frame,
+            [
+                ("legacy_context_free_step", {"value": "done"}),
+            ],
+        )
+
+        df = ar.to_pandas(result)
+        assert set(df["marker"]) == {"done"}
+
     def test_concurrent_step_registration(self, sample_csv):
         frame = ar.read_csv(sample_csv)
 

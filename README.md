@@ -399,6 +399,11 @@ ar.register_step("team:drop_nulls", remove_outliers)  # namespaced custom step
 # Introspect built-in and custom step names without reaching into internals.
 print(ar.list_steps())
 
+# Opt in to a context object only when you need execution metadata.
+def capture_context(df, context=None):
+    print(context.step_name, context.step_index, context.total_steps)
+    return df
+
 # Now use it in any pipeline alongside native C++ steps
 clean = ar.pipeline(frame, [
     ("builtin:strip_whitespace",),
