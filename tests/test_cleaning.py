@@ -1108,18 +1108,26 @@ class TestParseBoolStrings:
         frame = ar.from_pandas(df)
 
         # Float
-        with pytest.raises(TypeError, match="true_values must contain only strings, got float"):
+        with pytest.raises(
+            TypeError, match="true_values must contain only strings, got float"
+        ):
             ar.parse_bool_strings(frame, true_values={3.14, "yes"})
-        
-        with pytest.raises(TypeError, match="false_values must contain only strings, got float"):
+
+        with pytest.raises(
+            TypeError, match="false_values must contain only strings, got float"
+        ):
             ar.parse_bool_strings(frame, false_values={1.5, "no"})
 
         # Int
-        with pytest.raises(TypeError, match="true_values must contain only strings, got int"):
+        with pytest.raises(
+            TypeError, match="true_values must contain only strings, got int"
+        ):
             ar.parse_bool_strings(frame, true_values={42, "yes"})
 
         # NoneType
-        with pytest.raises(TypeError, match="true_values must contain only strings, got NoneType"):
+        with pytest.raises(
+            TypeError, match="true_values must contain only strings, got NoneType"
+        ):
             ar.parse_bool_strings(frame, true_values={None, "yes"})
 
     def test_parse_bool_strings_non_iterable_custom_values_raises(self):
