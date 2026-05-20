@@ -179,23 +179,21 @@ class ArFrame:
 
         n_rows, n_cols = self.shape
 
-        # Zero-column frame
         if n_cols == 0:
             return np.empty((n_rows, 0))
 
-        # Validate dtypes and collect columns
         columns = []
         for i in range(n_cols):
             col = self._frame.column_by_index(i)
             dtype = col.dtype()
 
-        if dtype not in SUPPORTED_DTYPES:
-            if n_rows == 0:
-                return np.empty((0, n_cols), dtype=object)
-            raise TypeError(
-                f"to_numpy() requires all columns to be numeric or bool. "
-                f"Column '{col.name()}' has unsupported dtype '{dtype}'."
-            )
+            if dtype not in SUPPORTED_DTYPES:
+                if n_rows == 0:
+                    return np.empty((0, n_cols), dtype=object)
+                raise TypeError(
+                    f"to_numpy() requires all columns to be numeric or bool. "
+                    f"Column '{col.name()}' has unsupported dtype '{dtype}'."
+                )
 
             mask = col.get_null_mask()
             has_nulls = mask.any()
@@ -207,7 +205,6 @@ class ArFrame:
                     f"e.g. frame.to_numpy(fill_value=0)."
                 )
 
-            # Extract with correct dtype — no forced float conversion
             if dtype == _DType.INT64:
                 arr = col.to_numpy_int().copy()
                 if has_nulls:
@@ -216,14 +213,13 @@ class ArFrame:
                 arr = col.to_numpy_float().copy()
                 if has_nulls:
                     arr[mask] = fill_value
-            else:  # BOOL
+            else:
                 arr = col.to_numpy_bool().copy()
                 if has_nulls:
                     arr[mask] = fill_value
 
             columns.append(arr)
 
-        # Zero-row frame — return correct shape (0, n_cols)
         if n_rows == 0:
             return np.empty((0, n_cols))
 
