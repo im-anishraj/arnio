@@ -1659,6 +1659,11 @@ def _profile_column(
     non_null = series.dropna()
     unique_count = int(non_null.nunique(dropna=True))
     unique_ratio = _ratio(unique_count, len(non_null))
+    dominant_ratio = 0.0
+
+    if len(non_null):
+        value_counts = non_null.value_counts(dropna=True)
+        dominant_ratio = _ratio(int(value_counts.iloc[0]), len(non_null))
     sample_values = non_null.head(sample_size).tolist()
 
     empty_string_count = 0
@@ -1749,6 +1754,7 @@ def _profile_column(
         unique_count=unique_count,
         whitespace_count=whitespace_count,
         empty_string_count=empty_string_count,
+        dominant_ratio=dominant_ratio,
     )
 
     return ColumnProfile(
@@ -1854,6 +1860,7 @@ def _column_warnings(
     unique_count: int,
     whitespace_count: int,
     empty_string_count: int,
+    dominant_ratio: float,
 ) -> list[str]:
     warnings: list[str] = []
     if null_count:
@@ -1862,6 +1869,8 @@ def _column_warnings(
         warnings.append("all_null")
     if row_count and unique_count == 1:
         warnings.append("constant")
+    if row_count and unique_count > 1 and dominant_ratio >= _NEAR_CONSTANT_THRESHOLD:
+        warnings.append("near_constant")
     if whitespace_count:
         warnings.append("leading_or_trailing_whitespace")
     if empty_string_count:
@@ -1903,6 +1912,7 @@ def _clean_scalar(value: Any) -> Any:
 
 
 _APPROX_TOP_VALUES_SEED = 0
+_NEAR_CONSTANT_THRESHOLD = 0.95
 
 
 def _top_values(
