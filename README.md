@@ -1057,6 +1057,22 @@ print(result.issue_count)  # Warning issues are still reported
 
 Warning-level issues remain visible in validation results without failing the overall validation status.
 
+### Schema JSON round-trips
+
+```python
+schema = ar.Schema(
+    {
+        "id": ar.String(nullable=False),
+        "created_at": ar.DateTime(format="%Y-%m-%dT%H:%M:%S"),
+    },
+    strict=True,
+    unique=["id"],
+)
+
+payload = schema.to_json()
+restored = ar.Schema.from_json(payload)
+```
+
 `ValidationResult.to_markdown()` is useful in CI logs, GitHub comments, or data quality reports because it renders a compact validation summary plus a GitHub-friendly issue table.
 
 For multi-column uniqueness (composite keys):
