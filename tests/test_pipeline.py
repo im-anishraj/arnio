@@ -563,6 +563,32 @@ class TestPipeline:
         df = ar.to_pandas(result)
         assert set(df["marker"]) == {"done"}
 
+    def test_pipeline_preserves_explicit_context_kwarg_for_python_steps(
+        self, sample_csv
+    ):
+        frame = ar.read_csv(sample_csv)
+        seen = {}
+
+        def capture_context(df, context=None):
+            seen["context"] = context
+            df["context_marker"] = str(context)
+            return df
+
+        ar.register_step("explicit_context_step", capture_context)
+        explicit_context = {"source": "caller"}
+
+        result = ar.pipeline(
+            frame,
+            [
+                ("explicit_context_step", {"context": explicit_context}),
+            ],
+        )
+
+        df = ar.to_pandas(result)
+
+        assert seen["context"] is explicit_context
+        assert set(df["context_marker"]) == {str(explicit_context)}
+
     def test_concurrent_step_registration(self, sample_csv):
         frame = ar.read_csv(sample_csv)
 
