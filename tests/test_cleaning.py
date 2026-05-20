@@ -2418,6 +2418,20 @@ class TestReplaceValues:
 
 class TestRoundNumericColumns:
 
+    def test_round_subset_with_non_numeric(self):
+        import pandas as pd
+
+        df = pd.DataFrame({"name": ["john"], "score": [98.765]})
+        frame = ar.from_pandas(df)
+        result = ar.round_numeric_columns(
+            frame,
+            subset=["name", "score"],
+            decimals=1,
+        )
+        result_df = ar.to_pandas(result)
+        assert list(result_df["name"]) == ["john"]
+        assert list(result_df["score"]) == [98.8]
+    
     def test_round_all_numeric(self):
         import pandas as pd
 
@@ -2518,6 +2532,7 @@ class TestRoundNumericColumns:
         with pytest.raises(TypeError, match="decimals must be an integer"):
             ar.round_numeric_columns(frame, decimals=True)
 
+<<<<<<< HEAD
     def test_round_numeric_columns_pandas_input_returns_dataframe(self):
         df = pd.DataFrame({"a": [1.234, 5.678], "label": ["x", "y"]})
 
@@ -2529,6 +2544,8 @@ class TestRoundNumericColumns:
         assert df["a"].tolist() == [1.234, 5.678]
 
 
+=======
+>>>>>>> 39a9555 (test: add mixed subset regression coverage)
 class TestCombineColumns:
     def test_combines_columns_with_separator(self):
         import pandas as pd
