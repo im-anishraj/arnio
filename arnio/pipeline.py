@@ -309,7 +309,7 @@ def pipeline(
 
     step_timings: list[dict[str, Any]] = []
     applied_steps: list[str] = []
-    row_counts: list[dict[str, int]] = []
+    row_counts: list[dict[str, int | str]] = []
     for step in steps:
         if len(step) == 1:
             name = step[0]
