@@ -83,7 +83,8 @@ def test_overflow_int_falls_back_to_float(tmp_path):
 
     df = read_csv(str(csv_file))
 
-    assert df.dtypes["a"] == "float64"
+    # Overflow integers are not coerced to float; preserve the token as string.
+    assert df.dtypes["a"] == "string"
 
 
 def test_numeric_with_leading_zeros_is_string(tmp_path):
