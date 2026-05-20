@@ -254,6 +254,16 @@ inline bool try_parse_float64(const std::string& cleaned, double& out) {
         }
         return true;
     }
+
+    // Some standard libraries parse hex-like tokens (e.g. "0xFF") as floating
+    // values, which would incorrectly classify hex integers as FLOAT64.
+    // Keep behavior consistent across platforms by rejecting 0x-prefixed tokens.
+    if ((lower.size() >= 2 && lower[0] == '0' && lower[1] == 'x') ||
+        (lower.size() >= 3 && (lower[0] == '+' || lower[0] == '-') && lower[1] == '0' &&
+         lower[2] == 'x')) {
+        return false;
+    }
+
     std::istringstream iss(cleaned);
     iss.imbue(std::locale::classic());
     double val = 0.0;
