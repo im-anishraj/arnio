@@ -119,8 +119,13 @@ def generate_multiline(rows=100_000, path=DEFAULT_MULTILINE_PATH):
 DEFAULT_SPARSE_NULLS_PATH = "benchmarks/benchmark_sparse_nulls.csv"
 
 
-def generate_sparse_nulls(rows=1_000_000, path=DEFAULT_SPARSE_NULLS_PATH, null_density=0.01, seed=42):
-    """Generate a deterministic CSV with controlled null density across mixed column types."""
+def generate_sparse_nulls(
+    rows=1_000_000,
+    path=DEFAULT_SPARSE_NULLS_PATH,
+    null_density=0.01,
+    seed=42,
+):
+    """Generate a CSV with controlled null density across mixed column types."""
     if DRY_RUN:
         rows = min(rows, 10)
     rng = np.random.default_rng(seed)
@@ -163,4 +168,8 @@ if __name__ == "__main__":
     generate_wide()
     generate_multiline()
     generate_sparse_nulls()
-    generate_sparse_nulls(path="benchmarks/benchmark_sparse_nulls_dense.csv", null_density=0.2, seed=99)
+    generate_sparse_nulls(
+        path="benchmarks/benchmark_sparse_nulls_dense.csv",
+        null_density=0.2,
+        seed=99,
+    )
