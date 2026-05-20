@@ -101,7 +101,9 @@ def verify_correctness(path):
     df_pd = pd.read_csv(path)
     df_pd.columns = df_pd.columns.str.strip()
     for col in df_pd.select_dtypes(include=["object", "string"]).columns:
-        df_pd[col] = df_pd[col].apply(lambda x: x.strip().lower() if isinstance(x, str) else x)
+        df_pd[col] = df_pd[col].apply(
+            lambda x: x.strip().lower() if isinstance(x, str) else x
+        )
     df_pd = df_pd.dropna()
     df_pd = df_pd.drop_duplicates()
     df_pd = df_pd.reset_index(drop=True)
@@ -145,7 +147,9 @@ def benchmark_pandas(path):
     t0 = time.perf_counter()
     df.columns = df.columns.str.strip()
     for col in df.select_dtypes(include=["object", "string"]).columns:
-        df[col] = df[col].apply(lambda x: x.strip().lower() if isinstance(x, str) else x)
+        df[col] = df[col].apply(
+            lambda x: x.strip().lower() if isinstance(x, str) else x
+        )
     t_clean_strings = time.perf_counter() - t0
 
     t0 = time.perf_counter()
