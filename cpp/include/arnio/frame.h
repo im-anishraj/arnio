@@ -36,6 +36,7 @@ class Frame {
 
     // Clone
     Frame clone() const;
+    Frame select_columns(const std::vector<std::string>& columns) const;
 
    private:
     std::vector<Column> columns_;

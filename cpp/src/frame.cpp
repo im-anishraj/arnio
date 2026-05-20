@@ -68,6 +68,12 @@ size_t Frame::column_index(const std::string& name) const {
 }
 
 void Frame::add_column(Column col) {
+    if (!columns_.empty() && col.size() != num_rows()) {
+        throw std::invalid_argument("Column '" + col.name() + "' has " +
+                                    std::to_string(col.size()) + " rows, expected " +
+                                    std::to_string(num_rows()));
+    }
+
     name_index_[col.name()] = columns_.size();
     columns_.push_back(std::move(col));
 }
@@ -83,6 +89,16 @@ Frame Frame::clone() const {
     return Frame(std::move(cloned));
 }
 
+Frame Frame::select_columns(const std::vector<std::string>& columns) const {
+    std::vector<Column> selected;
+    selected.reserve(columns.size());
+
+    for (const auto& name : columns) {
+        selected.push_back(column(name).clone());
+    }
+
+    return Frame(std::move(selected));
+}
 void Frame::rebuild_index() {
     name_index_.clear();
     for (size_t i = 0; i < columns_.size(); ++i) {
