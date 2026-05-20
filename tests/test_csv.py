@@ -756,6 +756,49 @@ def test_quoted_field_with_embedded_cr(tmp_path):
     assert df["note"][0] == "line1\rline2"
 
 
+def test_trailing_delimiter_creates_empty_field(tmp_path):
+    csv_path = tmp_path / "trailing.csv"
+
+    csv_path.write_text("id,name,value\n1,Alice,\n")
+
+    frame = ar.read_csv(csv_path)
+
+    df = ar.to_pandas(frame)
+
+    assert df.shape == (1, 3)
+    assert df["id"].iloc[0] == 1
+    assert df["name"].iloc[0] == "Alice"
+    assert pd.isna(df["value"].iloc[0])
+
+
+def test_multiple_trailing_delimiters_create_empty_fields(tmp_path):
+    csv_path = tmp_path / "multiple_trailing.csv"
+
+    csv_path.write_text("a,b,c,d\n1,2,,\n")
+
+    frame = ar.read_csv(csv_path)
+
+    df = ar.to_pandas(frame)
+
+    assert df.shape == (1, 4)
+    assert df["a"].iloc[0] == 1
+    assert df["b"].iloc[0] == 2
+    assert pd.isna(df["c"].iloc[0])
+    assert pd.isna(df["d"].iloc[0])
+
+
+def test_extra_non_empty_field_still_rejected(tmp_path):
+    csv_path = tmp_path / "extra_non_empty.csv"
+
+    csv_path.write_text("id,name\n1,Alice,EXTRA\n")
+
+    with pytest.raises(
+        ar.CsvReadError,
+        match="expected 2",
+    ):
+        ar.read_csv(csv_path)
+
+
 class TestArFrameHeadTail:
     def test_head_default(self, sample_csv):
         frame = ar.read_csv(sample_csv)
