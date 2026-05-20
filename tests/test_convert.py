@@ -299,6 +299,48 @@ class TestFromPandas:
 
         assert "Fix:" in str(exc_info.value)
 
+    def test_from_pandas_native_datetime64_raises_clear_error(self):
+        """Native datetime64 columns should raise a clear TypeError with a fix hint."""
+        df = pd.DataFrame({"timestamp": pd.date_range("2026-05-20", periods=3)})
+        with pytest.raises(
+            TypeError, match="Column 'timestamp' has unsupported dtype 'datetime64"
+        ) as exc_info:
+            ar.from_pandas(df)
+        assert "Fix:" in str(exc_info.value)
+        assert ".astype(str)" in str(exc_info.value)
+
+    def test_from_pandas_native_timedelta64_raises_clear_error(self):
+        """Native timedelta64 columns should raise a clear TypeError with a fix hint."""
+        df = pd.DataFrame({"duration": pd.to_timedelta(["1 days", "2 days"])})
+        with pytest.raises(
+            TypeError, match="Column 'duration' has unsupported dtype 'timedelta"
+        ) as exc_info:
+            ar.from_pandas(df)
+        assert "Fix:" in str(exc_info.value)
+        assert ".dt.total_seconds()" in str(exc_info.value)
+
+    def test_from_pandas_native_category_raises_clear_error(self):
+        """Native category columns should raise a clear TypeError with a fix hint."""
+        df = pd.DataFrame(
+            {"category_col": pd.Series(["a", "b", "a"], dtype="category")}
+        )
+        with pytest.raises(
+            TypeError, match="Column 'category_col' has unsupported dtype 'category'"
+        ) as exc_info:
+            ar.from_pandas(df)
+        assert "Fix:" in str(exc_info.value)
+        assert ".astype(str)" in str(exc_info.value)
+
+    def test_from_pandas_native_complex_raises_clear_error(self):
+        """Native complex columns should raise a clear TypeError with a fix hint."""
+        df = pd.DataFrame({"signal": pd.Series([1 + 2j, 3 + 4j], dtype=complex)})
+        with pytest.raises(
+            TypeError, match="Column 'signal' has unsupported dtype 'complex128'"
+        ) as exc_info:
+            ar.from_pandas(df)
+        assert "Fix:" in str(exc_info.value)
+        assert ".apply(str)" in str(exc_info.value)
+
     def test_from_pandas_preserves_column_order(self):
         df = pd.DataFrame(
             {
