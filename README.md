@@ -1442,10 +1442,9 @@ DataQualityReport(
       "dtype": "string",
       "semantic_type": "categorical",
       "null_count": 0,
-      "warnings": ["near_constant"],
       "top_values": [
-        {"value": "London", "count": 95, "ratio": 0.95},
-        {"value": "Paris", "count": 5, "ratio": 0.05}
+        {"value": "London", "count": 3, "ratio": 0.5},
+        {"value": "Paris", "count": 2, "ratio": 0.333}
       ]
     }
   },
@@ -1460,6 +1459,19 @@ DataQualityReport(
 }
 ```
 Columns where a single non-null value represents at least 95% of rows are reported with a `near_constant` warning.
+
+Example near-constant distribution:
+
+```json
+{
+  "row_count": 100,
+  "top_values": [
+    {"value": "London", "count": 95, "ratio": 0.95},
+    {"value": "Paris", "count": 5, "ratio": 0.05}
+  ],
+  "warnings": ["near_constant"]
+}
+```
 
 ### 3. Example Summary Table
 *A manually formatted Markdown table representing the core metrics:*
