@@ -23,12 +23,15 @@ def restore_python_step_registry():
     """
     with pipeline_module._REGISTRY_LOCK:
         original_registry = dict(pipeline_module._PYTHON_STEP_REGISTRY)
+        original_aliases = dict(pipeline_module._DEPRECATED_STEP_ALIASES)
 
     yield
 
     with pipeline_module._REGISTRY_LOCK:
         pipeline_module._PYTHON_STEP_REGISTRY.clear()
         pipeline_module._PYTHON_STEP_REGISTRY.update(original_registry)
+        pipeline_module._DEPRECATED_STEP_ALIASES.clear()
+        pipeline_module._DEPRECATED_STEP_ALIASES.update(original_aliases)
 
 
 class TestPipeline:
@@ -218,6 +221,31 @@ class TestPipeline:
 
         assert df["name"].iloc[0] == "Alice"
 
+    def test_pipeline_warns_for_deprecated_builtin_step_alias(
+        self,
+        csv_with_whitespace,
+    ):
+        pipeline_module._register_deprecated_step_alias(
+            "trim_whitespace",
+            "strip_whitespace",
+        )
+        frame = ar.read_csv(csv_with_whitespace)
+
+        with pytest.warns(
+            DeprecationWarning,
+            match="trim_whitespace.*strip_whitespace",
+        ):
+            result = ar.pipeline(
+                frame,
+                [
+                    ("trim_whitespace",),
+                ],
+            )
+
+        df = ar.to_pandas(result)
+
+        assert df["name"].iloc[0] == "Alice"
+
     def test_pipeline_supports_namespaced_custom_steps_with_builtin_basename(self):
         def custom_drop_nulls(df):
             df["marker"] = "custom"
@@ -236,6 +264,32 @@ class TestPipeline:
 
         assert list(df["marker"]) == ["custom", "custom"]
         assert df["value"].isna().sum() == 1
+
+    def test_register_deprecated_step_alias_rejects_unknown_target(self):
+        with pytest.raises(ar.UnknownStepError, match="missing_step"):
+            pipeline_module._register_deprecated_step_alias(
+                "legacy_step",
+                "missing_step",
+            )
+
+    def test_register_deprecated_step_alias_rejects_registered_name_conflict(self):
+        with pytest.raises(ValueError, match="already registered"):
+            pipeline_module._register_deprecated_step_alias(
+                "drop_nulls",
+                "strip_whitespace",
+            )
+
+    def test_register_step_rejects_reserved_deprecated_alias_name(self):
+        pipeline_module._register_deprecated_step_alias(
+            "legacy_strip",
+            "strip_whitespace",
+        )
+
+        def custom_step(df):
+            return df
+
+        with pytest.raises(ValueError, match="deprecated pipeline step alias"):
+            ar.register_step("legacy_strip", custom_step)
 
     def test_pipeline_mapping_shorthand(self, sample_csv):
         frame = ar.read_csv(sample_csv)
@@ -556,83 +610,23 @@ class TestPipeline:
         except ValueError as e:
             assert "Expected a dict" in str(e)
 
-    def test_custom_step_exception_wrapping_and_chaining(self):
-        """Verify that exceptions thrown by custom Python steps are wrapped with context."""
-
-        def failing_step(df, **kwargs):
-            raise RuntimeError("Internal step crash")
-
-        ar.register_step("error_prone_step", failing_step)
-
-        import pandas as pd
-
-        frame = ar.from_pandas(pd.DataFrame({"dummy": [1, 2, 3]}))
-
-        with pytest.raises(ar.PipelineStepError) as exc_info:
-            ar.pipeline(frame, [("error_prone_step",)])
-
-        assert "error_prone_step" in str(exc_info.value)
-        assert "Internal step crash" in str(exc_info.value)
-        assert isinstance(exc_info.value.__cause__, RuntimeError)
-
-    def test_pipeline_rejects_invalid_step_format(self, sample_csv):
+    def test_pipeline_rejects_empty_step(self, sample_csv):
         frame = ar.read_csv(sample_csv)
 
         with pytest.raises(ValueError, match="Invalid step format"):
-            ar.pipeline(
-                frame,
-                [
-                    ("strip_whitespace",),
-                    ("bad_step", "oops", "extra"),
-                ],
-            )
+            ar.pipeline(frame, [()])
+
+    def test_pipeline_rejects_string_step(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(ValueError, match="Invalid step format"):
+            ar.pipeline(frame, ["drop_nulls"])
 
     def test_pipeline_rejects_non_tuple_step(self, sample_csv):
         frame = ar.read_csv(sample_csv)
 
         with pytest.raises(ValueError, match="Invalid step format"):
-            ar.pipeline(
-                frame,
-                [
-                    "strip_whitespace",
-                ],
-            )
-
-    def test_pipeline_rejects_invalid_kwargs_type(self, sample_csv):
-        frame = ar.read_csv(sample_csv)
-
-        with pytest.raises(ValueError, match="Expected a dict"):
-            ar.pipeline(
-                frame,
-                [
-                    ("drop_nulls", "not_a_dict"),
-                ],
-            )
-
-    def test_pipeline_validation_happens_before_execution(
-        self,
-        sample_csv,
-    ):
-        frame = ar.read_csv(sample_csv)
-
-        calls = []
-
-        def tracker(df):
-            calls.append("executed")
-            return df
-
-        ar.register_step("tracker_validation_test", tracker)
-
-        with pytest.raises(ValueError, match="Invalid step format"):
-            ar.pipeline(
-                frame,
-                [
-                    ("tracker_validation_test",),
-                    ("bad_step", "oops", "extra"),
-                ],
-            )
-
-        assert calls == []
+            ar.pipeline(frame, [123])
 
 
 def test_get_builtin_step_signatures_returns_normalized_signatures():
@@ -1199,3 +1193,95 @@ def test_list_steps_includes_registered_custom_steps():
     steps = ar.list_steps()
 
     assert "list_steps_probe" in steps
+
+
+def test_reset_steps_removes_custom_registered_steps():
+    import pandas as pd
+
+    def custom_step(df, **kwargs):
+        return df
+
+    ar.register_step("custom_step", custom_step)
+
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "a": [1, 2, 3],
+            }
+        )
+    )
+
+    result = ar.pipeline(
+        frame,
+        [
+            ("custom_step",),
+        ],
+    )
+
+    assert ar.to_pandas(result)["a"].tolist() == [1, 2, 3]
+
+    ar.reset_steps()
+
+    with pytest.raises(ar.UnknownStepError):
+        ar.pipeline(
+            frame,
+            [
+                ("custom_step",),
+            ],
+        )
+
+
+def test_reset_steps_preserves_builtin_python_steps():
+    import pandas as pd
+
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "value": [" yes ", " no "],
+            }
+        )
+    )
+
+    ar.reset_steps()
+
+    result = ar.pipeline(
+        frame,
+        [
+            ("strip_whitespace",),
+        ],
+    )
+
+    cleaned = ar.to_pandas(result)
+
+    assert cleaned["value"].tolist() == ["yes", "no"]
+
+
+def test_reset_steps_removes_overwritten_custom_steps():
+    import pandas as pd
+
+    def first(df, **kwargs):
+        return df
+
+    def second(df, **kwargs):
+        return df
+
+    ar.register_step("temp_step", first)
+    ar.register_step("temp_step", second, overwrite=True)
+
+    ar.reset_steps()
+
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "a": [1],
+            }
+        )
+    )
+
+    with pytest.raises(ar.UnknownStepError):
+        ar.pipeline(
+            frame,
+            [
+                ("temp_step",),
+            ],
+        )

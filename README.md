@@ -253,6 +253,8 @@ frame = ar.read_csv("data.csv", null_values=[])
 
 > Every step above executes in C++. Your Python code is a _configuration_ — not the execution engine.
 
+> Explore more in the **[examples/](./examples/)** folder — ready-to-run recipes for sales, customers, survey, logs, and finance datasets.
+
 <br>
 
 ### Security note: CSV formula injection
@@ -334,6 +336,33 @@ Raises `ar.JsonlReadError` with the 1-based line number if a line contains inval
 </details>
 
 <details>
+<summary><b>📦 Export to Parquet for columnar analytics pipelines</b></summary>
+<br>
+
+`write_parquet` exports an ArFrame to a Parquet file via pyarrow.  Install the optional extra first:
+
+```bash
+pip install arnio[parquet]
+```
+
+```python
+# Basic export
+ar.write_parquet(frame, "output.parquet")
+
+# Choose compression codec: "snappy" (default), "gzip", "zstd", "brotli", "none"
+ar.write_parquet(frame, "output.parquet", compression="zstd")
+
+# Control row group size for large files
+ar.write_parquet(frame, "output.parquet", row_group_size=50_000)
+
+# .pq extension also accepted
+ar.write_parquet(frame, "output.pq")
+```
+
+Raises `ImportError` with an install hint if pyarrow is not available.
+</details>
+
+<details>
 <summary><b>👀 Preview rows without pandas conversion or full-column Python list materialization</b></summary>
 <br>
 
@@ -411,6 +440,15 @@ Need to inspect the built-in kwargs a step accepts before assembling a pipeline?
 signatures = ar.get_builtin_step_signatures()
 print(list(signatures["drop_nulls"].parameters))  # ["subset"]
 print(list(signatures["filter_rows"].parameters))  # ["column", "op", "value"]
+```
+
+Need to restore the registry back to built-in steps only during tests?
+
+```python
+ar.reset_steps()
+
+print(ar.list_steps())
+# Only built-in steps remain
 ```
 
 Custom steps run through a pandas↔ArFrame conversion bridge. Prototype in Python, then optionally migrate hot paths to C++ for full speed.
@@ -791,6 +829,8 @@ Most operations below run natively in C++. Currently, `filter_rows`, `replace_va
 | `drop_duplicates` | Deduplicate rows (first/last/none) | `ar.drop_duplicates(frame, keep="first")` |
 | `drop_constant_columns` | Remove columns with only one unique value | `ar.drop_constant_columns(frame)` |
 | `clip_numeric` | Clip numeric values to lower and/or upper bounds | `ar.clip_numeric(frame, lower=0, upper=100)` |
+| `coalesce_columns` | Select the first non-null value from a list of columns | `ar.coalesce_columns(frame, subset=["phone", "mobile"], output_column="contact")` |
+| `combine_columns` | Combine multiple columns into a single output column | `ar.combine_columns(frame, subset=["first", "last"], separator=" ", output_column="name")` |
 | `strip_whitespace` | Trim leading/trailing spaces from strings | `ar.strip_whitespace(frame)` |
 | `standardize_missing_tokens` | Replace common missing-value strings with NaN | `ar.standardize_missing_tokens(frame)` |
 | `normalize_case` | Force lower/upper/title case | `ar.normalize_case(frame, case_type="title")` |
@@ -953,29 +993,27 @@ This table helps users understand which pandas dtypes and workflows are fully su
 
 If a dtype is partially supported, users may need conversion before processing. Unsupported dtypes should raise clear errors where applicable.
 
-| Pandas Dtype | Support Status | Notes |
+| Pandas Dtype | Support Status | Notes / Fix Hints |
 |---|---|---|
-| `int64` | ✅ Supported | Fully supported with native C++ columnar storage |
-| `float64` | ✅ Supported | Fully supported with zero-copy conversion where possible |
-| `bool` | ✅ Supported | Native supported boolean type |
-| `string` | ✅ Supported | Recommended over `object` dtype for text workflows |
-| `datetime64[ns]` | ❌ Unsupported for native storage | No native datetime parsing or conversion support yet. Use `ar.DateTime()` for schema validation of string timestamp columns. |
-| `category` | ⚠️ Limited | Converted to string/object during processing |
-| `object` (mixed columns) | ⚠️ Limited | Mixed object columns may coerce to string and reduce type inference reliability |
-| nullable pandas dtypes (`Int64`, `boolean`) | ⚠️ Limited | Supported through pandas extension dtypes with null-mask handling |
-| `timedelta64[ns]` | ❌ Unsupported | Not currently supported |
+| `int64` / `Int64` | ✅ Supported | Fully supported with native C++ columnar storage. Nulls mapped to `pd.NA`. |
+| `float64` / `Float64` | ✅ Supported | Fully supported with zero-copy conversion. Nulls mapped to `np.nan` or `pd.NA`. |
+| `bool` / `boolean` | ✅ Supported | Native booleans supported with C++ backing. Nulls mapped to `pd.NA`. |
+| `string` / `string[python]` | ✅ Supported | Native string extension type. Recommended for text. Nulls mapped to `pd.NA`. |
+| `object` (strings / scalars) | ✅ Supported | Handled as text or coerced to common type if mixed. |
+| `object` (nested / lists / dicts) | ❌ Unsupported | Nested structures not allowed in flat columnar storage. Raises `TypeError`. |
+| `category` | ❌ Unsupported | Raises `TypeError` with fix hint. Convert to string: `df["col"].astype(str)` |
+| `datetime64[ns]` / timezone-aware | ❌ Unsupported | Raises `TypeError` with fix hint. Use `df["col"].astype(str)` or string timestamps. |
+| `timedelta64[ns]` | ❌ Unsupported | Raises `TypeError` with fix hint. Use `df["col"].dt.total_seconds()`. |
+| `complex64` / `complex128` | ❌ Unsupported | Raises `TypeError` with fix hint. Split into real/imag columns or convert to strings. |
 
 ### Notes
 
-- Numeric columns are optimized for zero-copy conversion between C++ and pandas where supported.
-- Pass `copy=True` to `to_pandas()` when downstream pandas code needs defensive pandas-owned column buffers.
-- Boolean conversion is already copied by the binding because `std::vector<bool>` cannot be exposed as a zero-copy NumPy buffer in the current implementation.
-- Columns with null masks may require copies so pandas can apply nullable values safely.
-- String columns require Python string object creation during `to_pandas()` conversion.
-- `ar.DateTime()` validates string timestamp columns with optional `format`, `min`, and `max`; it does not add native `datetime64[ns]` storage or automatic datetime conversion.
-- Mixed `object` columns may reduce type inference accuracy and may require preprocessing.
-- Unsupported dtypes should raise clear user-facing errors instead of silent failures.
-> **Note:** pandas DataFrame indexes are currently not preserved during `from_pandas()` conversion. Converted frames receive a default `RangeIndex` when converted back via `to_pandas()`.
+- **Zero-copy Optimization**: Numeric columns (`int64`, `float64`) are optimized for fast zero-copy conversion between C++ and pandas where supported.
+- **Defensive Buffers**: Pass `copy=True` to `to_pandas()` when downstream pandas code needs defensive pandas-owned column buffers.
+- **Boolean Buffers**: Boolean conversion is copied because `std::vector<bool>` cannot be exposed as a zero-copy NumPy buffer.
+- **Null Handling**: Columns with null masks are automatically converted to pandas nullable Extension dtypes (`Int64`, `BooleanDtype`, `StringDtype`).
+- **Index Drop**: pandas DataFrame indexes are currently not preserved during `from_pandas()` conversion; converted frames receive a default `RangeIndex` when converted back via `to_pandas()`.
+- **Validation**: Attempting to convert any unsupported type will raise a clear, user-friendly `TypeError` detailing the column name and how to fix/preprocess it.
 
 <br>
 
@@ -1196,10 +1234,66 @@ report = ar.profile(df, sample_size=5)
 safe_report = report.to_dict(redact_sample_values=True)
 ```
 
-When `approx_top_values=True`, string columns with high cardinality use a
-deterministic sample to estimate top values. Each column includes
+### Profiling privacy and redaction
+
+Profiling helps you understand data, but some report fields can still expose
+real emails, names, IDs, or other sensitive values. Before you paste output into
+GitHub issues, Slack, public notebooks, or shared logs, check whether you are
+sharing **aggregate statistics only** or **raw/sample cell values**.
+
+**What is aggregate-only vs may expose raw values**
+
+| Field or export | Aggregate-only? | May expose raw / sample data? |
+| --- | --- | --- |
+| `row_count`, `column_count`, `duplicate_rows`, `duplicate_ratio`, `quality_score`, `score_components` | Yes | No |
+| `null_count`, `null_ratio`, `unique_count`, `unique_ratio`, whitespace / empty-string counts | Yes | No |
+| Numeric `min` / `max` / `mean` / `std` / `q25`–`q95` | Statistics only | Uncommon on large datasets; small tables can still be identifying |
+| `semantic_type`, `suggested_dtype`, `warnings` | Metadata / hints | Can imply PII type (for example email-like), not redaction |
+| `ColumnProfile.sample_values` (in-memory) | No | **Yes** — first *N* non-null values (`sample_size` on `ar.profile()`) |
+| `ColumnProfile.top_values` | Includes counts / ratios | **Yes** — frequent **actual** values (exact or approximate; see below) |
+| `report.to_dict()` | Mixed | **Yes** — includes `sample_values` and `top_values` unless you redact samples |
+| `report.to_dict(redact_sample_values=True)` | Mixed | `sample_values` → `"[REDACTED]"` (same list length); **`top_values` unchanged** |
+| `report.to_markdown()`, `report.summary()` | Yes | No raw cell values in output |
+| `report.to_html()` / notebook display of `report` | Partial | **Shows `top_values`** chips; does not list `sample_values` |
+| `report.to_pandas()` | Partial | Includes **`top_values`**, not `sample_values` |
+| `ProfileComparison.to_dict()` | Nested profiles | **Yes** — embeds `left_profile` / `right_profile` via default `to_dict()` |
+
+Arnio does **not** auto-mask emails, phone numbers, or IDs by column type. Use the
+controls below for safer sharing.
+
+**Safe sharing practices**
+
+- **JSON logs and artifacts:** `report.to_dict(redact_sample_values=True)` before writing or uploading.
+- **Collect fewer samples:** `ar.profile(frame, sample_size=0)` skips `sample_values` (defaults still apply to `top_values` on string columns).
+- **Text summaries for CI or comments:** prefer `report.to_markdown()` or `report.summary()` when you do not need per-value examples.
+- **Notebooks and HTML exports:** avoid evaluating `report` or saving `report.to_html()` for sensitive data; HTML still shows `top_values`.
+- **GitHub bug reports and examples:** use synthetic data (`user@example.com`, `ID-001`), a minimal CSV, and redacted `to_dict()` output — not production dumps.
+- **Pandas export:** `ar.to_pandas(frame)` returns full table data; redaction applies to **quality reports**, not the underlying frame.
+- **Profile comparison:** `ProfileComparison.to_dict()` nests full profiles; build shared artifacts with `profile.to_dict(redact_sample_values=True)` if needed.
+
+```python
+import arnio as ar
+import pandas as pd
+
+df = ar.from_pandas(pd.DataFrame({
+    "email": ["user@example.com", "bad-email", None],
+    "user_id": [101, 102, 103],
+}))
+report = ar.profile(df, sample_size=2)
+
+# Safer JSON for sharing (sample_values only; top_values still present)
+safe_json = report.to_dict(redact_sample_values=True)
+
+# Safer text summary (no sample_values or top_values in output)
+print(report.to_markdown())
+```
+
+When `approx_top_values=True`, high-cardinality string columns estimate
+`top_values` from a deterministic sample. Each column may set
 `top_values_is_approximate`, `top_values_sample_count`, and
-`top_values_sample_ratio`, and the counts/ratios are sample-based.
+`top_values_sample_ratio`. Counts and ratios are sample-based, but displayed
+**values are still real strings from your data** — treat them like `top_values`
+for privacy.
 
 ```python
 # Optional: approximate top values for high-cardinality string columns
@@ -1243,8 +1337,6 @@ Sample output now includes quantiles for numeric columns:
   }
 }
 ```
-
-Use `report.to_dict(redact_sample_values=True)` when sharing reports outside your team and you want to avoid exposing raw example/sample values.
 
 ### Compare Profiles
 Use `ar.compare_profiles()` to compare two `DataQualityReport` profiles and flag per-column drift.
@@ -1332,7 +1424,19 @@ DataQualityReport(
       "mean": 87.9,
       "min": 85.5,
       "max": 90.0,
-      "warnings": ["contains_nulls"]
+      "warnings": ["contains_nulls"],
+      "histogram": [
+        {"bucket_start": 85.5, "bucket_end": 85.95, "count": 1, "ratio": 0.333333},
+        {"bucket_start": 85.95, "bucket_end": 86.4, "count": 0, "ratio": 0.0},
+        {"bucket_start": 86.4, "bucket_end": 86.85, "count": 0, "ratio": 0.0},
+        {"bucket_start": 86.85, "bucket_end": 87.3, "count": 0, "ratio": 0.0},
+        {"bucket_start": 87.3, "bucket_end": 87.75, "count": 0, "ratio": 0.0},
+        {"bucket_start": 87.75, "bucket_end": 88.2, "count": 0, "ratio": 0.0},
+        {"bucket_start": 88.2, "bucket_end": 88.65, "count": 1, "ratio": 0.333333},
+        {"bucket_start": 88.65, "bucket_end": 89.1, "count": 0, "ratio": 0.0},
+        {"bucket_start": 89.1, "bucket_end": 89.55, "count": 0, "ratio": 0.0},
+        {"bucket_start": 89.55, "bucket_end": 90.0, "count": 1, "ratio": 0.333333}
+      ]
     },
     "city": {
       "dtype": "string",
@@ -1448,6 +1552,10 @@ ar.register_step("remove_special_chars", remove_special_chars)
 # 3. Write tests, open a PR. That's it.
 ```
 
+If Arnio renames a built-in or registered pipeline step in a future release,
+the old step name can stay temporarily available and will emit a
+`DeprecationWarning` while routing execution to the new canonical step.
+
 ### If you do know C++
 
 The biggest performance wins are in:
@@ -1538,7 +1646,7 @@ arnio/
 │   └── bind_arnio.cpp       # pybind11 module — the Python↔C++ bridge
 ├── arnio/
 │   ├── __init__.py          # Public API surface
-│   ├── io.py                # read_csv, read_jsonl, scan_csv, write_csv
+│   ├── io.py                # read_csv, read_jsonl, scan_csv, write_csv, write_parquet
 │   ├── cleaning.py          # Python wrappers for C++ cleaning functions
 │   ├── pipeline.py          # Step registry + pipeline executor
 │   ├── convert.py           # to_pandas (zero-copy), from_pandas
@@ -1546,7 +1654,7 @@ arnio/
 │   └── exceptions.py        # ArnioError, UnknownStepError, CsvReadError, TypeCastError
 ├── tests/                   # pytest suite — CSV, cleaning, pipeline, conversions
 ├── benchmarks/              # Reproducible arnio vs pandas benchmark
-├── examples/                # basic_usage.py, auto_clean_tutorial.py, custom_step.py
+├── examples/                # basic_usage.py, auto_clean_tutorial.py, custom_step.py and ready to run recipes for sales, customers, survey, logs, finance
 └── website/                 # Project website — arnio.vercel.app
 ```
 

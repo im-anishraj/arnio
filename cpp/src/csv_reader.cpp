@@ -3,9 +3,12 @@
 #include <algorithm>
 #include <cctype>
 #include <cerrno>
+#include <cmath>
 #include <cstddef>
 #include <cstdlib>
 #include <fstream>
+#include <limits>
+#include <locale>
 #include <sstream>
 #include <stdexcept>
 #include <unordered_set>
@@ -205,7 +208,61 @@ static bool has_leading_zero_indicator(const std::string& cleaned) {
     return std::all_of(cleaned.begin(), cleaned.end(),
                        [](unsigned char ch) { return std::isdigit(ch); });
 }
+inline std::string to_lower_copy(std::string s) {
+    std::transform(s.begin(), s.end(), s.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return s;
+}
 
+inline bool looks_like_integer_token(const std::string& cleaned) {
+    if (cleaned.empty()) return false;
+    size_t i = 0;
+    if (cleaned[i] == '+' || cleaned[i] == '-') i++;
+    if (i >= cleaned.size()) return false;
+    for (; i < cleaned.size(); i++) {
+        if (!std::isdigit(static_cast<unsigned char>(cleaned[i]))) return false;
+    }
+    return true;
+}
+
+inline bool is_special_float_token(const std::string& lower) {
+    return lower == "inf" || lower == "+inf" || lower == "-inf" || lower == "nan";
+}
+
+inline bool try_parse_int64(const std::string& cleaned, int64_t& out) {
+    if (cleaned.empty()) return false;
+    std::istringstream iss(cleaned);
+    iss.imbue(std::locale::classic());
+    long long val = 0;
+    iss >> val;
+    if (iss.fail() || !iss.eof()) return false;
+    if (val < std::numeric_limits<int64_t>::min() || val > std::numeric_limits<int64_t>::max())
+        return false;
+    out = static_cast<int64_t>(val);
+    return true;
+}
+
+inline bool try_parse_float64(const std::string& cleaned, double& out) {
+    if (cleaned.empty()) return false;
+    const std::string lower = to_lower_copy(cleaned);
+    if (is_special_float_token(lower)) {
+        if (lower == "nan") {
+            out = std::numeric_limits<double>::quiet_NaN();
+        } else if (lower == "-inf") {
+            out = -std::numeric_limits<double>::infinity();
+        } else {
+            out = std::numeric_limits<double>::infinity();
+        }
+        return true;
+    }
+    std::istringstream iss(cleaned);
+    iss.imbue(std::locale::classic());
+    double val = 0.0;
+    iss >> val;
+    if (iss.fail() || !iss.eof()) return false;
+    out = val;
+    return true;
+}
 }  // namespace
 
 CsvParser::CsvParser(const CsvConfig& config) : config_(config) {}
@@ -272,37 +329,32 @@ DType CsvParser::infer_type(const std::string& value) const {
     if (is_null_sentinel(value)) return DType::NULL_TYPE;
 
     // Try bool
-    std::string lower = value;
-    std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+    std::string trimmed = value;
+    trim_in_place(trimmed);
+    std::string lower = to_lower_copy(trimmed);
     if (lower == "true" || lower == "false") return DType::BOOL;
 
     std::string cleaned = normalize_numeric(value, config_);
 
-    // Try int64
-    {
-        const char* start = cleaned.c_str();
-        char* end = nullptr;
-        errno = 0;
-        long long val = std::strtoll(start, &end, 10);
-        (void)val;
-        if (end != start && *end == '\0') {
-            if (errno == ERANGE) return DType::STRING;
-
-            if (has_leading_zero_indicator(cleaned)) {
-                return DType::STRING;
-            }
-
-            return DType::INT64;
-        }
+    if (is_special_float_token(to_lower_copy(cleaned))) {
+        return DType::FLOAT64;
     }
 
-    // Try float64
-    {
-        const char* start = cleaned.c_str();
-        char* end = nullptr;
-        double val = std::strtod(start, &end);
-        (void)val;
-        if (end != start && *end == '\0') return DType::FLOAT64;
+    int64_t i64 = 0;
+    if (try_parse_int64(cleaned, i64)) {
+        if (has_leading_zero_indicator(cleaned)) {
+            return DType::STRING;
+        }
+        return DType::INT64;
+    }
+
+    if (looks_like_integer_token(cleaned)) {
+        return DType::STRING;
+    }
+
+    double f64 = 0.0;
+    if (try_parse_float64(cleaned, f64)) {
+        return DType::FLOAT64;
     }
 
     // If thousands separator is set and value contains it but failed
@@ -345,35 +397,22 @@ CellValue CsvParser::parse_value(const std::string& raw, DType dtype) const {
 
     switch (dtype) {
         case DType::BOOL: {
-            std::string lower = raw;
-            std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+            std::string trimmed = raw;
+            trim_in_place(trimmed);
+            std::string lower = to_lower_copy(trimmed);
             return (lower == "true");
         }
         case DType::INT64: {
-            try {
-                std::string cleaned = normalize_numeric(raw, config_);
-                size_t pos = 0;
-                long long value = std::stoll(cleaned, &pos);
-                if (pos != cleaned.size()) {
-                    return std::monostate{};
-                }
-                return static_cast<int64_t>(value);
-            } catch (...) {
-                return std::monostate{};
-            }
+            std::string cleaned = normalize_numeric(raw, config_);
+            int64_t value = 0;
+            if (!try_parse_int64(cleaned, value)) return std::monostate{};
+            return value;
         }
         case DType::FLOAT64: {
-            try {
-                std::string cleaned = normalize_numeric(raw, config_);
-                size_t pos = 0;
-                double value = std::stod(cleaned, &pos);
-                if (pos != cleaned.size()) {
-                    return std::monostate{};
-                }
-                return value;
-            } catch (...) {
-                return std::monostate{};
-            }
+            std::string cleaned = normalize_numeric(raw, config_);
+            double value = 0.0;
+            if (!try_parse_float64(cleaned, value)) return std::monostate{};
+            return value;
         }
         case DType::STRING: {
             // Keep raw string values exactly as they appear in the CSV
@@ -539,13 +578,28 @@ std::vector<std::pair<std::string, std::string>> CsvReader::scan_schema(
     std::string line;
     std::vector<std::string> header;
 
+    std::vector<std::string> first_row;
+
     if (read_record(file, line)) {
         strip_utf8_bom(line);
-        header = parser_.parse_line(line);
-        for (auto& h : header) {
-            if (config.trim_headers) trim_in_place(h);
+
+        if (config.has_header) {
+            header = parser_.parse_line(line);
+
+            for (auto& h : header) {
+                if (config.trim_headers) trim_in_place(h);
+            }
+
+            validate_header(header);
+        } else {
+            first_row = parser_.parse_line(line);
+
+            header.reserve(first_row.size());
+
+            for (size_t i = 0; i < first_row.size(); ++i) {
+                header.push_back("col_" + std::to_string(i));
+            }
         }
-        validate_header(header);
     }
 
     size_t num_cols = header.size();
@@ -553,6 +607,16 @@ std::vector<std::pair<std::string, std::string>> CsvReader::scan_schema(
     size_t sample_count = 0;
 
     size_t max_samples = config.sample_size.value_or(100);
+
+    if (!config.has_header && !first_row.empty()) {
+        validate_row_width(1, num_cols, first_row.size());
+
+        for (size_t i = 0; i < num_cols && i < first_row.size(); ++i) {
+            col_types[i] = CsvParser::promote_type(col_types[i], parser_.infer_type(first_row[i]));
+        }
+
+        ++sample_count;
+    }
 
     while (read_record(file, line)) {
         if (sample_count >= max_samples) {

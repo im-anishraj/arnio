@@ -518,6 +518,43 @@ class TestReadCsv:
         with pytest.raises(TypeError, match="must contain only strings"):
             ar.read_csv("dummy.csv", null_values=[1])
 
+    def test_read_csv_handles_very_long_single_field(self, tmp_path):
+        long_text = "a" * 100000
+
+        csv_path = tmp_path / "long_field.csv"
+        csv_path.write_text(f"id,text\n1,{long_text}\n")
+
+        frame = ar.read_csv(csv_path)
+        df = ar.to_pandas(frame)
+
+        assert df["text"].iloc[0] == long_text
+        assert len(df["text"].iloc[0]) == 100000
+
+    def test_read_csv_handles_very_long_quoted_field(self, tmp_path):
+        long_text = "b" * 120000
+
+        csv_path = tmp_path / "quoted_long_field.csv"
+        csv_path.write_text(f'id,text\n1,"{long_text}"\n')
+
+        frame = ar.read_csv(csv_path)
+        df = ar.to_pandas(frame)
+
+        assert df["text"].iloc[0] == long_text
+        assert len(df["text"].iloc[0]) == 120000
+
+    def test_read_csv_handles_mixed_normal_and_large_fields(self, tmp_path):
+        long_text = "x" * 80000
+
+        csv_path = tmp_path / "mixed_large_fields.csv"
+        csv_path.write_text(f"id,text\n1,hello\n2,{long_text}\n3,world\n")
+
+        frame = ar.read_csv(csv_path)
+        df = ar.to_pandas(frame)
+
+        assert df["text"].iloc[0] == "hello"
+        assert df["text"].iloc[1] == long_text
+        assert df["text"].iloc[2] == "world"
+
 
 class TestScanCsv:
     def test_scan_schema(self, sample_csv):
@@ -742,6 +779,43 @@ class TestScanCsv:
         csv_path.write_text("value\n9223372036854775808\n")
 
         assert ar.scan_csv(csv_path) == {"value": "string"}
+
+    def test_scan_csv_has_header_false_generates_synthetic_columns(self, tmp_path):
+        csv_content = "1,Alice\n2,Bob\n"
+
+        csv_file = tmp_path / "headerless.csv"
+        csv_file.write_text(csv_content)
+
+        schema = ar.scan_csv(csv_file, has_header=False)
+
+        assert schema == {
+            "col_0": "int64",
+            "col_1": "string",
+        }
+
+    def test_scan_csv_default_has_header_behavior(self, tmp_path):
+        csv_content = "id,name\n1,Alice\n"
+
+        csv_file = tmp_path / "with_header.csv"
+        csv_file.write_text(csv_content)
+
+        schema = ar.scan_csv(csv_file)
+
+        assert schema == {
+            "id": "int64",
+            "name": "string",
+        }
+
+    def test_scan_csv_has_header_false_matches_read_csv(self, tmp_path):
+        csv_content = "1,Alice\n2,Bob\n"
+
+        csv_file = tmp_path / "headerless_match.csv"
+        csv_file.write_text(csv_content)
+
+        frame = ar.read_csv(csv_file, has_header=False)
+        schema = ar.scan_csv(csv_file, has_header=False)
+
+        assert list(frame.columns) == list(schema.keys())
 
 
 # --- Issue #115: quoted multiline round-trip across line endings ---
@@ -1424,3 +1498,54 @@ class TestReadCsvSkipRows:
         csv_path.write_text("a,b\n1,2\n")
         with pytest.raises(TypeError, match="integer"):
             ar.read_csv(csv_path, skiprows=1.5)
+class TestInferTypeLocaleAndNumericEdgeCases:
+    def test_float_decimal_dot(self, tmp_path):
+        path = tmp_path / "decimal.csv"
+        path.write_text("v\n3.14\n")
+        assert ar.read_csv(path).dtypes["v"] == "float64"
+
+    def test_whitespace_padded_int(self, tmp_path):
+        path = tmp_path / "ws_int.csv"
+        path.write_text("v\n 123 \n")
+        assert ar.read_csv(path).dtypes["v"] == "int64"
+
+    def test_whitespace_padded_float(self, tmp_path):
+        path = tmp_path / "ws_float.csv"
+        path.write_text("v\n 3.14 \n")
+        assert ar.read_csv(path).dtypes["v"] == "float64"
+
+    def test_whitespace_padded_bool(self, tmp_path):
+        path = tmp_path / "ws_bool.csv"
+        path.write_text("flag\n true \n")
+        assert ar.read_csv(path).dtypes["flag"] == "bool"
+
+    def test_special_float_tokens_infer_float64(self, tmp_path):
+        path = tmp_path / "special.csv"
+        path.write_text("v\ninf\n-inf\nnan\n")
+        assert ar.read_csv(path).dtypes["v"] == "float64"
+
+    def test_scientific_notation_lower(self, tmp_path):
+        path = tmp_path / "sci_lower.csv"
+        path.write_text("v\n1e10\n")
+        assert ar.read_csv(path).dtypes["v"] == "float64"
+
+    def test_scientific_notation_upper(self, tmp_path):
+        path = tmp_path / "sci_upper.csv"
+        path.write_text("v\n1E10\n")
+        assert ar.read_csv(path).dtypes["v"] == "float64"
+
+    def test_integer_overflow_remains_string(self, tmp_path):
+        path = tmp_path / "overflow.csv"
+        path.write_text("v\n9223372036854775808\n")
+        frame = ar.read_csv(path)
+        df = ar.to_pandas(frame)
+        assert frame.dtypes["v"] == "string"
+        assert df["v"].iloc[0] == "9223372036854775808"
+
+    def test_integer_overflow_mixed_column_string(self, tmp_path):
+        path = tmp_path / "overflow_mixed.csv"
+        path.write_text("v\n1\n9223372036854775808\n")
+        frame = ar.read_csv(path)
+        df = ar.to_pandas(frame)
+        assert frame.dtypes["v"] == "string"
+        assert list(df["v"]) == ["1", "9223372036854775808"]

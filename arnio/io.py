@@ -13,7 +13,13 @@ from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from typing import cast
 
-from ._core import _CsvChunkReader, _CsvConfig, _CsvReader, _CsvWriteConfig, _CsvWriter
+from ._core import (  # type: ignore
+    _CsvChunkReader,
+    _CsvConfig,
+    _CsvReader,
+    _CsvWriteConfig,
+    _CsvWriter,
+)
 from .exceptions import CsvReadError, JsonlReadError
 from .frame import ArFrame
 
@@ -627,6 +633,7 @@ def scan_csv(
     thousands_separator: str | None = None,
     sample_size: int | None = None,
     null_values: list[str] | None = None,
+    has_header: bool = True,
 ) -> dict[str, str]:
     """Return schema (column names + inferred types) without loading data.
 
@@ -651,6 +658,12 @@ def scan_csv(
         1,234 is interpreted as two separate fields.
     sample_size : int, optional
         Number of rows to read for type inference. If None, defaults to 100 rows.
+    has_header : bool, default True
+        Whether the CSV file contains a header row.
+
+        When False, synthetic column names are generated
+        in the form ``col_0``, ``col_1``, etc., matching
+        the behavior of ``read_csv(..., has_header=False)``.
 
     Returns
     -------
@@ -701,6 +714,7 @@ def scan_csv(
     config.encoding = encoding
     config.trim_headers = trim_headers
     config.thousands_separator = thousands_separator
+    config.has_header = has_header
 
     if null_values is not None:
         config.null_values = _validate_null_values(null_values)
@@ -972,3 +986,95 @@ def sniff_delimiter(
         )
 
     return best_candidates[0]
+
+
+_VALID_COMPRESSIONS = {"snappy", "gzip", "brotli", "zstd", "none"}
+
+
+def write_parquet(
+    frame: ArFrame,
+    path: str | os.PathLike[str],
+    *,
+    compression: str = "snappy",
+    row_group_size: int | None = None,
+) -> None:
+    """Write an ArFrame to a Parquet file via pyarrow.
+
+    Requires the ``pyarrow`` package.  Install it with::
+
+        pip install arnio[parquet]
+
+    The implementation converts the frame to a pandas DataFrame via
+    :func:`to_pandas` and delegates encoding to
+    ``pandas.DataFrame.to_parquet(engine="pyarrow")``.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        The data frame to write.
+    path : str or path-like
+        Destination file path.  Must end with ``.parquet`` or ``.pq``.
+    compression : str, default ``"snappy"``
+        Parquet compression codec.  Accepted values: ``"snappy"``,
+        ``"gzip"``, ``"brotli"``, ``"zstd"``, ``"none"``.
+    row_group_size : int, optional
+        Number of rows per Parquet row group.  If ``None``, pyarrow
+        chooses the default (typically 128 MB per group).  Must be a
+        positive integer when provided.
+
+    Raises
+    ------
+    ImportError
+        If ``pyarrow`` is not installed.
+    ValueError
+        If the file extension is not ``.parquet`` or ``.pq``, if
+        ``compression`` is not a recognised codec, or if
+        ``row_group_size`` is not a positive integer.
+
+    Examples
+    --------
+    >>> ar.write_parquet(frame, "output.parquet")
+    >>> ar.write_parquet(frame, "output.pq", compression="zstd")
+    >>> ar.write_parquet(frame, "output.parquet", row_group_size=50_000)
+    """
+    from .convert import to_pandas
+
+    path = os.fspath(path)
+    path_lower = path.lower()
+    if not (path_lower.endswith(".parquet") or path_lower.endswith(".pq")):
+        raise ValueError(
+            f"Unsupported file format: {path}. "
+            "write_parquet only supports .parquet and .pq files."
+        )
+
+    if compression not in _VALID_COMPRESSIONS:
+        raise ValueError(
+            f"Unknown compression codec: {compression!r}. "
+            f"Valid options are: {sorted(_VALID_COMPRESSIONS)}"
+        )
+
+    if row_group_size is not None:
+        if isinstance(row_group_size, bool) or not isinstance(row_group_size, int):
+            raise TypeError("row_group_size must be an integer")
+        if row_group_size <= 0:
+            raise ValueError("row_group_size must be a positive integer")
+
+    try:
+        import pyarrow  # noqa: F401 — presence check only
+    except ImportError as exc:
+        raise ImportError(
+            "pyarrow is required for Parquet export. "
+            "Install it with: pip install arnio[parquet]"
+        ) from exc
+
+    df = to_pandas(frame)
+
+    kwargs: dict = {
+        "engine": "pyarrow",
+        "compression": None if compression == "none" else compression,
+        "index": False,
+    }
+    if row_group_size is not None:
+        kwargs["row_group_size"] = row_group_size
+
+    df.to_parquet(path, **kwargs)

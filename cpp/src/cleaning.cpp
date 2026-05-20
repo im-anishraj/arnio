@@ -187,7 +187,7 @@ static Frame select_rows(const Frame& frame, const std::vector<size_t>& row_indi
         }
         new_cols.push_back(std::move(col));
     }
-    return Frame(std::move(new_cols));
+    return Frame(row_indices.size(), std::move(new_cols));
 }
 
 Frame drop_nulls(const Frame& frame, const std::optional<std::vector<std::string>>& subset) {
@@ -230,7 +230,7 @@ Frame fill_nulls(const Frame& frame, const CellValue& value,
             new_cols.push_back(src.clone());
         }
     }
-    return Frame(std::move(new_cols));
+    return Frame(frame.num_rows(), std::move(new_cols));
 }
 
 Frame drop_duplicates(const Frame& frame, const std::optional<std::vector<std::string>>& subset,
@@ -306,7 +306,7 @@ Frame strip_whitespace(const Frame& frame, const std::optional<std::vector<std::
             new_cols.push_back(src.clone());
         }
     }
-    return Frame(std::move(new_cols));
+    return Frame(frame.num_rows(), std::move(new_cols));
 }
 
 Frame normalize_case(const Frame& frame, const std::optional<std::vector<std::string>>& subset,
@@ -400,7 +400,7 @@ Frame normalize_case(const Frame& frame, const std::optional<std::vector<std::st
             new_cols.push_back(src.clone());
         }
     }
-    return Frame(std::move(new_cols));
+    return Frame(frame.num_rows(), std::move(new_cols));
 }
 
 Frame rename_columns(const Frame& frame,
@@ -415,7 +415,7 @@ Frame rename_columns(const Frame& frame,
         }
         new_cols.push_back(std::move(col));
     }
-    return Frame(std::move(new_cols));
+    return Frame(frame.num_rows(), std::move(new_cols));
 }
 
 Frame cast_types(const Frame& frame, const std::unordered_map<std::string, std::string>& mapping,
@@ -513,7 +513,7 @@ Frame cast_types(const Frame& frame, const std::unordered_map<std::string, std::
         }
         new_cols.push_back(std::move(col));
     }
-    return Frame(std::move(new_cols));
+    return Frame(frame.num_rows(), std::move(new_cols));
 }
 
 Frame clip_numeric(const Frame& frame, std::optional<double> lower, std::optional<double> upper,
