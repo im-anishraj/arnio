@@ -1498,6 +1498,8 @@ class TestReadCsvSkipRows:
         csv_path.write_text("a,b\n1,2\n")
         with pytest.raises(TypeError, match="integer"):
             ar.read_csv(csv_path, skiprows=1.5)
+
+
 class TestInferTypeLocaleAndNumericEdgeCases:
     def test_float_decimal_dot(self, tmp_path):
         path = tmp_path / "decimal.csv"
