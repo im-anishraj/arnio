@@ -17,6 +17,8 @@ from ._core import _CsvChunkReader, _CsvConfig, _CsvReader, _CsvWriteConfig, _Cs
 from .exceptions import CsvReadError, JsonlReadError
 from .frame import ArFrame
 
+_SUPPORTED_CSV_EXTENSIONS = (".csv", ".txt", ".tsv")
+
 
 def _is_utf8_encoding(encoding: str) -> bool:
     """Return whether the encoding should be treated as raw UTF-8 input."""
@@ -293,6 +295,22 @@ def _reject_utf8_nul_bytes(path: str) -> None:
         pass  # Let C++ backend handle or raise standard error
 
 
+def _validate_csv_path_extension(path: str) -> None:
+    """Validate that the path uses a supported CSV-like extension."""
+    path_lower = path.lower()
+    if not path_lower.endswith(_SUPPORTED_CSV_EXTENSIONS):
+        raise ValueError(
+            f"Unsupported file format: {path}. Only .csv, .txt, and .tsv are supported."
+        )
+
+
+def _validate_csv_read_path(path: str, encoding: str) -> None:
+    """Validate a CSV input path before native read or schema scan."""
+    _validate_csv_path_extension(path)
+    if _is_utf8_encoding(encoding):
+        _reject_utf8_nul_bytes(path)
+
+
 def read_csv(
     path: str | os.PathLike[str],
     *,
@@ -361,18 +379,7 @@ def read_csv(
     >>> frame = ar.read_csv("data.csv", delimiter=",", has_header=True)
     """
     path, should_cleanup = _materialize_csv_input(path)
-    path_lower = path.lower()
-    if not (
-        path_lower.endswith(".csv")
-        or path_lower.endswith(".txt")
-        or path_lower.endswith(".tsv")
-    ):
-        raise ValueError(
-            f"Unsupported file format: {path}. Only .csv, .txt, and .tsv are supported."
-        )
-
-    if _is_utf8_encoding(encoding):
-        _reject_utf8_nul_bytes(path)
+    _validate_csv_read_path(path, encoding)
     try:
         if os.path.getsize(path) == 0:
             raise CsvReadError(f"CSV file is empty: {path!r}")
@@ -480,15 +487,7 @@ def read_csv_chunked(
     ...     process(df)
     """
     path = os.fspath(path)
-    path_lower = path.lower()
-    if not (
-        path_lower.endswith(".csv")
-        or path_lower.endswith(".txt")
-        or path_lower.endswith(".tsv")
-    ):
-        raise ValueError(
-            f"Unsupported file format: {path}. Only .csv, .txt, and .tsv are supported."
-        )
+    _validate_csv_path_extension(path)
 
     try:
         if os.path.getsize(path) == 0:
@@ -575,15 +574,7 @@ def write_csv(
     >>> ar.write_csv(frame, "output.tsv", delimiter="\\t")
     """
     path = os.fspath(path)
-    path_lower = path.lower()
-    if not (
-        path_lower.endswith(".csv")
-        or path_lower.endswith(".txt")
-        or path_lower.endswith(".tsv")
-    ):
-        raise ValueError(
-            f"Unsupported file format: {path}. Only .csv, .txt, and .tsv are supported."
-        )
+    _validate_csv_path_extension(path)
 
     if not isinstance(delimiter, str):
         raise TypeError("delimiter must be a string")
@@ -667,18 +658,7 @@ def scan_csv(
     {'name': 'string', 'age': 'int64'}
     """
     path = os.fspath(path)
-    path_lower = path.lower()
-    if not (
-        path_lower.endswith(".csv")
-        or path_lower.endswith(".txt")
-        or path_lower.endswith(".tsv")
-    ):
-        raise ValueError(
-            f"Unsupported file format: {path}. Only .csv, .txt, and .tsv are supported."
-        )
-
-    if _is_utf8_encoding(encoding):
-        _reject_utf8_nul_bytes(path)
+    _validate_csv_read_path(path, encoding)
     try:
         if os.path.getsize(path) == 0:
             raise CsvReadError(f"CSV file is empty: {path!r}")

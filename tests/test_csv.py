@@ -336,6 +336,15 @@ class TestReadCsv:
         with pytest.raises(ValueError, match="Unsupported file format"):
             ar.read_csv(file_path)
 
+    def test_read_and_scan_csv_unsupported_extension_parity(self, tmp_path):
+        file_path = str(tmp_path / "data.json")
+        with open(file_path, "w") as f:
+            f.write('{"a": 1}')
+
+        for fn in (ar.read_csv, ar.scan_csv):
+            with pytest.raises(ValueError, match="Unsupported file format"):
+                fn(file_path)
+
     def test_binary_file_rejection(self, tmp_path):
         file_path = str(tmp_path / "data.csv")
         with open(file_path, "wb") as f:
