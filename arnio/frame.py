@@ -309,6 +309,43 @@ class ArFrame:
     def __contains__(self, item: object) -> bool:
         return isinstance(item, str) and item in self.columns
 
+    def __getitem__(self, key: str) -> list:
+        """Return column data as a list.
+
+        Parameters
+        ----------
+        key : str
+            Column name to access.
+
+        Returns
+        -------
+        list
+            Column values as a Python list.
+
+        Raises
+        ------
+        TypeError
+            If key is not a string.
+        KeyError
+            If the column does not exist.
+
+        Examples
+        --------
+        >>> frame = ar.read_csv("data.csv")
+        >>> frame["name"]
+        ['Alice', 'Bob', 'Charlie']
+        """
+        if not isinstance(key, str):
+            raise TypeError(f"column key must be a string, got {type(key).__name__!r}")
+
+        if key not in self.columns:
+            raise KeyError(
+                f"Column {key!r} not found. Available columns: {self.columns}"
+            )
+
+        col_index = self.columns.index(key)
+        return [self._frame.column_by_index(col_index).at(i) for i in range(len(self))]
+
     def preview(self, n: int = 5) -> str:
         """Return a lightweight string preview of the first ``n`` rows.
 

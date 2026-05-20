@@ -1227,3 +1227,55 @@ class TestSniffDelimiter:
             match="Could not determine CSV delimiter from sample: multiple candidate delimiters",
         ):
             ar.sniff_delimiter(csv_path)
+
+
+class TestArFrameGetItem:
+    def test_getitem_existing_column(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        result = frame["name"]
+        assert isinstance(result, list)
+        assert result == ["Alice", "Bob", "Charlie"]
+
+    def test_getitem_integer_column(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        result = frame["age"]
+        assert isinstance(result, list)
+        assert result == [30, 25, 35]
+
+    def test_getitem_bool_column(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        result = frame["active"]
+        assert isinstance(result, list)
+        assert result == [True, False, True]
+
+    def test_getitem_missing_column_raises_keyerror(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        with pytest.raises(KeyError):
+            frame["nonexistent"]
+
+    def test_getitem_non_string_key_raises_typeerror(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        with pytest.raises(TypeError):
+            frame[0]
+        with pytest.raises(TypeError):
+            frame[["name"]]
+
+    def test_getitem_empty_frame(self, tmp_path):
+        csv_path = tmp_path / "empty_rows.csv"
+        csv_path.write_text("name,age\n")
+        frame = ar.read_csv(csv_path)
+        result = frame["name"]
+        assert result == []
+
+    def test_getitem_column_with_nulls(self, csv_with_nulls):
+        frame = ar.read_csv(csv_with_nulls)
+        result = frame["name"]
+        assert isinstance(result, list)
+        assert result[0] == "Alice"
+
+    def test_getitem_column_with_spaces(self, tmp_path):
+        csv_path = tmp_path / "spaces.csv"
+        csv_path.write_text("first name,last name\nJohn,Doe\n")
+        frame = ar.read_csv(csv_path)
+        result = frame["first name"]
+        assert result == ["John"]
