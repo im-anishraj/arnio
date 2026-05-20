@@ -192,7 +192,6 @@ print(selected.columns)
 
 <br>
 
-
 ### Security note: CSV formula injection
 
 Arnio preserves cell values when reading CSV files. It does not rewrite strings that
@@ -211,117 +210,6 @@ export policy should stay explicit in the application that writes the file.
 
 <br>
 
-## ⚠️ Error Handling
-
-### `read_csv` and `scan_csv`
-
-**Missing file** — raises `CsvReadError`:
-
-```python
-# Bad: file does not exist
-ar.read_csv("missing.csv")
-# arnio.exceptions.CsvReadError: Cannot open file: missing.csv
-
-# Good: file exists and is readable
-frame = ar.read_csv("sales_data.csv")
-```
-
-**Zero-byte file** — raises `CsvReadError`:
-
-```python
-# Bad: file has zero bytes
-ar.read_csv("zero.csv")
-# arnio.exceptions.CsvReadError: CSV file is empty: 'zero.csv'
-
-# Good: file has a valid header row
-frame = ar.read_csv("clean.csv")
-```
-
-**Blank line file** — raises `CsvReadError` when the header is empty:
-
-```python
-# Bad: file contains only a blank line
-ar.read_csv("just_newline.csv")
-# arnio.exceptions.CsvReadError: CSV header contains an empty column name
-
-# Good: file has a valid header row
-frame = ar.read_csv("clean.csv")
-```
-
-**Binary or NUL-byte file** — raises `CsvReadError`:
-
-```python
-# Bad: file contains binary content or NUL bytes
-ar.read_csv("binary.csv")
-# arnio.exceptions.CsvReadError: CSV input contains NUL bytes
-# and appears to be binary or corrupted
-
-# Good: file is valid UTF-8 encoded text
-frame = ar.read_csv("clean.csv")
-```
-
-### Schema Validation
-
-Use `ar.validate()` to check a frame against a schema.
-Validation does not raise — it returns a `ValidationResult`
-with a `passed` flag and a list of `issues`.
-
-**Type mismatch** — `passed` is `False`, issue rule is `dtype`:
-
-```python
-# Bad: 'age' column contains strings but schema expects int64
-schema = ar.Schema({"name": ar.String(nullable=False), "age": ar.Int64(nullable=False)})
-result = ar.validate(frame, schema)
-print(result.passed)   # False
-print(result.issues)
-# [ValidationIssue(column='age', rule='dtype',
-#   message="Column 'age' has dtype 'string'; expected 'int64'")]
-
-# Good: column types match the schema
-schema = ar.Schema({"name": ar.String(nullable=False), "age": ar.Int64(nullable=False)})
-result = ar.validate(frame, schema)
-print(result.passed)   # True
-```
-
-**Missing required column** — issue rule is `required_column`:
-
-```python
-# Bad: 'email' column is required but not present in the frame
-schema = ar.Schema({
-    "name": ar.String(nullable=False),
-    "age": ar.Int64(nullable=False),
-    "email": ar.Email(nullable=False),
-})
-result = ar.validate(frame, schema)
-print(result.passed)   # False
-print(result.issues)
-# [ValidationIssue(column='email', rule='required_column',
-#   message='Missing required column: email')]
-
-# Good: all required columns are present in the frame
-schema = ar.Schema({"name": ar.String(nullable=False)})
-result = ar.validate(frame, schema)
-print(result.passed)   # True
-```
-
-### Pipeline Step Errors
-An unknown step name raises `UnknownStepError` immediately:
-
-
-```python
-# Bad: typo in step name
-ar.pipeline(frame, [("srtip_whitespace",)])
-# arnio.exceptions.UnknownStepError: Unknown pipeline step: 'srtip_whitespace'.
-
-
-# Good: valid step names only
-clean_frame = ar.pipeline(frame, [
-    ("strip_whitespace",),
-    ("drop_duplicates",),
-])
-```
-
-
 <details>
 <summary><b>📸 Peek at a 100 GB file without loading it</b></summary>
 <br>
@@ -335,7 +223,6 @@ schema = ar.scan_csv("100GB_file.csv", sample_size=500)
 ```
 
 Useful for exploring datasets before committing memory.
-
 </details>
 
 <details>
@@ -402,8 +289,8 @@ clean = ar.pipeline(frame, [
     ("drop_duplicates",),
 ])
 ```
-Custom steps run through a pandas↔ArFrame conversion bridge. Prototype in Python, then optionally migrate hot paths to C++ for full speed.
 
+Custom steps run through a pandas↔ArFrame conversion bridge. Prototype in Python, then optionally migrate hot paths to C++ for full speed.
 </details>
 
 <details>
