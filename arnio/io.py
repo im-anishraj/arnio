@@ -188,6 +188,7 @@ def read_csv(
     path: str | os.PathLike[str],
     *,
     delimiter: str = ",",
+    on_bad_lines: str = "warn",
     has_header: bool = True,
     usecols: list[str] | None = None,
     nrows: int | None = None,
@@ -272,6 +273,7 @@ def read_csv(
     mode = _validate_parser_mode(mode)
     config = _CsvConfig()
     config.delimiter = delimiter
+    config.on_bad_lines = on_bad_lines
     config.has_header = has_header
     config.encoding = encoding
     config.trim_headers = trim_headers

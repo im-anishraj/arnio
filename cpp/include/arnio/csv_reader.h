@@ -12,6 +12,7 @@ namespace arnio {
 
 struct CsvConfig {
     char delimiter = ',';
+    std::string on_bad_lines = "warn";
     bool has_header = true;
     std::optional<std::vector<std::string>> usecols = std::nullopt;
     std::optional<size_t> nrows = std::nullopt;

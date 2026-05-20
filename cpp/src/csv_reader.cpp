@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <iostream>
 #include <cerrno>
 #include <cstddef>
 #include <cstdlib>
@@ -415,20 +416,48 @@ Frame CsvReader::read(const std::string& path) const {
         if (!config.has_header && !expected_cols.has_value()) {
             expected_cols = fields.size();
         }
-
-        if (config.mode == "strict" && expected_cols.has_value()) {
-            validate_row_width(record_number, expected_cols.value(), fields.size());
-        }
-
-        if (expected_cols.has_value()) {
-            while (fields.size() < expected_cols.value()) {
-                fields.push_back("");
-            }
-        }
-
-        raw_data.push_back(std::move(fields));
-        ++row_count;
+        
+        bool bad_row =
+    expected_cols.has_value() &&
+    fields.size() != expected_cols.value();
+    
+    if (bad_row && config.mode != "strict") {
+    if (config.on_bad_lines == "warn") {
+        std::cerr
+            << "Warning: Row "
+            << record_number
+            << " has "
+            << fields.size()
+            << " columns; expected "
+            << expected_cols.value()
+            << std::endl;
+    } else if (config.on_bad_lines == "skip") {
+        continue;
+    } else if (config.on_bad_lines == "error") {
+        validate_row_width(
+            record_number,
+            expected_cols.value(),
+            fields.size()
+        );
     }
+}
+    if (config.mode == "strict" && expected_cols.has_value()) {
+    validate_row_width(
+        record_number,
+        expected_cols.value(),
+        fields.size()
+    );}
+    if (expected_cols.has_value()) {
+    while (fields.size() < expected_cols.value()) {
+        fields.push_back("");
+    }
+
+    if (fields.size() > expected_cols.value()) {
+        fields.resize(expected_cols.value());
+    }}
+    raw_data.push_back(std::move(fields));
+    ++row_count;
+    
     file.close();
 
     // If no header, generate column names
