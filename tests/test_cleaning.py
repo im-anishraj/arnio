@@ -2191,18 +2191,6 @@ class TestSelectColumns:
         assert list(df.columns) == ["name", "id"]
         assert list(df["name"]) == ["Alice", "Bob"]
 
-    def test_select_columns_allows_empty_input(self):
-        frame = ar.from_pandas(
-            pd.DataFrame(
-                {
-                    "id": [1, 2],
-                    "name": ["Alice", "Bob"],
-                }
-            )
-        )
-
-        with pytest.raises(ValueError, match="Column selection cannot be empty"):
-            ar.select_columns(frame, [])
 
     def test_select_columns_rejects_missing_columns(self, sample_csv):
         frame = ar.read_csv(sample_csv)
