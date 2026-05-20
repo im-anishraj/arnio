@@ -141,7 +141,9 @@ PYBIND11_MODULE(_arnio_cpp, m) {
 
     // --- Frame ---
     py::class_<Frame>(m, "Frame")
+        .def("select_columns", &Frame::select_columns)
         .def(py::init<>())
+        .def(py::init<size_t>(), py::arg("row_count"))
         .def("shape", &Frame::shape)
         .def("num_rows", &Frame::num_rows)
         .def("num_cols", &Frame::num_cols)
@@ -161,8 +163,9 @@ PYBIND11_MODULE(_arnio_cpp, m) {
         .def("clone", &Frame::clone)
         .def_static(
             "from_dict",
-            [](py::dict cols_dict, py::dict dtype_hints) {
-                Frame frame;
+            [](py::dict cols_dict, py::dict dtype_hints, py::object row_count_obj) {
+                Frame frame =
+                    row_count_obj.is_none() ? Frame() : Frame(row_count_obj.cast<size_t>());
 
                 for (auto item : cols_dict) {
                     std::string name = py::cast<std::string>(item.first);
@@ -214,7 +217,8 @@ PYBIND11_MODULE(_arnio_cpp, m) {
 
                 return frame;
             },
-            py::arg("cols_dict"), py::arg("dtype_hints") = py::dict());
+            py::arg("cols_dict"), py::arg("dtype_hints") = py::dict(),
+            py::arg("row_count") = py::none());
 
     // --- CsvReader ---
     py::class_<CsvConfig>(m, "CsvConfig")

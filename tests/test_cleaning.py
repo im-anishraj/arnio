@@ -353,14 +353,15 @@ class TestDropConstantColumns:
         assert result.columns == ["empty_num", "empty_text"]
         assert result.shape == frame.shape
 
-    def test_drop_constant_columns_all_columns_dropped_reports_zero_rows(self):
+    def test_drop_constant_columns_all_columns_dropped_preserves_row_count(self):
         frame = ar.from_pandas(pd.DataFrame({"a": [1], "b": ["x"], "c": [None]}))
 
         result = ar.drop_constant_columns(frame)
 
         assert result.columns == []
-        assert result.shape[0] == 0
+        assert result.shape[0] == 1
         assert result.shape[1] == 0
+        assert ar.to_pandas(result).shape == (1, 0)
 
 
 class TestClipNumeric:

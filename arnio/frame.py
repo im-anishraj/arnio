@@ -172,12 +172,7 @@ class ArFrame:
         if missing:
             raise ValueError(f"Unknown columns: {missing}")
 
-        from .convert import from_pandas, to_pandas
-
-        df = to_pandas(self)
-        selected_df = df[columns]
-
-        return from_pandas(selected_df)
+        return ArFrame(self._frame.select_columns(columns))
 
     def select_dtypes(
         self,

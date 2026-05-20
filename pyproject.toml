@@ -9,7 +9,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "arnio"
-version = "1.14.0"
+version = "1.16.0"
 description = "C++ accelerated data preparation for pandas and the Python data stack"
 readme = "README.md"
 license = { text = "MIT" }
@@ -54,9 +54,13 @@ dev = [
     "ruff>=0.4.0",
     "pre-commit>=3.0",
     "hypothesis>=6.0",
+    "tomli; python_version < '3.11'",
 ]
 sklearn = [
     "scikit-learn>=1.0",
+]
+parquet = [
+    "pyarrow>=8.0",
 ]
 
 [tool.setuptools.package-data]
