@@ -1140,7 +1140,7 @@ class TestRoundNumericColumns:
         result_df = ar.to_pandas(result)
         assert list(result_df["name"]) == ["john"]
         assert list(result_df["score"]) == [98.8]
-    
+
     def test_round_all_numeric(self):
         import pandas as pd
 
