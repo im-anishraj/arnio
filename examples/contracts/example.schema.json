@@ -1,0 +1,7 @@
+{
+  "user_id": "int64",
+  "email": "string",
+  "is_active": "bool",
+  "revenue": "float64"
+}
+

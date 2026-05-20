@@ -89,6 +89,50 @@ class ArFrame:
         """
         return self._frame.memory_usage()
 
+    def head(self, n: int = 5) -> ArFrame:
+        """Return the first n rows as an ArFrame.
+
+        Parameters
+        ----------
+        n : int, optional
+            Number of rows to return. Defaults to 5.
+
+        Returns
+        -------
+        ArFrame
+            New ArFrame containing the first n rows.
+        """
+        if isinstance(n, bool) or not isinstance(n, int) or n < 0:
+            raise ValueError(f"`n` must be a non-negative integer, got {n!r}")
+
+        from .convert import from_pandas, to_pandas
+
+        df = to_pandas(self)
+
+        return from_pandas(df.head(n))
+
+    def tail(self, n: int = 5) -> ArFrame:
+        """Return the last n rows as an ArFrame.
+
+        Parameters
+        ----------
+        n : int, optional
+            Number of rows to return. Defaults to 5.
+
+        Returns
+        -------
+        ArFrame
+            New ArFrame containing the last n rows.
+        """
+        if isinstance(n, bool) or not isinstance(n, int) or n < 0:
+            raise ValueError(f"`n` must be a non-negative integer, got {n!r}")
+
+        from .convert import from_pandas, to_pandas
+
+        df = to_pandas(self)
+
+        return from_pandas(df.tail(n))
+
     def select_columns(self, columns: list[str]) -> ArFrame:
         """Return a new ArFrame with only the selected columns.
 
@@ -130,12 +174,7 @@ class ArFrame:
         if missing:
             raise ValueError(f"Unknown columns: {missing}")
 
-        from .convert import from_pandas, to_pandas
-
-        df = to_pandas(self)
-        selected_df = df[columns]
-
-        return from_pandas(selected_df)
+        return ArFrame(self._frame.select_columns(columns))
 
     def to_numpy(self, fill_value: object = None) -> np.ndarray:
         """Convert a numeric/bool-only ArFrame to a 2D NumPy array.
@@ -327,6 +366,12 @@ class ArFrame:
 
         return self.select_columns(matched)
 
+    def _truncate_column_names(self, max_length=20):
+        return [
+            col[:max_length] + "..." if len(col) > max_length else col
+            for col in self.columns
+        ]
+
     # --- Dunder methods ---
 
     def __len__(self) -> int:
@@ -341,10 +386,50 @@ class ArFrame:
     def __str__(self) -> str:
         """Return a detailed string summary of the ArFrame."""
         lines = [f"ArFrame: {self.shape[0]} rows × {self.shape[1]} columns"]
-        lines.append(f"Columns: {self.columns}")
+        lines.append(f"Columns: {self._truncate_column_names()}")
         lines.append(f"DTypes:  {self.dtypes}")
         lines.append(f"Memory:  {self.memory_usage()} bytes")
         return "\n".join(lines)
+
+    def __contains__(self, item: object) -> bool:
+        return isinstance(item, str) and item in self.columns
+
+    def __getitem__(self, key: str) -> list:
+        """Return column data as a list.
+
+        Parameters
+        ----------
+        key : str
+            Column name to access.
+
+        Returns
+        -------
+        list
+            Column values as a Python list.
+
+        Raises
+        ------
+        TypeError
+            If key is not a string.
+        KeyError
+            If the column does not exist.
+
+        Examples
+        --------
+        >>> frame = ar.read_csv("data.csv")
+        >>> frame["name"]
+        ['Alice', 'Bob', 'Charlie']
+        """
+        if not isinstance(key, str):
+            raise TypeError(f"column key must be a string, got {type(key).__name__!r}")
+
+        if key not in self.columns:
+            raise KeyError(
+                f"Column {key!r} not found. Available columns: {self.columns}"
+            )
+
+        col_index = self.columns.index(key)
+        return [self._frame.column_by_index(col_index).at(i) for i in range(len(self))]
 
     def preview(self, n: int = 5) -> str:
         """Return a lightweight string preview of the first ``n`` rows.

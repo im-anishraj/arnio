@@ -1,5 +1,246 @@
 # Changelog
 
+## [1.16.0](https://github.com/im-anishraj/arnio/compare/v1.15.0...v1.16.0) (2026-05-20)
+
+
+### Features
+
+* warn on deprecated pipeline step aliases ([#853](https://github.com/im-anishraj/arnio/issues/853)) ([09bdb72](https://github.com/im-anishraj/arnio/commit/09bdb72a547856beb309bc1c93e1a0e0555f99d9))
+
+
+### Performance Improvements
+
+* **frame:** implement native select_columns path ([#917](https://github.com/im-anishraj/arnio/issues/917)) ([c9b6ba3](https://github.com/im-anishraj/arnio/commit/c9b6ba365e5e9e9832f2f4d39d4a4b4bac794a33))
+
+## [1.15.0](https://github.com/im-anishraj/arnio/compare/v1.14.0...v1.15.0) (2026-05-20)
+
+
+### Features
+
+* add __getitem__ to ArFrame for column access ([78dd66c](https://github.com/im-anishraj/arnio/commit/78dd66c1053f6c04bc61c35a9b81f016b37ac73a))
+* add ArFrame __contains__ support ([2e63c39](https://github.com/im-anishraj/arnio/commit/2e63c396730caef6e6b2d8d238c046ea22d889bc))
+* add chunked CSV reading example ([58de14e](https://github.com/im-anishraj/arnio/commit/58de14e79e86d4bb7bcb557b93bdcf08f4baa91f))
+* add conditional required validation ([34c75a2](https://github.com/im-anishraj/arnio/commit/34c75a20efb0e06acc2d036296e25eb484b090df))
+* add confidence metadata to cleaning suggestions ([2a78f8a](https://github.com/im-anishraj/arnio/commit/2a78f8a09d36147ce58f554a153340a60cb888fd))
+* add CSV delimiter sniffing helper (fixes [#127](https://github.com/im-anishraj/arnio/issues/127)) ([#801](https://github.com/im-anishraj/arnio/issues/801)) ([cad39d9](https://github.com/im-anishraj/arnio/commit/cad39d94501e6684dc364c246ffa9f867604bce6))
+* add CurrencyCode schema validation ([fdfda2b](https://github.com/im-anishraj/arnio/commit/fdfda2b2774fcb3b45871314186ba84cf769b87d)), closes [#204](https://github.com/im-anishraj/arnio/issues/204)
+* add DataQualityReport markdown export ([20b2f68](https://github.com/im-anishraj/arnio/commit/20b2f68c0fb29516366ca753327896a8eaba6392))
+* add Date schema field ([c52ac18](https://github.com/im-anishraj/arnio/commit/c52ac18fff979ef5b49b04a00b8d6d8faa4b933d))
+* add Decimal conversion policy ([97b1a1c](https://github.com/im-anishraj/arnio/commit/97b1a1cc0ede5fbf0aef4176339fa4b2cf4cfed0))
+* add drop_columns cleaning primitive ([#769](https://github.com/im-anishraj/arnio/issues/769)) ([2616c66](https://github.com/im-anishraj/arnio/commit/2616c6691563c037cfbea0bffc140c5ed4ded05e))
+* add drop_columns_matching cleaning step ([#743](https://github.com/im-anishraj/arnio/issues/743)) ([5db2fd1](https://github.com/im-anishraj/arnio/commit/5db2fd1ba8b040986eee08bc6fa27da1e5ccc473))
+* add examples environment checker ([01b4c35](https://github.com/im-anishraj/arnio/commit/01b4c35081068ab68581de33b6705d2fc2da7fa6))
+* add explain mode for auto_clean ([#692](https://github.com/im-anishraj/arnio/issues/692)) ([24036fa](https://github.com/im-anishraj/arnio/commit/24036fa259804ec504e36d2f94d5f4e4a3cac573))
+* add head() and tail() methods to ArFrame ([#565](https://github.com/im-anishraj/arnio/issues/565)) ([f254add](https://github.com/im-anishraj/arnio/commit/f254add98cecb78404a99b01a9290fe96b2adb53))
+* add numeric column histogram summaries ([#850](https://github.com/im-anishraj/arnio/issues/850)) ([85bdc36](https://github.com/im-anishraj/arnio/commit/85bdc36f37dd89023a18419d8bcb92ebbe1b2097))
+* add numeric quantiles to profile reports ([3934520](https://github.com/im-anishraj/arnio/commit/3934520c61abc4fe038b973b8a999bb00520ba74))
+* add optional pipeline timing metadata ([7da0bae](https://github.com/im-anishraj/arnio/commit/7da0bae28b0cd691781c47f572237dd629bfc2bc)), closes [#162](https://github.com/im-anishraj/arnio/issues/162)
+* add PhoneNumber schema validator ([#745](https://github.com/im-anishraj/arnio/issues/745)) ([21717d0](https://github.com/im-anishraj/arnio/commit/21717d07e5bc03098809b1312d51b919c74fd123))
+* add pipeline step registry introspection ([8178f0a](https://github.com/im-anishraj/arnio/commit/8178f0a995bc65f425189647ef4f8d59cf4e4537)), closes [#157](https://github.com/im-anishraj/arnio/issues/157)
+* add quality score components ([130ad70](https://github.com/im-anishraj/arnio/commit/130ad70075757051f1a49c8a0d9d9efb7e5a94de))
+* add reset_steps for pipeline registry cleanup ([71e3c09](https://github.com/im-anishraj/arnio/commit/71e3c09f87afe9db86215b52b129eb286be0461b))
+* add sample_size to scan_csv ([9f72698](https://github.com/im-anishraj/arnio/commit/9f726987a08b57fc8fa5d6d611e59f6c444a6232))
+* add schema JSON serialization ([7c919a1](https://github.com/im-anishraj/arnio/commit/7c919a1f48453b37975c1e964d72c90c1b86e6fc))
+* add standardize_missing_tokens step ([b2bd596](https://github.com/im-anishraj/arnio/commit/b2bd596e03c5a3e3143093116ed7f58b557ef84b))
+* add thousands separator parsing ([7ffe50c](https://github.com/im-anishraj/arnio/commit/7ffe50cfd669f96cbdc32248fd425d34eb9f1e83))
+* add ValidationResult.raise_for_errors ([4c34bf6](https://github.com/im-anishraj/arnio/commit/4c34bf60f70fa2f5c3183a1598066c4f470003c1))
+* add write_csv via C++ backend ([2a62edc](https://github.com/im-anishraj/arnio/commit/2a62edc94108f59fa4894ae88cf266000bb1626d))
+* **csv:** add chunked streaming CSV reader ([8032a81](https://github.com/im-anishraj/arnio/commit/8032a81f3022652df3027bd93fc1ebc0a234c224))
+* **csv:** add strict and permissive parser modes ([9cf1e07](https://github.com/im-anishraj/arnio/commit/9cf1e07de25888a90dd3cd68c7f1c1a46e3962f6)), closes [#132](https://github.com/im-anishraj/arnio/issues/132)
+* enrich pipeline execution metadata ([348104a](https://github.com/im-anishraj/arnio/commit/348104a4159437f77100106033916afd0f39c2b8)), closes [#166](https://github.com/im-anishraj/arnio/issues/166)
+* expose built-in pipeline step signatures ([25cc277](https://github.com/im-anishraj/arnio/commit/25cc277b911b3caad0925df392c581aa03796f8d)), closes [#170](https://github.com/im-anishraj/arnio/issues/170)
+* implement configurable missing data values handling ([#783](https://github.com/im-anishraj/arnio/issues/783)) ([765875c](https://github.com/im-anishraj/arnio/commit/765875c75b89da0e641be8b927dfe26935d3482b))
+* implement HTML export for DataQualityReport ([#685](https://github.com/im-anishraj/arnio/issues/685)) ([6296568](https://github.com/im-anishraj/arnio/commit/629656896efb18c33f1949f047738b2dbe48972b))
+* **io:** add read_jsonl() for JSON Lines support ([095b89d](https://github.com/im-anishraj/arnio/commit/095b89d52d57c6c9be528f7f0d6b4d10462d8383)), closes [#634](https://github.com/im-anishraj/arnio/issues/634)
+* **io:** support text file-like inputs in read_csv ([4549170](https://github.com/im-anishraj/arnio/commit/4549170986409d3dc3289506b377f10d884e2d78))
+* notebook-friendly DataQualityReport dashboard ([#737](https://github.com/im-anishraj/arnio/issues/737)) ([9e16e18](https://github.com/im-anishraj/arnio/commit/9e16e187be8b20d163660c12c6ddca23133dbbbb))
+* **pipeline:** add dry_run validation mode ([2768b4a](https://github.com/im-anishraj/arnio/commit/2768b4aa265fec2c4e5a6df60db418df072cabef))
+* **quality:** add compare_profiles helper ([a83c860](https://github.com/im-anishraj/arnio/commit/a83c860ec5ff05c7d3f33a526550e93f456d2a49)), closes [#185](https://github.com/im-anishraj/arnio/issues/185)
+* **quality:** add drift gate checks ([#735](https://github.com/im-anishraj/arnio/issues/735)) ([7029151](https://github.com/im-anishraj/arnio/commit/7029151268b8ae1b285e1d2145192c93be8d3879))
+* **quality:** add email and URL validity ratios to column profiles ([#176](https://github.com/im-anishraj/arnio/issues/176)) ([#808](https://github.com/im-anishraj/arnio/issues/808)) ([e4a96f9](https://github.com/im-anishraj/arnio/commit/e4a96f9e1a5c64e236ad0d85dd0ba6b5cdf10d49))
+* **schema:** add cross-field validation rules parameter ([#651](https://github.com/im-anishraj/arnio/issues/651)) ([36d0545](https://github.com/im-anishraj/arnio/commit/36d054549166542c5401f7a057df25f8a4ab7095)), closes [#196](https://github.com/im-anishraj/arnio/issues/196)
+* **schema:** add schema diff helper ([fe82072](https://github.com/im-anishraj/arnio/commit/fe820726cef88ad6ba702decd46bbe29fbcd8999)), closes [#209](https://github.com/im-anishraj/arnio/issues/209)
+* **schema:** add warning severity support ([58929c6](https://github.com/im-anishraj/arnio/commit/58929c6047d11800e095cd4e3cbfc95d1f379c4b)), closes [#192](https://github.com/im-anishraj/arnio/issues/192)
+* **schema:** bootstrap schema from quality report ([#529](https://github.com/im-anishraj/arnio/issues/529)) ([498d8d4](https://github.com/im-anishraj/arnio/commit/498d8d42deb13119a6f48d59a79562ed68f4ddec))
+* support namespaced pipeline steps ([57dec91](https://github.com/im-anishraj/arnio/commit/57dec91f31efbac2f5778af56b9b7afbd3836081)), closes [#168](https://github.com/im-anishraj/arnio/issues/168)
+* truncate long ArFrame column names in display ([#566](https://github.com/im-anishraj/arnio/issues/566)) ([66bdc0c](https://github.com/im-anishraj/arnio/commit/66bdc0c9310048ca979389ead3111fcc7e6d8054))
+* wrap custom pipeline step errors ([72ddda1](https://github.com/im-anishraj/arnio/commit/72ddda1a9ebf7b32619933e7d177f63e4a861ede))
+
+
+### Bug Fixes
+
+* align round_numeric_columns subset errors ([#774](https://github.com/im-anishraj/arnio/issues/774)) ([f9a7a4b](https://github.com/im-anishraj/arnio/commit/f9a7a4ba54d635d95d2f5ea2ccfe01bb77412e9e))
+* **bindings:** prevent dangling pointer in to_numpy_float/int ([#28](https://github.com/im-anishraj/arnio/issues/28)) ([#805](https://github.com/im-anishraj/arnio/issues/805)) ([f28a207](https://github.com/im-anishraj/arnio/commit/f28a207a9e897a86f242ffd6e42edcd9d73c8669))
+* **cleaning:** accept sequence subsets in parse_bool_strings ([#766](https://github.com/im-anishraj/arnio/issues/766)) ([c1c25d6](https://github.com/im-anishraj/arnio/commit/c1c25d619bbccabb9e7df679d607f7075150f686))
+* **cleaning:** preserve filter_rows column context on invalid comparisons ([ce10c2f](https://github.com/im-anishraj/arnio/commit/ce10c2f1633c6fecec52a53431783761b4eedc70))
+* **cleaning:** preserve Unicode bytes in normalize_case ([ca6afe6](https://github.com/im-anishraj/arnio/commit/ca6afe63397b619ac3f8326ec82bdab31bd9475c)), closes [#26](https://github.com/im-anishraj/arnio/issues/26)
+* **cleaning:** reject lossy and non-finite fill_nulls values ([cbd7d81](https://github.com/im-anishraj/arnio/commit/cbd7d81f5bdee6c47385fb46a3ab480a2bcae0ef))
+* **cleaning:** validate parse_bool_strings custom tokens ([1036f0b](https://github.com/im-anishraj/arnio/commit/1036f0b0d548af69e947219438208cf54b5a7f8b))
+* **csv_writer:** open output file in binary mode ([#752](https://github.com/im-anishraj/arnio/issues/752)) ([088c81f](https://github.com/im-anishraj/arnio/commit/088c81f12c949be14dfb345c3070bc90cc2a51ad)), closes [#717](https://github.com/im-anishraj/arnio/issues/717)
+* **csv:** normalize trailing empty fields ([62314d7](https://github.com/im-anishraj/arnio/commit/62314d741c5958b2ffbbd94e9ea362f8909520af)), closes [#116](https://github.com/im-anishraj/arnio/issues/116)
+* **csv:** preserve leading-zero identifier inference ([8aa3f15](https://github.com/im-anishraj/arnio/commit/8aa3f15df9724a0c37d6ca2e9578352f012aea21))
+* **csv:** reject late NUL bytes in UTF-8 input ([0152a68](https://github.com/im-anishraj/arnio/commit/0152a68510f541efaf845165d4ec53fd34e021e4))
+* escape markdown pipes in quality report ([#781](https://github.com/im-anishraj/arnio/issues/781)) ([8ca3074](https://github.com/im-anishraj/arnio/commit/8ca30749a3ab5122a052cd99651b1515d4ffe34d))
+* explicitly reject keep=True in drop_duplicates ([#584](https://github.com/im-anishraj/arnio/issues/584)) ([#787](https://github.com/im-anishraj/arnio/issues/787)) ([1d4993a](https://github.com/im-anishraj/arnio/commit/1d4993a99eb55e833a9dd22c59fe5d5b3c8fb188))
+* **frame:** enforce consistent column lengths ([#914](https://github.com/im-anishraj/arnio/issues/914)) ([6aab3ea](https://github.com/im-anishraj/arnio/commit/6aab3ea08058bec8af9b7051d636b96831251ecc))
+* keep decimal-looking strings on float path ([#788](https://github.com/im-anishraj/arnio/issues/788)) ([d8cea07](https://github.com/im-anishraj/arnio/commit/d8cea0728d938837e1a355cf56f74d82efeffa09))
+* make suggested cleaning kwargs deterministic in to_markdown ([#771](https://github.com/im-anishraj/arnio/issues/771)) ([5a280d2](https://github.com/im-anishraj/arnio/commit/5a280d28c5247abb9d5bb34062110c358b422758))
+* **pandas:** reject stringified column label collisions ([c3e1d3d](https://github.com/im-anishraj/arnio/commit/c3e1d3d006b0cefd6eefdff38659e94dcc05b7b5)), closes [#711](https://github.com/im-anishraj/arnio/issues/711)
+* **pipeline:** raise TypeError for custom steps returning non-DataFra… ([#687](https://github.com/im-anishraj/arnio/issues/687)) ([0008c21](https://github.com/im-anishraj/arnio/commit/0008c21bed342e87d2d27e8f2b960716b62542ee))
+* **pipeline:** reject custom steps that shadow built-ins ([b3bf090](https://github.com/im-anishraj/arnio/commit/b3bf0901a6c81999df7bb2e28e88e6ba460410ec))
+* preserve non-utf8 scan samples ([da5bf15](https://github.com/im-anishraj/arnio/commit/da5bf15f4ca9add2530e763acb65902c61956f11)), closes [#579](https://github.com/im-anishraj/arnio/issues/579)
+* preserve null-valued replace_values results ([#800](https://github.com/im-anishraj/arnio/issues/800)) ([5aaf070](https://github.com/im-anishraj/arnio/commit/5aaf070483e988d3acc7e9effcbb92b6199cf2f8))
+* preserve quoted CSV line endings ([8324322](https://github.com/im-anishraj/arnio/commit/8324322d2f32dea78a70dc5fea55e4ccccb4e5f2))
+* **quality:** correct compare_profiles drift thresholds ([#750](https://github.com/im-anishraj/arnio/issues/750)) ([f7b72a3](https://github.com/im-anishraj/arnio/commit/f7b72a3e49c65f3cd49c7014db31211382bdb263))
+* reject duplicate pandas column labels ([5316cf8](https://github.com/im-anishraj/arnio/commit/5316cf8b3da3c6d552ffc5910748dad29f69cda0))
+* reject empty write_csv line terminators ([#757](https://github.com/im-anishraj/arnio/issues/757)) ([859d4b9](https://github.com/im-anishraj/arnio/commit/859d4b998f4428fdf4ef0a3dacec2899c9aa6485))
+* reject late nul bytes in csv inputs ([#760](https://github.com/im-anishraj/arnio/issues/760)) ([f140aaf](https://github.com/im-anishraj/arnio/commit/f140aaf31a451c278b408a6f99259288f2e43336))
+* reject newline delimiters in write_csv ([#755](https://github.com/im-anishraj/arnio/issues/755)) ([58a265f](https://github.com/im-anishraj/arnio/commit/58a265ff30e86f7f893fa8385adb871bd7a65f3c))
+* reject quote delimiter in write_csv ([#756](https://github.com/im-anishraj/arnio/issues/756)) ([3f8c68f](https://github.com/im-anishraj/arnio/commit/3f8c68fdca49c95a60110cf43f2345deb53601ed))
+* reject unsupported object scalars ([75af857](https://github.com/im-anishraj/arnio/commit/75af85757e9680ae48ea231863199b723e8f3ad9))
+* resolve CountryCode validator allowlist and uniqueness ([eb7b34f](https://github.com/im-anishraj/arnio/commit/eb7b34fcb75b78d5e6803e1c0d19d734f47a3ca3)), closes [#714](https://github.com/im-anishraj/arnio/issues/714)
+* respect non-utf8 scan sample count ([#761](https://github.com/im-anishraj/arnio/issues/761)) ([4cd43c5](https://github.com/im-anishraj/arnio/commit/4cd43c5befc5bddd28ce896e6a6254f634af8f12))
+* **schema:** add redaction support to markdown validation reports ([e523129](https://github.com/im-anishraj/arnio/commit/e5231293b2825c47ed7f09d88b3d9287458a7513)), closes [#682](https://github.com/im-anishraj/arnio/issues/682)
+* **schema:** reject invalid unique configuration in validate ([a960498](https://github.com/im-anishraj/arnio/commit/a9604986aaf5330a84ba2344ddd54bf5afbbb4cf))
+* support headerless schema scanning ([acc7b1e](https://github.com/im-anishraj/arnio/commit/acc7b1e5a0a67d7ead77e119e880c1faf1c986d2))
+* use one-based composite unique row indexes ([#782](https://github.com/im-anishraj/arnio/issues/782)) ([cdd1368](https://github.com/im-anishraj/arnio/commit/cdd1368ea9520360965cdcb99337df913f421b51))
+* validate drop_duplicates keep option ([#758](https://github.com/im-anishraj/arnio/issues/758)) ([a12a5b1](https://github.com/im-anishraj/arnio/commit/a12a5b1dba68d5c30064c0f41dff954df923b5c6))
+* validate pipeline steps before execution ([#693](https://github.com/im-anishraj/arnio/issues/693)) ([d102429](https://github.com/im-anishraj/arnio/commit/d102429eced6a92c83cb3d6d1728bf810ea9ba7d))
+* validate schema field values early ([#748](https://github.com/im-anishraj/arnio/issues/748)) ([bf9d6ba](https://github.com/im-anishraj/arnio/commit/bf9d6bab605235841f60f61179838adca0e8d949))
+* validate Schema.unique string and invalid unique members ([#776](https://github.com/im-anishraj/arnio/issues/776)) ([866ffc5](https://github.com/im-anishraj/arnio/commit/866ffc59240542300dae27a97fcda878c9abaea6))
+* validate UInt64 conversion bounds ([32ae8a4](https://github.com/im-anishraj/arnio/commit/32ae8a43d2858c14d32122d236767d5d1453a837)), closes [#626](https://github.com/im-anishraj/arnio/issues/626)
+* validate write_csv delimiter type ([#759](https://github.com/im-anishraj/arnio/issues/759)) ([ca69adf](https://github.com/im-anishraj/arnio/commit/ca69adf1980c07d7866e64ad11f1255b0d98b384))
+
+
+### Performance Improvements
+
+* add approximate top-values profiling ([#762](https://github.com/im-anishraj/arnio/issues/762)) ([0d1168b](https://github.com/im-anishraj/arnio/commit/0d1168b0d294310f0772496b6f1290d6e9e8ac0c))
+* add measurement script for to_pandas conversion overhead ([#556](https://github.com/im-anishraj/arnio/issues/556)) ([6c15c53](https://github.com/im-anishraj/arnio/commit/6c15c5337ea09cdbe552733e871e09adca704895))
+* add multiline CSV benchmark coverage ([5f850f2](https://github.com/im-anishraj/arnio/commit/5f850f2e7c2c2bab3214f66e9844f326eb8921be))
+* **cleaning:** add native safe_divide_columns numeric path ([7179a95](https://github.com/im-anishraj/arnio/commit/7179a953472f39892ac4063d1cedd6e6c35d739f))
+* **cleaning:** implement native clip_numeric without pandas round-trip ([eed031f](https://github.com/im-anishraj/arnio/commit/eed031f02c01f48db21f6a7c005dc310cc7d205c)), closes [#657](https://github.com/im-anishraj/arnio/issues/657)
+* native normalize_unicode without pandas roundtrip ([38a6860](https://github.com/im-anishraj/arnio/commit/38a6860638f79035973899d6023829fef5c76624))
+
+
+### Documentation
+
+* add CLI roadmap and command examples ([1f4f61d](https://github.com/im-anishraj/arnio/commit/1f4f61d5a1c013179ec914931a713a5a833310e5)), closes [#671](https://github.com/im-anishraj/arnio/issues/671)
+* add CSV error handling guidance ([10aa0b7](https://github.com/im-anishraj/arnio/commit/10aa0b70f18026671ac9baeb94443fa27b2d46aa)), closes [#490](https://github.com/im-anishraj/arnio/issues/490)
+* add data contract CI workflow example ([ab83194](https://github.com/im-anishraj/arnio/commit/ab83194e81e667997cce23d30663d1efac33616f))
+* add examples for common messy datasets ([ab27ea7](https://github.com/im-anishraj/arnio/commit/ab27ea7765af6372d2bb7b3fbf4dba4186921433))
+* add JSONL pipeline processing example ([8db4886](https://github.com/im-anishraj/arnio/commit/8db48867e90591fbd2ff0f7be1764c6165ab77a5)), closes [#864](https://github.com/im-anishraj/arnio/issues/864)
+* add pipeline backend execution map ([#744](https://github.com/im-anishraj/arnio/issues/744)) ([e4f368e](https://github.com/im-anishraj/arnio/commit/e4f368ecd343e5d513a5c1d71a55b7e98d3925ce))
+* add profiling privacy and redaction guide ([#862](https://github.com/im-anishraj/arnio/issues/862)) ([cc07ed3](https://github.com/im-anishraj/arnio/commit/cc07ed3fa9e8ecbe6483ab4d0b604028f5d8e636))
+* add quick example section to README ([#794](https://github.com/im-anishraj/arnio/issues/794)) ([c9a59a2](https://github.com/im-anishraj/arnio/commit/c9a59a2b2cf4b94033538f1242598db4942fe84b))
+* add troubleshooting guide ([#791](https://github.com/im-anishraj/arnio/issues/791)) ([7f3d607](https://github.com/im-anishraj/arnio/commit/7f3d60701db10db1471670308c3642004bfd72ca))
+* document auto_clean strict mode risks ([#764](https://github.com/im-anishraj/arnio/issues/764)) ([12c6b36](https://github.com/im-anishraj/arnio/commit/12c6b36f340563cd4ab482b459fb3b0aa437e5e8))
+* document sklearn row-dropping pipeline behavior ([#786](https://github.com/im-anishraj/arnio/issues/786)) ([371f886](https://github.com/im-anishraj/arnio/commit/371f886a1a74c3e86f28683331cae9daf3655413))
+* document ValidationResult row-index convention (1-based, header excluded) ([#803](https://github.com/im-anishraj/arnio/issues/803)) ([a4f3965](https://github.com/im-anishraj/arnio/commit/a4f3965cc9d74cc2f62d6ab4bba81136ffb62c3b))
+* document write_csv validation behavior ([4588666](https://github.com/im-anishraj/arnio/commit/45886660c5087d80ab2aeb39ebd64562836805e8)), closes [#664](https://github.com/im-anishraj/arnio/issues/664)
+* standardize Google-style docstrings in arnio/schema.py ([dc5aa3d](https://github.com/im-anishraj/arnio/commit/dc5aa3d9036651c1190884ca376f1f0090796f98))
+
+## [1.14.0](https://github.com/im-anishraj/arnio/compare/v1.13.0...v1.14.0) (2026-05-18)
+
+
+### Features
+
+* add parse_bool_strings pipeline step ([bc6e53d](https://github.com/im-anishraj/arnio/commit/bc6e53d6cbf73c02bcbd81f828a6c085ed928797)), closes [#150](https://github.com/im-anishraj/arnio/issues/150)
+
+
+### Documentation
+
+* add interoperability examples ([aa7c7d7](https://github.com/im-anishraj/arnio/commit/aa7c7d77d1dcca8a6b7f416ef358a4c6f7ac8edc))
+
+## [1.13.0](https://github.com/im-anishraj/arnio/compare/v1.12.1...v1.13.0) (2026-05-18)
+
+
+### Features
+
+* add benchmark regression reporting ([#554](https://github.com/im-anishraj/arnio/issues/554)) ([83b9ee5](https://github.com/im-anishraj/arnio/commit/83b9ee5c8cf75477ebb476f1fb3f13654eceab3a))
+* add quality sample redaction ([#555](https://github.com/im-anishraj/arnio/issues/555)) ([daece46](https://github.com/im-anishraj/arnio/commit/daece46037eab5bc924d8e61b4111dc659301ed9))
+* add Regex field validator to schema ([#537](https://github.com/im-anishraj/arnio/issues/537)) ([70b1839](https://github.com/im-anishraj/arnio/commit/70b18395066c424e143a1a8eb034f3f200d92333))
+* add string length statistics to quality profile (resolves [#174](https://github.com/im-anishraj/arnio/issues/174)) ([#550](https://github.com/im-anishraj/arnio/issues/550)) ([98d1bf3](https://github.com/im-anishraj/arnio/commit/98d1bf34a9b175610efbb360d034ce0663a8a547))
+
+## [1.12.1](https://github.com/im-anishraj/arnio/compare/v1.12.0...v1.12.1) (2026-05-18)
+
+
+### Bug Fixes
+
+* make custom pipeline step registry thread-safe ([2755772](https://github.com/im-anishraj/arnio/commit/27557721616a078d4302f9cc7aa2e9f2750b96f5))
+
+
+### Performance Improvements
+
+* release GIL around long C++ operations ([1100fec](https://github.com/im-anishraj/arnio/commit/1100fec21ad05a6288a945af1e88754b7a787280))
+
+## [1.12.0](https://github.com/im-anishraj/arnio/compare/v1.11.3...v1.12.0) (2026-05-17)
+
+
+### Features
+
+* add strip_whitespace allocation benchmark ([e2ff584](https://github.com/im-anishraj/arnio/commit/e2ff58416125fe1eae4bef4c204cc52fb248fb86))
+
+
+### Documentation
+
+* replace ASCII architecture diagram with Mermaid flowchart ([abede39](https://github.com/im-anishraj/arnio/commit/abede392dfd11ac909d273c90cfc01463522004b))
+
+## [1.11.3](https://github.com/im-anishraj/arnio/compare/v1.11.2...v1.11.3) (2026-05-17)
+
+
+### Documentation
+
+* add API reference skeleton ([5ea384d](https://github.com/im-anishraj/arnio/commit/5ea384d9341aab15fdbe053ff0388d8f1430cf48))
+
+## [1.11.2](https://github.com/im-anishraj/arnio/compare/v1.11.1...v1.11.2) (2026-05-17)
+
+
+### Bug Fixes
+
+* raise clear errors for unsupported pandas dtypes in from_pandas ([1791e4f](https://github.com/im-anishraj/arnio/commit/1791e4f05242841e7878fd8c03a185bb01c48ae1))
+* preserve 1-based source row numbers in schema validation issues ([5f538fd](https://github.com/im-anishraj/arnio/commit/5f538fd2b508b4c791967c8f9b1947387c6467c2))
+
+## [1.11.1](https://github.com/im-anishraj/arnio/compare/v1.11.0...v1.11.1) (2026-05-17)
+
+
+### Bug Fixes
+
+* skip numeric cast suggestions for identifier-like columns ([cf687e2](https://github.com/im-anishraj/arnio/commit/cf687e2ae83b4cc1c1edef6065920a12fbc7a7ad))
+
+## [1.11.0](https://github.com/im-anishraj/arnio/compare/v1.10.0...v1.11.0) (2026-05-17)
+
+
+### Features
+
+* add scikit-learn ArnioCleaner transformer ([610a39f](https://github.com/im-anishraj/arnio/commit/610a39fe5ab4a02db2ad7f9c3223896cdf263db5))
+* register combine_columns as pipeline step and add test ([beaf402](https://github.com/im-anishraj/arnio/commit/beaf4022ac7dc70cb370d387769fc033beb4454d))
+
+## [1.10.0](https://github.com/im-anishraj/arnio/compare/v1.9.1...v1.10.0) (2026-05-17)
+
+
+### Features
+
+* add DateTime schema field ([05c26be](https://github.com/im-anishraj/arnio/commit/05c26bebf1cf79bbdbb98157dba1618c61abd08e))
+* add normalize_unicode cleaning step ([c8c7c40](https://github.com/im-anishraj/arnio/commit/c8c7c40c9172e83d289b25e2e4b797efd78cd26a))
+* add top_values summary for categorical columns ([f593f94](https://github.com/im-anishraj/arnio/commit/f593f94cf331180f29516d1afc217c106a96ad8b))
+
+
+### Performance Improvements
+
+* add process RSS metrics to benchmark ([6206cbd](https://github.com/im-anishraj/arnio/commit/6206cbda592705d20877d8a89e2f899025f2f329))
+
+
+### Documentation
+
+* add financial CSV cleaning example notebook ([e9fb6f6](https://github.com/im-anishraj/arnio/commit/e9fb6f6f793538354160584effd87bf866f85eee))
+
+## [1.9.1](https://github.com/im-anishraj/arnio/compare/v1.9.0...v1.9.1) (2026-05-17)
+
+
+### Performance Improvements
+
+* stream transcode and sample rows for scan_csv schema inference ([713aeaa](https://github.com/im-anishraj/arnio/commit/713aeaa9ccb380bb68568999edc141e1dc73389b))
+
 ## [1.9.0](https://github.com/im-anishraj/arnio/compare/v1.8.0...v1.9.0) (2026-05-17)
 
 

@@ -1,13 +1,19 @@
 """Generate deterministic benchmark CSV files before benchmarking."""
 
+import os
+
 import numpy as np
 import pandas as pd
 
 DEFAULT_TALL_PATH = "benchmarks/benchmark_1m.csv"
 DEFAULT_WIDE_PATH = "benchmarks/benchmark_wide.csv"
 
+DRY_RUN = os.getenv("ARNIO_BENCHMARK_DRY_RUN") == "1"
+
 
 def generate(rows=1_000_000, path=DEFAULT_TALL_PATH):
+    if DRY_RUN:
+        rows = min(rows, 10)
     rng = np.random.default_rng(42)
     df = pd.DataFrame(
         {
@@ -36,6 +42,9 @@ def generate(rows=1_000_000, path=DEFAULT_TALL_PATH):
 
 
 def generate_wide(rows=5_000, columns=256, path=DEFAULT_WIDE_PATH):
+    if DRY_RUN:
+        rows = min(rows, 5)
+        columns = min(columns, 10)
     if rows < 1:
         raise ValueError("wide benchmark requires at least 1 row")
     if columns < 4:
@@ -72,6 +81,42 @@ def generate_wide(rows=5_000, columns=256, path=DEFAULT_WIDE_PATH):
     print(f"Generated {rows:,} row x {columns:,} column CSV -> {path}")
 
 
+DEFAULT_MULTILINE_PATH = "benchmarks/benchmark_multiline.csv"
+
+
+def generate_multiline(rows=100_000, path=DEFAULT_MULTILINE_PATH):
+    if DRY_RUN:
+        rows = min(rows, 10)
+    rng = np.random.default_rng(999)
+    df = pd.DataFrame(
+        {
+            "id": rng.integers(1, 999999, rows),
+            "comments": rng.choice(
+                [
+                    "line 1\nline 2",
+                    "simple text",
+                    "another\nmultiline\ncomment",
+                    "short comment",
+                    'quoted "inner" text\nwith newlines',
+                ],
+                rows,
+            ),
+            "score": rng.uniform(0, 100, rows).round(4),
+            "notes": rng.choice(
+                [
+                    "first note\nsecond note",
+                    "no newline",
+                    "yet\nanother\nmultiline\nnote",
+                ],
+                rows,
+            ),
+        }
+    )
+    df.to_csv(path, index=False, lineterminator="\n")
+    print(f"Generated {rows:,} row Multiline CSV -> {path}")
+
+
 if __name__ == "__main__":
     generate()
     generate_wide()
+    generate_multiline()

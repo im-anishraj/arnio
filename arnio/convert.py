@@ -6,6 +6,9 @@ Pandas conversion functions.
 from __future__ import annotations
 
 import copy as copylib
+import decimal
+import math
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -18,12 +21,88 @@ def _is_nested(value: object) -> bool:
     return isinstance(value, (list, dict, tuple, set, np.ndarray))
 
 
+def _to_binding_safe(value: Any) -> Any:
+    """
+    Internal helper that normalizes scalars for the C++ binding layer.
+
+    Parameters
+    ----------
+    value : Any
+        Input value to convert.
+
+    Returns
+    -------
+    Any
+        Value safe for C++ binding. Decimal inputs are preserved as exact
+        strings. Float inputs are converted to binary float. NaN/Infinity are
+        rejected.
+
+    Raises
+    ------
+    ValueError
+        If the value is NaN or infinite.
+    """
+    if isinstance(value, decimal.Decimal):
+        if value.is_nan() or value.is_infinite():
+            raise ValueError("Invalid financial value: NaN or Infinity.")
+        return str(value)
+
+    if isinstance(value, float):
+        if math.isnan(value) or math.isinf(value):
+            raise ValueError("Invalid financial value: NaN or Infinity.")
+        return float(value)
+
+    return value
+
+
+def _check_unsupported_dtype(col_name: object, series: pd.Series) -> None:
+    """Raise a clear TypeError for dtypes that arnio cannot convert."""
+    dtype = series.dtype
+    dtype_str = str(dtype)
+    name = repr(str(col_name))
+
+    if hasattr(dtype, "tz") or dtype_str.startswith("datetime64"):
+        raise TypeError(
+            f"Column {name} has unsupported dtype '{dtype_str}'.\n"
+            f"  Fix: df[{name}] = df[{name}].astype(str)  "
+            f"# or use .dt.strftime('%Y-%m-%d') for formatted dates"
+        )
+
+    if dtype_str.startswith("timedelta"):
+        raise TypeError(
+            f"Column {name} has unsupported dtype '{dtype_str}'.\n"
+            f"  Fix: df[{name}] = df[{name}].dt.total_seconds()"
+        )
+
+    if hasattr(dtype, "categories"):
+        raise TypeError(
+            f"Column {name} has unsupported dtype 'category'.\n"
+            f"  Fix: df[{name}] = df[{name}].astype(str)"
+        )
+
+    if dtype_str in ("complex128", "complex64"):
+        raise TypeError(
+            f"Column {name} has unsupported dtype '{dtype_str}'.\n"
+            f"  Fix: df[{name}] = df[{name}].apply(str)"
+        )
+
+
 def _normalize_scalar(value: object) -> object:
+    if isinstance(value, decimal.Decimal):
+        return _to_binding_safe(value)
     if pd.isna(value):
         return None
     if isinstance(value, np.generic):
-        return value.item()
-    if not isinstance(value, (bool, int, float, str)):
+        value = value.item()
+    if isinstance(value, int) and not isinstance(value, bool):
+        if value < -9223372036854775808 or value > 9223372036854775807:
+            raise ValueError(
+                f"Integer value {value} is out of bounds for signed 64-bit integer. "
+                "arnio only supports signed 64-bit integers (-9223372036854775808 to 9223372036854775807)."
+            )
+    if isinstance(value, float):
+        return _to_binding_safe(value)
+    if not isinstance(value, (bool, int, str)):
         return str(value)
     return value
 
@@ -48,6 +127,29 @@ def _series_to_python_values(series: pd.Series, col_name: object) -> list[object
                 f"Column '{col_name}' contains unsupported nested value "
                 f"of type '{type(raw).__name__}' at value {raw!r}. "
                 "Convert nested objects to strings or flatten them first."
+            )
+
+        if isinstance(raw, pd.Timestamp):
+            raise TypeError(
+                f"Column '{col_name}' contains unsupported scalar value "
+                f"of type 'Timestamp' at value {raw!r}. "
+                f'Fix: df["{col_name}"] = df["{col_name}"].astype(str)'
+            )
+
+        if isinstance(raw, pd.Timedelta):
+            raise TypeError(
+                f"Column '{col_name}' contains unsupported scalar value "
+                f"of type 'Timedelta' at value {raw!r}. "
+                f'Fix: convert df["{col_name}"] to strings or a supported '
+                "numeric duration before from_pandas()"
+            )
+
+        if isinstance(raw, (complex, np.complexfloating)):
+            raise TypeError(
+                f"Column '{col_name}' contains unsupported scalar value "
+                f"of type '{type(raw).__name__}' at value {raw!r}. "
+                f'Fix: split df["{col_name}"] into real/imag columns or '
+                "convert it to strings before from_pandas()"
             )
 
         value = _normalize_scalar(raw)
@@ -109,7 +211,6 @@ def to_pandas(frame: ArFrame, *, copy: bool = False) -> pd.DataFrame:
             arr = col.to_numpy_int()
             if copy:
                 arr = arr.copy()
-            # pandas Int64Dtype handles nulls via mask
             series = pd.Series(arr, dtype=pd.Int64Dtype())
             series[mask] = pd.NA
             data[name] = series
@@ -128,7 +229,6 @@ def to_pandas(frame: ArFrame, *, copy: bool = False) -> pd.DataFrame:
             series[mask] = pd.NA
             data[name] = series
         else:
-            # STRING or unknown
             values = col.to_python_list()
             series = pd.Series(values, dtype=pd.StringDtype())
             series[mask] = pd.NA
@@ -143,13 +243,46 @@ def to_pandas(frame: ArFrame, *, copy: bool = False) -> pd.DataFrame:
 def _pandas_dtype_to_arnio(dtype: object) -> _DType | None:
     if dtype == pd.Int64Dtype():
         return _DType.INT64
-    if dtype == pd.Float64Dtype() or dtype == np.dtype("float64"):
+    if dtype == pd.Float64Dtype() or dtype == np.dtype("float64") or str(dtype) == "float64":
         return _DType.FLOAT64
     if dtype == pd.BooleanDtype() or dtype == np.dtype("bool"):
         return _DType.BOOL
     if dtype == pd.StringDtype() or dtype == np.dtype("object"):
         return _DType.STRING
     return None
+
+
+def _validate_unique_column_labels(labels: pd.Index) -> None:
+    seen: set[object] = set()
+    dupes: list[object] = []
+    for label in labels:
+        if label in seen and label not in dupes:
+            dupes.append(label)
+        seen.add(label)
+    if dupes:
+        raise ValueError(
+            "from_pandas() does not support duplicate column labels: "
+            f"{[repr(label) for label in dupes]}"
+        )
+
+    normalized: dict[str, object] = {}
+    collisions: dict[str, list[object]] = {}
+    for label in labels:
+        name = str(label)
+        if name in normalized:
+            collisions.setdefault(name, [normalized[name]]).append(label)
+        else:
+            normalized[name] = label
+
+    if collisions:
+        details = ", ".join(
+            f"{name!r}: {[repr(label) for label in labels]}"
+            for name, labels in collisions.items()
+        )
+        raise ValueError(
+            "from_pandas() column labels must remain unique after string "
+            f"conversion: {details}"
+        )
 
 
 def from_pandas(df: pd.DataFrame) -> ArFrame:
@@ -176,12 +309,16 @@ def from_pandas(df: pd.DataFrame) -> ArFrame:
     >>> df = pd.DataFrame({"name": ["Alice"], "age": [25]})
     >>> frame = ar.from_pandas(df)
     """
+    _validate_unique_column_labels(df.columns)
+
     columns = {}
     dtype_hints = {}
 
     for col_name in df.columns:
         series = df[col_name]
         name = str(col_name)
+
+        _check_unsupported_dtype(col_name, series)
 
         columns[name] = _series_to_python_values(series, col_name)
 
