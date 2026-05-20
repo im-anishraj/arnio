@@ -1121,7 +1121,6 @@ def test_register_step_rejects_reserved_builtin_namespace():
         ar.register_step("builtin:custom_step", dummy_step)
 
 
-<<<<<<< HEAD
 def test_list_steps_includes_builtins_in_deterministic_order():
     steps = ar.list_steps()
 
@@ -1140,7 +1139,8 @@ def test_list_steps_includes_registered_custom_steps():
     steps = ar.list_steps()
 
     assert "list_steps_probe" in steps
-=======
+
+    
 def test_reset_steps_removes_custom_registered_steps():
     import pandas as pd
 
@@ -1231,4 +1231,3 @@ def test_reset_steps_removes_overwritten_custom_steps():
                 ("temp_step",),
             ],
         )
->>>>>>> 738a0ef (feat: add reset_steps for pipeline test isolation)
