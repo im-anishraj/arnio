@@ -388,7 +388,7 @@ class TestPipeline:
                 ],
             )
 
-    def test_pipeline_select_columns_allows_reject_columns(self, sample_csv):
+    def test_pipeline_select_columns_reject_empty_columns(self, sample_csv):
         frame = ar.read_csv(sample_csv)
 
         with pytest.raises(ValueError, match="Column selection cannot be empty"):

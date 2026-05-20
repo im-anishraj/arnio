@@ -2191,7 +2191,6 @@ class TestSelectColumns:
         assert list(df.columns) == ["name", "id"]
         assert list(df["name"]) == ["Alice", "Bob"]
 
-
     def test_select_columns_rejects_missing_columns(self, sample_csv):
         frame = ar.read_csv(sample_csv)
 
