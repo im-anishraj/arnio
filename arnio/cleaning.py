@@ -1388,3 +1388,87 @@ def standardize_missing_tokens(frame, tokens=None, subset=None):
             df[subset] = df[subset].replace(tokens, float("nan"))
 
     return from_pandas(df) if is_arframe else df
+
+
+def normalize_boolean_values(
+    frame,
+    *,
+    true_values: list[str] | None = None,
+    false_values: list[str] | None = None,
+    subset: list[str] | None = None,
+):
+    """Normalize inconsistent boolean representation in string/numeric columns.
+
+    Parameters
+    ----------
+    frame : ArFrame or pd.DataFrame
+        Input data frame.
+    true_values : list[str], optional
+        Values to map to True. Default: ["yes", "y", "true", "1"]
+    false_values : list[str], optional
+        Values to map to False. Default: ["no", "n", "false", "0"]
+    subset : list[str], optional
+        Column names to normalize. If None, applies to all columns.
+
+    Returns
+    -------
+    ArFrame or pd.DataFrame
+        New frame with boolean representations normalized to True/False.
+    """
+    import pandas as pd
+
+    from .convert import from_pandas, to_pandas
+    from .frame import ArFrame
+
+    is_arframe = isinstance(frame, ArFrame)
+    if not is_arframe and not isinstance(frame, pd.DataFrame):
+        raise TypeError("frame must be an ArFrame or a pandas DataFrame")
+
+    if true_values is None:
+        true_values = ["yes", "y", "true", "1"]
+    if false_values is None:
+        false_values = ["no", "n", "false", "0"]
+
+    if not isinstance(true_values, list):
+        raise TypeError("true_values must be a list of strings or integers")
+    if not isinstance(false_values, list):
+        raise TypeError("false_values must be a list of strings or integers")
+
+    true_set = {str(v).strip().lower() for v in true_values}
+    false_set = {str(v).strip().lower() for v in false_values}
+
+    df = to_pandas(frame) if is_arframe else frame.copy()
+    column_names = list(df.columns)
+
+    if subset is None:
+        cols_to_process = column_names
+    else:
+        cols_to_process = _validate_column_sequence(subset, argument_name="subset")
+        missing = [col for col in cols_to_process if col not in column_names]
+        if missing:
+            available = ", ".join(column_names) or "<none>"
+            raise KeyError(
+                f"Missing columns for normalize_boolean_values: {missing}. Available columns: {available}"
+            )
+
+    def map_fn(x):
+        if pd.isna(x) or x is None:
+            return x
+        if isinstance(x, str):
+            s = x.strip().lower()
+            if s in true_set:
+                return True
+            if s in false_set:
+                return False
+        else:
+            s = str(x).strip().lower()
+            if s in true_set:
+                return True
+            if s in false_set:
+                return False
+        return x
+
+    for col in cols_to_process:
+        df[col] = df[col].apply(map_fn)
+
+    return from_pandas(df) if is_arframe else df

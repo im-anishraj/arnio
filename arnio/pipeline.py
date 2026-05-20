@@ -43,7 +43,8 @@ _STEP_REGISTRY: dict[str, Callable] = {
 
 _REGISTRY_LOCK = Lock()
 _PYTHON_STEP_REGISTRY: dict[str, Callable] = {
-    "standardize_missing_tokens": cleaning.standardize_missing_tokens
+    "standardize_missing_tokens": cleaning.standardize_missing_tokens,
+    "normalize_boolean_values": cleaning.normalize_boolean_values,
 }
 
 
