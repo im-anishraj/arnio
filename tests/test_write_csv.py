@@ -239,3 +239,35 @@ class TestBooleanOptionValidation:
         p.write_text("1,2\n3,4\n")
         frame = ar.read_csv(str(p), has_header=False)
         assert frame is not None
+
+    # --- scan_csv: trim_headers ---
+
+    def test_scan_csv_trim_headers_none_rejected(self, tmp_path):
+        p = tmp_path / "f.csv"
+        p.write_text("a,b\n1,2\n")
+        with pytest.raises(TypeError, match="trim_headers"):
+            ar.scan_csv(str(p), trim_headers=None)
+
+    def test_scan_csv_trim_headers_int_rejected(self, tmp_path):
+        p = tmp_path / "f.csv"
+        p.write_text("a,b\n1,2\n")
+        with pytest.raises(TypeError, match="trim_headers"):
+            ar.scan_csv(str(p), trim_headers=1)
+
+    def test_scan_csv_trim_headers_string_rejected(self, tmp_path):
+        p = tmp_path / "f.csv"
+        p.write_text("a,b\n1,2\n")
+        with pytest.raises(TypeError, match="trim_headers"):
+            ar.scan_csv(str(p), trim_headers="yes")
+
+    def test_scan_csv_trim_headers_true_accepted(self, tmp_path):
+        p = tmp_path / "f.csv"
+        p.write_text("a,b\n1,2\n")
+        result = ar.scan_csv(str(p), trim_headers=True)
+        assert result is not None
+
+    def test_scan_csv_trim_headers_false_accepted(self, tmp_path):
+        p = tmp_path / "f.csv"
+        p.write_text("a,b\n1,2\n")
+        result = ar.scan_csv(str(p), trim_headers=False)
+        assert result is not None
