@@ -183,9 +183,8 @@ def test_schema_validation_negative_max_errors(tmp_path):
         }
     )
 
-    result = ar.validate(frame, schema, max_errors=-1)
-
-    assert result.issue_count >= 0
+    with pytest.raises(ValueError):
+        ar.validate(frame, schema, max_errors=-1)
 
 
 def test_schema_validation_strict_max_errors_cap(tmp_path):
@@ -204,8 +203,8 @@ def test_schema_validation_strict_max_errors_cap(tmp_path):
 
     result = ar.validate(frame, schema, max_errors=1)
 
-    assert result.issue_count == 2
-    assert len(result.issues) == 2
+    assert result.issue_count == 1
+    assert len(result.issues) == 1
 
 
 def test_schema_validation_unique_max_errors_cap(tmp_path):
@@ -224,8 +223,8 @@ def test_schema_validation_unique_max_errors_cap(tmp_path):
 
     result = ar.validate(frame, schema, max_errors=1)
 
-    assert result.issue_count == 3
-    assert len(result.issues) == 3
+    assert result.issue_count == 1
+    assert len(result.issues) == 1
 
 
 def test_validation_result_summary_counts_issues_across_multiple_columns():

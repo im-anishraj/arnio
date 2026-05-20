@@ -795,12 +795,12 @@ def validate(
     """
     schema = schema if isinstance(schema, Schema) else Schema(schema)
 
+    if max_errors is not None and max_errors < 0:
+        raise ValueError("max_errors must be >= 0")
+
     df = to_pandas(frame)
     dtypes = frame.dtypes
     issues: list[ValidationIssue] = []
-
-    if max_errors is not None and max_errors < 0:
-        raise ValueError("max_errors must be >= 0")
 
     if max_errors == 0:
         return ValidationResult(
@@ -825,10 +825,12 @@ def validate(
             )
 
             if reached_limit():
+                issues = issues[:max_errors]
+
                 return ValidationResult(
                     row_count=len(df),
-                    issue_count=len(issues[:max_errors]),
-                    issues=issues[:max_errors],
+                    issue_count=len(issues),
+                    issues=issues,
                     bad_rows=[],
                 )
 
@@ -848,10 +850,12 @@ def validate(
         issues.extend(column_issues)
 
         if reached_limit():
+            issues = issues[:max_errors]
+
             return ValidationResult(
                 row_count=len(df),
-                issue_count=len(issues[:max_errors]),
-                issues=issues[:max_errors],
+                issue_count=len(issues),
+                issues=issues,
                 bad_rows=[],
             )
 
@@ -900,10 +904,12 @@ def validate(
                 )
             )
             if reached_limit():
+                issues = issues[:max_errors]
+
                 return ValidationResult(
                     row_count=len(df),
-                    issue_count=len(issues[:max_errors]),
-                    issues=issues[:max_errors],
+                    issue_count=len(issues),
+                    issues=issues,
                     bad_rows=[],
                 )
 
@@ -1599,6 +1605,7 @@ def _validate_datetime(
     field_def: Field,
 ) -> list[ValidationIssue]:
     issues: list[ValidationIssue] = []
+    row_issues = []
     parsed = pd.to_datetime(non_null, format=field_def.format, errors="coerce")
 
     invalid_format = non_null[parsed.isna()]
