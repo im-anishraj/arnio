@@ -173,6 +173,7 @@ def _validate_null_values(null_values: list[str]) -> list[str]:
 
     return list(null_values)
 
+
 def _validate_bool_option(value: bool, name: str) -> bool:
     """Validate that a boolean option is strictly True or False."""
     if not isinstance(value, bool):
@@ -180,6 +181,7 @@ def _validate_bool_option(value: bool, name: str) -> bool:
             f"{name} must be True or False, got {type(value).__name__}: {value!r}"
         )
     return value
+
 
 def _validate_parser_mode(mode: str) -> str:
     """Validate CSV parser mode."""

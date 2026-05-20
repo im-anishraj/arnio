@@ -1,4 +1,5 @@
 """Standalone tests for _validate_bool_option in arnio/io.py."""
+
 import sys
 import types
 import pytest

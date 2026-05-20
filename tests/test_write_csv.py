@@ -162,7 +162,7 @@ class TestWriteCsvLineTerminatorBytes:
         assert df["note"].iloc[0] == "line1\nline2"
         assert df["note"].iloc[1] == "plain"
 
-    
+
 class TestBooleanOptionValidation:
     """Tests for strict bool validation on has_header, trim_headers, write_header."""
 
