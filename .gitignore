@@ -233,4 +233,5 @@ _arnio_cpp*
 
 # csv
 /*.csv
-benchmarks/benchmark_gil_temp.csv
+
+.DS_Store
