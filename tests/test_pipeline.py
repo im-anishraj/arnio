@@ -23,12 +23,15 @@ def restore_python_step_registry():
     """
     with pipeline_module._REGISTRY_LOCK:
         original_registry = dict(pipeline_module._PYTHON_STEP_REGISTRY)
+        original_aliases = dict(pipeline_module._DEPRECATED_STEP_ALIASES)
 
     yield
 
     with pipeline_module._REGISTRY_LOCK:
         pipeline_module._PYTHON_STEP_REGISTRY.clear()
         pipeline_module._PYTHON_STEP_REGISTRY.update(original_registry)
+        pipeline_module._DEPRECATED_STEP_ALIASES.clear()
+        pipeline_module._DEPRECATED_STEP_ALIASES.update(original_aliases)
 
 
 class TestPipeline:
@@ -218,6 +221,31 @@ class TestPipeline:
 
         assert df["name"].iloc[0] == "Alice"
 
+    def test_pipeline_warns_for_deprecated_builtin_step_alias(
+        self,
+        csv_with_whitespace,
+    ):
+        pipeline_module._register_deprecated_step_alias(
+            "trim_whitespace",
+            "strip_whitespace",
+        )
+        frame = ar.read_csv(csv_with_whitespace)
+
+        with pytest.warns(
+            DeprecationWarning,
+            match="trim_whitespace.*strip_whitespace",
+        ):
+            result = ar.pipeline(
+                frame,
+                [
+                    ("trim_whitespace",),
+                ],
+            )
+
+        df = ar.to_pandas(result)
+
+        assert df["name"].iloc[0] == "Alice"
+
     def test_pipeline_supports_namespaced_custom_steps_with_builtin_basename(self):
         def custom_drop_nulls(df):
             df["marker"] = "custom"
@@ -236,6 +264,20 @@ class TestPipeline:
 
         assert list(df["marker"]) == ["custom", "custom"]
         assert df["value"].isna().sum() == 1
+
+    def test_register_deprecated_step_alias_rejects_unknown_target(self):
+        with pytest.raises(ar.UnknownStepError, match="missing_step"):
+            pipeline_module._register_deprecated_step_alias(
+                "legacy_step",
+                "missing_step",
+            )
+
+    def test_register_deprecated_step_alias_rejects_registered_name_conflict(self):
+        with pytest.raises(ValueError, match="already registered"):
+            pipeline_module._register_deprecated_step_alias(
+                "drop_nulls",
+                "strip_whitespace",
+            )
 
     def test_pipeline_mapping_shorthand(self, sample_csv):
         frame = ar.read_csv(sample_csv)

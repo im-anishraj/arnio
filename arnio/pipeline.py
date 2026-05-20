@@ -6,6 +6,7 @@ Chained cleaning pipeline.
 from __future__ import annotations
 
 import inspect
+import warnings
 from threading import Lock
 from time import perf_counter
 from typing import Any, Callable
@@ -42,6 +43,7 @@ _STEP_REGISTRY: dict[str, Callable] = {
 }
 
 _REGISTRY_LOCK = Lock()
+_DEPRECATED_STEP_ALIASES: dict[str, str] = {}
 _PYTHON_STEP_REGISTRY: dict[str, Callable] = {
     "standardize_missing_tokens": cleaning.standardize_missing_tokens
 }
@@ -165,15 +167,52 @@ def list_steps() -> list[str]:
     return sorted(set(_STEP_REGISTRY) | set(python_step_names))
 
 
+def _register_deprecated_step_alias(old_name: str, new_name: str) -> None:
+    """Register a deprecated step alias that warns and forwards to `new_name`."""
+    with _REGISTRY_LOCK:
+        available_steps = set(_STEP_REGISTRY) | set(_PYTHON_STEP_REGISTRY)
+
+        if new_name not in available_steps:
+            raise UnknownStepError(new_name, sorted(available_steps))
+        if old_name in available_steps:
+            raise ValueError(
+                f"Cannot deprecate '{old_name}': that step name is already registered."
+            )
+
+        existing_target = _DEPRECATED_STEP_ALIASES.get(old_name)
+        if existing_target is not None and existing_target != new_name:
+            raise ValueError(
+                f"Deprecated alias '{old_name}' already points to '{existing_target}'."
+            )
+
+        _DEPRECATED_STEP_ALIASES[old_name] = new_name
+
+
+def _resolve_step_name(name: str, deprecated_step_aliases: dict[str, str]) -> str:
+    """Resolve deprecated step aliases to their canonical names."""
+    canonical_name = deprecated_step_aliases.get(name)
+    if canonical_name is None:
+        return name
+
+    warnings.warn(
+        f"Pipeline step '{name}' is deprecated; use '{canonical_name}' instead.",
+        DeprecationWarning,
+        stacklevel=3,
+    )
+    return canonical_name
+
+
 def _validate_pipeline_steps(
     steps: list[tuple],
     python_step_registry: dict[str, Callable],
+    deprecated_step_aliases: dict[str, str],
 ) -> None:
     """Validate pipeline steps before execution begins."""
 
     available_steps = (
         set(_STEP_REGISTRY)
         | set(python_step_registry)
+        | set(deprecated_step_aliases)
         | set(_get_namespaced_builtin_steps(python_step_registry))
     )
 
@@ -253,10 +292,12 @@ def pipeline(
     with _REGISTRY_LOCK:
         python_step_registry = dict(_PYTHON_STEP_REGISTRY)
         namespaced_builtin_steps = _get_namespaced_builtin_steps(python_step_registry)
+        deprecated_step_aliases = dict(_DEPRECATED_STEP_ALIASES)
 
     _validate_pipeline_steps(
         steps,
         python_step_registry,
+        deprecated_step_aliases,
     )
 
     result = frame
@@ -279,6 +320,7 @@ def pipeline(
                 f"Invalid step format: {step}. Expected (name,) or (name, kwargs)"
             )
 
+        name = _resolve_step_name(name, deprecated_step_aliases)
         name = namespaced_builtin_steps.get(name, name)
 
         if name in _STEP_REGISTRY:

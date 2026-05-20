@@ -1448,6 +1448,10 @@ ar.register_step("remove_special_chars", remove_special_chars)
 # 3. Write tests, open a PR. That's it.
 ```
 
+If Arnio renames a built-in or registered pipeline step in a future release,
+the old step name can stay temporarily available and will emit a
+`DeprecationWarning` while routing execution to the new canonical step.
+
 ### If you do know C++
 
 The biggest performance wins are in:
