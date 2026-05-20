@@ -95,15 +95,15 @@ class ArFrame:
             extra = f"<p>... and {len(self.columns) - 5} more columns</p>"
 
         return f"""
-      <div style="padding:10px;border:1px solid #ccc;border-radius:6px;">
-         <h3>ArFrame Preview</h3>
-         <p><b>Shape:</b> {rows} rows × {cols} columns</p>
-         <ul>
-            {columns_html}
-         </ul>
-         {extra}
-     </div>
-     """
+        <div style="padding:10px;border:1px solid #ccc;border-radius:6px;">
+            <h3>ArFrame Preview</h3>
+            <p><b>Shape:</b> {rows} rows × {cols} columns</p>
+           <ul>
+              {columns_html}
+           </ul>
+           {extra}
+        </div>
+        """
 
     def __str__(self) -> str:
         """Return a detailed string summary of the ArFrame."""

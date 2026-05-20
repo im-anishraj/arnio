@@ -1,4 +1,6 @@
 from arnio.frame import ArFrame
+from arnio.convert import from_pandas
+import pandas as pd
 import html
 
 
@@ -30,25 +32,28 @@ def test_repr_html():
     assert "age" in output
 
 
-class EscapeFrame:
-    def shape(self):
-        return (1, 1)
+def test_repr_html_from_pandas():
+    df = pd.DataFrame(
+        {
+            "name": ["Alice", "Bob"],
+            "age": [20, 25],
+        }
+    )
 
-    def column_names(self):
-        return ["<script>"]
+    frame = from_pandas(df)
 
-    def dtypes(self):
-        return {"<script>": "str"}
+    output = frame._repr_html_()
 
-    def memory_usage(self):
-        return 10
-
-    def num_rows(self):
-        return 1
+    assert "ArFrame Preview" in output
+    assert "2 rows × 2 columns" in output
+    assert "name" in output
+    assert "age" in output
 
 
 def test_repr_html_escapes_html():
-    frame = ArFrame(EscapeFrame())
+    df = pd.DataFrame({"<script>": ["value"]})
+
+    frame = from_pandas(df)
 
     output = frame._repr_html_()
 
