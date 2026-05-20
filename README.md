@@ -210,6 +210,25 @@ export policy should stay explicit in the application that writes the file.
 
 <br>
 
+## Error Handling
+
+### `read_csv` and `scan_csv`
+
+| Input | Raises | Message |
+|:---|:---|:---|
+| File not found | `CsvReadError` | `Cannot open file: <path>` |
+| Zero-byte file | `CsvReadError` | `CSV file is empty: '<path>'` |
+| Blank header line | `CsvReadError` | `CSV header contains an empty column name` |
+| Binary / NUL bytes | `CsvReadError` | `CSV input contains NUL bytes and appears to be binary or corrupted` |
+
+### Schema Validation
+
+`ar.validate()` returns a `ValidationResult`; it does not raise for validation failures. Check `result.passed` and `result.issues` for `dtype` or `required_column` rule violations.
+
+### Pipeline Step Errors
+
+Unknown step names raise `UnknownStepError` before execution begins.
+
 <details>
 <summary><b>📸 Peek at a 100 GB file without loading it</b></summary>
 <br>
