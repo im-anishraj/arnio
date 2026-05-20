@@ -33,7 +33,7 @@ def main() -> None:
         print(df)
 
         # Perform cleaning/filtering on the chunk
-        cleaned = ar.strip_whitespace(chunk, columns=["name", "department"])
+        cleaned = ar.strip_whitespace(chunk, subset=["name", "department"])
         cleaned_df = ar.to_pandas(cleaned)
         print(f"Cleaned Chunk {idx + 1}:")
         print(cleaned_df)
