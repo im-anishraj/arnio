@@ -438,9 +438,16 @@ Frame CsvReader::read(const std::string& path) const {
                     break;
                 }
             }
-
+            
             if (trailing_empty_only) {
                 fields.resize(expected_cols.value());
+            } else {  // changes made here to throw error only if extra fields are not empty
+                throw std::runtime_error(
+                    "CSV row " + std::to_string(record_number) +
+                    " has " + std::to_string(fields.size()) +
+                    " fields but header defines " +
+                    std::to_string(expected_cols.value()) + " columns."
+                );
             }
         }
 
@@ -589,6 +596,13 @@ std::vector<std::pair<std::string, std::string>> CsvReader::scan_schema(
 
             if (trailing_empty_only) {
                 fields.resize(num_cols);
+            } else {  // throw error if extra fields are non-empty
+                throw std::runtime_error(
+                    "CSV row " + std::to_string(sample_count + 2) +
+                    " has " + std::to_string(fields.size()) +
+                    " fields but header defines " +
+                    std::to_string(num_cols) + " columns."
+                );
             }
         }
         validate_row_width(sample_count + 2, num_cols, fields.size());
@@ -661,6 +675,13 @@ bool CsvChunkReader::read_one_data_row(std::vector<std::string>& fields_out) {
 
             if (trailing_empty_only) {
                 fields_out.resize(expected_cols_.value());
+            } else {  // throw error if extra fields are non-empty
+                throw std::runtime_error(
+                    "CSV row " + std::to_string(record_number_) +
+                    " has " + std::to_string(fields_out.size()) +
+                    " fields but header defines " +
+                    std::to_string(expected_cols_.value()) + " columns."
+                );
             }
         }
 
