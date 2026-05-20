@@ -1,5 +1,6 @@
 """Tests for data cleaning functions."""
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -770,8 +771,7 @@ class TestNormalizeUnicode:
         result_df = ar.to_pandas(result)
         assert result_df["score"].iloc[0] == 42
         assert (
-            result_df["flag"].iloc[0] is True
-            or result_df["flag"].iloc[0] == True  # noqa: E712
+            result_df["flag"].iloc[0] is True or result_df["flag"].iloc[0] == True  # noqa: E712
         )
 
     def test_normalize_unicode_subset_only_targets_specified_columns(self):
@@ -1380,36 +1380,21 @@ class TestReplaceValues:
         assert df.loc[2, "flag"] == "ok"
 
     def test_replace_values_tuple_mapping_key_does_not_crash(self):
-        frame = ar.from_pandas(
-            pd.DataFrame(
-                {
-                    "col": ["A", "B", "C"]
-                }
-            )
-        )
+        frame = ar.from_pandas(pd.DataFrame({"col": ["A", "B", "C"]}))
 
         result = ar.replace_values(
             frame,
-            {
-                ("A", "B"): "X"
-            },
+            {("A", "B"): "X"},
             column="col",
         )
 
         df = ar.to_pandas(result)
 
         assert list(df["col"]) == ["A", "B", "C"]
-    
-    import numpy as np
+
     def test_replace_values_mixed_tuple_and_null_keys(self):
 
-        frame = ar.from_pandas(
-            pd.DataFrame(
-                {
-                    "col": ["A", np.nan, "C"]
-                }
-            )
-        )
+        frame = ar.from_pandas(pd.DataFrame({"col": ["A", np.nan, "C"]}))
 
         result = ar.replace_values(
             frame,

@@ -10,6 +10,9 @@ import unicodedata
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+import pandas as pd
+from pandas.api.types import is_scalar
+
 from ._core import (
     _cast_types,
     _clip_numeric,
@@ -1244,8 +1247,6 @@ def drop_columns_matching(frame, pattern):
 
     return from_pandas(result) if is_arframe else result
 
-from pandas.api.types import is_scalar
-import pandas as pd
 
 def _is_null_mapping_key(value):
     """
@@ -1262,6 +1263,7 @@ def _is_null_mapping_key(value):
         return False
 
     return bool(pd.isna(value))
+
 
 def replace_values(frame, mapping, column=None):
     """Replace values based on a mapping dict.
