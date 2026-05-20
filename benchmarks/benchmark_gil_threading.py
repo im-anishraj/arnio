@@ -5,11 +5,11 @@ Demonstrates that GIL is released during long C++ operations.
 Run: python benchmarks/benchmark_gil_threading.py
 """
 
+import os
 import threading
 import time
 from pathlib import Path
 
-import os
 import arnio as ar
 
 CSV_FILE = "benchmarks/benchmark_1m.csv"

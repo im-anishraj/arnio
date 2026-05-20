@@ -1,6 +1,7 @@
 """Generate deterministic benchmark CSV files before benchmarking."""
 
 import os
+
 import numpy as np
 import pandas as pd
 
