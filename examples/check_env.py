@@ -30,6 +30,20 @@ DEPENDENCIES = {
 }
 
 
+# Map example script name to its list of optional dependency keys
+EXAMPLES = {
+    "basic_usage.py": [],
+    "custom_step.py": ["pandas"],
+    "arnio_with_numpy.py": ["numpy"],
+    "arnio_with_pandas.py": ["pandas"],
+    "arnio_with_duckdb.py": ["duckdb", "pandas"],
+    "arnio_with_sklearn.py": ["sklearn", "pandas"],
+    "sklearn_pipeline.py": ["sklearn", "pandas"],
+    "auto_clean_tutorial.py": ["pandas"],
+    "arnio_with_jsonl.py": ["pandas"],
+}
+
+
 def check_dependencies():
     """Verify presence of optional dependencies."""
     results = {}
@@ -49,10 +63,12 @@ def print_dashboard(results):
     print("=" * 70)
 
     # Check Arnio C++ Core status
+    core_available = False
     try:
         import arnio._core  # noqa: F401
 
         core_status = "Available (C++ Accelerated)"
+        core_available = True
     except ImportError:
         core_status = "Not Compiled (Pure-Python Mode)"
 
@@ -69,44 +85,18 @@ def print_dashboard(results):
 
     print("-" * 70)
 
-    # Suggest runnable examples based on packages found
+    # Suggest runnable examples based on core status and packages found
     print("Runnable Examples Status:")
-    print(
-        "  - arnio_with_numpy.py      : ",
-        "[Ready]" if results["numpy"][0] else "[Missing numpy]",
-    )
-    print(
-        "  - arnio_with_pandas.py     : ",
-        "[Ready]" if results["pandas"][0] else "[Missing pandas]",
-    )
-    print(
-        "  - arnio_with_duckdb.py     : ",
-        (
-            "[Ready]"
-            if results["duckdb"][0] and results["pandas"][0]
-            else "[Missing duckdb/pandas]"
-        ),
-    )
-    print(
-        "  - arnio_with_sklearn.py    : ",
-        (
-            "[Ready]"
-            if results["sklearn"][0] and results["pandas"][0]
-            else "[Missing sklearn/pandas]"
-        ),
-    )
-    print(
-        "  - sklearn_pipeline.py      : ",
-        (
-            "[Ready]"
-            if results["sklearn"][0] and results["pandas"][0]
-            else "[Missing sklearn/pandas]"
-        ),
-    )
-    print(
-        "  - auto_clean_tutorial.py   : ",
-        "[Ready]" if results["pandas"][0] else "[Missing pandas]",
-    )
+    for name, reqs in EXAMPLES.items():
+        if not core_available:
+            status = "[Missing arnio core]"
+        else:
+            missing_reqs = [r for r in reqs if not results[r][0]]
+            if missing_reqs:
+                status = f"[Missing {'/'.join(missing_reqs)}]"
+            else:
+                status = "[Ready]"
+        print(f"  - {name:<26} : {status}")
 
     missing = []
     for lib, (status, _) in results.items():
