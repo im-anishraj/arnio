@@ -28,26 +28,43 @@ static std::vector<size_t> resolve_subset(const Frame& frame,
     return indices;
 }
 
-// Helper: build a row hash for deduplication
-static std::string row_key(const Frame& frame, size_t row, const std::vector<size_t>& cols) {
-    std::ostringstream oss;
-    for (size_t ci : cols) {
-        auto cell = frame.column(ci).at(row);
-        if (std::holds_alternative<std::monostate>(cell)) {
-            oss << "\x00";
-        } else if (std::holds_alternative<std::string>(cell)) {
-            oss << std::get<std::string>(cell);
-        } else if (std::holds_alternative<int64_t>(cell)) {
-            oss << std::get<int64_t>(cell);
-        } else if (std::holds_alternative<double>(cell)) {
-            oss << std::get<double>(cell);
-        } else if (std::holds_alternative<bool>(cell)) {
-            oss << (std::get<bool>(cell) ? "T" : "F");
+// Helper structures representing a row reference for hash-based deduplication
+struct RowRef {
+    const Frame* frame;
+    size_t row;
+    const std::vector<size_t>* cols;
+
+    bool operator==(const RowRef& other) const {
+        for (size_t ci : *cols) {
+            const auto& col1 = frame->column(ci);
+            const auto& col2 = other.frame->column(ci);
+            
+            bool null1 = col1.is_null(row);
+            bool null2 = col2.is_null(other.row);
+            if (null1 != null2) return false;
+            if (null1) continue;
+
+            if (col1.at(row) != col2.at(other.row)) return false;
         }
-        oss << "\x1F";  // unit separator
+        return true;
     }
-    return oss.str();
-}
+};
+
+struct RowRefHash {
+    size_t operator()(const RowRef& r) const {
+        size_t h = 0;
+        for (size_t ci : *r.cols) {
+            size_t cell_h = 0;
+            if (r.frame->column(ci).is_null(r.row)) {
+                cell_h = 0x9e3779b9;
+            } else {
+                cell_h = std::hash<CellValue>{}(r.frame->column(ci).at(r.row));
+            }
+            h ^= cell_h + 0x9e3779b9 + (h << 6) + (h >> 2);
+        }
+        return h;
+    }
+};
 
 static std::string cell_to_string(const CellValue& cell) {
     if (std::holds_alternative<std::string>(cell)) {
@@ -238,19 +255,20 @@ Frame drop_duplicates(const Frame& frame, const std::optional<std::vector<std::s
     auto col_indices = resolve_subset(frame, subset);
 
     if (keep == "first") {
-        std::unordered_set<std::string> seen;
+        std::unordered_set<RowRef, RowRefHash> seen;
         std::vector<size_t> keep_rows;
         for (size_t r = 0; r < frame.num_rows(); ++r) {
-            std::string key = row_key(frame, r, col_indices);
-            if (seen.insert(key).second) {
+            RowRef ref{&frame, r, &col_indices};
+            if (seen.insert(ref).second) {
                 keep_rows.push_back(r);
             }
         }
         return select_rows(frame, keep_rows);
     } else if (keep == "last") {
-        std::unordered_map<std::string, size_t> last_seen;
+        std::unordered_map<RowRef, size_t, RowRefHash> last_seen;
         for (size_t r = 0; r < frame.num_rows(); ++r) {
-            last_seen[row_key(frame, r, col_indices)] = r;
+            RowRef ref{&frame, r, &col_indices};
+            last_seen[ref] = r;
         }
         std::vector<size_t> keep_rows;
         for (auto& [_, ri] : last_seen) {
@@ -259,9 +277,10 @@ Frame drop_duplicates(const Frame& frame, const std::optional<std::vector<std::s
         std::sort(keep_rows.begin(), keep_rows.end());
         return select_rows(frame, keep_rows);
     } else if (keep == "none") {
-        std::unordered_map<std::string, std::vector<size_t>> groups;
+        std::unordered_map<RowRef, std::vector<size_t>, RowRefHash> groups;
         for (size_t r = 0; r < frame.num_rows(); ++r) {
-            groups[row_key(frame, r, col_indices)].push_back(r);
+            RowRef ref{&frame, r, &col_indices};
+            groups[ref].push_back(r);
         }
         std::vector<size_t> keep_rows;
         for (auto& [_, rows] : groups) {
