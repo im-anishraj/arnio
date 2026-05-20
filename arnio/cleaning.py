@@ -1008,7 +1008,6 @@ def combine_columns(
         raise ValueError("subset must contain at least one column")
 
     if output_column in df.columns:
-
         raise ValueError(f"Output column '{output_column}' already exists.")
 
     combined = (

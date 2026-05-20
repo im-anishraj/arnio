@@ -104,11 +104,13 @@ bool read_record(std::istream& file, std::string& record) {
 void validate_header(const std::vector<std::string>& header) {
     std::unordered_set<std::string> seen;
     for (const auto& name : header) {
-        if (name.empty()) {
+        std::string trimmed = name;
+        trim_in_place(trimmed);
+        if (trimmed.empty()) {
             throw std::runtime_error("CSV header contains an empty column name");
         }
-        if (!seen.insert(name).second) {
-            throw std::runtime_error("Duplicate column name: " + name);
+        if (!seen.insert(trimmed).second) {
+            throw std::runtime_error("Duplicate column name after trimming whitespace: " + trimmed);
         }
     }
 }

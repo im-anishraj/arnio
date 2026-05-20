@@ -60,7 +60,6 @@ def register_step(name: str, fn: Callable):
     >>> ar.register_step("custom_clean", custom_clean)
     """
     with _REGISTRY_LOCK:
-
         _PYTHON_STEP_REGISTRY[name] = fn
 
 
