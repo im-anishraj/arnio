@@ -1495,6 +1495,7 @@ class TestInferTypeLocaleAndNumericEdgeCases:
 
 # --- Tests added for CsvReader streaming memory optimization ---
 
+
 def test_streaming_nrows(tmp_path):
     csv_path = tmp_path / "nrows.csv"
     csv_path.write_text("a,b\n1,2\n3,4\n5,6\n")
@@ -1502,6 +1503,7 @@ def test_streaming_nrows(tmp_path):
     assert frame.shape == (2, 2)
     df = ar.to_pandas(frame)
     assert list(df["a"]) == [1, 3]
+
 
 def test_streaming_headerless(tmp_path):
     csv_path = tmp_path / "headerless.csv"
@@ -1512,6 +1514,7 @@ def test_streaming_headerless(tmp_path):
     df = ar.to_pandas(frame)
     assert list(df["col_0"]) == [1, 3]
 
+
 def test_streaming_trailing_empty_fields(tmp_path):
     csv_path = tmp_path / "trailing.csv"
     csv_path.write_text("a,b\n1,\n2,3\n")
@@ -1521,6 +1524,7 @@ def test_streaming_trailing_empty_fields(tmp_path):
     assert pd.isna(df["b"].iloc[0])
     assert df["b"].iloc[1] == 3
 
+
 def test_streaming_late_type_promotion(tmp_path):
     csv_path = tmp_path / "late_promo.csv"
     csv_path.write_text("a\n1\n2\n3\n4.5\nhello\n")
@@ -1528,6 +1532,7 @@ def test_streaming_late_type_promotion(tmp_path):
     assert frame.dtypes["a"] == "string"
     df = ar.to_pandas(frame)
     assert list(df["a"]) == ["1", "2", "3", "4.5", "hello"]
+
 
 def test_streaming_late_type_promotion_float(tmp_path):
     csv_path = tmp_path / "late_promo_float.csv"
