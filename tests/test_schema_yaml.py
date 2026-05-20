@@ -287,3 +287,4 @@ class TestDateTimeYamlRoundTrip:
         restored = Schema.from_yaml(original.to_yaml())
         assert restored.fields["ts"]._datetime_min is None
         assert restored.fields["ts"]._datetime_max is None
+        
