@@ -161,3 +161,114 @@ class TestWriteCsvLineTerminatorBytes:
         df = ar.to_pandas(frame2)
         assert df["note"].iloc[0] == "line1\nline2"
         assert df["note"].iloc[1] == "plain"
+
+
+class TestWriteCsvSafeForSpreadsheet:
+    """Tests for the safe_for_spreadsheet CSV export mode (issue #681)."""
+
+    def test_prefixes_formula_cells(self, tmp_path):
+        """Dangerous formula triggers are prefixed with a single-quote."""
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "data": [
+                        "=SUM(A1:A10)",
+                        "+cmd|'/C calc'!A0",
+                        "-1+1",
+                        "@SUM(A1)",
+                    ]
+                }
+            )
+        )
+        out = tmp_path / "safe.csv"
+        ar.write_csv(frame, out, safe_for_spreadsheet=True)
+        frame2 = ar.read_csv(out)
+        df = ar.to_pandas(frame2)
+        assert df["data"].iloc[0] == "'=SUM(A1:A10)"
+        assert df["data"].iloc[1] == "'+cmd|'/C calc'!A0"
+        assert df["data"].iloc[2] == "'-1+1"
+        assert df["data"].iloc[3] == "'@SUM(A1)"
+
+    def test_leaves_non_dangerous_strings(self, tmp_path):
+        """Normal strings without dangerous prefixes are unchanged."""
+        frame = ar.from_pandas(pd.DataFrame({"name": ["Alice", "Bob", "hello world"]}))
+        out = tmp_path / "safe.csv"
+        ar.write_csv(frame, out, safe_for_spreadsheet=True)
+        frame2 = ar.read_csv(out)
+        df = ar.to_pandas(frame2)
+        assert list(df["name"]) == ["Alice", "Bob", "hello world"]
+
+    def test_skips_numeric_and_bool_columns(self, tmp_path):
+        """Non-string columns (int, float, bool) are not modified."""
+        frame = ar.from_pandas(
+            pd.DataFrame({"val": [-1, 0, 1], "flag": [True, False, True]})
+        )
+        out = tmp_path / "safe.csv"
+        ar.write_csv(frame, out, safe_for_spreadsheet=True)
+        frame2 = ar.read_csv(out)
+        df = ar.to_pandas(frame2)
+        assert list(df["val"]) == [-1, 0, 1]
+        assert list(df["flag"]) == [True, False, True]
+
+    def test_handles_nulls(self, tmp_path):
+        """Null values are not corrupted; dangerous cells are still prefixed."""
+        frame = ar.from_pandas(pd.DataFrame({"data": ["=cmd", None, "safe"]}))
+        out = tmp_path / "safe.csv"
+        ar.write_csv(frame, out, safe_for_spreadsheet=True)
+        raw = out.read_text()
+        # The dangerous cell must be prefixed in the raw output
+        assert "'=cmd" in raw
+        # The safe cell must appear unchanged
+        assert "safe" in raw
+
+    def test_round_trip_content(self, tmp_path):
+        """Written content is readable and matches expectations."""
+        frame = ar.from_pandas(pd.DataFrame({"a": ["=1", "normal"], "b": [10, 20]}))
+        out = tmp_path / "rt.csv"
+        ar.write_csv(frame, out, safe_for_spreadsheet=True)
+        raw = out.read_text()
+        # The prefixed cell should appear as '=1 in the raw CSV
+        assert "'=1" in raw
+        assert "normal" in raw
+
+    def test_default_is_false(self, tmp_path):
+        """Default write_csv does NOT prefix dangerous strings."""
+        frame = ar.from_pandas(pd.DataFrame({"data": ["=SUM(A1)"]}))
+        out = tmp_path / "default.csv"
+        ar.write_csv(frame, out)
+        frame2 = ar.read_csv(out)
+        df = ar.to_pandas(frame2)
+        assert df["data"].iloc[0] == "=SUM(A1)"
+
+    def test_tab_and_cr_prefixed(self, tmp_path):
+        """Tab and carriage-return leading characters are prefixed."""
+        frame = ar.from_pandas(pd.DataFrame({"data": ["\tcmd", "\rmalicious"]}))
+        out = tmp_path / "special.csv"
+        ar.write_csv(frame, out, safe_for_spreadsheet=True)
+        frame2 = ar.read_csv(out)
+        df = ar.to_pandas(frame2)
+        assert df["data"].iloc[0].startswith("'")
+        assert df["data"].iloc[1].startswith("'")
+
+    def test_strict_bool_rejects_none(self, tmp_path):
+        """safe_for_spreadsheet=None raises TypeError."""
+        frame = ar.from_pandas(pd.DataFrame({"a": ["hello"]}))
+        out = tmp_path / "out.csv"
+        with pytest.raises(TypeError):
+            ar.write_csv(frame, out, safe_for_spreadsheet=None)
+
+    def test_strict_bool_rejects_int(self, tmp_path):
+        """safe_for_spreadsheet=1 or 0 raises TypeError."""
+        frame = ar.from_pandas(pd.DataFrame({"a": ["hello"]}))
+        out = tmp_path / "out.csv"
+        with pytest.raises(TypeError):
+            ar.write_csv(frame, out, safe_for_spreadsheet=1)
+        with pytest.raises(TypeError):
+            ar.write_csv(frame, out, safe_for_spreadsheet=0)
+
+    def test_strict_bool_rejects_string(self, tmp_path):
+        """safe_for_spreadsheet='true' raises TypeError."""
+        frame = ar.from_pandas(pd.DataFrame({"a": ["hello"]}))
+        out = tmp_path / "out.csv"
+        with pytest.raises(TypeError):
+            ar.write_csv(frame, out, safe_for_spreadsheet="true")
