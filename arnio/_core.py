@@ -3,45 +3,6 @@ arnio._core
 Internal module that imports the C++ extension.
 """
 
-import os
-import sys
-
-# On Windows, Python 3.8+ does not load DLLs from PATH automatically.
-# We scan PATH for directories containing g++.exe or runtime DLLs and add them.
-if sys.platform == "win32":
-    import glob
-
-    for path in os.environ.get("PATH", "").split(os.pathsep):
-        if path and os.path.isdir(path):
-            if (
-                os.path.exists(os.path.join(path, "g++.exe"))
-                or os.path.exists(os.path.join(path, "libstdc++-6.dll"))
-                or os.path.exists(os.path.join(path, "libgcc_s_seh-1.dll"))
-            ):
-                try:
-                    os.add_dll_directory(path)
-                except (OSError, AttributeError):
-                    pass
-
-    # Also support the winlibs package installed via winget dynamically
-    local_app_data = os.environ.get("LOCALAPPDATA")
-    if local_app_data:
-        winget_pattern = os.path.join(
-            local_app_data,
-            "Microsoft",
-            "WinGet",
-            "Packages",
-            "BrechtSanders.WinLibs.*",
-            "mingw64",
-            "bin",
-        )
-        for path in glob.glob(winget_pattern):
-            if os.path.isdir(path):
-                try:
-                    os.add_dll_directory(path)
-                except (OSError, AttributeError):
-                    pass
-
 try:
     from ._arnio_cpp import (  # type: ignore[import-not-found]  # noqa: I001
         Column as _Column,  # noqa: F401
