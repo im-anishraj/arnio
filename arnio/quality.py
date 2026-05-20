@@ -10,6 +10,7 @@ import math
 from dataclasses import dataclass, field
 from typing import Any
 
+import numpy as np
 import pandas as pd
 
 from .cleaning import cast_types, drop_duplicates, strip_whitespace
@@ -109,6 +110,7 @@ class ColumnProfile:
     top_values_is_approximate: bool = False
     top_values_sample_count: int | None = None
     top_values_sample_ratio: float | None = None
+    histogram: list[tuple[float, float, int, float]] | None = None
 
     def to_dict(self, *, redact_sample_values: bool = False) -> dict[str, Any]:
         """Return a JSON-friendly dictionary."""
@@ -158,6 +160,19 @@ class ColumnProfile:
             "top_values_is_approximate": self.top_values_is_approximate,
             "top_values_sample_count": self.top_values_sample_count,
             "top_values_sample_ratio": self.top_values_sample_ratio,
+            "histogram": (
+                [
+                    {
+                        "bucket_start": _clean_scalar(start),
+                        "bucket_end": _clean_scalar(end),
+                        "count": count,
+                        "ratio": ratio,
+                    }
+                    for start, end, count, ratio in self.histogram
+                ]
+                if self.histogram is not None
+                else None
+            ),
         }
 
 
@@ -416,7 +431,7 @@ class DataQualityReport:
             lines.append(
                 "<thead><tr>"
                 "<th>Name</th><th>Dtype</th><th>Semantic</th><th>Nulls</th><th>Unique</th>"
-                "<th>Top values</th><th>Warnings</th><th>Suggestion</th>"
+                "<th>Top Values / Dist</th><th>Warnings</th><th>Suggestion</th>"
                 "</tr></thead>"
             )
             lines.append("<tbody>")
@@ -434,6 +449,30 @@ class DataQualityReport:
                             f"<span class=\"chip\">{e(v)} · {e(f'{r:.0%}')}</span>"
                         )
                     top_html = "".join(top_bits)
+                elif col.histogram:
+                    max_ratio = max((r for _, _, _, r in col.histogram), default=1.0)
+                    if max_ratio == 0:
+                        max_ratio = 1.0
+                    bars = []
+                    last_idx = len(col.histogram) - 1
+                    for idx, (start, end, count, r) in enumerate(col.histogram):
+                        height_pct = (r / max_ratio) * 100
+                        bucket_label = (
+                            f"[{start:.4g}, {end:.4g}]"
+                            if idx == last_idx
+                            else f"[{start:.4g}, {end:.4g})"
+                        )
+                        bars.append(
+                            f'<div style="flex:1;height:{height_pct}%;background:#3b82f6;min-height:1px;border-radius:1px;" '
+                            f'title="{bucket_label}: {count} ({r:.1%})"></div>'
+                        )
+                    top_html = (
+                        f'<div style="display:inline-flex;align-items:flex-end;gap:1.5px;'
+                        f'height:20px;width:100px;background:#f3f4f6;border-radius:3px;padding:2px;" '
+                        f'title="Numeric Distribution Histogram">'
+                        f'{"".join(bars)}'
+                        f"</div>"
+                    )
                 else:
                     top_html = '<span class="muted">-</span>'
 
@@ -547,6 +586,7 @@ class DataQualityReport:
                     "top_values_is_approximate": column.top_values_is_approximate,
                     "top_values_sample_count": column.top_values_sample_count,
                     "top_values_sample_ratio": column.top_values_sample_ratio,
+                    "histogram": column.histogram,
                 }
                 for column in self.columns.values()
             ]
@@ -1649,7 +1689,7 @@ def _profile_column(
         else:
             top_values = _top_values(non_null)
 
-    min_value = max_value = mean = None
+    min_value = max_value = mean = histogram = None
     if len(non_null) and _is_numeric_dtype(dtype):
         numeric = pd.to_numeric(series, errors="coerce")
         numeric_non_null = numeric.dropna()
@@ -1663,6 +1703,23 @@ def _profile_column(
             q50 = round(float(quantiles.loc[0.50]), 4)
             q75 = round(float(quantiles.loc[0.75]), 4)
             q95 = round(float(quantiles.loc[0.95]), 4)
+
+            # Calculate histogram
+            finite_values = numeric_non_null[np.isfinite(numeric_non_null)]
+            if len(finite_values):
+                counts, bin_edges = np.histogram(finite_values.to_numpy(), bins=10)
+                total = int(counts.sum())
+                histogram = [
+                    (
+                        float(bin_edges[i]),
+                        float(bin_edges[i + 1]),
+                        int(counts[i]),
+                        _ratio(int(counts[i]), total),
+                    )
+                    for i in range(len(counts))
+                ]
+            else:
+                histogram = None
     elif len(non_null) and (
         dtype == "string" or pd.api.types.is_string_dtype(series.dtype)
     ):
@@ -1722,6 +1779,7 @@ def _profile_column(
         top_values_is_approximate=top_values_is_approximate,
         top_values_sample_count=top_values_sample_count,
         top_values_sample_ratio=top_values_sample_ratio,
+        histogram=histogram,
     )
 
 

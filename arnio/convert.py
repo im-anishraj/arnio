@@ -94,6 +94,12 @@ def _normalize_scalar(value: object) -> object:
         return None
     if isinstance(value, np.generic):
         value = value.item()
+    if isinstance(value, int) and not isinstance(value, bool):
+        if value < -9223372036854775808 or value > 9223372036854775807:
+            raise ValueError(
+                f"Integer value {value} is out of bounds for signed 64-bit integer. "
+                "arnio only supports signed 64-bit integers (-9223372036854775808 to 9223372036854775807)."
+            )
     if isinstance(value, float):
         return _to_binding_safe(value)
     if not isinstance(value, (bool, int, str)):
@@ -121,6 +127,29 @@ def _series_to_python_values(series: pd.Series, col_name: object) -> list[object
                 f"Column '{col_name}' contains unsupported nested value "
                 f"of type '{type(raw).__name__}' at value {raw!r}. "
                 "Convert nested objects to strings or flatten them first."
+            )
+
+        if isinstance(raw, pd.Timestamp):
+            raise TypeError(
+                f"Column '{col_name}' contains unsupported scalar value "
+                f"of type 'Timestamp' at value {raw!r}. "
+                f'Fix: df["{col_name}"] = df["{col_name}"].astype(str)'
+            )
+
+        if isinstance(raw, pd.Timedelta):
+            raise TypeError(
+                f"Column '{col_name}' contains unsupported scalar value "
+                f"of type 'Timedelta' at value {raw!r}. "
+                f'Fix: convert df["{col_name}"] to strings or a supported '
+                "numeric duration before from_pandas()"
+            )
+
+        if isinstance(raw, (complex, np.complexfloating)):
+            raise TypeError(
+                f"Column '{col_name}' contains unsupported scalar value "
+                f"of type '{type(raw).__name__}' at value {raw!r}. "
+                f'Fix: split df["{col_name}"] into real/imag columns or '
+                "convert it to strings before from_pandas()"
             )
 
         value = _normalize_scalar(raw)

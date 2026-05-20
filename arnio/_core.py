@@ -7,6 +7,7 @@ try:
     from ._arnio_cpp import (  # type: ignore[import-not-found]  # noqa: I001
         Column as _Column,  # noqa: F401
         CsvConfig as _CsvConfig,  # noqa: F401
+        CsvChunkReader as _CsvChunkReader,  # noqa: F401
         CsvReader as _CsvReader,  # noqa: F401
         CsvWriteConfig as _CsvWriteConfig,  # noqa: F401
         CsvWriter as _CsvWriter,  # noqa: F401
@@ -14,6 +15,7 @@ try:
         Frame as _Frame,  # noqa: F401
         cast_types as _cast_types,  # noqa: F401
         clip_numeric as _clip_numeric,  # noqa: F401
+        safe_divide_columns as _safe_divide_columns,  # noqa: F401
         drop_duplicates as _drop_duplicates,  # noqa: F401
         drop_nulls as _drop_nulls,  # noqa: F401
         fill_nulls as _fill_nulls,  # noqa: F401

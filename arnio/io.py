@@ -5,7 +5,7 @@ CSV reading and writing functions.
 
 from __future__ import annotations
 
-import csv
+import io
 import os
 import shutil
 import tempfile
@@ -13,7 +13,13 @@ from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from typing import cast
 
-from ._core import _CsvConfig, _CsvReader, _CsvWriteConfig, _CsvWriter
+from ._core import (  # type: ignore
+    _CsvChunkReader,
+    _CsvConfig,
+    _CsvReader,
+    _CsvWriteConfig,
+    _CsvWriter,
+)
 from .exceptions import CsvReadError, JsonlReadError
 from .frame import ArFrame
 
@@ -47,16 +53,82 @@ def _utf8_csv_path(
                 "w", encoding="utf-8", newline="", suffix=".csv", delete=False
             ) as tmp:
                 if sample_rows is not None:
-                    # Use csv.reader so we advance through complete CSV records
-                    # rather than raw physical lines. This prevents a quoted
-                    # multiline field from being split at the sampling boundary,
-                    # which would produce an invalid partial CSV for scan_schema.
-                    reader = csv.reader(src, delimiter=delimiter)
-                    writer = csv.writer(tmp, delimiter=delimiter)
-                    for row_count, row in enumerate(reader):
-                        if row_count >= sample_rows:
+                    # Preserve the original decoded CSV text while sampling
+                    # complete logical records so scan_schema does not see a
+                    # rewritten file with normalized quoting or line endings.
+                    row_count = 0
+                    in_quotes = False
+                    pending_quote = False
+                    pending_cr = False
+                    last_char_was_terminator = False
+                    sample_complete = False
+
+                    while chunk := src.read(8192):
+                        chunk_len = len(chunk)
+                        index = 0
+                        while index < chunk_len:
+                            char = chunk[index]
+
+                            if sample_complete:
+                                if pending_cr and char == "\n":
+                                    tmp.write(char)
+                                pending_cr = False
+                                break
+
+                            tmp.write(char)
+
+                            if pending_cr:
+                                pending_cr = False
+                                if char == "\n":
+                                    last_char_was_terminator = True
+                                    index += 1
+                                    continue
+
+                            if char == '"':
+                                if pending_quote:
+                                    pending_quote = False
+                                elif in_quotes:
+                                    pending_quote = True
+                                else:
+                                    in_quotes = True
+                                last_char_was_terminator = False
+                            else:
+                                if pending_quote:
+                                    in_quotes = False
+                                    pending_quote = False
+
+                                if not in_quotes and char in {"\n", "\r"}:
+                                    row_count += 1
+                                    last_char_was_terminator = True
+                                    if char == "\r":
+                                        if (
+                                            index + 1 < chunk_len
+                                            and chunk[index + 1] == "\n"
+                                        ):
+                                            tmp.write("\n")
+                                            index += 1
+                                        else:
+                                            pending_cr = True
+                                    if row_count >= sample_rows:
+                                        sample_complete = True
+                                        break
+                                else:
+                                    last_char_was_terminator = False
+
+                            index += 1
+
+                        if sample_complete and not pending_cr:
                             break
-                        writer.writerow(row)
+
+                    if (
+                        sample_rows > 0
+                        and not last_char_was_terminator
+                        and tmp.tell() > 0
+                    ):
+                        # Count a final record that reaches EOF without a line
+                        # terminator so sampling semantics match the previous
+                        # logical-record-based behavior.
+                        row_count += 1
                 else:
                     shutil.copyfileobj(src, tmp)
                 tmp_name = tmp.name
@@ -136,6 +208,28 @@ def _validate_nrows(nrows: int) -> int:
     return nrows
 
 
+def _validate_skip_rows(skip_rows: int) -> int:
+    """Validate skip_rows parameter."""
+    if isinstance(skip_rows, bool) or not isinstance(skip_rows, int):
+        raise TypeError("skip_rows must be an integer")
+
+    if skip_rows < 0:
+        raise ValueError("skip_rows must be non-negative")
+
+    return skip_rows
+
+
+def _validate_chunksize(chunksize: int) -> int:
+    """Validate chunksize parameter."""
+    if isinstance(chunksize, bool) or not isinstance(chunksize, int):
+        raise TypeError("chunksize must be an integer")
+
+    if chunksize <= 0:
+        raise ValueError("chunksize must be a positive integer")
+
+    return chunksize
+
+
 def _validate_null_values(null_values: list[str]) -> list[str]:
     """Validate null_values parameter."""
     if isinstance(null_values, str):
@@ -155,11 +249,54 @@ def _validate_parser_mode(mode: str) -> str:
     """Validate CSV parser mode."""
     if not isinstance(mode, str):
         raise TypeError("mode must be a string")
-
     if mode not in {"strict", "permissive"}:
         raise ValueError("mode must be either 'strict' or 'permissive'")
-
     return mode
+
+
+def _materialize_csv_input(
+    source: str | os.PathLike[str] | io.TextIOBase,
+) -> tuple[str, bool]:
+    """Convert supported CSV inputs into a filesystem path."""
+    if isinstance(source, (str, os.PathLike)):
+        return os.fspath(source), False
+    if isinstance(source, io.StringIO) or (
+        hasattr(source, "read") and callable(source.read)
+    ):
+        content = source.read()
+
+        if not isinstance(content, str):
+            raise TypeError("read_csv file-like objects must return text, not bytes")
+
+        tmp = tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            suffix=".csv",
+            delete=False,
+        )
+
+        try:
+            tmp.write(content)
+            tmp.close()
+            return tmp.name, True
+        except Exception:
+            os.unlink(tmp.name)
+            raise
+
+    raise TypeError("read_csv expected a filesystem path or text file-like object")
+
+
+def _reject_utf8_nul_bytes(path: str) -> None:
+    """Reject UTF-8 CSV inputs that contain NUL bytes anywhere in the file."""
+    try:
+        with open(path, "rb") as f:
+            while chunk := f.read(8192):
+                if b"\0" in chunk:
+                    raise CsvReadError(
+                        "CSV input contains NUL bytes and appears to be binary or corrupted"
+                    )
+    except FileNotFoundError:
+        pass  # Let C++ backend handle or raise standard error
 
 
 def read_csv(
@@ -179,8 +316,9 @@ def read_csv(
 
     Parameters
     ----------
-    path : str
-        Path to the CSV file. Supports .csv, .txt, and .tsv extensions.
+    path : str or file-like object
+        Filesystem path or text file-like object containing CSV data.
+        Supports .csv, .txt, and .tsv extensions for path inputs.
     delimiter : str, default ","
         Field delimiter character.
     has_header : bool, default True
@@ -231,7 +369,7 @@ def read_csv(
     --------
     >>> frame = ar.read_csv("data.csv", delimiter=",", has_header=True)
     """
-    path = os.fspath(path)
+    path, should_cleanup = _materialize_csv_input(path)
     path_lower = path.lower()
     if not (
         path_lower.endswith(".csv")
@@ -242,6 +380,8 @@ def read_csv(
             f"Unsupported file format: {path}. Only .csv, .txt, and .tsv are supported."
         )
 
+    if _is_utf8_encoding(encoding):
+        _reject_utf8_nul_bytes(path)
     try:
         if os.path.getsize(path) == 0:
             raise CsvReadError(f"CSV file is empty: {path!r}")
@@ -269,9 +409,13 @@ def read_csv(
         config.nrows = _validate_nrows(nrows)
 
     reader = _CsvReader(config)
+
     try:
         with _utf8_csv_path(path, encoding, delimiter=delimiter) as native_path:
             cpp_frame = reader.read(native_path)
+
+        return ArFrame(cpp_frame)
+
     except ValueError:
         raise
     except CsvReadError:
@@ -279,7 +423,129 @@ def read_csv(
     except RuntimeError as e:
         raise CsvReadError(str(e)) from e
 
-    return ArFrame(cpp_frame)
+    finally:
+        if should_cleanup and os.path.exists(path):
+            os.unlink(path)
+
+
+def read_csv_chunked(
+    path: str | os.PathLike[str],
+    *,
+    chunksize: int = 10_000,
+    delimiter: str = ",",
+    has_header: bool = True,
+    usecols: list[str] | None = None,
+    nrows: int | None = None,
+    skip_rows: int = 0,
+    encoding: str = "utf-8",
+    trim_headers: bool = True,
+    thousands_separator: str | None = None,
+    null_values: list[str] | None = None,
+    mode: str = "strict",
+) -> Iterator[ArFrame]:
+    """Read a CSV file in chunks, yielding ArFrame objects.
+
+    Column types are inferred from the first chunk and applied consistently
+    to all subsequent chunks. Memory use is bounded by the chunk size.
+
+    Parameters
+    ----------
+    path : str
+        Path to the CSV file. Supports .csv, .txt, and .tsv extensions.
+    chunksize : int, default 10_000
+        Maximum number of data rows per yielded chunk.
+    delimiter : str, default ","
+        Field delimiter character.
+    has_header : bool, default True
+        Whether the file has a header row.
+    usecols : list[str], optional
+        Columns to read. If None, reads all columns.
+    nrows : int, optional
+        Maximum total number of data rows to read across all chunks.
+    skip_rows : int, default 0
+        Number of data rows to skip after the header row.
+    encoding : str, default "utf-8"
+        File encoding.
+    trim_headers : bool, default True
+        Strip leading/trailing whitespace from column names.
+    thousands_separator : str, optional
+        Single non-alphanumeric character used as a thousands separator
+        during numeric parsing.
+    null_values : list[str], optional
+        Strings treated as null values.
+    mode : {"strict", "permissive"}, default "strict"
+        Controls malformed row handling.
+
+    Yields
+    ------
+    ArFrame
+        Successive chunks of the CSV data.
+
+    Examples
+    --------
+    >>> for chunk in ar.read_csv_chunked("huge.csv", chunksize=100_000):
+    ...     clean = ar.pipeline(chunk, [("drop_nulls",)])
+    ...     df = ar.to_pandas(clean)
+    ...     process(df)
+    """
+    path = os.fspath(path)
+    path_lower = path.lower()
+    if not (
+        path_lower.endswith(".csv")
+        or path_lower.endswith(".txt")
+        or path_lower.endswith(".tsv")
+    ):
+        raise ValueError(
+            f"Unsupported file format: {path}. Only .csv, .txt, and .tsv are supported."
+        )
+
+    try:
+        if os.path.getsize(path) == 0:
+            raise CsvReadError(f"CSV file is empty: {path!r}")
+    except FileNotFoundError:
+        pass
+
+    _validate_thousands_separator(thousands_separator)
+    delimiter = _validate_delimiter(delimiter)
+    mode = _validate_parser_mode(mode)
+    chunksize = _validate_chunksize(chunksize)
+    skip_rows = _validate_skip_rows(skip_rows)
+
+    config = _CsvConfig()
+    config.delimiter = delimiter
+    config.has_header = has_header
+    config.encoding = encoding
+    config.trim_headers = trim_headers
+    config.thousands_separator = thousands_separator
+    config.mode = mode
+    config.skip_rows = skip_rows
+
+    if null_values is not None:
+        config.null_values = _validate_null_values(null_values)
+
+    if usecols is not None:
+        config.usecols = _validate_usecols(usecols)
+
+    if nrows is not None:
+        config.nrows = _validate_nrows(nrows)
+
+    reader = _CsvChunkReader(config)
+    try:
+        with _utf8_csv_path(path, encoding, delimiter=delimiter) as native_path:
+            reader.open(native_path)
+            while True:
+                cpp_frame = reader.next_chunk(chunksize)
+                if cpp_frame is None:
+                    break
+                yield ArFrame(cpp_frame)
+    except ValueError:
+        raise
+    except CsvReadError:
+        raise
+    except RuntimeError as e:
+        raise CsvReadError(str(e)) from e
+    finally:
+        reader.close()
 
 
 def write_csv(
@@ -362,6 +628,7 @@ def scan_csv(
     thousands_separator: str | None = None,
     sample_size: int | None = None,
     null_values: list[str] | None = None,
+    has_header: bool = True,
 ) -> dict[str, str]:
     """Return schema (column names + inferred types) without loading data.
 
@@ -389,6 +656,12 @@ def scan_csv(
         1,234 is interpreted as two separate fields.
     sample_size : int, optional
         Number of rows to read for type inference. If None, defaults to 100 rows.
+    has_header : bool, default True
+        Whether the CSV file contains a header row.
+
+        When False, synthetic column names are generated
+        in the form ``col_0``, ``col_1``, etc., matching
+        the behavior of ``read_csv(..., has_header=False)``.
 
     Returns
     -------
@@ -423,6 +696,8 @@ def scan_csv(
             f"Unsupported file format: {path}. Only .csv, .txt, and .tsv are supported."
         )
 
+    if _is_utf8_encoding(encoding):
+        _reject_utf8_nul_bytes(path)
     try:
         if os.path.getsize(path) == 0:
             raise CsvReadError(f"CSV file is empty: {path!r}")
@@ -437,6 +712,7 @@ def scan_csv(
     config.encoding = encoding
     config.trim_headers = trim_headers
     config.thousands_separator = thousands_separator
+    config.has_header = has_header
 
     if null_values is not None:
         config.null_values = _validate_null_values(null_values)
@@ -452,8 +728,7 @@ def scan_csv(
     try:
         # Schema inference only needs a sample, avoiding full-file transcode.
         # sample_rows is passed so _utf8_csv_path uses record-aware sampling
-        # via csv.reader, which correctly handles quoted multiline fields that
-        # straddle the boundary.
+        # without rewriting decoded CSV text before native parsing.
         with _utf8_csv_path(
             path,
             encoding,
@@ -709,3 +984,95 @@ def sniff_delimiter(
         )
 
     return best_candidates[0]
+
+
+_VALID_COMPRESSIONS = {"snappy", "gzip", "brotli", "zstd", "none"}
+
+
+def write_parquet(
+    frame: ArFrame,
+    path: str | os.PathLike[str],
+    *,
+    compression: str = "snappy",
+    row_group_size: int | None = None,
+) -> None:
+    """Write an ArFrame to a Parquet file via pyarrow.
+
+    Requires the ``pyarrow`` package.  Install it with::
+
+        pip install arnio[parquet]
+
+    The implementation converts the frame to a pandas DataFrame via
+    :func:`to_pandas` and delegates encoding to
+    ``pandas.DataFrame.to_parquet(engine="pyarrow")``.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        The data frame to write.
+    path : str or path-like
+        Destination file path.  Must end with ``.parquet`` or ``.pq``.
+    compression : str, default ``"snappy"``
+        Parquet compression codec.  Accepted values: ``"snappy"``,
+        ``"gzip"``, ``"brotli"``, ``"zstd"``, ``"none"``.
+    row_group_size : int, optional
+        Number of rows per Parquet row group.  If ``None``, pyarrow
+        chooses the default (typically 128 MB per group).  Must be a
+        positive integer when provided.
+
+    Raises
+    ------
+    ImportError
+        If ``pyarrow`` is not installed.
+    ValueError
+        If the file extension is not ``.parquet`` or ``.pq``, if
+        ``compression`` is not a recognised codec, or if
+        ``row_group_size`` is not a positive integer.
+
+    Examples
+    --------
+    >>> ar.write_parquet(frame, "output.parquet")
+    >>> ar.write_parquet(frame, "output.pq", compression="zstd")
+    >>> ar.write_parquet(frame, "output.parquet", row_group_size=50_000)
+    """
+    from .convert import to_pandas
+
+    path = os.fspath(path)
+    path_lower = path.lower()
+    if not (path_lower.endswith(".parquet") or path_lower.endswith(".pq")):
+        raise ValueError(
+            f"Unsupported file format: {path}. "
+            "write_parquet only supports .parquet and .pq files."
+        )
+
+    if compression not in _VALID_COMPRESSIONS:
+        raise ValueError(
+            f"Unknown compression codec: {compression!r}. "
+            f"Valid options are: {sorted(_VALID_COMPRESSIONS)}"
+        )
+
+    if row_group_size is not None:
+        if isinstance(row_group_size, bool) or not isinstance(row_group_size, int):
+            raise TypeError("row_group_size must be an integer")
+        if row_group_size <= 0:
+            raise ValueError("row_group_size must be a positive integer")
+
+    try:
+        import pyarrow  # noqa: F401 — presence check only
+    except ImportError as exc:
+        raise ImportError(
+            "pyarrow is required for Parquet export. "
+            "Install it with: pip install arnio[parquet]"
+        ) from exc
+
+    df = to_pandas(frame)
+
+    kwargs: dict = {
+        "engine": "pyarrow",
+        "compression": None if compression == "none" else compression,
+        "index": False,
+    }
+    if row_group_size is not None:
+        kwargs["row_group_size"] = row_group_size
+
+    df.to_parquet(path, **kwargs)

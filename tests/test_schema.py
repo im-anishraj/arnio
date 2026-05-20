@@ -1,5 +1,6 @@
 """Tests for schema validation."""
 
+import pandas as pd
 import pytest
 
 import arnio as ar
@@ -886,6 +887,36 @@ def test_country_code_enforces_uniqueness(tmp_path):
     assert result.issue_count == 2
     assert all(issue.rule == "unique" for issue in result.issues)
     assert [issue.row_index for issue in result.issues] == [1, 3]
+    assert [issue.value for issue in result.issues] == ["IN", "IN"]
+
+
+def test_country_code_unique_ignores_multiple_nulls(tmp_path):
+    path = tmp_path / "nullable_duplicate_countries.csv"
+    path.write_text('country\nIN\n""\n""\nUS\n')
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"country": ar.CountryCode(nullable=True, unique=True)},
+    )
+
+    assert result.passed
+    assert result.issue_count == 0
+
+
+def test_country_code_rejects_unassigned_alpha_2_codes(tmp_path):
+    path = tmp_path / "unassigned_countries.csv"
+    path.write_text("country\nAA\nQM\nQZ\nXA\nZZ\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"country": ar.CountryCode(nullable=False)},
+    )
+
+    assert not result.passed
+    assert result.issue_count == 5
+    assert all(issue.rule == "country_code" for issue in result.issues)
+    assert [issue.row_index for issue in result.issues] == [1, 2, 3, 4, 5]
+    assert [issue.value for issue in result.issues] == ["AA", "QM", "QZ", "XA", "ZZ"]
 
 
 def test_country_code_nullable_behavior(tmp_path):
@@ -1996,3 +2027,110 @@ def test_datetime_timezone_aware_above_max_fails(tmp_path):
     assert not result.passed
     assert any(i.rule == "max" for i in result.issues)
     assert result.issues[0].row_index == 1
+
+
+def test_validate_unique_string_raises_type_error(tmp_path):
+    schema = ar.Schema(fields={"id": ar.String()}, unique=["id"])
+
+    object.__setattr__(schema, "unique", "id")
+
+    path = tmp_path / "unique_test.csv"
+    path.write_text("id\nA\nB\nA\n")
+    frame = ar.read_csv(path)
+
+    with pytest.raises(
+        TypeError, match="Schema 'unique' must be a list or tuple of strings"
+    ):
+        ar.validate(frame, schema)
+
+
+def test_validate_unique_invalid_member_type_raises_type_error(tmp_path):
+    schema = ar.Schema(fields={"id": ar.String()}, unique=["id"])
+
+    object.__setattr__(schema, "unique", ["id", 123])
+
+    path = tmp_path / "unique_member_test.csv"
+    path.write_text("id\nA\nB\n")
+    frame = ar.read_csv(path)
+
+    with pytest.raises(TypeError, match="Schema 'unique' members must be strings"):
+        ar.validate(frame, schema)
+
+
+def test_schema_json_roundtrip_preserves_fields_and_options():
+    ar.register_validator("positive_json", lambda v: v > 0)
+
+    schema = ar.Schema(
+        fields={
+            "id": ar.String(nullable=False, min_length=3, max_length=8, unique=True),
+            "status": ar.String(
+                allowed={"active", "inactive"}, required_if=("id", "A1")
+            ),
+            "score": ar.Custom("positive_json", nullable=False),
+            "created_at": ar.DateTime(
+                nullable=False,
+                format="%Y-%m-%dT%H:%M:%S",
+                min="2026-01-01T00:00:00",
+                max="2026-12-31T23:59:59",
+            ),
+        },
+        strict=True,
+        unique=["id", "created_at"],
+    )
+
+    restored = ar.Schema.from_json(schema.to_json())
+
+    assert restored == schema
+
+
+def test_schema_from_json_rejects_invalid_json():
+    with pytest.raises(ValueError, match="Invalid schema JSON"):
+        ar.Schema.from_json("{bad json}")
+
+
+def test_schema_to_json_rejects_rules():
+    schema = ar.Schema(
+        {"id": ar.String()},
+        rules=[lambda df: []],
+    )
+
+    with pytest.raises(ValueError, match="not JSON serializable"):
+        schema.to_json()
+
+
+def test_schema_from_json_rejects_non_object_field_definition():
+    with pytest.raises(TypeError, match="must be an object"):
+        ar.Schema.from_json('{"fields":{"id":"string"},"strict":false,"unique":null}')
+
+
+def test_empty_string_fails_when_not_nullable():
+    df = pd.DataFrame(
+        {
+            "user_id": [1, 2, 3, 4, 5],
+            "username": ["alice", "", "   ", None, float("nan")],
+        }
+    )
+    schema = ar.Schema(
+        {"user_id": ar.Int64(nullable=False), "username": ar.String(nullable=False)}
+    )
+    result = ar.validate(ar.from_pandas(df), schema)
+
+    assert result.issue_count == 4
+    for issue in result.issues:
+        assert issue.column == "username"
+        assert issue.rule == "nullable"
+
+
+def test_empty_string_passes_when_nullable():
+    df = pd.DataFrame(
+        {
+            "user_id": [1, 2, 3, 4, 5],
+            "username": ["alice", "", "   ", None, float("nan")],
+        }
+    )
+    schema = ar.Schema(
+        {"user_id": ar.Int64(nullable=False), "username": ar.String(nullable=True)}
+    )
+    result = ar.validate(ar.from_pandas(df), schema)
+
+    assert result.issue_count == 0

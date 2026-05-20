@@ -220,6 +220,8 @@ __marimo__/
 # ── Arnio-specific ──────────────────────────────────
 # Generated benchmark data (regenerate with: python benchmarks/generate_data.py)
 benchmarks/benchmark_1m.csv
+benchmarks/benchmark_wide.csv
+benchmarks/benchmark_multiline.csv
 
 # Wheel build outputs
 wheelhouse/

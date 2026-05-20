@@ -15,6 +15,7 @@ from .cleaning import (
     cast_types,
     clean,
     clip_numeric,
+    coalesce_columns,
     combine_columns,
     drop_columns,
     drop_columns_matching,
@@ -47,8 +48,22 @@ from .exceptions import (
 )
 from .frame import ArFrame
 from .integrations import ArnioPandasAccessor
-from .io import read_csv, read_jsonl, scan_csv, sniff_delimiter, write_csv
-from .pipeline import pipeline, register_step
+from .io import (
+    read_csv,
+    read_csv_chunked,
+    read_jsonl,
+    scan_csv,
+    sniff_delimiter,
+    write_csv,
+    write_parquet,
+)
+from .pipeline import (
+    get_builtin_step_signatures,
+    list_steps,
+    pipeline,
+    register_step,
+    reset_steps,
+)
 from .quality import (
     CleanExplanation,
     CleanStepRecord,
@@ -93,8 +108,10 @@ __all__ = [
     "ArFrame",
     # I/O
     "read_csv",
+    "read_csv_chunked",
     "read_jsonl",
     "write_csv",
+    "write_parquet",
     "scan_csv",
     "sniff_delimiter",
     # Cleaning
@@ -108,6 +125,7 @@ __all__ = [
     "drop_duplicates",
     "drop_constant_columns",
     "clip_numeric",
+    "coalesce_columns",
     "combine_columns",
     "drop_columns_matching",
     "strip_whitespace",
@@ -128,6 +146,9 @@ __all__ = [
     # Pipeline
     "pipeline",
     "register_step",
+    "get_builtin_step_signatures",
+    "list_steps",
+    "reset_steps",
     # Data quality
     "profile",
     "compare_profiles",

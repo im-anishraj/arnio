@@ -5,6 +5,7 @@ Production data contracts and validation.
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -363,6 +364,58 @@ class Schema:
     def validate(self, frame: ArFrame) -> ValidationResult:
         """Validate a frame against this schema."""
         return validate(frame, self)
+
+    def to_json(self) -> str:
+        """Serialize the schema to a stable JSON string."""
+        if self.rules:
+            raise ValueError(
+                "Schema rules are not JSON serializable. "
+                "Serialize only fields/strict/unique for now."
+            )
+
+        payload = {
+            "fields": {
+                name: _field_to_json_dict(field_def)
+                for name, field_def in sorted(self.fields.items())
+            },
+            "strict": self.strict,
+            "unique": list(self.unique) if self.unique is not None else None,
+        }
+        return json.dumps(payload, sort_keys=True)
+
+    @classmethod
+    def from_json(cls, value: str) -> Schema:
+        """Deserialize a schema from a JSON string produced by ``to_json()``."""
+        try:
+            payload = json.loads(value)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"Invalid schema JSON: {exc.msg}") from exc
+
+        if not isinstance(payload, dict):
+            raise TypeError(
+                "Schema JSON must decode to an object with 'fields', 'strict', and optional 'unique'."
+            )
+
+        fields_payload = payload.get("fields")
+        if not isinstance(fields_payload, dict):
+            raise TypeError(
+                "Schema JSON 'fields' must be an object mapping names to field definitions."
+            )
+
+        fields = {
+            name: _field_from_json_dict(name, field_payload)
+            for name, field_payload in fields_payload.items()
+        }
+
+        strict = payload.get("strict", False)
+        if not isinstance(strict, bool):
+            raise TypeError("Schema JSON 'strict' must be a boolean.")
+
+        unique = payload.get("unique")
+        if unique is not None and not isinstance(unique, list):
+            raise TypeError("Schema JSON 'unique' must be a list of strings or null.")
+
+        return cls(fields=fields, strict=strict, unique=unique)
 
     @classmethod
     def bootstrap_from_report(cls, report: Any) -> Schema:
@@ -774,6 +827,11 @@ def validate(frame: ArFrame, schema: Schema | dict[str, Field]) -> ValidationRes
     ValidationResult
         Validation result containing all issues and bad row indexes.
 
+    Raises
+    ------
+    TypeError
+        If schema.unique is provided but is not a list or tuple of strings.
+
     Examples
     --------
     >>> schema = ar.Schema({"email": ar.Email(nullable=False)})
@@ -811,7 +869,19 @@ def validate(frame: ArFrame, schema: Schema | dict[str, Field]) -> ValidationRes
                 )
 
     if schema.unique is not None:
-        if isinstance(schema.unique, (list, tuple)) and len(schema.unique) == 0:
+        if not isinstance(schema.unique, (list, tuple)):
+            raise TypeError(
+                "Schema 'unique' must be a list or tuple of strings (e.g., ['column_name']), "
+                f"got {type(schema.unique).__name__}."
+            )
+
+        for item in schema.unique:
+            if not isinstance(item, str):
+                raise TypeError(
+                    f"Schema 'unique' members must be strings, got {type(item).__name__} for element {item!r}."
+                )
+
+        if len(schema.unique) == 0:
             issues.append(
                 ValidationIssue(
                     column=None,
@@ -819,7 +889,7 @@ def validate(frame: ArFrame, schema: Schema | dict[str, Field]) -> ValidationRes
                     message="Composite unique columns cannot be empty",
                 )
             )
-        elif isinstance(schema.unique, (list, tuple)):
+        else:
             missing_cols = [c for c in schema.unique if c not in df.columns]
             if missing_cols:
                 for col in missing_cols:
@@ -891,7 +961,19 @@ def Int64(
     severity: str = "error",
     required_if: tuple[str, Any] | None = None,
 ) -> Field:
-    """Create an int64 schema field."""
+    """Create an int64 schema field.
+
+    Args:
+        nullable: Whether null values are allowed.
+        min: Minimum allowed value.
+        max: Maximum allowed value.
+        unique: Whether non-null values must be unique.
+        severity: Severity level for validation issues.
+        required_if: Conditional requirement as a column/value pair.
+
+    Returns:
+        Field: Configured int64 schema field.
+    """
 
     if min is not None and max is not None and min > max:
         raise ValueError("min must be less than or equal to max")
@@ -916,7 +998,19 @@ def Float64(
     severity: str = "error",
     required_if: tuple[str, Any] | None = None,
 ) -> Field:
-    """Create a float64 schema field."""
+    """Create a float64 schema field.
+
+    Args:
+        nullable: Whether null values are allowed.
+        min: Minimum allowed value.
+        max: Maximum allowed value.
+        unique: Whether non-null values must be unique.
+        severity: Severity level for validation issues.
+        required_if: Conditional requirement as a column/value pair.
+
+    Returns:
+        Field: Configured float64 schema field.
+    """
 
     if min is not None and max is not None and min > max:
         raise ValueError("min must be less than or equal to max")
@@ -943,7 +1037,21 @@ def String(
     max_length: int | None = None,
     required_if: tuple[str, Any] | None = None,
 ) -> Field:
-    """Create a string schema field."""
+    """Create a string schema field.
+
+    Args:
+        nullable: Whether null values are allowed.
+        pattern: Regular expression pattern that non-null values must match.
+        allowed: Allowed values for the field.
+        unique: Whether non-null values must be unique.
+        severity: Severity level for validation issues.
+        min_length: Minimum allowed string length.
+        max_length: Maximum allowed string length.
+        required_if: Conditional requirement as a column/value pair.
+
+    Returns:
+        Field: Configured string schema field.
+    """
 
     if min_length is not None and max_length is not None and min_length > max_length:
         raise ValueError("min_length must be less than or equal to max_length")
@@ -969,7 +1077,16 @@ def Bool(
     severity: str = "error",
     required_if: tuple[str, Any] | None = None,
 ) -> Field:
-    """Create a bool schema field."""
+    """Create a bool schema field.
+
+    Args:
+        nullable: Whether null values are allowed.
+        severity: Severity level for validation issues.
+        required_if: Conditional requirement as a column/value pair.
+
+    Returns:
+        Field: Configured bool schema field.
+    """
     return Field(
         dtype="bool",
         nullable=nullable,
@@ -986,7 +1103,18 @@ def Email(
     validation: str = "light",
     required_if: tuple[str, Any] | None = None,
 ) -> Field:
-    """Create an email-address schema field."""
+    """Create an email-address schema field.
+
+    Args:
+        nullable: Whether null values are allowed.
+        unique: Whether non-null values must be unique.
+        severity: Severity level for validation issues.
+        validation: Email validation mode, either "light" or "strict".
+        required_if: Conditional requirement as a column/value pair.
+
+    Returns:
+        Field: Configured email-address schema field.
+    """
     if validation not in {"light", "strict"}:
         raise ValueError("Email validation must be 'light' or 'strict'")
     return Field(
@@ -1006,7 +1134,17 @@ def URL(
     severity: str = "error",
     required_if: tuple[str, Any] | None = None,
 ) -> Field:
-    """Create a URL schema field."""
+    """Create a URL schema field.
+
+    Args:
+        nullable: Whether null values are allowed.
+        unique: Whether non-null values must be unique.
+        severity: Severity level for validation issues.
+        required_if: Conditional requirement as a column/value pair.
+
+    Returns:
+        Field: Configured URL schema field.
+    """
     return Field(
         dtype="string",
         nullable=nullable,
@@ -1024,7 +1162,17 @@ def PhoneNumber(
     severity: str = "error",
     required_if: tuple[str, Any] | None = None,
 ) -> Field:
-    """Create a phone-number schema field."""
+    """Create a phone-number schema field.
+
+    Args:
+        nullable: Whether null values are allowed.
+        unique: Whether non-null values must be unique.
+        severity: Severity level for validation issues.
+        required_if: Conditional requirement as a column/value pair.
+
+    Returns:
+        Field: Configured phone-number schema field.
+    """
     return Field(
         dtype="string",
         nullable=nullable,
@@ -1042,7 +1190,17 @@ def CountryCode(
     severity: str = "error",
     required_if: tuple[str, Any] | None = None,
 ) -> Field:
-    """Create an uppercase ISO alpha-2 country-code schema field."""
+    """Create an uppercase ISO alpha-2 country-code schema field.
+
+    Args:
+        nullable: Whether null values are allowed.
+        unique: Whether non-null values must be unique.
+        severity: Severity level for validation issues.
+        required_if: Conditional requirement as a column/value pair.
+
+    Returns:
+        Field: Configured uppercase ISO alpha-2 country-code schema field.
+    """
     return Field(
         dtype="string",
         nullable=nullable,
@@ -1054,7 +1212,15 @@ def CountryCode(
 
 
 def CurrencyCode(*, nullable: bool = True, unique: bool = False) -> Field:
-    """Create a schema field for 3-letter uppercase currency code formats."""
+    """Create a currency-code schema field.
+
+    Args:
+        nullable: Whether null values are allowed.
+        unique: Whether non-null values must be unique.
+
+    Returns:
+        Field: Configured 3-letter uppercase currency-code schema field.
+    """
     return Field(
         dtype="string",
         nullable=nullable,
@@ -1070,7 +1236,17 @@ def Date(
     severity: str = "error",
     required_if: tuple[str, Any] | None = None,
 ) -> Field:
-    """Create a date schema field."""
+    """Create a date schema field.
+
+    Args:
+        nullable: Whether null values are allowed.
+        unique: Whether non-null values must be unique.
+        severity: Severity level for validation issues.
+        required_if: Conditional requirement as a column/value pair.
+
+    Returns:
+        Field: Configured date schema field.
+    """
     return Field(
         dtype="string",
         nullable=nullable,
@@ -1177,18 +1353,22 @@ def _validate_column(
                 )
             )
 
+    is_null_mask = series.isna()
+    if actual_dtype in ("object", "string"):
+        is_null_mask = is_null_mask | (series.fillna("").astype(str).str.strip() == "")
+
     if not field_def.nullable:
         issues.extend(
             _row_issues(
-                series[series.isna()],
+                series[is_null_mask],
                 column=name,
                 rule="nullable",
-                message=f"Column {name!r} contains null values",
+                message=f"Column {name!r} contains null or empty values",
                 severity=field_def.severity,
             )
         )
 
-    non_null = series.dropna()
+    non_null = series[~is_null_mask]
 
     if field_def.required_if is not None:
         condition_column, expected_value = field_def.required_if
@@ -1484,6 +1664,67 @@ def _field_to_dict(field_def: Field) -> dict[str, Any]:
         "datetime_max": _clean_scalar(field_def._datetime_max),
         "required_if": _normalize_sequence(field_def.required_if),
     }
+
+
+def _field_to_json_dict(field_def: Field) -> dict[str, Any]:
+    data = _field_to_dict(field_def)
+    data["severity"] = field_def.severity
+    data["datetime_min"] = (
+        field_def._datetime_min.isoformat()
+        if field_def._datetime_min is not None
+        else None
+    )
+    data["datetime_max"] = (
+        field_def._datetime_max.isoformat()
+        if field_def._datetime_max is not None
+        else None
+    )
+    return data
+
+
+def _field_from_json_dict(name: str, payload: Any) -> Field:
+    if not isinstance(payload, dict):
+        raise TypeError(
+            f"Schema JSON field for column {name!r} must be an object, got {type(payload).__name__}."
+        )
+
+    allowed = payload.get("allowed")
+    if allowed is not None:
+        if not isinstance(allowed, list):
+            raise TypeError(
+                f"Schema JSON field {name!r} 'allowed' must be a list or null."
+            )
+        allowed = set(allowed)
+
+    required_if = payload.get("required_if")
+    if required_if is not None:
+        if not isinstance(required_if, list) or len(required_if) != 2:
+            raise TypeError(
+                f"Schema JSON field {name!r} 'required_if' must be a 2-item list or null."
+            )
+        required_if = tuple(required_if)
+
+    return Field(
+        dtype=payload.get("dtype"),
+        nullable=payload.get("nullable", True),
+        min=payload.get("min"),
+        max=payload.get("max"),
+        pattern=payload.get("pattern"),
+        semantic=payload.get("semantic"),
+        allowed=allowed,
+        unique=payload.get("unique", False),
+        min_length=payload.get("min_length"),
+        max_length=payload.get("max_length"),
+        format=payload.get("format"),
+        _datetime_min=_parse_datetime_bound(
+            payload.get("datetime_min"), "datetime_min"
+        ),
+        _datetime_max=_parse_datetime_bound(
+            payload.get("datetime_max"), "datetime_max"
+        ),
+        required_if=required_if,
+        severity=payload.get("severity", "error"),
+    )
 
 
 def _normalize_unique(
