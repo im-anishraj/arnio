@@ -326,15 +326,38 @@ class TestReadCsv:
         assert " score " in schema
         assert " active " in schema
 
-    def test_unsupported_extension(self, tmp_path):
-        import pytest
+    def test_non_standard_extension_accepted(self, tmp_path):
+        """Non-standard extensions no longer raise ValueError (fixes #34)."""
+        for ext in (".dat", ".log", ".data", ".pipe"):
+            p = tmp_path / f"data{ext}"
+            p.write_text("name,age\nAlice,30\n")
+            frame = ar.read_csv(str(p))
+            assert isinstance(frame, ar.ArFrame)
+            assert frame.columns == ["name", "age"]
 
-        file_path = str(tmp_path / "data.json")
-        with open(file_path, "w") as f:
-            f.write('{"a": 1}')
+    def test_tsv_auto_delimiter(self, tmp_path):
+        """read_csv auto-uses tab delimiter for .tsv files (fixes #34)."""
+        tsv = tmp_path / "data.tsv"
+        tsv.write_text("name\tage\nAlice\t30\nBob\t25\n")
+        frame = ar.read_csv(str(tsv))
+        assert frame.columns == ["name", "age"]
+        assert frame.shape == (2, 2)
 
-        with pytest.raises(ValueError, match="Unsupported file format"):
-            ar.read_csv(file_path)
+    def test_tsv_explicit_delimiter_honoured(self, tmp_path):
+        """Explicitly supplied delimiter is never overridden for .tsv (fixes #34)."""
+        tsv = tmp_path / "pipe.tsv"
+        tsv.write_text("name|age\nAlice|30\n")
+        frame = ar.read_csv(str(tsv), delimiter="|")
+        assert frame.columns == ["name", "age"]
+        assert frame.shape == (1, 2)
+
+    def test_tsv_explicit_comma_delimiter_honoured(self, tmp_path):
+        """Passing delimiter=',' to a .tsv file must preserve comma parsing (fixes #34)."""
+        tsv = tmp_path / "comma.tsv"
+        tsv.write_text("name,age\nAlice,30\n")
+        frame = ar.read_csv(str(tsv), delimiter=",")
+        assert frame.columns == ["name", "age"]
+        assert frame.shape == (1, 2)
 
     def test_binary_file_rejection(self, tmp_path):
         file_path = str(tmp_path / "data.csv")
@@ -740,6 +763,35 @@ class TestScanCsv:
     def test_scan_missing_file_passthrough(self, tmp_path):
         with pytest.raises(ar.CsvReadError):
             ar.scan_csv(str(tmp_path / "nonexistent.csv"))
+
+    def test_scan_non_standard_extension_accepted(self, tmp_path):
+        """Non-standard extensions no longer raise ValueError in scan_csv (fixes #34)."""
+        for ext in (".dat", ".log", ".data"):
+            p = tmp_path / f"data{ext}"
+            p.write_text("name,age\nAlice,30\n")
+            schema = ar.scan_csv(str(p))
+            assert set(schema.keys()) == {"name", "age"}
+
+    def test_scan_tsv_auto_delimiter(self, tmp_path):
+        """scan_csv auto-uses tab delimiter for .tsv files (fixes #34)."""
+        tsv = tmp_path / "data.tsv"
+        tsv.write_text("name\tage\nAlice\t30\nBob\t25\n")
+        schema = ar.scan_csv(str(tsv))
+        assert set(schema.keys()) == {"name", "age"}
+
+    def test_scan_tsv_explicit_delimiter_honoured(self, tmp_path):
+        """Explicitly supplied delimiter is never overridden for .tsv (fixes #34)."""
+        tsv = tmp_path / "pipe.tsv"
+        tsv.write_text("name|age\nAlice|30\n")
+        schema = ar.scan_csv(str(tsv), delimiter="|")
+        assert set(schema.keys()) == {"name", "age"}
+
+    def test_scan_tsv_explicit_comma_delimiter_honoured(self, tmp_path):
+        """Passing delimiter=',' to a .tsv file must preserve comma parsing (fixes #34)."""
+        tsv = tmp_path / "comma.tsv"
+        tsv.write_text("name,age\nAlice,30\n")
+        schema = ar.scan_csv(str(tsv), delimiter=",")
+        assert set(schema.keys()) == {"name", "age"}
 
     def test_scan_null_values_invalid_type(self):
         with pytest.raises(
