@@ -530,13 +530,28 @@ std::vector<std::pair<std::string, std::string>> CsvReader::scan_schema(
     std::string line;
     std::vector<std::string> header;
 
+    std::vector<std::string> first_row;
+
     if (read_record(file, line)) {
         strip_utf8_bom(line);
-        header = parser_.parse_line(line);
-        for (auto& h : header) {
-            if (config.trim_headers) trim_in_place(h);
+
+        if (config.has_header) {
+            header = parser_.parse_line(line);
+
+            for (auto& h : header) {
+                if (config.trim_headers) trim_in_place(h);
+            }
+
+            validate_header(header);
+        } else {
+            first_row = parser_.parse_line(line);
+
+            header.reserve(first_row.size());
+
+            for (size_t i = 0; i < first_row.size(); ++i) {
+                header.push_back("col_" + std::to_string(i));
+            }
         }
-        validate_header(header);
     }
 
     size_t num_cols = header.size();
@@ -544,6 +559,16 @@ std::vector<std::pair<std::string, std::string>> CsvReader::scan_schema(
     size_t sample_count = 0;
 
     size_t max_samples = config.sample_size.value_or(100);
+
+    if (!config.has_header && !first_row.empty()) {
+        validate_row_width(1, num_cols, first_row.size());
+
+        for (size_t i = 0; i < num_cols && i < first_row.size(); ++i) {
+            col_types[i] = CsvParser::promote_type(col_types[i], parser_.infer_type(first_row[i]));
+        }
+
+        ++sample_count;
+    }
 
     while (read_record(file, line)) {
         if (sample_count >= max_samples) {

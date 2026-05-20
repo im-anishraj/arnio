@@ -780,6 +780,43 @@ class TestScanCsv:
 
         assert ar.scan_csv(csv_path) == {"value": "string"}
 
+    def test_scan_csv_has_header_false_generates_synthetic_columns(self, tmp_path):
+        csv_content = "1,Alice\n2,Bob\n"
+
+        csv_file = tmp_path / "headerless.csv"
+        csv_file.write_text(csv_content)
+
+        schema = ar.scan_csv(csv_file, has_header=False)
+
+        assert schema == {
+            "col_0": "int64",
+            "col_1": "string",
+        }
+
+    def test_scan_csv_default_has_header_behavior(self, tmp_path):
+        csv_content = "id,name\n1,Alice\n"
+
+        csv_file = tmp_path / "with_header.csv"
+        csv_file.write_text(csv_content)
+
+        schema = ar.scan_csv(csv_file)
+
+        assert schema == {
+            "id": "int64",
+            "name": "string",
+        }
+
+    def test_scan_csv_has_header_false_matches_read_csv(self, tmp_path):
+        csv_content = "1,Alice\n2,Bob\n"
+
+        csv_file = tmp_path / "headerless_match.csv"
+        csv_file.write_text(csv_content)
+
+        frame = ar.read_csv(csv_file, has_header=False)
+        schema = ar.scan_csv(csv_file, has_header=False)
+
+        assert list(frame.columns) == list(schema.keys())
+
 
 # --- Issue #115: quoted multiline round-trip across line endings ---
 

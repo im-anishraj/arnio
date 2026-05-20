@@ -625,6 +625,7 @@ def scan_csv(
     thousands_separator: str | None = None,
     sample_size: int | None = None,
     null_values: list[str] | None = None,
+    has_header: bool = True,
 ) -> dict[str, str]:
     """Return schema (column names + inferred types) without loading data.
 
@@ -699,6 +700,7 @@ def scan_csv(
     config.encoding = encoding
     config.trim_headers = trim_headers
     config.thousands_separator = thousands_separator
+    config.has_header = has_header
 
     if null_values is not None:
         config.null_values = _validate_null_values(null_values)
