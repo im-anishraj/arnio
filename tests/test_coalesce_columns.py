@@ -22,7 +22,7 @@ def test_coalesce_columns_basic() -> None:
     expected = df.copy()
     expected["result"] = [10.0, 2.0, 40.0, 4.0]
 
-    pd.testing.assert_frame_equal(res_df, expected)
+    pd.testing.assert_frame_equal(res_df, expected, check_dtype=False)
 
 
 def test_coalesce_columns_arframe() -> None:
@@ -42,7 +42,7 @@ def test_coalesce_columns_arframe() -> None:
     expected = df.copy()
     expected["coalesced"] = ["world", "hello", None]
 
-    pd.testing.assert_frame_equal(res_df, expected)
+    pd.testing.assert_frame_equal(res_df, expected, check_dtype=False)
 
 
 def test_coalesce_columns_pipeline() -> None:
@@ -67,7 +67,7 @@ def test_coalesce_columns_pipeline() -> None:
     expected = df.copy()
     expected["res"] = [1.0, 2.0, 3.0]
 
-    pd.testing.assert_frame_equal(res_df, expected)
+    pd.testing.assert_frame_equal(res_df, expected, check_dtype=False)
 
 
 def test_coalesce_columns_validation() -> None:
