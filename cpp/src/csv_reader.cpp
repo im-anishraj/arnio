@@ -463,20 +463,13 @@ Frame CsvReader::read(const std::string& path) const {
         if (fields.empty()) return false;
         if (!config.has_header && !expected_cols.has_value()) expected_cols = fields.size();
 
-        // Trim trailing empty fields before width validation (permissive mode).
-        if (expected_cols.has_value() && fields.size() > expected_cols.value()) {
-            bool trailing_empty_only = true;
-            for (size_t i = expected_cols.value(); i < fields.size(); ++i) {
-                if (!fields[i].empty()) {
-                    trailing_empty_only = false;
-                    break;
-                }
+        if (expected_cols.has_value()) {
+            const size_t expected = expected_cols.value();
+            if (fields.size() > expected || config.mode == "strict") {
+                validate_row_width(rec_no, expected, fields.size());
             }
-            if (trailing_empty_only) fields.resize(expected_cols.value());
         }
 
-        if (config.mode == "strict" && expected_cols.has_value())
-            validate_row_width(rec_no, expected_cols.value(), fields.size());
         if (expected_cols.has_value()) {
             while (fields.size() < expected_cols.value()) fields.push_back("");
         }
