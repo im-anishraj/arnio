@@ -359,7 +359,7 @@ def run_case(case, skip_correctness=False):
             p_avg = avg(pd_ops_list[op])
             a_avg = avg(ar_ops_list[op])
             speedup = (
-                f"{p_avg / a_avg:.1f}x" if a_avg > 0 and op != "to_pandas" else "N/A"
+                f"{p_avg/a_avg:.1f}x" if a_avg > 0 and op != "to_pandas" else "N/A"
             )
             p_str = f"{p_avg:>11.2f}s" if op != "to_pandas" else f"{'N/A':>12}"
             print(f"{op:<20} {p_str} {a_avg:>11.2f}s {speedup:>10}")
@@ -367,7 +367,7 @@ def run_case(case, skip_correctness=False):
     print("-" * 57)
 
     print(
-        f"{'Exec Time (Total)':<20} {avg(pd_times):>11.2f}s {avg(ar_times):>11.2f}s {(avg(pd_times) / avg(ar_times)):>9.1f}x"
+        f"{'Exec Time (Total)':<20} {avg(pd_times):>11.2f}s {avg(ar_times):>11.2f}s {(avg(pd_times)/avg(ar_times)):>9.1f}x"
     )
     if pd_rss_rams and ar_rss_rams:
         pd_rss_avg = avg(pd_rss_rams)
@@ -383,10 +383,10 @@ def run_case(case, skip_correctness=False):
     if pd_rss_avg and ar_rss_avg:
         ram_reduction = (1 - (ar_rss_avg / pd_rss_avg)) * 100
         print(
-            f"\nSpeed: {avg(pd_times) / avg(ar_times):.1f}x | RAM: {ram_reduction:.0f}% reduction (RSS)"
+            f"\nSpeed: {avg(pd_times)/avg(ar_times):.1f}x | RAM: {ram_reduction:.0f}% reduction (RSS)"
         )
     else:
-        print(f"\nSpeed: {avg(pd_times) / avg(ar_times):.1f}x")
+        print(f"\nSpeed: {avg(pd_times)/avg(ar_times):.1f}x")
 
     baseline_case = baseline_data.get(case.name)
 

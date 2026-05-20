@@ -136,7 +136,7 @@ def run(n_rows: int = 1_000_000, runs: int = 5) -> None:
     print(f"  Runs:              {runs:>12}")
     print(f"{'':=<55}")
     print(f"  {'Engine':<20} {'Avg time':>12}  {'Peak heap':>12}")
-    print(f"  {'-' * 20} {'-' * 12}  {'-' * 12}")
+    print(f"  {'-'*20} {'-'*12}  {'-'*12}")
     print(
         f"  {'arnio (native)':<20} {avg_native * 1000:>10.1f} ms  {avg_native_peak:>10.1f} MB"
     )

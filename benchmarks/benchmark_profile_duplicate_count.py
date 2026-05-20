@@ -86,7 +86,7 @@ def run(n_rows: int = 500_000, runs: int = 5) -> None:
     print(f"  Runs:  {runs:>12}")
     print(f"{'':=<65}")
     print(f"  {'Approach':<35} {'Avg time':>12}")
-    print(f"  {'-' * 35} {'-' * 12}")
+    print(f"  {'-'*35} {'-'*12}")
     print(f"  {'df.duplicated().sum()  [current]':<35} {avg_b * 1000:>10.1f} ms")
     print(f"  {'hash_pandas_object     [candidate]':<35} {avg_c * 1000:>10.1f} ms")
     print(f"{'':=<65}")

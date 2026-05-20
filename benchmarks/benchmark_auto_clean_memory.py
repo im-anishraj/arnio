@@ -187,7 +187,7 @@ def _format_stats(
     if math.isclose(vmin, vmax):
         return f"{avg:.{decimals}f}"
 
-    return f"{avg:.{decimals}f} ({vmin:.{decimals}f}-{vmax:.{decimals}f})"
+    return f"{avg:.{decimals}f} " f"({vmin:.{decimals}f}-{vmax:.{decimals}f})"
 
 
 def benchmark_auto_clean(
@@ -264,7 +264,7 @@ def main() -> None:
     csv_path = (
         args.file
         if args.file
-        else (f"benchmarks/auto_clean_{args.rows}_seed{args.seed}.csv")
+        else (f"benchmarks/" f"auto_clean_{args.rows}_seed{args.seed}.csv")
     )
 
     warmup = not args.no_warmup
@@ -295,7 +295,7 @@ def main() -> None:
         f"File: {csv_path}"
     )
 
-    print(f"{'Operation':<24} {'Time(s)':>20} {'Peak Py(MiB)':>18}")
+    print(f"{'Operation':<24} " f"{'Time(s)':>20} " f"{'Peak Py(MiB)':>18}")
 
     print("-" * 68)
 
@@ -355,7 +355,9 @@ def main() -> None:
     )
 
     print(
-        f"{'Total avg (Read+Strict)':<24}{total_time_avg:>20.3f} {max_peak_avg:>18.2f}"
+        f"{'Total avg (Read+Strict)':<24}"
+        f"{total_time_avg:>20.3f} "
+        f"{max_peak_avg:>18.2f}"
     )
 
     if generated and not args.keep_file:
