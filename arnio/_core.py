@@ -1,7 +1,10 @@
-"""
-arnio._core
-Internal module that imports the C++ extension.
-"""
+import os
+import sys
+
+if sys.platform == "win32":
+    mingw_bin = r"C:\Users\VIDYANKSHINI\AppData\Local\Microsoft\WinGet\Packages\BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\mingw64\bin"
+    if os.path.isdir(mingw_bin):
+        os.add_dll_directory(mingw_bin)
 
 try:
     from ._arnio_cpp import (  # type: ignore[import-not-found]  # noqa: I001
