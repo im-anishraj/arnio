@@ -1438,3 +1438,56 @@ class TestArFrameGetItem:
         frame = ar.read_csv(csv_path)
         result = frame["first name"]
         assert result == ["John"]
+
+
+class TestInferTypeLocaleAndNumericEdgeCases:
+    def test_float_decimal_dot(self, tmp_path):
+        path = tmp_path / "decimal.csv"
+        path.write_text("v\n3.14\n")
+        assert ar.read_csv(path).dtypes["v"] == "float64"
+
+    def test_whitespace_padded_int(self, tmp_path):
+        path = tmp_path / "ws_int.csv"
+        path.write_text("v\n 123 \n")
+        assert ar.read_csv(path).dtypes["v"] == "int64"
+
+    def test_whitespace_padded_float(self, tmp_path):
+        path = tmp_path / "ws_float.csv"
+        path.write_text("v\n 3.14 \n")
+        assert ar.read_csv(path).dtypes["v"] == "float64"
+
+    def test_whitespace_padded_bool(self, tmp_path):
+        path = tmp_path / "ws_bool.csv"
+        path.write_text("flag\n true \n")
+        assert ar.read_csv(path).dtypes["flag"] == "bool"
+
+    def test_special_float_tokens_infer_float64(self, tmp_path):
+        path = tmp_path / "special.csv"
+        path.write_text("v\ninf\n-inf\nnan\n")
+        assert ar.read_csv(path).dtypes["v"] == "float64"
+
+    def test_scientific_notation_lower(self, tmp_path):
+        path = tmp_path / "sci_lower.csv"
+        path.write_text("v\n1e10\n")
+        assert ar.read_csv(path).dtypes["v"] == "float64"
+
+    def test_scientific_notation_upper(self, tmp_path):
+        path = tmp_path / "sci_upper.csv"
+        path.write_text("v\n1E10\n")
+        assert ar.read_csv(path).dtypes["v"] == "float64"
+
+    def test_integer_overflow_remains_string(self, tmp_path):
+        path = tmp_path / "overflow.csv"
+        path.write_text("v\n9223372036854775808\n")
+        frame = ar.read_csv(path)
+        df = ar.to_pandas(frame)
+        assert frame.dtypes["v"] == "string"
+        assert df["v"].iloc[0] == "9223372036854775808"
+
+    def test_integer_overflow_mixed_column_string(self, tmp_path):
+        path = tmp_path / "overflow_mixed.csv"
+        path.write_text("v\n1\n9223372036854775808\n")
+        frame = ar.read_csv(path)
+        df = ar.to_pandas(frame)
+        assert frame.dtypes["v"] == "string"
+        assert list(df["v"]) == ["1", "9223372036854775808"]

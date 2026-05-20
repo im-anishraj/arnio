@@ -1353,18 +1353,22 @@ def _validate_column(
                 )
             )
 
+    is_null_mask = series.isna()
+    if actual_dtype in ("object", "string"):
+        is_null_mask = is_null_mask | (series.fillna("").astype(str).str.strip() == "")
+
     if not field_def.nullable:
         issues.extend(
             _row_issues(
-                series[series.isna()],
+                series[is_null_mask],
                 column=name,
                 rule="nullable",
-                message=f"Column {name!r} contains null values",
+                message=f"Column {name!r} contains null or empty values",
                 severity=field_def.severity,
             )
         )
 
-    non_null = series.dropna()
+    non_null = series[~is_null_mask]
 
     if field_def.required_if is not None:
         condition_column, expected_value = field_def.required_if

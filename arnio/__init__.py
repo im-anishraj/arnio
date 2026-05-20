@@ -56,6 +56,7 @@ from .io import (
     scan_csv,
     sniff_delimiter,
     write_csv,
+    write_parquet,
 )
 from .pipeline import (
     get_builtin_step_signatures,
@@ -111,6 +112,7 @@ __all__ = [
     "read_csv_chunked",
     "read_jsonl",
     "write_csv",
+    "write_parquet",
     "scan_csv",
     "sniff_delimiter",
     # Cleaning

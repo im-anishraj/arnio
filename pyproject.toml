@@ -54,9 +54,13 @@ dev = [
     "ruff>=0.4.0",
     "pre-commit>=3.0",
     "hypothesis>=6.0",
+    "tomli; python_version < '3.11'",
 ]
 sklearn = [
     "scikit-learn>=1.0",
+]
+parquet = [
+    "pyarrow>=8.0",
 ]
 
 [tool.setuptools.package-data]

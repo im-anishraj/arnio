@@ -340,6 +340,33 @@ Raises `ar.JsonlReadError` with the 1-based line number if a line contains inval
 </details>
 
 <details>
+<summary><b>📦 Export to Parquet for columnar analytics pipelines</b></summary>
+<br>
+
+`write_parquet` exports an ArFrame to a Parquet file via pyarrow.  Install the optional extra first:
+
+```bash
+pip install arnio[parquet]
+```
+
+```python
+# Basic export
+ar.write_parquet(frame, "output.parquet")
+
+# Choose compression codec: "snappy" (default), "gzip", "zstd", "brotli", "none"
+ar.write_parquet(frame, "output.parquet", compression="zstd")
+
+# Control row group size for large files
+ar.write_parquet(frame, "output.parquet", row_group_size=50_000)
+
+# .pq extension also accepted
+ar.write_parquet(frame, "output.pq")
+```
+
+Raises `ImportError` with an install hint if pyarrow is not available.
+</details>
+
+<details>
 <summary><b>👀 Preview rows without pandas conversion or full-column Python list materialization</b></summary>
 <br>
 
@@ -1624,7 +1651,7 @@ arnio/
 │   └── bind_arnio.cpp       # pybind11 module — the Python↔C++ bridge
 ├── arnio/
 │   ├── __init__.py          # Public API surface
-│   ├── io.py                # read_csv, read_jsonl, scan_csv, write_csv
+│   ├── io.py                # read_csv, read_jsonl, scan_csv, write_csv, write_parquet
 │   ├── cleaning.py          # Python wrappers for C++ cleaning functions
 │   ├── pipeline.py          # Step registry + pipeline executor
 │   ├── convert.py           # to_pandas (zero-copy), from_pandas
