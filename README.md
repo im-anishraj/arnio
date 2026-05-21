@@ -1167,6 +1167,34 @@ print(result.issue_count)  # Warning issues are still reported
 
 Warning-level issues remain visible in validation results without failing the overall validation status.
 
+### URL validation
+
+`URL()` validates that values are well-formed URLs. By default, both `http` and `https` schemes are accepted.
+
+```python
+schema = ar.Schema({
+    "website": ar.URL(nullable=False),
+})
+result = ar.validate(frame, schema)
+print(result.passed)
+```
+
+Use `allowed_schemes` to restrict which URL schemes are valid:
+
+```python
+# https only
+schema = ar.Schema({
+    "website": ar.URL(allowed_schemes=["https"]),
+})
+
+# multiple schemes
+schema = ar.Schema({
+    "endpoint": ar.URL(allowed_schemes=["https", "ftp"]),
+})
+```
+
+Any URL with a scheme not in `allowed_schemes` will fail validation.
+
 ### Schema JSON round-trips
 
 ```python
