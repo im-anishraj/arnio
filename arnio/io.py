@@ -149,7 +149,7 @@ def read_csv(
         raise
     except CsvReadError:
         raise
-    except RuntimeError as e:
+    except Exception as e:
         raise CsvReadError(str(e)) from e
     return ArFrame(cpp_frame)
 
@@ -228,5 +228,7 @@ def scan_csv(
     try:
         with _utf8_csv_path(path, encoding) as native_path:
             return reader.scan_schema(native_path)
-    except RuntimeError as e:
+    except CsvReadError:
+        raise
+    except Exception as e:
         raise CsvReadError(str(e)) from e
