@@ -86,6 +86,30 @@ def _emit_scalar(value: Any) -> str:
     raise TypeError(f"Unsupported scalar type: {type(value)!r}")
 
 
+def _validate_serializable(value: Any) -> None:
+    if isinstance(value, _SCALAR_TYPES):
+        return
+
+    if isinstance(value, set):
+        for item in value:
+            _validate_serializable(item)
+        return
+
+    if isinstance(value, list):
+        for item in value:
+            _validate_serializable(item)
+        return
+
+    if isinstance(value, dict):
+        for item in value.values():
+            _validate_serializable(item)
+        return
+
+    raise TypeError(
+        f"schema_to_yaml does not support values of type {type(value)!r}."
+    )
+
+
 def _emit_value(value: Any, depth: int) -> str:
     """Recursively emit *value* at the given indentation *depth*."""
     indent = _INDENT * depth
@@ -165,6 +189,7 @@ def schema_to_dict(schema: dict | Any) -> dict:
     elif hasattr(schema, "fields"):
         # Future-proof: handle an actual Schema object with a .fields mapping.
         raw = {}
+
         for name, field in schema.fields.items():
             if isinstance(field, dict):
                 raw[name] = field
@@ -174,6 +199,12 @@ def schema_to_dict(schema: dict | Any) -> dict:
                 }
             else:
                 raw[name] = str(field)
+
+        if hasattr(schema, "strict"):
+            raw["strict"] = schema.strict
+
+        if hasattr(schema, "unique"):
+            raw["unique"] = schema.unique
     else:
         raise TypeError(
             f"Expected a dict or an object with a 'fields' attribute, "
@@ -183,17 +214,39 @@ def schema_to_dict(schema: dict | Any) -> dict:
     # Normalise: if the dict values are plain strings (e.g. scan_csv output),
     # wrap them so the YAML has a consistent nested structure.
     normalised: dict = {}
+    metadata: dict = {}
+
     for field_name in sorted(raw.keys()):
         value = raw[field_name]
+
+        if field_name in {"strict", "unique"}:
+            metadata[field_name] = value
+            continue
+            
         if isinstance(value, str):
             normalised[field_name] = {"type": value}
+
         elif isinstance(value, dict):
             # Sort nested keys for determinism; keep all metadata.
-            normalised[field_name] = dict(sorted(value.items()))
+            cleaned = {}
+
+            for k, v in sorted(value.items()):
+                if isinstance(v, set):
+                    cleaned[k] = sorted(v)
+                else:
+                    cleaned[k] = v
+
+            _validate_serializable(cleaned)
+
+            normalised[field_name] = cleaned
+
         else:
             normalised[field_name] = value
 
-    return {"fields": normalised}
+    result = {"fields": normalised}
+    result.update(metadata)
+
+    return result
 
 
 def schema_to_yaml(

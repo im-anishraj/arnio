@@ -14,14 +14,26 @@ Covers:
 
 from __future__ import annotations
 
-import os
+import importlib.util
 import pathlib
-import sys
 
 import pytest
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "arnio"))
-from schema_export import schema_to_dict, schema_to_yaml
+SCHEMA_EXPORT_PATH = (
+    pathlib.Path(__file__).resolve().parents[1] / "arnio" / "schema_export.py"
+)
+
+spec = importlib.util.spec_from_file_location(
+    "arnio.schema_export",
+    SCHEMA_EXPORT_PATH,
+)
+
+schema_export = importlib.util.module_from_spec(spec)
+assert spec.loader is not None
+spec.loader.exec_module(schema_export)
+
+schema_to_dict = schema_export.schema_to_dict
+schema_to_yaml = schema_export.schema_to_yaml
 
 
 class _FakeField:
