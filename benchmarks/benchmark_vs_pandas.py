@@ -1,4 +1,5 @@
-"""
+
+    """
 Reproducible benchmark: arnio vs pandas
 Run: python benchmarks/benchmark_vs_pandas.py
 """
@@ -461,3 +462,4 @@ if __name__ == "__main__":
         print("Note: Peak RSS unavailable (install psutil for process RSS).")
     for benchmark_case in BENCHMARKS:
         run_case(benchmark_case)
+
