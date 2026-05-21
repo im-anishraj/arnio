@@ -245,6 +245,7 @@ PYBIND11_MODULE(_arnio_cpp, m) {
         .def_readwrite("skip_rows", &CsvConfig::skip_rows)
         .def_readwrite("encoding", &CsvConfig::encoding)
         .def_readwrite("trim_headers", &CsvConfig::trim_headers)
+        .def_readwrite("decimal_separator", &CsvConfig::decimal_separator)
         .def_readwrite("thousands_separator", &CsvConfig::thousands_separator)
         .def_readwrite("sample_size", &CsvConfig::sample_size)
         .def_readwrite("mode", &CsvConfig::mode)

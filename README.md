@@ -257,6 +257,25 @@ frame = ar.read_csv("data.csv", null_values=["", "MISSING", "UNKNOWN"])
 # Disable null sentinel handling completely
 frame = ar.read_csv("data.csv", null_values=[])
 ```
+
+### Handling decimal separators
+
+Use `decimal_separator` when numeric CSV data uses a separator other than
+the default dot. This is explicit by design: Arnio does not auto-detect decimal
+formats because a comma can also be the CSV delimiter.
+
+```python
+# Semicolon-delimited CSV with unquoted European decimals
+frame = ar.read_csv("prices.csv", delimiter=";", decimal_separator=",")
+
+# Comma-delimited CSV still needs quoted comma-decimal values
+frame = ar.read_csv("prices.csv", decimal_separator=",")
+```
+
+The default remains `decimal_separator="."`, so existing dot-decimal files keep
+their current behavior. If you also use `thousands_separator`, it must differ
+from `decimal_separator`.
+
 ### Handling invalid UTF-8 bytes
 
 Use `encoding_errors` to control how invalid UTF-8 bytes are handled during CSV parsing.
