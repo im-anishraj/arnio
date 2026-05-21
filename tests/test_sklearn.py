@@ -156,3 +156,4 @@ def test_filter_rows_rejects_row_count_change_by_default():
     )
     with pytest.raises(ValueError, match="changed the row count"):
         cleaner.fit_transform(df)
+
