@@ -2281,3 +2281,63 @@ class TestUnterminatedQuoteLocation:
         csv_path.write_text('"oops\n')
         with pytest.raises(ar.CsvReadError, match="line 1"):
             ar.read_csv(csv_path, has_header=False)
+
+
+class TestArFrameToDict:
+    def test_to_dict_basic(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        result = frame.to_dict()
+        assert isinstance(result, dict)
+        assert list(result.keys()) == ["name", "age", "email", "active"]
+
+    def test_to_dict_values_are_lists(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        result = frame.to_dict()
+        for val in result.values():
+            assert isinstance(val, list)
+
+    def test_to_dict_string_column(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        result = frame.to_dict()
+        assert result["name"] == ["Alice", "Bob", "Charlie"]
+
+    def test_to_dict_integer_column(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        result = frame.to_dict()
+        assert result["age"] == [30, 25, 35]
+
+    def test_to_dict_bool_column(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        result = frame.to_dict()
+        assert result["active"] == [True, False, True]
+
+    def test_to_dict_preserves_column_order(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        result = frame.to_dict()
+        assert list(result.keys()) == frame.columns
+
+    def test_to_dict_empty_frame(self, tmp_path):
+        csv_path = tmp_path / "empty_rows.csv"
+        csv_path.write_text("name,age\n")
+        frame = ar.read_csv(csv_path)
+        result = frame.to_dict()
+        assert result == {"name": [], "age": []}
+
+    def test_to_dict_with_nulls(self, csv_with_nulls):
+        frame = ar.read_csv(csv_with_nulls)
+        result = frame.to_dict()
+        assert isinstance(result, dict)
+        assert result["name"][0] == "Alice"
+
+    def test_to_dict_single_column(self, tmp_path):
+        csv_path = tmp_path / "single.csv"
+        csv_path.write_text("value\n1\n2\n3\n")
+        frame = ar.read_csv(csv_path)
+        result = frame.to_dict()
+        assert result == {"value": [1, 2, 3]}
+
+    def test_to_dict_consistent_with_getitem(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        result = frame.to_dict()
+        for col in frame.columns:
+            assert result[col] == frame[col]
