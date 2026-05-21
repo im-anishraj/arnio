@@ -73,11 +73,11 @@ def test_example_script_runs_successfully(script_path):
             capture_output=True,
             text=True,
             cwd=str(EXAMPLES_DIR.parent),
-            timeout=15,  # Add timeout to prevent hangs in CI
+            timeout=30,  # Keep smoke tests bounded while allowing slow imports on Windows.
         )
     except subprocess.TimeoutExpired as e:
         pytest.fail(
-            f"Example {script_path.name} timed out after 15 seconds.\nOutput so far:\n{e.stdout}"
+            f"Example {script_path.name} timed out after 30 seconds.\nOutput so far:\n{e.stdout}"
         )
 
     assert result.returncode == 0, (

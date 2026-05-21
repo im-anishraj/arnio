@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Callable
 
+import numpy as np
 import pandas as pd
 
 from .convert import to_pandas
@@ -1133,22 +1134,34 @@ def URL(
     unique: bool = False,
     severity: str = "error",
     required_if: tuple[str, Any] | None = None,
+    allowed_schemes: list[str] | None = None,
 ) -> Field:
     """Create a URL schema field.
-
     Args:
         nullable: Whether null values are allowed.
         unique: Whether non-null values must be unique.
         severity: Severity level for validation issues.
         required_if: Conditional requirement as a column/value pair.
-
+        allowed_schemes: List of allowed URL schemes e.g. ["https"].
+            If None, both http and https are accepted.
     Returns:
         Field: Configured URL schema field.
     """
+    if allowed_schemes is not None:
+        if not isinstance(allowed_schemes, list) or len(allowed_schemes) == 0:
+            raise ValueError("allowed_schemes must be a non-empty list")
+        for scheme in allowed_schemes:
+            if not isinstance(scheme, str) or scheme.strip() == "":
+                raise ValueError("allowed_schemes must contain non-empty strings")
+        schemes = "|".join(re.escape(s) for s in allowed_schemes)
+        semantic = f"url:{schemes}"
+
+    else:
+        semantic = "url"
     return Field(
         dtype="string",
         nullable=nullable,
-        semantic="url",
+        semantic=semantic,
         unique=unique,
         required_if=required_if,
         severity=severity,
@@ -1330,6 +1343,59 @@ def DateTime(
     )
 
 
+def _is_safely_convertible_to_dtype(
+    series: pd.Series,
+    expected_dtype: str,
+    column_name: str,
+) -> bool:
+    try:
+        non_null = series.dropna()
+
+        if len(non_null) == 0:
+            return False
+
+        values = non_null.astype(str)
+
+        lower_name = column_name.lower()
+
+        is_identifier_like = (
+            lower_name == "id"
+            or lower_name.endswith("_id")
+            or lower_name
+            in {
+                "uuid",
+                "zip",
+                "zipcode",
+                "zip_code",
+            }
+        )
+
+        if is_identifier_like:
+            if values.str.match(r"^0\d+$").any():
+                return False
+
+        if expected_dtype == "int64":
+            if not values.str.match(r"^-?\d+$").all():
+                return False
+
+            parsed = pd.to_numeric(values, errors="raise")
+
+            int64_info = np.iinfo(np.int64)
+            if (parsed < int64_info.min).any() or (parsed > int64_info.max).any():
+                return False
+
+            return True
+
+        if expected_dtype == "float64":
+            pd.to_numeric(values, errors="raise")
+            return True
+
+    except Exception:
+        return False
+
+    return False
+
+
 def _validate_column(
     df: pd.DataFrame,
     series: pd.Series,
@@ -1341,14 +1407,29 @@ def _validate_column(
 
     if field_def.dtype is not None and actual_dtype != field_def.dtype:
         if not (field_def.dtype == "datetime" and actual_dtype == "string"):
+
+            message = (
+                f"Column {name!r} has dtype {actual_dtype!r}; "
+                f"expected {field_def.dtype!r}"
+            )
+            if (
+                actual_dtype == "string"
+                and field_def.dtype in {"int64", "float64"}
+                and _is_safely_convertible_to_dtype(
+                    df[name],
+                    field_def.dtype,
+                    name,
+                )
+            ):
+                message += (
+                    f". Values appear safely convertible " f"to '{field_def.dtype}'"
+                )
+
             issues.append(
                 ValidationIssue(
                     column=name,
                     rule="dtype",
-                    message=(
-                        f"Column {name!r} has dtype {actual_dtype!r}; "
-                        f"expected {field_def.dtype!r}"
-                    ),
+                    message=message,
                     severity=field_def.severity,
                 )
             )
@@ -1500,6 +1581,9 @@ def _validate_column(
                 )
         else:
             pattern = _SEMANTIC_PATTERNS.get(field_def.semantic)
+            if pattern is None and field_def.semantic.startswith("url:"):
+                schemes = field_def.semantic[len("url:") :]
+                pattern = rf"({schemes})://[^\s]+"
             if pattern is None:
                 issues.append(
                     ValidationIssue(

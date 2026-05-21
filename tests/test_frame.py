@@ -349,3 +349,110 @@ def test_cpp_frame_explicit_zero_rows_rejects_nonempty_first_column():
 
     with pytest.raises(ValueError, match="row count"):
         frame.add_column(column)
+
+
+def test_add_column_rejects_duplicate_name():
+    from arnio._arnio_cpp import Column, DType, Frame
+
+    frame = Frame()
+
+    c1 = Column("a", DType.INT64)
+    c1.push_back(1)
+    c1.push_back(2)
+
+    c2 = Column("a", DType.INT64)
+    c2.push_back(3)
+    c2.push_back(4)
+
+    frame.add_column(c1)
+
+    with pytest.raises(ValueError, match="already exists"):
+        frame.add_column(c2)
+
+
+# ArFrame.describe() Tests
+
+
+def test_describe_sample_metrics(sample_csv):
+    frame = ar.read_csv(sample_csv)
+    stats = frame.describe()
+
+    assert stats["age"]["count"] == 3.0
+    assert stats["age"]["nulls"] == 0.0
+    assert stats["age"]["mean"] == 30.0
+    assert stats["age"]["min"] == 25.0
+    assert stats["age"]["max"] == 35.0
+
+    assert stats["name"]["count"] == 3.0
+    assert stats["name"]["nulls"] == 0.0
+    assert stats["name"]["unique"] == 3.0
+    assert "mean" not in stats["name"]
+
+
+def test_describe_excludes_null_values(csv_with_nulls):
+    frame = ar.read_csv(csv_with_nulls)
+    stats = frame.describe()
+
+    assert stats["age"]["count"] == 3.0
+    assert stats["age"]["nulls"] == 1.0
+    assert stats["age"]["min"] == 25.0
+    assert stats["age"]["max"] == 30.0
+    assert stats["age"]["mean"] == pytest.approx(27.6666, rel=1e-3)
+
+    assert stats["name"]["count"] == 3.0
+    assert stats["name"]["nulls"] == 1.0
+    assert stats["name"]["unique"] == 3.0
+
+
+def test_describe_empty_frame_edge_case(tmp_path):
+    csv_path = tmp_path / "empty_input.csv"
+    csv_path.write_text("name,age\n")
+
+    frame = ar.read_csv(str(csv_path))
+    stats = frame.describe()
+
+    assert "name" in stats
+    assert "age" in stats
+
+    for col in frame.columns:
+        assert stats[col]["count"] == 0.0
+        assert stats[col]["nulls"] == 0.0
+
+        if "mean" in stats[col]:
+            assert stats[col]["mean"] == 0.0
+            assert stats[col]["min"] == 0.0
+            assert stats[col]["max"] == 0.0
+        elif "unique" in stats[col]:
+            assert stats[col]["unique"] == 0.0
+
+
+def test_describe_dictionary_subclass_repr(sample_csv):
+    frame = ar.read_csv(sample_csv)
+    stats = frame.describe()
+
+    assert stats["age"]["count"] == 3.0
+    assert "{\n" in repr(stats)
+
+
+def test_describe_all_numeric_columns(large_csv):
+    frame = ar.read_csv(large_csv)
+
+    numeric_frame = frame.select_dtypes(include=["int64", "float64"])
+    stats = numeric_frame.describe()
+
+    assert list(stats.keys()) == ["id", "value"]
+
+    for col in ["id", "value"]:
+        metric_keys = list(stats[col].keys())
+        assert metric_keys == ["count", "nulls", "mean", "min", "max"]
+
+
+def test_describe_all_string_columns(csv_with_whitespace):
+    frame = ar.read_csv(csv_with_whitespace)
+    stats = frame.describe()
+
+    assert list(stats.keys()) == ["name", "city"]
+
+    for col in ["name", "city"]:
+        metric_keys = list(stats[col].keys())
+        assert metric_keys == ["count", "nulls", "unique"]

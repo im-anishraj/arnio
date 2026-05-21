@@ -34,7 +34,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install cibuildwheel
-        run: pip install cibuildwheel==2.22.0
+        run: pip install "cibuildwheel>=3.2,<4"
 
       - name: Build macOS arm64 wheel
         run: cibuildwheel --only cp312-macosx_arm64 --output-dir wheelhouse

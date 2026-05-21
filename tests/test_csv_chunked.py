@@ -76,12 +76,12 @@ class TestReadCsvChunked:
 
     def test_quoted_multiline_field(self, tmp_path):
         path = tmp_path / "multiline.csv"
-        path.write_text(
-            "id,text\n"
-            '1,"line one\nline two"\n'
-            "2,simple\n"
-            '3,"another\nquoted"\n'
-            "4,plain\n"
+        path.write_bytes(
+            b"id,text\n"
+            b'1,"line one\nline two"\n'
+            b"2,simple\n"
+            b'3,"another\nquoted"\n'
+            b"4,plain\n"
         )
         chunks = _chunked_rows(str(path), chunksize=2)
         chunked_df = pd.concat([ar.to_pandas(c) for c in chunks], ignore_index=True)

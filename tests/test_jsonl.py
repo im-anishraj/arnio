@@ -128,6 +128,14 @@ class TestReadJsonlNrows:
         frame = ar.read_jsonl(path, nrows=3)
         assert frame.shape[0] == 3
 
+    def test_nrows_stops_before_malformed_record_beyond_limit(self, tmp_path):
+        path = tmp_path / "limited.jsonl"
+        path.write_text('{"a": 1}\n{"a": 2}\nnot json\n', encoding="utf-8")
+
+        frame = ar.read_jsonl(path, nrows=2)
+
+        assert frame.shape == (2, 1)
+
     def test_nrows_zero_returns_empty_frame(self, tmp_path):
         path = _write(tmp_path, "data.jsonl", [{"x": 1}, {"x": 2}])
         # nrows=0 is valid — reads 0 rows, returns empty frame

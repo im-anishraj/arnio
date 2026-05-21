@@ -22,5 +22,14 @@ benchmark: ## Run benchmarks
 	python benchmarks/generate_data.py
 	python benchmarks/benchmark_vs_pandas.py
 
+benchmark-sparse-nulls: ## Run sparse-null benchmark
+	python benchmarks/benchmark_sparse_nulls.py
+
 clean: ## Remove build artifacts
+ifeq ($(OS),Windows_NT)
 	python -c "import shutil, os, glob; [shutil.rmtree(p, ignore_errors=True) for p in ['dist', 'build', '.pytest_cache'] + glob.glob('*.egg-info') + glob.glob('**/__pycache__', recursive=True)]; [os.remove(f) for f in glob.glob('**/*.pyc', recursive=True)]"
+else
+	find . -type d -name "__pycache__" -exec rm -rf {} +
+	find . -name "*.pyc" -delete
+	rm -rf .pytest_cache dist build *.egg-info
+endif
