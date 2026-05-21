@@ -6,6 +6,7 @@ Chained cleaning pipeline.
 from __future__ import annotations
 
 import inspect
+import logging
 import warnings
 from dataclasses import dataclass
 from threading import Lock
@@ -21,6 +22,7 @@ from .frame import ArFrame
 
 _BUILTIN_STEP_NAMESPACE = "builtin"
 _STEP_NAMESPACE_SEPARATOR = ":"
+_LOGGER = logging.getLogger("arnio")
 
 # Map step names to cleaning functions
 _STEP_REGISTRY: dict[str, Callable] = {
@@ -259,12 +261,51 @@ def _validate_pipeline_steps(
             )
 
 
+def _log_pipeline_step_start(
+    step_name: str,
+    *,
+    path_label: str,
+    step_index: int,
+    total_steps: int,
+) -> None:
+    _LOGGER.info(
+        "Step %s/%s: %s [%s] starting",
+        step_index + 1,
+        total_steps,
+        step_name,
+        path_label,
+    )
+
+
+def _log_pipeline_step_done(
+    step_name: str,
+    *,
+    path_label: str,
+    step_index: int,
+    total_steps: int,
+    elapsed_seconds: float,
+    rows_before: int,
+    rows_after: int,
+) -> None:
+    _LOGGER.info(
+        "Step %s/%s: %s [%s] done (%.6fs, %s -> %s rows)",
+        step_index + 1,
+        total_steps,
+        step_name,
+        path_label,
+        elapsed_seconds,
+        rows_before,
+        rows_after,
+    )
+
+
 def pipeline(
     frame: ArFrame,
     steps: list[tuple],
     *,
     return_metadata: bool = False,
     dry_run: bool = False,
+    verbose: bool = False,
 ) -> ArFrame | tuple[ArFrame, dict[str, Any]]:
     """Apply a list of cleaning steps sequentially.
 
@@ -285,6 +326,9 @@ def pipeline(
     dry_run : bool, default False
         Validates pipeline structure and step execution without
         returning transformed output.
+    verbose : bool, default False
+        When True, emit per-step progress logs through the ``arnio`` logger
+        with execution path, elapsed time, and row-count changes.
 
     Returns
     -------
@@ -324,126 +368,182 @@ def pipeline(
     applied_steps: list[str] = []
     row_counts: list[dict[str, int | str]] = []
     total_steps = len(steps)
-    for step_index, step in enumerate(steps):
-        if len(step) == 1:
-            name = step[0]
-            kwargs = {}
-        elif len(step) == 2:
-            name, kwargs = step[0], step[1]
-            if not isinstance(kwargs, dict):
-                raise ValueError(
-                    f"Invalid step kwargs for {name!r}: {kwargs!r}. Expected a dict"
-                )
-        else:
-            raise ValueError(
-                f"Invalid step format: {step}. Expected (name,) or (name, kwargs)"
-            )
+    previous_logger_level = _LOGGER.level
+    should_restore_logger_level = False
+    if verbose and (
+        previous_logger_level == logging.NOTSET or previous_logger_level > logging.INFO
+    ):
+        _LOGGER.setLevel(logging.INFO)
+        should_restore_logger_level = True
 
-        name = _resolve_step_name(name, deprecated_step_aliases)
-        name = namespaced_builtin_steps.get(name, name)
-
-        if name in _STEP_REGISTRY:
-            # C++ backed step - fast path
-            fn = _STEP_REGISTRY[name]
-            rows_before = result.shape[0]
-
-            started_at = perf_counter()
-            if name == "rename_columns" and "mapping" not in kwargs:
-                step_result = fn(result, mapping=kwargs)
-
-                if not dry_run:
-                    result = step_result
-
-            elif name == "cast_types" and "mapping" not in kwargs:
-                step_result = fn(result, kwargs)
-
-                if not dry_run:
-                    result = step_result
-
+    try:
+        for step_index, step in enumerate(steps):
+            if len(step) == 1:
+                name = step[0]
+                kwargs = {}
+            elif len(step) == 2:
+                name, kwargs = step[0], step[1]
+                if not isinstance(kwargs, dict):
+                    raise ValueError(
+                        f"Invalid step kwargs for {name!r}: {kwargs!r}. Expected a dict"
+                    )
             else:
-                target_frame = result
+                raise ValueError(
+                    f"Invalid step format: {step}. Expected (name,) or (name, kwargs)"
+                )
 
-                step_result = fn(target_frame, **kwargs)
+            name = _resolve_step_name(name, deprecated_step_aliases)
+            name = namespaced_builtin_steps.get(name, name)
 
+            if name in _STEP_REGISTRY:
+                # C++ backed step - fast path
+                fn = _STEP_REGISTRY[name]
+                rows_before = result.shape[0]
+                started_at = perf_counter()
+
+                if verbose:
+                    _log_pipeline_step_start(
+                        name,
+                        path_label="C++",
+                        step_index=step_index,
+                        total_steps=total_steps,
+                    )
+
+                if name == "rename_columns" and "mapping" not in kwargs:
+                    step_result = fn(result, mapping=kwargs)
+
+                    if not dry_run:
+                        result = step_result
+
+                elif name == "cast_types" and "mapping" not in kwargs:
+                    step_result = fn(result, kwargs)
+
+                    if not dry_run:
+                        result = step_result
+
+                else:
+                    target_frame = result
+
+                    step_result = fn(target_frame, **kwargs)
+
+                    if not dry_run:
+                        result = step_result
+
+                elapsed_seconds = round(perf_counter() - started_at, 9)
+
+                if verbose:
+                    _log_pipeline_step_done(
+                        name,
+                        path_label="C++",
+                        step_index=step_index,
+                        total_steps=total_steps,
+                        elapsed_seconds=elapsed_seconds,
+                        rows_before=rows_before,
+                        rows_after=step_result.shape[0],
+                    )
+
+                if return_metadata:
+                    applied_steps.append(name)
+                    row_counts.append(
+                        {
+                            "step": name,
+                            "before": rows_before,
+                            "after": step_result.shape[0],
+                        }
+                    )
+                    step_timings.append(
+                        {
+                            "step": name,
+                            "seconds": elapsed_seconds,
+                        }
+                    )
+            elif name in python_step_registry:
+                # Pure Python step - slower but contributor-friendly
+                started_at = perf_counter()
+                rows_before = result.shape[0]
+
+                if verbose:
+                    _log_pipeline_step_start(
+                        name,
+                        path_label="Python",
+                        step_index=step_index,
+                        total_steps=total_steps,
+                    )
+
+                fn = python_step_registry[name]
+
+                df = to_pandas(result)
+
+                # Isolate genuine custom steps from internal core library functions
+                is_builtin = _is_builtin_python_step(name, fn)
+                signature = inspect.signature(fn)
+                call_kwargs = dict(kwargs)
+                if "context" in signature.parameters and "context" not in call_kwargs:
+                    call_kwargs["context"] = PipelineContext(
+                        step_name=name,
+                        step_index=step_index,
+                        total_steps=total_steps,
+                        dry_run=dry_run,
+                    )
+
+                try:
+                    returned = fn(df, **call_kwargs)
+                except Exception as e:
+                    if is_builtin:
+                        raise
+                    raise PipelineStepError(name, e) from e
+
+                if returned is None:
+                    raise TypeError(
+                        f"Custom pipeline step '{name}' returned None. "
+                        "Steps must return a pandas DataFrame."
+                    )
+                if not isinstance(returned, pd.DataFrame):
+                    raise TypeError(
+                        f"Custom pipeline step '{name}' returned "
+                        f"{type(returned).__name__!r} instead of a pandas DataFrame. "
+                        "Steps must return a pandas DataFrame."
+                    )
+                step_result = from_pandas(returned)
                 if not dry_run:
                     result = step_result
 
-            if return_metadata:
-                applied_steps.append(name)
-                row_counts.append(
-                    {
-                        "step": name,
-                        "before": rows_before,
-                        "after": step_result.shape[0],
-                    }
-                )
-                step_timings.append(
-                    {
-                        "step": name,
-                        "seconds": round(perf_counter() - started_at, 9),
-                    }
-                )
-        elif name in python_step_registry:
-            # Pure Python step - slower but contributor-friendly
-            started_at = perf_counter()
-            rows_before = result.shape[0]
+                elapsed_seconds = round(perf_counter() - started_at, 9)
 
-            fn = python_step_registry[name]
+                if verbose:
+                    _log_pipeline_step_done(
+                        name,
+                        path_label="Python",
+                        step_index=step_index,
+                        total_steps=total_steps,
+                        elapsed_seconds=elapsed_seconds,
+                        rows_before=rows_before,
+                        rows_after=step_result.shape[0],
+                    )
 
-            df = to_pandas(result)
-
-            # Isolate genuine custom steps from internal core library functions
-            is_builtin = _is_builtin_python_step(name, fn)
-            signature = inspect.signature(fn)
-            call_kwargs = dict(kwargs)
-            if "context" in signature.parameters and "context" not in call_kwargs:
-                call_kwargs["context"] = PipelineContext(
-                    step_name=name,
-                    step_index=step_index,
-                    total_steps=total_steps,
-                    dry_run=dry_run,
+                if return_metadata:
+                    applied_steps.append(name)
+                    row_counts.append(
+                        {
+                            "step": name,
+                            "before": rows_before,
+                            "after": step_result.shape[0],
+                        }
+                    )
+                    step_timings.append(
+                        {
+                            "step": name,
+                            "seconds": elapsed_seconds,
+                        }
+                    )
+            else:
+                available = list(_STEP_REGISTRY.keys()) + list(
+                    python_step_registry.keys()
                 )
-
-            try:
-                returned = fn(df, **call_kwargs)
-            except Exception as e:
-                if is_builtin:
-                    raise
-                raise PipelineStepError(name, e) from e
-
-            if returned is None:
-                raise TypeError(
-                    f"Custom pipeline step '{name}' returned None. "
-                    "Steps must return a pandas DataFrame."
-                )
-            if not isinstance(returned, pd.DataFrame):
-                raise TypeError(
-                    f"Custom pipeline step '{name}' returned "
-                    f"{type(returned).__name__!r} instead of a pandas DataFrame. "
-                    "Steps must return a pandas DataFrame."
-                )
-            step_result = from_pandas(returned)
-            if not dry_run:
-                result = step_result
-
-            if return_metadata:
-                applied_steps.append(name)
-                row_counts.append(
-                    {
-                        "step": name,
-                        "before": rows_before,
-                        "after": step_result.shape[0],
-                    }
-                )
-                step_timings.append(
-                    {
-                        "step": name,
-                        "seconds": round(perf_counter() - started_at, 9),
-                    }
-                )
-        else:
-            available = list(_STEP_REGISTRY.keys()) + list(python_step_registry.keys())
-            raise UnknownStepError(name, available)
+                raise UnknownStepError(name, available)
+    finally:
+        if should_restore_logger_level:
+            _LOGGER.setLevel(previous_logger_level)
 
     if return_metadata:
         return result, {

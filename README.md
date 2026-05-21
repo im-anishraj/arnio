@@ -115,6 +115,20 @@ print(metadata["applied_steps"])
 print(metadata["row_counts"])
 ```
 
+Need live pipeline progress instead? Use the opt-in verbose logger:
+
+```python
+import logging
+
+logging.basicConfig(level=logging.INFO)
+
+ar.pipeline(
+    frame,
+    [("strip_whitespace",), ("drop_duplicates",)],
+    verbose=True,
+)
+```
+
 ## Quick Example
 
 ```python

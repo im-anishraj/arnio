@@ -543,6 +543,58 @@ class TestPipeline:
         assert metadata["step_timings"][0]["step"] == "timed_python_step"
         assert metadata["step_timings"][0]["seconds"] >= 0
 
+    def test_pipeline_verbose_logging_disabled_by_default(self, sample_csv, caplog):
+        frame = ar.read_csv(sample_csv)
+
+        ar.pipeline(
+            frame,
+            [
+                ("strip_whitespace",),
+            ],
+        )
+
+        assert "Step 1/1: strip_whitespace" not in caplog.text
+
+    def test_pipeline_verbose_logging_for_cpp_step(self, sample_csv, caplog):
+        frame = ar.read_csv(sample_csv)
+
+        with caplog.at_level("INFO", logger="arnio"):
+            ar.pipeline(
+                frame,
+                [
+                    ("strip_whitespace",),
+                ],
+                verbose=True,
+            )
+
+        assert "Step 1/1: strip_whitespace [C++] starting" in caplog.text
+        assert "Step 1/1: strip_whitespace [C++] done" in caplog.text
+        assert "rows)" in caplog.text
+
+    def test_pipeline_verbose_logging_for_python_step(
+        self, sample_csv, caplog, monkeypatch
+    ):
+        frame = ar.read_csv(sample_csv)
+
+        def add_marker(df):
+            df["marker"] = "ok"
+            return df
+
+        ar.register_step("verbose_python_step", add_marker)
+        monkeypatch.setattr(pipeline_module, "from_pandas", lambda df: frame)
+
+        with caplog.at_level("INFO", logger="arnio"):
+            ar.pipeline(
+                frame,
+                [
+                    ("verbose_python_step",),
+                ],
+                verbose=True,
+            )
+
+        assert "Step 1/1: verbose_python_step [Python] starting" in caplog.text
+        assert "Step 1/1: verbose_python_step [Python] done" in caplog.text
+
     def test_register_python_step(self, sample_csv):
         frame = ar.read_csv(sample_csv)
 
