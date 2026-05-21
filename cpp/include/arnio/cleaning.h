@@ -36,6 +36,11 @@ Frame rename_columns(const Frame& frame,
                      const std::unordered_map<std::string, std::string>& mapping);
 
 // Cast column types
+Frame cast_types(const Frame& frame, const std::unordered_map<std::string, std::string>& mapping);
+
+// Make column names unique by appending suffixes
+Frame make_column_names_unique(const Frame& frame);
+
 Frame cast_types(const Frame& frame, const std::unordered_map<std::string, std::string>& mapping,
                  bool coerce_invalid = false);
 
