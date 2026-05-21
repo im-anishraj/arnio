@@ -179,11 +179,7 @@ class RecordReader {
 
 namespace {
 
-// Overload without line tracking — used by callers that do not need location.
-bool read_record(std::istream& file, std::string& record) {
-    size_t dummy = 0;
-    return read_record(file, record, dummy);
-}
+
 
 void validate_header(const std::vector<std::string>& header) {
     std::unordered_set<std::string> seen;
