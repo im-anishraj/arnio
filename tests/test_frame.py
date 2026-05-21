@@ -351,7 +351,7 @@ def test_cpp_frame_explicit_zero_rows_rejects_nonempty_first_column():
         frame.add_column(column)
 
 
-# ── ArFrame.describe() Tests ──────────────────────────────────────────────────
+# ArFrame.describe() Tests
 
 
 def test_describe_sample_metrics(sample_csv):
