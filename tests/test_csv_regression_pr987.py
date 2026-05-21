@@ -1,4 +1,3 @@
-import pandas as pd
 import pytest
 
 import arnio as ar
@@ -24,8 +23,6 @@ def test_multiline_quoted_records(tmp_path):
     assert len(df) == 2
     assert df["desc"].iloc[0] == "hello\nworld"
     assert df["desc"].iloc[1] == 'escaped "quote"'
-
-
 
 
 def test_buffer_boundary_edge_cases(tmp_path):

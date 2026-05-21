@@ -548,7 +548,7 @@ def read_csv_chunked(
     config = _CsvConfig()
     config.delimiter = delimiter
     config.has_header = _validate_bool_option(has_header, "has_header")
-    config.encoding = _validate_encoding(encoding)
+    config.encoding = encoding
     config.trim_headers = _validate_bool_option(trim_headers, "trim_headers")
     config.thousands_separator = thousands_separator
     config.mode = mode
