@@ -14,12 +14,13 @@ Covers:
 
 from __future__ import annotations
 
+import os
 import pathlib
-import textwrap
+import sys
 
 import pytest
 
-import sys, os; sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'arnio'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "arnio"))
 from schema_export import schema_to_dict, schema_to_yaml
 
 
@@ -44,8 +45,8 @@ class TestSchemaToDict:
         result = schema_to_dict(raw)
         assert result == {
             "fields": {
-                "id":    {"type": "INT64"},
-                "name":  {"type": "STRING"},
+                "id": {"type": "INT64"},
+                "name": {"type": "STRING"},
                 "score": {"type": "FLOAT64"},
             }
         }
@@ -79,6 +80,7 @@ class TestSchemaToDict:
     def test_unsupported_type_raises(self):
         with pytest.raises(TypeError, match="Expected a dict"):
             schema_to_dict(42)
+
 
 class TestSchemaToYamlOutput:
     def test_basic_output(self):
@@ -140,12 +142,12 @@ class TestSchemaToYamlOutput:
 
     def test_unsupported_value_type_raises(self):
         # Inject an unsupported type deep in the dict.
-        raw = {"col": {"type": object()}}   # object() isnt a supported scalar
+        raw = {"col": {"type": object()}}  # object() isnt a supported scalar
         with pytest.raises(TypeError):
             schema_to_yaml(raw)
 
     def test_float_specials(self):
-        import math
+
         raw = {"col": {"type": "FLOAT64", "min": float("inf"), "nan_ex": float("nan")}}
         out = schema_to_yaml(raw)
         assert ".inf" in out
@@ -156,6 +158,7 @@ class TestSchemaToYamlOutput:
         out = schema_to_yaml(schema)
         assert "ts:" in out
         assert "TIMESTAMP" in out
+
 
 class TestSchemaToYamlFileWrite:
     def test_writes_file(self, tmp_path):
@@ -189,5 +192,5 @@ class TestSchemaToYamlFileWrite:
 
     def test_no_file_when_path_none(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
-        schema_to_yaml({"col": "INT64"})   # no path= no file
+        schema_to_yaml({"col": "INT64"})  # no path= no file
         assert list(tmp_path.iterdir()) == []

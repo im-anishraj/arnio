@@ -19,7 +19,7 @@ for anything else so the contract stays explicit.
 from __future__ import annotations
 
 import pathlib
-from typing import Any, Union
+from typing import Any
 
 # ---------------------------------------------------------------------------
 # Internal helpers
@@ -41,7 +41,7 @@ def _emit_scalar(value: Any) -> str:
     if isinstance(value, int):
         return str(value)
     if isinstance(value, float):
-        if value != value:          # NaN
+        if value != value:  # NaN
             return ".nan"
         if value == float("inf"):
             return ".inf"
@@ -53,8 +53,27 @@ def _emit_scalar(value: Any) -> str:
         needs_quoting = (
             not value
             or value.lower() in {"true", "false", "null", "yes", "no", "on", "off"}
-            or value[0] in ('"', "'", "{", "[", "|", ">", "!", "&", "*", "#",
-                            "?", ":", "-", ",", "@", "`", "%", "~")
+            or value[0]
+            in (
+                '"',
+                "'",
+                "{",
+                "[",
+                "|",
+                ">",
+                "!",
+                "&",
+                "*",
+                "#",
+                "?",
+                ":",
+                "-",
+                ",",
+                "@",
+                "`",
+                "%",
+                "~",
+            )
             or ":" in value
             or "#" in value
             or value != value.strip()
@@ -99,8 +118,9 @@ def _emit_value(value: Any, depth: int) -> str:
             if isinstance(item, dict) and item:
                 # Multi-line mapping under a list bullet.
                 first_line, *rest = rendered.split("\n")
-                block = "\n".join([f"{indent}- {first_line}"] +
-                                  [f"{indent}  {r}" for r in rest])
+                block = "\n".join(
+                    [f"{indent}- {first_line}"] + [f"{indent}  {r}" for r in rest]
+                )
                 lines.append(block)
             elif isinstance(item, list) and item:
                 lines.append(f"{indent}-\n{rendered}")
@@ -118,7 +138,8 @@ def _emit_value(value: Any, depth: int) -> str:
 # Public API
 # ---------------------------------------------------------------------------
 
-def schema_to_dict(schema: Union[dict, Any]) -> dict:
+
+def schema_to_dict(schema: dict | Any) -> dict:
     """Convert *schema* to a plain, sorted, serialisation-ready :class:`dict`.
 
     Parameters
@@ -149,8 +170,7 @@ def schema_to_dict(schema: Union[dict, Any]) -> dict:
                 raw[name] = field
             elif hasattr(field, "__dict__"):
                 raw[name] = {
-                    k: v for k, v in vars(field).items()
-                    if not k.startswith("_")
+                    k: v for k, v in vars(field).items() if not k.startswith("_")
                 }
             else:
                 raw[name] = str(field)
@@ -177,8 +197,8 @@ def schema_to_dict(schema: Union[dict, Any]) -> dict:
 
 
 def schema_to_yaml(
-    schema: Union[dict, Any],
-    path: Union[str, pathlib.Path, None] = None,
+    schema: dict | Any,
+    path: str | pathlib.Path | None = None,
 ) -> str:
     """Serialise *schema* to a YAML string.
 
