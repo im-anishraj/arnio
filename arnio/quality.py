@@ -206,7 +206,6 @@ class DataQualityReport:
                 )
                 for name in sorted(self.columns)
             },
-
             "suggestions": [
                 {
                     "step": s[0],
@@ -220,7 +219,7 @@ class DataQualityReport:
                 )
             ],
         }
-    
+
     def __repr__(self) -> str:
         """Deterministic concise representation for terminals and notebooks."""
 
@@ -240,7 +239,6 @@ class DataQualityReport:
             f"column_names=[{preview}]"
             ")"
         )
-
 
     __str__ = __repr__
 
@@ -708,7 +706,6 @@ class QualityGateResult:
             },
             "issues": [issue.to_dict() for issue in self.issues],
         }
-
 
     def to_markdown(self) -> str:
         """Return a GitHub-friendly quality-gate report."""

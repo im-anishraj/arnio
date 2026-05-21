@@ -1578,9 +1578,6 @@ def test_profile_duplicate_count_hash_path_matches_pandas_baseline_at_scale():
     assert ar.profile(frame).duplicate_rows == baseline_count
 
 
-
-
-
 # ── Changes made through issue number 190 ───────────────────────────────────
 # Normal report repr
 
@@ -1878,4 +1875,3 @@ def test_quality_gate_markdown_escapes_pipe_characters():
     assert r"cat\|egory" in md
     assert r"pipe\|warning" in md
     assert "| col|name |" not in md
-
