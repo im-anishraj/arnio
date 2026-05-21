@@ -365,7 +365,16 @@ class Schema:
         frame: ArFrame,
         max_errors: int | None = None,
     ) -> ValidationResult:
-        """Validate a frame against this schema."""
+        """
+        Validate a frame against this schema.
+
+        Args:
+        frame: Frame to validate.
+        max_errors:
+        Maximum number of validation issues to return.
+        Validation stops once this limit is reached.
+        """
+
         return validate(frame, self, max_errors=max_errors)
 
     @classmethod
@@ -775,7 +784,11 @@ def validate(
     frame : ArFrame
         Input frame.
     schema : Schema or dict[str, Field]
-        Validation contract.
+        Validation schema.
+
+    max_errors : int | None
+        Maximum number of validation issues to return.
+        Validation stops once this limit is reached.
 
     Returns
     -------
@@ -807,7 +820,9 @@ def validate(
             row_count=len(df),
             issue_count=0,
             issues=[],
-            bad_rows=[],
+            bad_rows=sorted(
+                {issue.row_index for issue in issues if issue.row_index is not None}
+            ),
         )
 
     def reached_limit() -> bool:
@@ -831,7 +846,13 @@ def validate(
                     row_count=len(df),
                     issue_count=len(issues),
                     issues=issues,
-                    bad_rows=[],
+                    bad_rows=sorted(
+                        {
+                            issue.row_index
+                            for issue in issues
+                            if issue.row_index is not None
+                        }
+                    ),
                 )
 
             continue
@@ -856,7 +877,9 @@ def validate(
                 row_count=len(df),
                 issue_count=len(issues),
                 issues=issues,
-                bad_rows=[],
+                bad_rows=sorted(
+                    {issue.row_index for issue in issues if issue.row_index is not None}
+                ),
             )
 
     if schema.strict:
@@ -879,7 +902,13 @@ def validate(
                         row_count=len(df),
                         issue_count=len(issues),
                         issues=issues,
-                        bad_rows=[],
+                        bad_rows=sorted(
+                            {
+                                issue.row_index
+                                for issue in issues
+                                if issue.row_index is not None
+                            }
+                        ),
                     )
 
     if schema.unique is not None:
@@ -910,7 +939,13 @@ def validate(
                     row_count=len(df),
                     issue_count=len(issues),
                     issues=issues,
-                    bad_rows=[],
+                    bad_rows=sorted(
+                        {
+                            issue.row_index
+                            for issue in issues
+                            if issue.row_index is not None
+                        }
+                    ),
                 )
 
         else:
@@ -951,7 +986,13 @@ def validate(
                                 row_count=len(df),
                                 issue_count=len(issues),
                                 issues=issues,
-                                bad_rows=[],
+                                bad_rows=sorted(
+                                    {
+                                        issue.row_index
+                                        for issue in issues
+                                        if issue.row_index is not None
+                                    }
+                                ),
                             )
 
     if schema.rules:
@@ -971,6 +1012,22 @@ def validate(
                             f"item: {type(item).__name__!r}"
                         )
                 issues.extend(result)
+                if reached_limit():
+                    issues = issues[:max_errors]
+
+                    return ValidationResult(
+                        row_count=len(df),
+                        issue_count=len(issues),
+                        issues=issues,
+                        bad_rows=sorted(
+                            {
+                                issue.row_index
+                                for issue in issues
+                                if issue.row_index is not None
+                            }
+                        ),
+                    )
+
             except KeyError as e:
                 issues.append(
                     ValidationIssue(
