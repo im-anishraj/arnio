@@ -87,3 +87,6 @@ def test_csv_readers_parity_multiline_mixed(tmp_path):
     df_chunked = pd.concat([ar.to_pandas(c) for c in chunks], ignore_index=True)
 
     pd.testing.assert_frame_equal(df_read, df_chunked)
+
+    schema = ar.scan_csv(str(csv_path))
+    assert schema == {"id": "int64", "val": "string"}
