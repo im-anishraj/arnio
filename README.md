@@ -548,8 +548,8 @@ Enable lightweight pipeline diagnostics with `verbose=True`:
 result = ar.pipeline(
     frame,
     [
-        ar.trim_strings,
-        ar.drop_nulls,
+        ("strip_whitespace",),
+        ("drop_nulls",),
     ],
     verbose=True,
 )

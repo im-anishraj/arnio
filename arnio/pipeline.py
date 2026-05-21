@@ -286,6 +286,11 @@ def pipeline(
         When True, also return a metadata dictionary with per-step timing
         information in execution order.
 
+    verbose : bool, default False
+        Enable lightweight diagnostic logging through the ``arnio`` logger.
+        Logs step index, step name, execution path, elapsed execution
+        time, and row-count changes for each pipeline step.
+
     dry_run : bool, default False
         Validates pipeline structure and step execution without
         returning transformed output.
