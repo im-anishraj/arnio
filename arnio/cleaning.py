@@ -587,6 +587,13 @@ def cast_types(
         _validate_column_sequence(list(mapping), argument_name="mapping keys"),
         operation="cast_types",
     )
+    _VALID_DTYPE_STRINGS = {"int64", "float64", "bool", "string"}
+    for col_name, dtype_str in mapping.items():
+        if dtype_str not in _VALID_DTYPE_STRINGS:
+            raise TypeCastError(
+                f"Unknown target dtype for column '{col_name}': '{dtype_str}'. "
+                f"Valid options are: {sorted(_VALID_DTYPE_STRINGS)}"
+            )
     try:
         result = _cast_types(frame._frame, mapping)
     except ValueError as e:
