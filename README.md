@@ -1646,6 +1646,29 @@ pip install -e ".[dev]"
 pre-commit install
 pytest tests/ -v
 ```
+### Building frames without a CSV
+
+Use `ArFrame.from_records` (also available as `ar.from_records`) to build
+small frames inline — useful for tests, quick experiments, or feeding
+hand-crafted data into the pipeline without writing a CSV file.
+
+```python
+import arnio as ar
+
+# list-of-dicts — column names inferred from keys
+frame = ar.from_records([
+    {"id": 1, "name": "alice", "score": 95},
+    {"id": 2, "name": "bob",   "score": 88},
+])
+
+# list-of-lists or tuples — columns must be supplied
+frame2 = ar.from_records(
+    [(1, "alice", 95), (2, "bob", 88)],
+    columns=["id", "name", "score"],
+)
+```
+
+Missing keys in dict records are filled with `None`. Nested values raise `TypeError`. An empty list raises `ValueError`.
 
 #### Windows build troubleshooting
 
