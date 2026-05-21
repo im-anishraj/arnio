@@ -834,6 +834,7 @@ void CsvChunkReader::open(const std::string& path) {
     col_types_.clear();
     expected_cols_ = std::nullopt;
 
+    std::string line;
     const size_t skip_target = config.skip_rows.value_or(0);
     size_t skipped = 0;
     while (skipped < skip_target && record_reader_->read(line)) {
