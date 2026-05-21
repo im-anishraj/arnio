@@ -7,6 +7,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <limits>
 #include <locale>
@@ -434,7 +435,7 @@ CellValue CsvParser::parse_value(const std::string& raw, DType dtype) const {
 
 Frame CsvReader::read(const std::string& path) const {
     const CsvConfig& config = parser_.config();
-    std::ifstream file(path, std::ios::binary);
+    std::ifstream file(std::filesystem::u8path(path), std::ios::binary);
     if (!file.is_open()) {
         throw std::runtime_error("Cannot open file: " + path);
     }
@@ -567,7 +568,7 @@ Frame CsvReader::read(const std::string& path) const {
 std::vector<std::pair<std::string, std::string>> CsvReader::scan_schema(
     const std::string& path) const {
     const CsvConfig& config = parser_.config();
-    std::ifstream file(path, std::ios::binary);
+    std::ifstream file(std::filesystem::u8path(path), std::ios::binary);
     if (!file.is_open()) {
         throw std::runtime_error("Cannot open file: " + path);
     }
@@ -719,7 +720,7 @@ void CsvChunkReader::open(const std::string& path) {
     const CsvConfig& config = parser_.config();
     close();
 
-    file_.open(path, std::ios::binary);
+    file_.open(std::filesystem::u8path(path), std::ios::binary);
     if (!file_.is_open()) {
         throw std::runtime_error("Cannot open file: " + path);
     }

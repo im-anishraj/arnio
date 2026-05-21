@@ -1705,3 +1705,53 @@ class TestEdgeCaseCsvShapes:
         schema = ar.scan_csv(csv_path)
         assert "score" in schema
         assert len(schema) == 1
+
+
+class TestUnicodeFilePath:
+    """read_csv and scan_csv must work with non-ASCII characters in the path."""
+
+    def test_read_csv_unicode_filename(self, tmp_path, unicode_csv):
+        csv_path = tmp_path / "用户数据.csv"
+        csv_path.write_text(unicode_csv, encoding="utf-8")
+        frame = ar.read_csv(str(csv_path))
+        assert frame.columns == ["name", "value"]
+        assert frame.shape == (2, 2)
+
+    def test_scan_csv_unicode_filename(self, tmp_path, unicode_csv):
+        csv_path = tmp_path / "用户数据.csv"
+        csv_path.write_text(unicode_csv, encoding="utf-8")
+        schema = ar.scan_csv(str(csv_path))
+        assert schema == {"name": "string", "value": "int64"}
+
+    def test_read_csv_unicode_directory(self, tmp_path, unicode_csv):
+        folder = tmp_path / "données"
+        folder.mkdir()
+        csv_path = folder / "data.csv"
+        csv_path.write_text(unicode_csv, encoding="utf-8")
+        frame = ar.read_csv(str(csv_path))
+        assert frame.shape == (2, 2)
+
+    def test_scan_csv_unicode_directory(self, tmp_path, unicode_csv):
+        folder = tmp_path / "données"
+        folder.mkdir()
+        csv_path = folder / "data.csv"
+        csv_path.write_text(unicode_csv, encoding="utf-8")
+        schema = ar.scan_csv(str(csv_path))
+        assert schema == {"name": "string", "value": "int64"}
+
+    def test_chunked_read_unicode_path(self, tmp_path, unicode_csv):
+        folder = tmp_path / "用户"
+        folder.mkdir()
+
+        csv_path = folder / "数据.csv"
+        csv_path.write_text(unicode_csv, encoding="utf-8")
+
+        chunks = ar.read_csv_chunked(str(csv_path), chunksize=1)
+        chunks = list(chunks)
+
+        assert len(chunks) > 0
+
+        assert chunks[0].shape[1] == 2
+
+        total_rows = sum(chunk.shape[0] for chunk in chunks)
+        assert total_rows == 2
