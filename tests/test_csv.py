@@ -1,12 +1,14 @@
 """Tests for CSV reading functionality."""
 
 import io
+import re
 from pathlib import Path
 
 import pandas as pd
 import pytest
 
 import arnio as ar
+from arnio.exceptions import CsvReadError
 from arnio.io import _utf8_csv_path
 
 MESSY_CSV = str(Path(__file__).parent / "fixtures" / "messy_sales_data.csv")
@@ -358,6 +360,22 @@ class TestReadCsv:
         frame = ar.read_csv(str(tsv), delimiter=",")
         assert frame.columns == ["name", "age"]
         assert frame.shape == (1, 2)
+
+    def test_read_scan_csv_binary_file_parity(self, tmp_path):
+        binary_file = tmp_path / "binary.csv"
+
+        with open(binary_file, "wb") as f:
+            f.write(b"\x00\x01\x02")
+
+        expected_message = (
+            "CSV input contains NUL bytes and appears to be binary or corrupted"
+        )
+
+        with pytest.raises(CsvReadError, match=re.escape(expected_message)):
+            ar.read_csv(binary_file)
+
+        with pytest.raises(CsvReadError, match=re.escape(expected_message)):
+            ar.scan_csv(binary_file)
 
     def test_binary_file_rejection(self, tmp_path):
         file_path = str(tmp_path / "data.csv")

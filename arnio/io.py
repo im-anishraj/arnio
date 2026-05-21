@@ -308,6 +308,19 @@ def _reject_utf8_nul_bytes(path: str) -> None:
         pass  # Let C++ backend handle or raise standard error
 
 
+def _validate_csv_path(path: str, encoding: str) -> None:
+    """Shared validation for CSV-style file inputs."""
+
+    if _is_utf8_encoding(encoding):
+        _reject_utf8_nul_bytes(path)
+
+    try:
+        if os.path.getsize(path) == 0:
+            raise CsvReadError(f"CSV file is empty: {path!r}")
+    except FileNotFoundError:
+        pass
+
+
 def read_csv(
     path: str | os.PathLike[str],
     *,
@@ -393,6 +406,9 @@ def read_csv(
     >>> frame = ar.read_csv("data.dat")           # non-standard extension accepted
     """
     path, should_cleanup = _materialize_csv_input(path)
+
+    _validate_csv_path(path, encoding)
+
     path_lower = path.lower()
 
     # Resolve the sentinel: auto-detect tab for .tsv only when the caller
@@ -400,14 +416,6 @@ def read_csv(
     # honoured, even for .tsv paths.
     if delimiter is None:
         delimiter = "\t" if path_lower.endswith(".tsv") else ","
-
-    if _is_utf8_encoding(encoding):
-        _reject_utf8_nul_bytes(path)
-    try:
-        if os.path.getsize(path) == 0:
-            raise CsvReadError(f"CSV file is empty: {path!r}")
-    except FileNotFoundError:
-        pass  # Let C++ backend handle or raise standard error
 
     _validate_thousands_separator(thousands_separator)
     delimiter = _validate_delimiter(delimiter)
@@ -717,7 +725,11 @@ def scan_csv(
     >>> schema = ar.scan_csv("data.tsv", delimiter=",")  # explicit comma honoured
     >>> schema = ar.scan_csv("data.dat")              # non-standard extension accepted
     """
+
     path = os.fspath(path)
+
+    _validate_csv_path(path, encoding)
+
     path_lower = path.lower()
 
     # Resolve the sentinel: auto-detect tab for .tsv only when the caller
@@ -725,14 +737,6 @@ def scan_csv(
     # honoured, even for .tsv paths.
     if delimiter is None:
         delimiter = "\t" if path_lower.endswith(".tsv") else ","
-
-    if _is_utf8_encoding(encoding):
-        _reject_utf8_nul_bytes(path)
-    try:
-        if os.path.getsize(path) == 0:
-            raise CsvReadError(f"CSV file is empty: {path!r}")
-    except FileNotFoundError:
-        pass
 
     _validate_thousands_separator(thousands_separator)
     delimiter = _validate_delimiter(delimiter)
