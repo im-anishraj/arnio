@@ -59,11 +59,9 @@ def run():
 
     import os
 
-    scales = (
-        [10]
-        if os.getenv("ARNIO_BENCHMARK_DRY_RUN") == "1"
-        else [10_000, 100_000, 1_000_000]
-    )
+    dry_run = os.getenv("ARNIO_BENCHMARK_DRY_RUN") == "1"
+    scales = [10] if dry_run else [10_000, 100_000, 1_000_000]
+    hotspot_rows = 10 if dry_run else 100_000
 
     print("=" * 60)
     print("BENCHMARK: from_pandas() peak memory")
@@ -77,13 +75,9 @@ def run():
 
     print()
     print("=" * 60)
-    print("HOTSPOT: per-column peak memory at 100k rows")
+    print(f"HOTSPOT: per-column peak memory at {hotspot_rows:,} rows")
     print("=" * 60)
-    hotspot = measure_column_hotspot(scales[0])
+    hotspot = measure_column_hotspot(hotspot_rows)
     for col, mb in hotspot.items():
         print(f"  {col:<15}: {mb:.4f} MB")
     print("=" * 60)
-
-
-if __name__ == "__main__":
-    run()
