@@ -454,6 +454,33 @@ class TestDropConstantColumns:
         assert result.shape[1] == 0
         assert ar.to_pandas(result).shape == (1, 0)
 
+    def test_drop_constant_columns_all_columns_dropped_preserves_row_count_multiple_rows(self):
+        frame = ar.from_pandas(pd.DataFrame({"a": [7, 7, 7], "b": ["x", "x", "x"]}))
+        result = ar.drop_constant_columns(frame)
+        assert result.columns == []
+        assert result.shape == (3, 0)
+        assert ar.to_pandas(result).shape == (3, 0)
+
+    def test_zero_column_frame_shape_and_num_rows(self):
+        df = pd.DataFrame(index=range(5))
+        frame = ar.from_pandas(df)
+        assert frame.shape == (5, 0)
+        assert frame.shape[0] == 5
+        assert frame.shape[1] == 0
+
+    def test_zero_column_frame_pandas_roundtrip(self):
+        for n in [0, 1, 5, 100]:
+            df = pd.DataFrame(index=range(n))
+            frame = ar.from_pandas(df)
+            result = ar.to_pandas(frame)
+            assert result.shape == (n, 0), f"failed for n={n}"
+
+    def test_zero_column_frame_clone_preserves_row_count(self):
+        df = pd.DataFrame(index=range(4))
+        frame = ar.from_pandas(df)
+        cloned = frame._frame.clone()
+        assert cloned.num_rows() == 4
+        assert cloned.num_cols() == 0
 
 class TestClipNumeric:
     def test_clip_numeric_lower_only(self):
