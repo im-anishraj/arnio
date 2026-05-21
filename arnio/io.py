@@ -929,6 +929,8 @@ def read_jsonl(
                 line = raw_line.rstrip("\r\n")
                 if not line.strip():
                     continue  # skip blank / whitespace-only lines
+                if nrows is not None and len(records) >= nrows:
+                    break
                 try:
                     obj = json.loads(line)
                 except json.JSONDecodeError as exc:
@@ -940,8 +942,6 @@ def read_jsonl(
                         f"Expected a JSON object on line {lineno} of {path!r}, "
                         f"got {type(obj).__name__}"
                     )
-                if nrows is not None and len(records) >= nrows:
-                    break
                 records.append(obj)
     except OSError as exc:
         raise JsonlReadError(str(exc)) from exc
