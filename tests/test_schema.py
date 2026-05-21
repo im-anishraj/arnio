@@ -2297,3 +2297,80 @@ def test_empty_string_passes_when_nullable():
     result = ar.validate(ar.from_pandas(df), schema)
 
     assert result.issue_count == 0
+
+
+def test_url_https_only_accepts_https(tmp_path):
+    path = tmp_path / "urls.csv"
+    path.write_text("url\nhttps://example.com\nhttps://test.org\n")
+    result = ar.validate(ar.read_csv(path), {"url": ar.URL(allowed_schemes=["https"])})
+    assert result.passed
+
+
+def test_url_https_only_rejects_http(tmp_path):
+    path = tmp_path / "urls.csv"
+    path.write_text("url\nhttp://example.com\n")
+    result = ar.validate(ar.read_csv(path), {"url": ar.URL(allowed_schemes=["https"])})
+    assert not result.passed
+
+
+def test_url_multiple_schemes_accepted(tmp_path):
+    path = tmp_path / "urls.csv"
+    path.write_text("url\nhttps://example.com\nftp://files.example.com\n")
+    result = ar.validate(
+        ar.read_csv(path), {"url": ar.URL(allowed_schemes=["https", "ftp"])}
+    )
+    assert result.passed
+
+
+def test_url_multiple_schemes_rejects_unlisted(tmp_path):
+    path = tmp_path / "urls.csv"
+    path.write_text("url\nhttp://example.com\n")
+    result = ar.validate(
+        ar.read_csv(path), {"url": ar.URL(allowed_schemes=["https", "ftp"])}
+    )
+    assert not result.passed
+
+
+def test_url_default_accepts_http_and_https(tmp_path):
+    path = tmp_path / "urls.csv"
+    path.write_text("url\nhttp://example.com\nhttps://example.com\n")
+    result = ar.validate(ar.read_csv(path), {"url": ar.URL()})
+    assert result.passed
+
+
+def test_url_allowed_schemes_nullable_true_accepts_nulls(tmp_path):
+    path = tmp_path / "urls.csv"
+    path.write_text("url,dummy\nhttps://example.com,1\n,2\n")
+    result = ar.validate(
+        ar.read_csv(path), {"url": ar.URL(allowed_schemes=["https"], nullable=True)}
+    )
+    assert result.passed
+
+
+def test_url_allowed_schemes_nullable_false_rejects_nulls(tmp_path):
+    path = tmp_path / "urls.csv"
+    path.write_text("url,dummy\nhttps://example.com,1\n,2\n")
+    result = ar.validate(
+        ar.read_csv(path), {"url": ar.URL(allowed_schemes=["https"], nullable=False)}
+    )
+    assert not result.passed
+
+
+def test_url_allowed_schemes_empty_list_raises():
+    with pytest.raises(ValueError, match="non-empty"):
+        ar.URL(allowed_schemes=[])
+
+
+def test_url_allowed_schemes_empty_string_raises():
+    with pytest.raises(ValueError, match="non-empty strings"):
+        ar.URL(allowed_schemes=[""])
+
+
+def test_url_allowed_schemes_non_string_raises():
+    with pytest.raises(ValueError, match="non-empty strings"):
+        ar.URL(allowed_schemes=[123])
+
+
+def test_url_allowed_schemes_whitespace_string_raises():
+    with pytest.raises(ValueError, match="non-empty strings"):
+        ar.URL(allowed_schemes=["   "])

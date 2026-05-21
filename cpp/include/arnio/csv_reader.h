@@ -4,6 +4,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -15,14 +16,17 @@ struct CsvConfig {
     char delimiter = ',';
     bool has_header = true;
     std::optional<std::vector<std::string>> usecols = std::nullopt;
+    std::optional<std::unordered_map<std::string, std::string>> dtype = std::nullopt;
     std::optional<size_t> nrows = std::nullopt;
     std::optional<size_t> skip_rows = std::nullopt;
     std::string encoding = "utf-8";  // Currently only utf-8 supported
     bool trim_headers = true;        // for implementing the trim_headers option
+    char decimal_separator = '.';
     std::optional<char> thousands_separator = std::nullopt;
     std::optional<size_t> sample_size = std::nullopt;
     std::optional<std::vector<std::string>> null_values = std::nullopt;
     std::string mode = "strict";
+    std::string encoding_errors = "strict";
 };
 
 // Shared CSV field parsing and type inference used by CsvReader and CsvChunkReader.

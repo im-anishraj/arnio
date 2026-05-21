@@ -3,8 +3,8 @@
 <br>
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="logo-dark.png">
-  <img alt="Arnio" src="logo-light.png" width="280">
+  <source media="(prefers-color-scheme: dark)" srcset="final-icon-dark.svg">
+  <img alt="Arnio" src="final-icon-light.svg" width="280">
 </picture>
 
 <br><br>
@@ -124,6 +124,9 @@ frame = arnio.read_csv("sample.csv")
 
 # Preview first 5 rows
 frame.preview(5)
+
+# Generate and view scannable summary statistics
+print(frame.describe())
 ```
 
 ### Pipeline validation behavior
@@ -255,6 +258,52 @@ frame = ar.read_csv("data.csv", null_values=["", "MISSING", "UNKNOWN"])
 frame = ar.read_csv("data.csv", null_values=[])
 ```
 
+### Handling decimal separators
+
+Use `decimal_separator` when numeric CSV data uses a separator other than
+the default dot. This is explicit by design: Arnio does not auto-detect decimal
+formats because a comma can also be the CSV delimiter.
+
+```python
+# Semicolon-delimited CSV with unquoted European decimals
+frame = ar.read_csv("prices.csv", delimiter=";", decimal_separator=",")
+
+# Comma-delimited CSV still needs quoted comma-decimal values
+frame = ar.read_csv("prices.csv", decimal_separator=",")
+```
+
+The default remains `decimal_separator="."`, so existing dot-decimal files keep
+their current behavior. If you also use `thousands_separator`, it must differ
+from `decimal_separator`.
+
+### Handling invalid UTF-8 bytes
+
+Use `encoding_errors` to control how invalid UTF-8 bytes are handled during CSV parsing.
+
+```python
+# Raise an error on invalid UTF-8 bytes (default)
+frame = ar.read_csv(
+    "data.csv",
+    encoding_errors="strict",
+)
+
+# Replace invalid bytes with the Unicode replacement character (�)
+frame = ar.read_csv(
+    "data.csv",
+    encoding_errors="replace",
+)
+
+# Ignore invalid bytes completely
+frame = ar.read_csv(
+    "data.csv",
+    encoding_errors="ignore",
+)
+```
+Supported values:
+
+- `"strict"` (default)
+- `"replace"`
+- `"ignore"`
 > Every step above executes in C++. Your Python code is a _configuration_ — not the execution engine.
 
 > Explore more in the **[examples/](./examples/)** folder — ready-to-run recipes for sales, customers, survey, logs, and finance datasets.
@@ -845,6 +894,7 @@ Most operations below run natively in C++. Currently, `filter_rows`, `replace_va
 |:---|:---|:---|
 | `drop_nulls` | Remove rows with null/empty values | `ar.drop_nulls(frame, subset=["age"])` |
 | `drop_columns` | Remove selected columns while preserving the remaining order | `frame = ar.drop_columns(frame, ["debug_col"])` |
+| `drop_empty_columns` | Remove columns whose values are all null/empty | `frame = ar.drop_empty_columns(frame)` |
 | `keep_rows_with_nulls` | Keep only rows that contain at least one null | `ar.keep_rows_with_nulls(frame, subset=["age"])` |
 | `validate_columns_exist` | Fail early when required columns are missing | `ar.validate_columns_exist(frame, ["age"])` |
 | `filter_rows` | Filter rows using comparison operators | `ar.filter_rows(frame, column="age", op=">", value=18)` |
@@ -1166,6 +1216,34 @@ print(result.issue_count)  # Warning issues are still reported
 ```
 
 Warning-level issues remain visible in validation results without failing the overall validation status.
+
+### URL validation
+
+`URL()` validates that values are well-formed URLs. By default, both `http` and `https` schemes are accepted.
+
+```python
+schema = ar.Schema({
+    "website": ar.URL(nullable=False),
+})
+result = ar.validate(frame, schema)
+print(result.passed)
+```
+
+Use `allowed_schemes` to restrict which URL schemes are valid:
+
+```python
+# https only
+schema = ar.Schema({
+    "website": ar.URL(allowed_schemes=["https"]),
+})
+
+# multiple schemes
+schema = ar.Schema({
+    "endpoint": ar.URL(allowed_schemes=["https", "ftp"]),
+})
+```
+
+Any URL with a scheme not in `allowed_schemes` will fail validation.
 
 ### Schema JSON round-trips
 
@@ -1643,6 +1721,29 @@ pip install -e ".[dev]"
 pre-commit install
 pytest tests/ -v
 ```
+### Building frames without a CSV
+
+Use `ArFrame.from_records` (also available as `ar.from_records`) to build
+small frames inline — useful for tests, quick experiments, or feeding
+hand-crafted data into the pipeline without writing a CSV file.
+
+```python
+import arnio as ar
+
+# list-of-dicts — column names inferred from keys
+frame = ar.from_records([
+    {"id": 1, "name": "alice", "score": 95},
+    {"id": 2, "name": "bob",   "score": 88},
+])
+
+# list-of-lists or tuples — columns must be supplied
+frame2 = ar.from_records(
+    [(1, "alice", 95), (2, "bob", 88)],
+    columns=["id", "name", "score"],
+)
+```
+
+Missing keys in dict records are filled with `None`. Nested values raise `TypeError`. An empty list raises `ValueError`.
 
 #### Windows build troubleshooting
 
@@ -1766,8 +1867,8 @@ arnio/
 <div align="center">
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="logo-dark.png">
-  <img alt="Arnio" src="logo-light.png" width="80">
+  <source media="(prefers-color-scheme: dark)" srcset="final-icon-dark.svg">
+  <img alt="Arnio" src="final-icon-light.svg" width="80">
 </picture>
 
 <br><br>

@@ -32,6 +32,7 @@ _STEP_REGISTRY: dict[str, Callable] = {
     "validate_columns_exist": cleaning.validate_columns_exist,
     "drop_duplicates": cleaning.drop_duplicates,
     "drop_constant_columns": cleaning.drop_constant_columns,
+    "drop_empty_columns": cleaning.drop_empty_columns,
     "clip_numeric": cleaning.clip_numeric,
     "strip_whitespace": cleaning.strip_whitespace,
     "parse_bool_strings": cleaning.parse_bool_strings,
@@ -348,13 +349,17 @@ def pipeline(
             rows_before = result.shape[0]
 
             started_at = perf_counter()
-            if name == "rename_columns" and "mapping" not in kwargs:
+            if name == "rename_columns" and (
+                "mapping" not in kwargs or not isinstance(kwargs["mapping"], dict)
+            ):
                 step_result = fn(result, mapping=kwargs)
 
                 if not dry_run:
                     result = step_result
 
-            elif name == "cast_types" and "mapping" not in kwargs:
+            elif name == "cast_types" and (
+                "mapping" not in kwargs or not isinstance(kwargs["mapping"], dict)
+            ):
                 step_result = fn(result, kwargs)
 
                 if not dry_run:

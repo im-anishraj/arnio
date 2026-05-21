@@ -310,6 +310,7 @@ Frame strip_whitespace(const Frame& frame, const std::optional<std::vector<std::
 
     std::vector<Column> new_cols;
     new_cols.reserve(frame.num_cols());
+
     for (size_t ci = 0; ci < frame.num_cols(); ++ci) {
         const auto& src = frame.column(ci);
         if (targets.count(ci) && src.dtype() == DType::STRING) {
@@ -319,15 +320,16 @@ Frame strip_whitespace(const Frame& frame, const std::optional<std::vector<std::
                     col.push_null();
                 } else {
                     std::string val = std::get<std::string>(src.at(r));
-                    // Trim leading
-                    size_t start = val.find_first_not_of(" \t\n\r");
-                    // Trim trailing
-                    size_t end = val.find_last_not_of(" \t\n\r");
-                    if (start == std::string::npos) {
-                        col.push_back(std::string(""));
-                    } else {
-                        col.push_back(val.substr(start, end - start + 1));
-                    }
+                    // Trim leading whitespace in-place
+                    val.erase(val.begin(),
+                              std::find_if(val.begin(), val.end(),
+                                           [](unsigned char c) { return !std::isspace(c); }));
+                    // Trim trailing whitespace in-place
+                    val.erase(std::find_if(val.rbegin(), val.rend(),
+                                           [](unsigned char c) { return !std::isspace(c); })
+                                  .base(),
+                              val.end());
+                    col.push_back(std::move(val));
                 }
             }
             new_cols.push_back(std::move(col));

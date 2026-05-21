@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import copy
 import unicodedata
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 from ._core import (
@@ -56,14 +56,15 @@ def validate_columns_exist(
     KeyError
         If any requested column is missing.
     """
-    requested_columns = _validate_column_sequence(columns, argument_name="columns")
-    missing = [column for column in requested_columns if column not in frame.columns]
-    if missing:
-        available = ", ".join(frame.columns) or "<none>"
-        context = f" for {operation}" if operation else ""
-        raise KeyError(
-            f"Missing columns{context}: {missing}. Available columns: {available}"
-        )
+    _validate_existing_column_sequence(
+        columns,
+        available_columns=frame.columns,
+        argument_name="columns",
+        missing_message=lambda missing, available: (
+            f"Missing columns{f' for {operation}' if operation else ''}: {missing}. "
+            f"Available columns: {available}"
+        ),
+    )
     return frame
 
 
@@ -100,6 +101,32 @@ def _validate_mapping(
     normalized = dict(mapping)
     if not normalized and not allow_empty:
         raise ValueError(f"{argument_name} must not be empty")
+
+    return normalized
+
+
+def _validate_existing_column_sequence(
+    columns: Sequence[str],
+    *,
+    available_columns: Sequence[str],
+    argument_name: str,
+    allow_empty: bool = True,
+    missing_error: type[Exception] = KeyError,
+    missing_message: Callable[[list[str], str], str] | None = None,
+) -> list[str]:
+    normalized = _validate_column_sequence(columns, argument_name=argument_name)
+
+    if not normalized and not allow_empty:
+        raise ValueError(f"{argument_name} cannot be empty")
+
+    missing = [column for column in normalized if column not in available_columns]
+    if missing:
+        available = ", ".join(map(str, available_columns)) or "<none>"
+        if missing_message is None:
+            message = f"Missing columns: {missing}. Available columns: {available}"
+        else:
+            message = missing_message(missing, available)
+        raise missing_error(message)
 
     return normalized
 
@@ -160,15 +187,19 @@ def drop_nulls(
     >>> clean = ar.drop_nulls(frame, subset=["age", "name"])
     """
     if subset is not None:
-        requested_columns = _validate_column_sequence(subset, argument_name="subset")
-        if len(requested_columns) == 0:
+        subset = _validate_column_sequence(subset, argument_name="subset")
+        if len(subset) == 0:
             raise ValueError(
                 "drop_nulls: subset cannot be empty; pass subset=None to check all columns"
             )
-        validate_columns_exist(
-            frame,
-            requested_columns,
-            operation="drop_nulls",
+        subset = _validate_existing_column_sequence(
+            subset,
+            available_columns=frame.columns,
+            argument_name="subset",
+            missing_message=lambda missing, available: (
+                f"Missing columns for drop_nulls: {missing}. "
+                f"Available columns: {available}"
+            ),
         )
     result = _drop_nulls(frame._frame, subset=subset)
     return ArFrame(result)
@@ -200,13 +231,17 @@ def drop_columns(frame: ArFrame, columns: Sequence[str]) -> ArFrame:
     --------
     >>> frame = ar.drop_columns(frame, ["debug_col"])
     """
-    requested_columns = _validate_column_sequence(columns, argument_name="columns")
+    requested_columns = _validate_existing_column_sequence(
+        columns,
+        available_columns=frame.columns,
+        argument_name="columns",
+        missing_error=ValueError,
+        missing_message=lambda missing, _available: (
+            f"Columns not found in frame: {missing}"
+        ),
+    )
     if len(requested_columns) == 0:
         return frame
-
-    missing = [column for column in requested_columns if column not in frame.columns]
-    if missing:
-        raise ValueError(f"Columns not found in frame: {missing}")
     if len(requested_columns) == len(frame.columns):
         raise ValueError("drop_columns cannot remove all columns from the frame")
 
@@ -268,15 +303,18 @@ def keep_rows_with_nulls(
     is_arframe = not isinstance(frame, pd.DataFrame)
     df = to_pandas(frame) if is_arframe else frame
 
-    cols = subset if subset is not None else df.columns.tolist()
-
-    # validate that all subset columns actually exist
     if subset is not None:
-        validate_columns_exist(
-            frame,
-            _validate_column_sequence(subset, argument_name="subset"),
-            operation="keep_rows_with_nulls",
+        cols = _validate_existing_column_sequence(
+            subset,
+            available_columns=df.columns,
+            argument_name="subset",
+            missing_message=lambda missing, available: (
+                f"Missing columns for keep_rows_with_nulls: {missing}. "
+                f"Available columns: {available}"
+            ),
         )
+    else:
+        cols = df.columns.tolist()
 
     mask = df[cols].isnull().any(axis=1)
     result = df[mask].reset_index(drop=True)
@@ -317,10 +355,14 @@ def fill_nulls(
     >>> filled = ar.fill_nulls(frame, 0, subset=["age"])
     """
     if subset is not None:
-        validate_columns_exist(
-            frame,
-            _validate_column_sequence(subset, argument_name="subset"),
-            operation="fill_nulls",
+        subset = _validate_existing_column_sequence(
+            subset,
+            available_columns=frame.columns,
+            argument_name="subset",
+            missing_message=lambda missing, available: (
+                f"Missing columns for fill_nulls: {missing}. "
+                f"Available columns: {available}"
+            ),
         )
     result = _fill_nulls(frame._frame, value, subset=subset)
     return ArFrame(result)
@@ -355,15 +397,19 @@ def drop_duplicates(
     >>> unique = ar.drop_duplicates(frame, subset=["name"], keep="first")
     """
     if subset is not None:
-        requested_columns = _validate_column_sequence(subset, argument_name="subset")
-        if len(requested_columns) == 0:
+        subset = _validate_column_sequence(subset, argument_name="subset")
+        if len(subset) == 0:
             raise ValueError(
                 "drop_duplicates: subset cannot be empty; pass subset=None to compare all columns"
             )
-        validate_columns_exist(
-            frame,
-            requested_columns,
-            operation="drop_duplicates",
+        subset = _validate_existing_column_sequence(
+            subset,
+            available_columns=frame.columns,
+            argument_name="subset",
+            missing_message=lambda missing, available: (
+                f"Missing columns for drop_duplicates: {missing}. "
+                f"Available columns: {available}"
+            ),
         )
     if keep is True:
         raise ValueError("keep must be one of 'first', 'last', 'none', or False")
@@ -410,6 +456,57 @@ def drop_constant_columns(frame: ArFrame) -> ArFrame:
         column for column in df.columns if df[column].nunique(dropna=False) == 1
     ]
     return from_pandas(df.drop(columns=constant_columns))
+
+
+def drop_empty_columns(frame: ArFrame) -> ArFrame:
+    """Remove columns whose values are entirely null or empty strings.
+
+    String values containing only whitespace are treated as empty.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input data frame.
+
+    Returns
+    -------
+    ArFrame
+        New frame without fully empty columns.
+
+    Examples
+    --------
+    >>> frame = ar.read_csv("data.csv")
+    >>> reduced = ar.drop_empty_columns(frame)
+    """
+    from .convert import to_pandas
+
+    df = to_pandas(frame)
+    empty_columns: list[str] = []
+    for column in df.columns:
+        series = df[column]
+        is_empty = series.isna() | (
+            series.map(lambda value: isinstance(value, str) and value.strip() == "")
+        )
+        if bool(is_empty.all()):
+            empty_columns.append(column)
+
+    remaining_columns = [
+        column for column in frame.columns if column not in empty_columns
+    ]
+    attrs = copy.deepcopy(frame._attrs) if frame._attrs is not None else None
+    if remaining_columns:
+        columns_data: dict[str, list[object]] = {}
+        dtype_hints: dict[str, _DType] = {}
+        for column in remaining_columns:
+            cpp_column = frame._frame.column_by_name(column)
+            columns_data[column] = cpp_column.to_python_list()
+            dtype_hints[column] = cpp_column.dtype()
+        return ArFrame(_Frame.from_dict(columns_data, dtype_hints), attrs=attrs)
+
+    try:
+        return ArFrame(_Frame.from_dict({}, {}, frame.shape[0]), attrs=attrs)
+    except TypeError:
+        return ArFrame(_Frame(), attrs=attrs)
 
 
 def clip_numeric(
@@ -542,10 +639,14 @@ def strip_whitespace(
     >>> clean = ar.strip_whitespace(frame, subset=["name"])
     """
     if subset is not None:
-        validate_columns_exist(
-            frame,
-            _validate_column_sequence(subset, argument_name="subset"),
-            operation="strip_whitespace",
+        subset = _validate_existing_column_sequence(
+            subset,
+            available_columns=frame.columns,
+            argument_name="subset",
+            missing_message=lambda missing, available: (
+                f"Missing columns for strip_whitespace: {missing}. "
+                f"Available columns: {available}"
+            ),
         )
     result = _strip_whitespace(frame._frame, subset=subset)
     return ArFrame(result)
@@ -619,15 +720,16 @@ def parse_bool_strings(
         )
 
     if subset is not None:
-        columns = _validate_column_sequence(subset, argument_name="subset")
-
-        if len(columns) == 0:
-            raise ValueError("subset cannot be empty")
-
-        missing = [col for col in columns if col not in df.columns]
-
-        if missing:
-            raise ValueError(f"Columns not found in frame: {missing}")
+        columns = _validate_existing_column_sequence(
+            subset,
+            available_columns=df.columns,
+            argument_name="subset",
+            allow_empty=False,
+            missing_error=ValueError,
+            missing_message=lambda missing, _available: (
+                f"Columns not found in frame: {missing}"
+            ),
+        )
     else:
         columns = df.select_dtypes(include=["object", "string"]).columns.tolist()
 
@@ -679,10 +781,14 @@ def normalize_case(
     >>> lower = ar.normalize_case(frame, case_type="lower")
     """
     if subset is not None:
-        validate_columns_exist(
-            frame,
-            _validate_column_sequence(subset, argument_name="subset"),
-            operation="normalize_case",
+        subset = _validate_existing_column_sequence(
+            subset,
+            available_columns=frame.columns,
+            argument_name="subset",
+            missing_message=lambda missing, available: (
+                f"Missing columns for normalize_case: {missing}. "
+                f"Available columns: {available}"
+            ),
         )
     result = _normalize_case(frame._frame, subset=subset, case_type=case_type)
     return ArFrame(result)
@@ -704,10 +810,14 @@ def normalize_unicode(
     if form not in valid_forms:
         raise ValueError(f"Unsupported Unicode normalization form: {form}")
     if subset is not None:
-        validate_columns_exist(
-            frame,
-            _validate_column_sequence(subset, argument_name="subset"),
-            operation="normalize_unicode",
+        subset = _validate_existing_column_sequence(
+            subset,
+            available_columns=frame.columns,
+            argument_name="subset",
+            missing_message=lambda missing, available: (
+                f"Missing columns for normalize_unicode: {missing}. "
+                f"Available columns: {available}"
+            ),
         )
     cpp_frame = frame._frame
     num_cols = cpp_frame.num_cols()
@@ -1014,13 +1124,16 @@ def round_numeric_columns(
     df = to_pandas(frame) if is_arframe else frame.copy()
 
     if subset is not None:
-        missing = [col for col in subset if col not in df.columns]
-        if missing:
-            raise ValueError(
-                f"round_numeric_columns: unknown column(s) in subset: {missing}. "
-                f"Available columns: {list(df.columns)}"
-            )
-        cols_to_round = subset
+        cols_to_round = _validate_existing_column_sequence(
+            subset,
+            available_columns=df.columns,
+            argument_name="subset",
+            missing_error=ValueError,
+            missing_message=lambda missing, _available: (
+                "round_numeric_columns: unknown column(s) in subset: "
+                f"{missing}. Available columns: {list(df.columns)}"
+            ),
+        )
     else:
         cols_to_round = df.select_dtypes(include=["number"]).columns
 
@@ -1074,13 +1187,15 @@ def combine_columns(
     if subset is None:
         subset_columns = list(column_names)
     else:
-        subset_columns = _validate_column_sequence(subset, argument_name="subset")
-        missing = [column for column in subset_columns if column not in column_names]
-        if missing:
-            available = ", ".join(column_names) or "<none>"
-            raise KeyError(
-                f"Missing columns for combine_columns: {missing}. Available columns: {available}"
-            )
+        subset_columns = _validate_existing_column_sequence(
+            subset,
+            available_columns=column_names,
+            argument_name="subset",
+            missing_message=lambda missing, available: (
+                f"Missing columns for combine_columns: {missing}. "
+                f"Available columns: {available}"
+            ),
+        )
 
     if not subset_columns:
         raise ValueError("subset must contain at least one column")
@@ -1413,13 +1528,21 @@ def standardize_missing_tokens(frame, tokens=None, subset=None):
             df = df.replace(tokens, float("nan"))
 
     else:
-        unknown_columns = [column for column in subset if column not in df.columns]
-        if unknown_columns:
-            raise ValueError(f"Unknown columns in subset: {unknown_columns}")
+        subset_columns = _validate_existing_column_sequence(
+            subset,
+            available_columns=df.columns,
+            argument_name="subset",
+            missing_error=ValueError,
+            missing_message=lambda missing, _available: (
+                f"Unknown columns in subset: {missing}"
+            ),
+        )
         if tokens is None:
-            df[subset] = df[subset].replace(default_tokens, float("nan"))
+            df[subset_columns] = df[subset_columns].replace(
+                default_tokens, float("nan")
+            )
         else:
-            df[subset] = df[subset].replace(tokens, float("nan"))
+            df[subset_columns] = df[subset_columns].replace(tokens, float("nan"))
 
     return from_pandas(df) if is_arframe else df
 
@@ -1463,14 +1586,15 @@ def coalesce_columns(
         raise TypeError("frame must be an ArFrame or a pandas DataFrame")
 
     column_names = list(frame.columns)
-    subset_columns = _validate_column_sequence(subset, argument_name="subset")
-
-    missing = [column for column in subset_columns if column not in column_names]
-    if missing:
-        available = ", ".join(column_names) or "<none>"
-        raise KeyError(
-            f"Missing columns for coalesce_columns: {missing}. Available columns: {available}"
-        )
+    subset_columns = _validate_existing_column_sequence(
+        subset,
+        available_columns=column_names,
+        argument_name="subset",
+        missing_message=lambda missing, available: (
+            f"Missing columns for coalesce_columns: {missing}. "
+            f"Available columns: {available}"
+        ),
+    )
 
     if output_column in column_names:
         raise ValueError(f"Output column '{output_column}' already exists.")

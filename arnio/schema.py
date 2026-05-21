@@ -1134,22 +1134,34 @@ def URL(
     unique: bool = False,
     severity: str = "error",
     required_if: tuple[str, Any] | None = None,
+    allowed_schemes: list[str] | None = None,
 ) -> Field:
     """Create a URL schema field.
-
     Args:
         nullable: Whether null values are allowed.
         unique: Whether non-null values must be unique.
         severity: Severity level for validation issues.
         required_if: Conditional requirement as a column/value pair.
-
+        allowed_schemes: List of allowed URL schemes e.g. ["https"].
+            If None, both http and https are accepted.
     Returns:
         Field: Configured URL schema field.
     """
+    if allowed_schemes is not None:
+        if not isinstance(allowed_schemes, list) or len(allowed_schemes) == 0:
+            raise ValueError("allowed_schemes must be a non-empty list")
+        for scheme in allowed_schemes:
+            if not isinstance(scheme, str) or scheme.strip() == "":
+                raise ValueError("allowed_schemes must contain non-empty strings")
+        schemes = "|".join(re.escape(s) for s in allowed_schemes)
+        semantic = f"url:{schemes}"
+
+    else:
+        semantic = "url"
     return Field(
         dtype="string",
         nullable=nullable,
-        semantic="url",
+        semantic=semantic,
         unique=unique,
         required_if=required_if,
         severity=severity,
@@ -1569,6 +1581,9 @@ def _validate_column(
                 )
         else:
             pattern = _SEMANTIC_PATTERNS.get(field_def.semantic)
+            if pattern is None and field_def.semantic.startswith("url:"):
+                schemes = field_def.semantic[len("url:") :]
+                pattern = rf"({schemes})://[^\s]+"
             if pattern is None:
                 issues.append(
                     ValidationIssue(

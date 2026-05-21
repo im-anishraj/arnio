@@ -150,6 +150,25 @@ class TestPipeline:
         assert list(df.columns) == ["value"]
         assert list(df["value"]) == [1, 2, 1]
 
+    def test_pipeline_drop_empty_columns(self, tmp_path):
+        csv_path = tmp_path / "pipeline_drop_empty_columns.csv"
+        csv_path.write_text(
+            'all_null,all_blank,value\n,"",1\n,"   ",2\n',
+            encoding="utf-8",
+        )
+        frame = ar.read_csv(csv_path)
+
+        result = ar.pipeline(
+            frame,
+            [
+                ("drop_empty_columns",),
+            ],
+        )
+        df = ar.to_pandas(result)
+
+        assert list(df.columns) == ["value"]
+        assert list(df["value"]) == [1, 2]
+
     def test_pipeline_trim_column_names(self):
         import pandas as pd
 
@@ -316,6 +335,39 @@ class TestPipeline:
 
         assert result.dtypes["years"] == "float64"
         assert "age" not in result.columns
+
+    def test_pipeline_shorthand_with_column_named_mapping_cast_types(self):
+        import pandas as pd
+
+        import arnio as ar
+
+        frame = ar.from_pandas(pd.DataFrame({"mapping": ["1", "2"]}))
+
+        result = ar.pipeline(
+            frame,
+            [
+                ("cast_types", {"mapping": "int64"}),
+            ],
+        )
+
+        assert result.dtypes["mapping"] == "int64"
+
+    def test_pipeline_shorthand_with_column_named_mapping_rename_columns(self):
+        import pandas as pd
+
+        import arnio as ar
+
+        frame = ar.from_pandas(pd.DataFrame({"mapping": [1, 2]}))
+
+        result = ar.pipeline(
+            frame,
+            [
+                ("rename_columns", {"mapping": "new_mapping_col"}),
+            ],
+        )
+
+        assert "new_mapping_col" in result.columns
+        assert "mapping" not in result.columns
 
     def test_pipeline_validate_columns_exist(self, sample_csv):
         frame = ar.read_csv(sample_csv)

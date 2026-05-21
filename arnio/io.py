@@ -29,12 +29,19 @@ def _is_utf8_encoding(encoding: str) -> bool:
     return encoding.lower().replace("_", "-") in {"utf-8", "utf8"}
 
 
+def _raise_csv_path_os_error(path: str, error: OSError) -> None:
+    """Raise a path-aware CsvReadError for filesystem access failures."""
+    reason = error.strerror or str(error)
+    raise CsvReadError(f"Could not access CSV file {path!r}: {reason}") from error
+
+
 @contextmanager
 def _utf8_csv_path(
     path: str,
     encoding: str,
     delimiter: str = ",",
     sample_rows: int | None = None,
+    encoding_errors: str = "strict",
 ) -> Iterator[str]:
     """Return a UTF-8 file path for the C++ reader.
 
@@ -48,7 +55,7 @@ def _utf8_csv_path(
 
     tmp_name: str | None = None
     try:
-        with open(path, encoding=encoding, newline="") as src:
+        with open(path, encoding=encoding, errors=encoding_errors, newline="") as src:
             with tempfile.NamedTemporaryFile(
                 "w", encoding="utf-8", newline="", suffix=".csv", delete=False
             ) as tmp:
@@ -140,7 +147,7 @@ def _utf8_csv_path(
             f"Could not decode {path!r} using encoding {encoding!r}"
         ) from e
     except OSError as e:
-        raise CsvReadError(str(e)) from e
+        _raise_csv_path_os_error(path, e)
     finally:
         if tmp_name is not None:
             try:
@@ -151,6 +158,7 @@ def _utf8_csv_path(
 
 def _validate_thousands_separator(
     thousands_separator: str | None,
+    decimal_separator: str = ".",
 ) -> None:
     if thousands_separator is None:
         return
@@ -162,10 +170,24 @@ def _validate_thousands_separator(
         raise ValueError(
             "thousands_separator must be a single non-alphanumeric character"
         )
-    if thousands_separator in {".", "+", "-"}:
+    if thousands_separator in {"+", "-"}:
+        raise ValueError("Invalid thousands_separator: '+' and '-' are not allowed")
+    if thousands_separator == decimal_separator:
+        raise ValueError("thousands_separator must differ from decimal_separator")
+
+
+def _validate_decimal_separator(decimal_separator: str) -> str:
+    if not isinstance(decimal_separator, str):
+        raise TypeError("decimal_separator must be a string")
+    if len(decimal_separator) != 1:
+        raise ValueError("decimal_separator must be a single character")
+    if decimal_separator.isalnum() or decimal_separator in {'"', "\n", "\r"}:
         raise ValueError(
-            "Invalid thousands_separator: '.', '+' and '-' are not allowed"
+            "decimal_separator must be a single non-alphanumeric character"
         )
+    if decimal_separator in {"+", "-"}:
+        raise ValueError("Invalid decimal_separator: '+' and '-' are not allowed")
+    return decimal_separator
 
 
 def _validate_delimiter(delimiter: str) -> str:
@@ -195,6 +217,34 @@ def _validate_usecols(usecols: Sequence[str]) -> list[str]:
         raise ValueError("usecols must not contain duplicate column names")
 
     return list(usecols)
+
+
+def _validate_dtype_mapping(dtype: dict[str, str]) -> dict[str, str]:
+    if not isinstance(dtype, dict):
+        raise TypeError(
+            "dtype must be a dictionary mapping column names to dtype strings"
+        )
+
+    allowed = {"string", "int64", "float64", "bool"}
+
+    validated: dict[str, str] = {}
+
+    for column, dtype_name in dtype.items():
+        if not isinstance(column, str):
+            raise TypeError("dtype column names must be strings")
+
+        if not isinstance(dtype_name, str):
+            raise TypeError("dtype values must be strings")
+
+        if dtype_name not in allowed:
+            raise ValueError(
+                f"Unsupported dtype {dtype_name!r}. "
+                f"Expected one of: {sorted(allowed)}"
+            )
+
+        validated[column] = dtype_name
+
+    return validated
 
 
 def _validate_nrows(nrows: int) -> int:
@@ -306,6 +356,8 @@ def _reject_utf8_nul_bytes(path: str) -> None:
                     )
     except FileNotFoundError:
         pass  # Let C++ backend handle or raise standard error
+    except OSError as e:
+        _raise_csv_path_os_error(path, e)
 
 
 def _validate_csv_path(path: str, encoding: str) -> None:
@@ -319,6 +371,23 @@ def _validate_csv_path(path: str, encoding: str) -> None:
             raise CsvReadError(f"CSV file is empty: {path!r}")
     except FileNotFoundError:
         pass
+    except OSError as e:
+        _raise_csv_path_os_error(path, e)
+
+
+_VALID_ENCODING_ERRORS = {"strict", "replace", "ignore"}
+
+
+def _validate_encoding_errors(value: str) -> str:
+    if not isinstance(value, str):
+        raise TypeError("encoding_errors must be a string")
+
+    if value not in _VALID_ENCODING_ERRORS:
+        raise ValueError(
+            "encoding_errors must be one of " "'strict', 'replace', or 'ignore'"
+        )
+
+    return value
 
 
 def read_csv(
@@ -331,9 +400,12 @@ def read_csv(
     skiprows: int | None = None,
     encoding: str = "utf-8",
     trim_headers: bool = True,
+    decimal_separator: str = ".",
     thousands_separator: str | None = None,
     null_values: list[str] | None = None,
+    dtype: dict[str, str] | None = None,
     mode: str = "strict",
+    encoding_errors: str = "strict",
 ) -> ArFrame:
     """Read a CSV file into an ArFrame via C++ backend.
 
@@ -364,14 +436,31 @@ def read_csv(
         File encoding.
     trim_headers : bool, default True
         Strip leading/trailing whitespace from column names.
+    decimal_separator : str, default "."
+        Single non-alphanumeric character used as the decimal separator
+        during numeric parsing. Use "," to opt in to European-style decimals
+        such as ``"12,45"``. Values containing the CSV delimiter must still
+        be quoted.
     thousands_separator : str, optional
         Single non-alphanumeric character used as a thousands separator
         during numeric parsing.
+
+
 
         Values containing delimiter characters must still be quoted
         properly in the CSV input. For example, when using a comma
         delimiter, the value "1,234" must be quoted, while unquoted
         1,234 is interpreted as two separate fields.
+
+    dtype : dict[str, str], optional
+        Explicit column dtype mapping. Specified columns skip automatic
+        type inference and use the requested dtype directly.
+
+        Supported dtypes:
+        - "string"
+        - "int64"
+        - "float64"
+        - "bool"
 
     mode : {"strict", "permissive"}, default "strict"
         Controls malformed row handling.
@@ -417,19 +506,24 @@ def read_csv(
     if delimiter is None:
         delimiter = "\t" if path_lower.endswith(".tsv") else ","
 
-    _validate_thousands_separator(thousands_separator)
+    decimal_separator = _validate_decimal_separator(decimal_separator)
+    _validate_thousands_separator(thousands_separator, decimal_separator)
     delimiter = _validate_delimiter(delimiter)
     mode = _validate_parser_mode(mode)
+    encoding_errors = _validate_encoding_errors(encoding_errors)
     config = _CsvConfig()
     config.delimiter = delimiter
     config.has_header = _validate_bool_option(has_header, "has_header")
     config.encoding = encoding
     config.trim_headers = _validate_bool_option(trim_headers, "trim_headers")
+    config.decimal_separator = decimal_separator
     config.thousands_separator = thousands_separator
     config.mode = mode
-
+    config.encoding_errors = encoding_errors
     if null_values is not None:
         config.null_values = _validate_null_values(null_values)
+    if dtype is not None:
+        config.dtype = _validate_dtype_mapping(dtype)
 
     if usecols is not None:
         config.usecols = _validate_usecols(usecols)
@@ -443,7 +537,9 @@ def read_csv(
     reader = _CsvReader(config)
 
     try:
-        with _utf8_csv_path(path, encoding, delimiter=delimiter) as native_path:
+        with _utf8_csv_path(
+            path, encoding, encoding_errors=encoding_errors, delimiter=delimiter
+        ) as native_path:
             cpp_frame = reader.read(native_path)
 
         return ArFrame(cpp_frame)
@@ -471,6 +567,7 @@ def read_csv_chunked(
     skip_rows: int = 0,
     encoding: str = "utf-8",
     trim_headers: bool = True,
+    decimal_separator: str = ".",
     thousands_separator: str | None = None,
     null_values: list[str] | None = None,
     mode: str = "strict",
@@ -500,11 +597,17 @@ def read_csv_chunked(
         File encoding.
     trim_headers : bool, default True
         Strip leading/trailing whitespace from column names.
+    decimal_separator : str, default "."
+        Single non-alphanumeric character used as the decimal separator
+        during numeric parsing.
     thousands_separator : str, optional
         Single non-alphanumeric character used as a thousands separator
         during numeric parsing.
     null_values : list[str], optional
         Strings treated as null values.
+
+
+
     mode : {"strict", "permissive"}, default "strict"
         Controls malformed row handling.
         Both modes reject extra fields; permissive mode only allows missing
@@ -539,7 +642,8 @@ def read_csv_chunked(
     except FileNotFoundError:
         pass
 
-    _validate_thousands_separator(thousands_separator)
+    decimal_separator = _validate_decimal_separator(decimal_separator)
+    _validate_thousands_separator(thousands_separator, decimal_separator)
     delimiter = _validate_delimiter(delimiter)
     mode = _validate_parser_mode(mode)
     chunksize = _validate_chunksize(chunksize)
@@ -550,6 +654,7 @@ def read_csv_chunked(
     config.has_header = _validate_bool_option(has_header, "has_header")
     config.encoding = encoding
     config.trim_headers = _validate_bool_option(trim_headers, "trim_headers")
+    config.decimal_separator = decimal_separator
     config.thousands_separator = thousands_separator
     config.mode = mode
     config.skip_rows = skip_rows
@@ -659,10 +764,12 @@ def scan_csv(
     delimiter: str | None = None,
     encoding: str = "utf-8",
     trim_headers: bool = True,
+    decimal_separator: str = ".",
     thousands_separator: str | None = None,
     sample_size: int | None = None,
     null_values: list[str] | None = None,
     has_header: bool = True,
+    encoding_errors: str = "strict",
 ) -> dict[str, str]:
     """Return schema (column names + inferred types) without loading data.
 
@@ -682,6 +789,9 @@ def scan_csv(
         transcoded to infer the schema.
     trim_headers : bool, default True
         Strip leading/trailing whitespace from column names.
+    decimal_separator : str, default "."
+        Single non-alphanumeric character used as the decimal separator
+        during numeric parsing.
     thousands_separator : str, optional
         Single non-alphanumeric character used as a thousands separator
         during numeric parsing.
@@ -738,15 +848,18 @@ def scan_csv(
     if delimiter is None:
         delimiter = "\t" if path_lower.endswith(".tsv") else ","
 
-    _validate_thousands_separator(thousands_separator)
+    decimal_separator = _validate_decimal_separator(decimal_separator)
+    _validate_thousands_separator(thousands_separator, decimal_separator)
     delimiter = _validate_delimiter(delimiter)
-
+    encoding_errors = _validate_encoding_errors(encoding_errors)
     config = _CsvConfig()
     config.delimiter = delimiter
     config.encoding = encoding
     config.trim_headers = _validate_bool_option(trim_headers, "trim_headers")
+    config.decimal_separator = decimal_separator
     config.thousands_separator = thousands_separator
     config.has_header = has_header
+    config.encoding_errors = encoding_errors
 
     if null_values is not None:
         config.null_values = _validate_null_values(null_values)
@@ -766,6 +879,7 @@ def scan_csv(
         with _utf8_csv_path(
             path,
             encoding,
+            encoding_errors=encoding_errors,
             delimiter=delimiter,
             sample_rows=100 if sample_size is None else sample_size,
         ) as native_path:

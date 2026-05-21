@@ -5,8 +5,10 @@
 #include <cerrno>
 #include <charconv>
 #include <cmath>
+#include <codecvt>
 #include <cstddef>
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <limits>
 #include <locale>
@@ -14,7 +16,6 @@
 #include <stdexcept>
 #include <system_error>
 #include <unordered_set>
-
 namespace arnio {
 
 namespace {
@@ -132,10 +133,17 @@ class RecordReader {
     }
 
     bool read(std::string& out_record) {
+        size_t dummy = 0;
+        return read(out_record, dummy);
+    }
+
+    bool read(std::string& out_record, size_t& line_number) {
         record_.clear();
         bool first = true;
+        size_t record_start_line = line_number + 1;
 
         while (reader_.getline(line_, line_ending_)) {
+            ++line_number;
             if (!first) {
                 record_ += prev_line_ending_;
             }
@@ -150,7 +158,8 @@ class RecordReader {
         }
 
         if (!record_.empty() && !record_complete(record_)) {
-            throw std::runtime_error("Unterminated quoted CSV record");
+            throw std::runtime_error("Unterminated quoted field starting at line " +
+                                     std::to_string(record_start_line));
         }
 
         if (!record_.empty()) {
@@ -170,6 +179,12 @@ class RecordReader {
 
 namespace {
 
+// Overload without line tracking — used by callers that do not need location.
+bool read_record(std::istream& file, std::string& record) {
+    size_t dummy = 0;
+    return read_record(file, record, dummy);
+}
+
 void validate_header(const std::vector<std::string>& header) {
     std::unordered_set<std::string> seen;
     for (const auto& name : header) {
@@ -182,11 +197,14 @@ void validate_header(const std::vector<std::string>& header) {
     }
 }
 
-static bool has_valid_thousands_grouping(const std::string& value, char separator) {
+constexpr const char* INVALID_NUMERIC_TOKEN = "\x1f";
+
+static bool has_valid_thousands_grouping(const std::string& value, char separator,
+                                         char decimal_separator) {
     std::string integer_part = value;
 
     // Ignore decimal portion
-    size_t decimal_pos = value.find('.');
+    size_t decimal_pos = value.find(decimal_separator);
     if (decimal_pos != std::string::npos) {
         integer_part = value.substr(0, decimal_pos);
     }
@@ -237,14 +255,58 @@ static bool has_valid_thousands_grouping(const std::string& value, char separato
     return true;
 }
 
+static bool looks_numeric_with_chars(const std::string& value, const CsvConfig& config,
+                                     bool allow_dot) {
+    std::string check = value;
+    trim_in_place(check);
+    if (check.empty()) return false;
+    if (check[0] == '-' || check[0] == '+') check = check.substr(1);
+    if (check.empty()) return false;
+
+    bool has_digit = false;
+    for (char c : check) {
+        if (std::isdigit(static_cast<unsigned char>(c))) {
+            has_digit = true;
+            continue;
+        }
+        if (c == config.decimal_separator) continue;
+        if (allow_dot && c == '.') continue;
+        if (config.thousands_separator.has_value() && c == config.thousands_separator.value()) {
+            continue;
+        }
+        return false;
+    }
+    return has_digit;
+}
+
+static bool has_invalid_decimal_format(const std::string& value, const CsvConfig& config) {
+    std::string s = value;
+    trim_in_place(s);
+    if (s.empty()) return false;
+
+    if (config.decimal_separator != '.' && s.find('.') != std::string::npos &&
+        looks_numeric_with_chars(s, config, true)) {
+        return true;
+    }
+
+    return std::count(s.begin(), s.end(), config.decimal_separator) > 1 &&
+           looks_numeric_with_chars(s, config, false);
+}
+
 std::string normalize_numeric(const std::string& value, const CsvConfig& config) {
     std::string s = value;
     trim_in_place(s);
     if (config.thousands_separator.has_value()) {
         char sep = config.thousands_separator.value();
-        if (has_valid_thousands_grouping(s, sep)) {
+        if (has_valid_thousands_grouping(s, sep, config.decimal_separator)) {
             s.erase(std::remove(s.begin(), s.end(), sep), s.end());
         }
+    }
+    if (has_invalid_decimal_format(s, config)) {
+        return INVALID_NUMERIC_TOKEN;
+    }
+    if (config.decimal_separator != '.') {
+        std::replace(s.begin(), s.end(), config.decimal_separator, '.');
     }
     return s;
 }
@@ -338,6 +400,82 @@ inline bool try_parse_float64(const std::string& cleaned, double& out) {
 }
 }  // namespace
 
+static std::string handle_utf8_errors(const std::string& input, const std::string& mode) {
+    std::string output;
+
+    size_t i = 0;
+
+    while (i < input.size()) {
+        unsigned char c = static_cast<unsigned char>(input[i]);
+
+        size_t char_len = 0;
+
+        if (c <= 0x7F) {
+            char_len = 1;
+        } else if (c >= 0xC2 && c <= 0xDF) {
+            char_len = 2;
+        } else if (c >= 0xE0 && c <= 0xEF) {
+            char_len = 3;
+        } else if (c >= 0xF0 && c <= 0xF4) {
+            char_len = 4;
+        } else {
+            char_len = 0;
+        }
+
+        bool valid = true;
+
+        if (char_len == 0 || i + char_len > input.size()) {
+            valid = false;
+        } else {
+            for (size_t j = 1; j < char_len; ++j) {
+                unsigned char cc = static_cast<unsigned char>(input[i + j]);
+
+                if ((cc & 0xC0) != 0x80) {
+                    valid = false;
+                    break;
+                }
+            }
+
+            if (valid && char_len == 2) {
+                valid = c >= 0xC2;
+            }
+
+            if (valid && char_len == 3) {
+                unsigned char c1 = static_cast<unsigned char>(input[i + 1]);
+
+                if ((c == 0xE0 && c1 < 0xA0) || (c == 0xED && c1 >= 0xA0)) {
+                    valid = false;
+                }
+            }
+
+            if (valid && char_len == 4) {
+                unsigned char c1 = static_cast<unsigned char>(input[i + 1]);
+
+                if ((c == 0xF0 && c1 < 0x90) || (c == 0xF4 && c1 >= 0x90)) {
+                    valid = false;
+                }
+            }
+        }
+
+        if (valid) {
+            output.append(input.substr(i, char_len));
+
+            i += char_len;
+        } else {
+            if (mode == "strict") {
+                throw std::runtime_error("Invalid UTF-8 sequence encountered");
+            }
+
+            if (mode == "replace") {
+                output += "\xEF\xBF\xBD";
+            }
+
+            ++i;
+        }
+    }
+
+    return output;
+}
 CsvParser::CsvParser(const CsvConfig& config) : config_(config) {}
 
 CsvReader::CsvReader(const CsvConfig& config) : parser_(config) {}
@@ -418,15 +556,16 @@ bool CsvParser::is_null_sentinel(const std::string& value) const {
 }
 
 DType CsvParser::infer_type(const std::string& value) const {
-    if (is_null_sentinel(value)) return DType::NULL_TYPE;
+    const std::string sanitized = handle_utf8_errors(value, config_.encoding_errors);
+    if (is_null_sentinel(sanitized)) return DType::NULL_TYPE;
 
     // Try bool
-    std::string trimmed = value;
+    std::string trimmed = sanitized;
     trim_in_place(trimmed);
     std::string lower = to_lower_copy(trimmed);
     if (lower == "true" || lower == "false") return DType::BOOL;
 
-    std::string cleaned = normalize_numeric(value, config_);
+    std::string cleaned = normalize_numeric(sanitized, config_);
 
     if (is_special_float_token(to_lower_copy(cleaned))) {
         return DType::FLOAT64;
@@ -454,16 +593,23 @@ DType CsvParser::infer_type(const std::string& value) const {
     // so it doesn't poison the whole column's dtype to STRING.
     if (config_.thousands_separator.has_value()) {
         char sep = config_.thousands_separator.value();
-        if (value.find(sep) != std::string::npos && !has_valid_thousands_grouping(value, sep)) {
-            std::string check = value;
+        if (sanitized.find(sep) != std::string::npos &&
+            !has_valid_thousands_grouping(sanitized, sep, config_.decimal_separator)) {
+            std::string check = sanitized;
             trim_in_place(check);
             if (!check.empty() && (check[0] == '-' || check[0] == '+')) check = check.substr(1);
+            const char decimal_sep = config_.decimal_separator;
             bool looks_numeric =
-                !check.empty() && std::all_of(check.begin(), check.end(), [sep](char c) {
-                    return std::isdigit((unsigned char)c) || c == sep || c == '.';
+                !check.empty() &&
+                std::all_of(check.begin(), check.end(), [sep, decimal_sep](char c) {
+                    return std::isdigit((unsigned char)c) || c == sep || c == decimal_sep;
                 });
             if (looks_numeric) return DType::NULL_TYPE;
         }
+    }
+
+    if (has_invalid_decimal_format(sanitized, config_)) {
+        return DType::NULL_TYPE;
     }
 
     return DType::STRING;
@@ -485,30 +631,31 @@ DType CsvParser::promote_type(DType current, DType incoming) {
 }
 
 CellValue CsvParser::parse_value(const std::string& raw, DType dtype) const {
-    if (is_null_sentinel(raw)) return std::monostate{};
+    const std::string sanitized = handle_utf8_errors(raw, config_.encoding_errors);
+    if (is_null_sentinel(sanitized)) return std::monostate{};
 
     switch (dtype) {
         case DType::BOOL: {
-            std::string trimmed = raw;
+            std::string trimmed = sanitized;
             trim_in_place(trimmed);
             std::string lower = to_lower_copy(trimmed);
             return (lower == "true");
         }
         case DType::INT64: {
-            std::string cleaned = normalize_numeric(raw, config_);
+            std::string cleaned = normalize_numeric(sanitized, config_);
             int64_t value = 0;
             if (!try_parse_int64(cleaned, value)) return std::monostate{};
             return value;
         }
         case DType::FLOAT64: {
-            std::string cleaned = normalize_numeric(raw, config_);
+            std::string cleaned = normalize_numeric(sanitized, config_);
             double value = 0.0;
             if (!try_parse_float64(cleaned, value)) return std::monostate{};
             return value;
         }
         case DType::STRING: {
             // Keep raw string values exactly as they appear in the CSV
-            return raw;
+            return sanitized;
         }
         default:
             return std::monostate{};
@@ -517,7 +664,7 @@ CellValue CsvParser::parse_value(const std::string& raw, DType dtype) const {
 
 Frame CsvReader::read(const std::string& path) const {
     const CsvConfig& config = parser_.config();
-    std::ifstream file(path, std::ios::binary);
+    std::ifstream file(std::filesystem::u8path(path), std::ios::binary);
     if (!file.is_open()) {
         throw std::runtime_error("Cannot open file: " + path);
     }
@@ -529,21 +676,25 @@ Frame CsvReader::read(const std::string& path) const {
     std::vector<std::vector<std::string>> raw_data;
 
     size_t record_number = 0;
+    size_t line_number = 0;
 
     if (config.skip_rows.has_value()) {
         size_t to_skip = config.skip_rows.value();
         size_t skipped = 0;
-        while (skipped < to_skip && record_reader.read(line)) {
+        while (skipped < to_skip && record_reader.read(line, line_number)) {
             ++record_number;
             ++skipped;
         }
     }
 
     // Read header
-    if (config.has_header && record_reader.read(line)) {
+    if (config.has_header && record_reader.read(line, line_number)) {
         ++record_number;
         strip_utf8_bom(line);
         header = parser_.parse_line(line);
+        for (auto& h : header) {
+            h = handle_utf8_errors(h, config.encoding_errors);
+        }
         for (auto& h : header) {
             if (config.trim_headers) trim_in_place(h);
         }
@@ -560,7 +711,7 @@ Frame CsvReader::read(const std::string& path) const {
         reusable_fields.reserve(expected_cols.value());
     }
 
-    while (record_reader.read(line)) {
+    while (record_reader.read(line, line_number)) {
         ++record_number;
 
         if (config.nrows.has_value() && row_count >= config.nrows.value()) {
@@ -620,11 +771,36 @@ Frame CsvReader::read(const std::string& path) const {
             col_indices.push_back(i);
         }
     }
+    if (config.dtype.has_value()) {
+        for (const auto& [column_name, dtype_name] : config.dtype.value()) {
+            auto header_it = std::find(header.begin(), header.end(), column_name);
 
+            if (header_it == header.end()) {
+                throw std::runtime_error("Column not found in dtype mapping: " + column_name);
+            }
+
+            size_t column_index = static_cast<size_t>(std::distance(header.begin(), header_it));
+
+            bool selected = std::find(col_indices.begin(), col_indices.end(), column_index) !=
+                            col_indices.end();
+
+            if (!selected) {
+                throw std::runtime_error("dtype specified for non-selected column: " + column_name);
+            }
+        }
+    }
     // Infer types (first pass)
     std::vector<DType> col_types(num_cols, DType::NULL_TYPE);
-    for (const auto& row : raw_data) {
-        for (size_t ci : col_indices) {
+
+    for (size_t ci : col_indices) {
+        const std::string& column_name = header[ci];
+
+        if (config.dtype.has_value() && config.dtype->count(column_name)) {
+            col_types[ci] = string_to_dtype(config.dtype->at(column_name));
+            continue;
+        }
+
+        for (const auto& row : raw_data) {
             if (ci < row.size()) {
                 DType inferred = parser_.infer_type(row[ci]);
                 col_types[ci] = CsvParser::promote_type(col_types[ci], inferred);
@@ -658,7 +834,7 @@ Frame CsvReader::read(const std::string& path) const {
 std::vector<std::pair<std::string, std::string>> CsvReader::scan_schema(
     const std::string& path) const {
     const CsvConfig& config = parser_.config();
-    std::ifstream file(path, std::ios::binary);
+    std::ifstream file(std::filesystem::u8path(path), std::ios::binary);
     if (!file.is_open()) {
         throw std::runtime_error("Cannot open file: " + path);
     }
@@ -675,6 +851,10 @@ std::vector<std::pair<std::string, std::string>> CsvReader::scan_schema(
 
         if (config.has_header) {
             header = parser_.parse_line(line);
+
+            for (auto& h : header) {
+                h = handle_utf8_errors(h, config.encoding_errors);
+            }
 
             for (auto& h : header) {
                 if (config.trim_headers) trim_in_place(h);
@@ -817,7 +997,7 @@ void CsvChunkReader::open(const std::string& path) {
     const CsvConfig& config = parser_.config();
     close();
 
-    file_.open(path, std::ios::binary);
+    file_.open(std::filesystem::u8path(path), std::ios::binary);
     if (!file_.is_open()) {
         throw std::runtime_error("Cannot open file: " + path);
     }
