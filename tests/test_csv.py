@@ -705,7 +705,9 @@ class TestReadCsv:
         csv_path = tmp_path / "unterminated.csv"
         csv_path.write_text('id,text\n1,"hello\n')
 
-        with pytest.raises(ar.CsvReadError, match="Unterminated quoted CSV record"):
+        with pytest.raises(
+            ar.CsvReadError, match="Unterminated quoted field starting at line 2"
+        ):
             ar.read_csv(csv_path)
 
     def test_duplicate_headers_rejected(self, tmp_path):
@@ -2134,3 +2136,58 @@ class TestUnicodeFilePath:
 
         total_rows = sum(chunk.shape[0] for chunk in chunks)
         assert total_rows == 2
+
+
+# --- Issue #113: unterminated quoted field errors must include line number ---
+
+
+class TestUnterminatedQuoteLocation:
+    """Regression tests for #113 — CsvReadError must include the line number
+    where an unterminated quoted field begins so users can locate the problem
+    in their input file quickly."""
+
+    def test_error_message_includes_line_number(self, tmp_path):
+        # Unterminated quote starts on line 2 (after the header).
+        csv_path = tmp_path / "bad.csv"
+        csv_path.write_text('name,note\nAlice,"unterminated\n')
+        with pytest.raises(ar.CsvReadError, match="line 2"):
+            ar.read_csv(csv_path)
+
+    def test_error_message_includes_correct_line_for_later_row(self, tmp_path):
+        # Two valid rows, then an unterminated quote on line 4.
+        csv_path = tmp_path / "bad.csv"
+        csv_path.write_text('a,b\n1,ok\n2,fine\n3,"oops\n')
+        with pytest.raises(ar.CsvReadError, match="line 4"):
+            ar.read_csv(csv_path)
+
+    def test_error_message_includes_line_for_multiline_field_start(self, tmp_path):
+        # A valid multiline field followed by an unterminated one.
+        # Valid: rows 1-3 (header + "hello\nworld" spanning lines 2-3).
+        # Invalid: unterminated quote starts on line 4.
+        csv_path = tmp_path / "bad.csv"
+        csv_path.write_bytes(b'id,text\n1,"hello\nworld"\n2,"oops\n')
+        with pytest.raises(ar.CsvReadError, match="line 4"):
+            ar.read_csv(csv_path)
+
+    def test_error_message_says_unterminated_quoted_field(self, tmp_path):
+        # The error message must mention "Unterminated quoted field".
+        csv_path = tmp_path / "bad.csv"
+        csv_path.write_text('x\n"no close\n')
+        with pytest.raises(ar.CsvReadError, match="Unterminated quoted field"):
+            ar.read_csv(csv_path)
+
+    def test_valid_multiline_field_still_parses(self, tmp_path):
+        # A properly closed multiline field must NOT raise.
+        csv_path = tmp_path / "ok.csv"
+        csv_path.write_bytes(b'id,text\n1,"hello\nworld"\n')
+        frame = ar.read_csv(csv_path)
+        assert frame.shape == (1, 2)
+        df = ar.to_pandas(frame)
+        assert df["text"].iloc[0] == "hello\nworld"
+
+    def test_no_header_unterminated_quote_line_number(self, tmp_path):
+        # Without a header, the unterminated quote is on line 1.
+        csv_path = tmp_path / "bad.csv"
+        csv_path.write_text('"oops\n')
+        with pytest.raises(ar.CsvReadError, match="line 1"):
+            ar.read_csv(csv_path, has_header=False)
