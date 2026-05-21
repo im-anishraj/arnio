@@ -495,7 +495,8 @@ def read_csv_chunked(
     nrows : int, optional
         Maximum total number of data rows to read across all chunks.
     skiprows : int, default 0
-        Number of data rows to skip after the header row.
+        Number of lines to skip before reading the header. Useful for
+        CSV files with metadata preambles before the actual data.
     encoding : str, default "utf-8"
         File encoding.
     trim_headers : bool, default True

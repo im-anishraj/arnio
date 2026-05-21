@@ -530,6 +530,15 @@ Frame CsvReader::read(const std::string& path) const {
 
     size_t record_number = 0;
 
+    if (config.skip_rows.has_value()) {
+        size_t to_skip = config.skip_rows.value();
+        size_t skipped = 0;
+        while (skipped < to_skip && record_reader.read(line)) {
+            ++record_number;
+            ++skipped;
+        }
+    }
+
     // Read header
     if (config.has_header && record_reader.read(line)) {
         ++record_number;
@@ -539,15 +548,6 @@ Frame CsvReader::read(const std::string& path) const {
             if (config.trim_headers) trim_in_place(h);
         }
         validate_header(header);
-    }
-
-    if (config.skip_rows.has_value()) {
-        size_t to_skip = config.skip_rows.value();
-        size_t skipped = 0;
-        while (skipped < to_skip && record_reader.read(line)) {
-            ++record_number;
-            ++skipped;
-        }
     }
 
     // Read all rows
@@ -834,7 +834,13 @@ void CsvChunkReader::open(const std::string& path) {
     col_types_.clear();
     expected_cols_ = std::nullopt;
 
-    std::string line;
+    const size_t skip_target = config.skip_rows.value_or(0);
+    size_t skipped = 0;
+    while (skipped < skip_target && record_reader_->read(line)) {
+        ++record_number_;
+        ++skipped;
+    }
+
     if (config.has_header && record_reader_->read(line)) {
         ++record_number_;
         strip_utf8_bom(line);
@@ -846,19 +852,6 @@ void CsvChunkReader::open(const std::string& path) {
         expected_cols_ = header_.size();
         resolve_col_indices();
         col_types_.assign(header_.size(), DType::NULL_TYPE);
-    }
-
-    const size_t skip_target = config.skip_rows.value_or(0);
-    size_t skipped = 0;
-    std::vector<std::string> reusable_fields;
-    if (expected_cols_.has_value()) {
-        reusable_fields.reserve(expected_cols_.value());
-    }
-    while (skipped < skip_target) {
-        if (!read_one_data_row(reusable_fields)) {
-            break;
-        }
-        ++skipped;
     }
 }
 
