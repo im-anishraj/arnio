@@ -21,6 +21,7 @@ from .cleaning import (
     drop_columns_matching,
     drop_constant_columns,
     drop_duplicates,
+    drop_empty_columns,
     drop_nulls,
     fill_nulls,
     filter_rows,
@@ -47,7 +48,7 @@ from .exceptions import (
     TypeCastError,
     UnknownStepError,
 )
-from .frame import ArFrame
+from .frame import ArFrame, ColumnSummary
 from .integrations import ArnioPandasAccessor, register_duckdb
 from .io import (
     read_csv,
@@ -106,9 +107,12 @@ from .schema import (
     validate,
 )
 
+from_records = ArFrame.from_records
+
 __all__ = [
     # Core class
     "ArFrame",
+    "ColumnSummary",
     # I/O
     "read_csv",
     "read_csv_chunked",
@@ -128,6 +132,7 @@ __all__ = [
     "replace_values",
     "drop_duplicates",
     "drop_constant_columns",
+    "drop_empty_columns",
     "clip_numeric",
     "coalesce_columns",
     "combine_columns",
@@ -145,6 +150,7 @@ __all__ = [
     # Conversion
     "to_pandas",
     "from_pandas",
+    "from_records",
     # Integrations
     "ArnioPandasAccessor",
     "register_duckdb",
