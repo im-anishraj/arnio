@@ -1,6 +1,23 @@
 """
 arnio.frame
 ArFrame — the core data container wrapping the C++ Frame.
+
+Copy and Mutation Semantics
+---------------------------
+All ArFrame methods that transform or slice data return a **new ArFrame**.
+The original frame is never modified. This is the guaranteed contract for
+all public methods in this module:
+
+- head()           → returns new ArFrame, original unchanged
+- tail()           → returns new ArFrame, original unchanged
+- select_columns() → returns new ArFrame, original unchanged
+- select_dtypes()  → returns new ArFrame, original unchanged
+
+Example::
+
+    frame = ar.read_csv("data.csv")
+    top5 = frame.head(5)       # new frame — frame is untouched
+    assert top5 is not frame   # always True
 """
 
 from __future__ import annotations
@@ -88,7 +105,9 @@ class ArFrame:
         return self._frame.memory_usage()
 
     def head(self, n: int = 5) -> ArFrame:
-        """Return the first n rows as an ArFrame.
+        """Return the first n rows as a new ArFrame.
+
+        The original frame is not modified.
 
         Parameters
         ----------
@@ -98,7 +117,15 @@ class ArFrame:
         Returns
         -------
         ArFrame
-            New ArFrame containing the first n rows.
+            A new ArFrame containing the first n rows.
+            The original frame remains unchanged.
+
+        Examples
+        --------
+        >>> frame = ar.read_csv("data.csv")
+        >>> top5 = frame.head(5)
+        >>> top5 is frame   # always False — head() never mutates
+        False
         """
         if isinstance(n, bool) or not isinstance(n, int) or n < 0:
             raise ValueError(f"`n` must be a non-negative integer, got {n!r}")
@@ -110,7 +137,9 @@ class ArFrame:
         return from_pandas(df.head(n))
 
     def tail(self, n: int = 5) -> ArFrame:
-        """Return the last n rows as an ArFrame.
+        """Return the last n rows as a new ArFrame.
+
+        The original frame is not modified.
 
         Parameters
         ----------
@@ -120,7 +149,15 @@ class ArFrame:
         Returns
         -------
         ArFrame
-            New ArFrame containing the last n rows.
+            A new ArFrame containing the last n rows.
+            The original frame remains unchanged.
+
+        Examples
+        --------
+        >>> frame = ar.read_csv("data.csv")
+        >>> last5 = frame.tail(5)
+        >>> last5 is frame   # always False — tail() never mutates
+        False
         """
         if isinstance(n, bool) or not isinstance(n, int) or n < 0:
             raise ValueError(f"`n` must be a non-negative integer, got {n!r}")
@@ -134,6 +171,8 @@ class ArFrame:
     def select_columns(self, columns: list[str]) -> ArFrame:
         """Return a new ArFrame with only the selected columns.
 
+        The original frame is not modified.
+
         Parameters
         ----------
         columns : list[str]
@@ -142,7 +181,8 @@ class ArFrame:
         Returns
         -------
         ArFrame
-            New ArFrame containing only the selected columns.
+            A new ArFrame containing only the selected columns.
+            The original frame remains unchanged.
 
         Raises
         ------
@@ -151,6 +191,13 @@ class ArFrame:
         ValueError
             If the selection is empty, contains duplicates,
             or includes unknown columns.
+
+        Examples
+        --------
+        >>> frame = ar.read_csv("data.csv")
+        >>> small = frame.select_columns(["name", "age"])
+        >>> small is frame   # always False — select_columns() never mutates
+        False
         """
         if isinstance(columns, str):
             raise TypeError("columns must be a sequence of column names, not a string.")
@@ -181,6 +228,7 @@ class ArFrame:
     ) -> ArFrame:
         """Return a new ArFrame containing only columns whose dtype matches the filter.
 
+        The original frame is not modified.
         At least one of *include* or *exclude* must be provided.
 
         Parameters
@@ -195,8 +243,8 @@ class ArFrame:
         Returns
         -------
         ArFrame
-            New ArFrame containing only the matched columns, in original
-            column order.
+            A new ArFrame containing only the matched columns, in original
+            column order. The original frame remains unchanged.
 
         Raises
         ------
@@ -212,6 +260,8 @@ class ArFrame:
         --------
         >>> frame = ar.read_csv("data.csv")
         >>> numeric = frame.select_dtypes(include=["int64", "float64"])
+        >>> numeric is frame   # always False — select_dtypes() never mutates
+        False
         >>> without_strings = frame.select_dtypes(exclude="string")
         """
         if include is None and exclude is None:
