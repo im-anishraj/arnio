@@ -17,7 +17,7 @@ def test_line_endings_mixed(tmp_path):
 
 def test_multiline_quoted_records(tmp_path):
     csv_path = tmp_path / "multiline.csv"
-    csv_path.write_text('id,desc\n1,"hello\nworld"\n2,"escaped ""quote"""\n')
+    csv_path.write_bytes(b'id,desc\n1,"hello\nworld"\n2,"escaped ""quote"""\n')
     frame = ar.read_csv(str(csv_path))
     df = ar.to_pandas(frame)
     assert len(df) == 2
