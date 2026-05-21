@@ -361,34 +361,35 @@ class ArFrame:
             raise ValueError(f"Unknown columns: {missing}")
 
         return ArFrame(self._frame.select_columns(columns))
-    
+
     def drop_columns(self, cols: list[str]) -> ArFrame:
-    """Return a new ArFrame with the specified columns removed.
+        """Return a new ArFrame with the specified columns removed.
 
-    Parameters
-    ----------
-    cols : list[str]
-        Column names to drop. Duplicates are silently ignored.
-        An empty list returns a copy of the frame unchanged.
+        Parameters
+        ----------
+        cols : list[str]
+            Column names to drop. Duplicates are silently ignored.
+            An empty list returns a copy of the frame unchanged.
 
-    Returns
-    -------
-    ArFrame
-        New ArFrame without the dropped columns. Original column
-        order is preserved.
+        Returns
+        -------
+        ArFrame
+            New ArFrame without the dropped columns. Original column
+            order is preserved.
 
-    Raises
-    ------
-    TypeError
-        If cols is not a list, or contains non-string elements.
-    ValueError
-        If any name in cols does not exist in the frame.
+        Raises
+        ------
+        TypeError
+            If cols is not a list, or contains non-string elements.
+        ValueError
+            If any name in cols does not exist in the frame.
 
-    Examples
-    --------
-    >>> frame = ar.read_csv("data.csv")
-    >>> smaller = frame.drop_columns(["col1", "col2"])
-    """
+        Examples
+        --------
+        >>> frame = ar.read_csv("data.csv")
+        >>> smaller = frame.drop_columns(["col1", "col2"])
+        """
+
     if not isinstance(cols, list):
         raise TypeError(
             f"cols must be a list of column names, got {type(cols).__name__!r}"
@@ -409,8 +410,7 @@ class ArFrame:
     missing = [col for col in unique_cols if col not in self.columns]
     if missing:
         raise ValueError(
-            f"Unknown column(s): {missing}. "
-            f"Available columns: {self.columns}"
+            f"Unknown column(s): {missing}. " f"Available columns: {self.columns}"
         )
 
     # Empty input — return unchanged copy
@@ -425,6 +425,7 @@ class ArFrame:
     if not remaining:
         from .convert import from_pandas, to_pandas
         import pandas as pd
+
         return from_pandas(pd.DataFrame())
 
     return ArFrame(self._frame.select_columns(remaining))
