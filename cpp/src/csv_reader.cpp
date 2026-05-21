@@ -79,15 +79,17 @@ static bool getline_universal(std::istream& stream, std::string& line, std::stri
     return true;
 }
 
-bool read_record(std::istream& file, std::string& record) {
+bool read_record(std::istream& file, std::string& record, size_t& line_number) {
     record.clear();
 
     std::string line;
     std::string line_ending;
     std::string prev_line_ending;
     bool first = true;
+    size_t record_start_line = line_number + 1;
 
     while (getline_universal(file, line, line_ending)) {
+        ++line_number;
         if (!first) {
             record += prev_line_ending;  //  use PREVIOUS ending as separator
         }
@@ -101,10 +103,17 @@ bool read_record(std::istream& file, std::string& record) {
     }
 
     if (!record.empty() && !record_complete(record)) {
-        throw std::runtime_error("Unterminated quoted CSV record");
+        throw std::runtime_error("Unterminated quoted field starting at line " +
+                                 std::to_string(record_start_line));
     }
 
     return !record.empty();
+}
+
+// Overload without line tracking — used by callers that do not need location.
+bool read_record(std::istream& file, std::string& record) {
+    size_t dummy = 0;
+    return read_record(file, record, dummy);
 }
 
 void validate_header(const std::vector<std::string>& header) {
@@ -524,18 +533,19 @@ Frame CsvReader::read(const std::string& path) const {
     std::vector<std::vector<std::string>> raw_data;
 
     size_t record_number = 0;
+    size_t line_number = 0;
 
     if (config.skip_rows.has_value()) {
         size_t to_skip = config.skip_rows.value();
         size_t skipped = 0;
-        while (skipped < to_skip && read_record(file, line)) {
+        while (skipped < to_skip && read_record(file, line, line_number)) {
             ++record_number;
             ++skipped;
         }
     }
 
     // Read header
-    if (config.has_header && read_record(file, line)) {
+    if (config.has_header && read_record(file, line, line_number)) {
         ++record_number;
         strip_utf8_bom(line);
         header = parser_.parse_line(line);
@@ -552,7 +562,7 @@ Frame CsvReader::read(const std::string& path) const {
     size_t row_count = 0;
     std::optional<size_t> expected_cols =
         config.has_header ? std::optional<size_t>{header.size()} : std::nullopt;
-    while (read_record(file, line)) {
+    while (read_record(file, line, line_number)) {
         ++record_number;
 
         if (config.nrows.has_value() && row_count >= config.nrows.value()) {
