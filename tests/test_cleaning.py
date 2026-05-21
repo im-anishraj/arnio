@@ -1556,6 +1556,7 @@ class TestCastTypes:
 
         with pytest.raises(ar.TypeCastError, match="Cannot cast column 'active'"):
             ar.cast_types(frame, {"active": "bool"})
+
     def test_cast_int_to_string_value_correctness(self, sample_csv):
         # Checks actual values, not just dtype
         frame = ar.read_csv(sample_csv)
@@ -1586,7 +1587,9 @@ class TestCastTypes:
 
     def test_cast_null_preserved_through_int_to_float(self):
         # Nulls must survive type conversion
-        frame = ar.from_pandas(pd.DataFrame({"x": pd.array([1, None, 3], dtype="Int64")}))
+        frame = ar.from_pandas(
+            pd.DataFrame({"x": pd.array([1, None, 3], dtype="Int64")})
+        )
         result = ar.cast_types(frame, {"x": "float64"})
         df = ar.to_pandas(result)
         assert result.dtypes["x"] == "float64"
@@ -1637,6 +1640,7 @@ class TestCastTypes:
         result = ar.cast_types(frame, {"age": "float64", "name": "string"})
         assert result.dtypes["age"] == "float64"
         assert result.dtypes["name"] == "string"
+
     def test_cast_string_to_float_unparseable_raises(self):
         # "abc" cannot be parsed as float64, should raise TypeCastError
         frame = ar.from_pandas(pd.DataFrame({"score": ["1.5", "abc"]}))
@@ -1651,6 +1655,7 @@ class TestCastTypes:
         assert result.dtypes["score"] == "float64"
         assert df["score"].iloc[0] == 1.5
         assert pd.isna(df["score"].iloc[1])
+
 
 class TestCleanAPI:
     def test_clean_defaults(self, csv_with_whitespace):
