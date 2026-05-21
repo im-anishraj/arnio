@@ -179,8 +179,6 @@ class RecordReader {
 
 namespace {
 
-
-
 void validate_header(const std::vector<std::string>& header) {
     std::unordered_set<std::string> seen;
     for (const auto& name : header) {
