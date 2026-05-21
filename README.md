@@ -254,7 +254,34 @@ frame = ar.read_csv("data.csv", null_values=["", "MISSING", "UNKNOWN"])
 # Disable null sentinel handling completely
 frame = ar.read_csv("data.csv", null_values=[])
 ```
+### Handling invalid UTF-8 bytes
 
+Use `encoding_errors` to control how invalid UTF-8 bytes are handled during CSV parsing.
+
+```python
+# Raise an error on invalid UTF-8 bytes (default)
+frame = ar.read_csv(
+    "data.csv",
+    encoding_errors="strict",
+)
+
+# Replace invalid bytes with the Unicode replacement character (�)
+frame = ar.read_csv(
+    "data.csv",
+    encoding_errors="replace",
+)
+
+# Ignore invalid bytes completely
+frame = ar.read_csv(
+    "data.csv",
+    encoding_errors="ignore",
+)
+```
+Supported values:
+
+- `"strict"` (default)
+- `"replace"`
+- `"ignore"`
 > Every step above executes in C++. Your Python code is a _configuration_ — not the execution engine.
 
 > Explore more in the **[examples/](./examples/)** folder — ready-to-run recipes for sales, customers, survey, logs, and finance datasets.

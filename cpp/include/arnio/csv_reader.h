@@ -22,6 +22,7 @@ struct CsvConfig {
     std::optional<size_t> sample_size = std::nullopt;
     std::optional<std::vector<std::string>> null_values = std::nullopt;
     std::string mode = "strict";
+    std::string encoding_errors = "strict";
 };
 
 // Shared CSV field parsing and type inference used by CsvReader and CsvChunkReader.

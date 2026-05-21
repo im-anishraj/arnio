@@ -5,6 +5,7 @@
 #include <cerrno>
 #include <charconv>
 #include <cmath>
+#include <codecvt>
 #include <cstddef>
 #include <cstdlib>
 #include <fstream>
@@ -14,7 +15,6 @@
 #include <stdexcept>
 #include <system_error>
 #include <unordered_set>
-
 namespace arnio {
 
 namespace {
@@ -274,6 +274,82 @@ inline bool try_parse_float64(const std::string& cleaned, double& out) {
 }
 }  // namespace
 
+static std::string handle_utf8_errors(const std::string& input, const std::string& mode) {
+    std::string output;
+
+    size_t i = 0;
+
+    while (i < input.size()) {
+        unsigned char c = static_cast<unsigned char>(input[i]);
+
+        size_t char_len = 0;
+
+        if (c <= 0x7F) {
+            char_len = 1;
+        } else if (c >= 0xC2 && c <= 0xDF) {
+            char_len = 2;
+        } else if (c >= 0xE0 && c <= 0xEF) {
+            char_len = 3;
+        } else if (c >= 0xF0 && c <= 0xF4) {
+            char_len = 4;
+        } else {
+            char_len = 0;
+        }
+
+        bool valid = true;
+
+        if (char_len == 0 || i + char_len > input.size()) {
+            valid = false;
+        } else {
+            for (size_t j = 1; j < char_len; ++j) {
+                unsigned char cc = static_cast<unsigned char>(input[i + j]);
+
+                if ((cc & 0xC0) != 0x80) {
+                    valid = false;
+                    break;
+                }
+            }
+
+            if (valid && char_len == 2) {
+                valid = c >= 0xC2;
+            }
+
+            if (valid && char_len == 3) {
+                unsigned char c1 = static_cast<unsigned char>(input[i + 1]);
+
+                if ((c == 0xE0 && c1 < 0xA0) || (c == 0xED && c1 >= 0xA0)) {
+                    valid = false;
+                }
+            }
+
+            if (valid && char_len == 4) {
+                unsigned char c1 = static_cast<unsigned char>(input[i + 1]);
+
+                if ((c == 0xF0 && c1 < 0x90) || (c == 0xF4 && c1 >= 0x90)) {
+                    valid = false;
+                }
+            }
+        }
+
+        if (valid) {
+            output.append(input.substr(i, char_len));
+
+            i += char_len;
+        } else {
+            if (mode == "strict") {
+                throw std::runtime_error("Invalid UTF-8 sequence encountered");
+            }
+
+            if (mode == "replace") {
+                output += "\xEF\xBF\xBD";
+            }
+
+            ++i;
+        }
+    }
+
+    return output;
+}
 CsvParser::CsvParser(const CsvConfig& config) : config_(config) {}
 
 CsvReader::CsvReader(const CsvConfig& config) : parser_(config) {}
@@ -335,15 +411,16 @@ bool CsvParser::is_null_sentinel(const std::string& value) const {
 }
 
 DType CsvParser::infer_type(const std::string& value) const {
-    if (is_null_sentinel(value)) return DType::NULL_TYPE;
+    const std::string sanitized = handle_utf8_errors(value, config_.encoding_errors);
+    if (is_null_sentinel(sanitized)) return DType::NULL_TYPE;
 
     // Try bool
-    std::string trimmed = value;
+    std::string trimmed = sanitized;
     trim_in_place(trimmed);
     std::string lower = to_lower_copy(trimmed);
     if (lower == "true" || lower == "false") return DType::BOOL;
 
-    std::string cleaned = normalize_numeric(value, config_);
+    std::string cleaned = normalize_numeric(sanitized, config_);
 
     if (is_special_float_token(to_lower_copy(cleaned))) {
         return DType::FLOAT64;
@@ -371,8 +448,9 @@ DType CsvParser::infer_type(const std::string& value) const {
     // so it doesn't poison the whole column's dtype to STRING.
     if (config_.thousands_separator.has_value()) {
         char sep = config_.thousands_separator.value();
-        if (value.find(sep) != std::string::npos && !has_valid_thousands_grouping(value, sep)) {
-            std::string check = value;
+        if (sanitized.find(sep) != std::string::npos &&
+            !has_valid_thousands_grouping(sanitized, sep)) {
+            std::string check = sanitized;
             trim_in_place(check);
             if (!check.empty() && (check[0] == '-' || check[0] == '+')) check = check.substr(1);
             bool looks_numeric =
@@ -402,30 +480,31 @@ DType CsvParser::promote_type(DType current, DType incoming) {
 }
 
 CellValue CsvParser::parse_value(const std::string& raw, DType dtype) const {
-    if (is_null_sentinel(raw)) return std::monostate{};
+    const std::string sanitized = handle_utf8_errors(raw, config_.encoding_errors);
+    if (is_null_sentinel(sanitized)) return std::monostate{};
 
     switch (dtype) {
         case DType::BOOL: {
-            std::string trimmed = raw;
+            std::string trimmed = sanitized;
             trim_in_place(trimmed);
             std::string lower = to_lower_copy(trimmed);
             return (lower == "true");
         }
         case DType::INT64: {
-            std::string cleaned = normalize_numeric(raw, config_);
+            std::string cleaned = normalize_numeric(sanitized, config_);
             int64_t value = 0;
             if (!try_parse_int64(cleaned, value)) return std::monostate{};
             return value;
         }
         case DType::FLOAT64: {
-            std::string cleaned = normalize_numeric(raw, config_);
+            std::string cleaned = normalize_numeric(sanitized, config_);
             double value = 0.0;
             if (!try_parse_float64(cleaned, value)) return std::monostate{};
             return value;
         }
         case DType::STRING: {
             // Keep raw string values exactly as they appear in the CSV
-            return raw;
+            return sanitized;
         }
         default:
             return std::monostate{};
@@ -459,6 +538,9 @@ Frame CsvReader::read(const std::string& path) const {
         ++record_number;
         strip_utf8_bom(line);
         header = parser_.parse_line(line);
+        for (auto& h : header) {
+            h = handle_utf8_errors(h, config.encoding_errors);
+        }
         for (auto& h : header) {
             if (config.trim_headers) trim_in_place(h);
         }
@@ -582,6 +664,10 @@ std::vector<std::pair<std::string, std::string>> CsvReader::scan_schema(
 
         if (config.has_header) {
             header = parser_.parse_line(line);
+
+            for (auto& h : header) {
+                h = handle_utf8_errors(h, config.encoding_errors);
+            }
 
             for (auto& h : header) {
                 if (config.trim_headers) trim_in_place(h);
