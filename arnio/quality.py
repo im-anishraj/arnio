@@ -113,6 +113,8 @@ class ColumnProfile:
     q50: float | None = None
     q75: float | None = None
     q95: float | None = None
+    outlier_count: int | None = None
+    outlier_ratio: float | None = None
     sample_values: list[Any] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     top_values: list[tuple[Any, int, float]] | None = None
@@ -170,6 +172,8 @@ class ColumnProfile:
                     "q50": _clean_scalar(self.q50),
                     "q75": _clean_scalar(self.q75),
                     "q95": _clean_scalar(self.q95),
+                    "outlier_count": self.outlier_count,
+                    "outlier_ratio": self.outlier_ratio,
                 }
                 if _is_numeric_dtype(self.dtype)
                 else {}
@@ -756,6 +760,8 @@ class DataQualityReport:
                             "q50": _clean_scalar(column.q50),
                             "q75": _clean_scalar(column.q75),
                             "q95": _clean_scalar(column.q95),
+                            "outlier_count": column.outlier_count,
+                            "outlier_ratio": column.outlier_ratio,
                         }
                         if _is_numeric_dtype(column.dtype)
                         else {}
@@ -1999,6 +2005,7 @@ def _profile_column(
     top_values_sample_count = None
     top_values_sample_ratio = None
     q25 = q50 = q75 = q95 = None
+    outlier_count = outlier_ratio = None
     std = None
     if dtype == "string" or pd.api.types.is_string_dtype(series.dtype):
         as_text = non_null.astype("string")
@@ -2034,6 +2041,11 @@ def _profile_column(
             q50 = round(float(quantiles.loc[0.50]), 4)
             q75 = round(float(quantiles.loc[0.75]), 4)
             q95 = round(float(quantiles.loc[0.95]), 4)
+            outlier_count, outlier_ratio = _iqr_outlier_summary(
+                numeric_non_null,
+                q25=q25,
+                q75=q75,
+            )
 
             # Calculate histogram
             finite_values = numeric_non_null[np.isfinite(numeric_non_null)]
@@ -2085,6 +2097,9 @@ def _profile_column(
         dominant_ratio=dominant_ratio,
     )
 
+    if outlier_count is not None and outlier_count > 0:
+        warnings.append("potential_outliers")
+
     return ColumnProfile(
         name=name,
         dtype=dtype,
@@ -2107,6 +2122,8 @@ def _profile_column(
         q50=q50,
         q75=q75,
         q95=q95,
+        outlier_count=outlier_count,
+        outlier_ratio=outlier_ratio,
         sample_values=sample_values,
         warnings=warnings,
         top_values=top_values,
@@ -2182,6 +2199,27 @@ def _suggest_column_dtype(series: pd.Series, dtype: str) -> str | None:
             return "int64"
         return "float64"
     return None
+
+
+def _iqr_outlier_summary(
+    numeric_non_null: pd.Series,
+    *,
+    q25: float,
+    q75: float,
+    min_values: int = 4,
+) -> tuple[int | None, float | None]:
+    if len(numeric_non_null) < min_values:
+        return (None, None)
+    iqr = q75 - q25
+    lower_bound = q25 - 1.5 * iqr
+    upper_bound = q75 + 1.5 * iqr
+    outlier_count = len(
+        numeric_non_null[
+            (numeric_non_null < lower_bound) | (numeric_non_null > upper_bound)
+        ]
+    )
+    outlier_ratio = _ratio(outlier_count, len(numeric_non_null))
+    return outlier_count, outlier_ratio
 
 
 def _column_warnings(
