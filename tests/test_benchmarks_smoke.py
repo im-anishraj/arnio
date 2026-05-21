@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pytest
 
+from benchmarks.benchmark_vs_pandas import check_regression
+
 # Check if the C++ extension is compiled
 try:
     import arnio._core  # noqa: F401
@@ -139,3 +141,27 @@ def test_benchmark_sparse_nulls_dry_run_cleans_up_temp_files():
         if f.name != "benchmark_sparse_nulls.csv"
     ]
     assert len(post_files) == 0, f"Temp files not cleaned up: {post_files}"
+
+
+def test_check_regression_detects_slowdown():
+    """Regression should trigger when slowdown exceeds threshold."""
+    is_regression, regression_percent = check_regression(
+        current_time=12.0,
+        baseline_time=10.0,
+        threshold_percent=10,
+    )
+
+    assert is_regression is True
+    assert regression_percent == 20.0
+
+
+def test_check_regression_allows_small_variance():
+    """Small timing variance should not trigger regression."""
+    is_regression, regression_percent = check_regression(
+        current_time=10.5,
+        baseline_time=10.0,
+        threshold_percent=10,
+    )
+
+    assert is_regression is False
+    assert regression_percent == 5.0

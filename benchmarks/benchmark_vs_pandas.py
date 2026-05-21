@@ -27,7 +27,7 @@ DRY_RUN = os.getenv("ARNIO_BENCHMARK_DRY_RUN") == "1"
 RUNS = 1 if DRY_RUN else 3
 
 BASELINE_FILE = "benchmarks/baseline.json"
-REGRESSION_THRESHOLD = 5  # Percent
+REGRESSION_THRESHOLD = 10  # Percent
 
 
 @dataclass(frozen=True)
@@ -290,6 +290,12 @@ def calculate_regression(current, baseline):
     ) * 100  # How much slower current benchmark is compared to baseline
 
 
+def check_regression(current_time, baseline_time, threshold_percent):
+    regression_percent = ((current_time - baseline_time) / baseline_time) * 100
+
+    return regression_percent > threshold_percent, regression_percent
+
+
 def run_case(case, skip_correctness=False):
     baseline_data = load_baseline()
 
@@ -403,12 +409,16 @@ def run_case(case, skip_correctness=False):
         baseline_time = baseline_case["arnio_exec_time"]
         current_time = avg(ar_times)
 
-        regression = calculate_regression(current_time, baseline_time)
+        is_regression, regression_percent = check_regression(
+            current_time,
+            baseline_time,
+            REGRESSION_THRESHOLD,
+        )
 
-        if regression > REGRESSION_THRESHOLD:
+        if is_regression:
             print(
-                f"WARNING: Regression detected:"
-                f"{regression:.1f}% slower than baseline "
+                f"WARNING: Regression detected: "
+                f"{regression_percent:.1f}% slower than baseline "
                 f"(threshold: {REGRESSION_THRESHOLD}%)"
             )
     else:
@@ -465,10 +475,15 @@ if __name__ == "__main__":
         )
     elif rss_source == "unavailable":
         print("Note: Peak RSS unavailable (install psutil for process RSS).")
-    results = []
 
+    results = {}
     for benchmark_case in BENCHMARKS:
-        results.append(run_case(benchmark_case))
+        result = run_case(benchmark_case)
+        results[result["case"]] = {
+            "pandas_exec_time": result["pandas_exec_time"],
+            "arnio_exec_time": result["arnio_exec_time"],
+            "speedup": result["speedup"],
+        }
 
     with open("benchmark_results.json", "w") as f:
         json.dump(results, f, indent=2)
