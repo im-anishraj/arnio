@@ -21,6 +21,8 @@ from __future__ import annotations
 import pathlib
 from typing import Any
 
+from arnio.schema import _field_to_dict
+
 _INDENT = "  "
 
 # Types that arnio's Schema / scan_csv can legitimately produce.
@@ -188,6 +190,8 @@ def schema_to_dict(schema: dict | Any) -> dict:
         for name, field in schema.fields.items():
             if isinstance(field, dict):
                 raw[name] = field
+            elif hasattr(field, "dtype"):
+                raw[name] = _field_to_dict(field)
             elif hasattr(field, "__dict__"):
                 raw[name] = {
                     k: v for k, v in vars(field).items() if not k.startswith("_")
