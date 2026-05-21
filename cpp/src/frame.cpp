@@ -63,6 +63,13 @@ const Column& Frame::column(size_t idx) const {
     return columns_[idx];
 }
 
+Column& Frame::column_mut(size_t idx) {
+    if (idx >= columns_.size()) {
+        throw std::out_of_range("Column index out of range");
+    }
+    return columns_[idx];
+}
+
 const Column& Frame::column(const std::string& name) const {
     auto it = name_index_.find(name);
     if (it == name_index_.end()) {
