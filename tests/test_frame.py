@@ -421,21 +421,19 @@ def test_describe_all_numeric_columns(large_csv):
     numeric_frame = frame.select_dtypes(include=["int64", "float64"])
     stats = numeric_frame.describe()
 
-    assert list(stats.keys()) == ["value", "id"]
+    assert list(stats.keys()) == ["id", "value"]
 
-    for col in ["value", "id"]:
+    for col in ["id", "value"]:
         metric_keys = list(stats[col].keys())
-        assert metric_keys == ["max", "min", "mean", "nulls", "count"]
+        assert metric_keys == ["count", "nulls", "mean", "min", "max"]
 
 
 def test_describe_all_string_columns(csv_with_whitespace):
     frame = ar.read_csv(csv_with_whitespace)
+    stats = frame.describe()
 
-    string_frame = frame.select_dtypes(include=["string"])
-    stats = string_frame.describe()
+    assert list(stats.keys()) == ["name", "city"]
 
-    assert list(stats.keys()) == ["city", "name"]
-
-    for col in ["city", "name"]:
+    for col in ["name", "city"]:
         metric_keys = list(stats[col].keys())
-        assert metric_keys == ["unique", "nulls", "count"]
+        assert metric_keys == ["count", "nulls", "unique"]
