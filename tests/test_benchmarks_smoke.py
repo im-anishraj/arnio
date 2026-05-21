@@ -23,7 +23,9 @@ CI_SAFE_BENCHMARKS = [
     "benchmark_clip_numeric.py",
     "benchmark_combine_columns.py",
     "benchmark_gil_threading.py",
+    "benchmark_numeric_parse.py",
     "benchmark_profile_duplicate_count.py",
+    "benchmark_sparse_nulls.py",
     "benchmark_strip_whitespace.py",
     "benchmark_to_pandas_overhead.py",
     "benchmark_vs_pandas.py",
@@ -33,7 +35,9 @@ CI_SAFE_BENCHMARKS = [
 BENCHMARK_ARGS = {
     "benchmark_auto_clean_memory.py": ["--rows", "10", "--repeat", "1"],
     "benchmark_clip_numeric.py": ["--rows", "10", "--runs", "1"],
+    "benchmark_numeric_parse.py": ["--rows", "10", "--runs", "1"],
     "benchmark_profile_duplicate_count.py": ["--rows", "10", "--runs", "1"],
+    "benchmark_sparse_nulls.py": ["--rows", "10", "--runs", "1"],
 }
 
 
@@ -96,3 +100,42 @@ def test_benchmark_script_runs_successfully(script_path):
         f"Stdout:\n{result.stdout}\n"
         f"Stderr:\n{result.stderr}"
     )
+
+
+@pytest.mark.skipif(not HAS_CORE, reason="Arnio C++ extension is not compiled.")
+def test_benchmark_sparse_nulls_dry_run_cleans_up_temp_files():
+    """Verify benchmark_sparse_nulls.py runs in dry-run mode and removes temp files."""
+    script_path = BENCHMARKS_DIR / "benchmark_sparse_nulls.py"
+    if not script_path.exists():
+        pytest.skip("benchmark_sparse_nulls.py not found")
+
+    env = os.environ.copy()
+    env["ARNIO_BENCHMARK_DRY_RUN"] = "1"
+
+    # Check for any existing temp files before the run
+    pre_files = list(BENCHMARKS_DIR.glob("benchmark_sparse_nulls_*.csv"))
+    for f in pre_files:
+        if f.name != "benchmark_sparse_nulls.csv":
+            f.unlink(missing_ok=True)
+
+    cmd = [sys.executable, str(script_path), "--rows", "10", "--runs", "1"]
+    result = subprocess.run(
+        cmd,
+        env=env,
+        capture_output=True,
+        text=True,
+        cwd=str(BENCHMARKS_DIR.parent),
+        timeout=30,
+    )
+
+    assert (
+        result.returncode == 0
+    ), f"Dry-run failed.\nStdout:\n{result.stdout}\nStderr:\n{result.stderr}"
+
+    # Verify all density-specific temp CSV files were removed
+    post_files = [
+        f
+        for f in BENCHMARKS_DIR.glob("benchmark_sparse_nulls_*.csv")
+        if f.name != "benchmark_sparse_nulls.csv"
+    ]
+    assert len(post_files) == 0, f"Temp files not cleaned up: {post_files}"

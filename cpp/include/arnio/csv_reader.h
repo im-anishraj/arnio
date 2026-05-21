@@ -3,6 +3,7 @@
 #include <fstream>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -14,6 +15,7 @@ struct CsvConfig {
     char delimiter = ',';
     bool has_header = true;
     std::optional<std::vector<std::string>> usecols = std::nullopt;
+    std::optional<std::unordered_map<std::string, std::string>> dtype = std::nullopt;
     std::optional<size_t> nrows = std::nullopt;
     std::optional<size_t> skip_rows = std::nullopt;
     std::string encoding = "utf-8";  // Currently only utf-8 supported

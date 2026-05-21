@@ -29,6 +29,12 @@ def _is_utf8_encoding(encoding: str) -> bool:
     return encoding.lower().replace("_", "-") in {"utf-8", "utf8"}
 
 
+def _raise_csv_path_os_error(path: str, error: OSError) -> None:
+    """Raise a path-aware CsvReadError for filesystem access failures."""
+    reason = error.strerror or str(error)
+    raise CsvReadError(f"Could not access CSV file {path!r}: {reason}") from error
+
+
 @contextmanager
 def _utf8_csv_path(
     path: str,
@@ -140,7 +146,7 @@ def _utf8_csv_path(
             f"Could not decode {path!r} using encoding {encoding!r}"
         ) from e
     except OSError as e:
-        raise CsvReadError(str(e)) from e
+        _raise_csv_path_os_error(path, e)
     finally:
         if tmp_name is not None:
             try:
@@ -197,6 +203,34 @@ def _validate_usecols(usecols: Sequence[str]) -> list[str]:
     return list(usecols)
 
 
+def _validate_dtype_mapping(dtype: dict[str, str]) -> dict[str, str]:
+    if not isinstance(dtype, dict):
+        raise TypeError(
+            "dtype must be a dictionary mapping column names to dtype strings"
+        )
+
+    allowed = {"string", "int64", "float64", "bool"}
+
+    validated: dict[str, str] = {}
+
+    for column, dtype_name in dtype.items():
+        if not isinstance(column, str):
+            raise TypeError("dtype column names must be strings")
+
+        if not isinstance(dtype_name, str):
+            raise TypeError("dtype values must be strings")
+
+        if dtype_name not in allowed:
+            raise ValueError(
+                f"Unsupported dtype {dtype_name!r}. "
+                f"Expected one of: {sorted(allowed)}"
+            )
+
+        validated[column] = dtype_name
+
+    return validated
+
+
 def _validate_nrows(nrows: int) -> int:
     """Validate nrows parameter."""
     if isinstance(nrows, bool) or not isinstance(nrows, int):
@@ -243,6 +277,15 @@ def _validate_null_values(null_values: list[str]) -> list[str]:
             raise TypeError("null_values must contain only strings")
 
     return list(null_values)
+
+
+def _validate_bool_option(value: bool, name: str) -> bool:
+    """Validate that a boolean option is strictly True or False."""
+    if not isinstance(value, bool):
+        raise TypeError(
+            f"{name} must be True or False, got {type(value).__name__}: {value!r}"
+        )
+    return value
 
 
 def _validate_parser_mode(mode: str) -> str:
@@ -297,19 +340,38 @@ def _reject_utf8_nul_bytes(path: str) -> None:
                     )
     except FileNotFoundError:
         pass  # Let C++ backend handle or raise standard error
+    except OSError as e:
+        _raise_csv_path_os_error(path, e)
+
+
+def _validate_csv_path(path: str, encoding: str) -> None:
+    """Shared validation for CSV-style file inputs."""
+
+    if _is_utf8_encoding(encoding):
+        _reject_utf8_nul_bytes(path)
+
+    try:
+        if os.path.getsize(path) == 0:
+            raise CsvReadError(f"CSV file is empty: {path!r}")
+    except FileNotFoundError:
+        pass
+    except OSError as e:
+        _raise_csv_path_os_error(path, e)
 
 
 def read_csv(
     path: str | os.PathLike[str],
     *,
-    delimiter: str = ",",
+    delimiter: str | None = None,
     has_header: bool = True,
     usecols: list[str] | None = None,
     nrows: int | None = None,
+    skiprows: int | None = None,
     encoding: str = "utf-8",
     trim_headers: bool = True,
     thousands_separator: str | None = None,
     null_values: list[str] | None = None,
+    dtype: dict[str, str] | None = None,
     mode: str = "strict",
 ) -> ArFrame:
     """Read a CSV file into an ArFrame via C++ backend.
@@ -318,15 +380,25 @@ def read_csv(
     ----------
     path : str or file-like object
         Filesystem path or text file-like object containing CSV data.
-        Supports .csv, .txt, and .tsv extensions for path inputs.
-    delimiter : str, default ","
-        Field delimiter character.
+        Any file extension is accepted. For ``.tsv`` files, the delimiter
+        is automatically set to ``'\t'`` when ``delimiter`` is omitted.
+    delimiter : str or None, default None
+        Field delimiter character.  When ``None`` (the default) the
+        delimiter is inferred from the file extension: ``'\t'`` for
+        ``.tsv`` files and ``','`` for everything else.  Passing an
+        explicit value always takes precedence — for example,
+        ``delimiter=','`` reads a comma-delimited ``.tsv`` file without
+        any auto-detection.
     has_header : bool, default True
         Whether the file has a header row.
     usecols : list[str], optional
         Columns to read. If None, reads all columns.
     nrows : int, optional
         Number of rows to read. If None, reads all rows.
+    skiprows : int, optional
+        Number of lines to skip before reading the header. Useful for
+        CSV files with metadata preambles before the actual data.
+        If None, no lines are skipped.
     encoding : str, default "utf-8"
         File encoding.
     trim_headers : bool, default True
@@ -335,16 +407,30 @@ def read_csv(
         Single non-alphanumeric character used as a thousands separator
         during numeric parsing.
 
+
+
         Values containing delimiter characters must still be quoted
         properly in the CSV input. For example, when using a comma
         delimiter, the value "1,234" must be quoted, while unquoted
         1,234 is interpreted as two separate fields.
+
+    dtype : dict[str, str], optional
+        Explicit column dtype mapping. Specified columns skip automatic
+        type inference and use the requested dtype directly.
+
+        Supported dtypes:
+        - "string"
+        - "int64"
+        - "float64"
+        - "bool"
 
     mode : {"strict", "permissive"}, default "strict"
         Controls malformed row handling.
 
         - strict: raises CsvReadError on inconsistent row widths.
         - permissive: fills missing trailing fields with nulls.
+        - both modes reject extra fields because they would otherwise be
+          silently dropped.
 
     Returns
     -------
@@ -354,56 +440,58 @@ def read_csv(
     Raises
     ------
     ValueError
-        If file format is unsupported or if thousands_separator is invalid.
+        If thousands_separator is invalid.
 
     TypeError
-        If thousands_separator is not a string or None.
+        If delimiter is not a string or None, or thousands_separator is
+        not a string or None.
 
     CsvReadError
         If CSV input contains NUL bytes and appears binary or corrupted.
 
     Examples
     --------
-    >>> frame = ar.read_csv("data.csv", delimiter=",", has_header=True)
+    >>> frame = ar.read_csv("data.csv")           # comma delimiter
+    >>> frame = ar.read_csv("data.tsv")           # tab auto-detected
+    >>> frame = ar.read_csv("data.tsv", delimiter=",")  # explicit comma honoured
+    >>> frame = ar.read_csv("data.dat")           # non-standard extension accepted
     """
     path, should_cleanup = _materialize_csv_input(path)
-    path_lower = path.lower()
-    if not (
-        path_lower.endswith(".csv")
-        or path_lower.endswith(".txt")
-        or path_lower.endswith(".tsv")
-    ):
-        raise ValueError(
-            f"Unsupported file format: {path}. Only .csv, .txt, and .tsv are supported."
-        )
 
-    if _is_utf8_encoding(encoding):
-        _reject_utf8_nul_bytes(path)
-    try:
-        if os.path.getsize(path) == 0:
-            raise CsvReadError(f"CSV file is empty: {path!r}")
-    except FileNotFoundError:
-        pass  # Let C++ backend handle or raise standard error
+    _validate_csv_path(path, encoding)
+
+    path_lower = path.lower()
+
+    # Resolve the sentinel: auto-detect tab for .tsv only when the caller
+    # truly omitted delimiter (None).  An explicit delimiter="," is always
+    # honoured, even for .tsv paths.
+    if delimiter is None:
+        delimiter = "\t" if path_lower.endswith(".tsv") else ","
 
     _validate_thousands_separator(thousands_separator)
     delimiter = _validate_delimiter(delimiter)
     mode = _validate_parser_mode(mode)
     config = _CsvConfig()
     config.delimiter = delimiter
-    config.has_header = has_header
+    config.has_header = _validate_bool_option(has_header, "has_header")
     config.encoding = encoding
-    config.trim_headers = trim_headers
+    config.trim_headers = _validate_bool_option(trim_headers, "trim_headers")
     config.thousands_separator = thousands_separator
     config.mode = mode
 
     if null_values is not None:
         config.null_values = _validate_null_values(null_values)
+    if dtype is not None:
+        config.dtype = _validate_dtype_mapping(dtype)
 
     if usecols is not None:
         config.usecols = _validate_usecols(usecols)
 
     if nrows is not None:
         config.nrows = _validate_nrows(nrows)
+
+    if skiprows is not None:
+        config.skip_rows = _validate_skip_rows(skiprows)
 
     reader = _CsvReader(config)
 
@@ -470,8 +558,13 @@ def read_csv_chunked(
         during numeric parsing.
     null_values : list[str], optional
         Strings treated as null values.
+
+
+
     mode : {"strict", "permissive"}, default "strict"
         Controls malformed row handling.
+        Both modes reject extra fields; permissive mode only allows missing
+        trailing fields, which are filled with nulls.
 
     Yields
     ------
@@ -510,9 +603,9 @@ def read_csv_chunked(
 
     config = _CsvConfig()
     config.delimiter = delimiter
-    config.has_header = has_header
+    config.has_header = _validate_bool_option(has_header, "has_header")
     config.encoding = encoding
-    config.trim_headers = trim_headers
+    config.trim_headers = _validate_bool_option(trim_headers, "trim_headers")
     config.thousands_separator = thousands_separator
     config.mode = mode
     config.skip_rows = skip_rows
@@ -606,7 +699,7 @@ def write_csv(
 
     config = _CsvWriteConfig()
     config.delimiter = delimiter
-    config.write_header = write_header
+    config.write_header = _validate_bool_option(write_header, "write_header")
     config.line_terminator = line_terminator
 
     writer = _CsvWriter(config)
@@ -619,7 +712,7 @@ def write_csv(
 def scan_csv(
     path: str | os.PathLike[str],
     *,
-    delimiter: str = ",",
+    delimiter: str | None = None,
     encoding: str = "utf-8",
     trim_headers: bool = True,
     thousands_separator: str | None = None,
@@ -632,9 +725,14 @@ def scan_csv(
     Parameters
     ----------
     path : str
-        Path to the CSV file. Supports .csv, .txt, and .tsv extensions.
-    delimiter : str, default ","
-        Field delimiter character.
+        Path to the CSV file. Any file extension is accepted. For ``.tsv``
+        files, the delimiter is automatically set to ``'\t'`` when
+        ``delimiter`` is omitted.
+    delimiter : str or None, default None
+        Field delimiter character.  When ``None`` (the default) the
+        delimiter is inferred from the file extension: ``'\t'`` for
+        ``.tsv`` files and ``','`` for everything else.  Passing an
+        explicit value always takes precedence.
     encoding : str, default "utf-8"
         File encoding. For non-UTF-8 inputs, a sample of the file is
         transcoded to infer the schema.
@@ -665,10 +763,11 @@ def scan_csv(
     Raises
     ------
     ValueError
-        If file format is unsupported or if thousands_separator is invalid.
+        If thousands_separator is invalid.
 
     TypeError
-        If thousands_separator is not a string or None.
+        If delimiter is not a string or None, or thousands_separator is
+        not a string or None.
 
     CsvReadError
         If CSV input contains NUL bytes and appears binary or corrupted.
@@ -678,25 +777,22 @@ def scan_csv(
     >>> schema = ar.scan_csv("data.csv")
     >>> print(schema)
     {'name': 'string', 'age': 'int64'}
+    >>> schema = ar.scan_csv("data.tsv")              # tab auto-detected
+    >>> schema = ar.scan_csv("data.tsv", delimiter=",")  # explicit comma honoured
+    >>> schema = ar.scan_csv("data.dat")              # non-standard extension accepted
     """
-    path = os.fspath(path)
-    path_lower = path.lower()
-    if not (
-        path_lower.endswith(".csv")
-        or path_lower.endswith(".txt")
-        or path_lower.endswith(".tsv")
-    ):
-        raise ValueError(
-            f"Unsupported file format: {path}. Only .csv, .txt, and .tsv are supported."
-        )
 
-    if _is_utf8_encoding(encoding):
-        _reject_utf8_nul_bytes(path)
-    try:
-        if os.path.getsize(path) == 0:
-            raise CsvReadError(f"CSV file is empty: {path!r}")
-    except FileNotFoundError:
-        pass
+    path = os.fspath(path)
+
+    _validate_csv_path(path, encoding)
+
+    path_lower = path.lower()
+
+    # Resolve the sentinel: auto-detect tab for .tsv only when the caller
+    # truly omitted delimiter (None).  An explicit delimiter="," is always
+    # honoured, even for .tsv paths.
+    if delimiter is None:
+        delimiter = "\t" if path_lower.endswith(".tsv") else ","
 
     _validate_thousands_separator(thousands_separator)
     delimiter = _validate_delimiter(delimiter)
@@ -704,7 +800,7 @@ def scan_csv(
     config = _CsvConfig()
     config.delimiter = delimiter
     config.encoding = encoding
-    config.trim_headers = trim_headers
+    config.trim_headers = _validate_bool_option(trim_headers, "trim_headers")
     config.thousands_separator = thousands_separator
     config.has_header = has_header
 
