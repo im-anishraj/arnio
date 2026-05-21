@@ -1393,7 +1393,6 @@ class TestReplaceValues:
         assert list(df["col"]) == ["A", "B", "C"]
 
     def test_replace_values_mixed_tuple_and_null_keys(self):
-
         frame = ar.from_pandas(pd.DataFrame({"col": ["A", np.nan, "C"]}))
 
         result = ar.replace_values(
