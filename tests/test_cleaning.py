@@ -1221,6 +1221,7 @@ class TestRoundNumericColumns:
         with pytest.raises(TypeError, match="decimals must be an integer"):
             ar.round_numeric_columns(frame, decimals=True)
 
+
 class TestCombineColumns:
     def test_combines_columns_with_separator(self):
         import pandas as pd
