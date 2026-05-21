@@ -142,6 +142,7 @@ class TestFromPandas:
 
         assert frame.columns == ["z_name", "a_score", "m_active", "b_id"]
         assert list(result.columns) == ["z_name", "a_score", "m_active", "b_id"]
+
     def test_basic_roundtrip(self, sample_csv):
         frame = ar.read_csv(sample_csv)
         df = ar.to_pandas(frame)
