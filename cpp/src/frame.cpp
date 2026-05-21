@@ -84,6 +84,10 @@ size_t Frame::column_index(const std::string& name) const {
 }
 
 void Frame::add_column(Column col) {
+    if (name_index_.find(col.name()) != name_index_.end()) {
+        throw std::invalid_argument("Column '" + col.name() +
+                                    "' already exists in Frame. Drop or rename it before adding.");
+    }
     if (!row_count_known_) {
         row_count_ = col.size();
         row_count_known_ = true;
