@@ -971,6 +971,22 @@ clean = ar.pipeline(frame, [
 ])
 ```
 
+### Winsorize outliers
+
+`winsorize_outliers()` clips extreme numeric values using lower and upper quantiles. Non-numeric columns are ignored unless explicitly selected in `subset`.
+
+```python
+frame = ar.read_csv("data.csv")
+
+result = ar.winsorize_outliers(
+    frame,
+    lower=0.05,
+    upper=0.95,
+)
+```
+
+It can also be used inside `ar.pipeline()` as `("winsorize_outliers", {"lower": 0.05, "upper": 0.95})`.
+
 ### 🔁 Replace values
 
 Use `replace_values` to substitute values using a mapping. It works as a pipeline step (Python backend) and can operate on a single column or the whole frame when `column` is omitted. It also understands null semantics: using `None` (or `np.nan`) as a mapping key targets existing nulls, and mapping a value to `None` creates real nulls.

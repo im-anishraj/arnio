@@ -124,6 +124,109 @@ class TestFillNulls:
             ar.fill_nulls(frame, "bad", subset=["x"])
 
 
+class TestWinsorizeOutliers:
+    def test_winsorize_outliers_clips_numeric_values(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "value": [1, 2, 3, 4, 100],
+                }
+            )
+        )
+
+        result = ar.winsorize_outliers(frame, lower=0.2, upper=0.8)
+        df = ar.to_pandas(result)
+
+        assert df["value"].tolist() == pytest.approx([1.8, 2.0, 3.0, 4.0, 23.2])
+
+    def test_winsorize_outliers_subset(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "a": [1, 2, 3, 4, 100],
+                    "b": [10, 20, 30, 40, 500],
+                }
+            )
+        )
+
+        result = ar.winsorize_outliers(
+            frame,
+            lower=0.2,
+            upper=0.8,
+            subset=["a"],
+        )
+        df = ar.to_pandas(result)
+
+        assert df["a"].tolist() == pytest.approx([1.8, 2.0, 3.0, 4.0, 23.2])
+        assert list(df["b"]) == [10, 20, 30, 40, 500]
+
+    def test_winsorize_outliers_ignores_non_numeric_without_subset(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "value": [1, 2, 3, 4, 100],
+                    "label": ["a", "b", "c", "d", "e"],
+                }
+            )
+        )
+
+        result = ar.winsorize_outliers(frame, lower=0.2, upper=0.8)
+        df = ar.to_pandas(result)
+
+        assert df["value"].tolist() == pytest.approx([1.8, 2.0, 3.0, 4.0, 23.2])
+        assert list(df["label"]) == ["a", "b", "c", "d", "e"]
+
+    def test_winsorize_outliers_rejects_non_numeric_subset(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "value": [1, 2, 3],
+                    "label": ["a", "b", "c"],
+                }
+            )
+        )
+
+        with pytest.raises(ValueError, match="only supports numeric columns"):
+            ar.winsorize_outliers(frame, subset=["label"])
+
+    def test_winsorize_outliers_rejects_unknown_subset_column(self):
+        frame = ar.from_pandas(pd.DataFrame({"value": [1, 2, 3]}))
+
+        with pytest.raises(ValueError, match="Unknown columns in subset"):
+            ar.winsorize_outliers(frame, subset=["missing"])
+
+    @pytest.mark.parametrize(
+        ("lower", "upper"),
+        [
+            (-0.1, 0.95),
+            (0.05, 1.1),
+            (0.8, 0.2),
+            (0.5, 0.5),
+        ],
+    )
+    def test_winsorize_outliers_rejects_invalid_bounds(self, lower, upper):
+        frame = ar.from_pandas(pd.DataFrame({"value": [1, 2, 3]}))
+
+        with pytest.raises(ValueError):
+            ar.winsorize_outliers(frame, lower=lower, upper=upper)
+
+    def test_winsorize_outliers_identical_values_noop(self):
+        frame = ar.from_pandas(pd.DataFrame({"value": [5, 5, 5]}))
+
+        result = ar.winsorize_outliers(frame)
+        df = ar.to_pandas(result)
+
+        assert list(df["value"]) == [5, 5, 5]
+
+    def test_winsorize_outliers_single_row_noop(self):
+        frame = ar.from_pandas(pd.DataFrame({"value": [10]}))
+
+        result = ar.winsorize_outliers(frame)
+        df = ar.to_pandas(result)
+
+        assert list(df["value"]) == [10]
+
+
 class TestValidateColumnsExist:
     def test_returns_original_frame_when_columns_exist(self, sample_csv):
         frame = ar.read_csv(sample_csv)
@@ -2636,6 +2739,27 @@ class TestClipNumericNativeRegression:
         frame = ar.from_pandas(pd.DataFrame({"score": [-10, 50, 200]}))
         result = ar.pipeline(frame, [("clip_numeric", {"lower": 0, "upper": 100})])
         assert ar.to_pandas(result)["score"].tolist() == [0, 50, 100]
+
+    def test_pipeline_winsorize_outliers(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "value": [1, 2, 3, 4, 100],
+                    "label": ["a", "b", "c", "d", "e"],
+                }
+            )
+        )
+
+        result = ar.pipeline(
+            frame,
+            [
+                ("winsorize_outliers", {"lower": 0.2, "upper": 0.8}),
+            ],
+        )
+        df = ar.to_pandas(result)
+
+        assert df["value"].tolist() == pytest.approx([1.8, 2.0, 3.0, 4.0, 23.2])
+        assert list(df["label"]) == ["a", "b", "c", "d", "e"]
 
     # ------------------------------------------------------------------
     # Large-frame determinism: result must be identical to the old

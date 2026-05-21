@@ -23,6 +23,7 @@ from ._core import (
     _safe_divide_columns,
     _strip_whitespace,
 )
+from .convert import from_pandas, to_pandas
 from .exceptions import TypeCastError
 from .frame import ArFrame
 
@@ -612,6 +613,81 @@ def clip_numeric(
         subset=subset,
     )
     return ArFrame(result)
+
+
+def winsorize_outliers(
+    frame: ArFrame,
+    *,
+    lower: float = 0.05,
+    upper: float = 0.95,
+    subset: list[str] | None = None,
+) -> ArFrame:
+    """Winsorize numeric columns using quantile-based clipping.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input data frame.
+    lower : float, default 0.05
+        Lower quantile bound.
+    upper : float, default 0.95
+        Upper quantile bound.
+    subset : list[str], optional
+        Numeric columns to winsorize. If None, applies to all numeric columns.
+
+    Returns
+    -------
+    ArFrame
+        New frame with winsorized numeric values.
+    """
+
+    if lower < 0 or upper > 1:
+        raise ValueError("lower and upper must be between 0 and 1")
+
+    if lower >= upper:
+        raise ValueError("lower must be less than upper")
+
+    dtypes = frame.dtypes
+
+    numeric_columns = [
+        col for col, dtype in dtypes.items() if dtype in ("int64", "float64")
+    ]
+
+    if subset is not None:
+        unknown_columns = [col for col in subset if col not in dtypes]
+        if unknown_columns:
+            raise ValueError(f"Unknown columns in subset: {unknown_columns}")
+
+        non_numeric_columns = [
+            col for col in subset if dtypes.get(col) not in ("int64", "float64")
+        ]
+        if non_numeric_columns:
+            raise ValueError(
+                "winsorize_outliers only supports numeric columns: "
+                f"{non_numeric_columns}"
+            )
+
+        target_columns = subset
+    else:
+        target_columns = numeric_columns
+
+    if not target_columns:
+        return frame
+
+    df = to_pandas(frame).copy()
+
+    for column in target_columns:
+        lower_bound = df[column].quantile(lower)
+        upper_bound = df[column].quantile(upper)
+
+        series = df[column].astype("float64")
+
+        df[column] = series.clip(
+            lower=lower_bound,
+            upper=upper_bound,
+        )
+
+    return from_pandas(df)
 
 
 def strip_whitespace(
