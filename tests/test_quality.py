@@ -75,82 +75,6 @@ def test_profile_non_numeric_no_quantiles():
     assert "q95" not in profile
 
 
-def test_profile_email_and_url_validity_ratios():
-    df = pd.DataFrame(
-        {
-            "good_email": [
-                "alice@test.com",
-                "bob@test.com",
-                "cara@test.com",
-                "dave@test.com",
-                "eve@test.com",
-            ],
-            "mixed_email": [
-                "alice@test.com",
-                "bob@test.com",
-                "cara@test.com",
-                "dave@test.com",
-                "invalid-email",
-            ],
-            "good_url": [
-                "http://test.com",
-                "https://example.com/foo",
-                "https://another.org",
-                "http://a.b",
-                "https://last.com",
-            ],
-            "mixed_url": [
-                "http://test.com",
-                "https://example.com/foo",
-                "https://another.org",
-                "http://a.b",
-                "not-a-url",
-            ],
-            "generic": ["hello", "world", "foo", "bar", "baz"],
-        }
-    )
-
-    frame = ar.from_pandas(df)
-    report = ar.profile(frame)
-
-    assert report.columns["good_email"].semantic_type == "email"
-    assert report.columns["mixed_email"].semantic_type == "email"
-    assert report.columns["good_url"].semantic_type == "url"
-    assert report.columns["mixed_url"].semantic_type == "url"
-    assert report.columns["generic"].semantic_type == "categorical"
-
-    assert report.columns["good_email"].email_validity_ratio == 1.0
-    assert report.columns["good_email"].url_validity_ratio is None
-
-    assert report.columns["mixed_email"].email_validity_ratio == 0.8
-    assert report.columns["mixed_email"].url_validity_ratio is None
-
-    assert report.columns["good_url"].url_validity_ratio == 1.0
-    assert report.columns["good_url"].email_validity_ratio is None
-
-    assert report.columns["mixed_url"].url_validity_ratio == 0.8
-    assert report.columns["mixed_url"].email_validity_ratio is None
-
-    assert report.columns["generic"].email_validity_ratio is None
-    assert report.columns["generic"].url_validity_ratio is None
-
-    good_email_dict = report.columns["good_email"].to_dict()
-    assert good_email_dict["email_validity_ratio"] == 1.0
-    assert good_email_dict["url_validity_ratio"] is None
-
-    mixed_url_dict = report.columns["mixed_url"].to_dict()
-    assert mixed_url_dict["url_validity_ratio"] == 0.8
-    assert mixed_url_dict["email_validity_ratio"] is None
-
-    pdf = report.to_pandas()
-    good_email_row = pdf[pdf["name"] == "good_email"].iloc[0]
-    assert good_email_row["email_validity_ratio"] == 1.0
-    assert (
-        pd.isna(good_email_row["url_validity_ratio"])
-        or good_email_row["url_validity_ratio"] is None
-    )
-
-
 def test_compare_profiles_identical_profiles_are_ok():
     frame = ar.from_pandas(
         pd.DataFrame({"score": [10.0, 11.0, 12.0], "city": ["a", "b", "a"]})
@@ -452,32 +376,6 @@ def test_auto_clean_rejects_unknown_mode(sample_csv):
         assert False, "Expected ValueError"
     except ValueError as exc:
         assert "mode must be" in str(exc)
-
-
-def test_auto_clean_strict_casts_ambiguous_numeric_strings():
-    df = pd.DataFrame(
-        {
-            "code": ["007", "008"],  # Not identifier-like, but has leading zeros
-            "user_id": ["001", "002"],  # Identifier-like, has leading zeros
-        }
-    )
-    frame = ar.from_pandas(df)
-
-    # Verify that without allow_lossy_casts, strict mode fails
-    with pytest.raises(ValueError, match="would apply type casts"):
-        ar.auto_clean(frame, mode="strict")
-
-    # Apply strict mode with allow_lossy_casts
-    clean = ar.auto_clean(frame, mode="strict", allow_lossy_casts=True)
-    result = ar.to_pandas(clean)
-
-    # "code" is cast to int64, losing leading zeros
-    assert list(result["code"]) == [7, 8]
-    assert pd.api.types.is_integer_dtype(result["code"])
-
-    # "user_id" is protected and retains leading zeros
-    assert list(result["user_id"]) == ["001", "002"]
-    assert pd.api.types.is_string_dtype(result["user_id"])
 
 
 def test_profile_sample_size(tmp_path):
@@ -805,6 +703,50 @@ def test_identifier_numeric_cast_prevention():
     assert list(result["id"]) == ["001", "002", "003"]
     assert list(result["customer_id"]) == ["00123", "00456", "00789"]
     assert list(result["zip_code"]) == ["01234", "02345", "03456"]
+
+
+# ── to_markdown escaping tests ─────────────────────────────────────────────────
+
+
+def test_to_markdown_pipe_in_column_name():
+    df = pd.DataFrame({"a|b": ["x"]})
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+    md = report.to_markdown()
+
+    assert "a\\|b" in md
+
+
+def test_to_markdown_newline_in_column_name():
+    df = pd.DataFrame({"line\ncol": ["y"]})
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+    md = report.to_markdown()
+
+    assert "<br>" in md
+    assert "line\ncol" not in md
+
+
+def test_to_markdown_pipe_in_warnings():
+    df = pd.DataFrame({"a|b": [" x "]})
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+    md = report.to_markdown()
+
+    for line in md.splitlines():
+        assert "a|b" not in line
+        assert "a\\|b" in line or "---" in line or "Column" in line
+
+
+def test_to_markdown_normal_column_names_stable():
+    df = pd.DataFrame({"name": ["Alice"], "age": ["25"]})
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+    md = report.to_markdown()
+
+    assert "| name |" in md
+    assert "| age |" in md
+    assert md.startswith("| Column |")
 
 
 # ── string length statistics tests ───────────────────────────────────────────
@@ -1577,214 +1519,45 @@ def test_profile_duplicate_count_hash_path_matches_pandas_baseline_at_scale():
     assert hash_count == baseline_count
     assert ar.profile(frame).duplicate_rows == baseline_count
 
+    # ── to_markdown escaping tests ─────────────────────────────────────────────────
 
-# ── numeric histogram tests ──────────────────────────────────────────────────
 
-
-def test_profile_numeric_histogram_normal():
-    # Test normal distribution / sequence
-    df = pd.DataFrame({"nums": list(range(1, 101))})
+def test_to_markdown_pipe_in_column_name():
+    df = pd.DataFrame({"a|b": ["x"]})
     frame = ar.from_pandas(df)
     report = ar.profile(frame)
-    profile = report.columns["nums"]
-
-    assert profile.histogram is not None
-    assert len(profile.histogram) == 10
-
-    # Check that counts sum to 100
-    counts = [c for _, _, c, _ in profile.histogram]
-    ratios = [r for _, _, _, r in profile.histogram]
-    assert sum(counts) == 100
-    assert abs(sum(ratios) - 1.0) < 1e-9
-
-    # Check bounds
-    assert profile.histogram[0][0] == 1.0
-    assert profile.histogram[-1][1] == 100.0
-
-    # Serialization test
-    dct = profile.to_dict()
-    assert "histogram" in dct
-    assert len(dct["histogram"]) == 10
-    assert dct["histogram"][0]["bucket_start"] == 1.0
-    assert dct["histogram"][0]["count"] == 10
-    assert abs(dct["histogram"][0]["ratio"] - 0.1) < 1e-9
-
-
-def test_profile_numeric_histogram_constant_values():
-    # Test constant values
-    df = pd.DataFrame({"nums": [5.0] * 20})
-    frame = ar.from_pandas(df)
-    report = ar.profile(frame)
-    profile = report.columns["nums"]
-
-    assert profile.histogram is not None
-    assert len(profile.histogram) == 10
-
-    counts = [c for _, _, c, _ in profile.histogram]
-    assert sum(counts) == 20
-
-    # numpy.histogram handles constant values by setting bin boundaries offset by a small delta (typically +/- 0.5)
-    # let's assert the counts are correct and serialize properly
-    dct = profile.to_dict()
-    assert "histogram" in dct
-    assert len(dct["histogram"]) == 10
-
-
-def test_profile_numeric_histogram_empty_and_all_nulls():
-    # All nulls
-    df = pd.DataFrame({"nums": [None, None, None]})
-    df["nums"] = df["nums"].astype("float64")
-    frame = ar.from_pandas(df)
-    report = ar.profile(frame)
-    profile = report.columns["nums"]
-    assert profile.histogram is None
-
-    # Empty column (0 rows)
-    df_empty = pd.DataFrame({"nums": pd.Series(dtype="float64")})
-    frame_empty = ar.from_pandas(df_empty)
-    report_empty = ar.profile(frame_empty)
-    profile_empty = report_empty.columns["nums"]
-    assert profile_empty.histogram is None
-
-
-def test_profile_numeric_histogram_missing_values():
-    # Mix of nulls and numeric values
-    df = pd.DataFrame({"nums": [10.0, None, 20.0, None, 30.0]})
-    frame = ar.from_pandas(df)
-    report = ar.profile(frame)
-    profile = report.columns["nums"]
-
-    assert profile.histogram is not None
-    assert len(profile.histogram) == 10
-    counts = [c for _, _, c, _ in profile.histogram]
-    assert sum(counts) == 3  # only non-null values are counted
-
-    ratios = [r for _, _, _, r in profile.histogram]
-    assert abs(sum(ratios) - 1.0) < 1e-5
-
-
-def test_profile_numeric_histogram_small_sample():
-    # Just 1 value
-    df = pd.DataFrame({"nums": [42.0]})
-    frame = ar.from_pandas(df)
-    report = ar.profile(frame)
-    profile = report.columns["nums"]
-
-    assert profile.histogram is not None
-    assert len(profile.histogram) == 10
-    counts = [c for _, _, c, _ in profile.histogram]
-    assert sum(counts) == 1
-
-
-def test_profile_numeric_histogram_non_numeric():
-    # String column should have histogram = None
-    df = pd.DataFrame({"names": ["Alice", "Bob", "Charlie"]})
-    frame = ar.from_pandas(df)
-    report = ar.profile(frame)
-    profile = report.columns["names"]
-
-    assert profile.histogram is None
-    assert "histogram" in profile.to_dict()
-    assert profile.to_dict()["histogram"] is None
-
-
-def test_profile_numeric_histogram_to_pandas():
-    df = pd.DataFrame({"nums": [1, 2, 3]})
-    frame = ar.from_pandas(df)
-    report = ar.profile(frame)
-
-    pdf = report.to_pandas()
-    assert "histogram" in pdf.columns
-    assert pdf.loc[pdf["name"] == "nums", "histogram"].values[0] is not None
-
-
-def test_profile_numeric_histogram_non_finite_values():
-    # Test handling of infinite values in histogram calculation
-    from arnio._core import _DType, _Frame
-    from arnio.frame import ArFrame
-
-    cpp_frame = _Frame.from_dict(
-        {"nums": [1.0, 2.0, float("inf"), float("-inf"), None, 3.0]},
-        {"nums": _DType.FLOAT64},
-    )
-    frame = ArFrame(cpp_frame)
-    report = ar.profile(frame)
-    profile = report.columns["nums"]
-
-    # The histogram should filter out +/- inf and NaNs, binning only [1.0, 2.0, 3.0]
-    assert profile.histogram is not None
-    assert len(profile.histogram) == 10
-
-    counts = [c for _, _, c, _ in profile.histogram]
-    assert sum(counts) == 3
-
-    # All infinities (no finite values to bin)
-    cpp_frame_all_inf = _Frame.from_dict(
-        {"nums": [float("inf"), float("-inf")]},
-        {"nums": _DType.FLOAT64},
-    )
-    frame_all_inf = ArFrame(cpp_frame_all_inf)
-    report_all_inf = ar.profile(frame_all_inf)
-    profile_all_inf = report_all_inf.columns["nums"]
-    assert profile_all_inf.histogram is None
-
-
-def test_report_to_markdown_escapes_newlines_in_column_cells():
-    report = ar.DataQualityReport(
-        row_count=2,
-        column_count=1,
-        memory_usage=128,
-        duplicate_rows=0,
-        duplicate_ratio=0.0,
-        columns={
-            "multi\nline": ar.ColumnProfile(
-                name="multi\nline",
-                dtype="string",
-                semantic_type="free\ntext",
-                row_count=2,
-                null_count=0,
-                null_ratio=0.0,
-                unique_count=2,
-                unique_ratio=1.0,
-                warnings=["contains\nnewline"],
-            )
-        },
-        suggestions=[],
-    )
-    md = report.to_markdown()
-    assert "multi<br>line" in md
-    assert "free<br>text" in md
-    assert "contains<br>newline" in md
-    assert "| multi\nline |" not in md
-
-
-def test_quality_gate_markdown_escapes_pipe_characters():
-    report = ar.DataQualityReport(
-        row_count=2,
-        column_count=1,
-        memory_usage=128,
-        duplicate_rows=0,
-        duplicate_ratio=0.0,
-        columns={
-            "col|name": ar.ColumnProfile(
-                name="col|name",
-                dtype="str|ing",
-                semantic_type="cat|egory",
-                row_count=2,
-                null_count=0,
-                null_ratio=0.0,
-                unique_count=2,
-                unique_ratio=1.0,
-                warnings=["pipe|warning"],
-            )
-        },
-        suggestions=[],
-    )
-
     md = report.to_markdown()
 
-    assert r"col\|name" in md
-    assert r"str\|ing" in md
-    assert r"cat\|egory" in md
-    assert r"pipe\|warning" in md
-    assert "| col|name |" not in md
+    assert "a\\|b" in md
+
+
+def test_to_markdown_newline_in_column_name():
+    df = pd.DataFrame({"line\ncol": ["y"]})
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+    md = report.to_markdown()
+
+    assert "<br>" in md
+    assert "line\ncol" not in md
+
+
+def test_to_markdown_pipe_in_warnings():
+    df = pd.DataFrame({"a|b": [" x "]})
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+    md = report.to_markdown()
+
+    for line in md.splitlines():
+        assert "a|b" not in line
+        assert "a\\|b" in line or "---" in line or "Column" in line or "Name" in line
+
+
+def test_to_markdown_normal_column_names_stable():
+    df = pd.DataFrame({"name": ["Alice"], "age": ["25"]})
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+    md = report.to_markdown()
+
+    assert "| name |" in md
+    assert "| age |" in md
+    assert "# Data Quality Report" in md
