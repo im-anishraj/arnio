@@ -1,7 +1,5 @@
-import io
-from pathlib import Path
-import pytest
 import pandas as pd
+import pytest
 
 import arnio as ar
 from arnio.exceptions import CsvReadError
@@ -32,7 +30,7 @@ def test_chunked_parity_skip_nrows(tmp_path):
     csv_path = tmp_path / "chunked.csv"
     csv_path.write_text("id,val\n1,a\n2,b\n3,c\n4,d\n5,e\n")
 
-    f1 = ar.read_csv(str(csv_path), skip_rows=1, nrows=3)
+    f1 = ar.read_csv(str(csv_path), skiprows=1, nrows=3)
     df1 = ar.to_pandas(f1)
 
     reader = ar.read_csv_chunked(str(csv_path), chunksize=2, skip_rows=1, nrows=3)

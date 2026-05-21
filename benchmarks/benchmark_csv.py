@@ -1,6 +1,7 @@
-import time
-import os
 import csv
+import os
+import time
+
 import arnio
 
 
