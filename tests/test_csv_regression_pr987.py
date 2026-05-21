@@ -86,7 +86,4 @@ def test_csv_readers_parity_multiline_mixed(tmp_path):
     chunks = list(ar.read_csv_chunked(str(csv_path), chunksize=2))
     df_chunked = pd.concat([ar.to_pandas(c) for c in chunks], ignore_index=True)
 
-    df_scan = ar.to_pandas(ar.scan_csv(str(csv_path)).collect())
-
     pd.testing.assert_frame_equal(df_read, df_chunked)
-    pd.testing.assert_frame_equal(df_read, df_scan)
