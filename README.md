@@ -540,6 +540,24 @@ frame.head(0)
 Raises `ValueError` for negative or boolean `n`.
 </details>
 
+### Pipeline verbose diagnostics
+
+Enable lightweight pipeline diagnostics with `verbose=True`:
+
+```python
+result = ar.pipeline(
+    frame,
+    [
+        ar.trim_strings,
+        ar.drop_nulls,
+    ],
+    verbose=True,
+)
+```
+
+This logs step execution order, execution path, elapsed time,
+and row-count changes through the `arnio` logger.
+
 <br>
 
 ---

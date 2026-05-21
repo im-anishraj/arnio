@@ -6,6 +6,7 @@ Chained cleaning pipeline.
 from __future__ import annotations
 
 import inspect
+import logging
 import warnings
 from dataclasses import dataclass
 from threading import Lock
@@ -19,6 +20,7 @@ from .convert import from_pandas, to_pandas
 from .exceptions import PipelineStepError, UnknownStepError
 from .frame import ArFrame
 
+logger = logging.getLogger("arnio")
 _BUILTIN_STEP_NAMESPACE = "builtin"
 _STEP_NAMESPACE_SEPARATOR = ":"
 
@@ -266,6 +268,7 @@ def pipeline(
     *,
     return_metadata: bool = False,
     dry_run: bool = False,
+    verbose: bool = False,
 ) -> ArFrame | tuple[ArFrame, dict[str, Any]]:
     """Apply a list of cleaning steps sequentially.
 
@@ -373,6 +376,22 @@ def pipeline(
                 if not dry_run:
                     result = step_result
 
+            elapsed_ms = (perf_counter() - started_at) * 1000
+
+            if verbose:
+                execution_path = f"{fn.__module__}.{fn.__name__}"
+
+                logger.info(
+                    "[%s/%s] %s | path=%s | rows: %s -> %s | %.2fms",
+                    step_index + 1,
+                    total_steps,
+                    name,
+                    execution_path,
+                    rows_before,
+                    step_result.shape[0],
+                    elapsed_ms,
+                )
+
             if return_metadata:
                 applied_steps.append(name)
                 row_counts.append(
@@ -430,6 +449,23 @@ def pipeline(
             step_result = from_pandas(returned)
             if not dry_run:
                 result = step_result
+
+            elapsed_ms = (perf_counter() - started_at) * 1000
+
+            if verbose:
+                step_name = getattr(fn, "__name__", name)
+                execution_path = f"{fn.__module__}.{step_name}"
+
+                logger.info(
+                    "[%s/%s] %s | path=%s | rows: %s -> %s | %.2fms",
+                    step_index + 1,
+                    total_steps,
+                    name,
+                    execution_path,
+                    rows_before,
+                    step_result.shape[0],
+                    elapsed_ms,
+                )
 
             if return_metadata:
                 applied_steps.append(name)
