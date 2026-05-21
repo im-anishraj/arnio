@@ -413,3 +413,29 @@ def test_describe_dictionary_subclass_repr(sample_csv):
 
     assert stats["age"]["count"] == 3.0
     assert "{\n" in repr(stats)
+
+
+def test_describe_all_numeric_columns(large_csv):
+    frame = ar.read_csv(large_csv)
+
+    numeric_frame = frame.select_dtypes(include=["int64", "float64"])
+    stats = numeric_frame.describe()
+
+    assert list(stats.keys()) == ["value", "id"]
+
+    for col in ["value", "id"]:
+        metric_keys = list(stats[col].keys())
+        assert metric_keys == ["max", "min", "mean", "nulls", "count"]
+
+
+def test_describe_all_string_columns(csv_with_whitespace):
+    frame = ar.read_csv(csv_with_whitespace)
+
+    string_frame = frame.select_dtypes(include=["string"])
+    stats = string_frame.describe()
+
+    assert list(stats.keys()) == ["city", "name"]
+
+    for col in ["city", "name"]:
+        metric_keys = list(stats[col].keys())
+        assert metric_keys == ["unique", "nulls", "count"]

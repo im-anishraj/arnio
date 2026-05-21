@@ -161,11 +161,7 @@ PYBIND11_MODULE(_arnio_cpp, m) {
             py::return_value_policy::reference_internal)
         .def("add_column", &Frame::add_column)
         .def("clone", &Frame::clone)
-        .def("describe",
-             [](const Frame& f) {
-                 py::gil_scoped_release release;
-                 return f.describe();
-             })
+        .def("describe", &Frame::describe)
         .def_static(
             "from_dict",
             [](py::dict cols_dict, py::dict dtype_hints, py::object row_count_obj) {

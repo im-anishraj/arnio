@@ -131,19 +131,19 @@ void Frame::rebuild_index() {
     }
 }
 
-std::unordered_map<std::string, std::unordered_map<std::string, double>> Frame::describe() const {
-    std::unordered_map<std::string, std::unordered_map<std::string, double>> summary;
+py::dict Frame::describe() const {
+    py::dict summary;
 
     for (const auto& col : columns_) {
         std::string col_name = col.name();
-        std::unordered_map<std::string, double> stats;
+        py::dict stats;
 
         size_t total_rows = col.size();
         size_t null_count = 0;
         size_t valid_count = 0;
         std::string type_str = dtype_to_string(col.dtype());
 
-        // Process Numeric Datatypes (Lowercase to match dtype_to_string)
+        // Process Numeric Datatypes
         if (type_str == "int64" || type_str == "float64") {
             double sum = 0.0;
             double min_val = std::numeric_limits<double>::infinity();
@@ -156,7 +156,6 @@ std::unordered_map<std::string, std::unordered_map<std::string, double>> Frame::
                 }
                 valid_count++;
 
-                // Safe extraction based on specific type inside the variant
                 double val = 0.0;
                 if (col.dtype() == DType::INT64) {
                     val = static_cast<double>(std::get<int64_t>(col.at(i)));
@@ -169,6 +168,7 @@ std::unordered_map<std::string, std::unordered_map<std::string, double>> Frame::
                 if (val > max_val) max_val = val;
             }
 
+            // Insert metrics in the strict order requested by the maintainer
             stats["count"] = static_cast<double>(valid_count);
             stats["nulls"] = static_cast<double>(null_count);
 
@@ -181,6 +181,8 @@ std::unordered_map<std::string, std::unordered_map<std::string, double>> Frame::
                 stats["min"] = 0.0;
                 stats["max"] = 0.0;
             }
+
+            summary[py::str(col_name)] = stats;
         }
         // Process String Datatypes
         else if (type_str == "string") {
@@ -192,17 +194,16 @@ std::unordered_map<std::string, std::unordered_map<std::string, double>> Frame::
                     continue;
                 }
                 valid_count++;
-
-                // Safely extract string out of variant
                 unique_values.insert(std::get<std::string>(col.at(i)));
             }
 
+            // Insert metrics in the strict order requested for strings
             stats["count"] = static_cast<double>(valid_count);
             stats["nulls"] = static_cast<double>(null_count);
             stats["unique"] = static_cast<double>(unique_values.size());
-        }
 
-        summary[col_name] = stats;
+            summary[py::str(col_name)] = stats;
+        }
     }
 
     return summary;
