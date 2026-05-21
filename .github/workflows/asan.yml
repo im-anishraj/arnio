@@ -42,7 +42,7 @@ jobs:
 
       - name: Install project
         run: |
-          pip install -e ".[dev]" --no-build-isolation
+          pip install -e ".[dev]" --no-build-isolation --no-cache-dir
 
       - name: Resolve ASAN runtime path
         run: |
