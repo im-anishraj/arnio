@@ -1443,6 +1443,84 @@ class TestParseBoolStrings:
         with pytest.raises(TypeError, match="true_values must contain only strings"):
             ar.parse_bool_strings(frame, true_values={True, "yes"})
 
+    def test_parse_bool_strings_other_non_string_types_in_custom_values_raises(self):
+        """Test that custom sets containing floats, ints, or None raise TypeError."""
+        import pandas as pd
+
+        df = pd.DataFrame({"active": ["yes", "no"]}, dtype=object)
+        frame = ar.from_pandas(df)
+
+        # Float
+        with pytest.raises(
+            TypeError, match="true_values must contain only strings, got float"
+        ):
+            ar.parse_bool_strings(frame, true_values={3.14, "yes"})
+
+        with pytest.raises(
+            TypeError, match="false_values must contain only strings, got float"
+        ):
+            ar.parse_bool_strings(frame, false_values={1.5, "no"})
+
+        # Int
+        with pytest.raises(
+            TypeError, match="true_values must contain only strings, got int"
+        ):
+            ar.parse_bool_strings(frame, true_values={42, "yes"})
+
+        # NoneType
+        with pytest.raises(
+            TypeError, match="true_values must contain only strings, got NoneType"
+        ):
+            ar.parse_bool_strings(frame, true_values={None, "yes"})
+
+    def test_parse_bool_strings_non_iterable_custom_values_raises(self):
+        """Test that passing a completely non-iterable type (like int, float, bool) to true_values/false_values raises TypeError."""
+        import pandas as pd
+
+        df = pd.DataFrame({"active": ["yes", "no"]}, dtype=object)
+        frame = ar.from_pandas(df)
+
+        with pytest.raises(TypeError, match="'int' object is not iterable"):
+            ar.parse_bool_strings(frame, true_values=123)
+
+        with pytest.raises(TypeError, match="'float' object is not iterable"):
+            ar.parse_bool_strings(frame, false_values=45.6)
+
+    def test_parse_bool_strings_overlap_whitespace_and_case_normalization(self):
+        """Test that tokens that overlap after case folding and whitespace stripping are correctly rejected."""
+        import pandas as pd
+
+        df = pd.DataFrame({"active": ["yes", "no"]}, dtype=object)
+        frame = ar.from_pandas(df)
+
+        # Exact overlap
+        with pytest.raises(ValueError, match="overlap after normalization: {'yes'}"):
+            ar.parse_bool_strings(frame, true_values={"yes"}, false_values={"yes"})
+
+        # Overlap after whitespace stripping and case folding
+        with pytest.raises(ValueError, match="overlap after normalization: {'yes'}"):
+            ar.parse_bool_strings(frame, true_values={" YES "}, false_values={"yes"})
+
+        with pytest.raises(ValueError, match="overlap after normalization: {'yes'}"):
+            ar.parse_bool_strings(frame, true_values={"yes"}, false_values={"Yes"})
+
+    def test_parse_bool_strings_empty_custom_values_sets(self):
+        """Test that empty custom true_values and false_values sets are accepted and behave as no-ops for matching."""
+        import pandas as pd
+
+        df = pd.DataFrame({"active": ["true", "false", "yes", "no"]}, dtype=object)
+        frame = ar.from_pandas(df)
+
+        # Empty true_values means no values are converted to True
+        result1 = ar.parse_bool_strings(frame, true_values=set())
+        cleaned1 = ar.to_pandas(result1)
+        assert cleaned1["active"].tolist() == ["true", "False", "yes", "False"]
+
+        # Empty false_values means no values are converted to False
+        result2 = ar.parse_bool_strings(frame, false_values=set())
+        cleaned2 = ar.to_pandas(result2)
+        assert cleaned2["active"].tolist() == ["True", "false", "True", "no"]
+
 
 class TestRenameColumns:
     def test_rename(self, sample_csv):
