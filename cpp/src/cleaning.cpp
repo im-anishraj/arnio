@@ -2,9 +2,11 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdint>
 #include <functional>
 #include <sstream>
 #include <stdexcept>
+#include <unordered_map>
 #include <unordered_set>
 
 namespace arnio {
@@ -25,25 +27,44 @@ static std::vector<size_t> resolve_subset(const Frame& frame,
     return indices;
 }
 
-// Helper: build a row hash for deduplication
-static std::string row_key(const Frame& frame, size_t row, const std::vector<size_t>& cols) {
-    std::ostringstream oss;
+// Helper: FNV-1a hash combine utility
+static inline size_t hash_combine(size_t seed, size_t value) {
+    seed ^= value + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+    return seed;
+}
+
+static inline size_t fnv1a_bytes(const void* data, size_t len) {
+    const auto* bytes = static_cast<const uint8_t*>(data);
+    size_t hash = 14695981039346656037ULL;  // FNV offset basis
+    for (size_t i = 0; i < len; ++i) {
+        hash ^= static_cast<size_t>(bytes[i]);
+        hash *= 1099511628211ULL;  // FNV prime
+    }
+    return hash;
+}
+
+// Helper: build a fast row hash for deduplication
+static size_t row_hash(const Frame& frame, size_t row, const std::vector<size_t>& cols) {
+    size_t seed = 0;
     for (size_t ci : cols) {
         auto cell = frame.column(ci).at(row);
         if (std::holds_alternative<std::monostate>(cell)) {
-            oss << "\x00";
+            seed = hash_combine(seed, std::hash<size_t>{}(~static_cast<size_t>(0)));
         } else if (std::holds_alternative<std::string>(cell)) {
-            oss << std::get<std::string>(cell);
+            const auto& s = std::get<std::string>(cell);
+            seed = hash_combine(seed, fnv1a_bytes(s.data(), s.size()));
         } else if (std::holds_alternative<int64_t>(cell)) {
-            oss << std::get<int64_t>(cell);
+            int64_t v = std::get<int64_t>(cell);
+            seed = hash_combine(seed, fnv1a_bytes(&v, sizeof(v)));
         } else if (std::holds_alternative<double>(cell)) {
-            oss << std::get<double>(cell);
+            double v = std::get<double>(cell);
+            seed = hash_combine(seed, fnv1a_bytes(&v, sizeof(v)));
         } else if (std::holds_alternative<bool>(cell)) {
-            oss << (std::get<bool>(cell) ? "T" : "F");
+            bool v = std::get<bool>(cell);
+            seed = hash_combine(seed, std::hash<bool>{}(v));
         }
-        oss << "\x1F";  // unit separator
     }
-    return oss.str();
+    return seed;
 }
 
 static std::string cell_to_string(const CellValue& cell) {
@@ -185,19 +206,19 @@ Frame drop_duplicates(const Frame& frame, const std::optional<std::vector<std::s
     auto col_indices = resolve_subset(frame, subset);
 
     if (keep == "first") {
-        std::unordered_set<std::string> seen;
+        std::unordered_set<size_t> seen;
         std::vector<size_t> keep_rows;
         for (size_t r = 0; r < frame.num_rows(); ++r) {
-            std::string key = row_key(frame, r, col_indices);
-            if (seen.insert(key).second) {
+            size_t h = row_hash(frame, r, col_indices);
+            if (seen.insert(h).second) {
                 keep_rows.push_back(r);
             }
         }
         return select_rows(frame, keep_rows);
     } else if (keep == "last") {
-        std::unordered_map<std::string, size_t> last_seen;
+        std::unordered_map<size_t, size_t> last_seen;
         for (size_t r = 0; r < frame.num_rows(); ++r) {
-            last_seen[row_key(frame, r, col_indices)] = r;
+            last_seen[row_hash(frame, r, col_indices)] = r;
         }
         std::vector<size_t> keep_rows;
         for (auto& [_, ri] : last_seen) {
@@ -206,9 +227,9 @@ Frame drop_duplicates(const Frame& frame, const std::optional<std::vector<std::s
         std::sort(keep_rows.begin(), keep_rows.end());
         return select_rows(frame, keep_rows);
     } else if (keep == "none") {
-        std::unordered_map<std::string, std::vector<size_t>> groups;
+        std::unordered_map<size_t, std::vector<size_t>> groups;
         for (size_t r = 0; r < frame.num_rows(); ++r) {
-            groups[row_key(frame, r, col_indices)].push_back(r);
+            groups[row_hash(frame, r, col_indices)].push_back(r);
         }
         std::vector<size_t> keep_rows;
         for (auto& [_, rows] : groups) {
