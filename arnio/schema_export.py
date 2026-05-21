@@ -21,10 +21,6 @@ from __future__ import annotations
 import pathlib
 from typing import Any
 
-# ---------------------------------------------------------------------------
-# Internal helpers
-# ---------------------------------------------------------------------------
-
 _INDENT = "  "
 
 # Types that arnio's Schema / scan_csv can legitimately produce.
@@ -154,11 +150,6 @@ def _emit_value(value: Any, depth: int) -> str:
         f"schema_to_yaml does not support values of type {type(value)!r}. "
         "Only str, int, float, bool, None, list, and dict are allowed."
     )
-
-
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
 
 
 def schema_to_dict(schema: dict | Any) -> dict:
