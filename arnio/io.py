@@ -307,6 +307,26 @@ def _reject_utf8_nul_bytes(path: str) -> None:
     except FileNotFoundError:
         pass  # Let C++ backend handle or raise standard error
 
+_SUPPORTED_EXTENSIONS = (".csv", ".txt", ".tsv")
+
+
+def _validate_csv_path(path: str, encoding: str) -> None:
+    path_lower = path.lower()
+
+    if not any(path_lower.endswith(ext) for ext in _SUPPORTED_EXTENSIONS):
+        raise ValueError(
+            f"Unsupported file format: {path}. "
+            "Only .csv, .txt, and .tsv are supported."
+        )
+
+    if _is_utf8_encoding(encoding):
+        _reject_utf8_nul_bytes(path)
+
+    try:
+        if os.path.getsize(path) == 0:
+            raise CsvReadError(f"CSV file is empty: {path!r}")
+    except FileNotFoundError:
+        pass
 
 def read_csv(
     path: str | os.PathLike[str],
@@ -393,21 +413,16 @@ def read_csv(
     >>> frame = ar.read_csv("data.dat")           # non-standard extension accepted
     """
     path, should_cleanup = _materialize_csv_input(path)
-    path_lower = path.lower()
 
-    # Resolve the sentinel: auto-detect tab for .tsv only when the caller
-    # truly omitted delimiter (None).  An explicit delimiter="," is always
-    # honoured, even for .tsv paths.
-    if delimiter is None:
-        delimiter = "\t" if path_lower.endswith(".tsv") else ","
+_validate_csv_path(path, encoding)
 
-    if _is_utf8_encoding(encoding):
-        _reject_utf8_nul_bytes(path)
-    try:
-        if os.path.getsize(path) == 0:
-            raise CsvReadError(f"CSV file is empty: {path!r}")
-    except FileNotFoundError:
-        pass  # Let C++ backend handle or raise standard error
+path_lower = path.lower()
+
+# Resolve the sentinel: auto-detect tab for .tsv only when
+# truly omitted delimiter (None). An explicit delimiter=","
+# is honoured, even for .tsv paths.
+if delimiter is None:
+    delimiter = "\t" if path_lower.endswith(".tsv") else ","
 
     _validate_thousands_separator(thousands_separator)
     delimiter = _validate_delimiter(delimiter)
@@ -717,22 +732,18 @@ def scan_csv(
     >>> schema = ar.scan_csv("data.tsv", delimiter=",")  # explicit comma honoured
     >>> schema = ar.scan_csv("data.dat")              # non-standard extension accepted
     """
+
     path = os.fspath(path)
-    path_lower = path.lower()
 
-    # Resolve the sentinel: auto-detect tab for .tsv only when the caller
-    # truly omitted delimiter (None).  An explicit delimiter="," is always
-    # honoured, even for .tsv paths.
-    if delimiter is None:
-        delimiter = "\t" if path_lower.endswith(".tsv") else ","
+_validate_csv_path(path, encoding)
 
-    if _is_utf8_encoding(encoding):
-        _reject_utf8_nul_bytes(path)
-    try:
-        if os.path.getsize(path) == 0:
-            raise CsvReadError(f"CSV file is empty: {path!r}")
-    except FileNotFoundError:
-        pass
+path_lower = path.lower()
+
+# Resolve the sentinel: auto-detect tab for .tsv only when
+# truly omitted delimiter (None). An explicit delimiter=","
+# is honoured, even for .tsv paths.
+if delimiter is None:
+    delimiter = "\t" if path_lower.endswith(".tsv") else ","
 
     _validate_thousands_separator(thousands_separator)
     delimiter = _validate_delimiter(delimiter)
