@@ -81,3 +81,7 @@ def run():
     for col, mb in hotspot.items():
         print(f"  {col:<15}: {mb:.4f} MB")
     print("=" * 60)
+
+
+if __name__ == "__main__":
+    run()

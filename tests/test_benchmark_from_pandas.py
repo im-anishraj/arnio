@@ -13,3 +13,5 @@ def test_benchmark_dry_run():
         text=True,
     )
     assert result.returncode == 0, result.stderr
+    assert "BENCHMARK: from_pandas() peak memory" in result.stdout
+    assert "HOTSPOT: per-column peak memory" in result.stdout
