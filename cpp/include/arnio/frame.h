@@ -1,7 +1,9 @@
 #pragma once
 
+#include <limits>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -23,6 +25,7 @@ class Frame {
     std::vector<std::string> column_names() const;
     std::unordered_map<std::string, std::string> dtypes() const;
     size_t memory_usage() const;
+    std::unordered_map<std::string, std::unordered_map<std::string, double>> describe() const;
 
     // Column access
     const Column& column(size_t idx) const;

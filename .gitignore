@@ -222,6 +222,8 @@ __marimo__/
 benchmarks/benchmark_1m.csv
 benchmarks/benchmark_wide.csv
 benchmarks/benchmark_multiline.csv
+benchmarks/benchmark_sparse_nulls.csv
+benchmarks/benchmark_strip_whitespace.csv
 
 # Wheel build outputs
 wheelhouse/

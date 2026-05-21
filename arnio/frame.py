@@ -5,12 +5,22 @@ ArFrame — the core data container wrapping the C++ Frame.
 
 from __future__ import annotations
 
+import json
+
 from ._core import _Frame
 
 #: Dtype strings recognised by ArFrame.select_dtypes().
 _VALID_DTYPES: frozenset[str] = frozenset(
     {"int64", "float64", "string", "bool", "null"}
 )
+
+
+class StatsDict(dict):
+    def __repr__(self) -> str:
+        return json.dumps(self, indent=2)
+
+    def _repr_markdown_(self) -> str:
+        return f"```json\n{json.dumps(self, indent=2)}\n```"
 
 
 class ArFrame:
@@ -275,6 +285,16 @@ class ArFrame:
             )
 
         return self.select_columns(matched)
+
+    def describe(self) -> dict[str, dict[str, float]]:
+        """Generate summary statistics for all numeric and string columns.
+
+        Returns
+        -------
+        dict[str, dict[str, float]]
+            A printable nested dictionary of metrics.
+        """
+        return StatsDict(self._frame.describe())
 
     def _truncate_column_names(self, max_length=20):
         return [
