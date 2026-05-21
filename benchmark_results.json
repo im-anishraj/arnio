@@ -1,0 +1,8 @@
+[
+  {
+    "case": "Tall CSV (1,000,000 rows x 12 columns)",
+    "pandas_exec_time": 0.019676099997013807,
+    "arnio_exec_time": 0.04083620000164956,
+    "speedup": 0.4818298469548832
+  }
+]

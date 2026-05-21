@@ -1,0 +1,11 @@
+id,age,salary,name,city,active
+89251,45,119371.46,Diana,Paris,False
+773955,32,146101.17,Alice,Paris,False
+654571,23,69099.04,Diana,New York,True
+438878,52,74455.16,Alice,Paris,True
+433015,73,86346.7,Diana,Tokyo,True
+858597,21,52736.56,Diana,London,False
+85946,71,45590.58,Diana,Paris,True
+697367,69,87084.59,Charlie,New York,True
+201470,35,57229.12,Bob,London,True
+94178,57,110377.68,Charlie,London,True
