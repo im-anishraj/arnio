@@ -117,6 +117,7 @@ def test_arniocleaner_rejects_transform_with_missing_columns():
 # Tests added to cover drop_nulls and filter_rows changing row count
 # as required by the acceptance criteria
 
+
 def test_drop_nulls_changes_row_count_when_allowed():
     df = pd.DataFrame({"name": ["Alice", "Bob", None], "age": [30, 25, 40]})
     cleaner = ArnioCleaner(
@@ -156,4 +157,3 @@ def test_filter_rows_rejects_row_count_change_by_default():
     )
     with pytest.raises(ValueError, match="changed the row count"):
         cleaner.fit_transform(df)
-
