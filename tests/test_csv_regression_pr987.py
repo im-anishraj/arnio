@@ -28,16 +28,23 @@ def test_multiline_quoted_records(tmp_path):
 def test_buffer_boundary_edge_cases(tmp_path):
     csv_path = tmp_path / "boundary.csv"
     header = b"pad,val\r\n"
-    pad_len = 65536 - len(header) - 1
-    row1 = b"a" * (pad_len - 6) + b",test\r\n"
+    # We want to cross the boundary right between \r and \n at the end of a record.
+    # The record should also contain a multiline quoted field.
+    # len(header) = 9
+    # We want row1_part1 to be 65527 bytes, ending in \r.
+    # The suffix of row1_part1 is b',"hello\nworld"\r' which is 16 bytes.
+    # So padding is 65527 - 16 = 65511 bytes.
+    padding = b"a" * 65511
+    row1_part1 = padding + b',"hello\nworld"\r'
+    row1_part2 = b"\n"
     row2 = b"b,after_boundary\r\n"
 
-    csv_path.write_bytes(header + row1 + row2)
+    csv_path.write_bytes(header + row1_part1 + row1_part2 + row2)
 
     frame = ar.read_csv(str(csv_path))
     df = ar.to_pandas(frame)
     assert len(df) == 2
-    assert df["val"].iloc[0] == "test"
+    assert df["val"].iloc[0] == "hello\nworld"
     assert df["val"].iloc[1] == "after_boundary"
 
 
@@ -46,3 +53,40 @@ def test_nul_byte_exception(tmp_path):
     csv_path.write_bytes(b"id,val\n1,a\0b\n")
     with pytest.raises(CsvReadError):
         ar.read_csv(str(csv_path))
+
+
+def test_read_csv_skiprows_nrows(tmp_path):
+    csv_path = tmp_path / "skip_nrows.csv"
+    lines = ["skip_metadata_1", "skip_metadata_2", "id,val"]
+    for i in range(10):
+        lines.append(f"{i},val_{i}")
+    csv_path.write_text("\n".join(lines))
+
+    frame = ar.read_csv(str(csv_path), skiprows=2, nrows=5)
+    df = ar.to_pandas(frame)
+    assert len(df) == 5
+    assert list(df["id"]) == [0, 1, 2, 3, 4]
+
+
+def test_csv_readers_parity_multiline_mixed(tmp_path):
+    import pandas as pd
+
+    csv_path = tmp_path / "parity.csv"
+    # Mixed line endings and multiline quoted records
+    csv_path.write_bytes(
+        b"id,val\r\n"
+        b'1,"line1\nline2"\n'
+        b"2,normal\r\n"
+        b'3,"another\r\nquote"\n'
+        b"4,end\r"
+    )
+
+    df_read = ar.to_pandas(ar.read_csv(str(csv_path)))
+
+    chunks = list(ar.read_csv_chunked(str(csv_path), chunksize=2))
+    df_chunked = pd.concat([ar.to_pandas(c) for c in chunks], ignore_index=True)
+
+    df_scan = ar.to_pandas(ar.scan_csv(str(csv_path)).collect())
+
+    pd.testing.assert_frame_equal(df_read, df_chunked)
+    pd.testing.assert_frame_equal(df_read, df_scan)
