@@ -1542,6 +1542,7 @@ DataQualityReport(
 }
 ```
 Columns where a single non-null value represents at least 95% of rows are reported with a `near_constant` warning.
+Columns with a very high ratio of unique values are reported with a `high_cardinality` warning because they may represent identifiers, leakage risk, or modeling hazards.
 
 Example near-constant distribution:
 
