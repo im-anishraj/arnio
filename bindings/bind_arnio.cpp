@@ -161,6 +161,20 @@ PYBIND11_MODULE(_arnio_cpp, m) {
             py::return_value_policy::reference_internal)
         .def("add_column", &Frame::add_column)
         .def("clone", &Frame::clone)
+        .def("describe",
+             [](const Frame& f) {
+                 py::dict summary;
+                 auto raw_summary = f.describe();
+                 for (const auto& col_pair : raw_summary) {
+                     py::dict stats;
+                     for (const auto& metric_pair : col_pair.second) {
+                         stats[py::str(metric_pair.first)] = metric_pair.second;
+                     }
+                     summary[py::str(col_pair.first)] = stats;
+                 }
+
+                 return summary;
+             })
         .def_static(
             "from_dict",
             [](py::dict cols_dict, py::dict dtype_hints, py::object row_count_obj) {

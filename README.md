@@ -124,6 +124,9 @@ frame = arnio.read_csv("sample.csv")
 
 # Preview first 5 rows
 frame.preview(5)
+
+# Generate and view scannable summary statistics
+print(frame.describe())
 ```
 
 ### Pipeline validation behavior
