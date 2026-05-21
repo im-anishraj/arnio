@@ -2490,6 +2490,93 @@ class TestSafeDivideColumns:
         assert list(df.columns) == ["revenue", "ratio", "cost"]
         assert list(df["ratio"]) == [4.0, 4.0]
 
+    # --- Regression tests for string zero denominators (bug fix) ---
+
+    def test_string_zero_denominator_uses_fill_value(self):
+        # String "0" must be treated as zero — not silently passed through.
+        frame = ar.from_pandas(
+            pd.DataFrame({"num": [10.0, 20.0, 30.0], "den": ["0", "2", "0"]})
+        )
+        result = ar.safe_divide_columns(
+            frame,
+            numerator="num",
+            denominator="den",
+            output_column="ratio",
+            fill_value=-1.0,
+        )
+        df = ar.to_pandas(result)
+        assert list(df["ratio"]) == [-1.0, 10.0, -1.0]
+
+    def test_string_zero_point_zero_denominator_uses_fill_value(self):
+        # String "0.0" must also be treated as zero.
+        frame = ar.from_pandas(pd.DataFrame({"num": [10.0, 20.0], "den": ["0.0", "4"]}))
+        result = ar.safe_divide_columns(
+            frame,
+            numerator="num",
+            denominator="den",
+            output_column="ratio",
+            fill_value=0.0,
+        )
+        df = ar.to_pandas(result)
+        assert df["ratio"].iloc[0] == 0.0
+        assert df["ratio"].iloc[1] == 5.0
+
+    def test_numeric_zero_denominator_uses_fill_value(self):
+        # Numeric 0 (int) must still be caught — regression guard.
+        frame = ar.from_pandas(pd.DataFrame({"num": [10.0, 20.0], "den": [0, 4]}))
+        result = ar.safe_divide_columns(
+            frame,
+            numerator="num",
+            denominator="den",
+            output_column="ratio",
+            fill_value=-99.0,
+        )
+        df = ar.to_pandas(result)
+        assert df["ratio"].iloc[0] == -99.0
+        assert df["ratio"].iloc[1] == 5.0
+
+    def test_nullable_denominator_uses_fill_value(self):
+        # None / pd.NA denominator must use fill_value, not raise.
+        frame = ar.from_pandas(
+            pd.DataFrame({"num": [10.0, 20.0, 30.0], "den": [None, 4.0, None]})
+        )
+        result = ar.safe_divide_columns(
+            frame,
+            numerator="num",
+            denominator="den",
+            output_column="ratio",
+            fill_value=0.0,
+        )
+        df = ar.to_pandas(result)
+        assert df["ratio"].iloc[0] == 0.0
+        assert df["ratio"].iloc[1] == 5.0
+        assert df["ratio"].iloc[2] == 0.0
+
+    def test_valid_nonzero_numeric_string_denominator_divides_correctly(self):
+        # String "2" and "4" must produce valid division, not be masked.
+        frame = ar.from_pandas(pd.DataFrame({"num": [10.0, 20.0], "den": ["2", "4"]}))
+        result = ar.safe_divide_columns(
+            frame,
+            numerator="num",
+            denominator="den",
+            output_column="ratio",
+            fill_value=-1.0,
+        )
+        df = ar.to_pandas(result)
+        assert df["ratio"].iloc[0] == 5.0
+        assert df["ratio"].iloc[1] == 5.0
+
+    def test_invalid_non_null_denominator_string_raises(self):
+        # A non-null, non-numeric string like "abc" must raise ValueError,
+        # not be silently treated as null.
+        frame = ar.from_pandas(pd.DataFrame({"num": [10.0, 20.0], "den": ["abc", "4"]}))
+        with pytest.raises(
+            ValueError, match="Denominator column 'den' contains non-numeric"
+        ):
+            ar.safe_divide_columns(
+                frame, numerator="num", denominator="den", output_column="ratio"
+            )
+
 
 class TestClipNumericNativeRegression:
     """Regression tests verifying the native C++ clip_numeric hot-path.

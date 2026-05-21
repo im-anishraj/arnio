@@ -1301,19 +1301,19 @@ def safe_divide_columns(
     numerator_series = df[numerator]
     denominator_series = df[denominator]
 
-    if pd.api.types.is_numeric_dtype(
-        numerator_series
-    ) and pd.api.types.is_numeric_dtype(denominator_series):
-        numerator_values = numerator_series
-        denominator_values = denominator_series
-        bad_numerator = numerator_values.isna() & numerator_series.notna()
-        bad_denominator = denominator_values.isna() & denominator_series.notna()
-    else:
-        numerator_values = pd.to_numeric(numerator_series, errors="coerce")
-        denominator_values = pd.to_numeric(denominator_series, errors="coerce")
+    # Always coerce through pd.to_numeric so that numeric-looking strings
+    # ("0", "0.0", "2.5") are handled identically to their numeric equivalents.
+    # This fixes the bug where string "0" was not caught as a zero denominator.
+    numerator_values = pd.to_numeric(numerator_series, errors="coerce")
+    denominator_values = pd.to_numeric(denominator_series, errors="coerce")
 
-        bad_numerator = numerator_values.isna() & numerator_series.notna()
-        bad_denominator = denominator_values.isna() & denominator_series.notna()
+    # Distinguish null originals (None / pd.NA → use fill_value) from
+    # invalid non-null strings ("abc" → raise ValueError).
+    # A value is "bad" if pd.to_numeric produced NaN but the original was
+    # not null — i.e. it was a non-null, non-numeric string.
+    bad_numerator = numerator_values.isna() & numerator_series.notna()
+    bad_denominator = denominator_values.isna() & denominator_series.notna()
+
     if bad_numerator.any():
         bad_values = df.loc[bad_numerator, numerator].head(3).tolist()
         raise ValueError(
@@ -1325,9 +1325,10 @@ def safe_divide_columns(
             f"Denominator column '{denominator}' contains non-numeric values: {bad_values}"
         )
 
-    safe_denom = denominator_values.mask(
-        denominator_values.isna() | denominator_values.eq(0)
-    )
+    # Mask zero and null denominators — both numeric 0 and string "0" / "0.0"
+    # are caught here because denominator_values is already coerced to float.
+    is_zero_or_null = denominator_values.isna() | (denominator_values == 0)
+    safe_denom = denominator_values.mask(is_zero_or_null)
     result = numerator_values / safe_denom
     df = df.copy()
     df[output_column] = result.fillna(fill_value)
