@@ -48,6 +48,9 @@ inline bool record_complete(const std::string& record) {
 
     return !in_quotes;
 }
+
+} // namespace
+
 class BufferedStreamReader {
 public:
     explicit BufferedStreamReader(std::istream& stream) : stream_(stream), pos_(0), end_(0) {
@@ -163,6 +166,8 @@ private:
     std::string line_ending_;
     std::string prev_line_ending_;
 };
+
+namespace {
 
 void validate_header(const std::vector<std::string>& header) {
     std::unordered_set<std::string> seen;
