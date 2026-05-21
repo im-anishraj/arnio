@@ -25,7 +25,8 @@ class Frame {
     std::vector<std::string> column_names() const;
     std::unordered_map<std::string, std::string> dtypes() const;
     size_t memory_usage() const;
-    py::dict describe() const;
+    std::vector<std::pair<std::string, std::vector<std::pair<std::string, double>>>> describe()
+        const;
 
     // Column access
     const Column& column(size_t idx) const;

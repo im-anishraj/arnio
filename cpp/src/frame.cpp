@@ -131,19 +131,19 @@ void Frame::rebuild_index() {
     }
 }
 
-py::dict Frame::describe() const {
-    py::dict summary;
+std::vector<std::pair<std::string, std::vector<std::pair<std::string, double>>>> Frame::describe()
+    const {
+    std::vector<std::pair<std::string, std::vector<std::pair<std::string, double>>>> summary;
 
     for (const auto& col : columns_) {
         std::string col_name = col.name();
-        py::dict stats;
+        std::vector<std::pair<std::string, double>> stats;
 
         size_t total_rows = col.size();
         size_t null_count = 0;
         size_t valid_count = 0;
         std::string type_str = dtype_to_string(col.dtype());
 
-        // Process Numeric Datatypes
         if (type_str == "int64" || type_str == "float64") {
             double sum = 0.0;
             double min_val = std::numeric_limits<double>::infinity();
@@ -168,24 +168,21 @@ py::dict Frame::describe() const {
                 if (val > max_val) max_val = val;
             }
 
-            // Insert metrics in the strict order requested by the maintainer
-            stats["count"] = static_cast<double>(valid_count);
-            stats["nulls"] = static_cast<double>(null_count);
-
+            // Push metrics in the exact forward order requested by the maintainer
+            stats.push_back({"count", static_cast<double>(valid_count)});
+            stats.push_back({"nulls", static_cast<double>(null_count)});
             if (valid_count > 0) {
-                stats["mean"] = sum / valid_count;
-                stats["min"] = min_val;
-                stats["max"] = max_val;
+                stats.push_back({"mean", sum / valid_count});
+                stats.push_back({"min", min_val});
+                stats.push_back({"max", max_val});
             } else {
-                stats["mean"] = 0.0;
-                stats["min"] = 0.0;
-                stats["max"] = 0.0;
+                stats.push_back({"mean", 0.0});
+                stats.push_back({"min", 0.0});
+                stats.push_back({"max", 0.0});
             }
 
-            summary[py::str(col_name)] = stats;
-        }
-        // Process String Datatypes
-        else if (type_str == "string") {
+            summary.push_back({col_name, stats});
+        } else if (type_str == "string") {
             std::unordered_set<std::string> unique_values;
 
             for (size_t i = 0; i < total_rows; ++i) {
@@ -197,12 +194,11 @@ py::dict Frame::describe() const {
                 unique_values.insert(std::get<std::string>(col.at(i)));
             }
 
-            // Insert metrics in the strict order requested for strings
-            stats["count"] = static_cast<double>(valid_count);
-            stats["nulls"] = static_cast<double>(null_count);
-            stats["unique"] = static_cast<double>(unique_values.size());
+            stats.push_back({"count", static_cast<double>(valid_count)});
+            stats.push_back({"nulls", static_cast<double>(null_count)});
+            stats.push_back({"unique", static_cast<double>(unique_values.size())});
 
-            summary[py::str(col_name)] = stats;
+            summary.push_back({col_name, stats});
         }
     }
 
