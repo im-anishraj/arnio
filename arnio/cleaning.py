@@ -102,6 +102,8 @@ def _validate_mapping(
     if not normalized and not allow_empty:
         raise ValueError(f"{argument_name} must not be empty")
 
+    return normalized
+
 
 def _validate_existing_column_sequence(
     columns: Sequence[str],
