@@ -79,7 +79,7 @@ def run():
     print("=" * 60)
     print("HOTSPOT: per-column peak memory at 100k rows")
     print("=" * 60)
-    hotspot = measure_column_hotspot(100_000)
+    hotspot = measure_column_hotspot(scales[0])
     for col, mb in hotspot.items():
         print(f"  {col:<15}: {mb:.4f} MB")
     print("=" * 60)
