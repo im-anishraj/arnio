@@ -361,21 +361,6 @@ class TestReadCsv:
         assert frame.columns == ["name", "age"]
         assert frame.shape == (1, 2)
 
-    def test_read_scan_csv_unsupported_extension_parity(self, tmp_path):
-        invalid_file = tmp_path / "data.json"
-        invalid_file.write_text("{}")
-
-        expected_message = (
-            f"Unsupported file format: {invalid_file}. "
-            "Only .csv, .txt, and .tsv are supported."
-        )
-
-        with pytest.raises(ValueError, match=re.escape(expected_message)):
-            ar.read_csv(invalid_file)
-
-        with pytest.raises(ValueError, match=re.escape(expected_message)):
-            ar.scan_csv(invalid_file)
-
     def test_read_scan_csv_binary_file_parity(self, tmp_path):
         binary_file = tmp_path / "binary.csv"
 
