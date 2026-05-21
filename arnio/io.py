@@ -130,6 +130,22 @@ def read_csv(
     except FileNotFoundError:
         pass  # Let C++ backend handle or raise standard error
 
+    if _is_utf8_encoding(encoding):
+        try:
+            with open(path, encoding="utf-8", errors="replace") as f:
+                content = f.read()
+            quote_count = content.count('"')
+            # A file with an odd number of unescaped quotes has an unterminated
+            # record. Count escaped quotes ("") and subtract — each escaped pair
+            # contributes 0 net openers, each real quote contributes 1.
+            escaped = content.count('""')
+            if (quote_count - escaped * 2) % 2 != 0:
+                raise CsvReadError(
+                    f"CSV file contains an unterminated quoted record: {path!r}"
+                )
+        except (FileNotFoundError, OSError):
+            pass
+
     config = _CsvConfig()
     config.delimiter = delimiter
     config.has_header = has_header
