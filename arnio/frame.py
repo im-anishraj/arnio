@@ -1,6 +1,24 @@
 """
 arnio.frame
 ArFrame — the core data container wrapping the C++ Frame.
+
+Copy and Mutation Semantics
+---------------------------
+The following ArFrame methods have been audited and are guaranteed to return
+a **new ArFrame** without modifying the original frame:
+
+- head()           → returns new ArFrame, original unchanged
+- tail()           → returns new ArFrame, original unchanged
+- select_columns() → returns new ArFrame, original unchanged
+- select_dtypes()  → returns new ArFrame, original unchanged
+
+No other methods in this module have been audited for copy semantics.
+
+Example::
+
+    frame = ar.read_csv("data.csv")
+    top5 = frame.head(5)       # new frame — frame is untouched
+    assert top5 is not frame   # always True
 """
 
 from __future__ import annotations
@@ -221,7 +239,78 @@ class ArFrame:
         Returns
         -------
         int
-            Total memory usage in bytes.
+            Memory usage in bytes.
+        """
+        return self._frame.memory_usage()
+
+    def head(self, n: int = 5) -> ArFrame:
+        """Return the first n rows as a new ArFrame.
+
+        The original frame is not modified.
+
+        Parameters
+        ----------
+        n : int, optional
+            Number of rows to return. Defaults to 5.
+
+        Returns
+        -------
+        ArFrame
+            A new ArFrame containing the first n rows.
+            The original frame remains unchanged.
+
+        Examples
+        --------
+        >>> frame = ar.read_csv("data.csv")
+        >>> top5 = frame.head(5)
+        >>> top5 is frame   # always False — head() never mutates
+        False
+        """
+        if isinstance(n, bool) or not isinstance(n, int) or n < 0:
+            raise ValueError(f"`n` must be a non-negative integer, got {n!r}")
+
+        actual_n = min(n, len(self))
+
+        return ArFrame(self._frame.select_rows(0, actual_n))
+
+    def tail(self, n: int = 5) -> ArFrame:
+        """Return the last n rows as a new ArFrame.
+
+        The original frame is not modified.
+
+        Parameters
+        ----------
+        n : int, optional
+            Number of rows to return. Defaults to 5.
+
+        Returns
+        -------
+        ArFrame
+            A new ArFrame containing the last n rows.
+            The original frame remains unchanged.
+
+        Examples
+        --------
+        >>> frame = ar.read_csv("data.csv")
+        >>> last5 = frame.tail(5)
+        >>> last5 is frame   # always False — tail() never mutates
+        False
+        """
+        if isinstance(n, bool) or not isinstance(n, int) or n < 0:
+            raise ValueError(f"`n` must be a non-negative integer, got {n!r}")
+
+        actual_n = min(n, len(self))
+        start = max(0, len(self) - actual_n)
+
+        return ArFrame(self._frame.select_rows(start, actual_n))
+
+    def to_dict(self) -> dict[str, list]:
+        """Export the frame as a Python dictionary.
+
+        Returns
+        -------
+        dict[str, list]
+            A dictionary mapping column names to lists of values.
 
         Examples
         --------
@@ -289,6 +378,8 @@ class ArFrame:
     def select_columns(self, columns: list[str]) -> ArFrame:
         """Return a new ArFrame with only the selected columns.
 
+        The original frame is not modified.
+
         Parameters
         ----------
         columns : list[str]
@@ -297,7 +388,8 @@ class ArFrame:
         Returns
         -------
         ArFrame
-            New ArFrame containing only the selected columns.
+            A new ArFrame containing only the selected columns.
+            The original frame remains unchanged.
 
         Raises
         ------
@@ -306,6 +398,13 @@ class ArFrame:
         ValueError
             If the selection is empty, contains duplicates,
             or includes unknown columns.
+
+        Examples
+        --------
+        >>> frame = ar.read_csv("data.csv")
+        >>> small = frame.select_columns(["name", "age"])
+        >>> small is frame   # always False — select_columns() never mutates
+        False
         """
         if isinstance(columns, str):
             raise TypeError("columns must be a sequence of column names, not a string.")
@@ -492,6 +591,7 @@ class ArFrame:
     ) -> ArFrame:
         """Return a new ArFrame containing only columns whose dtype matches the filter.
 
+        The original frame is not modified.
         At least one of *include* or *exclude* must be provided.
 
         Parameters
@@ -506,8 +606,8 @@ class ArFrame:
         Returns
         -------
         ArFrame
-            New ArFrame containing only the matched columns, in original
-            column order.
+            A new ArFrame containing only the matched columns, in original
+            column order. The original frame remains unchanged.
 
         Raises
         ------
@@ -523,6 +623,8 @@ class ArFrame:
         --------
         >>> frame = ar.read_csv("data.csv")
         >>> numeric = frame.select_dtypes(include=["int64", "float64"])
+        >>> numeric is frame   # always False — select_dtypes() never mutates
+        False
         >>> without_strings = frame.select_dtypes(exclude="string")
         """
         if include is None and exclude is None:
@@ -690,14 +792,12 @@ class ArFrame:
 
         actual_n = min(n, num_rows)
 
-        # Pull only the first `actual_n` values per column — no full conversion
         col_names = self.columns
         col_data = [
             [self._frame.column_by_index(i).at(r) for r in range(actual_n)]
             for i in range(num_cols)
         ]
 
-        # Calculate column widths for alignment
         col_widths = [
             max(
                 len(col_names[i]),
@@ -706,11 +806,9 @@ class ArFrame:
             for i in range(num_cols)
         ]
 
-        # Build header and separator
         header = "  ".join(col_names[i].ljust(col_widths[i]) for i in range(num_cols))
         separator = "  ".join("-" * col_widths[i] for i in range(num_cols))
 
-        # Build rows
         rows = [
             "  ".join(str(col_data[i][r]).ljust(col_widths[i]) for i in range(num_cols))
             for r in range(actual_n)
