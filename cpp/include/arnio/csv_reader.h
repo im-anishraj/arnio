@@ -61,6 +61,7 @@ class CsvReader {
 class CsvChunkReader {
    public:
     explicit CsvChunkReader(const CsvConfig& config = CsvConfig{});
+    ~CsvChunkReader();
 
     void open(const std::string& path);
     std::optional<Frame> next_chunk(size_t chunksize);

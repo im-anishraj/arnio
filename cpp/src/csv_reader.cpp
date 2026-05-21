@@ -739,6 +739,7 @@ std::vector<std::pair<std::string, std::string>> CsvReader::scan_schema(
 // --- CsvChunkReader (streaming) ---
 
 CsvChunkReader::CsvChunkReader(const CsvConfig& config) : parser_(config) {}
+CsvChunkReader::~CsvChunkReader() = default;
 
 void CsvChunkReader::resolve_col_indices() {
     const CsvConfig& config = parser_.config();
