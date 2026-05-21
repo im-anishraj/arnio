@@ -959,6 +959,22 @@ def validate(
                             message=f"Column {col!r} not found",
                         )
                     )
+
+                    if reached_limit():
+                        issues = issues[:max_errors]
+
+                        return ValidationResult(
+                            row_count=len(df),
+                            issue_count=len(issues),
+                            issues=issues,
+                            bad_rows=sorted(
+                                {
+                                    issue.row_index
+                                    for issue in issues
+                                    if issue.row_index is not None
+                                }
+                            ),
+                        )
             else:
                 duplicate_mask = df.duplicated(
                     subset=list(schema.unique),
@@ -1036,6 +1052,21 @@ def validate(
                         message=f"Cross-field rule referenced a missing column: {e}",
                     )
                 )
+                if reached_limit():
+                    issues = issues[:max_errors]
+
+                    return ValidationResult(
+                        row_count=len(df),
+                        issue_count=len(issues),
+                        issues=issues,
+                        bad_rows=sorted(
+                            {
+                                issue.row_index
+                                for issue in issues
+                                if issue.row_index is not None
+                            }
+                        ),
+                    )
 
     bad_rows = sorted(
         {issue.row_index for issue in issues if issue.row_index is not None}

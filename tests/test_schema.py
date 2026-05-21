@@ -1,5 +1,7 @@
 """Tests for schema validation."""
 
+import io
+
 import pytest
 
 import arnio as ar
@@ -185,6 +187,48 @@ def test_schema_validation_negative_max_errors(tmp_path):
 
     with pytest.raises(ValueError):
         ar.validate(frame, schema, max_errors=-1)
+
+
+def test_schema_validation_unique_missing_columns_respects_max_errors():
+    frame = ar.read_csv(io.StringIO("x\n1\n"))
+
+    schema = ar.Schema(
+        {},
+        unique=["a", "b"],
+    )
+
+    result = ar.validate(frame, schema, max_errors=1)
+
+    assert result.issue_count == 1
+
+
+def test_schema_validation_rule_keyerror_respects_max_errors():
+    def bad_rule(df):
+        return [
+            ar.ValidationIssue(
+                column="a",
+                rule="custom",
+                message="error 1",
+            ),
+            ar.ValidationIssue(
+                column="b",
+                rule="custom",
+                message="error 2",
+            ),
+        ]
+
+    frame = ar.read_csv(io.StringIO("a\n1\n"))
+
+    schema = ar.Schema(
+        {
+            "a": ar.String(),
+        },
+        rules=[bad_rule],
+    )
+
+    result = ar.validate(frame, schema, max_errors=1)
+
+    assert result.issue_count == 1
 
 
 def test_schema_validation_strict_max_errors_cap(tmp_path):
