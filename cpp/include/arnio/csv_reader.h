@@ -20,6 +20,7 @@ struct CsvConfig {
     std::optional<size_t> skip_rows = std::nullopt;
     std::string encoding = "utf-8";  // Currently only utf-8 supported
     bool trim_headers = true;        // for implementing the trim_headers option
+    char decimal_separator = '.';
     std::optional<char> thousands_separator = std::nullopt;
     std::optional<size_t> sample_size = std::nullopt;
     std::optional<std::vector<std::string>> null_values = std::nullopt;

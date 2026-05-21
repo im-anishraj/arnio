@@ -158,6 +158,7 @@ def _utf8_csv_path(
 
 def _validate_thousands_separator(
     thousands_separator: str | None,
+    decimal_separator: str = ".",
 ) -> None:
     if thousands_separator is None:
         return
@@ -169,10 +170,24 @@ def _validate_thousands_separator(
         raise ValueError(
             "thousands_separator must be a single non-alphanumeric character"
         )
-    if thousands_separator in {".", "+", "-"}:
+    if thousands_separator in {"+", "-"}:
+        raise ValueError("Invalid thousands_separator: '+' and '-' are not allowed")
+    if thousands_separator == decimal_separator:
+        raise ValueError("thousands_separator must differ from decimal_separator")
+
+
+def _validate_decimal_separator(decimal_separator: str) -> str:
+    if not isinstance(decimal_separator, str):
+        raise TypeError("decimal_separator must be a string")
+    if len(decimal_separator) != 1:
+        raise ValueError("decimal_separator must be a single character")
+    if decimal_separator.isalnum() or decimal_separator in {'"', "\n", "\r"}:
         raise ValueError(
-            "Invalid thousands_separator: '.', '+' and '-' are not allowed"
+            "decimal_separator must be a single non-alphanumeric character"
         )
+    if decimal_separator in {"+", "-"}:
+        raise ValueError("Invalid decimal_separator: '+' and '-' are not allowed")
+    return decimal_separator
 
 
 def _validate_delimiter(delimiter: str) -> str:
@@ -385,6 +400,7 @@ def read_csv(
     skiprows: int | None = None,
     encoding: str = "utf-8",
     trim_headers: bool = True,
+    decimal_separator: str = ".",
     thousands_separator: str | None = None,
     null_values: list[str] | None = None,
     dtype: dict[str, str] | None = None,
@@ -420,6 +436,11 @@ def read_csv(
         File encoding.
     trim_headers : bool, default True
         Strip leading/trailing whitespace from column names.
+    decimal_separator : str, default "."
+        Single non-alphanumeric character used as the decimal separator
+        during numeric parsing. Use "," to opt in to European-style decimals
+        such as ``"12,45"``. Values containing the CSV delimiter must still
+        be quoted.
     thousands_separator : str, optional
         Single non-alphanumeric character used as a thousands separator
         during numeric parsing.
@@ -485,7 +506,8 @@ def read_csv(
     if delimiter is None:
         delimiter = "\t" if path_lower.endswith(".tsv") else ","
 
-    _validate_thousands_separator(thousands_separator)
+    decimal_separator = _validate_decimal_separator(decimal_separator)
+    _validate_thousands_separator(thousands_separator, decimal_separator)
     delimiter = _validate_delimiter(delimiter)
     mode = _validate_parser_mode(mode)
     encoding_errors = _validate_encoding_errors(encoding_errors)
@@ -494,6 +516,7 @@ def read_csv(
     config.has_header = _validate_bool_option(has_header, "has_header")
     config.encoding = encoding
     config.trim_headers = _validate_bool_option(trim_headers, "trim_headers")
+    config.decimal_separator = decimal_separator
     config.thousands_separator = thousands_separator
     config.mode = mode
     config.encoding_errors = encoding_errors
@@ -544,6 +567,7 @@ def read_csv_chunked(
     skip_rows: int = 0,
     encoding: str = "utf-8",
     trim_headers: bool = True,
+    decimal_separator: str = ".",
     thousands_separator: str | None = None,
     null_values: list[str] | None = None,
     mode: str = "strict",
@@ -573,6 +597,9 @@ def read_csv_chunked(
         File encoding.
     trim_headers : bool, default True
         Strip leading/trailing whitespace from column names.
+    decimal_separator : str, default "."
+        Single non-alphanumeric character used as the decimal separator
+        during numeric parsing.
     thousands_separator : str, optional
         Single non-alphanumeric character used as a thousands separator
         during numeric parsing.
@@ -615,7 +642,8 @@ def read_csv_chunked(
     except FileNotFoundError:
         pass
 
-    _validate_thousands_separator(thousands_separator)
+    decimal_separator = _validate_decimal_separator(decimal_separator)
+    _validate_thousands_separator(thousands_separator, decimal_separator)
     delimiter = _validate_delimiter(delimiter)
     mode = _validate_parser_mode(mode)
     chunksize = _validate_chunksize(chunksize)
@@ -626,6 +654,7 @@ def read_csv_chunked(
     config.has_header = _validate_bool_option(has_header, "has_header")
     config.encoding = encoding
     config.trim_headers = _validate_bool_option(trim_headers, "trim_headers")
+    config.decimal_separator = decimal_separator
     config.thousands_separator = thousands_separator
     config.mode = mode
     config.skip_rows = skip_rows
@@ -735,6 +764,7 @@ def scan_csv(
     delimiter: str | None = None,
     encoding: str = "utf-8",
     trim_headers: bool = True,
+    decimal_separator: str = ".",
     thousands_separator: str | None = None,
     sample_size: int | None = None,
     null_values: list[str] | None = None,
@@ -759,6 +789,9 @@ def scan_csv(
         transcoded to infer the schema.
     trim_headers : bool, default True
         Strip leading/trailing whitespace from column names.
+    decimal_separator : str, default "."
+        Single non-alphanumeric character used as the decimal separator
+        during numeric parsing.
     thousands_separator : str, optional
         Single non-alphanumeric character used as a thousands separator
         during numeric parsing.
@@ -815,13 +848,15 @@ def scan_csv(
     if delimiter is None:
         delimiter = "\t" if path_lower.endswith(".tsv") else ","
 
-    _validate_thousands_separator(thousands_separator)
+    decimal_separator = _validate_decimal_separator(decimal_separator)
+    _validate_thousands_separator(thousands_separator, decimal_separator)
     delimiter = _validate_delimiter(delimiter)
     encoding_errors = _validate_encoding_errors(encoding_errors)
     config = _CsvConfig()
     config.delimiter = delimiter
     config.encoding = encoding
     config.trim_headers = _validate_bool_option(trim_headers, "trim_headers")
+    config.decimal_separator = decimal_separator
     config.thousands_separator = thousands_separator
     config.has_header = has_header
     config.encoding_errors = encoding_errors
