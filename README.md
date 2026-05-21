@@ -1179,6 +1179,7 @@ report = ar.profile(frame)
 summary = report.summary()
 print(summary)
 
+
 suggestions = ar.suggest_cleaning(frame)
 print(suggestions)
 # [('strip_whitespace', {'subset': ['customer', 'city']}), ('drop_duplicates', {'keep': 'first'})]
