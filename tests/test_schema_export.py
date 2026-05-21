@@ -199,3 +199,25 @@ def test_public_api_accessible_via_arnio_namespace():
     assert hasattr(ar, "schema_to_yaml")
     assert ar.schema_to_dict is schema_to_dict
     assert ar.schema_to_yaml is schema_to_yaml
+
+
+def test_schema_with_rules_raises():
+    schema = _FakeSchema({"col": {"type": "STRING"}})
+    schema.rules = [lambda df: []]
+    with pytest.raises(ValueError, match="rules"):
+        schema_to_dict(schema)
+
+
+def test_strict_and_unique_preserved():
+    schema = _FakeSchema({"col": {"type": "INT64"}})
+    schema.strict = True
+    schema.unique = ["col"]
+    result = schema_to_dict(schema)
+    assert result["strict"] is True
+    assert result["unique"] == ["col"]
+
+
+def test_set_valued_allowed_normalized():
+    raw = {"status": {"type": "STRING", "allowed": {"b", "a", "c"}}}
+    result = schema_to_dict(raw)
+    assert result["fields"]["status"]["allowed"] == ["a", "b", "c"]

@@ -176,8 +176,14 @@ def schema_to_dict(schema: dict | Any) -> dict:
     if isinstance(schema, dict):
         raw: dict = schema
     elif hasattr(schema, "fields"):
-        # Future-proof: handle an actual Schema object with a .fields mapping.
         raw = {}
+
+        if getattr(schema, "rules", None):
+            raise ValueError(
+                "schema_to_yaml does not support Schema objects with custom rules "
+                "because callables are not serializable. "
+                "Remove schema.rules before exporting."
+            )
 
         for name, field in schema.fields.items():
             if isinstance(field, dict):
@@ -216,7 +222,6 @@ def schema_to_dict(schema: dict | Any) -> dict:
             normalised[field_name] = {"type": value}
 
         elif isinstance(value, dict):
-            # Sort nested keys for determinism; keep all metadata.
             cleaned = {}
 
             for k, v in sorted(value.items()):
