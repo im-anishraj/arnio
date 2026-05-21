@@ -29,6 +29,12 @@ def _is_utf8_encoding(encoding: str) -> bool:
     return encoding.lower().replace("_", "-") in {"utf-8", "utf8"}
 
 
+def _raise_csv_path_os_error(path: str, error: OSError) -> None:
+    """Raise a path-aware CsvReadError for filesystem access failures."""
+    reason = error.strerror or str(error)
+    raise CsvReadError(f"Could not access CSV file {path!r}: {reason}") from error
+
+
 @contextmanager
 def _utf8_csv_path(
     path: str,
@@ -140,7 +146,7 @@ def _utf8_csv_path(
             f"Could not decode {path!r} using encoding {encoding!r}"
         ) from e
     except OSError as e:
-        raise CsvReadError(str(e)) from e
+        _raise_csv_path_os_error(path, e)
     finally:
         if tmp_name is not None:
             try:
@@ -334,6 +340,8 @@ def _reject_utf8_nul_bytes(path: str) -> None:
                     )
     except FileNotFoundError:
         pass  # Let C++ backend handle or raise standard error
+    except OSError as e:
+        _raise_csv_path_os_error(path, e)
 
 
 def _validate_csv_path(path: str, encoding: str) -> None:
@@ -347,6 +355,8 @@ def _validate_csv_path(path: str, encoding: str) -> None:
             raise CsvReadError(f"CSV file is empty: {path!r}")
     except FileNotFoundError:
         pass
+    except OSError as e:
+        _raise_csv_path_os_error(path, e)
 
 
 def read_csv(
