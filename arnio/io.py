@@ -208,15 +208,15 @@ def _validate_nrows(nrows: int) -> int:
     return nrows
 
 
-def _validate_skip_rows(skiprows: int) -> int:
-    """Validate skiprows parameter."""
-    if isinstance(skiprows, bool) or not isinstance(skiprows, int):
-        raise TypeError("skiprows must be an integer")
+def _validate_skip_rows(skip_rows: int) -> int:
+    """Validate skip_rows parameter."""
+    if isinstance(skip_rows, bool) or not isinstance(skip_rows, int):
+        raise TypeError("skip_rows must be an integer")
 
-    if skiprows < 0:
-        raise ValueError("skiprows must be non-negative")
+    if skip_rows < 0:
+        raise ValueError("skip_rows must be non-negative")
 
-    return skiprows
+    return skip_rows
 
 
 def _validate_chunksize(chunksize: int) -> int:
@@ -468,7 +468,7 @@ def read_csv_chunked(
     has_header: bool = True,
     usecols: list[str] | None = None,
     nrows: int | None = None,
-    skiprows: int = 0,
+    skip_rows: int = 0,
     encoding: str = "utf-8",
     trim_headers: bool = True,
     thousands_separator: str | None = None,
@@ -494,9 +494,8 @@ def read_csv_chunked(
         Columns to read. If None, reads all columns.
     nrows : int, optional
         Maximum total number of data rows to read across all chunks.
-    skiprows : int, default 0
-        Number of lines to skip before reading the header. Useful for
-        CSV files with metadata preambles before the actual data.
+    skip_rows : int, default 0
+        Number of data rows to skip after the header row.
     encoding : str, default "utf-8"
         File encoding.
     trim_headers : bool, default True
@@ -544,16 +543,16 @@ def read_csv_chunked(
     delimiter = _validate_delimiter(delimiter)
     mode = _validate_parser_mode(mode)
     chunksize = _validate_chunksize(chunksize)
-    skiprows = _validate_skip_rows(skiprows)
+    skip_rows = _validate_skip_rows(skip_rows)
 
     config = _CsvConfig()
     config.delimiter = delimiter
     config.has_header = _validate_bool_option(has_header, "has_header")
-    config.encoding = encoding
+    config.encoding = _validate_encoding(encoding)
     config.trim_headers = _validate_bool_option(trim_headers, "trim_headers")
     config.thousands_separator = thousands_separator
     config.mode = mode
-    config.skip_rows = skiprows
+    config.skip_rows = skip_rows
 
     if null_values is not None:
         config.null_values = _validate_null_values(null_values)

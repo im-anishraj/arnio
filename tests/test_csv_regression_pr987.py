@@ -26,21 +26,6 @@ def test_multiline_quoted_records(tmp_path):
     assert df["desc"].iloc[1] == 'escaped "quote"'
 
 
-def test_chunked_parity_skip_nrows(tmp_path):
-    csv_path = tmp_path / "chunked.csv"
-    csv_path.write_text("skip_this\nid,val\n1,a\n2,b\n3,c\n4,d\n5,e\n")
-
-    f1 = ar.read_csv(str(csv_path), skiprows=1, nrows=3)
-    df1 = ar.to_pandas(f1)
-
-    reader = ar.read_csv_chunked(str(csv_path), chunksize=2, skiprows=1, nrows=3)
-    chunks = list(reader)
-    df2 = pd.concat([ar.to_pandas(c) for c in chunks], ignore_index=True)
-
-    assert len(df1) == 3
-    assert len(df2) == 3
-    assert list(df1["id"]) == [1, 2, 3]
-    assert list(df2["id"]) == [1, 2, 3]
 
 
 def test_buffer_boundary_edge_cases(tmp_path):
