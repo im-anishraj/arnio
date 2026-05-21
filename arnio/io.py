@@ -351,6 +351,9 @@ def read_csv(
         File encoding.
     trim_headers : bool, default True
         Strip leading/trailing whitespace from column names.
+
+        Headers that differ only by leading or trailing whitespace are
+        always rejected, even when this option is False.
     thousands_separator : str, optional
         Single non-alphanumeric character used as a thousands separator
         during numeric parsing.
@@ -674,6 +677,9 @@ def scan_csv(
         transcoded to infer the schema.
     trim_headers : bool, default True
         Strip leading/trailing whitespace from column names.
+
+        Headers that differ only by leading or trailing whitespace are
+        always rejected, even when this option is False.
     thousands_separator : str, optional
         Single non-alphanumeric character used as a thousands separator
         during numeric parsing.

@@ -466,8 +466,37 @@ class TestReadCsv:
         csv_path = tmp_path / "duplicate_headers.csv"
         csv_path.write_text("a,a\n1,2\n")
 
-        with pytest.raises(ar.CsvReadError, match="Duplicate column name: a"):
+        with pytest.raises(
+            ar.CsvReadError, match="Duplicate column name after trimming whitespace: a"
+        ):
             ar.read_csv(csv_path)
+
+    def test_duplicate_headers_after_trim_rejected(self, tmp_path):
+        csv_path = tmp_path / "whitespace_duplicate_headers.csv"
+        csv_path.write_text("a , a\n1,2\n")
+
+        with pytest.raises(
+            ar.CsvReadError, match="Duplicate column name after trimming whitespace: a"
+        ):
+            ar.read_csv(csv_path)
+
+    def test_duplicate_headers_after_trim_rejected_trim_headers_false(self, tmp_path):
+        csv_path = tmp_path / "whitespace_duplicate_headers_notrim.csv"
+        csv_path.write_text("a , a\n1,2\n")
+
+        with pytest.raises(
+            ar.CsvReadError, match="Duplicate column name after trimming whitespace: a"
+        ):
+            ar.read_csv(csv_path, trim_headers=False)
+
+    def test_duplicate_headers_after_trim_scan_csv(self, tmp_path):
+        csv_path = tmp_path / "scan_whitespace_duplicate.csv"
+        csv_path.write_text("x , x\n1,2\n")
+
+        with pytest.raises(
+            ar.CsvReadError, match="Duplicate column name after trimming whitespace: x"
+        ):
+            ar.scan_csv(csv_path)
 
     def test_empty_file_raises(self, tmp_path):
         csv_path = tmp_path / "empty.csv"
@@ -674,7 +703,6 @@ class TestScanCsv:
         assert schema_full["value"] == "string"
 
     def test_scan_sample_size_invalid(self, sample_csv):
-
         with pytest.raises(ValueError, match="sample_size must be a positive integer"):
             ar.scan_csv(sample_csv, sample_size=0)
 
