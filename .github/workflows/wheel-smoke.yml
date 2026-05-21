@@ -27,7 +27,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install cibuildwheel
-        run: pip install cibuildwheel==2.22.0
+        run: pip install "cibuildwheel>=3.2,<4"
 
       - name: Build manylinux wheel
         run: cibuildwheel --only cp312-manylinux_x86_64 --output-dir wheelhouse

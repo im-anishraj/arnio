@@ -32,6 +32,7 @@ from .cleaning import (
     replace_values,
     round_numeric_columns,
     safe_divide_columns,
+    select_columns,
     standardize_missing_tokens,
     strip_whitespace,
     trim_column_names,
@@ -47,7 +48,7 @@ from .exceptions import (
     UnknownStepError,
 )
 from .frame import ArFrame
-from .integrations import ArnioPandasAccessor
+from .integrations import ArnioPandasAccessor, register_duckdb
 from .io import (
     read_csv,
     read_csv_chunked,
@@ -58,6 +59,7 @@ from .io import (
     write_parquet,
 )
 from .pipeline import (
+    PipelineContext,
     get_builtin_step_signatures,
     list_steps,
     pipeline,
@@ -117,6 +119,7 @@ __all__ = [
     # Cleaning
     "drop_nulls",
     "drop_columns",
+    "select_columns",
     "keep_rows_with_nulls",
     "fill_nulls",
     "validate_columns_exist",
@@ -144,11 +147,13 @@ __all__ = [
     "from_dict",
     # Integrations
     "ArnioPandasAccessor",
+    "register_duckdb",
     # Pipeline
     "pipeline",
     "register_step",
     "get_builtin_step_signatures",
     "list_steps",
+    "PipelineContext",
     "reset_steps",
     # Data quality
     "profile",

@@ -229,12 +229,16 @@ Example contract files are included under `examples/contracts/`.
 Use `select_columns()` to create a new `ArFrame` with only the required columns before converting to pandas.
 
 ```python
-selected = frame.select_columns(["name", "revenue"])
+selected = ar.select_columns(frame, ["name", "revenue"])
 
 print(selected.columns)
 # ['name', 'revenue']
 ```
 
+- Preserves the requested column order.
+- Returns a new `ArFrame`.
+- Raises `ValueError` if any requested column does not exist.
+- Raises `TypeError` if `columns` is not a sequence of strings.
 
 ### Handling missing values
 
@@ -426,6 +430,11 @@ ar.register_step("team:drop_nulls", remove_outliers)  # namespaced custom step
 # Introspect built-in and custom step names without reaching into internals.
 print(ar.list_steps())
 
+# Opt in to a context object only when you need execution metadata.
+def capture_context(df, context=None):
+    print(context.step_name, context.step_index, context.total_steps)
+    return df
+
 # Now use it in any pipeline alongside native C++ steps
 clean = ar.pipeline(frame, [
     ("builtin:strip_whitespace",),
@@ -544,6 +553,20 @@ not to replace it.
 | **scikit-learn** | Use Arnio cleaning as a preprocessing layer before model training. |
 | **DuckDB / Arrow** | Validate and prepare data before analytics and columnar exchange. |
 | **notebooks** | Inspect quality issues and cleaning suggestions before analysis. |
+
+### DuckDB registration
+
+Use `ar.register_duckdb(frame, conn, "table_name")` to register an ArFrame directly as a DuckDB relation without writing pandas conversion glue yourself. DuckDB is an optional dependency — install it with `pip install duckdb` when needed.
+
+```python
+import duckdb
+import arnio as ar
+
+frame = ar.read_csv("data.csv")
+conn = duckdb.connect()
+ar.register_duckdb(frame, conn, "my_table")
+result = conn.execute("SELECT * FROM my_table").fetchdf()
+```
 
 ### Row-dropping pipeline behavior
 
@@ -867,6 +890,7 @@ Most operations below run natively in C++. Currently, `filter_rows`, `replace_va
 | `safe_divide_columns` | Divide one column by another, handling zero/null denominators | `ar.safe_divide_columns(frame, numerator="revenue", denominator="cost", output_column="ratio")` |
 | `drop_columns_matching` | Drop columns whose names match a regex pattern | `ar.drop_columns_matching(frame, pattern="^temp_")` |
 | `trim_column_names` | Strip leading/trailing whitespace from column names | `ar.trim_column_names(frame)` |
+| `select_columns` | Return a new frame containing only selected columns | `ar.select_columns(frame, ["id", "name"])` |
 
 #### `ArFrame.select_dtypes` — type-based column selection
 
@@ -1098,6 +1122,32 @@ if not result.passed:
     print(result.to_pandas())
     print(result.to_markdown(max_issues=10))
 ```
+### Numeric string compatibility hints
+
+Validation messages indicate when string values appear safely convertible
+to numeric dtypes.
+
+```python
+frame = ar.from_pandas(
+    pd.DataFrame(
+        {
+            "age": ["1", "2", "3"],
+        }
+    )
+)
+
+schema = ar.Schema(
+    {
+        "age": ar.Int64(),
+    }
+)
+
+result = ar.validate(frame, schema)
+
+print(result.issues[0].message)
+# Column 'age' has dtype 'string'; expected 'int64'.
+# Values appear safely convertible to 'int64'
+```
 
 In this example, `country` becomes required only when
 `user_type == "international"`.
@@ -1157,6 +1207,8 @@ schema = ar.Schema(
 payload = schema.to_json()
 restored = ar.Schema.from_json(payload)
 ```
+
+See [examples/schema_validation.py](examples/schema_validation.py) for a complete runnable tutorial covering `Schema`, field types, invalid-row reporting, and `ValidationResult` output.
 
 `ValidationResult.to_markdown()` is useful in CI logs, GitHub comments, or data quality reports because it renders a compact validation summary plus a GitHub-friendly issue table.
 
@@ -1233,7 +1285,7 @@ Expected cleaned output with `mode="strict"`:
 
 `mode="safe"` only trims whitespace. Use `mode="strict"` when you also want deterministic built-in cleanup such as exact duplicate removal.
 
-See [examples/auto_clean_tutorial.py](examples/auto_clean_tutorial.py) for a runnable version of this walkthrough.
+See [examples/auto_clean_tutorial.py](examples/auto_clean_tutorial.py) for a runnable version of this walkthrough, and [examples/schema_validation.py](examples/schema_validation.py) for a focused validation tutorial.
 
 > For strict mode data-loss risks and safe workflow, see [AUTO_CLEAN_GUIDE.md](AUTO_CLEAN_GUIDE.md).
 
@@ -1483,6 +1535,20 @@ DataQualityReport(
   ]
 }
 ```
+Columns where a single non-null value represents at least 95% of rows are reported with a `near_constant` warning.
+
+Example near-constant distribution:
+
+```json
+{
+  "row_count": 100,
+  "top_values": [
+    {"value": "London", "count": 95, "ratio": 0.95},
+    {"value": "Paris", "count": 5, "ratio": 0.05}
+  ],
+  "warnings": ["near_constant"]
+}
+```
 
 ### 3. Example Summary Table
 *A manually formatted Markdown table representing the core metrics:*
@@ -1603,6 +1669,39 @@ pre-commit install
 pytest tests/ -v
 ```
 
+#### Windows build troubleshooting
+
+If `pip install -e ".[dev]"` fails on Windows, work through this checklist before retrying:
+
+1. Install [Visual Studio Build Tools 2022](https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2022) with the `Desktop development with C++` workload.
+2. Upgrade packaging tools:
+   ```bash
+   python -m pip install --upgrade pip setuptools wheel
+   ```
+3. Confirm the MSVC compiler is on `PATH` by running `cl` from a Developer Command Prompt.
+4. Retry the editable install:
+   ```bash
+   pip install -e ".[dev]"
+   pre-commit install
+   pytest tests/ -v
+   ```
+
+If you want a quick wheel-build smoke test before running the full suite, use:
+
+```bash
+pip wheel . --no-deps -w dist/
+python tests/smoke_wheel_install.py --wheelhouse dist
+```
+
+Common symptoms:
+
+- `Microsoft Visual C++ 14.x is required`: install the Build Tools workload above, then reopen your shell.
+- `'cl' is not recognized`: use a Developer Command Prompt or repair the Build Tools installation.
+- `pip install -e ".[dev]"` succeeds but `pre-commit` is missing: rerun `python -m pip install -e ".[dev]"` after upgrading `pip`, `setuptools`, and `wheel`.
+- The wheel build passes but tests fail: rerun `pytest tests/ -v` and debug the failing test output separately from the build step.
+
+If you prefer a Linux-like toolchain on Windows, WSL is also supported.
+
 > **PR titles must follow [Conventional Commits](https://www.conventionalcommits.org/)** — `feat:`, `fix:`, `docs:`, `chore:`. Our release pipeline auto-generates changelogs from these.
 
 For GSSoC contributors, please read **[GSSOC_GUIDE.md](GSSOC_GUIDE.md)** before asking to be assigned. It explains issue claiming, contribution levels, review expectations, and what maintainers look for in a strong PR. If you want a quick onboarding refresher, see the [GSSoC FAQ](GSSOC_GUIDE.md#gssoc-faq).
@@ -1713,4 +1812,3 @@ arnio/
 <sub>Built with C++ and pybind11 · Licensed under MIT · Maintained by <a href="https://github.com/im-anishraj">@im-anishraj</a></sub>
 
 </div>
-

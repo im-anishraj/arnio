@@ -807,6 +807,56 @@ def test_identifier_numeric_cast_prevention():
     assert list(result["zip_code"]) == ["01234", "02345", "03456"]
 
 
+def test_profile_detects_near_constant_column():
+    frame = ar.from_pandas(
+        pd.DataFrame({"status": (["active"] * 95 + ["inactive"] * 5)})
+    )
+
+    report = ar.profile(frame)
+
+    assert "near_constant" in report.columns["status"].warnings
+    assert "constant" not in report.columns["status"].warnings
+
+
+def test_profile_constant_column_not_marked_near_constant():
+    frame = ar.from_pandas(pd.DataFrame({"status": ["active"] * 100}))
+
+    report = ar.profile(frame)
+
+    assert "constant" in report.columns["status"].warnings
+    assert "near_constant" not in report.columns["status"].warnings
+
+
+def test_profile_balanced_column_not_marked_near_constant():
+    frame = ar.from_pandas(
+        pd.DataFrame({"status": (["active"] * 50 + ["inactive"] * 50)})
+    )
+
+    report = ar.profile(frame)
+
+    assert "near_constant" not in report.columns["status"].warnings
+
+
+def test_profile_near_constant_ignores_nulls():
+    frame = ar.from_pandas(
+        pd.DataFrame({"status": (["active"] * 95 + ["inactive"] * 5 + [None] * 20)})
+    )
+
+    report = ar.profile(frame)
+
+    assert "near_constant" in report.columns["status"].warnings
+
+
+def test_profile_near_constant_threshold_boundary():
+    frame = ar.from_pandas(
+        pd.DataFrame({"status": (["active"] * 95 + ["inactive"] * 5)})
+    )
+
+    report = ar.profile(frame)
+
+    assert "near_constant" in report.columns["status"].warnings
+
+
 # ── string length statistics tests ───────────────────────────────────────────
 
 
@@ -989,6 +1039,48 @@ def test_report_to_markdown_escapes_pipe_characters_in_column_cells():
     assert "bad\\|name" in md
     assert "free\\|text" in md
     assert "contains \\| pipe" in md
+
+
+def test_report_to_markdown_escapes_newlines_in_cell_values():
+    """Newlines in column names or warnings must not break Markdown table rows."""
+    from arnio.quality import ColumnProfile, DataQualityReport
+
+    report = DataQualityReport(
+        row_count=2,
+        column_count=1,
+        memory_usage=128,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={
+            "col\nname": ColumnProfile(
+                name="col\nname",
+                dtype="string\r\nwith newline",
+                semantic_type="text\rwith CR",
+                row_count=2,
+                null_count=0,
+                null_ratio=0.0,
+                unique_count=2,
+                unique_ratio=1.0,
+                warnings=["warn\nwith newline", "warn\r\nwith CRLF"],
+            )
+        },
+        suggestions=[],
+    )
+
+    md = report.to_markdown()
+
+    # Newlines must be replaced with <br>
+    assert "<br>" in md
+    assert "col\nname" not in md
+    assert "warn\nwith newline" not in md
+    assert "warn\r\nwith CRLF" not in md
+    assert "string\r\nwith newline" not in md
+    assert "text\rwith CR" not in md
+
+    # col name and warning content should still appear, escaped
+    assert "col<br>name" in md
+    assert "warn<br>with newline" in md
+    assert "warn<br>with CRLF" in md
 
 
 def test_report_to_markdown_empty_sections():

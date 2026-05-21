@@ -21,6 +21,25 @@ class TestDropNulls:
         # Only row 2 has null name
         assert result.shape[0] == 3
 
+    def test_drop_nulls_empty_subset_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"name": ["Alice", None, "Charlie"]}))
+
+        with pytest.raises(ValueError, match="subset"):
+            ar.drop_nulls(frame, subset=[])
+
+    def test_drop_nulls_pipeline_empty_subset_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"name": ["Alice", None, "Charlie"]}))
+
+        with pytest.raises(ValueError, match="subset"):
+            ar.pipeline(frame, [("drop_nulls", {"subset": []})])
+
+    def test_drop_nulls_subset_none_still_works(self):
+        frame = ar.from_pandas(pd.DataFrame({"name": ["Alice", None, "Charlie"]}))
+
+        result = ar.drop_nulls(frame)
+
+        assert result.shape[0] == 2
+
 
 class TestKeepRowsWithNulls:
     def test_keeps_only_null_rows(self, csv_with_nulls):
@@ -194,6 +213,36 @@ class TestDropDuplicates:
         result = ar.drop_duplicates(frame, subset=["name"])
         assert result.shape[0] == 3
 
+    def test_drop_duplicates_empty_subset_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"id": [1, 2, 3], "name": ["a", "b", "c"]}))
+
+        with pytest.raises(ValueError, match="subset"):
+            ar.drop_duplicates(frame, subset=[])
+
+    def test_drop_duplicates_pipeline_empty_subset_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"id": [1, 2, 3], "name": ["a", "b", "c"]}))
+
+        with pytest.raises(ValueError, match="subset"):
+            ar.pipeline(frame, [("drop_duplicates", {"subset": []})])
+
+    def test_drop_duplicates_valid_subset_still_works(self):
+        frame = ar.from_pandas(
+            pd.DataFrame({"id": [1, 2, 3], "name": ["Alice", "Alice", "Bob"]})
+        )
+
+        result = ar.drop_duplicates(frame, subset=["name"])
+        df = ar.to_pandas(result)
+
+        assert result.shape[0] < frame.shape[0]
+        assert "name" in df.columns
+
+    def test_drop_duplicates_subset_none_still_works(self):
+        frame = ar.from_pandas(pd.DataFrame({"id": [1, 1, 2], "name": ["a", "a", "b"]}))
+
+        result = ar.drop_duplicates(frame)
+
+        assert result.shape[0] == 2
+
     def test_drop_dupes_regression_keep_true(self, csv_with_duplicates):
         frame = ar.read_csv(csv_with_duplicates)
 
@@ -222,6 +271,48 @@ class TestDropDuplicates:
         names = ar.to_pandas(result)["name"].tolist()
 
         assert names == expected_names
+
+    def test_drop_duplicates_type_collision_int_vs_string(self):
+        """int 1 and string '1' must NOT be treated as duplicates (fixes #33)."""
+        frame = ar.from_pandas(pd.DataFrame({"id": [1, 2], "val": [1, "1"]}))
+        result = ar.drop_duplicates(frame)
+        assert result.shape[0] == 2
+
+    def test_drop_duplicates_null_vs_empty_string(self):
+        """None and '' must NOT be treated as duplicates (fixes #33)."""
+        frame = ar.from_pandas(pd.DataFrame({"col1": [None, "", None]}))
+        result = ar.drop_duplicates(frame)
+        assert result.shape[0] == 2
+
+    def test_drop_duplicates_separator_injection_unit_sep(self):
+        """Rows whose values shift around the \x1f boundary must stay distinct (fixes #33).
+
+        With the old row_key (no length prefixing):
+          row 0: col1='a'      col2='b\x1fc'  -> key 'a\x1fb\x1fc\x1f'  (BUG: same as row 1)
+          row 1: col1='a\x1fb' col2='c'       -> key 'a\x1fb\x1fc\x1f'  (BUG: same as row 0)
+        The two rows are distinct but were incorrectly treated as duplicates.
+        """
+        frame = ar.from_pandas(
+            pd.DataFrame({"col1": ["a", "a\x1fb"], "col2": ["b\x1fc", "c"]})
+        )
+        result = ar.drop_duplicates(frame)
+        assert result.shape[0] == 2
+
+    def test_drop_duplicates_separator_injection_colon(self):
+        """Values containing ':' must not produce false duplicates (fixes #33)."""
+        frame = ar.from_pandas(
+            pd.DataFrame({"col1": ["a:b", "a"], "col2": ["c", "b:c"]})
+        )
+        result = ar.drop_duplicates(frame)
+        assert result.shape[0] == 2
+
+    def test_drop_duplicates_separator_injection_synthetic_prefix(self):
+        """Values that look like serialized prefixes must not collide (fixes #33)."""
+        frame = ar.from_pandas(
+            pd.DataFrame({"col1": ["S1:a", ""], "col2": ["b", "S1:ab"]})
+        )
+        result = ar.drop_duplicates(frame)
+        assert result.shape[0] == 2
 
 
 class TestDropColumns:
@@ -1113,7 +1204,9 @@ class TestRenameColumns:
     def test_rename_rejects_non_mapping(self, sample_csv):
         frame = ar.read_csv(sample_csv)
 
-        with pytest.raises(TypeError, match="mapping must be a mapping"):
+        with pytest.raises(
+            TypeError, match="mapping must be a mapping of string keys to strings"
+        ):
             ar.rename_columns(frame, [("name", "full_name")])
 
     def test_rename_rejects_non_string_target(self, sample_csv):
@@ -1256,7 +1349,9 @@ class TestCastTypes:
     def test_cast_rejects_non_mapping_with_clear_error(self, sample_csv, mapping):
         frame = ar.read_csv(sample_csv)
 
-        with pytest.raises(TypeError, match="mapping must be a mapping"):
+        with pytest.raises(
+            TypeError, match="mapping must be a mapping of string keys to strings"
+        ):
             ar.cast_types(frame, mapping)
 
     def test_cast_bool_rejects_unknown_strings(self):
@@ -1333,6 +1428,44 @@ class TestFilterRows:
             TypeError, match="filter_rows: cannot compare column 'name'"
         ):
             ar.filter_rows(df, "name", ">", 1)
+
+
+class TestMappingValidation:
+    def test_rename_columns_rejects_invalid_mapping_value_type(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(TypeError, match="mapping values must be non-empty strings"):
+            ar.rename_columns(frame, {"name": 123})
+
+    def test_replace_values_rejects_missing_column(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(KeyError, match="Column 'missing' not found"):
+            ar.replace_values(frame, {"Alice": "Alicia"}, column="missing")
+
+    def test_replace_values_rejects_non_mapping_input(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(TypeError, match="mapping must be a dict-like mapping"):
+            ar.replace_values(frame, [("Alice", "Alicia")])
+
+    def test_replace_values_rejects_empty_mapping(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(ValueError, match="mapping must not be empty"):
+            ar.replace_values(frame, {})
+
+    def test_rename_columns_rejects_non_mapping_input(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(TypeError, match="mapping must be a mapping"):
+            ar.rename_columns(frame, [("name", "full_name")])
+
+    def test_cast_types_rejects_non_mapping_input(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(TypeError, match="mapping must be a mapping"):
+            ar.cast_types(frame, [("age", "string")])
 
 
 class TestReplaceValues:
@@ -2170,3 +2303,69 @@ def test_fill_nulls_validation_lossy_and_non_finite():
         ar.pipeline(
             float_frame, [("fill_nulls", {"value": float("inf"), "subset": ["x"]})]
         )
+
+
+class TestSelectColumns:
+    def test_select_columns_keeps_requested_columns_and_preserves_order(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "id": [1, 2],
+                    "debug": ["x", "y"],
+                    "name": ["Alice", "Bob"],
+                    "flag": [True, False],
+                }
+            )
+        )
+
+        result = ar.select_columns(frame, ["name", "id"])
+        df = ar.to_pandas(result)
+
+        assert list(df.columns) == ["name", "id"]
+        assert list(df["name"]) == ["Alice", "Bob"]
+
+    def test_select_columns_rejects_missing_columns(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(ValueError, match="Unknown columns"):
+            ar.select_columns(frame, ["missing"])
+
+    def test_select_columns_rejects_string_input(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(
+            TypeError, match="columns must be a sequence of column names, not a string"
+        ):
+            ar.select_columns(frame, "age")
+
+    def test_select_columns_rejects_non_string_items(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(TypeError, match="All column names must be strings"):
+            ar.select_columns(frame, ["age", 1])
+
+    def test_select_columns_rejects_empty(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "id": [1, 2],
+                    "name": ["Alice", "Bob"],
+                }
+            )
+        )
+
+        with pytest.raises(ValueError, match="Column selection cannot be empty"):
+            ar.select_columns(frame, [])
+
+    def test_select_columns_rejects_duplicates(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "id": [1, 2],
+                    "name": ["Alice", "Bob"],
+                }
+            )
+        )
+
+        with pytest.raises(ValueError):
+            ar.select_columns(frame, ["id", "id"])

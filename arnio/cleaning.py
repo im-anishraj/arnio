@@ -87,18 +87,37 @@ def _validate_column_sequence(
     return normalized
 
 
+def _validate_mapping(
+    mapping: Mapping[Any, Any],
+    *,
+    argument_name: str,
+    allow_empty: bool = True,
+    non_mapping_message: str | None = None,
+) -> dict[Any, Any]:
+    if not isinstance(mapping, Mapping):
+        raise TypeError(non_mapping_message or f"{argument_name} must be a mapping")
+
+    normalized = dict(mapping)
+    if not normalized and not allow_empty:
+        raise ValueError(f"{argument_name} must not be empty")
+
+    return normalized
+
+
 def _validate_string_mapping(
     mapping: Mapping[str, str],
     *,
     argument_name: str,
     allow_empty: bool = True,
 ) -> dict[str, str]:
-    if not isinstance(mapping, Mapping):
-        raise TypeError(f"{argument_name} must be a mapping of string keys to strings")
-
-    normalized = dict(mapping)
-    if not normalized and not allow_empty:
-        raise ValueError(f"{argument_name} must not be empty")
+    normalized = _validate_mapping(
+        mapping,
+        argument_name=argument_name,
+        allow_empty=allow_empty,
+        non_mapping_message=(
+            f"{argument_name} must be a mapping of string keys to strings"
+        ),
+    )
 
     invalid_keys = [key for key in normalized if not isinstance(key, str)]
     if invalid_keys:
@@ -141,9 +160,14 @@ def drop_nulls(
     >>> clean = ar.drop_nulls(frame, subset=["age", "name"])
     """
     if subset is not None:
+        requested_columns = _validate_column_sequence(subset, argument_name="subset")
+        if len(requested_columns) == 0:
+            raise ValueError(
+                "drop_nulls: subset cannot be empty; pass subset=None to check all columns"
+            )
         validate_columns_exist(
             frame,
-            _validate_column_sequence(subset, argument_name="subset"),
+            requested_columns,
             operation="drop_nulls",
         )
     result = _drop_nulls(frame._frame, subset=subset)
@@ -260,6 +284,11 @@ def keep_rows_with_nulls(
     return from_pandas(result) if is_arframe else result
 
 
+def select_columns(frame: ArFrame, columns: Sequence[str]) -> ArFrame:
+    """Return a new frame containing only the requested columns."""
+    return frame.select_columns(columns)
+
+
 def fill_nulls(
     frame: ArFrame,
     value: Any,
@@ -326,9 +355,14 @@ def drop_duplicates(
     >>> unique = ar.drop_duplicates(frame, subset=["name"], keep="first")
     """
     if subset is not None:
+        requested_columns = _validate_column_sequence(subset, argument_name="subset")
+        if len(requested_columns) == 0:
+            raise ValueError(
+                "drop_duplicates: subset cannot be empty; pass subset=None to compare all columns"
+            )
         validate_columns_exist(
             frame,
-            _validate_column_sequence(subset, argument_name="subset"),
+            requested_columns,
             operation="drop_duplicates",
         )
     if keep is True:
@@ -1276,14 +1310,15 @@ def replace_values(frame, mapping, column=None):
 
     from .convert import from_pandas, to_pandas
 
-    if not isinstance(mapping, dict):
-        raise TypeError(
+    mapping = _validate_mapping(
+        mapping,
+        argument_name="mapping",
+        allow_empty=False,
+        non_mapping_message=(
             "mapping must be a dict-like mapping of {old_value: new_value}, "
             f"not {type(mapping).__name__}."
-        )
-    if not mapping:
-        raise ValueError("mapping must not be empty")
-
+        ),
+    )
     is_arframe = not isinstance(frame, pd.DataFrame)
     # Avoid mutating the caller's DataFrame in the direct pandas API path.
     df = to_pandas(frame) if is_arframe else frame.copy()

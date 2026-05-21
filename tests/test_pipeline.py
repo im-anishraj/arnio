@@ -363,6 +363,55 @@ class TestPipeline:
                 [("drop_columns", {"columns": ["missing"]})],
             )
 
+    def test_pipeline_select_columns(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        result = ar.pipeline(
+            frame,
+            [
+                ("select_columns", {"columns": ["email", "name"]}),
+            ],
+        )
+
+        assert result.columns == ["email", "name"]
+
+    def test_pipeline_select_columns_rejects_missing_columns(self, sample_csv):
+        import pytest
+
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(ValueError, match="Unknown columns"):
+            ar.pipeline(
+                frame,
+                [
+                    ("select_columns", {"columns": ["missing"]}),
+                ],
+            )
+
+    def test_pipeline_select_columns_reject_empty_columns(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(ValueError, match="Column selection cannot be empty"):
+            ar.pipeline(
+                frame,
+                [
+                    ("select_columns", {"columns": []}),
+                ],
+            )
+
+    def test_pipeline_select_columns_rejects_duplicates(self, sample_csv):
+        import pytest
+
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(ValueError, match="Duplicate column names are not allowed"):
+            ar.pipeline(
+                frame,
+                [
+                    ("select_columns", {"columns": ["name", "name"]}),
+                ],
+            )
+
     def test_pipeline_validate_columns_exist_rejects_missing_columns(self, sample_csv):
         import pytest
 
@@ -513,6 +562,81 @@ class TestPipeline:
         df = ar.to_pandas(result)
         assert "marker" in df.columns
         assert set(df["marker"]) == {"done"}
+
+    def test_pipeline_passes_context_to_opt_in_python_steps(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        seen = {}
+
+        def capture_context(df, context=None):
+            seen["context"] = context
+            df["step_seen"] = context.step_name
+            return df
+
+        ar.register_step("context_capture_step", capture_context)
+
+        result = ar.pipeline(
+            frame,
+            [
+                ("strip_whitespace",),
+                ("context_capture_step",),
+            ],
+            dry_run=True,
+        )
+
+        context = seen["context"]
+        assert isinstance(context, ar.PipelineContext)
+        assert context.step_name == "context_capture_step"
+        assert context.step_index == 1
+        assert context.total_steps == 2
+        assert context.dry_run is True
+        assert isinstance(result, ar.ArFrame)
+
+    def test_pipeline_does_not_require_context_for_existing_python_steps(
+        self, sample_csv
+    ):
+        frame = ar.read_csv(sample_csv)
+
+        def legacy_step(df, value="ok"):
+            df["marker"] = value
+            return df
+
+        ar.register_step("legacy_context_free_step", legacy_step)
+
+        result = ar.pipeline(
+            frame,
+            [
+                ("legacy_context_free_step", {"value": "done"}),
+            ],
+        )
+
+        df = ar.to_pandas(result)
+        assert set(df["marker"]) == {"done"}
+
+    def test_pipeline_preserves_explicit_context_kwarg_for_python_steps(
+        self, sample_csv
+    ):
+        frame = ar.read_csv(sample_csv)
+        seen = {}
+
+        def capture_context(df, context=None):
+            seen["context"] = context
+            df["context_marker"] = str(context)
+            return df
+
+        ar.register_step("explicit_context_step", capture_context)
+        explicit_context = {"source": "caller"}
+
+        result = ar.pipeline(
+            frame,
+            [
+                ("explicit_context_step", {"context": explicit_context}),
+            ],
+        )
+
+        df = ar.to_pandas(result)
+
+        assert seen["context"] is explicit_context
+        assert set(df["context_marker"]) == {str(explicit_context)}
 
     def test_concurrent_step_registration(self, sample_csv):
         frame = ar.read_csv(sample_csv)

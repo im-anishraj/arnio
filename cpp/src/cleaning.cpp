@@ -2,12 +2,14 @@
 
 #include <algorithm>
 #include <cctype>
+#include <charconv>
 #include <cmath>
 #include <cstdio>
 #include <functional>
 #include <limits>
 #include <sstream>
 #include <stdexcept>
+#include <system_error>
 #include <unordered_set>
 
 namespace arnio {
@@ -26,27 +28,6 @@ static std::vector<size_t> resolve_subset(const Frame& frame,
         }
     }
     return indices;
-}
-
-// Helper: build a row hash for deduplication
-static std::string row_key(const Frame& frame, size_t row, const std::vector<size_t>& cols) {
-    std::ostringstream oss;
-    for (size_t ci : cols) {
-        auto cell = frame.column(ci).at(row);
-        if (std::holds_alternative<std::monostate>(cell)) {
-            oss << "\x00";
-        } else if (std::holds_alternative<std::string>(cell)) {
-            oss << std::get<std::string>(cell);
-        } else if (std::holds_alternative<int64_t>(cell)) {
-            oss << std::get<int64_t>(cell);
-        } else if (std::holds_alternative<double>(cell)) {
-            oss << std::get<double>(cell);
-        } else if (std::holds_alternative<bool>(cell)) {
-            oss << (std::get<bool>(cell) ? "T" : "F");
-        }
-        oss << "\x1F";  // unit separator
-    }
-    return oss.str();
 }
 
 static std::string cell_to_string(const CellValue& cell) {
@@ -93,6 +74,43 @@ static std::string combine_cell_to_string(const CellValue& cell) {
     return "";
 }
 
+// Serialize one CellValue with a type tag and length prefix so that
+// different types with the same string representation (e.g. int 1 vs
+// string "1") and values containing the unit separator (\x1F) never
+// collide in row_key().  Format:
+//   null   -> N
+//   string -> S<len>:<bytes>
+//   int64  -> I<len>:<digits>
+//   double -> F<len>:<digits>  (using combine_cell_to_string for portability)
+//   bool   -> BT or BF
+static void serialize_cell(std::ostream& os, const CellValue& cell) {
+    if (std::holds_alternative<std::monostate>(cell)) {
+        os << "N";
+    } else if (std::holds_alternative<std::string>(cell)) {
+        const std::string& s = std::get<std::string>(cell);
+        os << "S" << s.size() << ":" << s;
+    } else if (std::holds_alternative<int64_t>(cell)) {
+        std::string s = std::to_string(std::get<int64_t>(cell));
+        os << "I" << s.size() << ":" << s;
+    } else if (std::holds_alternative<double>(cell)) {
+        std::string s = combine_cell_to_string(cell);
+        os << "F" << s.size() << ":" << s;
+    } else if (std::holds_alternative<bool>(cell)) {
+        os << (std::get<bool>(cell) ? "BT" : "BF");
+    }
+}
+
+// Helper: build a row hash for deduplication
+static std::string row_key(const Frame& frame, size_t row, const std::vector<size_t>& cols) {
+    std::ostringstream oss;
+    for (size_t ci : cols) {
+        auto cell = frame.column(ci).at(row);
+        serialize_cell(oss, cell);
+        oss << "\x1F";  // unit separator
+    }
+    return oss.str();
+}
+
 static CellValue coerce_value(const CellValue& value, DType target) {
     if (std::holds_alternative<std::monostate>(value)) {
         return std::monostate{};
@@ -118,11 +136,14 @@ static CellValue coerce_value(const CellValue& value, DType target) {
         }
         if (std::holds_alternative<std::string>(value)) {
             const auto& s = std::get<std::string>(value);
-            try {
-                size_t pos = 0;
-                int64_t parsed = std::stoll(s, &pos);
-                if (pos == s.size()) return parsed;
-            } catch (...) {
+            int64_t parsed = 0;
+            const char* start = s.data();
+            const char* end = s.data() + s.size();
+            while (start < end && std::isspace(static_cast<unsigned char>(*start))) ++start;
+            if (start < end && *start == '+') ++start;
+            if (start < end) {
+                auto [ptr, ec] = std::from_chars(start, end, parsed);
+                if (ec == std::errc() && ptr == end) return parsed;
             }
         }
     }
@@ -191,6 +212,10 @@ static Frame select_rows(const Frame& frame, const std::vector<size_t>& row_indi
 }
 
 Frame drop_nulls(const Frame& frame, const std::optional<std::vector<std::string>>& subset) {
+    if (subset.has_value() && subset->empty()) {
+        throw std::invalid_argument("drop_nulls subset cannot be empty");
+    }
+
     auto col_indices = resolve_subset(frame, subset);
     std::vector<size_t> keep_rows;
     for (size_t r = 0; r < frame.num_rows(); ++r) {
@@ -235,6 +260,10 @@ Frame fill_nulls(const Frame& frame, const CellValue& value,
 
 Frame drop_duplicates(const Frame& frame, const std::optional<std::vector<std::string>>& subset,
                       const std::string& keep) {
+    if (subset.has_value() && subset->empty()) {
+        throw std::invalid_argument("drop_duplicates subset cannot be empty");
+    }
+
     auto col_indices = resolve_subset(frame, subset);
 
     if (keep == "first") {
@@ -460,22 +489,26 @@ Frame cast_types(const Frame& frame, const std::unordered_map<std::string, std::
                 case DType::STRING:
                     col.push_back(str_val);
                     break;
-                case DType::INT64:
-                    try {
-                        size_t pos = 0;
-                        int64_t parsed = std::stoll(str_val, &pos);
-                        if (pos != str_val.size()) {
-                            throw cast_error(src.name(), str_val, it->second, r);
-                        }
+                case DType::INT64: {
+                    int64_t parsed = 0;
+                    const char* st = str_val.data();
+                    const char* en = str_val.data() + str_val.size();
+                    while (st < en && std::isspace(static_cast<unsigned char>(*st))) ++st;
+                    if (st < en && *st == '+') ++st;
+                    bool ok = false;
+                    if (st < en) {
+                        auto [ptr, ec] = std::from_chars(st, en, parsed);
+                        ok = (ec == std::errc() && ptr == en);
+                    }
+                    if (ok) {
                         col.push_back(parsed);
-                    } catch (...) {
-                        if (coerce_invalid) {
-                            col.push_null();
-                        } else {
-                            throw cast_error(src.name(), str_val, it->second, r);
-                        }
+                    } else if (coerce_invalid) {
+                        col.push_null();
+                    } else {
+                        throw cast_error(src.name(), str_val, it->second, r);
                     }
                     break;
+                }
                 case DType::FLOAT64:
                     try {
                         size_t pos = 0;

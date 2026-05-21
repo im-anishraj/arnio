@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cerrno>
+#include <charconv>
 #include <cmath>
 #include <cstddef>
 #include <cstdlib>
@@ -11,6 +12,7 @@
 #include <locale>
 #include <sstream>
 #include <stdexcept>
+#include <system_error>
 #include <unordered_set>
 
 namespace arnio {
@@ -231,15 +233,12 @@ inline bool is_special_float_token(const std::string& lower) {
 
 inline bool try_parse_int64(const std::string& cleaned, int64_t& out) {
     if (cleaned.empty()) return false;
-    std::istringstream iss(cleaned);
-    iss.imbue(std::locale::classic());
-    long long val = 0;
-    iss >> val;
-    if (iss.fail() || !iss.eof()) return false;
-    if (val < std::numeric_limits<int64_t>::min() || val > std::numeric_limits<int64_t>::max())
-        return false;
-    out = static_cast<int64_t>(val);
-    return true;
+    const char* start = cleaned.data();
+    const char* end = cleaned.data() + cleaned.size();
+    if (*start == '+') ++start;
+    if (start >= end) return false;
+    auto [ptr, ec] = std::from_chars(start, end, out);
+    return ec == std::errc() && ptr == end;
 }
 
 inline bool try_parse_float64(const std::string& cleaned, double& out) {
@@ -255,6 +254,16 @@ inline bool try_parse_float64(const std::string& cleaned, double& out) {
         }
         return true;
     }
+
+    // Some standard libraries parse hex-like tokens (e.g. "0xFF") as floating
+    // values, which would incorrectly classify hex integers as FLOAT64.
+    // Keep behavior consistent across platforms by rejecting 0x-prefixed tokens.
+    if ((lower.size() >= 2 && lower[0] == '0' && lower[1] == 'x') ||
+        (lower.size() >= 3 && (lower[0] == '+' || lower[0] == '-') && lower[1] == '0' &&
+         lower[2] == 'x')) {
+        return false;
+    }
+
     std::istringstream iss(cleaned);
     iss.imbue(std::locale::classic());
     double val = 0.0;
@@ -436,6 +445,15 @@ Frame CsvReader::read(const std::string& path) const {
 
     size_t record_number = 0;
 
+    if (config.skip_rows.has_value()) {
+        size_t to_skip = config.skip_rows.value();
+        size_t skipped = 0;
+        while (skipped < to_skip && read_record(file, line)) {
+            ++record_number;
+            ++skipped;
+        }
+    }
+
     // Read header
     if (config.has_header && read_record(file, line)) {
         ++record_number;
@@ -468,23 +486,11 @@ Frame CsvReader::read(const std::string& path) const {
             expected_cols = fields.size();
         }
 
-        if (expected_cols.has_value() && fields.size() > expected_cols.value()) {
-            bool trailing_empty_only = true;
-
-            for (size_t i = expected_cols.value(); i < fields.size(); ++i) {
-                if (!fields[i].empty()) {
-                    trailing_empty_only = false;
-                    break;
-                }
+        if (expected_cols.has_value()) {
+            const size_t expected = expected_cols.value();
+            if (fields.size() > expected || config.mode == "strict") {
+                validate_row_width(record_number, expected, fields.size());
             }
-
-            if (trailing_empty_only) {
-                fields.resize(expected_cols.value());
-            }
-        }
-
-        if (config.mode == "strict" && expected_cols.has_value()) {
-            validate_row_width(record_number, expected_cols.value(), fields.size());
         }
 
         if (expected_cols.has_value()) {
@@ -616,20 +622,6 @@ std::vector<std::pair<std::string, std::string>> CsvReader::scan_schema(
 
         if (line.empty()) continue;
         auto fields = parser_.parse_line(line);
-        if (fields.size() > num_cols) {
-            bool trailing_empty_only = true;
-
-            for (size_t i = num_cols; i < fields.size(); ++i) {
-                if (!fields[i].empty()) {
-                    trailing_empty_only = false;
-                    break;
-                }
-            }
-
-            if (trailing_empty_only) {
-                fields.resize(num_cols);
-            }
-        }
         validate_row_width(sample_count + 2, num_cols, fields.size());
         for (size_t i = 0; i < num_cols && i < fields.size(); ++i) {
             col_types[i] = CsvParser::promote_type(col_types[i], parser_.infer_type(fields[i]));
@@ -688,23 +680,11 @@ bool CsvChunkReader::read_one_data_row(std::vector<std::string>& fields_out) {
             expected_cols_ = fields_out.size();
         }
 
-        if (expected_cols_.has_value() && fields_out.size() > expected_cols_.value()) {
-            bool trailing_empty_only = true;
-
-            for (size_t i = expected_cols_.value(); i < fields_out.size(); ++i) {
-                if (!fields_out[i].empty()) {
-                    trailing_empty_only = false;
-                    break;
-                }
+        if (expected_cols_.has_value()) {
+            const size_t expected = expected_cols_.value();
+            if (fields_out.size() > expected || config.mode == "strict") {
+                validate_row_width(record_number_, expected, fields_out.size());
             }
-
-            if (trailing_empty_only) {
-                fields_out.resize(expected_cols_.value());
-            }
-        }
-
-        if (config.mode == "strict" && expected_cols_.has_value()) {
-            validate_row_width(record_number_, expected_cols_.value(), fields_out.size());
         }
 
         if (expected_cols_.has_value()) {
