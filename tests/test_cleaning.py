@@ -2533,6 +2533,7 @@ class TestRoundNumericColumns:
             ar.round_numeric_columns(frame, decimals=True)
 
 <<<<<<< HEAD
+<<<<<<< HEAD
     def test_round_numeric_columns_pandas_input_returns_dataframe(self):
         df = pd.DataFrame({"a": [1.234, 5.678], "label": ["x", "y"]})
 
@@ -2546,6 +2547,9 @@ class TestRoundNumericColumns:
 
 =======
 >>>>>>> 39a9555 (test: add mixed subset regression coverage)
+=======
+
+>>>>>>> 576bb00 (test: format round_numeric_columns regression tests)
 class TestCombineColumns:
     def test_combines_columns_with_separator(self):
         import pandas as pd
