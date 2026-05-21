@@ -84,6 +84,18 @@ class TestKeepRowsWithNulls:
         )
         assert result.shape[0] == 1
 
+    def test_invalid_subset_string(self, csv_with_nulls):
+        """keep_rows_with_nulls raises TypeError when subset is a string."""
+        frame = ar.read_csv(csv_with_nulls)
+        with pytest.raises(TypeError, match="must be a list"):
+            ar.keep_rows_with_nulls(frame, subset="age")
+
+    def test_missing_column_raises(self, csv_with_nulls):
+        """keep_rows_with_nulls raises KeyError when subset column is missing."""
+        frame = ar.read_csv(csv_with_nulls)
+        with pytest.raises(KeyError, match="nonexistent"):
+            ar.keep_rows_with_nulls(frame, subset=["nonexistent"])
+
 
 class TestFillNulls:
     def test_fill_with_string(self, csv_with_nulls):
