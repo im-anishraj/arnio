@@ -1,5 +1,6 @@
 """Tests for CSV reading functionality."""
 
+import builtins
 import io
 import re
 from pathlib import Path
@@ -629,6 +630,50 @@ class TestReadCsv:
         with pytest.raises(ar.CsvReadError):
             ar.read_csv(str(tmp_path / "nonexistent.csv"))
 
+    def test_read_csv_permission_error_includes_path_and_os_reason(
+        self, tmp_path, monkeypatch
+    ):
+        csv_path = tmp_path / "permission.csv"
+        csv_path.write_text("a,b\n1,2\n")
+        csv_path_str = str(csv_path)
+        real_open = builtins.open
+
+        def blocked_open(*args, **kwargs):
+            if args[0] == csv_path_str and args[1] == "rb":
+                raise PermissionError(13, "Access is denied")
+            return real_open(*args, **kwargs)
+
+        monkeypatch.setattr(builtins, "open", blocked_open)
+
+        with pytest.raises(
+            CsvReadError,
+            match="Could not access CSV file .+: Access is denied",
+        ) as exc_info:
+            ar.read_csv(csv_path)
+        assert repr(str(csv_path)) in str(exc_info.value)
+
+    def test_read_csv_non_utf8_permission_error_includes_path_and_os_reason(
+        self, tmp_path, monkeypatch
+    ):
+        csv_path = tmp_path / "permission-latin1.csv"
+        csv_path.write_bytes("name\nAndr\xe9\n".encode("latin-1"))
+        csv_path_str = str(csv_path)
+        real_open = builtins.open
+
+        def blocked_open(*args, **kwargs):
+            if args[0] == csv_path_str and kwargs.get("encoding") == "latin-1":
+                raise PermissionError(13, "Access is denied")
+            return real_open(*args, **kwargs)
+
+        monkeypatch.setattr(builtins, "open", blocked_open)
+
+        with pytest.raises(
+            CsvReadError,
+            match="Could not access CSV file .+: Access is denied",
+        ) as exc_info:
+            ar.read_csv(csv_path, encoding="latin-1")
+        assert repr(str(csv_path)) in str(exc_info.value)
+
     def test_null_values_default_preserves_empty_only_behavior(self, tmp_path):
         csv_path = tmp_path / "default_nulls.csv"
         csv_path.write_text("a,b\n,1\nNA,2\n")
@@ -913,6 +958,28 @@ class TestScanCsv:
     def test_scan_missing_file_passthrough(self, tmp_path):
         with pytest.raises(ar.CsvReadError):
             ar.scan_csv(str(tmp_path / "nonexistent.csv"))
+
+    def test_scan_csv_permission_error_includes_path_and_os_reason(
+        self, tmp_path, monkeypatch
+    ):
+        csv_path = tmp_path / "scan-permission.csv"
+        csv_path.write_text("a,b\n1,2\n")
+        csv_path_str = str(csv_path)
+        real_open = builtins.open
+
+        def blocked_open(*args, **kwargs):
+            if args[0] == csv_path_str and args[1] == "rb":
+                raise PermissionError(13, "Access is denied")
+            return real_open(*args, **kwargs)
+
+        monkeypatch.setattr(builtins, "open", blocked_open)
+
+        with pytest.raises(
+            CsvReadError,
+            match="Could not access CSV file .+: Access is denied",
+        ) as exc_info:
+            ar.scan_csv(csv_path)
+        assert repr(str(csv_path)) in str(exc_info.value)
 
     def test_scan_non_standard_extension_accepted(self, tmp_path):
         """Non-standard extensions no longer raise ValueError in scan_csv (fixes #34)."""
