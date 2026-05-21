@@ -47,7 +47,7 @@ from .exceptions import (
     TypeCastError,
     UnknownStepError,
 )
-from .frame import ArFrame
+from .frame import ArFrame, ColumnSummary
 from .integrations import ArnioPandasAccessor, register_duckdb
 from .io import (
     read_csv,
@@ -108,6 +108,7 @@ from .schema import (
 __all__ = [
     # Core class
     "ArFrame",
+    "ColumnSummary",
     # I/O
     "read_csv",
     "read_csv_chunked",

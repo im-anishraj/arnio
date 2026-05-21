@@ -13,6 +13,42 @@ _VALID_DTYPES: frozenset[str] = frozenset(
 )
 
 
+class ColumnSummary:
+    """Schema summary for a single column.
+
+    Attributes
+    ----------
+    name : str
+        Column name.
+    dtype : str
+        Inferred dtype string (e.g. ``"int64"``, ``"string"``).
+    nullable : bool
+        True if the column contains at least one null value, False otherwise.
+    """
+
+    __slots__ = ("name", "dtype", "nullable")
+
+    def __init__(self, name: str, dtype: str, nullable: bool) -> None:
+        self.name = name
+        self.dtype = dtype
+        self.nullable = nullable
+
+    def __repr__(self) -> str:
+        return (
+            f"ColumnSummary(name={self.name!r}, dtype={self.dtype!r},"
+            f" nullable={self.nullable})"
+        )
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, ColumnSummary):
+            return NotImplemented
+        return (
+            self.name == other.name
+            and self.dtype == other.dtype
+            and self.nullable == other.nullable
+        )
+
+
 class ArFrame:
     """Lightweight columnar data container backed by C++."""
 
@@ -56,6 +92,42 @@ class ArFrame:
             Mapping of column names to their data types.
         """
         return self._frame.dtypes()
+
+    @property
+    def schema_summary(self) -> list[ColumnSummary]:
+        """Column names, dtypes, and nullability in one place.
+
+        Inspects the C++ frame directly — no pandas conversion triggered.
+
+        Returns
+        -------
+        list[ColumnSummary]
+            One :class:`ColumnSummary` per column, in original column order.
+            Each entry has three attributes:
+
+            * ``name`` – column name (``str``)
+            * ``dtype`` – inferred dtype string, e.g. ``"int64"`` (``str``)
+            * ``nullable`` – ``True`` if the column contains at least one null
+              value, ``False`` otherwise (``bool``)
+
+        Examples
+        --------
+        >>> frame = ar.read_csv("data.csv")
+        >>> for col in frame.schema_summary:
+        ...     print(col.name, col.dtype, col.nullable)
+        id int64 False
+        email string True
+        score float64 True
+        """
+        col_dtypes = self.dtypes
+        result: list[ColumnSummary] = []
+        for i, name in enumerate(self.columns):
+            mask = self._frame.column_by_index(i).get_null_mask()
+            nullable = bool(mask.any())
+            result.append(
+                ColumnSummary(name=name, dtype=col_dtypes[name], nullable=nullable)
+            )
+        return result
 
     @property
     def is_empty(self) -> bool:
