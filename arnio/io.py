@@ -364,10 +364,22 @@ def read_csv(
         Single non-alphanumeric character used as a thousands separator
         during numeric parsing.
 
+
+
         Values containing delimiter characters must still be quoted
         properly in the CSV input. For example, when using a comma
         delimiter, the value "1,234" must be quoted, while unquoted
         1,234 is interpreted as two separate fields.
+
+    dtype : dict[str, str], optional
+        Explicit column dtype mapping. Specified columns skip automatic
+        type inference and use the requested dtype directly.
+
+        Supported dtypes:
+        - "string"
+        - "int64"
+        - "float64"
+        - "bool"
 
     mode : {"strict", "permissive"}, default "strict"
         Controls malformed row handling.
@@ -502,15 +514,6 @@ def read_csv_chunked(
     null_values : list[str], optional
         Strings treated as null values.
 
-    dtype : dict[str, str], optional
-        Explicit column dtype mapping. Specified columns skip automatic
-        type inference and use the requested dtype directly.
-
-        Supported dtypes:
-        - "string"
-        - "int64"
-        - "float64"
-        - "bool"
 
 
     mode : {"strict", "permissive"}, default "strict"
