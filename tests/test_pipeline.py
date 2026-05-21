@@ -317,6 +317,39 @@ class TestPipeline:
         assert result.dtypes["years"] == "float64"
         assert "age" not in result.columns
 
+    def test_pipeline_shorthand_with_column_named_mapping_cast_types(self):
+        import pandas as pd
+
+        import arnio as ar
+
+        frame = ar.from_pandas(pd.DataFrame({"mapping": ["1", "2"]}))
+
+        result = ar.pipeline(
+            frame,
+            [
+                ("cast_types", {"mapping": "int64"}),
+            ],
+        )
+
+        assert result.dtypes["mapping"] == "int64"
+
+    def test_pipeline_shorthand_with_column_named_mapping_rename_columns(self):
+        import pandas as pd
+
+        import arnio as ar
+
+        frame = ar.from_pandas(pd.DataFrame({"mapping": [1, 2]}))
+
+        result = ar.pipeline(
+            frame,
+            [
+                ("rename_columns", {"mapping": "new_mapping_col"}),
+            ],
+        )
+
+        assert "new_mapping_col" in result.columns
+        assert "mapping" not in result.columns
+
     def test_pipeline_validate_columns_exist(self, sample_csv):
         frame = ar.read_csv(sample_csv)
         result = ar.pipeline(

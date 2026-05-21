@@ -348,13 +348,17 @@ def pipeline(
             rows_before = result.shape[0]
 
             started_at = perf_counter()
-            if name == "rename_columns" and "mapping" not in kwargs:
+            if name == "rename_columns" and (
+                "mapping" not in kwargs or not isinstance(kwargs["mapping"], dict)
+            ):
                 step_result = fn(result, mapping=kwargs)
 
                 if not dry_run:
                     result = step_result
 
-            elif name == "cast_types" and "mapping" not in kwargs:
+            elif name == "cast_types" and (
+                "mapping" not in kwargs or not isinstance(kwargs["mapping"], dict)
+            ):
                 step_result = fn(result, kwargs)
 
                 if not dry_run:
