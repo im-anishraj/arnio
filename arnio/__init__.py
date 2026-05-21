@@ -105,6 +105,8 @@ from .schema import (
     validate,
 )
 
+from_records = ArFrame.from_records
+
 __all__ = [
     # Core class
     "ArFrame",
@@ -144,6 +146,7 @@ __all__ = [
     # Conversion
     "to_pandas",
     "from_pandas",
+    "from_records",
     # Integrations
     "ArnioPandasAccessor",
     "register_duckdb",

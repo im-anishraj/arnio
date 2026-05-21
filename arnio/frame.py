@@ -22,6 +22,89 @@ class ArFrame:
         self._frame = cpp_frame
         self._attrs: dict = attrs if attrs is not None else {}
 
+    @classmethod
+    def from_records(
+        cls,
+        records: list,
+        columns: list[str] | None = None,
+    ) -> ArFrame:
+        """Build an ArFrame from a list of records.
+
+        Parameters
+        ----------
+        records : list
+            A non-empty list of dicts, lists, or tuples.
+        columns : list[str] or None
+            Column names. Required when records are lists or tuples.
+            Optional for dicts — inferred from keys if not given.
+        Returns
+        -------
+        ArFrame
+
+        Raises
+        ------
+        TypeError
+            If records is not a list, elements are mixed types, or a
+            cell value is a list or dict.
+        ValueError
+            If records is empty, columns is missing for sequence records,
+            or a row's length doesn't match columns.
+        """
+        import pandas as pd
+
+        from .convert import from_pandas
+
+        if not isinstance(records, list):
+            raise TypeError(f"records must be a list, got {type(records).__name__!r}")
+
+        if len(records) == 0:
+            raise ValueError("records must be non-empty")
+
+        first = records[0]
+
+        if isinstance(first, dict):
+            for i, row in enumerate(records):
+                if not isinstance(row, dict):
+                    raise TypeError(
+                        f"all records must be dicts, but row {i} is {type(row).__name__!r}"
+                    )
+                for col, val in row.items():
+                    if isinstance(val, (list, dict)):
+                        raise TypeError(
+                            f"nested values are not supported; "
+                            f"column {col!r} at row {i} contains a {type(val).__name__!r}"
+                        )
+            df = pd.DataFrame.from_records(records, columns=columns)
+
+        elif isinstance(first, (list, tuple)):
+            if columns is None:
+                raise ValueError(
+                    "columns must be provided when records are lists or tuples"
+                )
+            for i, row in enumerate(records):
+                if not isinstance(row, (list, tuple)):
+                    raise TypeError(
+                        f"all records must be the same type, but row {i} is {type(row).__name__!r}"
+                    )
+                if len(row) != len(columns):
+                    raise ValueError(
+                        f"row {i} has {len(row)} value(s) but {len(columns)} column(s) were provided"
+                    )
+                for j, val in enumerate(row):
+                    if isinstance(val, (list, dict)):
+                        raise TypeError(
+                            f"nested values are not supported; "
+                            f"column {columns[j]!r} at row {i} contains a {type(val).__name__!r}"
+                        )
+            df = pd.DataFrame.from_records(records, columns=columns)
+
+        else:
+            raise TypeError(
+                f"records must contain dicts, lists, or tuples, got {type(first).__name__!r}"
+            )
+
+        return from_pandas(df)
+
     # --- Properties ---
 
     @property
