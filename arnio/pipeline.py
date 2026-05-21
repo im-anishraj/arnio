@@ -32,6 +32,7 @@ _STEP_REGISTRY: dict[str, Callable] = {
     "validate_columns_exist": cleaning.validate_columns_exist,
     "drop_duplicates": cleaning.drop_duplicates,
     "drop_constant_columns": cleaning.drop_constant_columns,
+    "drop_empty_columns": cleaning.drop_empty_columns,
     "clip_numeric": cleaning.clip_numeric,
     "strip_whitespace": cleaning.strip_whitespace,
     "parse_bool_strings": cleaning.parse_bool_strings,

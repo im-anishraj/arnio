@@ -458,6 +458,57 @@ def drop_constant_columns(frame: ArFrame) -> ArFrame:
     return from_pandas(df.drop(columns=constant_columns))
 
 
+def drop_empty_columns(frame: ArFrame) -> ArFrame:
+    """Remove columns whose values are entirely null or empty strings.
+
+    String values containing only whitespace are treated as empty.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input data frame.
+
+    Returns
+    -------
+    ArFrame
+        New frame without fully empty columns.
+
+    Examples
+    --------
+    >>> frame = ar.read_csv("data.csv")
+    >>> reduced = ar.drop_empty_columns(frame)
+    """
+    from .convert import to_pandas
+
+    df = to_pandas(frame)
+    empty_columns: list[str] = []
+    for column in df.columns:
+        series = df[column]
+        is_empty = series.isna() | (
+            series.map(lambda value: isinstance(value, str) and value.strip() == "")
+        )
+        if bool(is_empty.all()):
+            empty_columns.append(column)
+
+    remaining_columns = [
+        column for column in frame.columns if column not in empty_columns
+    ]
+    attrs = copy.deepcopy(frame._attrs) if frame._attrs is not None else None
+    if remaining_columns:
+        columns_data: dict[str, list[object]] = {}
+        dtype_hints: dict[str, _DType] = {}
+        for column in remaining_columns:
+            cpp_column = frame._frame.column_by_name(column)
+            columns_data[column] = cpp_column.to_python_list()
+            dtype_hints[column] = cpp_column.dtype()
+        return ArFrame(_Frame.from_dict(columns_data, dtype_hints), attrs=attrs)
+
+    try:
+        return ArFrame(_Frame.from_dict({}, {}, frame.shape[0]), attrs=attrs)
+    except TypeError:
+        return ArFrame(_Frame(), attrs=attrs)
+
+
 def clip_numeric(
     frame: ArFrame,
     *,
