@@ -617,6 +617,7 @@ class TestPipeline:
                 ar.from_pandas(pd.DataFrame({"a": [1]})),
                 [("temporary_step",)],
             )
+
     def test_pipeline_passes_context_to_opt_in_python_steps(self, sample_csv):
         frame = ar.read_csv(sample_csv)
         seen = {}
