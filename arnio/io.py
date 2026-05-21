@@ -141,7 +141,7 @@ def read_csv(
             escaped = content.count('""')
             if (quote_count - escaped * 2) % 2 != 0:
                 raise CsvReadError(
-                    f"CSV file contains an unterminated quoted record: {path!r}"
+                    f"Unterminated quoted CSV record: {path!r}"
                 )
         except (FileNotFoundError, OSError):
             pass
@@ -243,12 +243,10 @@ def scan_csv(
     reader = _CsvReader(config)
     try:
         with _utf8_csv_path(path, encoding) as native_path:
-            cpp_frame = reader.read(native_path)
+            return reader.scan_schema(native_path)
     except ValueError:
         raise
     except CsvReadError:
         raise
-    except RuntimeError as e:
-        raise CsvReadError(str(e)) from e
     except Exception as e:
         raise CsvReadError(str(e)) from e
