@@ -230,6 +230,7 @@ PYBIND11_MODULE(_arnio_cpp, m) {
         .def(py::init<>())
         .def_readwrite("delimiter", &CsvConfig::delimiter)
         .def_readwrite("has_header", &CsvConfig::has_header)
+        .def_readwrite("dtype", &CsvConfig::dtype)
         .def_readwrite("usecols", &CsvConfig::usecols)
         .def_readwrite("nrows", &CsvConfig::nrows)
         .def_readwrite("skip_rows", &CsvConfig::skip_rows)

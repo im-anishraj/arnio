@@ -530,11 +530,36 @@ Frame CsvReader::read(const std::string& path) const {
             col_indices.push_back(i);
         }
     }
+    if (config.dtype.has_value()) {
+        for (const auto& [column_name, dtype_name] : config.dtype.value()) {
+            auto header_it = std::find(header.begin(), header.end(), column_name);
 
+            if (header_it == header.end()) {
+                throw std::runtime_error("Column not found in dtype mapping: " + column_name);
+            }
+
+            size_t column_index = static_cast<size_t>(std::distance(header.begin(), header_it));
+
+            bool selected = std::find(col_indices.begin(), col_indices.end(), column_index) !=
+                            col_indices.end();
+
+            if (!selected) {
+                throw std::runtime_error("dtype specified for non-selected column: " + column_name);
+            }
+        }
+    }
     // Infer types (first pass)
     std::vector<DType> col_types(num_cols, DType::NULL_TYPE);
-    for (const auto& row : raw_data) {
-        for (size_t ci : col_indices) {
+
+    for (size_t ci : col_indices) {
+        const std::string& column_name = header[ci];
+
+        if (config.dtype.has_value() && config.dtype->count(column_name)) {
+            col_types[ci] = string_to_dtype(config.dtype->at(column_name));
+            continue;
+        }
+
+        for (const auto& row : raw_data) {
             if (ci < row.size()) {
                 DType inferred = parser_.infer_type(row[ci]);
                 col_types[ci] = CsvParser::promote_type(col_types[ci], inferred);

@@ -127,6 +127,22 @@ class TestToPandas:
 
 
 class TestFromPandas:
+    def test_column_order_preserved_with_non_alphabetical_mixed_dtypes(self):
+        df = pd.DataFrame(
+            {
+                "z_name": ["Alice", "Bob"],
+                "a_score": [95.5, 88.0],
+                "m_active": [True, False],
+                "b_id": [1, 2],
+            }
+        )
+
+        frame = ar.from_pandas(df)
+        result = ar.to_pandas(frame)
+
+        assert frame.columns == ["z_name", "a_score", "m_active", "b_id"]
+        assert list(result.columns) == ["z_name", "a_score", "m_active", "b_id"]
+
     def test_basic_roundtrip(self, sample_csv):
         frame = ar.read_csv(sample_csv)
         df = ar.to_pandas(frame)

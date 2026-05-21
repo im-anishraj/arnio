@@ -15,6 +15,138 @@ MESSY_CSV = str(Path(__file__).parent / "fixtures" / "messy_sales_data.csv")
 
 
 class TestReadCsv:
+    def test_read_csv_dtype_override_string(self, tmp_path):
+        path = tmp_path / "zip_codes.csv"
+        path.write_text("zip,quantity\n" "07001,5\n" "08002,10\n")
+
+        frame = ar.read_csv(
+            path,
+            dtype={"zip": "string"},
+        )
+
+        pdf = ar.to_pandas(frame)
+
+        assert frame.dtypes["zip"] == "string"
+        assert pdf["zip"].tolist() == ["07001", "08002"]
+
+    def test_read_csv_dtype_mixed_inference(self, tmp_path):
+        path = tmp_path / "mixed_types.csv"
+        path.write_text("zip,price\n" "07001,12.5\n" "08002,20.0\n")
+
+        frame = ar.read_csv(
+            path,
+            dtype={"zip": "string"},
+        )
+
+        assert frame.dtypes["zip"] == "string"
+        assert frame.dtypes["price"] == "float64"
+
+    def test_read_csv_dtype_rejects_non_string_mapping_entries(self, tmp_path):
+        path = tmp_path / "bad_dtype_mapping.csv"
+        path.write_text("age\n25\n")
+
+        with pytest.raises(TypeError, match="dtype column names must be strings"):
+            ar.read_csv(path, dtype={1: "int64"})
+
+        with pytest.raises(TypeError, match="dtype values must be strings"):
+            ar.read_csv(path, dtype={"age": int})
+
+    def test_read_csv_dtype_with_generated_column_names(self, tmp_path):
+        path = tmp_path / "no_header.csv"
+        path.write_text("07001,5\n" "08002,10\n")
+
+        frame = ar.read_csv(
+            path,
+            has_header=False,
+            dtype={"col_0": "string", "col_1": "int64"},
+        )
+
+        pdf = ar.to_pandas(frame)
+
+        assert frame.dtypes["col_0"] == "string"
+        assert frame.dtypes["col_1"] == "int64"
+        assert pdf["col_0"].tolist() == ["07001", "08002"]
+        assert pdf["col_1"].tolist() == [5, 10]
+
+    def test_read_csv_dtype_with_usecols(self, tmp_path):
+        path = tmp_path / "usecols_dtype.csv"
+        path.write_text("zip,quantity,price\n" "07001,5,12.5\n" "08002,10,20.0\n")
+
+        frame = ar.read_csv(
+            path,
+            usecols=["zip", "price"],
+            dtype={"zip": "string"},
+        )
+
+        pdf = ar.to_pandas(frame)
+
+        assert list(pdf.columns) == ["zip", "price"]
+        assert frame.dtypes["zip"] == "string"
+        assert frame.dtypes["price"] == "float64"
+        assert pdf["zip"].tolist() == ["07001", "08002"]
+
+    def test_read_csv_dtype_parse_failure_becomes_null(self, tmp_path):
+        path = tmp_path / "parse_failure.csv"
+        path.write_text("quantity\n" "abc\n")
+
+        frame = ar.read_csv(
+            path,
+            dtype={"quantity": "int64"},
+        )
+
+        pdf = ar.to_pandas(frame)
+
+        assert frame.dtypes["quantity"] == "int64"
+        assert pdf["quantity"].isna().tolist() == [True]
+
+    def test_read_csv_dtype_non_selected_usecols_column(self, tmp_path):
+        path = tmp_path / "dtype_usecols_error.csv"
+        path.write_text("zip,price\n" "07001,12.5\n")
+
+        with pytest.raises(
+            ar.CsvReadError,
+            match="dtype specified for non-selected column",
+        ):
+            ar.read_csv(
+                path,
+                usecols=["zip"],
+                dtype={"price": "float64"},
+            )
+
+    def test_read_csv_dtype_override_string_to_int64(self, tmp_path):
+        path = tmp_path / "quantities.csv"
+        path.write_text("quantity,label\n" "5,small\n" "10,large\n")
+
+        frame = ar.read_csv(
+            path,
+            dtype={"quantity": "int64"},
+        )
+
+        pdf = ar.to_pandas(frame)
+
+        assert frame.dtypes["quantity"] == "int64"
+        assert pdf["quantity"].tolist() == [5, 10]
+
+    def test_read_csv_invalid_dtype_name(self, tmp_path):
+        path = tmp_path / "invalid_dtype.csv"
+        path.write_text("age\n" "25\n")
+
+        with pytest.raises(ValueError, match="Unsupported dtype"):
+            ar.read_csv(
+                path,
+                dtype={"age": "datetime"},
+            )
+
+    def test_read_csv_dtype_unknown_column(self, tmp_path):
+        path = tmp_path / "unknown_column.csv"
+        path.write_text("age,name\n" "25,Alice\n")
+
+        with pytest.raises(ar.CsvReadError, match="Column not found in dtype mapping"):
+            ar.read_csv(
+                path,
+                dtype={"salary": "float64"},
+            )
+
     def test_basic_read(self, sample_csv):
         frame = ar.read_csv(sample_csv)
         assert isinstance(frame, ar.ArFrame)
