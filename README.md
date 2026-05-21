@@ -1230,8 +1230,21 @@ data = {
 }
 df = ar.from_pandas(pd.DataFrame(data))
 # Bounded profiling for large datasets (controls how many sample values are kept)
+
+
+frame = ar.from_pandas(
+    pd.DataFrame(
+        {
+            "email": ["a@example.com", "b@example.com"],
+            "status": ["active", "inactive"],
+        }
+    )
+)
+
 report = ar.profile(frame)
+
 print(report)
+# Safe report can also be used
 safe_report = report.to_dict(redact_sample_values=True)
 ```
 

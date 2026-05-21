@@ -1578,8 +1578,13 @@ def test_profile_duplicate_count_hash_path_matches_pandas_baseline_at_scale():
     assert ar.profile(frame).duplicate_rows == baseline_count
 
 
-#Changes made through issue number 190
-#Normal report repr
+
+
+
+# ── Changes made through issue number 190 ───────────────────────────────────
+# Normal report repr
+
+
 def test_report_repr_is_concise_and_stable():
     frame = ar.from_pandas(
         pd.DataFrame(
@@ -1602,7 +1607,9 @@ def test_report_repr_is_concise_and_stable():
     assert "column_names=[a, b]" in output
 
 
-#Empty report handling
+# Empty report handling
+
+
 def test_report_repr_handles_empty_reports():
     frame = ar.from_pandas(pd.DataFrame())
 
@@ -1615,7 +1622,9 @@ def test_report_repr_handles_empty_reports():
     assert "column_names=[]" in output
 
 
-#Deterministic dict ordering
+# Deterministic dict ordering
+
+
 def test_report_to_dict_is_deterministic():
     frame = ar.from_pandas(
         pd.DataFrame(
@@ -1634,7 +1643,9 @@ def test_report_to_dict_is_deterministic():
     assert list(result["columns"].keys()) == ["a", "m", "z"]
 
 
-#Deterministic suggestions ordering
+# Deterministic suggestions ordering
+
+
 def test_report_suggestions_are_deterministic():
     report = ar.DataQualityReport(
         row_count=1,
