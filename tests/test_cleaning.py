@@ -454,7 +454,9 @@ class TestDropConstantColumns:
         assert result.shape[1] == 0
         assert ar.to_pandas(result).shape == (1, 0)
 
-    def test_drop_constant_columns_all_columns_dropped_preserves_row_count_multiple_rows(self):
+    def test_drop_constant_columns_all_columns_dropped_preserves_row_count_multiple_rows(
+        self,
+    ):
         frame = ar.from_pandas(pd.DataFrame({"a": [7, 7, 7], "b": ["x", "x", "x"]}))
         result = ar.drop_constant_columns(frame)
         assert result.columns == []
@@ -481,6 +483,7 @@ class TestDropConstantColumns:
         cloned = frame._frame.clone()
         assert cloned.num_rows() == 4
         assert cloned.num_cols() == 0
+
 
 class TestClipNumeric:
     def test_clip_numeric_lower_only(self):
