@@ -514,6 +514,28 @@ class TestPipeline:
         assert "marker" in df.columns
         assert set(df["marker"]) == {"done"}
 
+    def test_unregister_missing_step(self):
+        with pytest.raises(ar.UnknownStepError):
+            ar.unregister_step("missing_step")
+
+    def test_unregister_builtin_python_step(self):
+        with pytest.raises(ar.UnknownStepError):
+            ar.unregister_step("standardize_missing_tokens")
+
+    def test_unregister_custom_step(self):
+        def custom_step(df):
+            return df
+
+        ar.register_step("temporary_step", custom_step)
+
+        ar.unregister_step("temporary_step")
+
+        with pytest.raises(ar.UnknownStepError):
+            ar.pipeline(
+                ar.from_pandas(pd.DataFrame({"a": [1]})),
+                [("temporary_step",)],
+            )
+
     def test_concurrent_step_registration(self, sample_csv):
         frame = ar.read_csv(sample_csv)
 
