@@ -41,6 +41,7 @@ def _utf8_csv_path(
     encoding: str,
     delimiter: str = ",",
     sample_rows: int | None = None,
+    encoding_errors: str = "strict",
 ) -> Iterator[str]:
     """Return a UTF-8 file path for the C++ reader.
 
@@ -54,7 +55,7 @@ def _utf8_csv_path(
 
     tmp_name: str | None = None
     try:
-        with open(path, encoding=encoding, newline="") as src:
+        with open(path, encoding=encoding, errors=encoding_errors, newline="") as src:
             with tempfile.NamedTemporaryFile(
                 "w", encoding="utf-8", newline="", suffix=".csv", delete=False
             ) as tmp:
@@ -359,6 +360,21 @@ def _validate_csv_path(path: str, encoding: str) -> None:
         _raise_csv_path_os_error(path, e)
 
 
+_VALID_ENCODING_ERRORS = {"strict", "replace", "ignore"}
+
+
+def _validate_encoding_errors(value: str) -> str:
+    if not isinstance(value, str):
+        raise TypeError("encoding_errors must be a string")
+
+    if value not in _VALID_ENCODING_ERRORS:
+        raise ValueError(
+            "encoding_errors must be one of " "'strict', 'replace', or 'ignore'"
+        )
+
+    return value
+
+
 def read_csv(
     path: str | os.PathLike[str],
     *,
@@ -373,6 +389,7 @@ def read_csv(
     null_values: list[str] | None = None,
     dtype: dict[str, str] | None = None,
     mode: str = "strict",
+    encoding_errors: str = "strict",
 ) -> ArFrame:
     """Read a CSV file into an ArFrame via C++ backend.
 
@@ -471,6 +488,7 @@ def read_csv(
     _validate_thousands_separator(thousands_separator)
     delimiter = _validate_delimiter(delimiter)
     mode = _validate_parser_mode(mode)
+    encoding_errors = _validate_encoding_errors(encoding_errors)
     config = _CsvConfig()
     config.delimiter = delimiter
     config.has_header = _validate_bool_option(has_header, "has_header")
@@ -478,7 +496,7 @@ def read_csv(
     config.trim_headers = _validate_bool_option(trim_headers, "trim_headers")
     config.thousands_separator = thousands_separator
     config.mode = mode
-
+    config.encoding_errors = encoding_errors
     if null_values is not None:
         config.null_values = _validate_null_values(null_values)
     if dtype is not None:
@@ -496,7 +514,9 @@ def read_csv(
     reader = _CsvReader(config)
 
     try:
-        with _utf8_csv_path(path, encoding, delimiter=delimiter) as native_path:
+        with _utf8_csv_path(
+            path, encoding, encoding_errors=encoding_errors, delimiter=delimiter
+        ) as native_path:
             cpp_frame = reader.read(native_path)
 
         return ArFrame(cpp_frame)
@@ -719,6 +739,7 @@ def scan_csv(
     sample_size: int | None = None,
     null_values: list[str] | None = None,
     has_header: bool = True,
+    encoding_errors: str = "strict",
 ) -> dict[str, str]:
     """Return schema (column names + inferred types) without loading data.
 
@@ -796,13 +817,14 @@ def scan_csv(
 
     _validate_thousands_separator(thousands_separator)
     delimiter = _validate_delimiter(delimiter)
-
+    encoding_errors = _validate_encoding_errors(encoding_errors)
     config = _CsvConfig()
     config.delimiter = delimiter
     config.encoding = encoding
     config.trim_headers = _validate_bool_option(trim_headers, "trim_headers")
     config.thousands_separator = thousands_separator
     config.has_header = has_header
+    config.encoding_errors = encoding_errors
 
     if null_values is not None:
         config.null_values = _validate_null_values(null_values)
@@ -822,6 +844,7 @@ def scan_csv(
         with _utf8_csv_path(
             path,
             encoding,
+            encoding_errors=encoding_errors,
             delimiter=delimiter,
             sample_rows=100 if sample_size is None else sample_size,
         ) as native_path:

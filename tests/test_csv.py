@@ -574,6 +574,101 @@ class TestReadCsv:
         frame = ar.read_csv(Path(sample_csv))
         assert frame.shape == (3, 4)
 
+    def test_read_csv_encoding_errors_strict(self, tmp_path):
+        csv_file = tmp_path / "invalid_utf8.csv"
+
+        csv_file.write_bytes(b"name\nabc\xffdef\n")
+
+        with pytest.raises(ar.CsvReadError):
+            ar.read_csv(
+                csv_file,
+                encoding="utf-8",
+                encoding_errors="strict",
+            )
+
+    def test_read_csv_encoding_errors_replace(self, tmp_path):
+        csv_file = tmp_path / "invalid_utf8.csv"
+
+        csv_file.write_bytes(b"name\nabc\xffdef\n")
+
+        frame = ar.read_csv(
+            csv_file,
+            encoding="utf-8",
+            encoding_errors="replace",
+        )
+
+        value = frame["name"][0]
+
+        assert value == "abc�def"
+        assert "def" in value
+
+    def test_read_csv_encoding_errors_ignore(self, tmp_path):
+        csv_file = tmp_path / "invalid_utf8.csv"
+
+        csv_file.write_bytes(b"name\nabc\xffdef\n")
+
+        frame = ar.read_csv(
+            csv_file,
+            encoding="utf-8",
+            encoding_errors="ignore",
+        )
+
+        value = frame["name"][0]
+
+        assert value == "abcdef"
+
+    def test_read_csv_invalid_encoding_errors_mode(self, tmp_path):
+        csv_file = tmp_path / "data.csv"
+
+        csv_file.write_text(
+            "name\nalice\n",
+            encoding="utf-8",
+        )
+
+        with pytest.raises(ValueError):
+            ar.read_csv(
+                csv_file,
+                encoding_errors="bad-mode",
+            )
+
+    def test_scan_csv_encoding_errors_strict(self, tmp_path):
+        csv_file = tmp_path / "invalid_utf8.csv"
+
+        csv_file.write_bytes(b"name\nabc\xffdef\n")
+
+        with pytest.raises(ar.CsvReadError):
+            ar.scan_csv(
+                csv_file,
+                encoding="utf-8",
+                encoding_errors="strict",
+            )
+
+    def test_scan_csv_encoding_errors_replace(self, tmp_path):
+        csv_file = tmp_path / "invalid_utf8.csv"
+
+        csv_file.write_bytes(b"name\nabc\xffdef\n")
+
+        schema = ar.scan_csv(
+            csv_file,
+            encoding="utf-8",
+            encoding_errors="replace",
+        )
+
+        assert schema["name"] == "string"
+
+    def test_scan_csv_encoding_errors_ignore(self, tmp_path):
+        csv_file = tmp_path / "invalid_utf8.csv"
+
+        csv_file.write_bytes(b"name\nabc\xffdef\n")
+
+        schema = ar.scan_csv(
+            csv_file,
+            encoding="utf-8",
+            encoding_errors="ignore",
+        )
+
+        assert schema["name"] == "string"
+
     def test_non_utf8_encoding(self, tmp_path):
         csv_path = tmp_path / "latin.csv"
         csv_path.write_bytes("name\nAndré\n".encode("latin-1"))
@@ -772,6 +867,48 @@ class TestReadCsv:
         assert df["text"].iloc[0] == "hello"
         assert df["text"].iloc[1] == long_text
         assert df["text"].iloc[2] == "world"
+
+    def test_read_csv_encoding_errors_replace_header(self, tmp_path):
+        csv_file = tmp_path / "invalid_header.csv"
+
+        csv_file.write_bytes(b"na\xffme\nalice\n")
+
+        frame = ar.read_csv(
+            csv_file,
+            encoding="utf-8",
+            encoding_errors="replace",
+        )
+
+        columns = frame.columns
+
+        assert columns == ["na�me"]
+
+    def test_read_csv_encoding_errors_ignore_header(self, tmp_path):
+        csv_file = tmp_path / "invalid_header.csv"
+
+        csv_file.write_bytes(b"na\xffme\nalice\n")
+
+        frame = ar.read_csv(
+            csv_file,
+            encoding="utf-8",
+            encoding_errors="ignore",
+        )
+
+        columns = frame.columns
+
+        assert columns == ["name"]
+
+    def test_read_csv_encoding_errors_strict_header(self, tmp_path):
+        csv_file = tmp_path / "invalid_header.csv"
+
+        csv_file.write_bytes(b"na\xffme\nalice\n")
+
+        with pytest.raises(ar.CsvReadError):
+            ar.read_csv(
+                csv_file,
+                encoding="utf-8",
+                encoding_errors="strict",
+            )
 
 
 class TestScanCsv:
@@ -1085,6 +1222,49 @@ class TestScanCsv:
         schema = ar.scan_csv(csv_file, has_header=False)
 
         assert list(frame.columns) == list(schema.keys())
+
+    def test_read_csv_encoding_errors_preserve_valid_utf8(
+        self,
+        tmp_path,
+    ):
+        csv_file = tmp_path / "mixed_utf8.csv"
+
+        csv_file.write_bytes(b"name\ncaf\xc3\xa9\xff\n")
+
+        frame = ar.read_csv(
+            csv_file,
+            encoding="utf-8",
+            encoding_errors="replace",
+        )
+
+        value = frame["name"][0]
+
+        assert value == "café�"
+
+    def test_read_csv_encoding_errors_ignore_preserves_numeric_inference(
+        self, tmp_path
+    ):
+        csv_file = tmp_path / "numeric_ignore.csv"
+
+        csv_file.write_bytes(b"value\n1\xff\n2\n")
+
+        frame = ar.read_csv(
+            csv_file,
+            encoding="utf-8",
+            encoding_errors="ignore",
+        )
+
+        values = frame["value"]
+
+        assert values == [1, 2]
+
+    def test_read_csv_encoding_errors_rejects_overlong_utf8(self, tmp_path):
+        csv_file = tmp_path / "overlong.csv"
+
+        csv_file.write_bytes(b"name\n\xc0\xaf\n")
+
+        with pytest.raises(ar.CsvReadError):
+            ar.read_csv(csv_file, encoding="utf-8", encoding_errors="strict")
 
 
 # --- Issue #115: quoted multiline round-trip across line endings ---
