@@ -3,8 +3,8 @@
 <br>
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="final-icon-dark.svg">
-  <img alt="Arnio" src="final-icon-light.svg" width="280">
+  <source media="(prefers-color-scheme: dark)" srcset="logo-dark.png">
+  <img alt="Arnio" src="logo-light.png" width="280">
 </picture>
 
 <br><br>
@@ -1766,8 +1766,8 @@ arnio/
 <div align="center">
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="final-icon-dark.svg">
-  <img alt="Arnio" src="final-icon-light.svg" width="80">
+  <source media="(prefers-color-scheme: dark)" srcset="logo-dark.png">
+  <img alt="Arnio" src="logo-light.png" width="80">
 </picture>
 
 <br><br>
