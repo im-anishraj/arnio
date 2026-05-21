@@ -105,9 +105,7 @@ def _validate_serializable(value: Any) -> None:
             _validate_serializable(item)
         return
 
-    raise TypeError(
-        f"schema_to_yaml does not support values of type {type(value)!r}."
-    )
+    raise TypeError(f"schema_to_yaml does not support values of type {type(value)!r}.")
 
 
 def _emit_value(value: Any, depth: int) -> str:
@@ -222,7 +220,7 @@ def schema_to_dict(schema: dict | Any) -> dict:
         if field_name in {"strict", "unique"}:
             metadata[field_name] = value
             continue
-            
+
         if isinstance(value, str):
             normalised[field_name] = {"type": value}
 
