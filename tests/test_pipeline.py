@@ -150,6 +150,25 @@ class TestPipeline:
         assert list(df.columns) == ["value"]
         assert list(df["value"]) == [1, 2, 1]
 
+    def test_pipeline_drop_empty_columns(self, tmp_path):
+        csv_path = tmp_path / "pipeline_drop_empty_columns.csv"
+        csv_path.write_text(
+            'all_null,all_blank,value\n,"",1\n,"   ",2\n',
+            encoding="utf-8",
+        )
+        frame = ar.read_csv(csv_path)
+
+        result = ar.pipeline(
+            frame,
+            [
+                ("drop_empty_columns",),
+            ],
+        )
+        df = ar.to_pandas(result)
+
+        assert list(df.columns) == ["value"]
+        assert list(df["value"]) == [1, 2]
+
     def test_pipeline_trim_column_names(self):
         import pandas as pd
 

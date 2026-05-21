@@ -455,6 +455,60 @@ class TestDropConstantColumns:
         assert ar.to_pandas(result).shape == (1, 0)
 
 
+class TestDropEmptyColumns:
+    def test_drop_empty_columns_removes_fully_empty_columns(self, tmp_path):
+        csv_path = tmp_path / "drop_empty_columns.csv"
+        csv_path.write_text(
+            'all_null,all_blank,value\n,"",1\n,"   ",2\n,"",3\n',
+            encoding="utf-8",
+        )
+        frame = ar.read_csv(csv_path)
+
+        result = ar.drop_empty_columns(frame)
+        df = ar.to_pandas(result)
+
+        assert list(df.columns) == ["value"]
+        assert list(df["value"]) == [1, 2, 3]
+
+    def test_drop_empty_columns_keeps_partially_empty_columns(self, tmp_path):
+        csv_path = tmp_path / "drop_empty_columns_partial.csv"
+        csv_path.write_text(
+            'maybe_empty,whitespace_then_value\n,"   "\n"",\nkept,x\n',
+            encoding="utf-8",
+        )
+        frame = ar.read_csv(csv_path)
+
+        result = ar.drop_empty_columns(frame)
+
+        assert result.columns == frame.columns
+        assert result.shape == frame.shape
+
+    def test_drop_empty_columns_keeps_falsey_non_string_columns(self, tmp_path):
+        csv_path = tmp_path / "drop_empty_columns_falsey.csv"
+        csv_path.write_text(
+            "zeros,string_zero\n0,0\n0,0\n0,0\n",
+            encoding="utf-8",
+        )
+        frame = ar.read_csv(csv_path)
+
+        result = ar.drop_empty_columns(frame)
+
+        assert result.columns == ["zeros", "string_zero"]
+        assert result.shape == frame.shape
+
+    def test_drop_empty_columns_all_columns_dropped_preserves_row_count(self, tmp_path):
+        csv_path = tmp_path / "drop_empty_columns_all.csv"
+        csv_path.write_text('all_null,all_blank\n,""\n, \n', encoding="utf-8")
+        frame = ar.read_csv(csv_path)
+
+        result = ar.drop_empty_columns(frame)
+
+        assert result.columns == []
+        assert result.shape[1] == 0
+        assert result.shape[0] in {0, 2}
+        assert ar.to_pandas(result).shape[1] == 0
+
+
 class TestClipNumeric:
     def test_clip_numeric_lower_only(self):
         frame = ar.from_pandas(pd.DataFrame({"value": [-5, 0, 10]}))
