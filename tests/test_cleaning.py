@@ -1257,6 +1257,21 @@ class TestRenameColumns:
         with pytest.raises(ValueError, match="collide with existing columns"):
             ar.rename_columns(frame, {"name": "age"})
 
+    def test_rename_columns_rejects_empty_target(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(TypeError, match="non-empty strings"):
+            ar.rename_columns(frame, {"name": ""})
+
+    def test_rename_columns_rejects_whitespace_target(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(
+            TypeError,
+            match="values must be non-empty strings",
+        ):
+            ar.rename_columns(frame, {"name": "   "})
+
 
 class TestTrimColumnNames:
     def test_trim_column_names_basic(self):
