@@ -20,6 +20,54 @@ from ._core import (
 from .exceptions import TypeCastError
 from .frame import ArFrame
 
+_FILL_COMPATIBLE_TYPES: dict[str, tuple[type, ...]] = {
+    "int64":   (int,),
+    "float64": (float, int),   # int is a safe upcast to float64
+    "bool":    (bool,),
+    "string":  (str,),
+}
+
+_DTYPE_LABEL: dict[str, str] = {
+    "int64":   "int64 (integer)",
+    "float64": "float64 (floating-point)",
+    "bool":    "bool",
+    "string":  "string",
+}
+
+
+def _validate_fill_value(value: Any, frame: "ArFrame", subset: list[str] | None) -> None:
+    """Raise TypeError before entering C++ if *value* is incompatible with any
+    target column's dtype."""
+    target_columns: list[str] = subset if subset is not None else frame.columns
+    dtype_map: dict[str, str] = dict(frame._frame.dtypes())
+
+    for col_name in target_columns:
+        col_dtype = dtype_map.get(col_name)
+        if col_dtype is None:
+            continue
+
+        compatible = _FILL_COMPATIBLE_TYPES.get(col_dtype)
+        if compatible is None:
+            continue
+
+        # bool is a subclass of int in Python, so isinstance(True, (int,)) is True.
+        # Explicitly reject bool fill values for numeric columns.
+        if col_dtype in ("int64", "float64") and isinstance(value, bool):
+            raise TypeError(
+                f"fill_nulls: fill value {value!r} has type 'bool', which is not "
+                f"compatible with column {col_name!r} (dtype '{col_dtype}'). "
+                f"Use an integer or float value instead."
+            )
+
+        if not isinstance(value, compatible):
+            friendly_dtype = _DTYPE_LABEL.get(col_dtype, col_dtype)
+            expected = " or ".join(t.__name__ for t in compatible)
+            raise TypeError(
+                f"fill_nulls: fill value {value!r} has type "
+                f"'{type(value).__name__}', which is not compatible with column "
+                f"{col_name!r} (dtype '{friendly_dtype}'). "
+                f"Expected a Python {expected} value."
+            )
 
 def validate_columns_exist(
     frame: ArFrame,
@@ -212,6 +260,7 @@ def fill_nulls(
             _validate_column_sequence(subset, argument_name="subset"),
             operation="fill_nulls",
         )
+    _validate_fill_value(value, frame, subset)
     result = _fill_nulls(frame._frame, value, subset=subset)
     return ArFrame(result)
 
