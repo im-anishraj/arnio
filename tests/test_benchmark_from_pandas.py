@@ -2,6 +2,7 @@ import os
 import subprocess
 import sys
 
+
 def test_benchmark_dry_run():
     env = os.environ.copy()
     env["ARNIO_BENCHMARK_DRY_RUN"] = "1"
