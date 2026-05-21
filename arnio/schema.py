@@ -1148,8 +1148,14 @@ def URL(
         Field: Configured URL schema field.
     """
     if allowed_schemes is not None:
+        if not isinstance(allowed_schemes, list) or len(allowed_schemes) == 0:
+            raise ValueError("allowed_schemes must be a non-empty list")
+        for scheme in allowed_schemes:
+            if not isinstance(scheme, str) or scheme.strip() == "":
+                raise ValueError("allowed_schemes must contain non-empty strings")
         schemes = "|".join(re.escape(s) for s in allowed_schemes)
         semantic = f"url:{schemes}"
+
     else:
         semantic = "url"
     return Field(

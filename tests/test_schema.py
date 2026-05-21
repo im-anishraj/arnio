@@ -2354,3 +2354,23 @@ def test_url_allowed_schemes_nullable_false_rejects_nulls(tmp_path):
         ar.read_csv(path), {"url": ar.URL(allowed_schemes=["https"], nullable=False)}
     )
     assert not result.passed
+
+
+def test_url_allowed_schemes_empty_list_raises():
+    with pytest.raises(ValueError, match="non-empty"):
+        ar.URL(allowed_schemes=[])
+
+
+def test_url_allowed_schemes_empty_string_raises():
+    with pytest.raises(ValueError, match="non-empty strings"):
+        ar.URL(allowed_schemes=[""])
+
+
+def test_url_allowed_schemes_non_string_raises():
+    with pytest.raises(ValueError, match="non-empty strings"):
+        ar.URL(allowed_schemes=[123])
+
+
+def test_url_allowed_schemes_whitespace_string_raises():
+    with pytest.raises(ValueError, match="non-empty strings"):
+        ar.URL(allowed_schemes=["   "])
