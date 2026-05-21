@@ -1,6 +1,7 @@
 #pragma once
 
 #include <fstream>
+#include <memory>
 #include <optional>
 #include <string>
 #include <utility>
@@ -32,6 +33,7 @@ class CsvParser {
     const CsvConfig& config() const { return config_; }
 
     std::vector<std::string> parse_line(const std::string& line) const;
+    void parse_line(const std::string& line, std::vector<std::string>& out_fields) const;
     bool is_null_sentinel(const std::string& value) const;
     DType infer_type(const std::string& value) const;
     static DType promote_type(DType current, DType incoming);
@@ -76,6 +78,7 @@ class CsvChunkReader {
     bool schema_locked_ = false;
     bool header_finalized_ = false;
     bool opened_ = false;
+    std::unique_ptr<class RecordReader> record_reader_;
 
     void resolve_col_indices();
     bool read_one_data_row(std::vector<std::string>& fields_out);

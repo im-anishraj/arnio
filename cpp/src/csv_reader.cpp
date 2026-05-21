@@ -48,63 +48,121 @@ inline bool record_complete(const std::string& record) {
 
     return !in_quotes;
 }
-static bool getline_universal(std::istream& stream, std::string& line, std::string& line_ending) {
-    line.clear();
-    line_ending = "\n";  // default
-    char c;
-    if (!stream.get(c)) return false;
-
-    while (stream) {
-        if (c == '\n') {
-            line_ending = "\n";
-            break;
-        }
-        if (c == '\r') {
-            if (stream.peek() == '\n') {
-                stream.get();
-                line_ending = "\r\n";
-            } else {
-                line_ending = "\r";
-            }
-            break;
-        }
-        if (c == '\0') {
-            throw std::runtime_error(
-                "CSV input contains NUL bytes and appears to be binary or corrupted");
-        }
-        line += c;
-        if (!stream.get(c)) break;
+class BufferedStreamReader {
+public:
+    explicit BufferedStreamReader(std::istream& stream) : stream_(stream), pos_(0), end_(0) {
+        buffer_.resize(65536);
     }
-    return true;
-}
 
-bool read_record(std::istream& file, std::string& record) {
-    record.clear();
+    bool getline(std::string& line, std::string& line_ending) {
+        line.clear();
+        line_ending = "\n";
 
-    std::string line;
-    std::string line_ending;
-    std::string prev_line_ending;
-    bool first = true;
+        while (true) {
+            if (pos_ >= end_) {
+                stream_.read(buffer_.data(), buffer_.size());
+                end_ = stream_.gcount();
+                pos_ = 0;
+                if (end_ == 0) {
+                    return !line.empty();
+                }
+            }
 
-    while (getline_universal(file, line, line_ending)) {
-        if (!first) {
-            record += prev_line_ending;  //  use PREVIOUS ending as separator
+            size_t start = pos_;
+            while (pos_ < end_) {
+                char c = buffer_[pos_];
+                if (c == '\n' || c == '\r' || c == '\0') break;
+                pos_++;
+            }
+
+            line.append(buffer_.data() + start, pos_ - start);
+
+            if (pos_ < end_) {
+                char c = buffer_[pos_];
+                if (c == '\0') {
+                    throw std::runtime_error("CSV input contains NUL bytes and appears to be binary or corrupted");
+                }
+
+                if (c == '\n') {
+                    line_ending = "\n";
+                    pos_++;
+                    return true;
+                }
+
+                if (c == '\r') {
+                    pos_++;
+                    if (pos_ < end_) {
+                        if (buffer_[pos_] == '\n') {
+                            pos_++;
+                            line_ending = "\r\n";
+                        } else {
+                            line_ending = "\r";
+                        }
+                    } else {
+                        int next_c = stream_.peek();
+                        if (next_c == '\n') {
+                            stream_.get();
+                            line_ending = "\r\n";
+                        } else {
+                            line_ending = "\r";
+                        }
+                    }
+                    return true;
+                }
+            }
         }
-        record += line;
-        prev_line_ending = line_ending;
-        first = false;
+    }
 
-        if (record_complete(record)) {
+private:
+    std::istream& stream_;
+    std::vector<char> buffer_;
+    size_t pos_;
+    size_t end_;
+};
+
+class RecordReader {
+public:
+    explicit RecordReader(std::istream& stream) : reader_(stream) {
+        record_.reserve(1024);
+        line_.reserve(1024);
+    }
+
+    bool read(std::string& out_record) {
+        record_.clear();
+        bool first = true;
+
+        while (reader_.getline(line_, line_ending_)) {
+            if (!first) {
+                record_ += prev_line_ending_;
+            }
+            record_ += line_;
+            prev_line_ending_ = line_ending_;
+            first = false;
+
+            if (record_complete(record_)) {
+                out_record = record_;
+                return true;
+            }
+        }
+
+        if (!record_.empty() && !record_complete(record_)) {
+            throw std::runtime_error("Unterminated quoted CSV record");
+        }
+
+        if (!record_.empty()) {
+            out_record = record_;
             return true;
         }
+        return false;
     }
 
-    if (!record.empty() && !record_complete(record)) {
-        throw std::runtime_error("Unterminated quoted CSV record");
-    }
-
-    return !record.empty();
-}
+private:
+    BufferedStreamReader reader_;
+    std::string record_;
+    std::string line_;
+    std::string line_ending_;
+    std::string prev_line_ending_;
+};
 
 void validate_header(const std::vector<std::string>& header) {
     std::unordered_set<std::string> seen;
@@ -280,7 +338,23 @@ CsvReader::CsvReader(const CsvConfig& config) : parser_(config) {}
 
 std::vector<std::string> CsvParser::parse_line(const std::string& line) const {
     std::vector<std::string> fields;
+    parse_line(line, fields);
+    return fields;
+}
+
+void CsvParser::parse_line(const std::string& line, std::vector<std::string>& fields) const {
+    size_t field_idx = 0;
+    auto add_field = [&](const std::string& val) {
+        if (field_idx < fields.size()) {
+            fields[field_idx] = val;
+        } else {
+            fields.push_back(val);
+        }
+        field_idx++;
+    };
+
     std::string field;
+    field.reserve(line.size() / 4 + 1); // heuristic for average field length
     bool in_quotes = false;
 
     for (size_t i = 0; i < line.size(); ++i) {
@@ -300,7 +374,7 @@ std::vector<std::string> CsvParser::parse_line(const std::string& line) const {
             if (c == '"') {
                 in_quotes = true;
             } else if (c == config_.delimiter) {
-                fields.push_back(field);
+                add_field(field);
                 field.clear();
             } else if (c == '\r' && !in_quotes) {
                 continue;
@@ -309,8 +383,11 @@ std::vector<std::string> CsvParser::parse_line(const std::string& line) const {
             }
         }
     }
-    fields.push_back(field);
-    return fields;
+    add_field(field);
+
+    if (field_idx < fields.size()) {
+        fields.resize(field_idx);
+    }
 }
 
 bool CsvParser::is_null_sentinel(const std::string& value) const {
@@ -439,6 +516,8 @@ Frame CsvReader::read(const std::string& path) const {
         throw std::runtime_error("Cannot open file: " + path);
     }
 
+    RecordReader record_reader(file);
+
     std::string line;
     std::vector<std::string> header;
     std::vector<std::vector<std::string>> raw_data;
@@ -448,14 +527,14 @@ Frame CsvReader::read(const std::string& path) const {
     if (config.skip_rows.has_value()) {
         size_t to_skip = config.skip_rows.value();
         size_t skipped = 0;
-        while (skipped < to_skip && read_record(file, line)) {
+        while (skipped < to_skip && record_reader.read(line)) {
             ++record_number;
             ++skipped;
         }
     }
 
     // Read header
-    if (config.has_header && read_record(file, line)) {
+    if (config.has_header && record_reader.read(line)) {
         ++record_number;
         strip_utf8_bom(line);
         header = parser_.parse_line(line);
@@ -469,7 +548,13 @@ Frame CsvReader::read(const std::string& path) const {
     size_t row_count = 0;
     std::optional<size_t> expected_cols =
         config.has_header ? std::optional<size_t>{header.size()} : std::nullopt;
-    while (read_record(file, line)) {
+    
+    std::vector<std::string> reusable_fields;
+    if (expected_cols.has_value()) {
+        reusable_fields.reserve(expected_cols.value());
+    }
+
+    while (record_reader.read(line)) {
         ++record_number;
 
         if (config.nrows.has_value() && row_count >= config.nrows.value()) {
@@ -480,26 +565,26 @@ Frame CsvReader::read(const std::string& path) const {
             continue;
         }
 
-        auto fields = parser_.parse_line(line);
+        parser_.parse_line(line, reusable_fields);
 
         if (!config.has_header && !expected_cols.has_value()) {
-            expected_cols = fields.size();
+            expected_cols = reusable_fields.size();
         }
 
         if (expected_cols.has_value()) {
             const size_t expected = expected_cols.value();
-            if (fields.size() > expected || config.mode == "strict") {
-                validate_row_width(record_number, expected, fields.size());
+            if (reusable_fields.size() > expected || config.mode == "strict") {
+                validate_row_width(record_number, expected, reusable_fields.size());
             }
         }
 
         if (expected_cols.has_value()) {
-            while (fields.size() < expected_cols.value()) {
-                fields.push_back("");
+            while (reusable_fields.size() < expected_cols.value()) {
+                reusable_fields.push_back("");
             }
         }
 
-        raw_data.push_back(std::move(fields));
+        raw_data.push_back(reusable_fields);
         ++row_count;
     }
     file.close();
@@ -572,12 +657,14 @@ std::vector<std::pair<std::string, std::string>> CsvReader::scan_schema(
         throw std::runtime_error("Cannot open file: " + path);
     }
 
+    RecordReader record_reader(file);
+
     std::string line;
     std::vector<std::string> header;
 
     std::vector<std::string> first_row;
 
-    if (read_record(file, line)) {
+    if (record_reader.read(line)) {
         strip_utf8_bom(line);
 
         if (config.has_header) {
@@ -615,16 +702,19 @@ std::vector<std::pair<std::string, std::string>> CsvReader::scan_schema(
         ++sample_count;
     }
 
-    while (read_record(file, line)) {
+    std::vector<std::string> reusable_fields;
+    reusable_fields.reserve(num_cols);
+
+    while (record_reader.read(line)) {
         if (sample_count >= max_samples) {
             break;
         }
 
         if (line.empty()) continue;
-        auto fields = parser_.parse_line(line);
-        validate_row_width(sample_count + 2, num_cols, fields.size());
-        for (size_t i = 0; i < num_cols && i < fields.size(); ++i) {
-            col_types[i] = CsvParser::promote_type(col_types[i], parser_.infer_type(fields[i]));
+        parser_.parse_line(line, reusable_fields);
+        validate_row_width(sample_count + 2, num_cols, reusable_fields.size());
+        for (size_t i = 0; i < num_cols && i < reusable_fields.size(); ++i) {
+            col_types[i] = CsvParser::promote_type(col_types[i], parser_.infer_type(reusable_fields[i]));
         }
         ++sample_count;
     }
@@ -667,14 +757,14 @@ void CsvChunkReader::resolve_col_indices() {
 bool CsvChunkReader::read_one_data_row(std::vector<std::string>& fields_out) {
     const CsvConfig& config = parser_.config();
     std::string line;
-    while (read_record(file_, line)) {
+    while (record_reader_->read(line)) {
         ++record_number_;
 
         if (line.empty()) {
             continue;
         }
 
-        fields_out = parser_.parse_line(line);
+        parser_.parse_line(line, fields_out);
 
         if (!config.has_header && !expected_cols_.has_value()) {
             expected_cols_ = fields_out.size();
@@ -724,6 +814,8 @@ void CsvChunkReader::open(const std::string& path) {
         throw std::runtime_error("Cannot open file: " + path);
     }
 
+    record_reader_ = std::make_unique<RecordReader>(file_);
+
     opened_ = true;
     record_number_ = 0;
     rows_read_total_ = 0;
@@ -735,7 +827,7 @@ void CsvChunkReader::open(const std::string& path) {
     expected_cols_ = std::nullopt;
 
     std::string line;
-    if (config.has_header && read_record(file_, line)) {
+    if (config.has_header && record_reader_->read(line)) {
         ++record_number_;
         strip_utf8_bom(line);
         header_ = parser_.parse_line(line);
@@ -750,9 +842,12 @@ void CsvChunkReader::open(const std::string& path) {
 
     const size_t skip_target = config.skip_rows.value_or(0);
     size_t skipped = 0;
+    std::vector<std::string> reusable_fields;
+    if (expected_cols_.has_value()) {
+        reusable_fields.reserve(expected_cols_.value());
+    }
     while (skipped < skip_target) {
-        std::vector<std::string> fields;
-        if (!read_one_data_row(fields)) {
+        if (!read_one_data_row(reusable_fields)) {
             break;
         }
         ++skipped;
