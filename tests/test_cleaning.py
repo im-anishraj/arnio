@@ -1656,6 +1656,27 @@ class TestCastTypes:
         assert df["score"].iloc[0] == 1.5
         assert pd.isna(df["score"].iloc[1])
 
+    def test_cast_string_to_int_unparseable_raises(self):
+        # "hello" cannot be parsed as int64, raises TypeCastError by default
+        frame = ar.from_pandas(pd.DataFrame({"age": ["10", "hello"]}))
+        with pytest.raises(ar.TypeCastError, match="Cannot cast column 'age'"):
+            ar.cast_types(frame, {"age": "int64"})
+
+    def test_cast_string_to_int_unparseable_coerces(self):
+        # with errors="coerce", unparseable strings become null
+        frame = ar.from_pandas(pd.DataFrame({"age": ["10", "hello"]}))
+        result = ar.cast_types(frame, {"age": "int64"}, errors="coerce")
+        df = ar.to_pandas(result)
+        assert result.dtypes["age"] == "int64"
+        assert df["age"].iloc[0] == 10
+        assert pd.isna(df["age"].iloc[1])
+
+    def test_cast_invalid_dtype_string_raises(self):
+        # "datetime" is not a supported type, raises TypeCastError
+        frame = ar.from_pandas(pd.DataFrame({"age": [1, 2, 3]}))
+        with pytest.raises(ar.TypeCastError, match="Unknown target dtype"):
+            ar.cast_types(frame, {"age": "datetime"})
+
 
 class TestCleanAPI:
     def test_clean_defaults(self, csv_with_whitespace):
