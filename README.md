@@ -257,6 +257,43 @@ frame = ar.read_csv("data.csv", null_values=["", "MISSING", "UNKNOWN"])
 # Disable null sentinel handling completely
 frame = ar.read_csv("data.csv", null_values=[])
 ```
+
+## from_dict Support
+
+This adds support for converting a dictionary into an `ArFrame`.
+
+## What it does
+
+- Accepts dictionaries with string keys
+- Converts the dictionary into a Pandas DataFrame before creating an `ArFrame`
+- Stringifies nested Python objects inside cells, such as `dict`, `list`, and `tuple`
+  (Nested lists/dicts are being stringified, not natively supported as nested columnar data)
+- Preserves the existing handling for scalar values
+- Raises clear errors for invalid inputs
+
+## Nested object handling
+
+Arnio does not natively support nested Python objects as column values.
+
+In this implementation, nested values are explicitly converted to strings before frame creation
+to avoid conversion errors, not natively supported as nested columnar data
+
+Example:
+
+```python
+data = {
+    "name": ["Alice"],
+    "info": [{"city": "NY", "age": 25}]
+}
+```
+Gets converted internally to:
+```python
+{
+    "name": ["Alice"],
+    "info": ["{'city': 'NY', 'age': 25}"]
+}
+```
+This avoids TypeError issues during conversion and keeps the data compatible with ArFrame.
 ### Handling invalid UTF-8 bytes
 
 Use `encoding_errors` to control how invalid UTF-8 bytes are handled during CSV parsing.

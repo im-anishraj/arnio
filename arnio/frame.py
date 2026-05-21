@@ -153,6 +153,12 @@ class ArFrame:
 
     # --- Properties ---
 
+    @classmethod
+    def from_dict(cls, data: dict):
+        from .convert import from_dict as _from_dict
+
+        return _from_dict(data)
+
     @property
     def shape(self) -> tuple[int, int]:
         """Row and column count.
