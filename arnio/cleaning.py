@@ -10,6 +10,7 @@ import unicodedata
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+import numpy as np
 import pandas as pd
 from pandas.api.types import is_scalar
 
@@ -1329,8 +1330,15 @@ def replace_values(frame, mapping, column=None):
         if _is_null_mapping_key(k):
             null_key_present = True
             null_replacement = v
-        else:
+        # Exclude tuple/list/ndarray/series/index keys which pandas.replace
+        # does not support and can raise confusing errors (e.g. operand
+        # length mismatch). Treat strings and true scalars as valid keys.
+        elif is_scalar(k) and not isinstance(k, (tuple, list, np.ndarray, pd.Series, pd.Index)):
             normalized_mapping[k] = v
+        else:
+            # pandas replace does not support non-scalar mapping keys like tuples
+            # and lists. Ignore those keys rather than raising a user-facing error.
+            continue
 
     if column:
         s = df[column]
