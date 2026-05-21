@@ -69,7 +69,7 @@ class TestReadCsvChunked:
         path = tmp_path / "skip.csv"
         path.write_text("\n".join(lines))
 
-        chunks = _chunked_rows(str(path), chunksize=5, skip_rows=10)
+        chunks = _chunked_rows(str(path), chunksize=5, skiprows=10)
         chunked_df = pd.concat([ar.to_pandas(c) for c in chunks], ignore_index=True)
         assert chunked_df.shape[0] == 10
         assert chunked_df["id"].tolist() == list(range(10, 20))

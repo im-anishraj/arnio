@@ -33,7 +33,7 @@ def test_chunked_parity_skip_nrows(tmp_path):
     f1 = ar.read_csv(str(csv_path), skiprows=1, nrows=3)
     df1 = ar.to_pandas(f1)
 
-    reader = ar.read_csv_chunked(str(csv_path), chunksize=2, skip_rows=1, nrows=3)
+    reader = ar.read_csv_chunked(str(csv_path), chunksize=2, skiprows=1, nrows=3)
     chunks = list(reader)
     df2 = pd.concat([ar.to_pandas(c) for c in chunks], ignore_index=True)
 

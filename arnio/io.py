@@ -208,15 +208,15 @@ def _validate_nrows(nrows: int) -> int:
     return nrows
 
 
-def _validate_skip_rows(skip_rows: int) -> int:
-    """Validate skip_rows parameter."""
-    if isinstance(skip_rows, bool) or not isinstance(skip_rows, int):
-        raise TypeError("skip_rows must be an integer")
+def _validate_skip_rows(skiprows: int) -> int:
+    """Validate skiprows parameter."""
+    if isinstance(skiprows, bool) or not isinstance(skiprows, int):
+        raise TypeError("skiprows must be an integer")
 
-    if skip_rows < 0:
-        raise ValueError("skip_rows must be non-negative")
+    if skiprows < 0:
+        raise ValueError("skiprows must be non-negative")
 
-    return skip_rows
+    return skiprows
 
 
 def _validate_chunksize(chunksize: int) -> int:
@@ -468,7 +468,7 @@ def read_csv_chunked(
     has_header: bool = True,
     usecols: list[str] | None = None,
     nrows: int | None = None,
-    skip_rows: int = 0,
+    skiprows: int = 0,
     encoding: str = "utf-8",
     trim_headers: bool = True,
     thousands_separator: str | None = None,
@@ -494,7 +494,7 @@ def read_csv_chunked(
         Columns to read. If None, reads all columns.
     nrows : int, optional
         Maximum total number of data rows to read across all chunks.
-    skip_rows : int, default 0
+    skiprows : int, default 0
         Number of data rows to skip after the header row.
     encoding : str, default "utf-8"
         File encoding.
@@ -543,7 +543,7 @@ def read_csv_chunked(
     delimiter = _validate_delimiter(delimiter)
     mode = _validate_parser_mode(mode)
     chunksize = _validate_chunksize(chunksize)
-    skip_rows = _validate_skip_rows(skip_rows)
+    skiprows = _validate_skip_rows(skiprows)
 
     config = _CsvConfig()
     config.delimiter = delimiter
@@ -552,7 +552,7 @@ def read_csv_chunked(
     config.trim_headers = _validate_bool_option(trim_headers, "trim_headers")
     config.thousands_separator = thousands_separator
     config.mode = mode
-    config.skip_rows = skip_rows
+    config.skip_rows = skiprows
 
     if null_values is not None:
         config.null_values = _validate_null_values(null_values)

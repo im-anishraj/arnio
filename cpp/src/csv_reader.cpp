@@ -49,10 +49,10 @@ inline bool record_complete(const std::string& record) {
     return !in_quotes;
 }
 
-} // namespace
+}  // namespace
 
 class BufferedStreamReader {
-public:
+   public:
     explicit BufferedStreamReader(std::istream& stream) : stream_(stream), pos_(0), end_(0) {
         buffer_.resize(65536);
     }
@@ -83,7 +83,8 @@ public:
             if (pos_ < end_) {
                 char c = buffer_[pos_];
                 if (c == '\0') {
-                    throw std::runtime_error("CSV input contains NUL bytes and appears to be binary or corrupted");
+                    throw std::runtime_error(
+                        "CSV input contains NUL bytes and appears to be binary or corrupted");
                 }
 
                 if (c == '\n') {
@@ -116,7 +117,7 @@ public:
         }
     }
 
-private:
+   private:
     std::istream& stream_;
     std::vector<char> buffer_;
     size_t pos_;
@@ -124,7 +125,7 @@ private:
 };
 
 class RecordReader {
-public:
+   public:
     explicit RecordReader(std::istream& stream) : reader_(stream) {
         record_.reserve(1024);
         line_.reserve(1024);
@@ -159,7 +160,7 @@ public:
         return false;
     }
 
-private:
+   private:
     BufferedStreamReader reader_;
     std::string record_;
     std::string line_;
@@ -359,7 +360,7 @@ void CsvParser::parse_line(const std::string& line, std::vector<std::string>& fi
     };
 
     std::string field;
-    field.reserve(line.size() / 4 + 1); // heuristic for average field length
+    field.reserve(line.size() / 4 + 1);  // heuristic for average field length
     bool in_quotes = false;
 
     for (size_t i = 0; i < line.size(); ++i) {
@@ -529,15 +530,6 @@ Frame CsvReader::read(const std::string& path) const {
 
     size_t record_number = 0;
 
-    if (config.skip_rows.has_value()) {
-        size_t to_skip = config.skip_rows.value();
-        size_t skipped = 0;
-        while (skipped < to_skip && record_reader.read(line)) {
-            ++record_number;
-            ++skipped;
-        }
-    }
-
     // Read header
     if (config.has_header && record_reader.read(line)) {
         ++record_number;
@@ -549,11 +541,20 @@ Frame CsvReader::read(const std::string& path) const {
         validate_header(header);
     }
 
+    if (config.skip_rows.has_value()) {
+        size_t to_skip = config.skip_rows.value();
+        size_t skipped = 0;
+        while (skipped < to_skip && record_reader.read(line)) {
+            ++record_number;
+            ++skipped;
+        }
+    }
+
     // Read all rows
     size_t row_count = 0;
     std::optional<size_t> expected_cols =
         config.has_header ? std::optional<size_t>{header.size()} : std::nullopt;
-    
+
     std::vector<std::string> reusable_fields;
     if (expected_cols.has_value()) {
         reusable_fields.reserve(expected_cols.value());
@@ -719,7 +720,8 @@ std::vector<std::pair<std::string, std::string>> CsvReader::scan_schema(
         parser_.parse_line(line, reusable_fields);
         validate_row_width(sample_count + 2, num_cols, reusable_fields.size());
         for (size_t i = 0; i < num_cols && i < reusable_fields.size(); ++i) {
-            col_types[i] = CsvParser::promote_type(col_types[i], parser_.infer_type(reusable_fields[i]));
+            col_types[i] =
+                CsvParser::promote_type(col_types[i], parser_.infer_type(reusable_fields[i]));
         }
         ++sample_count;
     }
