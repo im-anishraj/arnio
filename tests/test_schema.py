@@ -48,6 +48,27 @@ def test_dtype_validation_reports_safe_float_conversion_for_numeric_strings():
     assert "safely convertible to 'float64'" in result.issues[0].message
 
 
+def test_schema_validation_row_indexed_issues_respect_cap():
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "name": [None, None, "ok"],
+            }
+        )
+    )
+
+    schema = ar.Schema(
+        {
+            "name": ar.Field(nullable=False),
+        }
+    )
+
+    result = ar.validate(frame, schema, max_errors=1)
+
+    assert result.issue_count == 1
+    assert result.bad_rows == [1]
+
+
 def test_dtype_validation_does_not_report_safe_conversion_for_invalid_numeric_strings():
     frame = ar.from_pandas(
         pd.DataFrame(
@@ -368,18 +389,8 @@ def test_schema_validation_unique_missing_columns_respects_max_errors():
 
 def test_schema_validation_rule_keyerror_respects_max_errors():
     def bad_rule(df):
-        return [
-            ar.ValidationIssue(
-                column="a",
-                rule="custom",
-                message="error 1",
-            ),
-            ar.ValidationIssue(
-                column="b",
-                rule="custom",
-                message="error 2",
-            ),
-        ]
+        _ = df["missing_column"]
+        return []
 
     frame = ar.read_csv(io.StringIO("a\n1\n"))
 

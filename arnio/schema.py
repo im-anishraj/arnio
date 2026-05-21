@@ -861,6 +861,9 @@ def validate(
     >>> result.passed
     """
     schema = schema if isinstance(schema, Schema) else Schema(schema)
+    if max_errors is not None:
+        if isinstance(max_errors, bool) or not isinstance(max_errors, int):
+            raise TypeError("max_errors must be an int or None")
 
     if max_errors is not None and max_errors < 0:
         raise ValueError("max_errors must be >= 0")
@@ -1145,6 +1148,12 @@ def Int64(
     """Create an int64 schema field.
 
     Args:
+        frame:
+            Input frame to validate.
+        schema:
+            Schema definition.
+        max_errors:
+            Maximum number of errors before stopping validation.
         nullable: Whether null values are allowed.
         min: Minimum allowed value.
         max: Maximum allowed value.
