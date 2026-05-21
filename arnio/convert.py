@@ -348,10 +348,9 @@ def from_dict(data: dict) -> ArFrame:
 
         for col_name in df.columns:
             if df[col_name].map(_is_nested).any():
-                df[col_name] = df[col_name].astype(str)
-            else:
-                # Otherwise, apply your normal scalar cleanups (Decimals, NaNs, etc.)
-                df[col_name] = df[col_name].map(_normalize_scalar)
+                raise ValueError(
+                    f"Nested objects are not supported in column '{col_name}'"
+                )
 
         for col_name in df.columns:
             _check_unsupported_dtype(col_name, df[col_name])

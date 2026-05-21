@@ -19,16 +19,6 @@ def test_dict():
     assert frame.shape == (2, 2)
 
 
-def test_nested_dict_values():
-    data = {
-        "name": ["Alice", "Bob"],
-        "info": [{"city": "NY", "age": 25}, {"city": "LA", "age": 30}],
-    }
-    frame = ar.from_dict(data)
-    df_out = ar.to_pandas(frame)
-    assert isinstance(df_out["info"][0], str)
-
-
 def test_preview_returns_string(sample_csv):
     frame = ar.read_csv(sample_csv)
     result = frame.preview()
@@ -114,6 +104,15 @@ def test_preview_large_csv(large_csv):
 
 
 # ── Invalid inputs ────────────────────────────────────────────────────────────
+
+
+def test_nested_dict_values():
+    data = {
+        "name": ["Alice", "Bob"],
+        "info": [{"city": "NY", "age": 25}, {"city": "LA", "age": 30}],
+    }
+    with pytest.raises(ValueError):
+        ar.from_dict(data)
 
 
 def test_length_mismatch():
