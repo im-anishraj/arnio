@@ -817,6 +817,18 @@ class TestScanCsv:
 
         assert list(frame.columns) == list(schema.keys())
 
+    def test_scan_single_row(self, tmp_path):
+        csv_path = tmp_path / "single_row.csv"
+        csv_path.write_text("id,name,value\n1,Alice,99\n")
+        schema = ar.scan_csv(csv_path)
+        assert schema == {"id": "int64", "name": "string", "value": "int64"}
+
+    def test_scan_single_column(self, tmp_path):
+        csv_path = tmp_path / "single_col.csv"
+        csv_path.write_text("score\n10\n20\n30\n")
+        schema = ar.scan_csv(csv_path)
+        assert schema == {"score": "int64"}
+
 
 # --- Issue #115: quoted multiline round-trip across line endings ---
 
@@ -1491,3 +1503,71 @@ class TestInferTypeLocaleAndNumericEdgeCases:
         df = ar.to_pandas(frame)
         assert frame.dtypes["v"] == "string"
         assert list(df["v"]) == ["1", "9223372036854775808"]
+
+
+class TestCastTypes:
+    def test_cast_valid_string_to_int(self, tmp_path):
+        csv_path = tmp_path / "data.csv"
+        csv_path.write_text("value\n1\n2\n3\n")
+        frame = ar.read_csv(csv_path)
+        result = ar.cast_types(frame, {"value": "int64"})
+        assert result.dtypes["value"] == "int64"
+
+    def test_cast_invalid_string_to_int_raises(self, tmp_path):
+        csv_path = tmp_path / "data.csv"
+        csv_path.write_text("value\nhello\nworld\n")
+        frame = ar.read_csv(csv_path)
+        with pytest.raises(ar.TypeCastError):
+            ar.cast_types(frame, {"value": "int64"})
+
+    def test_cast_invalid_string_to_int_coerce(self, tmp_path):
+        csv_path = tmp_path / "data.csv"
+        csv_path.write_text("value\n1\nhello\n3\n")
+        frame = ar.read_csv(csv_path)
+        result = ar.cast_types(frame, {"value": "int64"}, errors="coerce")
+        df = ar.to_pandas(result)
+        assert result.dtypes["value"] == "int64"
+        assert pd.isna(df["value"].iloc[1])
+
+    def test_cast_mixed_valid_invalid_raises_by_default(self, tmp_path):
+        csv_path = tmp_path / "data.csv"
+        csv_path.write_text("value\n1\nabc\n3\n")
+        frame = ar.read_csv(csv_path)
+        with pytest.raises(ar.TypeCastError):
+            ar.cast_types(frame, {"value": "int64"})
+
+    def test_cast_float_string_to_int_raises(self, tmp_path):
+        csv_path = tmp_path / "data.csv"
+        csv_path.write_text("value\n1.5\n2.7\n")
+        frame = ar.read_csv(csv_path)
+        with pytest.raises(ar.TypeCastError):
+            ar.cast_types(frame, {"value": "int64"})
+
+
+class TestFromPandas:
+    def test_nullable_int_column(self):
+        df = pd.DataFrame({"value": pd.array([1, 2, None], dtype="Int64")})
+        frame = ar.from_pandas(df)
+        assert frame.dtypes["value"] == "int64"
+
+    def test_nullable_float_column(self):
+        df = pd.DataFrame({"value": pd.array([1.1, 2.2, None], dtype="Float64")})
+        frame = ar.from_pandas(df)
+        assert frame.dtypes["value"] == "float64"
+
+    def test_nullable_boolean_column(self):
+        df = pd.DataFrame({"flag": pd.array([True, False, None], dtype="boolean")})
+        frame = ar.from_pandas(df)
+        assert frame.dtypes["flag"] == "bool"
+
+    def test_nullable_int_null_preserved(self):
+        df = pd.DataFrame({"value": pd.array([1, None, 3], dtype="Int64")})
+        frame = ar.from_pandas(df)
+        result = ar.to_pandas(frame)
+        assert pd.isna(result["value"].iloc[1])
+
+    def test_nullable_bool_null_preserved(self):
+        df = pd.DataFrame({"flag": pd.array([True, None, False], dtype="boolean")})
+        frame = ar.from_pandas(df)
+        result = ar.to_pandas(frame)
+        assert pd.isna(result["flag"].iloc[1])
