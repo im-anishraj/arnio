@@ -66,6 +66,18 @@ def test_dtype_validation_does_not_report_safe_conversion_for_invalid_numeric_st
     assert "safely convertible" not in result.issues[0].message
 
 
+def test_validate_rejects_chunked_iterators(tmp_path):
+    path = tmp_path / "data.csv"
+    path.write_text("email\n" "a@example.com\n")
+
+    chunks = ar.read_csv_chunked(path, chunksize=1)
+
+    with pytest.raises(
+        TypeError, match="Chunked validation is not currently supported"
+    ):
+        ar.validate(chunks, {"email": ar.Email(nullable=False)})
+
+
 def test_dtype_validation_does_not_report_safe_conversion_for_identifier_like_columns():
     frame = ar.from_pandas(
         pd.DataFrame(

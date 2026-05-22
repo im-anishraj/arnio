@@ -343,6 +343,8 @@ export policy should stay explicit in the application that writes the file.
 
 `ar.validate()` returns a `ValidationResult`; it does not raise for validation failures. Check `result.passed` and `result.issues` for `dtype` or `required_column` rule violations.
 
+`validate()` currently operates on a single in-memory `ArFrame`. Chunked validation via `read_csv_chunked()` iterators is not yet supported directly. Validate each chunk individually or materialize the data before validation when working with streamed/chunked inputs.
+
 ### Pipeline Step Errors
 
 Unknown step names raise `UnknownStepError` before execution begins.
