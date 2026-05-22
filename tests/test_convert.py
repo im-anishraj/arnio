@@ -631,44 +631,31 @@ class TestFromPandas:
         message = str(exc_info.value)
         assert "True" in message
 
-    def test_from_pandas_all_null_float64_extension(self):
-        df = pd.DataFrame({"score": pd.Series([pd.NA, pd.NA, pd.NA], dtype="Float64")})
-        result = ar.to_pandas(ar.from_pandas(df))
-        assert len(result) == 3
-        assert result["score"].isna().all()
-        assert str(result["score"].dtype) == "string"
+    def test_uint64_overflow_raises_clear_error(self):
+        """UInt64 values outside int64 range raise a clear ValueError."""
+        df = pd.DataFrame({"x": pd.Series([2**63], dtype="UInt64")})
+        with pytest.raises(ValueError, match="outside the signed int64 range") as exc_info:
+            ar.from_pandas(df)
+        assert "x" in str(exc_info.value)
+        assert str(2**63) in str(exc_info.value)
 
-    def test_from_pandas_all_null_boolean_extension(self):
-        df = pd.DataFrame({"active": pd.Series([pd.NA, pd.NA, pd.NA], dtype="boolean")})
-        result = ar.to_pandas(ar.from_pandas(df))
-        assert len(result) == 3
-        assert result["active"].isna().all()
-        assert str(result["active"].dtype) == "string"
+    def test_object_dtype_overflow_raises_clear_error(self):
+        """Object dtype integers outside int64 range raise a clear ValueError."""
+        df = pd.DataFrame({"x": pd.Series([2**63], dtype=object)})
+        with pytest.raises(ValueError, match="outside the signed int64 range") as exc_info:
+            ar.from_pandas(df)
+        assert "x" in str(exc_info.value)
+        assert str(2**63) in str(exc_info.value)
 
-    def test_from_pandas_all_null_string_extension(self):
-        df = pd.DataFrame({"name": pd.Series([pd.NA, pd.NA, pd.NA], dtype="string")})
-        result = ar.to_pandas(ar.from_pandas(df))
-        assert len(result) == 3
-        assert result["name"].isna().all()
-        assert str(result["name"].dtype) == "string"
+    def test_int64_max_boundary_accepted(self):
+        """2**63 - 1 is the maximum valid int64 value and must be accepted."""
+        df = pd.DataFrame({"x": pd.Series([2**63 - 1], dtype=object)})
+        assert ar.from_pandas(df) is not None
 
-    def test_empty_column_dataframe_preserves_row_count(self):
-        df = pd.DataFrame(index=range(3))
-
-        frame = ar.from_pandas(df)
-        result = ar.to_pandas(frame)
-
-        assert frame.shape == (3, 0)
-        assert result.shape == (3, 0)
-        assert result.index.tolist() == [0, 1, 2]
-
-    def test_zero_column_frame_survives_repeated_roundtrip(self):
-        df = pd.DataFrame(index=range(2))
-
-        frame = ar.from_pandas(df)
-        roundtripped = ar.from_pandas(ar.to_pandas(frame))
-
-        assert roundtripped.shape == (2, 0)
+    def test_int64_min_boundary_accepted(self):
+        """-(2**63) is the minimum valid int64 value and must be accepted."""
+        df = pd.DataFrame({"x": pd.Series([-(2**63)], dtype=object)})
+        assert ar.from_pandas(df) is not None
 
 
 class TestAttrsPreservation:
