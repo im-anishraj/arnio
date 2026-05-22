@@ -27,7 +27,7 @@ DRY_RUN = os.getenv("ARNIO_BENCHMARK_DRY_RUN") == "1"
 RUNS = 1 if DRY_RUN else 3
 
 BASELINE_FILE = "benchmarks/baseline.json"
-REGRESSION_THRESHOLD = 10  # Percent
+REGRESSION_THRESHOLD = 5  # Percent
 
 
 @dataclass(frozen=True)
@@ -416,8 +416,8 @@ def run_case(case, skip_correctness=False):
         )
 
         if is_regression:
-            print(
-                f"WARNING: Regression detected: "
+            raise RuntimeError(
+                f"Benchmark regression detected: "
                 f"{regression_percent:.1f}% slower than baseline "
                 f"(threshold: {REGRESSION_THRESHOLD}%)"
             )
@@ -485,5 +485,10 @@ if __name__ == "__main__":
             "speedup": result["speedup"],
         }
 
-    with open("benchmark_results.json", "w") as f:
+    output_path = Path("benchmark_results.json")
+
+    with open(output_path, "w") as f:
         json.dump(results, f, indent=2)
+
+    if DRY_RUN and output_path.exists():
+        output_path.unlink()
