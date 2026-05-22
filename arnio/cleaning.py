@@ -422,7 +422,11 @@ def drop_duplicates(
     return ArFrame(result)
 
 
-def drop_constant_columns(frame: ArFrame) -> ArFrame:
+def drop_constant_columns(
+    frame: ArFrame,
+    *,
+    subset: list[str] | None = None,
+) -> ArFrame:
     """Remove columns with exactly one unique value.
 
     Nulls are counted as values when determining whether a column is constant.
@@ -437,6 +441,8 @@ def drop_constant_columns(frame: ArFrame) -> ArFrame:
     ----------
     frame : ArFrame
         Input data frame.
+    subset : list[str], optional
+        Column names to check for constant values. If None, checks all columns.
 
     Returns
     -------
@@ -450,13 +456,24 @@ def drop_constant_columns(frame: ArFrame) -> ArFrame:
     """
     from .convert import from_pandas, to_pandas
 
+    dtypes = frame.dtypes
+
+    if subset is not None:
+        unknown_columns = [col for col in subset if col not in dtypes]
+        if unknown_columns:
+            raise ValueError(f"Unknown columns in subset: {unknown_columns}")
+        target_columns = subset
+    else:
+        target_columns = list(dtypes.keys())
+
     df = to_pandas(frame)
     if len(df.index) == 0:
         return frame
 
     constant_columns = [
-        column for column in df.columns if df[column].nunique(dropna=False) == 1
+        column for column in target_columns if df[column].nunique(dropna=False) == 1
     ]
+    remaining_columns = [col for col in df.columns if col not in constant_columns]
     return from_pandas(df.drop(columns=constant_columns))
 
 
