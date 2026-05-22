@@ -30,7 +30,24 @@ class CsvReadError(ArnioError):
     pass
 
 
+class JsonlReadError(ArnioError):
+    """Raised when a JSON Lines file cannot be read or contains malformed data."""
+
+    pass
+
+
 class TypeCastError(ArnioError):
     """Raised when cast_types encounters an incompatible type."""
 
     pass
+
+
+class PipelineStepError(ArnioError):
+    """Raised when an execution error occurs inside a custom pipeline step."""
+
+    def __init__(self, step_name: str, orig_err: Exception):
+        self.step_name = step_name
+        self.orig_err = orig_err
+        super().__init__(
+            f"Error occurred during custom pipeline step '{step_name}': {orig_err}"
+        )
