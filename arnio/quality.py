@@ -6,6 +6,7 @@ Data quality profiling and safe automatic cleaning helpers.
 from __future__ import annotations
 
 import html
+import json
 import math
 from dataclasses import dataclass, field
 from typing import Any
@@ -248,6 +249,27 @@ class DataQualityReport:
                 for s in self.suggestions
             ],
         }
+
+    def to_json(
+        self,
+        *,
+        indent: int | None = None,
+        redact_sample_values: bool = False,
+        exclude_columns: list[str] | set[str] | tuple[str, ...] | None = None,
+    ) -> str:
+        """Return the report as a JSON string.
+
+        Example:
+        report.to_json(indent=2)
+        """
+
+        return json.dumps(
+            self.to_dict(
+                redact_sample_values=redact_sample_values,
+                exclude_columns=exclude_columns,
+            ),
+            indent=indent,
+        )
 
     def to_markdown(self) -> str:
         """Return a GitHub-friendly Markdown report."""
