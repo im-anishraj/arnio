@@ -830,6 +830,8 @@ def validate(
     frame: ArFrame,
     schema: Schema | dict[str, Field],
     max_errors: int | None = None,
+    *,
+    columns: list[str] | None = None,
 ) -> ValidationResult:
     """Validate an ArFrame against a schema.
 
@@ -844,6 +846,8 @@ def validate(
     max_errors : int | None
         Maximum number of validation issues to return.
         Validation stops once this limit is reached.
+    columns : list[str], optional
+        Column names to validate. If None, validates all columns in the schema.
 
     Returns
     -------
@@ -875,6 +879,10 @@ def validate(
 
     if max_errors is not None and max_errors < 0:
         raise ValueError("max_errors must be >= 0")
+
+    if columns is not None:
+        schema_fields = {k: v for k, v in schema.fields.items() if k in columns}
+        schema = Schema(schema_fields)
 
     df = to_pandas(frame)
     dtypes = frame.dtypes
