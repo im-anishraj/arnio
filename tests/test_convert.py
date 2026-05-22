@@ -149,6 +149,14 @@ class TestFromPandas:
         assert "y" in frame.columns
         assert "z" in frame.columns
 
+    def test_from_pandas_constructed_frame_no_longer_passes_row_count_arg(self):
+        df = pd.DataFrame({"name": ["Alice", "Bob"], "score": [95.5, 87.0]})
+
+        frame = ar.from_pandas(df)
+
+        assert frame.shape == (2, 2)
+        pd.testing.assert_frame_equal(ar.to_pandas(frame), df, check_dtype=False)
+
     def test_string_dtype_roundtrip_with_missing_value(self):
         df = pd.DataFrame(
             {
