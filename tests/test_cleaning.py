@@ -1674,6 +1674,34 @@ class TestRenameColumns:
         ):
             ar.rename_columns(frame, {"name": "   "})
 
+    # --- Regression tests for non-dict mapping validation (bug fix) ---
+
+    def test_rename_rejects_none_with_clear_type_error(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        with pytest.raises(TypeError, match="'NoneType'"):
+            ar.rename_columns(frame, None)
+
+    def test_rename_rejects_list_of_tuples_with_clear_type_error(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        with pytest.raises(TypeError, match="'list'"):
+            ar.rename_columns(frame, [("name", "full_name")])
+
+    def test_rename_rejects_integer_with_clear_type_error(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        with pytest.raises(TypeError, match="'int'"):
+            ar.rename_columns(frame, 42)
+
+    def test_rename_rejects_string_with_clear_type_error(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        with pytest.raises(TypeError, match="'str'"):
+            ar.rename_columns(frame, "name:full_name")
+
+    def test_rename_valid_dict_still_works(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        result = ar.rename_columns(frame, {"name": "full_name"})
+        assert "full_name" in result.columns
+        assert "name" not in result.columns
+
 
 class TestTrimColumnNames:
     def test_trim_column_names_basic(self):

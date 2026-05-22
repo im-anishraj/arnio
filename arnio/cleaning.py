@@ -138,14 +138,15 @@ def _validate_string_mapping(
     argument_name: str,
     allow_empty: bool = True,
 ) -> dict[str, str]:
-    normalized = _validate_mapping(
-        mapping,
-        argument_name=argument_name,
-        allow_empty=allow_empty,
-        non_mapping_message=(
-            f"{argument_name} must be a mapping of string keys to strings"
-        ),
-    )
+    if not isinstance(mapping, Mapping):
+        raise TypeError(
+            f"{argument_name} must be a dict mapping column names to strings, "
+            f"got {type(mapping).__name__!r}"
+        )
+
+    normalized = dict(mapping)
+    if not normalized and not allow_empty:
+        raise ValueError(f"{argument_name} must not be empty")
 
     invalid_keys = [key for key in normalized if not isinstance(key, str)]
     if invalid_keys:
