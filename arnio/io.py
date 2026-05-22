@@ -431,6 +431,13 @@ def read_csv(
     skiprows: int | None = None,
     encoding: str = "utf-8",
     trim_headers: bool = True,
+    decimal_separator: str = ".",
+    thousands_separator: str | None = None,
+    null_values: list[str] | None = None,
+    dtype: dict[str, str] | None = None,
+    mode: str = "strict",
+    encoding_errors: str = "strict",
+    verbose: bool = False,
 ) -> ArFrame:
     """Read a CSV file into an ArFrame via C++ backend.
 
@@ -462,6 +469,10 @@ def read_csv(
         File encoding.
     trim_headers : bool, default True
         Strip leading/trailing whitespace from column names.
+
+    verbose : bool, default False
+        If True, prints progress information during CSV reading,
+        including the file path and number of rows loaded.
 
     Returns
     -------
@@ -579,8 +590,12 @@ def read_csv(
                     e, native_path, encoding, delimiter
                 ) from None
 
-        if on_bad_lines == "warn" and bad_rows:
-            _warn_bad_rows(bad_rows)
+        if verbose:
+            print(f"[arnio] Reading: {path}")
+            frame = ArFrame(cpp_frame)
+            print(f"[arnio] Done! {len(frame)} rows loaded.")
+            return frame
+        return ArFrame(cpp_frame)
 
         frame = ArFrame(cpp_frame)
 
@@ -622,7 +637,7 @@ def read_csv_chunked(
     null_values: list[str] | None = None,
     on_bad_lines: str = "warn",
     mode: str = "strict",
-    on_bad_lines: str = "error",
+    verbose: bool = False,
 ) -> Iterator[ArFrame]:
     """Read a CSV file in chunks, yielding ArFrame objects.
 
@@ -812,28 +827,10 @@ def read_csv_chunked(
                 chunk = reader.next_chunk(chunksize, on_bad_lines)
                 if chunk is None:
                     break
-                cpp_frame, bad_rows = chunk
-
-                    if on_bad_lines == "warn" and bad_rows:
-                        _warn_bad_rows(bad_rows)
-                    frame = ArFrame(cpp_frame)
-
-                    if frame.shape[0] == 0 and bad_rows:
-                        if yielded_nonempty_chunk:
-                            continue
-
-                    yielded_nonempty_chunk = (
-                        yielded_nonempty_chunk or frame.shape[0] > 0
-                    )
-
-                    yield frame
-            finally:
-                reader.close()
-                if should_cleanup and os.path.exists(native_path):
-                    try:
-                        os.unlink(native_path)
-                    except OSError:
-                        pass
+                chunk = ArFrame(cpp_frame)
+                if verbose:
+                    print(f"[arnio] Chunk loaded: {len(chunk)} rows")
+                yield chunk
     except ValueError:
         raise
     except CsvReadError:
