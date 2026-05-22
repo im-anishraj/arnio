@@ -11,9 +11,12 @@ from sklearn.pipeline import Pipeline  # noqa: E402
 from arnio.integrations.sklearn import ArnioCleaner  # noqa: E402
 
 
+# ===========================================================================
+# Original tests (kept, updated to match new contract)
+# ===========================================================================
+
 def test_arniocleaner_non_dataframe_input():
     cleaner = ArnioCleaner()
-    # Test lists and numpy arrays fail safely
     with pytest.raises(TypeError, match="requires a pandas DataFrame"):
         cleaner.fit([[1, 2], [3, 4]])
 
@@ -24,21 +27,15 @@ def test_arniocleaner_non_dataframe_input():
 
 def test_arniocleaner_configured_steps():
     df = pd.DataFrame({"A": ["  dirty  ", "data "], "B": [1, 2]})
-
     cleaner = ArnioCleaner(steps=[("strip_whitespace",)])
     result = cleaner.fit_transform(df)
-
     assert result["A"].tolist() == ["dirty", "data"]
 
 
 def test_arniocleaner_copy_behavior():
     df = pd.DataFrame({"A": ["  dirty  ", "data "]})
-
-    # Test copy=True (default) ensures the original dataframe isn't mutated
     cleaner = ArnioCleaner(steps=[("strip_whitespace",)], copy=True)
     cleaner.fit_transform(df)
-
-    # Original should still have spaces
     assert df.iloc[0, 0] == "  dirty  "
 
 
@@ -46,14 +43,13 @@ def test_arniocleaner_in_pipeline():
     df = pd.DataFrame({"A": [" data ", "here "], "B": [1, 2]})
     cleaner = ArnioCleaner(steps=[])
     pipe = Pipeline([("arnio_prep", cleaner)])
-
     result = pipe.fit_transform(df)
-
     assert isinstance(result, pd.DataFrame)
     assert result.index.equals(df.index)
     assert list(result.columns) == ["A", "B"]
 
 
+<<<<<<< HEAD
 def test_arniocleaner_feature_names_out_tracks_dropped_columns():
     df = pd.DataFrame({"A": ["x", "y"], "B": [1, 2]})
 
@@ -108,13 +104,13 @@ def test_arniocleaner_allows_row_dropping_when_enabled():
     assert result.iloc[0]["name"] == "Alice"
 
 
+=======
+>>>>>>> 8e5471d (feat(sklearn): enforce schema-stability contract in ArnioCleaner (#946))
 def test_arniocleaner_rejects_transform_column_order_mismatch():
     train = pd.DataFrame({"A": [" x "], "B": [1]})
     test = pd.DataFrame({"B": [1], "A": [" x "]})
-
     cleaner = ArnioCleaner(steps=[("strip_whitespace",)])
     cleaner.fit(train)
-
     with pytest.raises(ValueError, match="columns must match"):
         cleaner.transform(test)
 
@@ -146,48 +142,41 @@ def test_arniocleaner_rejects_transform_with_missing_columns():
         cleaner.transform(test)
 
 
-# --- Issue: ArnioCleaner row-dropping pipeline behavior ---
-# Tests added to cover drop_nulls and filter_rows changing row count
-# as required by the acceptance criteria
+# ===========================================================================
+# Issue #946 – ArnioCleaner schema-stability contract
+# ===========================================================================
+# Policy (chosen by maintainer):
+#   • Row-count changes  → ALWAYS rejected at fit() in BOTH modes
+#   • Column schema changes → rejected by default (strict mode),
+#                             allowed only with allow_schema_changes=True
+#   • get_feature_names_out() → reflects final columns in opt-in mode
 
 
-def test_drop_nulls_changes_row_count_when_allowed():
-    df = pd.DataFrame({"name": ["Alice", "Bob", None], "age": [30, 25, 40]})
-    cleaner = ArnioCleaner(
-        steps=[("drop_nulls",)],
-        allow_row_count_change=True,
-    )
-    result = cleaner.fit_transform(df)
-    assert len(result) == 2
-    assert list(result["name"]) == ["Alice", "Bob"]
+# ---------------------------------------------------------------------------
+# STRICT MODE (default): row-count-changing steps rejected at fit()
+# ---------------------------------------------------------------------------
 
-
-def test_filter_rows_changes_row_count_when_allowed():
-    # filter_rows takes column, op, value as separate kwargs
-    df = pd.DataFrame({"score": [10, 50, 90], "label": ["low", "mid", "high"]})
-    cleaner = ArnioCleaner(
-        steps=[("filter_rows", {"column": "score", "op": ">", "value": 20})],
-        allow_row_count_change=True,
-    )
-    result = cleaner.fit_transform(df)
-    assert len(result) == 2
-    assert list(result["label"]) == ["mid", "high"]
-
-
-def test_drop_nulls_rejects_row_count_change_by_default():
-    # drop_nulls without allow_row_count_change=True must raise ValueError
+def test_strict_drop_nulls_rejected_at_fit():
+    """drop_nulls must raise at fit() because it may change row count."""
     df = pd.DataFrame({"name": ["Alice", None], "age": [30, 40]})
     cleaner = ArnioCleaner(steps=[("drop_nulls",)])
-    with pytest.raises(ValueError, match="changed the row count"):
-        cleaner.fit_transform(df)
+    with pytest.raises(ValueError, match="row-count-changing"):
+        cleaner.fit(df)
 
 
-def test_filter_rows_rejects_row_count_change_by_default():
-    # filter_rows without allow_row_count_change=True must raise ValueError
+def test_strict_drop_duplicates_rejected_at_fit():
+    df = pd.DataFrame({"x": [1, 1, 2]})
+    cleaner = ArnioCleaner(steps=[("drop_duplicates",)])
+    with pytest.raises(ValueError, match="row-count-changing"):
+        cleaner.fit(df)
+
+
+def test_strict_filter_rows_rejected_at_fit():
     df = pd.DataFrame({"score": [10, 50, 90]})
     cleaner = ArnioCleaner(
         steps=[("filter_rows", {"column": "score", "op": ">", "value": 20})]
     )
+<<<<<<< HEAD
     with pytest.raises(ValueError, match="changed the row count"):
         cleaner.fit_transform(df)
 
@@ -304,3 +293,219 @@ def test_arniocleaner_clone_with_invalid_params_does_not_raise():
     cleaner = ArnioCleaner(copy="yes")
     cloned = clone(cleaner)
     assert cloned.copy == "yes"
+=======
+    with pytest.raises(ValueError, match="row-count-changing"):
+        cleaner.fit(df)
+
+
+def test_strict_keep_rows_with_nulls_rejected_at_fit():
+    df = pd.DataFrame({"a": [1, None, 3]})
+    cleaner = ArnioCleaner(steps=[("keep_rows_with_nulls",)])
+    with pytest.raises(ValueError, match="row-count-changing"):
+        cleaner.fit(df)
+
+
+# ---------------------------------------------------------------------------
+# STRICT MODE: column-schema-changing steps rejected at fit()
+# ---------------------------------------------------------------------------
+
+def test_strict_rename_columns_rejected():
+    df = pd.DataFrame({"A": [1, 2], "B": [3, 4]})
+    cleaner = ArnioCleaner(steps=[("rename_columns", {"A": "alpha"})],)
+    with pytest.raises(ValueError, match="allow_schema_changes"):
+        cleaner.fit(df)
+
+
+def test_strict_drop_columns_rejected():
+    df = pd.DataFrame({"A": [1, 2], "B": [3, 4]})
+    cleaner = ArnioCleaner(steps=[("drop_columns", {"columns": ["B"]})])
+    with pytest.raises(ValueError, match="allow_schema_changes"):
+        cleaner.fit(df)
+
+
+def test_strict_drop_constant_columns_rejected():
+    df = pd.DataFrame({"A": [1, 1], "B": [2, 3]})
+    cleaner = ArnioCleaner(steps=[("drop_constant_columns",)])
+    with pytest.raises(ValueError, match="allow_schema_changes"):
+        cleaner.fit(df)
+
+
+def test_strict_combine_columns_rejected():
+    """combine_columns adds a column – rejected in strict mode."""
+    df = pd.DataFrame({"first": ["John", "Jane"], "last": ["Doe", "Smith"]})
+    cleaner = ArnioCleaner(
+        steps=[
+            (
+                "combine_columns",
+                {"subset": ["first", "last"], "output_column": "full_name", "separator": " "},
+            )
+        ]
+    )
+    with pytest.raises(ValueError, match="allow_schema_changes"):
+        cleaner.fit(df)
+
+
+def test_strict_trim_column_names_rejected():
+    df = pd.DataFrame({" A ": [1, 2], "B ": [3, 4]})
+    cleaner = ArnioCleaner(steps=[("trim_column_names",)])
+    with pytest.raises(ValueError, match="allow_schema_changes"):
+        cleaner.fit(df)
+
+
+# ---------------------------------------------------------------------------
+# STRICT MODE: schema-preserving steps pass cleanly
+# ---------------------------------------------------------------------------
+
+def test_strict_strip_whitespace_allowed():
+    df = pd.DataFrame({"A": [" dirty ", "data "], "B": [1, 2]})
+    cleaner = ArnioCleaner(steps=[("strip_whitespace",)])
+    result = cleaner.fit_transform(df)
+    assert result["A"].tolist() == ["dirty", "data"]
+    assert list(result.columns) == ["A", "B"]
+
+
+def test_strict_fill_nulls_allowed():
+    df = pd.DataFrame({"A": [1.0, None, 3.0]})
+    cleaner = ArnioCleaner(steps=[("fill_nulls", {"value": 0})])
+    result = cleaner.fit_transform(df)
+    assert result["A"].tolist() == [1.0, 0.0, 3.0]
+
+
+def test_strict_normalize_case_allowed():
+    df = pd.DataFrame({"name": ["ALICE", "Bob"]})
+    cleaner = ArnioCleaner(steps=[("normalize_case",)])
+    result = cleaner.fit_transform(df)
+    assert result["name"].tolist() == ["alice", "bob"]
+
+
+def test_strict_get_feature_names_out_returns_input_columns():
+    df = pd.DataFrame({"A": [1, 2], "B": [3, 4]})
+    cleaner = ArnioCleaner(steps=[("strip_whitespace",)])
+    cleaner.fit(df)
+    assert list(cleaner.get_feature_names_out()) == ["A", "B"]
+
+
+# ---------------------------------------------------------------------------
+# OPT-IN MODE (allow_schema_changes=True): row-count STILL rejected
+# ---------------------------------------------------------------------------
+
+def test_optIn_row_count_still_rejected_drop_nulls():
+    """Row-count-changing steps are always rejected, even in opt-in mode."""
+    df = pd.DataFrame({"name": ["Alice", None], "age": [30, 40]})
+    cleaner = ArnioCleaner(steps=[("drop_nulls",)], allow_schema_changes=True)
+    with pytest.raises(ValueError, match="row-count-changing"):
+        cleaner.fit(df)
+
+
+def test_optIn_row_count_still_rejected_filter_rows():
+    df = pd.DataFrame({"score": [10, 50, 90]})
+    cleaner = ArnioCleaner(
+        steps=[("filter_rows", {"column": "score", "op": ">", "value": 20})],
+        allow_schema_changes=True,
+    )
+    with pytest.raises(ValueError, match="row-count-changing"):
+        cleaner.fit(df)
+
+
+# ---------------------------------------------------------------------------
+# OPT-IN MODE: column-schema-changing steps allowed
+# ---------------------------------------------------------------------------
+
+def test_optIn_rename_columns_allowed():
+    df = pd.DataFrame({"A": [1, 2], "B": [3, 4]})
+    cleaner = ArnioCleaner(
+        steps=[("rename_columns", {"A": "alpha"})],
+        allow_schema_changes=True,
+    )
+    result = cleaner.fit_transform(df)
+    assert list(result.columns) == ["alpha", "B"]
+
+
+def test_optIn_drop_columns_allowed():
+    df = pd.DataFrame({"A": [1, 2], "B": [3, 4], "C": [5, 6]})
+    cleaner = ArnioCleaner(
+        steps=[("drop_columns", {"columns": ["C"]})],
+        allow_schema_changes=True,
+    )
+    result = cleaner.fit_transform(df)
+    assert list(result.columns) == ["A", "B"]
+
+
+def test_optIn_drop_constant_columns_allowed():
+    """drop_constant_columns drops the all-same column A."""
+    df = pd.DataFrame({"A": [1, 1, 1], "B": [2, 3, 4]})
+    cleaner = ArnioCleaner(
+        steps=[("drop_constant_columns",)],
+        allow_schema_changes=True,
+    )
+    result = cleaner.fit_transform(df)
+    assert list(result.columns) == ["B"]
+
+
+def test_optIn_combine_columns_allowed():
+    """combine_columns appends a new column – allowed in opt-in mode."""
+    df = pd.DataFrame({"first": ["John", "Jane"], "last": ["Doe", "Smith"]})
+    cleaner = ArnioCleaner(
+        steps=[
+            (
+                "combine_columns",
+                {"subset": ["first", "last"], "output_column": "full_name", "separator": " "},
+            )
+        ],
+        allow_schema_changes=True,
+    )
+    result = cleaner.fit_transform(df)
+    assert "full_name" in result.columns
+    assert result["full_name"].tolist() == ["John Doe", "Jane Smith"]
+
+
+# ---------------------------------------------------------------------------
+# OPT-IN MODE: get_feature_names_out() reflects final transformed columns
+# ---------------------------------------------------------------------------
+
+def test_optIn_get_feature_names_out_after_rename():
+    df = pd.DataFrame({"A": [1, 2], "B": [3, 4]})
+    cleaner = ArnioCleaner(
+        steps=[("rename_columns", {"A": "alpha"})],
+        allow_schema_changes=True,
+    )
+    cleaner.fit(df)
+    assert list(cleaner.get_feature_names_out()) == ["alpha", "B"]
+
+
+def test_optIn_get_feature_names_out_after_drop():
+    df = pd.DataFrame({"A": [1, 2], "B": [3, 4], "C": [5, 6]})
+    cleaner = ArnioCleaner(
+        steps=[("drop_columns", {"columns": ["C"]})],
+        allow_schema_changes=True,
+    )
+    cleaner.fit(df)
+    assert list(cleaner.get_feature_names_out()) == ["A", "B"]
+
+
+def test_optIn_get_feature_names_out_after_drop_constant():
+    df = pd.DataFrame({"A": [1, 1, 1], "B": [2, 3, 4]})
+    cleaner = ArnioCleaner(
+        steps=[("drop_constant_columns",)],
+        allow_schema_changes=True,
+    )
+    cleaner.fit(df)
+    assert list(cleaner.get_feature_names_out()) == ["B"]
+
+
+def test_optIn_get_feature_names_out_after_combine():
+    df = pd.DataFrame({"first": ["John", "Jane"], "last": ["Doe", "Smith"]})
+    cleaner = ArnioCleaner(
+        steps=[
+            (
+                "combine_columns",
+                {"subset": ["first", "last"], "output_column": "full_name", "separator": " "},
+            )
+        ],
+        allow_schema_changes=True,
+    )
+    cleaner.fit(df)
+    out = list(cleaner.get_feature_names_out())
+    assert "full_name" in out
+    assert "first" in out and "last" in out
+>>>>>>> 8e5471d (feat(sklearn): enforce schema-stability contract in ArnioCleaner (#946))
