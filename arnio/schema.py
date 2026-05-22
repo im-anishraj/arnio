@@ -5,11 +5,13 @@ Production data contracts and validation.
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Callable
 
+import numpy as np
 import pandas as pd
 
 from .convert import to_pandas
@@ -360,9 +362,74 @@ class Schema:
                         f"Schema 'unique' members must be strings, got {type(item).__name__} for element {item!r}."
                     )
 
-    def validate(self, frame: ArFrame) -> ValidationResult:
-        """Validate a frame against this schema."""
-        return validate(frame, self)
+    def validate(
+        self,
+        frame: ArFrame,
+        max_errors: int | None = None,
+    ) -> ValidationResult:
+        """
+        Validate an ArFrame against this schema.
+
+        Args:
+            frame:
+                frame to validate.
+            max_errors:
+                Maximum number of validation issues to return.
+                Validation stops once this limit is reached.
+        """
+        return validate(frame, self, max_errors=max_errors)
+
+    def to_json(self) -> str:
+        """Serialize the schema to a stable JSON string."""
+        if self.rules:
+            raise ValueError(
+                "Schema rules are not JSON serializable. "
+                "Serialize only fields/strict/unique for now."
+            )
+
+        payload = {
+            "fields": {
+                name: _field_to_json_dict(field_def)
+                for name, field_def in sorted(self.fields.items())
+            },
+            "strict": self.strict,
+            "unique": list(self.unique) if self.unique is not None else None,
+        }
+        return json.dumps(payload, sort_keys=True)
+
+    @classmethod
+    def from_json(cls, value: str) -> Schema:
+        """Deserialize a schema from a JSON string produced by ``to_json()``."""
+        try:
+            payload = json.loads(value)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"Invalid schema JSON: {exc.msg}") from exc
+
+        if not isinstance(payload, dict):
+            raise TypeError(
+                "Schema JSON must decode to an object with 'fields', 'strict', and optional 'unique'."
+            )
+
+        fields_payload = payload.get("fields")
+        if not isinstance(fields_payload, dict):
+            raise TypeError(
+                "Schema JSON 'fields' must be an object mapping names to field definitions."
+            )
+
+        fields = {
+            name: _field_from_json_dict(name, field_payload)
+            for name, field_payload in fields_payload.items()
+        }
+
+        strict = payload.get("strict", False)
+        if not isinstance(strict, bool):
+            raise TypeError("Schema JSON 'strict' must be a boolean.")
+
+        unique = payload.get("unique")
+        if unique is not None and not isinstance(unique, list):
+            raise TypeError("Schema JSON 'unique' must be a list of strings or null.")
+
+        return cls(fields=fields, strict=strict, unique=unique)
 
     @classmethod
     def bootstrap_from_report(cls, report: Any) -> Schema:
@@ -759,20 +826,34 @@ def diff_schema(
     return SchemaDiff(differences)
 
 
-def validate(frame: ArFrame, schema: Schema | dict[str, Field]) -> ValidationResult:
+def validate(
+    frame: ArFrame,
+    schema: Schema | dict[str, Field],
+    max_errors: int | None = None,
+) -> ValidationResult:
     """Validate an ArFrame against a schema.
 
     Parameters
     ----------
     frame : ArFrame
-        Input frame.
+        Input frame. Must be a single in-memory ArFrame. Chunked validation
+        is not currently supported by this function.
     schema : Schema or dict[str, Field]
-        Validation contract.
+        Validation schema.
+
+    max_errors : int | None
+        Maximum number of validation issues to return.
+        Validation stops once this limit is reached.
 
     Returns
     -------
     ValidationResult
         Validation result containing all issues and bad row indexes.
+
+    Raises
+    ------
+    TypeError
+        If schema.unique is provided but is not a list or tuple of strings.
 
     Examples
     --------
@@ -780,10 +861,37 @@ def validate(frame: ArFrame, schema: Schema | dict[str, Field]) -> ValidationRes
     >>> result = ar.validate(frame, schema)
     >>> result.passed
     """
+    if not isinstance(frame, ArFrame):
+        raise TypeError(
+            "validate() expects a single ArFrame. Chunked validation is not "
+            "currently supported; validate each chunk explicitly or materialize "
+            "the data before validation."
+        )
+
     schema = schema if isinstance(schema, Schema) else Schema(schema)
+    if max_errors is not None:
+        if isinstance(max_errors, bool) or not isinstance(max_errors, int):
+            raise TypeError("max_errors must be an int or None")
+
+    if max_errors is not None and max_errors < 0:
+        raise ValueError("max_errors must be >= 0")
+
     df = to_pandas(frame)
     dtypes = frame.dtypes
     issues: list[ValidationIssue] = []
+
+    if max_errors == 0:
+        return ValidationResult(
+            row_count=len(df),
+            issue_count=0,
+            issues=[],
+            bad_rows=sorted(
+                {issue.row_index for issue in issues if issue.row_index is not None}
+            ),
+        )
+
+    def reached_limit() -> bool:
+        return max_errors is not None and len(issues) >= max_errors
 
     for name, field_def in schema.fields.items():
         if name not in df.columns:
@@ -795,11 +903,53 @@ def validate(frame: ArFrame, schema: Schema | dict[str, Field]) -> ValidationRes
                     severity=field_def.severity,
                 )
             )
+
+            if reached_limit():
+                issues = issues[:max_errors]
+
+                return ValidationResult(
+                    row_count=len(df),
+                    issue_count=len(issues),
+                    issues=issues,
+                    bad_rows=sorted(
+                        {
+                            issue.row_index
+                            for issue in issues
+                            if issue.row_index is not None
+                        }
+                    ),
+                )
+
             continue
-        issues.extend(_validate_column(df, df[name], dtypes.get(name), name, field_def))
+        column_issues = _validate_column(
+            df,
+            df[name],
+            dtypes.get(name),
+            name,
+            field_def,
+        )
+
+        remaining = None if max_errors is None else max_errors - len(issues)
+        if remaining is not None:
+            column_issues = column_issues[:remaining]
+
+        issues.extend(column_issues)
+
+        if reached_limit():
+            issues = issues[:max_errors]
+
+            return ValidationResult(
+                row_count=len(df),
+                issue_count=len(issues),
+                issues=issues,
+                bad_rows=sorted(
+                    {issue.row_index for issue in issues if issue.row_index is not None}
+                ),
+            )
 
     if schema.strict:
         expected = set(schema.fields)
+
         for name in df.columns:
             if name not in expected:
                 issues.append(
@@ -810,8 +960,36 @@ def validate(frame: ArFrame, schema: Schema | dict[str, Field]) -> ValidationRes
                     )
                 )
 
+                if reached_limit():
+                    issues = issues[:max_errors]
+
+                    return ValidationResult(
+                        row_count=len(df),
+                        issue_count=len(issues),
+                        issues=issues,
+                        bad_rows=sorted(
+                            {
+                                issue.row_index
+                                for issue in issues
+                                if issue.row_index is not None
+                            }
+                        ),
+                    )
+
     if schema.unique is not None:
-        if isinstance(schema.unique, (list, tuple)) and len(schema.unique) == 0:
+        if not isinstance(schema.unique, (list, tuple)):
+            raise TypeError(
+                "Schema 'unique' must be a list or tuple of strings (e.g., ['column_name']), "
+                f"got {type(schema.unique).__name__}."
+            )
+
+        for item in schema.unique:
+            if not isinstance(item, str):
+                raise TypeError(
+                    f"Schema 'unique' members must be strings, got {type(item).__name__} for element {item!r}."
+                )
+
+        if len(schema.unique) == 0:
             issues.append(
                 ValidationIssue(
                     column=None,
@@ -819,7 +997,23 @@ def validate(frame: ArFrame, schema: Schema | dict[str, Field]) -> ValidationRes
                     message="Composite unique columns cannot be empty",
                 )
             )
-        elif isinstance(schema.unique, (list, tuple)):
+            if reached_limit():
+                issues = issues[:max_errors]
+
+                return ValidationResult(
+                    row_count=len(df),
+                    issue_count=len(issues),
+                    issues=issues,
+                    bad_rows=sorted(
+                        {
+                            issue.row_index
+                            for issue in issues
+                            if issue.row_index is not None
+                        }
+                    ),
+                )
+
+        else:
             missing_cols = [c for c in schema.unique if c not in df.columns]
             if missing_cols:
                 for col in missing_cols:
@@ -830,8 +1024,28 @@ def validate(frame: ArFrame, schema: Schema | dict[str, Field]) -> ValidationRes
                             message=f"Column {col!r} not found",
                         )
                     )
+
+                    if reached_limit():
+                        issues = issues[:max_errors]
+
+                        return ValidationResult(
+                            row_count=len(df),
+                            issue_count=len(issues),
+                            issues=issues,
+                            bad_rows=sorted(
+                                {
+                                    issue.row_index
+                                    for issue in issues
+                                    if issue.row_index is not None
+                                }
+                            ),
+                        )
             else:
-                duplicate_mask = df.duplicated(subset=list(schema.unique), keep=False)
+                duplicate_mask = df.duplicated(
+                    subset=list(schema.unique),
+                    keep=False,
+                )
+
                 if duplicate_mask.any():
                     for index in df[duplicate_mask].index:
                         issues.append(
@@ -845,6 +1059,23 @@ def validate(frame: ArFrame, schema: Schema | dict[str, Field]) -> ValidationRes
                                 row_index=int(index) + 1,
                             )
                         )
+
+                        if reached_limit():
+                            issues = issues[:max_errors]
+
+                            return ValidationResult(
+                                row_count=len(df),
+                                issue_count=len(issues),
+                                issues=issues,
+                                bad_rows=sorted(
+                                    {
+                                        issue.row_index
+                                        for issue in issues
+                                        if issue.row_index is not None
+                                    }
+                                ),
+                            )
+
     if schema.rules:
         for rule_fn in schema.rules:
             rule_name = getattr(rule_fn, "__name__", type(rule_fn).__name__)
@@ -862,6 +1093,22 @@ def validate(frame: ArFrame, schema: Schema | dict[str, Field]) -> ValidationRes
                             f"item: {type(item).__name__!r}"
                         )
                 issues.extend(result)
+                if reached_limit():
+                    issues = issues[:max_errors]
+
+                    return ValidationResult(
+                        row_count=len(df),
+                        issue_count=len(issues),
+                        issues=issues,
+                        bad_rows=sorted(
+                            {
+                                issue.row_index
+                                for issue in issues
+                                if issue.row_index is not None
+                            }
+                        ),
+                    )
+
             except KeyError as e:
                 issues.append(
                     ValidationIssue(
@@ -870,6 +1117,21 @@ def validate(frame: ArFrame, schema: Schema | dict[str, Field]) -> ValidationRes
                         message=f"Cross-field rule referenced a missing column: {e}",
                     )
                 )
+                if reached_limit():
+                    issues = issues[:max_errors]
+
+                    return ValidationResult(
+                        row_count=len(df),
+                        issue_count=len(issues),
+                        issues=issues,
+                        bad_rows=sorted(
+                            {
+                                issue.row_index
+                                for issue in issues
+                                if issue.row_index is not None
+                            }
+                        ),
+                    )
 
     bad_rows = sorted(
         {issue.row_index for issue in issues if issue.row_index is not None}
@@ -891,7 +1153,19 @@ def Int64(
     severity: str = "error",
     required_if: tuple[str, Any] | None = None,
 ) -> Field:
-    """Create an int64 schema field."""
+    """Create an int64 schema field.
+
+    Args:
+        nullable: Whether null values are allowed.
+        min: Minimum allowed value.
+        max: Maximum allowed value.
+        unique: Whether non-null values must be unique.
+        severity: Severity level for validation issues.
+        required_if: Conditional requirement as a column/value pair.
+
+    Returns:
+        Field: Configured int64 schema field.
+    """
 
     if min is not None and max is not None and min > max:
         raise ValueError("min must be less than or equal to max")
@@ -916,7 +1190,19 @@ def Float64(
     severity: str = "error",
     required_if: tuple[str, Any] | None = None,
 ) -> Field:
-    """Create a float64 schema field."""
+    """Create a float64 schema field.
+
+    Args:
+        nullable: Whether null values are allowed.
+        min: Minimum allowed value.
+        max: Maximum allowed value.
+        unique: Whether non-null values must be unique.
+        severity: Severity level for validation issues.
+        required_if: Conditional requirement as a column/value pair.
+
+    Returns:
+        Field: Configured float64 schema field.
+    """
 
     if min is not None and max is not None and min > max:
         raise ValueError("min must be less than or equal to max")
@@ -943,7 +1229,21 @@ def String(
     max_length: int | None = None,
     required_if: tuple[str, Any] | None = None,
 ) -> Field:
-    """Create a string schema field."""
+    """Create a string schema field.
+
+    Args:
+        nullable: Whether null values are allowed.
+        pattern: Regular expression pattern that non-null values must match.
+        allowed: Allowed values for the field.
+        unique: Whether non-null values must be unique.
+        severity: Severity level for validation issues.
+        min_length: Minimum allowed string length.
+        max_length: Maximum allowed string length.
+        required_if: Conditional requirement as a column/value pair.
+
+    Returns:
+        Field: Configured string schema field.
+    """
 
     if min_length is not None and max_length is not None and min_length > max_length:
         raise ValueError("min_length must be less than or equal to max_length")
@@ -969,7 +1269,16 @@ def Bool(
     severity: str = "error",
     required_if: tuple[str, Any] | None = None,
 ) -> Field:
-    """Create a bool schema field."""
+    """Create a bool schema field.
+
+    Args:
+        nullable: Whether null values are allowed.
+        severity: Severity level for validation issues.
+        required_if: Conditional requirement as a column/value pair.
+
+    Returns:
+        Field: Configured bool schema field.
+    """
     return Field(
         dtype="bool",
         nullable=nullable,
@@ -986,7 +1295,18 @@ def Email(
     validation: str = "light",
     required_if: tuple[str, Any] | None = None,
 ) -> Field:
-    """Create an email-address schema field."""
+    """Create an email-address schema field.
+
+    Args:
+        nullable: Whether null values are allowed.
+        unique: Whether non-null values must be unique.
+        severity: Severity level for validation issues.
+        validation: Email validation mode, either "light" or "strict".
+        required_if: Conditional requirement as a column/value pair.
+
+    Returns:
+        Field: Configured email-address schema field.
+    """
     if validation not in {"light", "strict"}:
         raise ValueError("Email validation must be 'light' or 'strict'")
     return Field(
@@ -1005,12 +1325,34 @@ def URL(
     unique: bool = False,
     severity: str = "error",
     required_if: tuple[str, Any] | None = None,
+    allowed_schemes: list[str] | None = None,
 ) -> Field:
-    """Create a URL schema field."""
+    """Create a URL schema field.
+    Args:
+        nullable: Whether null values are allowed.
+        unique: Whether non-null values must be unique.
+        severity: Severity level for validation issues.
+        required_if: Conditional requirement as a column/value pair.
+        allowed_schemes: List of allowed URL schemes e.g. ["https"].
+            If None, both http and https are accepted.
+    Returns:
+        Field: Configured URL schema field.
+    """
+    if allowed_schemes is not None:
+        if not isinstance(allowed_schemes, list) or len(allowed_schemes) == 0:
+            raise ValueError("allowed_schemes must be a non-empty list")
+        for scheme in allowed_schemes:
+            if not isinstance(scheme, str) or scheme.strip() == "":
+                raise ValueError("allowed_schemes must contain non-empty strings")
+        schemes = "|".join(re.escape(s) for s in allowed_schemes)
+        semantic = f"url:{schemes}"
+
+    else:
+        semantic = "url"
     return Field(
         dtype="string",
         nullable=nullable,
-        semantic="url",
+        semantic=semantic,
         unique=unique,
         required_if=required_if,
         severity=severity,
@@ -1024,7 +1366,17 @@ def PhoneNumber(
     severity: str = "error",
     required_if: tuple[str, Any] | None = None,
 ) -> Field:
-    """Create a phone-number schema field."""
+    """Create a phone-number schema field.
+
+    Args:
+        nullable: Whether null values are allowed.
+        unique: Whether non-null values must be unique.
+        severity: Severity level for validation issues.
+        required_if: Conditional requirement as a column/value pair.
+
+    Returns:
+        Field: Configured phone-number schema field.
+    """
     return Field(
         dtype="string",
         nullable=nullable,
@@ -1042,7 +1394,17 @@ def CountryCode(
     severity: str = "error",
     required_if: tuple[str, Any] | None = None,
 ) -> Field:
-    """Create an uppercase ISO alpha-2 country-code schema field."""
+    """Create an uppercase ISO alpha-2 country-code schema field.
+
+    Args:
+        nullable: Whether null values are allowed.
+        unique: Whether non-null values must be unique.
+        severity: Severity level for validation issues.
+        required_if: Conditional requirement as a column/value pair.
+
+    Returns:
+        Field: Configured uppercase ISO alpha-2 country-code schema field.
+    """
     return Field(
         dtype="string",
         nullable=nullable,
@@ -1054,7 +1416,15 @@ def CountryCode(
 
 
 def CurrencyCode(*, nullable: bool = True, unique: bool = False) -> Field:
-    """Create a schema field for 3-letter uppercase currency code formats."""
+    """Create a currency-code schema field.
+
+    Args:
+        nullable: Whether null values are allowed.
+        unique: Whether non-null values must be unique.
+
+    Returns:
+        Field: Configured 3-letter uppercase currency-code schema field.
+    """
     return Field(
         dtype="string",
         nullable=nullable,
@@ -1070,7 +1440,17 @@ def Date(
     severity: str = "error",
     required_if: tuple[str, Any] | None = None,
 ) -> Field:
-    """Create a date schema field."""
+    """Create a date schema field.
+
+    Args:
+        nullable: Whether null values are allowed.
+        unique: Whether non-null values must be unique.
+        severity: Severity level for validation issues.
+        required_if: Conditional requirement as a column/value pair.
+
+    Returns:
+        Field: Configured date schema field.
+    """
     return Field(
         dtype="string",
         nullable=nullable,
@@ -1154,6 +1534,59 @@ def DateTime(
     )
 
 
+def _is_safely_convertible_to_dtype(
+    series: pd.Series,
+    expected_dtype: str,
+    column_name: str,
+) -> bool:
+    try:
+        non_null = series.dropna()
+
+        if len(non_null) == 0:
+            return False
+
+        values = non_null.astype(str)
+
+        lower_name = column_name.lower()
+
+        is_identifier_like = (
+            lower_name == "id"
+            or lower_name.endswith("_id")
+            or lower_name
+            in {
+                "uuid",
+                "zip",
+                "zipcode",
+                "zip_code",
+            }
+        )
+
+        if is_identifier_like:
+            if values.str.match(r"^0\d+$").any():
+                return False
+
+        if expected_dtype == "int64":
+            if not values.str.match(r"^-?\d+$").all():
+                return False
+
+            parsed = pd.to_numeric(values, errors="raise")
+
+            int64_info = np.iinfo(np.int64)
+            if (parsed < int64_info.min).any() or (parsed > int64_info.max).any():
+                return False
+
+            return True
+
+        if expected_dtype == "float64":
+            pd.to_numeric(values, errors="raise")
+            return True
+
+    except Exception:
+        return False
+
+    return False
+
+
 def _validate_column(
     df: pd.DataFrame,
     series: pd.Series,
@@ -1165,30 +1598,49 @@ def _validate_column(
 
     if field_def.dtype is not None and actual_dtype != field_def.dtype:
         if not (field_def.dtype == "datetime" and actual_dtype == "string"):
+
+            message = (
+                f"Column {name!r} has dtype {actual_dtype!r}; "
+                f"expected {field_def.dtype!r}"
+            )
+            if (
+                actual_dtype == "string"
+                and field_def.dtype in {"int64", "float64"}
+                and _is_safely_convertible_to_dtype(
+                    df[name],
+                    field_def.dtype,
+                    name,
+                )
+            ):
+                message += (
+                    f". Values appear safely convertible " f"to '{field_def.dtype}'"
+                )
+
             issues.append(
                 ValidationIssue(
                     column=name,
                     rule="dtype",
-                    message=(
-                        f"Column {name!r} has dtype {actual_dtype!r}; "
-                        f"expected {field_def.dtype!r}"
-                    ),
+                    message=message,
                     severity=field_def.severity,
                 )
             )
 
+    is_null_mask = series.isna()
+    if actual_dtype in ("object", "string"):
+        is_null_mask = is_null_mask | (series.fillna("").astype(str).str.strip() == "")
+
     if not field_def.nullable:
         issues.extend(
             _row_issues(
-                series[series.isna()],
+                series[is_null_mask],
                 column=name,
                 rule="nullable",
-                message=f"Column {name!r} contains null values",
+                message=f"Column {name!r} contains null or empty values",
                 severity=field_def.severity,
             )
         )
 
-    non_null = series.dropna()
+    non_null = series[~is_null_mask]
 
     if field_def.required_if is not None:
         condition_column, expected_value = field_def.required_if
@@ -1320,6 +1772,9 @@ def _validate_column(
                 )
         else:
             pattern = _SEMANTIC_PATTERNS.get(field_def.semantic)
+            if pattern is None and field_def.semantic.startswith("url:"):
+                schemes = field_def.semantic[len("url:") :]
+                pattern = rf"({schemes})://[^\s]+"
             if pattern is None:
                 issues.append(
                     ValidationIssue(
@@ -1484,6 +1939,67 @@ def _field_to_dict(field_def: Field) -> dict[str, Any]:
         "datetime_max": _clean_scalar(field_def._datetime_max),
         "required_if": _normalize_sequence(field_def.required_if),
     }
+
+
+def _field_to_json_dict(field_def: Field) -> dict[str, Any]:
+    data = _field_to_dict(field_def)
+    data["severity"] = field_def.severity
+    data["datetime_min"] = (
+        field_def._datetime_min.isoformat()
+        if field_def._datetime_min is not None
+        else None
+    )
+    data["datetime_max"] = (
+        field_def._datetime_max.isoformat()
+        if field_def._datetime_max is not None
+        else None
+    )
+    return data
+
+
+def _field_from_json_dict(name: str, payload: Any) -> Field:
+    if not isinstance(payload, dict):
+        raise TypeError(
+            f"Schema JSON field for column {name!r} must be an object, got {type(payload).__name__}."
+        )
+
+    allowed = payload.get("allowed")
+    if allowed is not None:
+        if not isinstance(allowed, list):
+            raise TypeError(
+                f"Schema JSON field {name!r} 'allowed' must be a list or null."
+            )
+        allowed = set(allowed)
+
+    required_if = payload.get("required_if")
+    if required_if is not None:
+        if not isinstance(required_if, list) or len(required_if) != 2:
+            raise TypeError(
+                f"Schema JSON field {name!r} 'required_if' must be a 2-item list or null."
+            )
+        required_if = tuple(required_if)
+
+    return Field(
+        dtype=payload.get("dtype"),
+        nullable=payload.get("nullable", True),
+        min=payload.get("min"),
+        max=payload.get("max"),
+        pattern=payload.get("pattern"),
+        semantic=payload.get("semantic"),
+        allowed=allowed,
+        unique=payload.get("unique", False),
+        min_length=payload.get("min_length"),
+        max_length=payload.get("max_length"),
+        format=payload.get("format"),
+        _datetime_min=_parse_datetime_bound(
+            payload.get("datetime_min"), "datetime_min"
+        ),
+        _datetime_max=_parse_datetime_bound(
+            payload.get("datetime_max"), "datetime_max"
+        ),
+        required_if=required_if,
+        severity=payload.get("severity", "error"),
+    )
 
 
 def _normalize_unique(

@@ -1,0 +1,9 @@
+log_id,timestamp,level,service,message
+1,2024-03-01 10:00:01,INFO,auth-service,user login successful
+2,2024-03-01 10:00:45,ERROR,payment-service,timeout connecting to db
+3,2024-03-01 10:01:02,,api-gateway,request received
+4,2024-03-01 10:01:15,WARN,AUTH-SERVICE,token expiring soon
+4,2024-03-01 10:01:15,WARN,AUTH-SERVICE,token expiring soon
+5,2024-03-01 10:02:00,error,payment-service,retry failed
+6,,INFO,,heartbeat check
+7,2024-03-01 10:03:10,DEBUG,cache-service,cache miss for key user:42
