@@ -24,6 +24,7 @@ from .cleaning import (
     drop_duplicates,
     drop_empty_columns,
     drop_nulls,
+    distinct,
     fill_nulls,
     filter_rows,
     keep_rows_with_nulls,

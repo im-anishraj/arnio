@@ -1912,3 +1912,36 @@ def concat(frames: list[ArFrame], *, ignore_index: bool = False) -> ArFrame:
     dfs = [to_pandas(f) for f in frames]
     result_df = pd.concat(dfs, ignore_index=ignore_index)
     return from_pandas(result_df)
+
+
+def distinct(frame: ArFrame, *, column: str) -> list:
+    """Get unique values from a column.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input frame.
+    column : str
+        Column name to get unique values from.
+
+    Returns
+    -------
+    list
+        List of unique values from the column.
+
+    Raises
+    ------
+    ValueError
+        If the column does not exist in the frame.
+
+    Examples
+    --------
+    >>> frame = ar.from_pandas(pd.DataFrame({"color": ["red", "blue", "red", "green"]}))
+    >>> ar.distinct(frame, column="color")
+    ['red', 'blue', 'green']
+    """
+    if column not in frame.columns:
+        raise ValueError(f"Column {column!r} not found in frame")
+
+    df = to_pandas(frame)
+    return df[column].dropna().unique().tolist()
