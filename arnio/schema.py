@@ -1517,6 +1517,14 @@ def DateTime(
     if format is not None and not isinstance(format, str):
         raise TypeError("DateTime format must be a string or None")
 
+    if format is not None:
+        try:
+            pd.to_datetime("2024-01-01", format=format)
+        except ValueError as exc:
+            raise ValueError(
+                f"DateTime format {format!r} is not a valid strftime format: {exc}"
+            ) from exc
+
     min_val = _parse_datetime_bound(min, "min")
     max_val = _parse_datetime_bound(max, "max")
     if min_val is not None and max_val is not None and min_val > max_val:
