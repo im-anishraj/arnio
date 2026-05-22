@@ -236,7 +236,6 @@ class DataQualityReport:
             "suggestions": [
                 {
                     "step": s[0],
-                    "kwargs": dict(sorted(s[1].items())),
                     "kwargs": {
                         key: (
                             [item for item in value if item not in exclude_columns]
