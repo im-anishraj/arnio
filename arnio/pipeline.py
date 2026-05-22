@@ -284,7 +284,7 @@ def unregister_step(name: str) -> None:
     """
     from .exceptions import UnknownStepError
 
-    if name in _STEP_REGISTRY:
+    if name in _STEP_REGISTRY or name in _BUILTIN_PYTHON_STEP_REGISTRY:
         raise UnknownStepError(
             name,
             list(_PYTHON_STEP_REGISTRY.keys()),
