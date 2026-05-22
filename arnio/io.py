@@ -239,8 +239,7 @@ def _validate_dtype_mapping(dtype: dict[str, str]) -> dict[str, str]:
 
         if dtype_name not in allowed:
             raise ValueError(
-                f"Unsupported dtype {dtype_name!r}. "
-                f"Expected one of: {sorted(allowed)}"
+                f"Unsupported dtype {dtype_name!r}. Expected one of: {sorted(allowed)}"
             )
 
         validated[column] = dtype_name
@@ -412,7 +411,7 @@ def _validate_encoding_errors(value: str) -> str:
 
     if value not in _VALID_ENCODING_ERRORS:
         raise ValueError(
-            "encoding_errors must be one of " "'strict', 'replace', or 'ignore'"
+            "encoding_errors must be one of 'strict', 'replace', or 'ignore'"
         )
 
     return value

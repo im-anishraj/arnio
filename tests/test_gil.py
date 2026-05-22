@@ -16,7 +16,7 @@ class TestGILReleaseCsvRead:
     def test_concurrent_csv_reads(self, tmp_path):
         """Multiple threads should be able to read CSVs concurrently."""
         path = tmp_path / "data.csv"
-        lines = ["id,value"] + [f"{i},{i*1.5}" for i in range(500)]
+        lines = ["id,value"] + [f"{i},{i * 1.5}" for i in range(500)]
         path.write_text("\n".join(lines))
 
         results = [None, None]

@@ -1217,8 +1217,7 @@ class TestNormalizeUnicode:
         result_df = ar.to_pandas(result)
         assert result_df["score"].iloc[0] == 42
         assert (
-            result_df["flag"].iloc[0] is True
-            or result_df["flag"].iloc[0] == True  # noqa: E712
+            result_df["flag"].iloc[0] is True or result_df["flag"].iloc[0] == True  # noqa: E712
         )
 
     def test_normalize_unicode_subset_only_targets_specified_columns(self):

@@ -241,19 +241,17 @@ def _validate_pipeline_steps(
     for step in steps:
         if not isinstance(step, tuple) or not (1 <= len(step) <= 2):
             raise ValueError(
-                f"Invalid step format: {step!r}. " "Expected (name,) or (name, kwargs)"
+                f"Invalid step format: {step!r}. Expected (name,) or (name, kwargs)"
             )
 
         name = step[0]
 
         if not isinstance(name, str):
-            raise ValueError(
-                f"Invalid pipeline step name: {name!r}. " "Expected a string"
-            )
+            raise ValueError(f"Invalid pipeline step name: {name!r}. Expected a string")
 
         if len(step) == 2 and not isinstance(step[1], dict):
             raise ValueError(
-                f"Invalid step kwargs for '{name}': " f"{step[1]!r}. Expected a dict"
+                f"Invalid step kwargs for '{name}': {step[1]!r}. Expected a dict"
             )
 
         if name not in available_steps:
