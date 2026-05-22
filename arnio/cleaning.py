@@ -1683,3 +1683,63 @@ def coalesce_columns(
     df[output_column] = df[subset_columns].bfill(axis=1).iloc[:, 0]
 
     return from_pandas(df) if is_arframe else df
+
+
+def merge(
+    frame1: ArFrame,
+    frame2: ArFrame,
+    *,
+    on: str | list[str],
+    how: str = "left",
+) -> ArFrame:
+    """Merge two frames horizontally using a common column.
+
+    Parameters
+    ----------
+    frame1, frame2 : ArFrame
+        The frames to merge.
+    on : str or list[str]
+        Column name(s) to join on. Must exist in both frames.
+    how : {"left", "right", "outer", "inner"}, default "left"
+        How to handle the join:
+        - left: keep all rows from frame1
+        - right: keep all rows from frame2
+        - outer: keep all rows from both frames
+        - inner: keep only rows present in both frames
+
+    Returns
+    -------
+    ArFrame
+        Merged frame.
+
+    Raises
+    ------
+    ValueError
+        If the merge key is not found in both frames, or if an invalid
+        ``how`` value is provided.
+
+    Examples
+    --------
+    >>> frame1 = ar.from_pandas(pd.DataFrame({"id": [1, 2], "name": ["Alice", "Bob"]}))
+    >>> frame2 = ar.from_pandas(pd.DataFrame({"id": [1, 2], "score": [85, 90]}))
+    >>> ar.merge(frame1, frame2, on="id")
+    """
+    if how not in ("left", "right", "outer", "inner"):
+        raise ValueError(
+            f"merge how must be one of 'left', 'right', 'outer', 'inner', got {how!r}"
+        )
+
+    if isinstance(on, str):
+        on = [on]
+
+    df1 = to_pandas(frame1)
+    df2 = to_pandas(frame2)
+
+    for col in on:
+        if col not in df1.columns:
+            raise ValueError(f"Merge key {col!r} not found in left frame")
+        if col not in df2.columns:
+            raise ValueError(f"Merge key {col!r} not found in right frame")
+
+    result_df = df1.merge(df2, on=on, how=how)
+    return from_pandas(result_df)
