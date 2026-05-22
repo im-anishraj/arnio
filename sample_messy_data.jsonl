@@ -1,0 +1,4 @@
+{"name": "  Alice  ", "age": 30, "city": "New York"}
+{"name": "Bob", "age": null, "city": null}
+{"name": "Charlie", "age": 35, "city": "  London  "}
+{"name": "Alice", "age": 30, "city": "New York"}

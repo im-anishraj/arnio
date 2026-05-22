@@ -1,0 +1,11 @@
+id,name,age,salary,city,active,score,category,is_member,notes
+795680,,23,57268.65,  PARIS,no,78.07, C ,,
+189472, prasoon,65,96550.17,,False,45.89, C ,1,Valid
+462941,  Ishan,58,,,no,56.87, A ,1,
+129922, rishit  ,45,129315.74,London,True,13.98, C ,0,Valid
+686478,DHRUV ,44,105799.73,,no,11.45,D,,Valid
+475705, rishit  ,71,120970.53,London,no,66.84,B,,  Pending  
+330197,  Ishan,23,72543.12,London,no,47.11,D,1,Needs review
+226910,PRANAY  ,61,146483.76,tokyo  ,yes,56.52, A ,1,  Pending  
+564500, rishit  ,30,137174.53,tokyo  ,FALSE,76.5,B,,  Pending  
+669814, rishit  ,23,123406.02,  New York  ,yes,63.47, C ,1,
