@@ -1798,3 +1798,53 @@ def sort(
 
     result_df = df.sort_values(by=by, ascending=ascending)
     return from_pandas(result_df)
+
+
+def sample(
+    frame: ArFrame,
+    *,
+    n: int | None = None,
+    frac: float | None = None,
+    seed: int | None = None,
+) -> ArFrame:
+    """Randomly sample rows from a frame.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input frame to sample from.
+    n : int, optional
+        Number of rows to sample. Cannot be used with ``frac``.
+    frac : float, optional
+        Fraction of rows to sample, between 0 and 1. Cannot be used with ``n``.
+    seed : int, optional
+        Random seed for reproducibility.
+
+    Returns
+    -------
+    ArFrame
+        Sampled frame.
+
+    Raises
+    ------
+    ValueError
+        If neither ``n`` nor ``frac`` is provided, or if both are provided.
+
+    Examples
+    --------
+    >>> frame = ar.read_csv("data.csv")
+    >>> ar.sample(frame, n=10)
+    """
+    if n is None and frac is None:
+        raise ValueError("Either n or frac must be provided")
+    if n is not None and frac is not None:
+        raise ValueError("Only one of n or frac can be provided, not both")
+    if n is not None:
+        if isinstance(n, bool) or not isinstance(n, int):
+            raise TypeError("n must be an integer")
+        if n < 0:
+            raise ValueError("n must be non-negative")
+
+    df = to_pandas(frame)
+    result_df = df.sample(n=n, frac=frac, random_state=seed)
+    return from_pandas(result_df)

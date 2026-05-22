@@ -34,6 +34,7 @@ from .cleaning import (
     replace_values,
     round_numeric_columns,
     safe_divide_columns,
+    sample,
     select_columns,
     sort,
     standardize_missing_tokens,
