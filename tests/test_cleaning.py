@@ -2024,6 +2024,16 @@ class TestFilterRows:
         ):
             ar.filter_rows(df, "name", ">", 1)
 
+    def test_filter_rows_with_arframe_input(self):
+        frame = ar.from_pandas(pd.DataFrame({"age": [20, 30, 40]}))
+
+        result = ar.filter_rows(frame, "age", ">", 25)
+
+        assert isinstance(result, ar.ArFrame)
+        assert len(result) == 2
+        df = ar.to_pandas(result)
+        assert list(df["age"]) == [30, 40]
+
 
 class TestMappingValidation:
     def test_rename_columns_rejects_invalid_mapping_value_type(self, sample_csv):
