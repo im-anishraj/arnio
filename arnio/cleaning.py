@@ -1714,3 +1714,25 @@ def coalesce_columns(
     df[output_column] = df[subset_columns].bfill(axis=1).iloc[:, 0]
 
     return from_pandas(df) if is_arframe else df
+
+
+def distinct(frame: ArFrame, *, column: str) -> list:
+    """Get unique values from a column.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input frame.
+    column : str
+        Column name to get unique values from.
+
+    Returns
+    -------
+    list
+        List of unique values from the column.
+    """
+    if column not in frame.columns:
+        raise ValueError(f"Column {column!r} not found in frame")
+
+    df = to_pandas(frame)
+    return df[column].dropna().unique().tolist()
