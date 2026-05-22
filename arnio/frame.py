@@ -6,6 +6,7 @@ ArFrame — the core data container wrapping the C++ Frame.
 from __future__ import annotations
 
 import json
+from typing import Iterator
 
 from ._core import _Frame
 
@@ -296,13 +297,20 @@ class ArFrame:
 
         return from_pandas(df.tail(n))
 
-    def to_dict(self) -> dict[str, list]:
+    def to_dict(self, *, chunk_size: int | None = None) -> dict[str, list] | Iterator[dict[str, list]]:
         """Export the frame as a Python dictionary.
+
+        Parameters
+        ----------
+        chunk_size : int, optional
+            If provided, yields dictionaries of lists for each chunk of rows.
+            The last chunk may have fewer rows.
 
         Returns
         -------
-        dict[str, list]
-            A dictionary mapping column names to lists of values.
+        dict[str, list] or Iterator[dict[str, list]]
+            A dictionary mapping column names to lists of values, or an iterator
+            of such dictionaries if chunk_size is specified.
 
         Examples
         --------
@@ -312,12 +320,26 @@ class ArFrame:
         """
         col_names = self.columns
         num_cols = self.shape[1]
-        return {
-            col_names[i]: [
-                self._frame.column_by_index(i).at(r) for r in range(len(self))
-            ]
-            for i in range(num_cols)
-        }
+        num_rows = len(self)
+
+        def gen_chunks():
+            for start in range(0, num_rows, chunk_size):
+                end = min(start + chunk_size, num_rows)
+                yield {
+                    col_names[i]: [
+                        self._frame.column_by_index(i).at(r) for r in range(start, end)
+                    ]
+                    for i in range(num_cols)
+                }
+
+        if chunk_size is None:
+            return {
+                col_names[i]: [
+                    self._frame.column_by_index(i).at(r) for r in range(num_rows)
+                ]
+                for i in range(num_cols)
+            }
+        return gen_chunks()
 
     def select_columns(self, columns: list[str]) -> ArFrame:
         """Return a new ArFrame with only the selected columns.
