@@ -1930,10 +1930,3 @@ arnio/
 <br>
 
 <sub>Built with C++ and pybind11 · Licensed under MIT · Maintained by <a href="https://github.com/im-anishraj">@im-anishraj</a></sub>
-
-<<<<<<< HEAD
-</div>
-</div>
-
-=======
->>>>>>> 982f00f (docs: remove stray closing div from README)
