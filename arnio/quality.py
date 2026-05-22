@@ -730,6 +730,7 @@ def profile(
     approx_top_values_min_unique: int = 1000,
     approx_top_values_min_ratio: float = 0.2,
     approx_top_values_sample_size: int = 2000,
+    subset: list[str] | None = None,
 ) -> DataQualityReport:
     """Profile data quality for an ArFrame.
 
@@ -747,6 +748,8 @@ def profile(
         Minimum unique ratio (unique / non-null) required to enable approximation.
     approx_top_values_sample_size : int, default 2000
         Number of non-null values sampled to estimate top values.
+    subset : list[str], optional
+        Column names to profile. If None, profiles all columns.
 
     Returns
     -------
@@ -785,6 +788,15 @@ def profile(
     if approx_top_values_sample_size <= 0:
         raise ValueError("approx_top_values_sample_size must be positive")
 
+    dtypes = frame.dtypes
+    if subset is not None:
+        unknown_columns = [col for col in subset if col not in dtypes]
+        if unknown_columns:
+            raise ValueError(f"Unknown columns in subset: {unknown_columns}")
+        target_columns = subset
+    else:
+        target_columns = list(dtypes.keys())
+
     df = to_pandas(frame)
     row_count, column_count = frame.shape
     duplicate_rows = int(df.duplicated().sum()) if row_count else 0
@@ -802,7 +814,7 @@ def profile(
             approx_top_values_min_ratio=approx_top_values_min_ratio,
             approx_top_values_sample_size=approx_top_values_sample_size,
         )
-        for name in df.columns
+        for name in target_columns
     }
 
     report = DataQualityReport(
