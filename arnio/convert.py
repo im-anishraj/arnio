@@ -261,6 +261,8 @@ def to_arrow(frame: ArFrame) -> pa.Table:
 
     Raises
     ------
+    TypeError
+        If the input is not an ArFrame.
     ImportError
         If pyarrow is not installed.
 
@@ -269,11 +271,14 @@ def to_arrow(frame: ArFrame) -> pa.Table:
     >>> frame = ar.read_csv("data.csv")
     >>> table = ar.to_arrow(frame)
     """
+    if not isinstance(frame, ArFrame):
+        raise TypeError(f"to_arrow() expects an ArFrame, got {type(frame).__name__}")
+
     try:
         import pyarrow as pa
     except ImportError as e:
         raise ImportError(
-            "to_arrow() requires pyarrow. Install it with: pip install pyarrow"
+            "to_arrow() requires pyarrow. Install it with: pip install arnio[arrow]"
         ) from e
 
     cpp_frame = frame._frame

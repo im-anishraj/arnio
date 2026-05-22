@@ -9,8 +9,6 @@ import pytest
 import arnio as ar
 from arnio.convert import _to_binding_safe
 
-pyarrow = pytest.importorskip("pyarrow", reason="to_arrow() tests require pyarrow")
-
 
 class TestToPandas:
     def test_basic_conversion(self, sample_csv):
@@ -901,7 +899,12 @@ class TestUInt64BoundaryConversion:
 class TestToArrow:
     """Tests for Arrow export."""
 
+    def setup_method(self):
+        pytest.importorskip("pyarrow")
+
     def test_int64_columns(self):
+        import pyarrow
+
         df = pd.DataFrame({"x": pd.Series([1, 2, 3], dtype=pd.Int64Dtype())})
         frame = ar.from_pandas(df)
         table = ar.to_arrow(frame)
@@ -911,6 +914,8 @@ class TestToArrow:
         assert table.column(0).to_pylist() == [1, 2, 3]
 
     def test_float64_columns(self):
+        import pyarrow
+
         df = pd.DataFrame({"y": pd.Series([1.5, 2.5, 3.5], dtype="float64")})
         frame = ar.from_pandas(df)
         table = ar.to_arrow(frame)
@@ -918,6 +923,8 @@ class TestToArrow:
         assert table.column(0).to_pylist() == [1.5, 2.5, 3.5]
 
     def test_bool_columns(self):
+        import pyarrow
+
         df = pd.DataFrame({"z": pd.Series([True, False, True], dtype="bool")})
         frame = ar.from_pandas(df)
         table = ar.to_arrow(frame)
@@ -925,6 +932,8 @@ class TestToArrow:
         assert table.column(0).to_pylist() == [True, False, True]
 
     def test_nullable_bool_columns(self):
+        import pyarrow
+
         df = pd.DataFrame({"a": pd.Series([True, False, pd.NA], dtype="boolean")})
         frame = ar.from_pandas(df)
         table = ar.to_arrow(frame)
@@ -932,6 +941,8 @@ class TestToArrow:
         assert table.column(0).to_pylist() == [True, False, None]
 
     def test_string_columns(self):
+        import pyarrow
+
         df = pd.DataFrame({"s": pd.Series(["a", "b", "c"], dtype="string")})
         frame = ar.from_pandas(df)
         table = ar.to_arrow(frame)
@@ -939,6 +950,8 @@ class TestToArrow:
         assert table.column(0).to_pylist() == ["a", "b", "c"]
 
     def test_mixed_column_types(self):
+        import pyarrow
+
         df = pd.DataFrame(
             {
                 "int_col": pd.Series([1, 2, 3], dtype=pd.Int64Dtype()),
@@ -992,10 +1005,12 @@ class TestToArrow:
         assert table.num_columns == 1
 
     def test_invalid_frame_type(self):
-        with pytest.raises(AttributeError):
+        with pytest.raises(TypeError, match="to_arrow.*expects an ArFrame"):
             ar.to_arrow("not_a_frame")
 
     def test_from_csv_roundtrip(self, sample_csv):
+        import pyarrow
+
         frame = ar.read_csv(sample_csv)
         table = ar.to_arrow(frame)
         assert table.num_columns == 4
