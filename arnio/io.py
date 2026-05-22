@@ -955,6 +955,7 @@ def read_jsonl(
     *,
     encoding: str = "utf-8",
     nrows: int | None = None,
+    columns: list[str] | None = None,
 ) -> ArFrame:
     """Read a JSON Lines file into an ArFrame.
 
@@ -972,6 +973,9 @@ def read_jsonl(
         File encoding.
     nrows : int, optional
         Maximum number of data rows to read.  If ``None``, all rows are read.
+    columns : list[str], optional
+        Expected column names and order. If provided, the output frame will
+        have columns in this order, with missing columns filled as null.
 
     Returns
     -------
@@ -1053,6 +1057,8 @@ def read_jsonl(
     import pandas as pd
 
     df = pd.DataFrame(records)
+    if columns is not None:
+        df = df.reindex(columns=columns)
     return from_pandas(df)
 
 
