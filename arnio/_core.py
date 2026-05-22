@@ -20,6 +20,8 @@ try:
     )
 except ImportError as e:
     raise ImportError(
-        "arnio C++ extension (_arnio_cpp) not found. "
-        "Please install arnio with: pip install ."
+        "arnio C++ extension (_arnio_cpp) not found.\n"
+        "Install from source: pip install .\n"
+        "Windows: Install 'Desktop development with C++' in Visual Studio Build Tools, or use WSL.\n"
+        "Linux/macOS: Ensure gcc or clang is installed."
     ) from e
