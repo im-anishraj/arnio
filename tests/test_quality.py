@@ -1963,3 +1963,34 @@ def test_data_quality_report_to_dict_excludes_columns_from_suggestions():
 
     assert kwargs["subset"] == ["name"]
     assert kwargs["cast_types"] == {"name": "string"}
+
+
+def test_data_quality_report_to_dict_preserves_non_column_suggestion_values():
+    report = ar.DataQualityReport(
+        row_count=2,
+        column_count=1,
+        memory_usage=100,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        quality_score=1.0,
+        score_components={},
+        columns={},
+        suggestions=[
+            (
+                "custom_step",
+                {
+                    "message": ["age"],
+                    "metadata": {"age": "keep"},
+                    "threshold": 5,
+                },
+            )
+        ],
+    )
+
+    result = report.to_dict(exclude_columns=["age"])
+
+    kwargs = result["suggestions"][0]["kwargs"]
+
+    assert kwargs["message"] == ["age"]
+    assert kwargs["metadata"] == {"age": "keep"}
+    assert kwargs["threshold"] == 5
