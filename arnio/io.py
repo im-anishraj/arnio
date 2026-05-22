@@ -756,6 +756,8 @@ def write_csv(
     delimiter: str = ",",
     write_header: bool = True,
     line_terminator: str = "\n",
+    encoding: str = "utf-8",
+    bom: bool = False,
 ) -> None:
     """Write an ArFrame to a CSV file via C++ backend.
 
@@ -771,6 +773,11 @@ def write_csv(
         Whether to write the column header row.
     line_terminator : str, default "\\n"
         Line terminator to use between rows.
+    encoding : str, default "utf-8"
+        File encoding.
+    bom : bool, default False
+        Whether to write a UTF-8 BOM (Byte Order Mark) at the start of the file.
+        Useful for Excel compatibility.
 
     Raises
     ------
@@ -812,6 +819,8 @@ def write_csv(
     config.delimiter = delimiter
     config.write_header = _validate_bool_option(write_header, "write_header")
     config.line_terminator = line_terminator
+    config.encoding = encoding
+    config.bom = bom
 
     writer = _CsvWriter(config)
     try:
