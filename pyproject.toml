@@ -29,6 +29,7 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Programming Language :: C++",
     "Topic :: Scientific/Engineering",
     "Topic :: Software Development :: Libraries :: Python Modules",
@@ -54,9 +55,13 @@ dev = [
     "ruff>=0.4.0",
     "pre-commit>=3.0",
     "hypothesis>=6.0",
+    "tomli; python_version < '3.11'",
 ]
 sklearn = [
     "scikit-learn>=1.0",
+]
+parquet = [
+    "pyarrow>=8.0",
 ]
 
 [tool.setuptools.package-data]
@@ -87,7 +92,7 @@ testpaths = ["tests"]
 addopts = "-v --tb=short"
 
 [tool.cibuildwheel]
-build = "cp39-* cp310-* cp311-* cp312-* cp313-*"
+build = "cp39-* cp310-* cp311-* cp312-* cp313-* cp314-*"
 skip = "*-win32 *-manylinux_i686 *-musllinux*"
 test-requires = ["pytest", "pandas>=1.5", "numpy>=1.23", "hypothesis>=6.0"]
 test-command = "pytest {project}/tests/ -v --tb=short -x"

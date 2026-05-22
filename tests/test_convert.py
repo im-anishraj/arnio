@@ -126,7 +126,75 @@ class TestToPandas:
         ]
 
 
+class TestFromRecords:
+    def test_list_of_dicts(self):
+        frame = ar.ArFrame.from_records(
+            [{"id": 1, "name": "alice"}, {"id": 2, "name": "bob"}]
+        )
+        assert frame.shape == (2, 2)
+        assert frame.columns == ["id", "name"]
+
+    def test_list_of_lists(self):
+        frame = ar.ArFrame.from_records(
+            [[1, "alice"], [2, "bob"]], columns=["id", "name"]
+        )
+        assert frame.shape == (2, 2)
+        assert frame.columns == ["id", "name"]
+
+    def test_list_of_tuples(self):
+        frame = ar.ArFrame.from_records(
+            [(1, "alice"), (2, "bob")], columns=["id", "name"]
+        )
+        assert frame.shape == (2, 2)
+
+    def test_missing_key_fills_none(self):
+        frame = ar.ArFrame.from_records([{"a": 1}, {"a": 2, "b": 99}])
+        assert frame.shape == (2, 2)
+        df = ar.to_pandas(frame)
+        assert pd.isna(df["b"].iloc[0])
+
+    def test_top_level_reexport(self):
+        frame = ar.from_records([{"x": 1}])
+        assert frame.shape == (1, 1)
+
+    def test_empty_raises(self):
+        with pytest.raises(ValueError, match="non-empty"):
+            ar.ArFrame.from_records([])
+
+    def test_sequences_without_columns_raises(self):
+        with pytest.raises(ValueError, match="columns must be provided"):
+            ar.ArFrame.from_records([[1, 2]])
+
+    def test_column_count_mismatch_raises(self):
+        with pytest.raises(ValueError, match="row 1"):
+            ar.ArFrame.from_records([[1, 2], [3, 4, 5]], columns=["a", "b"])
+
+    def test_nested_value_raises(self):
+        with pytest.raises(TypeError, match="nested"):
+            ar.ArFrame.from_records([{"a": [1, 2]}])
+
+    def test_mixed_types_raises(self):
+        with pytest.raises(TypeError):
+            ar.ArFrame.from_records([{"a": 1}, [1, 2]])
+
+
 class TestFromPandas:
+    def test_column_order_preserved_with_non_alphabetical_mixed_dtypes(self):
+        df = pd.DataFrame(
+            {
+                "z_name": ["Alice", "Bob"],
+                "a_score": [95.5, 88.0],
+                "m_active": [True, False],
+                "b_id": [1, 2],
+            }
+        )
+
+        frame = ar.from_pandas(df)
+        result = ar.to_pandas(frame)
+
+        assert frame.columns == ["z_name", "a_score", "m_active", "b_id"]
+        assert list(result.columns) == ["z_name", "a_score", "m_active", "b_id"]
+
     def test_basic_roundtrip(self, sample_csv):
         frame = ar.read_csv(sample_csv)
         df = ar.to_pandas(frame)
@@ -583,6 +651,24 @@ class TestFromPandas:
         assert len(result) == 3
         assert result["name"].isna().all()
         assert str(result["name"].dtype) == "string"
+
+    def test_empty_column_dataframe_preserves_row_count(self):
+        df = pd.DataFrame(index=range(3))
+
+        frame = ar.from_pandas(df)
+        result = ar.to_pandas(frame)
+
+        assert frame.shape == (3, 0)
+        assert result.shape == (3, 0)
+        assert result.index.tolist() == [0, 1, 2]
+
+    def test_zero_column_frame_survives_repeated_roundtrip(self):
+        df = pd.DataFrame(index=range(2))
+
+        frame = ar.from_pandas(df)
+        roundtripped = ar.from_pandas(ar.to_pandas(frame))
+
+        assert roundtripped.shape == (2, 0)
 
 
 class TestAttrsPreservation:

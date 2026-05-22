@@ -33,6 +33,12 @@ class Column {
     // Clone
     Column clone() const;
 
+    // Move-clone: transfers ownership of internal data to a new Column.
+    // The source Column is left in a valid but empty state.
+    // Use only when the source will not be accessed again (e.g. when
+    // building a new Frame from a Frame that is about to be discarded).
+    Column move_clone();
+
    private:
     void set_dtype(DType dtype);
     void assert_type_consistency() const;

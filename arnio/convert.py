@@ -234,7 +234,10 @@ def to_pandas(frame: ArFrame, *, copy: bool = False) -> pd.DataFrame:
             series[mask] = pd.NA
             data[name] = series
 
-    result = pd.DataFrame(data)
+    if not data:
+        result = pd.DataFrame(index=pd.RangeIndex(cpp_frame.num_rows()))
+    else:
+        result = pd.DataFrame(data)
     if frame._attrs:
         result.attrs = copylib.deepcopy(frame._attrs)
     return result
@@ -327,5 +330,8 @@ def from_pandas(df: pd.DataFrame) -> ArFrame:
         if dtype_hint is not None:
             dtype_hints[name] = dtype_hint
 
-    cpp_frame = _Frame.from_dict(columns, dtype_hints)
+
+  
+    cpp_frame = _Frame.from_dict(columns, dtype_hints, len(df))
     return ArFrame(cpp_frame, attrs=copylib.deepcopy(df.attrs))
+

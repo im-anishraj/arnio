@@ -5,14 +5,63 @@ ArFrame — the core data container wrapping the C++ Frame.
 
 from __future__ import annotations
 
+import json
 import numpy as np
 
 from ._core import _DType, _Frame
+
+
+
+
 
 #: Dtype strings recognised by ArFrame.select_dtypes().
 _VALID_DTYPES: frozenset[str] = frozenset(
     {"int64", "float64", "string", "bool", "null"}
 )
+
+
+class StatsDict(dict):
+    def __repr__(self) -> str:
+        return json.dumps(self, indent=2)
+
+    def _repr_markdown_(self) -> str:
+        return f"```json\n{json.dumps(self, indent=2)}\n```"
+
+
+class ColumnSummary:
+    """Schema summary for a single column.
+
+    Attributes
+    ----------
+    name : str
+        Column name.
+    dtype : str
+        Inferred dtype string (e.g. ``"int64"``, ``"string"``).
+    nullable : bool
+        True if the column contains at least one null value, False otherwise.
+    """
+
+    __slots__ = ("name", "dtype", "nullable")
+
+    def __init__(self, name: str, dtype: str, nullable: bool) -> None:
+        self.name = name
+        self.dtype = dtype
+        self.nullable = nullable
+
+    def __repr__(self) -> str:
+        return (
+            f"ColumnSummary(name={self.name!r}, dtype={self.dtype!r},"
+            f" nullable={self.nullable})"
+        )
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, ColumnSummary):
+            return NotImplemented
+        return (
+            self.name == other.name
+            and self.dtype == other.dtype
+            and self.nullable == other.nullable
+        )
 
 
 class ArFrame:
@@ -23,6 +72,89 @@ class ArFrame:
     def __init__(self, cpp_frame: _Frame, attrs: dict | None = None) -> None:
         self._frame = cpp_frame
         self._attrs: dict = attrs if attrs is not None else {}
+
+    @classmethod
+    def from_records(
+        cls,
+        records: list,
+        columns: list[str] | None = None,
+    ) -> ArFrame:
+        """Build an ArFrame from a list of records.
+
+        Parameters
+        ----------
+        records : list
+            A non-empty list of dicts, lists, or tuples.
+        columns : list[str] or None
+            Column names. Required when records are lists or tuples.
+            Optional for dicts — inferred from keys if not given.
+        Returns
+        -------
+        ArFrame
+
+        Raises
+        ------
+        TypeError
+            If records is not a list, elements are mixed types, or a
+            cell value is a list or dict.
+        ValueError
+            If records is empty, columns is missing for sequence records,
+            or a row's length doesn't match columns.
+        """
+        import pandas as pd
+
+        from .convert import from_pandas
+
+        if not isinstance(records, list):
+            raise TypeError(f"records must be a list, got {type(records).__name__!r}")
+
+        if len(records) == 0:
+            raise ValueError("records must be non-empty")
+
+        first = records[0]
+
+        if isinstance(first, dict):
+            for i, row in enumerate(records):
+                if not isinstance(row, dict):
+                    raise TypeError(
+                        f"all records must be dicts, but row {i} is {type(row).__name__!r}"
+                    )
+                for col, val in row.items():
+                    if isinstance(val, (list, dict)):
+                        raise TypeError(
+                            f"nested values are not supported; "
+                            f"column {col!r} at row {i} contains a {type(val).__name__!r}"
+                        )
+            df = pd.DataFrame.from_records(records, columns=columns)
+
+        elif isinstance(first, (list, tuple)):
+            if columns is None:
+                raise ValueError(
+                    "columns must be provided when records are lists or tuples"
+                )
+            for i, row in enumerate(records):
+                if not isinstance(row, (list, tuple)):
+                    raise TypeError(
+                        f"all records must be the same type, but row {i} is {type(row).__name__!r}"
+                    )
+                if len(row) != len(columns):
+                    raise ValueError(
+                        f"row {i} has {len(row)} value(s) but {len(columns)} column(s) were provided"
+                    )
+                for j, val in enumerate(row):
+                    if isinstance(val, (list, dict)):
+                        raise TypeError(
+                            f"nested values are not supported; "
+                            f"column {columns[j]!r} at row {i} contains a {type(val).__name__!r}"
+                        )
+            df = pd.DataFrame.from_records(records, columns=columns)
+
+        else:
+            raise TypeError(
+                f"records must contain dicts, lists, or tuples, got {type(first).__name__!r}"
+            )
+
+        return from_pandas(df)
 
     # --- Properties ---
 
@@ -58,6 +190,42 @@ class ArFrame:
             Mapping of column names to their data types.
         """
         return self._frame.dtypes()
+
+    @property
+    def schema_summary(self) -> list[ColumnSummary]:
+        """Column names, dtypes, and nullability in one place.
+
+        Inspects the C++ frame directly — no pandas conversion triggered.
+
+        Returns
+        -------
+        list[ColumnSummary]
+            One :class:`ColumnSummary` per column, in original column order.
+            Each entry has three attributes:
+
+            * ``name`` – column name (``str``)
+            * ``dtype`` – inferred dtype string, e.g. ``"int64"`` (``str``)
+            * ``nullable`` – ``True`` if the column contains at least one null
+              value, ``False`` otherwise (``bool``)
+
+        Examples
+        --------
+        >>> frame = ar.read_csv("data.csv")
+        >>> for col in frame.schema_summary:
+        ...     print(col.name, col.dtype, col.nullable)
+        id int64 False
+        email string True
+        score float64 True
+        """
+        col_dtypes = self.dtypes
+        result: list[ColumnSummary] = []
+        for i, name in enumerate(self.columns):
+            mask = self._frame.column_by_index(i).get_null_mask()
+            nullable = bool(mask.any())
+            result.append(
+                ColumnSummary(name=name, dtype=col_dtypes[name], nullable=nullable)
+            )
+        return result
 
     @property
     def is_empty(self) -> bool:
@@ -132,6 +300,29 @@ class ArFrame:
         df = to_pandas(self)
 
         return from_pandas(df.tail(n))
+
+    def to_dict(self) -> dict[str, list]:
+        """Export the frame as a Python dictionary.
+
+        Returns
+        -------
+        dict[str, list]
+            A dictionary mapping column names to lists of values.
+
+        Examples
+        --------
+        >>> frame = ar.read_csv("data.csv")
+        >>> frame.to_dict()
+        {'name': ['Alice', 'Bob'], 'age': [25, 30]}
+        """
+        col_names = self.columns
+        num_cols = self.shape[1]
+        return {
+            col_names[i]: [
+                self._frame.column_by_index(i).at(r) for r in range(len(self))
+            ]
+            for i in range(num_cols)
+        }
 
     def select_columns(self, columns: list[str]) -> ArFrame:
         """Return a new ArFrame with only the selected columns.
@@ -365,6 +556,16 @@ class ArFrame:
             )
 
         return self.select_columns(matched)
+
+    def describe(self) -> dict[str, dict[str, float]]:
+        """Generate summary statistics for all numeric and string columns.
+
+        Returns
+        -------
+        dict[str, dict[str, float]]
+            A printable nested dictionary of metrics.
+        """
+        return StatsDict(self._frame.describe())
 
     def _truncate_column_names(self, max_length=20):
         return [
