@@ -26,6 +26,7 @@ from .cleaning import (
     fill_nulls,
     filter_rows,
     keep_rows_with_nulls,
+    merge,
     normalize_case,
     normalize_unicode,
     parse_bool_strings,
