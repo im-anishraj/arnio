@@ -1848,3 +1848,40 @@ def sample(
     df = to_pandas(frame)
     result_df = df.sample(n=n, frac=frac, random_state=seed)
     return from_pandas(result_df)
+
+
+def concat(frames: list[ArFrame], *, ignore_index: bool = False) -> ArFrame:
+    """Concatenate frames vertically (stack rows).
+
+    Parameters
+    ----------
+    frames : list[ArFrame]
+        List of frames to concatenate. All frames must have the same columns.
+    ignore_index : bool, default False
+        If True, reset the index in the result frame.
+
+    Returns
+    -------
+    ArFrame
+        Concatenated frame.
+
+    Raises
+    ------
+    ValueError
+        If ``frames`` is empty, or if frames have mismatched columns.
+
+    Examples
+    --------
+    >>> frame1 = ar.from_pandas(pd.DataFrame({"a": [1, 2]}))
+    >>> frame2 = ar.from_pandas(pd.DataFrame({"a": [3, 4]}))
+    >>> ar.concat([frame1, frame2])
+    """
+    if not frames:
+        raise ValueError("concat requires at least one frame")
+
+    if len(frames) == 1:
+        return frames[0]
+
+    dfs = [to_pandas(f) for f in frames]
+    result_df = pd.concat(dfs, ignore_index=ignore_index)
+    return from_pandas(result_df)

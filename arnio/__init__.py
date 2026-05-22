@@ -17,6 +17,7 @@ from .cleaning import (
     clip_numeric,
     coalesce_columns,
     combine_columns,
+    concat,
     drop_columns,
     drop_columns_matching,
     drop_constant_columns,
