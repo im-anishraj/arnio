@@ -2176,6 +2176,26 @@ class TestRoundNumericColumns:
         assert list(result_df["a"]) == [1.1, 2.5]
         assert list(result_df["c"]) == ["str1", "str2"]
 
+    def test_round_numeric_columns_with_arframe_input(self):
+        df = pd.DataFrame({"a": [1.123, 2.456], "b": [3.789, 4.0]})
+        frame = ar.from_pandas(df)
+
+        result = ar.round_numeric_columns(frame, decimals=1)
+
+        assert isinstance(result, ar.ArFrame)
+        result_df = ar.to_pandas(result)
+        assert list(result_df["a"]) == [1.1, 2.5]
+        assert list(result_df["b"]) == [3.8, 4.0]
+
+    def test_round_numeric_columns_with_dataframe_input(self):
+        df = pd.DataFrame({"a": [1.123, 2.456], "b": [3.789, 4.0]})
+
+        result = ar.round_numeric_columns(df, decimals=1)
+
+        assert isinstance(result, pd.DataFrame)
+        assert list(result["a"]) == [1.1, 2.5]
+        assert list(result["b"]) == [3.8, 4.0]
+
     def test_missing_column(self):
         import pandas as pd
 
