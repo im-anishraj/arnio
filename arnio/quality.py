@@ -226,7 +226,24 @@ class DataQualityReport:
             "suggestions": [
                 {
                     "step": s[0],
-                    "kwargs": dict(s[1]),
+                    "kwargs": {
+                        key: (
+                            [
+                                item
+                                for item in value
+                                if item not in exclude_columns
+                            ]
+                            if isinstance(value, list)
+                            else {
+                                k: v
+                                for k, v in value.items()
+                                if k not in exclude_columns
+                            }
+                            if isinstance(value, dict)
+                            else value
+                        )
+                        for key, value in dict(s[1]).items()
+                    },
                     "confidence_score": getattr(s, "confidence_score", None),
                     "confidence_reason": getattr(s, "confidence_reason", None),
                 }

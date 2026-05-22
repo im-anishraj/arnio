@@ -1922,3 +1922,48 @@ def test_data_quality_report_to_dict_invalid_exclude_columns_type():
 
     with pytest.raises(TypeError):
         report.to_dict(exclude_columns="name")
+
+def test_data_quality_report_to_dict_invalid_exclude_columns_entries():
+    frame = ar.read_csv(
+        io.StringIO(
+            "name\nalice\nbob\n"
+        )
+    )
+
+    report = ar.profile(frame)
+
+    with pytest.raises(TypeError):
+        report.to_dict(exclude_columns=["name", 123])
+
+def test_data_quality_report_to_dict_excludes_columns_from_suggestions():
+    report = ar.DataQualityReport(
+        row_count=2,
+        column_count=2,
+        memory_usage=100,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        quality_score=1.0,
+        score_components={},
+        columns={},
+        suggestions=[
+            (
+                "strip_whitespace",
+                {
+                    "subset": ["name", "age"],
+                    "cast_types": {
+                        "name": "string",
+                        "age": "int",
+                    },
+                },
+            )
+        ],
+    )
+
+    result = report.to_dict(exclude_columns=["age"])
+
+    kwargs = result["suggestions"][0]["kwargs"]
+
+    assert kwargs["subset"] == ["name"]
+    assert kwargs["cast_types"] == {
+        "name": "string"
+    }        
