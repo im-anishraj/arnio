@@ -41,15 +41,11 @@ def test_from_pandas_smoke():
     assert out["x"].tolist() == [1, 2]
     assert out["y"].tolist() == ["a", "b"]
 
+
 def test_on_bad_lines_warn_truncates_and_pads(self, tmp_path):
     csv_path = tmp_path / "warn.csv"
 
-    csv_path.write_text(
-        "name,age\n"
-        "Alice,30\n"
-        "Bob,25,extra\n"
-        "Charlie\n"
-    )
+    csv_path.write_text("name,age\n" "Alice,30\n" "Bob,25,extra\n" "Charlie\n")
 
     frame = ar.read_csv(
         csv_path,
@@ -66,15 +62,11 @@ def test_on_bad_lines_warn_truncates_and_pads(self, tmp_path):
 
     assert pd.isna(df["age"].iloc[2])
 
+
 def test_on_bad_lines_skip_drops_rows(self, tmp_path):
     csv_path = tmp_path / "skip.csv"
 
-    csv_path.write_text(
-        "name,age\n"
-        "Alice,30\n"
-        "Bob,25,extra\n"
-        "Charlie\n"
-    )
+    csv_path.write_text("name,age\n" "Alice,30\n" "Bob,25,extra\n" "Charlie\n")
 
     frame = ar.read_csv(
         csv_path,
@@ -87,14 +79,11 @@ def test_on_bad_lines_skip_drops_rows(self, tmp_path):
     assert frame.shape == (1, 2)
     assert df["name"].iloc[0] == "Alice"
 
+
 def test_on_bad_lines_error_raises(self, tmp_path):
     csv_path = tmp_path / "error.csv"
 
-    csv_path.write_text(
-        "name,age\n"
-        "Alice,30\n"
-        "Bob,25,extra\n"
-    )
+    csv_path.write_text("name,age\n" "Alice,30\n" "Bob,25,extra\n")
 
     with pytest.raises(RuntimeError, match="expected 2"):
         ar.read_csv(

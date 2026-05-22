@@ -254,50 +254,19 @@ def _validate_parser_mode(mode: str) -> str:
     return mode
 
 
-def _materialize_csv_input(
-    source: str | os.PathLike[str] | io.TextIOBase,
-) -> tuple[str, bool]:
-    """Convert supported CSV inputs into a filesystem path."""
-    if isinstance(source, (str, os.PathLike)):
-        return os.fspath(source), False
-    if isinstance(source, io.StringIO) or (
-        hasattr(source, "read") and callable(source.read)
-    ):
-        content = source.read()
 
-        if not isinstance(content, str):
-            raise TypeError("read_csv file-like objects must return text, not bytes")
+def _validate_on_bad_lines(on_bad_lines: str) -> str:
+    """Validate on_bad_lines parameter."""
+    if not isinstance(on_bad_lines, str):
+        raise TypeError("on_bad_lines must be a string")
 
-        tmp = tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
-            suffix=".csv",
-            delete=False,
-        )
+    valid_values = {"error", "warn", "skip"}
 
-        try:
-            tmp.write(content)
-            tmp.close()
-            return tmp.name, True
-        except Exception:
-            os.unlink(tmp.name)
-            raise
+    if on_bad_lines not in valid_values:
+        raise ValueError("on_bad_lines must be one of: " "'error', 'warn', or 'skip'")
 
-    raise TypeError("read_csv expected a filesystem path or text file-like object")
-
-
-def _reject_utf8_nul_bytes(path: str) -> None:
-    """Reject UTF-8 CSV inputs that contain NUL bytes anywhere in the file."""
-    try:
-        with open(path, "rb") as f:
-            while chunk := f.read(8192):
-                if b"\0" in chunk:
-                    raise CsvReadError(
-                        "CSV input contains NUL bytes and appears to be binary or corrupted"
-                    )
-    except FileNotFoundError:
-        pass  # Let C++ backend handle or raise standard error
-
+    return on_bad_lines
+]
 
 def read_csv(
     path: str | os.PathLike[str],
@@ -389,6 +358,7 @@ def read_csv(
     _validate_thousands_separator(thousands_separator)
     delimiter = _validate_delimiter(delimiter)
     mode = _validate_parser_mode(mode)
+    on_bad_lines = _validate_on_bad_lines(on_bad_lines)
     config = _CsvConfig()
     config.delimiter = delimiter
     config.on_bad_lines = on_bad_lines
@@ -440,6 +410,7 @@ def read_csv_chunked(
     trim_headers: bool = True,
     thousands_separator: str | None = None,
     null_values: list[str] | None = None,
+    on_bad_lines: str = "warn",
     mode: str = "strict",
 ) -> Iterator[ArFrame]:
     """Read a CSV file in chunks, yielding ArFrame objects.
@@ -509,10 +480,11 @@ def read_csv_chunked(
     mode = _validate_parser_mode(mode)
     chunksize = _validate_chunksize(chunksize)
     skip_rows = _validate_skip_rows(skip_rows)
-
+    on_bad_lines = _validate_on_bad_lines(on_bad_lines)
     config = _CsvConfig()
     config.delimiter = delimiter
     config.has_header = has_header
+    config.on_bad_lines = on_bad_lines
     config.encoding = encoding
     config.trim_headers = trim_headers
     config.thousands_separator = thousands_separator
