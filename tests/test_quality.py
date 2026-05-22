@@ -1,5 +1,7 @@
 """Tests for data quality profiling and smart cleaning."""
 
+import io
+
 import pandas as pd
 import pytest
 
@@ -975,7 +977,7 @@ def test_report_to_markdown_basic(tmp_path):
 def test_report_to_markdown_includes_uniqueness_metrics(tmp_path):
     path = tmp_path / "unique_metrics.csv"
 
-    path.write_text("id,name\n" "1,Alice\n" "2,Bob\n" "2,Bob\n")
+    path.write_text("id,name\n1,Alice\n2,Bob\n2,Bob\n")
 
     report = ar.profile(ar.read_csv(path))
 
@@ -1880,3 +1882,43 @@ def test_quality_gate_markdown_escapes_pipe_characters():
     assert r"cat\|egory" in md
     assert r"pipe\|warning" in md
     assert "| col|name |" not in md
+
+
+def test_data_quality_report_to_dict_exclude_columns():
+    frame = ar.read_csv(io.StringIO("name,age\nalice,20\nbob,30\n"))
+
+    report = ar.profile(frame)
+
+    result = report.to_dict(exclude_columns=["age"])
+
+    assert "age" not in result["columns"]
+    assert "name" in result["columns"]
+
+
+def test_data_quality_report_to_dict_default_behavior():
+    frame = ar.read_csv(io.StringIO("name\nalice\nbob\n"))
+
+    report = ar.profile(frame)
+
+    result = report.to_dict()
+
+    assert "name" in result["columns"]
+
+
+def test_data_quality_report_to_dict_unknown_column():
+    frame = ar.read_csv(io.StringIO("name\nalice\nbob\n"))
+
+    report = ar.profile(frame)
+
+    result = report.to_dict(exclude_columns=["missing_column"])
+
+    assert "name" in result["columns"]
+
+
+def test_data_quality_report_to_dict_invalid_exclude_columns_type():
+    frame = ar.read_csv(io.StringIO("name\nalice\nbob\n"))
+
+    report = ar.profile(frame)
+
+    with pytest.raises(TypeError):
+        report.to_dict(exclude_columns="name")
