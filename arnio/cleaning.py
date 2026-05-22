@@ -1743,3 +1743,58 @@ def merge(
 
     result_df = df1.merge(df2, on=on, how=how)
     return from_pandas(result_df)
+
+
+def sort(
+    frame: ArFrame,
+    *,
+    by: str | list[str],
+    ascending: bool | list[bool] = True,
+) -> ArFrame:
+    """Sort a frame by column values.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input frame to sort.
+    by : str or list[str]
+        Column name(s) to sort by.
+    ascending : bool or list[bool], default True
+        Sort order. If a bool, applies to all columns. If a list, must match
+        the length of ``by``.
+
+    Returns
+    -------
+    ArFrame
+        Sorted frame.
+
+    Raises
+    ------
+    ValueError
+        If a column in ``by`` is not found in the frame, or if ``ascending``
+        is a list that does not match the length of ``by``.
+
+    Examples
+    --------
+    >>> frame = ar.from_pandas(pd.DataFrame({"name": ["Bob", "Alice"], "age": [30, 25]}))
+    >>> ar.sort(frame, by="name")
+    """
+    df = to_pandas(frame)
+
+    if isinstance(by, str):
+        by = [by]
+
+    for col in by:
+        if col not in df.columns:
+            raise ValueError(f"Sort column {col!r} not found in frame")
+
+    if isinstance(ascending, list):
+        if len(ascending) != len(by):
+            raise ValueError(
+                f"ascending list length {len(ascending)} does not match by length {len(by)}"
+            )
+    else:
+        ascending = [ascending] * len(by)
+
+    result_df = df.sort_values(by=by, ascending=ascending)
+    return from_pandas(result_df)
