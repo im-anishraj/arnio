@@ -90,6 +90,12 @@ class ColumnProfile:
     estimated from a deterministic sample. When ``True``,
     ``top_values_sample_count`` and ``top_values_sample_ratio`` describe the
     sample used for the counts/ratios.
+
+        For numeric columns with at least four non-null values, ``iqr``,
+    ``outlier_lower_bound``, and ``outlier_upper_bound`` describe the
+    1.5×IQR (Tukey) fences used with ``outlier_count`` / ``outlier_ratio``.
+    A value is an outlier when it is strictly less than
+    ``outlier_lower_bound`` or strictly greater than ``outlier_upper_bound``.
     """
 
     name: str
@@ -113,6 +119,9 @@ class ColumnProfile:
     q50: float | None = None
     q75: float | None = None
     q95: float | None = None
+    iqr: float | None = None
+    outlier_lower_bound: float | None = None
+    outlier_upper_bound: float | None = None
     outlier_count: int | None = None
     outlier_ratio: float | None = None
     sample_values: list[Any] = field(default_factory=list)
@@ -172,6 +181,9 @@ class ColumnProfile:
                     "q50": _clean_scalar(self.q50),
                     "q75": _clean_scalar(self.q75),
                     "q95": _clean_scalar(self.q95),
+                    "iqr": _clean_scalar(self.iqr),
+                    "outlier_lower_bound": _clean_scalar(self.outlier_lower_bound),
+                    "outlier_upper_bound": _clean_scalar(self.outlier_upper_bound),
                     "outlier_count": self.outlier_count,
                     "outlier_ratio": self.outlier_ratio,
                 }
@@ -760,6 +772,13 @@ class DataQualityReport:
                             "q50": _clean_scalar(column.q50),
                             "q75": _clean_scalar(column.q75),
                             "q95": _clean_scalar(column.q95),
+                            "iqr": _clean_scalar(column.iqr),
+                            "outlier_lower_bound": _clean_scalar(
+                                column.outlier_lower_bound
+                            ),
+                            "outlier_upper_bound": _clean_scalar(
+                                column.outlier_upper_bound
+                            ),
                             "outlier_count": column.outlier_count,
                             "outlier_ratio": column.outlier_ratio,
                         }
@@ -2005,6 +2024,7 @@ def _profile_column(
     top_values_sample_count = None
     top_values_sample_ratio = None
     q25 = q50 = q75 = q95 = None
+    iqr = outlier_lower_bound = outlier_upper_bound = None
     outlier_count = outlier_ratio = None
     std = None
     if dtype == "string" or pd.api.types.is_string_dtype(series.dtype):
@@ -2041,7 +2061,13 @@ def _profile_column(
             q50 = round(float(quantiles.loc[0.50]), 4)
             q75 = round(float(quantiles.loc[0.75]), 4)
             q95 = round(float(quantiles.loc[0.95]), 4)
-            outlier_count, outlier_ratio = _iqr_outlier_summary(
+            (
+                outlier_count,
+                outlier_ratio,
+                iqr,
+                outlier_lower_bound,
+                outlier_upper_bound,
+            ) = _iqr_outlier_summary(
                 numeric_non_null,
                 q25=q25,
                 q75=q75,
@@ -2122,6 +2148,9 @@ def _profile_column(
         q50=q50,
         q75=q75,
         q95=q95,
+        iqr=iqr,
+        outlier_lower_bound=outlier_lower_bound,
+        outlier_upper_bound=outlier_upper_bound,
         outlier_count=outlier_count,
         outlier_ratio=outlier_ratio,
         sample_values=sample_values,
@@ -2207,9 +2236,9 @@ def _iqr_outlier_summary(
     q25: float,
     q75: float,
     min_values: int = 4,
-) -> tuple[int | None, float | None]:
+) -> tuple[int | None, float | None, float | None, float | None, float | None]:
     if len(numeric_non_null) < min_values:
-        return (None, None)
+        return (None, None, None, None, None)
     iqr = q75 - q25
     lower_bound = q25 - 1.5 * iqr
     upper_bound = q75 + 1.5 * iqr
@@ -2219,7 +2248,13 @@ def _iqr_outlier_summary(
         ]
     )
     outlier_ratio = _ratio(outlier_count, len(numeric_non_null))
-    return outlier_count, outlier_ratio
+    return (
+        outlier_count,
+        outlier_ratio,
+        round(float(iqr), 4),
+        round(float(lower_bound), 4),
+        round(float(upper_bound), 4),
+    )
 
 
 def _column_warnings(
