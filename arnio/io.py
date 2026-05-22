@@ -611,10 +611,12 @@ def read_csv_chunked(
     nrows: int | None = None,
     skip_rows: int = 0,
     encoding: str = "utf-8",
+    encoding_errors: str = "strict",
     trim_headers: bool = True,
     decimal_separator: str = ".",
     thousands_separator: str | None = None,
     null_values: list[str] | None = None,
+    dtype: dict[str, str] | None = None,
     mode: str = "strict",
     on_bad_lines: str = "error",
 ) -> Iterator[ArFrame]:
@@ -641,6 +643,9 @@ def read_csv_chunked(
         Number of data rows to skip after the header row.
     encoding : str, default "utf-8"
         File encoding.
+    encoding_errors : str, default "strict"
+        How to handle encoding errors. Same options as the ``errors`` argument
+        in Python's ``open()`` function.
     trim_headers : bool, default True
         Strip leading/trailing whitespace from column names.
     decimal_separator : str, default "."
@@ -651,9 +656,8 @@ def read_csv_chunked(
         during numeric parsing.
     null_values : list[str], optional
         Strings treated as null values.
-
-
-
+    dtype : dict[str, str], optional
+        Explicit column dtype mapping for the output frame.
     mode : {"strict", "permissive"}, default "strict"
         Controls malformed row handling.
         Both modes reject extra fields; permissive mode only allows missing
