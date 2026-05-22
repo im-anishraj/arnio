@@ -1971,6 +1971,15 @@ def _field_from_json_dict(name: str, payload: Any) -> Field:
             )
         allowed = set(allowed)
 
+    dtype = payload.get("dtype")
+    if dtype is not None:
+        allowed_dtypes = {"int64", "float64", "string", "bool", "null", "datetime"}
+        if dtype not in allowed_dtypes:
+            raise ValueError(
+                f"Schema JSON field {name!r} has invalid dtype {dtype!r}. "
+                f"Allowed values: {sorted(allowed_dtypes)}"
+            )
+
     required_if = payload.get("required_if")
     if required_if is not None:
         if not isinstance(required_if, list) or len(required_if) != 2:
@@ -1980,7 +1989,7 @@ def _field_from_json_dict(name: str, payload: Any) -> Field:
         required_if = tuple(required_if)
 
     return Field(
-        dtype=payload.get("dtype"),
+        dtype=dtype,
         nullable=payload.get("nullable", True),
         min=payload.get("min"),
         max=payload.get("max"),
