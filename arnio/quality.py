@@ -219,10 +219,6 @@ class DataQualityReport:
             "quality_score": self.quality_score,
             "score_components": self.score_components,
             "columns": {
-                name: self.columns[name].to_dict(
-                    redact_sample_values=redact_sample_values
-                )
-                for name in sorted(self.columns
                 name: column.to_dict(redact_sample_values=redact_sample_values)
                 for name, column in self.columns.items()
                 if name not in exclude_columns
