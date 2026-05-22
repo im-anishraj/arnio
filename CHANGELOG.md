@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.17.1](https://github.com/im-anishraj/arnio/compare/v1.17.0...v1.17.1) (2026-05-22)
+
+
+### Documentation
+
+* clarify chunked schema validation contract ([e570c38](https://github.com/im-anishraj/arnio/commit/e570c380f1062bfec8b43929b052c9c80e195c33))
+
 ## [1.17.0](https://github.com/im-anishraj/arnio/compare/v1.16.0...v1.17.0) (2026-05-22)
 
 
