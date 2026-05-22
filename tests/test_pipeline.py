@@ -201,7 +201,10 @@ class TestUnregisterStep:
         ar.register_step("temp_step", dummy)
         ar.unregister_step("temp_step")
         with pytest.raises(ar.UnknownStepError):
-            ar.pipeline(ar.from_pandas(__import__("pandas").DataFrame({"a": [1]})), [("temp_step",)])
+            ar.pipeline(
+                ar.from_pandas(__import__("pandas").DataFrame({"a": [1]})),
+                [("temp_step",)],
+            )
 
     def test_unregister_nonexistent_raises(self):
         with pytest.raises(ar.UnknownStepError):
