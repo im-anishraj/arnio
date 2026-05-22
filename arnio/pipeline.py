@@ -6,7 +6,9 @@ Chained cleaning pipeline.
 from __future__ import annotations
 
 import inspect
+import logging
 import warnings
+from dataclasses import dataclass
 from threading import Lock
 from time import perf_counter
 from typing import Any, Callable
@@ -18,6 +20,7 @@ from .convert import from_pandas, to_pandas
 from .exceptions import PipelineStepError, UnknownStepError
 from .frame import ArFrame
 
+logger = logging.getLogger("arnio")
 _BUILTIN_STEP_NAMESPACE = "builtin"
 _STEP_NAMESPACE_SEPARATOR = ":"
 
@@ -25,12 +28,15 @@ _STEP_NAMESPACE_SEPARATOR = ":"
 _STEP_REGISTRY: dict[str, Callable] = {
     "drop_nulls": cleaning.drop_nulls,
     "drop_columns": cleaning.drop_columns,
+    "select_columns": cleaning.select_columns,
     "keep_rows_with_nulls": cleaning.keep_rows_with_nulls,
     "fill_nulls": cleaning.fill_nulls,
     "validate_columns_exist": cleaning.validate_columns_exist,
     "drop_duplicates": cleaning.drop_duplicates,
     "drop_constant_columns": cleaning.drop_constant_columns,
+    "drop_empty_columns": cleaning.drop_empty_columns,
     "clip_numeric": cleaning.clip_numeric,
+    "winsorize_outliers": cleaning.winsorize_outliers,
     "strip_whitespace": cleaning.strip_whitespace,
     "parse_bool_strings": cleaning.parse_bool_strings,
     "normalize_case": cleaning.normalize_case,
@@ -48,6 +54,16 @@ _PYTHON_STEP_REGISTRY: dict[str, Callable] = {
     "standardize_missing_tokens": cleaning.standardize_missing_tokens,
     "coalesce_columns": cleaning.coalesce_columns,
 }
+
+
+@dataclass(frozen=True)
+class PipelineContext:
+    """Execution context passed to opt-in Python pipeline steps."""
+
+    step_name: str
+    step_index: int
+    total_steps: int
+    dry_run: bool
 
 
 def _is_builtin_python_step(name: str, fn: Callable) -> bool:
@@ -253,6 +269,7 @@ def pipeline(
     *,
     return_metadata: bool = False,
     dry_run: bool = False,
+    verbose: bool = False,
 ) -> ArFrame | tuple[ArFrame, dict[str, Any]]:
     """Apply a list of cleaning steps sequentially.
 
@@ -269,6 +286,11 @@ def pipeline(
     return_metadata : bool, default False
         When True, also return a metadata dictionary with per-step timing
         information in execution order.
+
+    verbose : bool, default False
+        Enable lightweight diagnostic logging through the ``arnio`` logger.
+        Logs step index, step name, execution path, elapsed execution
+        time, and row-count changes for each pipeline step.
 
     dry_run : bool, default False
         Validates pipeline structure and step execution without
@@ -311,12 +333,8 @@ def pipeline(
     step_timings: list[dict[str, Any]] = []
     applied_steps: list[str] = []
     row_counts: list[dict[str, int | str]] = []
-    for step in steps:
-        if not isinstance(step, tuple):
-            raise ValueError(
-                f"Invalid step format: {step}. Expected (name,) or (name, kwargs)"
-            )
-
+    total_steps = len(steps)
+    for step_index, step in enumerate(steps):
         if len(step) == 1:
             name = step[0]
             kwargs = {}
@@ -340,13 +358,17 @@ def pipeline(
             rows_before = result.shape[0]
 
             started_at = perf_counter()
-            if name == "rename_columns" and "mapping" not in kwargs:
+            if name == "rename_columns" and (
+                "mapping" not in kwargs or not isinstance(kwargs["mapping"], dict)
+            ):
                 step_result = fn(result, mapping=kwargs)
 
                 if not dry_run:
                     result = step_result
 
-            elif name == "cast_types" and "mapping" not in kwargs:
+            elif name == "cast_types" and (
+                "mapping" not in kwargs or not isinstance(kwargs["mapping"], dict)
+            ):
                 step_result = fn(result, kwargs)
 
                 if not dry_run:
@@ -359,6 +381,22 @@ def pipeline(
 
                 if not dry_run:
                     result = step_result
+
+            elapsed_ms = (perf_counter() - started_at) * 1000
+
+            if verbose:
+                execution_path = f"{fn.__module__}.{fn.__name__}"
+
+                logger.info(
+                    "[%s/%s] %s | path=%s | rows: %s -> %s | %.2fms",
+                    step_index + 1,
+                    total_steps,
+                    name,
+                    execution_path,
+                    rows_before,
+                    step_result.shape[0],
+                    elapsed_ms,
+                )
 
             if return_metadata:
                 applied_steps.append(name)
@@ -386,9 +424,18 @@ def pipeline(
 
             # Isolate genuine custom steps from internal core library functions
             is_builtin = _is_builtin_python_step(name, fn)
+            signature = inspect.signature(fn)
+            call_kwargs = dict(kwargs)
+            if "context" in signature.parameters and "context" not in call_kwargs:
+                call_kwargs["context"] = PipelineContext(
+                    step_name=name,
+                    step_index=step_index,
+                    total_steps=total_steps,
+                    dry_run=dry_run,
+                )
 
             try:
-                returned = fn(df, **kwargs)
+                returned = fn(df, **call_kwargs)
             except Exception as e:
                 if is_builtin:
                     raise
@@ -408,6 +455,23 @@ def pipeline(
             step_result = from_pandas(returned)
             if not dry_run:
                 result = step_result
+
+            elapsed_ms = (perf_counter() - started_at) * 1000
+
+            if verbose:
+                step_name = getattr(fn, "__name__", name)
+                execution_path = f"{fn.__module__}.{step_name}"
+
+                logger.info(
+                    "[%s/%s] %s | path=%s | rows: %s -> %s | %.2fms",
+                    step_index + 1,
+                    total_steps,
+                    name,
+                    execution_path,
+                    rows_before,
+                    step_result.shape[0],
+                    elapsed_ms,
+                )
 
             if return_metadata:
                 applied_steps.append(name)

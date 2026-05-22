@@ -7,6 +7,12 @@ from pathlib import Path
 
 import pytest
 
+from benchmarks.benchmark_vs_pandas import (
+    BenchmarkCase,
+    check_regression,
+    run_case,
+)
+
 # Check if the C++ extension is compiled
 try:
     import arnio._core  # noqa: F401
@@ -23,7 +29,9 @@ CI_SAFE_BENCHMARKS = [
     "benchmark_clip_numeric.py",
     "benchmark_combine_columns.py",
     "benchmark_gil_threading.py",
+    "benchmark_numeric_parse.py",
     "benchmark_profile_duplicate_count.py",
+    "benchmark_sparse_nulls.py",
     "benchmark_strip_whitespace.py",
     "benchmark_to_pandas_overhead.py",
     "benchmark_vs_pandas.py",
@@ -33,7 +41,9 @@ CI_SAFE_BENCHMARKS = [
 BENCHMARK_ARGS = {
     "benchmark_auto_clean_memory.py": ["--rows", "10", "--repeat", "1"],
     "benchmark_clip_numeric.py": ["--rows", "10", "--runs", "1"],
+    "benchmark_numeric_parse.py": ["--rows", "10", "--runs", "1"],
     "benchmark_profile_duplicate_count.py": ["--rows", "10", "--runs", "1"],
+    "benchmark_sparse_nulls.py": ["--rows", "10", "--runs", "1"],
 }
 
 
@@ -96,3 +106,130 @@ def test_benchmark_script_runs_successfully(script_path):
         f"Stdout:\n{result.stdout}\n"
         f"Stderr:\n{result.stderr}"
     )
+
+
+@pytest.mark.skipif(not HAS_CORE, reason="Arnio C++ extension is not compiled.")
+def test_benchmark_sparse_nulls_dry_run_cleans_up_temp_files():
+    """Verify benchmark_sparse_nulls.py runs in dry-run mode and removes temp files."""
+    script_path = BENCHMARKS_DIR / "benchmark_sparse_nulls.py"
+    if not script_path.exists():
+        pytest.skip("benchmark_sparse_nulls.py not found")
+
+    env = os.environ.copy()
+    env["ARNIO_BENCHMARK_DRY_RUN"] = "1"
+
+    # Check for any existing temp files before the run
+    pre_files = list(BENCHMARKS_DIR.glob("benchmark_sparse_nulls_*.csv"))
+    for f in pre_files:
+        if f.name != "benchmark_sparse_nulls.csv":
+            f.unlink(missing_ok=True)
+
+    cmd = [sys.executable, str(script_path), "--rows", "10", "--runs", "1"]
+    result = subprocess.run(
+        cmd,
+        env=env,
+        capture_output=True,
+        text=True,
+        cwd=str(BENCHMARKS_DIR.parent),
+        timeout=30,
+    )
+
+    assert (
+        result.returncode == 0
+    ), f"Dry-run failed.\nStdout:\n{result.stdout}\nStderr:\n{result.stderr}"
+
+    # Verify all density-specific temp CSV files were removed
+    post_files = [
+        f
+        for f in BENCHMARKS_DIR.glob("benchmark_sparse_nulls_*.csv")
+        if f.name != "benchmark_sparse_nulls.csv"
+    ]
+    assert len(post_files) == 0, f"Temp files not cleaned up: {post_files}"
+
+
+def test_check_regression_detects_slowdown():
+    """Regression should trigger when slowdown exceeds threshold."""
+    is_regression, regression_percent = check_regression(
+        current_time=12.0,
+        baseline_time=10.0,
+        threshold_percent=5,
+    )
+
+    assert is_regression is True
+    assert regression_percent == 20.0
+
+
+def test_check_regression_allows_small_variance():
+    """Small timing variance should not trigger regression."""
+    is_regression, regression_percent = check_regression(
+        current_time=10.5,
+        baseline_time=10.0,
+        threshold_percent=5,
+    )
+
+    assert is_regression is False
+    assert regression_percent == 5.0
+
+
+def test_run_case_raises_on_regression(monkeypatch):
+    """run_case should fail when benchmark regression exceeds threshold."""
+
+    benchmark_case = BenchmarkCase(
+        "Regression Test Case",
+        "dummy.csv",
+    )
+
+    monkeypatch.setattr(
+        "benchmarks.benchmark_vs_pandas.load_baseline",
+        lambda: {
+            "Regression Test Case": {
+                "arnio_exec_time": 10.0,
+            }
+        },
+    )
+
+    monkeypatch.setattr(
+        "benchmarks.benchmark_vs_pandas.verify_correctness",
+        lambda path: None,
+    )
+
+    monkeypatch.setattr(
+        "benchmarks.benchmark_vs_pandas.RUNS",
+        1,
+    )
+
+    def fake_run_subprocess(engine, path):
+        if engine == "arnio":
+            return {
+                "elapsed": 11.0,
+                "peak_trace_mb": 1,
+                "peak_rss_mb": 1,
+                "ops": {
+                    "read_csv": 1,
+                    "clean_strings": 1,
+                    "drop_nulls": 1,
+                    "drop_duplicates": 1,
+                    "to_pandas": 1,
+                },
+            }
+
+        return {
+            "elapsed": 1.0,
+            "peak_trace_mb": 1,
+            "peak_rss_mb": 1,
+            "ops": {
+                "read_csv": 1,
+                "clean_strings": 1,
+                "drop_nulls": 1,
+                "drop_duplicates": 1,
+                "to_pandas": 1,
+            },
+        }
+
+    monkeypatch.setattr(
+        "benchmarks.benchmark_vs_pandas.run_subprocess",
+        fake_run_subprocess,
+    )
+
+    with pytest.raises(RuntimeError, match="Benchmark regression detected"):
+        run_case(benchmark_case, skip_correctness=True)

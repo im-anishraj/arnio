@@ -67,6 +67,13 @@ const Column& Frame::column(size_t idx) const {
     return columns_[idx];
 }
 
+Column& Frame::column_mut(size_t idx) {
+    if (idx >= columns_.size()) {
+        throw std::out_of_range("Column index out of range");
+    }
+    return columns_[idx];
+}
+
 const Column& Frame::column(const std::string& name) const {
     auto it = name_index_.find(name);
     if (it == name_index_.end()) {
@@ -88,6 +95,10 @@ size_t Frame::column_index(const std::string& name) const {
 }
 
 void Frame::add_column(Column col) {
+    if (name_index_.find(col.name()) != name_index_.end()) {
+        throw std::invalid_argument("Column '" + col.name() +
+                                    "' already exists in Frame. Drop or rename it before adding.");
+    }
     if (!row_count_known_) {
         // First column added - set row count from its size
         row_count_ = col.size();
@@ -135,6 +146,80 @@ void Frame::rebuild_index() {
     for (size_t i = 0; i < columns_.size(); ++i) {
         name_index_[columns_[i].name()] = i;
     }
+}
+
+std::vector<std::pair<std::string, std::vector<std::pair<std::string, double>>>> Frame::describe()
+    const {
+    std::vector<std::pair<std::string, std::vector<std::pair<std::string, double>>>> summary;
+
+    for (const auto& col : columns_) {
+        std::string col_name = col.name();
+        std::vector<std::pair<std::string, double>> stats;
+
+        size_t total_rows = col.size();
+        size_t null_count = 0;
+        size_t valid_count = 0;
+        std::string type_str = dtype_to_string(col.dtype());
+
+        if (type_str == "int64" || type_str == "float64") {
+            double sum = 0.0;
+            double min_val = std::numeric_limits<double>::infinity();
+            double max_val = -std::numeric_limits<double>::infinity();
+
+            for (size_t i = 0; i < total_rows; ++i) {
+                if (col.is_null(i)) {
+                    null_count++;
+                    continue;
+                }
+                valid_count++;
+
+                double val = 0.0;
+                if (col.dtype() == DType::INT64) {
+                    val = static_cast<double>(std::get<int64_t>(col.at(i)));
+                } else {
+                    val = std::get<double>(col.at(i));
+                }
+
+                sum += val;
+                if (val < min_val) min_val = val;
+                if (val > max_val) max_val = val;
+            }
+
+            // Push metrics in the exact forward order requested by the maintainer
+            stats.push_back({"count", static_cast<double>(valid_count)});
+            stats.push_back({"nulls", static_cast<double>(null_count)});
+            if (valid_count > 0) {
+                stats.push_back({"mean", sum / valid_count});
+                stats.push_back({"min", min_val});
+                stats.push_back({"max", max_val});
+            } else {
+                stats.push_back({"mean", 0.0});
+                stats.push_back({"min", 0.0});
+                stats.push_back({"max", 0.0});
+            }
+
+            summary.push_back({col_name, stats});
+        } else if (type_str == "string") {
+            std::unordered_set<std::string> unique_values;
+
+            for (size_t i = 0; i < total_rows; ++i) {
+                if (col.is_null(i)) {
+                    null_count++;
+                    continue;
+                }
+                valid_count++;
+                unique_values.insert(std::get<std::string>(col.at(i)));
+            }
+
+            stats.push_back({"count", static_cast<double>(valid_count)});
+            stats.push_back({"nulls", static_cast<double>(null_count)});
+            stats.push_back({"unique", static_cast<double>(unique_values.size())});
+
+            summary.push_back({col_name, stats});
+        }
+    }
+
+    return summary;
 }
 
 }  // namespace arnio

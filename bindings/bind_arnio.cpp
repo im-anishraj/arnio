@@ -161,6 +161,20 @@ PYBIND11_MODULE(_arnio_cpp, m) {
             py::return_value_policy::reference_internal)
         .def("add_column", &Frame::add_column)
         .def("clone", &Frame::clone)
+        .def("describe",
+             [](const Frame& f) {
+                 py::dict summary;
+                 auto raw_summary = f.describe();
+                 for (const auto& col_pair : raw_summary) {
+                     py::dict stats;
+                     for (const auto& metric_pair : col_pair.second) {
+                         stats[py::str(metric_pair.first)] = metric_pair.second;
+                     }
+                     summary[py::str(col_pair.first)] = stats;
+                 }
+
+                 return summary;
+             })
         .def_static(
             "from_dict",
             [](py::dict cols_dict, py::dict dtype_hints, py::object row_count_obj) {
@@ -221,27 +235,42 @@ PYBIND11_MODULE(_arnio_cpp, m) {
             py::arg("row_count") = py::none());
 
     // --- CsvReader ---
+    py::class_<BadRow>(m, "BadRow")
+        .def_readonly("row", &BadRow::row)
+        .def_readonly("expected", &BadRow::expected)
+        .def_readonly("actual", &BadRow::actual);
+
     py::class_<CsvConfig>(m, "CsvConfig")
         .def(py::init<>())
         .def_readwrite("delimiter", &CsvConfig::delimiter)
         .def_readwrite("has_header", &CsvConfig::has_header)
+        .def_readwrite("dtype", &CsvConfig::dtype)
         .def_readwrite("usecols", &CsvConfig::usecols)
         .def_readwrite("nrows", &CsvConfig::nrows)
         .def_readwrite("skip_rows", &CsvConfig::skip_rows)
         .def_readwrite("encoding", &CsvConfig::encoding)
         .def_readwrite("trim_headers", &CsvConfig::trim_headers)
+        .def_readwrite("decimal_separator", &CsvConfig::decimal_separator)
         .def_readwrite("thousands_separator", &CsvConfig::thousands_separator)
         .def_readwrite("sample_size", &CsvConfig::sample_size)
         .def_readwrite("mode", &CsvConfig::mode)
+        .def_readwrite("encoding_errors", &CsvConfig::encoding_errors)
         .def_readwrite("null_values", &CsvConfig::null_values);
 
     py::class_<CsvReader>(m, "CsvReader")
         .def(py::init<const CsvConfig&>(), py::arg("config") = CsvConfig{})
-        .def("read",
-             [](const CsvReader& reader, const std::string& path) {
-                 py::gil_scoped_release release;
-                 return reader.read(path);
-             })
+        .def(
+            "read",
+            [](const CsvReader& reader, const std::string& path, const std::string& on_bad_lines) {
+                CsvParseResult result;
+                {
+                    py::gil_scoped_release release;
+                    result = reader.read(path, on_bad_lines);
+                }
+
+                return py::make_tuple(std::move(result.frame), std::move(result.bad_rows));
+            },
+            py::arg("path"), py::arg("on_bad_lines") = std::string("error"))
         .def("scan_schema", [](const CsvReader& reader, const std::string& path) {
             std::vector<std::pair<std::string, std::string>> result;
             {
@@ -262,18 +291,21 @@ PYBIND11_MODULE(_arnio_cpp, m) {
                  py::gil_scoped_release release;
                  reader.open(path);
              })
-        .def("next_chunk",
-             [](CsvChunkReader& reader, size_t chunksize) -> py::object {
-                 std::optional<Frame> result;
-                 {
-                     py::gil_scoped_release release;
-                     result = reader.next_chunk(chunksize);
-                 }
-                 if (!result.has_value()) {
-                     return py::none();
-                 }
-                 return py::cast(std::move(*result));
-             })
+        .def(
+            "next_chunk",
+            [](CsvChunkReader& reader, size_t chunksize,
+               const std::string& on_bad_lines) -> py::object {
+                std::optional<CsvParseResult> result;
+                {
+                    py::gil_scoped_release release;
+                    result = reader.next_chunk(chunksize, on_bad_lines);
+                }
+                if (!result.has_value()) {
+                    return py::none();
+                }
+                return py::make_tuple(std::move(result->frame), std::move(result->bad_rows));
+            },
+            py::arg("chunksize"), py::arg("on_bad_lines") = std::string("error"))
         .def("close", &CsvChunkReader::close);
 
     // --- CsvWriter ---
