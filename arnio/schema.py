@@ -233,6 +233,33 @@ def URL(*, nullable: bool = True, unique: bool = False) -> Field:
     return Field(dtype="string", nullable=nullable, semantic="url", unique=unique)
 
 
+def Date(*, nullable: bool = True, unique: bool = False) -> Field:
+    """Create a date-string schema field.
+
+    Parameters
+    ----------
+    nullable : bool, default True
+        Whether null values are allowed.
+    unique : bool, default False
+        Whether values must be unique.
+
+    Returns
+    -------
+    Field
+        A date-validated schema field.
+
+    Examples
+    --------
+    >>> schema = ar.Schema({"created_at": ar.Date(nullable=False)})
+    """
+    return Field(
+        dtype="string",
+        nullable=nullable,
+        semantic="datetime",
+        unique=unique,
+    )
+
+
 def _validate_column(
     series: pd.Series,
     actual_dtype: str | None,
