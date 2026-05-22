@@ -460,7 +460,11 @@ def drop_constant_columns(frame: ArFrame) -> ArFrame:
     return from_pandas(df.drop(columns=constant_columns))
 
 
-def drop_empty_columns(frame: ArFrame) -> ArFrame:
+def drop_empty_columns(
+    frame: ArFrame,
+    *,
+    subset: list[str] | None = None,
+) -> ArFrame:
     """Remove columns whose values are entirely null or empty strings.
 
     String values containing only whitespace are treated as empty.
@@ -469,6 +473,8 @@ def drop_empty_columns(frame: ArFrame) -> ArFrame:
     ----------
     frame : ArFrame
         Input data frame.
+    subset : list[str], optional
+        Column names to check for empty values. If None, checks all columns.
 
     Returns
     -------
@@ -482,9 +488,19 @@ def drop_empty_columns(frame: ArFrame) -> ArFrame:
     """
     from .convert import to_pandas
 
+    dtypes = frame.dtypes
+
+    if subset is not None:
+        unknown_columns = [col for col in subset if col not in dtypes]
+        if unknown_columns:
+            raise ValueError(f"Unknown columns in subset: {unknown_columns}")
+        target_columns = subset
+    else:
+        target_columns = list(dtypes.keys())
+
     df = to_pandas(frame)
     empty_columns: list[str] = []
-    for column in df.columns:
+    for column in target_columns:
         series = df[column]
         is_empty = series.isna() | (
             series.map(lambda value: isinstance(value, str) and value.strip() == "")
