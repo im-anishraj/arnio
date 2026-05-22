@@ -24,8 +24,7 @@ class CsvWriter {
 
     std::string quote_field(const std::string& field) const;
 
-    std::string cell_to_string(const Frame& frame, size_t row,
-                               size_t col) const;
+    std::string cell_to_string(const Frame& frame, size_t row, size_t col) const;
 };
 
 }  // namespace arnio
