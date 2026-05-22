@@ -11,6 +11,22 @@ from arnio._core import _Column, _DType, _Frame
 # ── Normal behaviour ──────────────────────────────────────────────────────────
 
 
+def test_dict():
+    data = {"name": ["Alice", "Bob"], "age": [25, 30]}
+
+    frame = ar.from_dict(data)
+    assert frame.columns == ["name", "age"]
+    assert frame.shape == (2, 2)
+
+
+def test_dict_ArFrame():
+    data = {"name": ["Alice", "Bob"], "age": [25, 30]}
+
+    frame = ar.ArFrame.from_dict(data)
+    assert frame.columns == ["name", "age"]
+    assert frame.shape == (2, 2)
+
+
 def test_preview_returns_string(sample_csv):
     frame = ar.read_csv(sample_csv)
     result = frame.preview()
@@ -52,6 +68,40 @@ def test_preview_n_equals_one(sample_csv):
 # ── Edge cases ────────────────────────────────────────────────────────────────
 
 
+def test_Empty_dict():
+    data = {}
+    frame = ar.from_dict(data)
+
+    assert frame.shape == (0, 0)
+    assert frame.columns == []
+
+
+def test_Empty_dict_ArFrame():
+    data = {}
+    frame = ar.ArFrame.from_dict(data)
+
+    assert frame.shape == (0, 0)
+    assert frame.columns == []
+
+
+def test_none_value():
+    # Verifies that columns containing None/missing values are accepted
+    data = {"name": ["Alice", "Bob"], "age": [25, None]}
+
+    frame = ar.from_dict(data)
+    assert frame.shape == (2, 2)
+    assert frame.columns == ["name", "age"]
+
+
+def test_none_value_ArFrame():
+    # Verifies that columns containing None/missing values are accepted
+    data = {"name": ["Alice", "Bob"], "age": [25, None]}
+
+    frame = ar.ArFrame.from_dict(data)
+    assert frame.shape == (2, 2)
+    assert frame.columns == ["name", "age"]
+
+
 def test_preview_n_exceeds_row_count(sample_csv):
     frame = ar.read_csv(sample_csv)
     result = frame.preview(n=9999)
@@ -79,6 +129,62 @@ def test_preview_large_csv(large_csv):
 
 
 # ── Invalid inputs ────────────────────────────────────────────────────────────
+
+
+def test_nested_dict_keys():
+    data = {"name": ["Alice", "Bob"], 36: [25, 30]}
+    with pytest.raises(TypeError):
+        ar.from_dict(data)
+
+
+def test_nested_dict_keys_ArFrame():
+    data = {"name": ["Alice", "Bob"], 36: [25, 30]}
+    with pytest.raises(TypeError):
+        ar.ArFrame.from_dict(data)
+
+
+def test_nested_dict_values():
+    data = {
+        "name": ["Alice", "Bob"],
+        "info": [{"city": "NY", "age": 25}, {"city": "LA", "age": 30}],
+    }
+    with pytest.raises(ValueError):
+        ar.from_dict(data)
+
+
+def test_nested_dict_values_ArFrame():
+    data = {
+        "name": ["Alice", "Bob"],
+        "info": [{"city": "NY", "age": 25}, {"city": "LA", "age": 30}],
+    }
+    with pytest.raises(ValueError):
+        ar.ArFrame.from_dict(data)
+
+
+def test_length_mismatch():
+    data = {"name": ["Alice", "Bob"], "age": [25]}  # Missing an age
+    with pytest.raises(ValueError):
+        ar.from_dict(data)
+
+
+def test_length_mismatch_ArFrame():
+    data = {"name": ["Alice", "Bob"], "age": [25]}  # Missing an age
+    with pytest.raises(ValueError):
+        ar.ArFrame.from_dict(data)
+
+
+def test_scalar_dict():
+    # Pandas pd.DataFrame({"a": 1}) fails because it requires an index.
+    data = {"name": "Alice", "age": 25}
+    with pytest.raises(ValueError):
+        ar.from_dict(data)
+
+
+def test_scalar_dict_ArFrame():
+    # Pandas pd.DataFrame({"a": 1}) fails because it requires an index.
+    data = {"name": "Alice", "age": 25}
+    with pytest.raises(ValueError):
+        ar.ArFrame.from_dict(data)
 
 
 def test_preview_invalid_n_zero(sample_csv):
