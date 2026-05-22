@@ -6,13 +6,10 @@ ArFrame — the core data container wrapping the C++ Frame.
 from __future__ import annotations
 
 import json
+
 import numpy as np
 
 from ._core import _DType, _Frame
-
-
-
-
 
 #: Dtype strings recognised by ArFrame.select_dtypes().
 _VALID_DTYPES: frozenset[str] = frozenset(

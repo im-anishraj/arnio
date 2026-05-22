@@ -467,12 +467,6 @@ def test_add_column_allows_first_column_in_empty_frame():
     c1 = Column("a", DType.INT64)
     c1.push_back(1)
     frame.add_column(c1)
-<<<<<<< HEAD
-
-  
-
-
-    assert frame.shape() == (1, 1)
 
 
 def test_cpp_frame_explicit_zero_rows_rejects_nonempty_first_column():
@@ -589,7 +583,3 @@ def test_describe_all_string_columns(csv_with_whitespace):
     for col in ["name", "city"]:
         metric_keys = list(stats[col].keys())
         assert metric_keys == ["count", "nulls", "unique"]
-
-=======
-    assert frame.shape() == (1, 1)
->>>>>>> 52b4c23 (style: format code with black)
