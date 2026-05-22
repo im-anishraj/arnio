@@ -305,7 +305,7 @@ frame = ar.read_csv(
     encoding_errors="strict",
 )
 
-# Replace invalid bytes with the Unicode replacement character (�)
+# Replace invalid bytes with the Unicode replacement character ( )
 frame = ar.read_csv(
     "data.csv",
     encoding_errors="replace",
@@ -630,25 +630,35 @@ ar.register_duckdb(frame, conn, "my_table")
 result = conn.execute("SELECT * FROM my_table").fetchdf()
 ```
 
-### Row-dropping pipeline behavior
+### Row-dropping and schema-change behavior
 
-Some pipeline steps such as `drop_nulls` or `drop_duplicates`
-can change the number of rows returned during `transform`.
+`ArnioCleaner` enforces a strict transformer contract by default:
 
-By default, `ArnioCleaner` raises a `ValueError` if a pipeline
-changes row count during transform because many scikit-learn
-workflows expect input and output sample counts to remain aligned.
+- **Row-count-changing steps** (`drop_nulls`, `drop_duplicates`,
+  `filter_rows`, `keep_rows_with_nulls`) are **always rejected** with a
+  clear `ValueError`. Scikit-learn transformers must return the same
+  number of rows as the input.
 
-If row-dropping behavior is intentional, pass
-`allow_row_count_change=True` when constructing `ArnioCleaner`.
+- **Column schema-changing steps** (`rename_columns`, `drop_columns`,
+  `drop_constant_columns`, `combine_columns`) are **rejected by default**
+  and allowed only when `allow_schema_changes=True` is passed.
 
 ```python
+# Schema-preserving (default strict mode)
 cleaner = ArnioCleaner(
     steps=[
-        ("drop_nulls",),
         ("strip_whitespace",),
+        ("fill_nulls", {"value": 0}),
     ],
-    allow_row_count_change=True,
+)
+
+# Opt-in column schema changes
+cleaner = ArnioCleaner(
+    steps=[
+        ("rename_columns", {"old_name": "new_name"}),
+        ("drop_constant_columns",),
+    ],
+    allow_schema_changes=True,
 )
 ```
 
