@@ -912,6 +912,7 @@ def check_quality_gates(
     allow_new_columns: bool = False,
     allow_missing_columns: bool = False,
     fail_on_dtype_change: bool = True,
+    exclude_columns: list[str] | None = None,
 ) -> QualityGateResult:
     """Check two quality profiles against pass/fail drift thresholds.
 
@@ -934,6 +935,8 @@ def check_quality_gates(
         Whether added or removed columns are allowed.
     fail_on_dtype_change : bool, default True
         Whether shared columns with changed dtypes fail the gate.
+    exclude_columns : list[str], optional
+        Column names to exclude from drift detection.
 
     Returns
     -------
@@ -1001,6 +1004,11 @@ def check_quality_gates(
 
     baseline_columns = set(baseline_profile.columns)
     current_columns = set(current_profile.columns)
+
+    if exclude_columns is not None:
+        exclude_set = set(exclude_columns)
+        baseline_columns -= exclude_set
+        current_columns -= exclude_set
 
     if not thresholds["allow_missing_columns"]:
         for column in sorted(baseline_columns - current_columns):
