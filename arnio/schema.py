@@ -949,32 +949,16 @@ def validate(
 
     if schema.strict:
         expected = set(schema.fields)
+        unexpected_columns = [name for name in df.columns if name not in expected]
 
-        for name in df.columns:
-            if name not in expected:
-                issues.append(
-                    ValidationIssue(
-                        column=str(name),
-                        rule="unexpected_column",
-                        message=f"Unexpected column: {name}",
-                    )
+        if unexpected_columns:
+            issues.append(
+                ValidationIssue(
+                    column=str(unexpected_columns[0]),
+                    rule="unexpected_column",
+                    message=f"Unexpected column(s) found: {unexpected_columns} (total {len(unexpected_columns)})",
                 )
-
-                if reached_limit():
-                    issues = issues[:max_errors]
-
-                    return ValidationResult(
-                        row_count=len(df),
-                        issue_count=len(issues),
-                        issues=issues,
-                        bad_rows=sorted(
-                            {
-                                issue.row_index
-                                for issue in issues
-                                if issue.row_index is not None
-                            }
-                        ),
-                    )
+            )
 
     if schema.unique is not None:
         if not isinstance(schema.unique, (list, tuple)):
