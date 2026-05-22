@@ -111,6 +111,7 @@ def test_pandas_accessor_validates_dataframe():
 # --- Issue: dry_run mode for auto_clean missing edge cases ---
 # Tests added to cover dry_run=True with return_report=True and safe mode
 
+
 def test_auto_clean_dry_run_with_return_report():
     # dry_run=True with return_report=True should return (frame, report)
     frame = ar.from_pandas(pd.DataFrame({"name": [" Alice ", " Bob "]}))
@@ -133,4 +134,3 @@ def test_auto_clean_dry_run_safe_mode_does_not_mutate():
     assert isinstance(result, ar.DataQualityReport)
     # Frame must not be mutated — score stays as string
     assert frame.dtypes["score"] == "string"
-    
