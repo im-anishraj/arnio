@@ -1148,12 +1148,6 @@ def Int64(
     """Create an int64 schema field.
 
     Args:
-        frame:
-            Input frame to validate.
-        schema:
-            Schema definition.
-        max_errors:
-            Maximum number of errors before stopping validation.
         nullable: Whether null values are allowed.
         min: Minimum allowed value.
         max: Maximum allowed value.

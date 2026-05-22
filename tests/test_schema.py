@@ -313,6 +313,52 @@ def test_validation_result_to_pandas_empty_has_stable_columns():
     ]
 
 
+def test_schema_validation_bool_max_errors_rejected():
+    frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
+    schema = ar.Schema({"a": ar.Field()})
+
+    with pytest.raises(TypeError, match="max_errors"):
+        ar.validate(frame, schema, max_errors=True)
+
+
+def test_schema_validation_float_max_errors_rejected():
+    frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
+    schema = ar.Schema({"a": ar.Field()})
+
+    with pytest.raises(TypeError, match="max_errors"):
+        ar.validate(frame, schema, max_errors=1.5)
+
+
+def test_schema_validation_custom_rule_respects_max_errors():
+    def bad_rule(df):
+        return [
+            ar.ValidationIssue(
+                column="a",
+                rule="custom",
+                message="error 1",
+                row_index=1,
+            ),
+            ar.ValidationIssue(
+                column="a",
+                rule="custom",
+                message="error 2",
+                row_index=2,
+            ),
+        ]
+
+    frame = ar.from_pandas(pd.DataFrame({"a": [1, 2]}))
+
+    schema = ar.Schema(
+        {"a": ar.Field()},
+        rules=[bad_rule],
+    )
+
+    result = ar.validate(frame, schema, max_errors=1)
+
+    assert result.issue_count == 1
+    assert result.bad_rows == [1]
+
+
 def test_validation_result_summary_counts_repeated_issues_in_one_column():
     result = ar.ValidationResult(
         row_count=3,
