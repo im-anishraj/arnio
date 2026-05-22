@@ -1714,3 +1714,46 @@ def coalesce_columns(
     df[output_column] = df[subset_columns].bfill(axis=1).iloc[:, 0]
 
     return from_pandas(df) if is_arframe else df
+
+
+def sort(
+    frame: ArFrame,
+    *,
+    by: str | list[str],
+    ascending: bool | list[bool] = True,
+) -> ArFrame:
+    """Sort a frame by column values.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input frame to sort.
+    by : str or list[str]
+        Column name(s) to sort by.
+    ascending : bool or list[bool], default True
+        Sort order.
+
+    Returns
+    -------
+    ArFrame
+        Sorted frame.
+    """
+    df = to_pandas(frame)
+
+    if isinstance(by, str):
+        by = [by]
+
+    for col in by:
+        if col not in df.columns:
+            raise ValueError(f"Sort column {col!r} not found in frame")
+
+    if isinstance(ascending, list):
+        if len(ascending) != len(by):
+            raise ValueError(
+                f"ascending list length {len(ascending)} does not match by length {len(by)}"
+            )
+    else:
+        ascending = [ascending] * len(by)
+
+    result_df = df.sort_values(by=by, ascending=ascending)
+    return from_pandas(result_df)
