@@ -102,7 +102,7 @@ clean_df = df.arnio.clean([
     ("normalize_case", {"case_type": "lower"}),
     ("drop_duplicates",),
 ])
-
+`df.arnio.clean()` supports both pipeline-based cleaning steps and keyword-based convenience operations such as `drop_duplicates=True`.
 report = clean_df.arnio.profile()
 ```
 
@@ -307,6 +307,39 @@ not to replace it.
 | **DuckDB / Arrow** | Validate and prepare data before analytics and columnar exchange. |
 | **notebooks** | Inspect quality issues and cleaning suggestions before analysis. |
 
+### DuckDB registration
+
+Use `ar.register_duckdb(frame, conn, "table_name")` to register an ArFrame directly as a DuckDB relation without writing pandas conversion glue yourself. DuckDB is an optional dependency — install it with `pip install duckdb` when needed.
+
+```python
+import duckdb
+import arnio as ar
+
+frame = ar.read_csv("data.csv")
+conn = duckdb.connect()
+ar.register_duckdb(frame, conn, "my_table")
+result = conn.execute("SELECT * FROM my_table").fetchdf()
+```
+
+### Row-dropping pipeline behavior
+
+Some pipeline steps such as `drop_nulls` or `drop_duplicates`
+can change the number of rows returned during `transform`.
+
+By default, `ArnioCleaner` raises a `ValueError` if a pipeline
+changes row count during transform because many scikit-learn
+workflows expect input and output sample counts to remain aligned.
+
+If row-dropping behavior is intentional, pass
+`allow_row_count_change=True` when constructing `ArnioCleaner`.
+
+```python
+cleaner = ar.ArnioCleaner(
+    steps=[...],
+    allow_row_count_change=True,
+)
+```
+
 ### Pandas accessor
 
 ```python
@@ -319,6 +352,8 @@ validation = clean_df.arnio.validate({
     "age": ar.Int64(nullable=True, min=0),
 })
 ```
+The accessor automatically converts dictionary-based validation rules into an internal `ar.Schema` instance.
+
 
 This keeps pandas as the analysis tool while Arnio handles the preparation,
 quality, and validation layer.
@@ -340,7 +375,7 @@ df = pd.read_csv("data.csv")              # 💥 RAM spike — entire file as ra
 df.columns = df.columns.str.strip()        # Why is this not automatic?
 df["name"] = df["name"].str.strip()        # Python loop over every cell
 df["name"] = df["name"].str.lower()        # Another Python loop
-df = df.dropna()                           # Another pass
+df = df.dropna(subset=["revenue"])         # Another pass
 df = df.drop_duplicates()                  # Another pass
 ```
 
@@ -1044,6 +1079,8 @@ print(suggestions)
 safe = ar.auto_clean(frame)
 strict = ar.auto_clean(frame, mode="strict")
 ```
+By default, `ar.auto_clean()` returns only the cleaned dataframe.  
+When `return_report=True` is provided, it returns a tuple containing both the cleaned dataframe and the generated report.
 
 Messy input:
 
@@ -1526,6 +1563,8 @@ print(ar.__version__)
 print(ar.scan_csv("/tmp/arnio-smoke.csv"))
 PY
 ```
+`scan_csv()` performs lazy or schema-aware CSV scanning before full dataframe materialization, unlike `read_csv()` which immediately loads the entire dataset into memory.
+
 
 5. Verify the GitHub release, PyPI project page, and install command all show the expected version before announcing the release.
 
