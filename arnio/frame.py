@@ -5,7 +5,9 @@ ArFrame — the core data container wrapping the C++ Frame.
 
 from __future__ import annotations
 
+import copy
 import json
+import math
 
 from ._core import _Frame
 
@@ -548,6 +550,15 @@ class ArFrame:
             for col in self.columns
         ]
 
+    @staticmethod
+    def _values_equal(a, b):
+        if a is None and b is None:
+            return True
+        if isinstance(a, float) and isinstance(b, float):
+            if math.isnan(a) and math.isnan(b):
+                return True
+        return a == b
+
     # --- Dunder methods ---
 
     def __len__(self) -> int:
@@ -624,6 +635,37 @@ class ArFrame:
         raise TypeError(
             f"column key must be a str or list of str, got {type(key).__name__!r}"
         )
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, ArFrame):
+            return NotImplemented
+        if (
+            self.shape != other.shape
+            or self.columns != other.columns
+            or self.dtypes != other.dtypes
+        ):
+            return False
+
+        for i in range(self._frame.num_cols()):
+            left = self._frame.column_by_index(i).to_python_list()
+            right = other._frame.column_by_index(i).to_python_list()
+
+            for lval, rval in zip(left, right):
+                if not self._values_equal(lval, rval):
+                    return False
+
+        return True
+
+    def __copy__(self) -> ArFrame:
+        return ArFrame(self._frame, attrs=self._attrs.copy())
+
+    def __deepcopy__(self, memo: dict) -> ArFrame:
+        if id(self) in memo:
+            return memo[id(self)]
+        copied = ArFrame(self._frame.clone(), attrs={})
+        memo[id(self)] = copied
+        copied._attrs = copy.deepcopy(self._attrs, memo)
+        return copied
 
     def preview(self, n: int = 5) -> str:
         """Return a lightweight string preview of the first ``n`` rows.
