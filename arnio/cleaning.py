@@ -1512,30 +1512,30 @@ def replace_values(frame, mapping, column=None):
         ),
     )
     is_arframe = not isinstance(frame, pd.DataFrame)
-    # Avoid mutating the caller's DataFrame in the direct pandas API path.
-    df = to_pandas(frame) if is_arframe else frame.copy()
 
     if column is not None:
         if not isinstance(column, str) or not column.strip():
             raise TypeError("column must be a non-empty string when provided")
-        if column not in df.columns:
-            available = ", ".join(map(str, df.columns)) or "<none>"
+
+        available_cols = frame.columns if is_arframe else frame.columns.tolist()
+        if column not in available_cols:
+            available = ", ".join(map(str, available_cols)) or "<none>"
             raise KeyError(
                 f"Column '{column}' not found. Available columns: {available}"
             )
 
-    # Normalize mapping and separate null-key handling because NaN != NaN
     null_key_present = False
     null_replacement = None
     normalized_mapping = {}
 
     for k, v in mapping.items():
-        # detect null-like keys (None, NaN, pd.NA)
         if k is None or pd.isna(k):
             null_key_present = True
             null_replacement = v
         else:
             normalized_mapping[k] = v
+
+    df = to_pandas(frame) if is_arframe else frame.copy()
 
     if column:
         s = df[column]
@@ -1543,8 +1543,6 @@ def replace_values(frame, mapping, column=None):
         if normalized_mapping:
             s = s.replace(normalized_mapping)
         if null_key_present:
-            # Replace only values that were already null before replacement so
-            # null-valued mapping results remain real nulls.
             s = s.where(~original_null_mask, null_replacement)
         df[column] = s
     else:
@@ -1552,8 +1550,6 @@ def replace_values(frame, mapping, column=None):
         if normalized_mapping:
             df = df.replace(normalized_mapping)
         if null_key_present:
-            # Replace only values that were already null before replacement so
-            # null-valued mapping results remain real nulls.
             df = df.where(~original_null_mask, null_replacement)
 
     return from_pandas(df) if is_arframe else df
