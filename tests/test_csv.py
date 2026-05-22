@@ -2208,6 +2208,8 @@ class TestFromPandas:
         frame = ar.from_pandas(df)
         result = ar.to_pandas(frame)
         assert pd.isna(result["flag"].iloc[1])
+
+
 class TestEdgeCaseCsvShapes:
     def test_single_row_csv(self, tmp_path):
         csv_path = tmp_path / "single_row.csv"
