@@ -305,11 +305,44 @@ ISO_3166_1_ALPHA_2 = {
 }
 
 ISO_639_1_CODES = {
-    "ar", "bn", "cs", "da", "de", "el", "en", "es", "fa",
-    "fi", "fr", "gu", "he", "hi", "hu", "id", "it", "ja",
-    "kn", "ko", "ml", "mr", "nl", "no", "pa", "pl", "pt",
-    "ro", "ru", "sv", "ta", "te", "th", "tr", "uk", "ur",
-    "vi", "zh"
+    "ar",
+    "bn",
+    "cs",
+    "da",
+    "de",
+    "el",
+    "en",
+    "es",
+    "fa",
+    "fi",
+    "fr",
+    "gu",
+    "he",
+    "hi",
+    "hu",
+    "id",
+    "it",
+    "ja",
+    "kn",
+    "ko",
+    "ml",
+    "mr",
+    "nl",
+    "no",
+    "pa",
+    "pl",
+    "pt",
+    "ro",
+    "ru",
+    "sv",
+    "ta",
+    "te",
+    "th",
+    "tr",
+    "uk",
+    "ur",
+    "vi",
+    "zh",
 }
 
 
@@ -1421,6 +1454,8 @@ def CountryCode(
         required_if=required_if,
         severity=severity,
     )
+
+
 def LanguageCode(
     *,
     nullable: bool = True,
@@ -1837,7 +1872,7 @@ def _validate_column(
 
                 elif field_def.semantic == "language_code":
                     invalid = non_null[~non_null.isin(ISO_639_1_CODES)]
-                    
+
                 else:
                     invalid = non_null[~text.str.fullmatch(pattern, na=False)]
 

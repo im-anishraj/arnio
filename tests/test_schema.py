@@ -1250,6 +1250,7 @@ def test_country_code_validation_rejects_invalid_codes(tmp_path):
     assert [issue.row_index for issue in result.issues] == [1, 2, 3, 4, 5, 6, 7, 8, 9]
     assert all(issue.rule == "country_code" for issue in result.issues)
 
+
 def test_language_code_validation_accepts_iso_639_1_codes(tmp_path):
     path = tmp_path / "languages.csv"
     path.write_text("language\nen\nhi\nfr\nde\n")
@@ -1265,9 +1266,7 @@ def test_language_code_validation_accepts_iso_639_1_codes(tmp_path):
 
 def test_language_code_validation_rejects_invalid_codes(tmp_path):
     path = tmp_path / "bad_languages.csv"
-    path.write_text(
-        "language\nenglish\neng\nEN\nEN-US\nzz\n123\n\n"
-    )
+    path.write_text("language\nenglish\neng\nEN\nEN-US\nzz\n123\n\n")
 
     result = ar.validate(
         ar.read_csv(path),
