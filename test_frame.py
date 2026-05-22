@@ -349,3 +349,25 @@ def test_cpp_frame_explicit_zero_rows_rejects_nonempty_first_column():
 
     with pytest.raises(ValueError, match="row count"):
         frame.add_column(column)
+# Tests for mutation and copy semantics
+def test_head_returns_new_frame(sample_frame):
+    result = sample_frame.head(2)
+    assert result is not sample_frame
+
+def test_tail_returns_new_frame(sample_frame):
+    result = sample_frame.tail(2)
+    assert result is not sample_frame
+
+def test_select_columns_returns_new_frame(sample_frame):
+    result = sample_frame.select_columns(["name"])
+    assert result is not sample_frame
+
+def test_head_does_not_modify_original(sample_frame):
+    original_shape = sample_frame.shape
+    sample_frame.head(2)
+    assert sample_frame.shape == original_shape
+
+def test_tail_does_not_modify_original(sample_frame):
+    original_shape = sample_frame.shape
+    sample_frame.tail(2)
+    assert sample_frame.shape == original_shape
