@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.18.0](https://github.com/im-anishraj/arnio/compare/v1.17.1...v1.18.0) (2026-05-22)
+
+
+### Features
+
+* add Arrow export API and bool dtype detection ([9064b48](https://github.com/im-anishraj/arnio/commit/9064b486ef8fbb4a3398d45719c715f820fe5a24))
+* **schema:** add max_errors support to schema validation ([dd025c1](https://github.com/im-anishraj/arnio/commit/dd025c10739e0477a312fec6b1a00586d76dbe61))
+
+
+### Bug Fixes
+
+* **cleaning:** include received type in mapping validation errors ([2c79c49](https://github.com/im-anishraj/arnio/commit/2c79c490214a6e36610e633f0f547251f86cef26)), closes [#581](https://github.com/im-anishraj/arnio/issues/581)
+
 ## [1.17.1](https://github.com/im-anishraj/arnio/compare/v1.17.0...v1.17.1) (2026-05-22)
 
 
