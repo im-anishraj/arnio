@@ -1714,3 +1714,29 @@ def coalesce_columns(
     df[output_column] = df[subset_columns].bfill(axis=1).iloc[:, 0]
 
     return from_pandas(df) if is_arframe else df
+
+
+def concat(frames: list[ArFrame], *, ignore_index: bool = False) -> ArFrame:
+    """Concatenate frames vertically (stack rows).
+
+    Parameters
+    ----------
+    frames : list[ArFrame]
+        List of frames to concatenate.
+    ignore_index : bool, default False
+        If True, reset the index in the result frame.
+
+    Returns
+    -------
+    ArFrame
+        Concatenated frame.
+    """
+    if not frames:
+        raise ValueError("concat requires at least one frame")
+
+    if len(frames) == 1:
+        return frames[0]
+
+    dfs = [to_pandas(f) for f in frames]
+    result_df = pd.concat(dfs, ignore_index=ignore_index)
+    return from_pandas(result_df)
