@@ -140,7 +140,7 @@ def _validate_string_mapping(
 ) -> dict[str, str]:
     if not isinstance(mapping, Mapping):
         raise TypeError(
-            f"{argument_name} must be a dict mapping column names to strings, "
+            f"{argument_name} must be a mapping of string keys to strings, "
             f"got {type(mapping).__name__!r}"
         )
 

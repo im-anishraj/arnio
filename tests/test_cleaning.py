@@ -1678,22 +1678,22 @@ class TestRenameColumns:
 
     def test_rename_rejects_none_with_clear_type_error(self, sample_csv):
         frame = ar.read_csv(sample_csv)
-        with pytest.raises(TypeError, match="'NoneType'"):
+        with pytest.raises(TypeError, match="must be a mapping.*'NoneType'"):
             ar.rename_columns(frame, None)
 
     def test_rename_rejects_list_of_tuples_with_clear_type_error(self, sample_csv):
         frame = ar.read_csv(sample_csv)
-        with pytest.raises(TypeError, match="'list'"):
+        with pytest.raises(TypeError, match="must be a mapping.*'list'"):
             ar.rename_columns(frame, [("name", "full_name")])
 
     def test_rename_rejects_integer_with_clear_type_error(self, sample_csv):
         frame = ar.read_csv(sample_csv)
-        with pytest.raises(TypeError, match="'int'"):
+        with pytest.raises(TypeError, match="must be a mapping.*'int'"):
             ar.rename_columns(frame, 42)
 
     def test_rename_rejects_string_with_clear_type_error(self, sample_csv):
         frame = ar.read_csv(sample_csv)
-        with pytest.raises(TypeError, match="'str'"):
+        with pytest.raises(TypeError, match="must be a mapping.*'str'"):
             ar.rename_columns(frame, "name:full_name")
 
     def test_rename_valid_dict_still_works(self, sample_csv):
