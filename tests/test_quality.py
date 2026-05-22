@@ -1,6 +1,7 @@
 """Tests for data quality profiling and smart cleaning."""
 
 import io
+import json
 
 import pandas as pd
 import pytest
@@ -2039,3 +2040,84 @@ def test_data_quality_report_to_dict_preserves_non_column_suggestion_values():
     assert kwargs["message"] == ["age"]
     assert kwargs["metadata"] == {"age": "keep"}
     assert kwargs["threshold"] == 5
+
+
+def test_data_quality_report_to_json_returns_valid_json():
+    report = ar.DataQualityReport(
+        row_count=10,
+        column_count=1,
+        memory_usage=100,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+    )
+
+    json_output = report.to_json()
+
+    parsed = json.loads(json_output)
+
+    assert parsed["row_count"] == 10
+    assert parsed["column_count"] == 1
+
+
+def test_data_quality_report_to_json_indent():
+    report = ar.DataQualityReport(
+        row_count=10,
+        column_count=1,
+        memory_usage=100,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+    )
+
+    json_output = report.to_json(indent=2)
+
+    assert "\n" in json_output
+    assert '  "row_count"' in json_output
+
+
+def test_data_quality_report_to_json_exclude_columns():
+    from arnio._core import _DType, _Frame
+    from arnio.frame import ArFrame
+
+    cpp_frame = _Frame.from_dict(
+        {
+            "name": ["John"],
+            "age": [21],
+        },
+        {
+            "name": _DType.STRING,
+            "age": _DType.INT64,
+        },
+    )
+
+    frame = ArFrame(cpp_frame)
+
+    report = ar.profile(frame)
+
+    json_output = report.to_json(exclude_columns=["age"])
+
+    parsed = json.loads(json_output)
+
+    assert "name" in parsed["columns"]
+    assert "age" not in parsed["columns"]
+
+
+def test_data_quality_report_to_json_redact_sample_values():
+    from arnio._core import _DType, _Frame
+    from arnio.frame import ArFrame
+
+    cpp_frame = _Frame.from_dict(
+        {"name": ["John"]},
+        {"name": _DType.STRING},
+    )
+
+    frame = ArFrame(cpp_frame)
+
+    report = ar.profile(frame)
+
+    json_output = report.to_json(redact_sample_values=True)
+
+    parsed = json.loads(json_output)
+
+    assert parsed["columns"]["name"]["sample_values"] == ["[REDACTED]"]
