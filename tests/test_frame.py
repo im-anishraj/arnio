@@ -398,6 +398,25 @@ def test_cpp_frame_explicit_zero_rows_rejects_nonempty_first_column():
         frame.add_column(column)
 
 
+def test_add_column_rejects_duplicate_name():
+    from arnio._arnio_cpp import Column, DType, Frame
+
+    frame = Frame()
+
+    c1 = Column("a", DType.INT64)
+    c1.push_back(1)
+    c1.push_back(2)
+
+    c2 = Column("a", DType.INT64)
+    c2.push_back(3)
+    c2.push_back(4)
+
+    frame.add_column(c1)
+
+    with pytest.raises(ValueError, match="already exists"):
+        frame.add_column(c2)
+
+
 # ArFrame.describe() Tests
 
 
@@ -484,3 +503,73 @@ def test_describe_all_string_columns(csv_with_whitespace):
     for col in ["name", "city"]:
         metric_keys = list(stats[col].keys())
         assert metric_keys == ["count", "nulls", "unique"]
+
+
+# ── drop_columns ──────────────────────────────────────────────────────────────
+
+
+class TestDropColumns:
+    """Tests for ArFrame.drop_columns()."""
+
+    def test_drop_single_column(self):
+        df = pd.DataFrame({"a": [1, 2], "b": [3, 4], "c": [5, 6]})
+        frame = ar.from_pandas(df)
+        result = frame.drop_columns(["b"])
+        assert result.columns == ["a", "c"]
+        assert result.shape == (2, 2)
+
+    def test_drop_multiple_columns(self):
+        df = pd.DataFrame({"a": [1], "b": [2], "c": [3], "d": [4]})
+        frame = ar.from_pandas(df)
+        result = frame.drop_columns(["a", "c"])
+        assert result.columns == ["b", "d"]
+
+    def test_drop_preserves_column_order(self):
+        df = pd.DataFrame({"x": [1], "y": [2], "z": [3]})
+        frame = ar.from_pandas(df)
+        result = frame.drop_columns(["y"])
+        assert result.columns == ["x", "z"]
+
+    def test_drop_empty_list_returns_copy(self):
+        df = pd.DataFrame({"a": [1, 2], "b": [3, 4]})
+        frame = ar.from_pandas(df)
+        result = frame.drop_columns([])
+        assert result.columns == ["a", "b"]
+        assert result.shape == frame.shape
+
+    def test_drop_all_columns_returns_empty_frame(self):
+        df = pd.DataFrame({"a": [1], "b": [2]})
+        frame = ar.from_pandas(df)
+        result = frame.drop_columns(["a", "b"])
+        assert result.columns == []
+        assert result.shape == (1, 0)
+
+    def test_drop_duplicate_names_in_cols(self):
+        df = pd.DataFrame({"a": [1], "b": [2], "c": [3]})
+        frame = ar.from_pandas(df)
+        result = frame.drop_columns(["a", "a"])
+        assert result.columns == ["b", "c"]
+
+    def test_drop_unknown_column_raises_value_error(self):
+        df = pd.DataFrame({"a": [1], "b": [2]})
+        frame = ar.from_pandas(df)
+        with pytest.raises(ValueError, match="Unknown column"):
+            frame.drop_columns(["z"])
+
+    def test_drop_non_list_raises_type_error(self):
+        df = pd.DataFrame({"a": [1]})
+        frame = ar.from_pandas(df)
+        with pytest.raises(TypeError, match="cols must be a list"):
+            frame.drop_columns("a")
+
+    def test_drop_non_string_items_raises_type_error(self):
+        df = pd.DataFrame({"a": [1], "b": [2]})
+        frame = ar.from_pandas(df)
+        with pytest.raises(TypeError, match="strings"):
+            frame.drop_columns([1, 2])
+
+    def test_drop_does_not_mutate_original(self):
+        df = pd.DataFrame({"a": [1], "b": [2]})
+        frame = ar.from_pandas(df)
+        frame.drop_columns(["a"])
+        assert frame.columns == ["a", "b"]

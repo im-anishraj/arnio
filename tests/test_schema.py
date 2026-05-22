@@ -1,5 +1,7 @@
 """Tests for schema validation."""
 
+import io
+
 import pandas as pd
 import pytest
 
@@ -46,6 +48,27 @@ def test_dtype_validation_reports_safe_float_conversion_for_numeric_strings():
     assert "safely convertible to 'float64'" in result.issues[0].message
 
 
+def test_schema_validation_row_indexed_issues_respect_cap():
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "name": [None, None, "ok"],
+            }
+        )
+    )
+
+    schema = ar.Schema(
+        {
+            "name": ar.Field(nullable=False),
+        }
+    )
+
+    result = ar.validate(frame, schema, max_errors=1)
+
+    assert result.issue_count == 1
+    assert result.bad_rows == [1]
+
+
 def test_dtype_validation_does_not_report_safe_conversion_for_invalid_numeric_strings():
     frame = ar.from_pandas(
         pd.DataFrame(
@@ -64,6 +87,18 @@ def test_dtype_validation_does_not_report_safe_conversion_for_invalid_numeric_st
 
     assert not result.passed
     assert "safely convertible" not in result.issues[0].message
+
+
+def test_validate_rejects_chunked_iterators(tmp_path):
+    path = tmp_path / "data.csv"
+    path.write_text("email\n" "a@example.com\n")
+
+    chunks = ar.read_csv_chunked(path, chunksize=1)
+
+    with pytest.raises(
+        TypeError, match="Chunked validation is not currently supported"
+    ):
+        ar.validate(chunks, {"email": ar.Email(nullable=False)})
 
 
 def test_dtype_validation_does_not_report_safe_conversion_for_identifier_like_columns():
@@ -188,6 +223,31 @@ def test_schema_validation_passes_for_valid_frame(sample_csv):
     assert result.bad_rows == []
 
 
+def test_schema_validation_stops_after_max_errors(tmp_path):
+    path = tmp_path / "bad.csv"
+
+    path.write_text(
+        "name,age,email\n"
+        ",150,invalid-email\n"
+        ",200,another-invalid\n"
+        ",300,bad-email\n"
+    )
+
+    frame = ar.read_csv(path)
+    schema = ar.Schema(
+        {
+            "name": ar.String(nullable=False),
+            "age": ar.Int64(min=0, max=120),
+            "email": ar.Email(nullable=False),
+        }
+    )
+
+    result = ar.validate(frame, schema, max_errors=2)
+
+    assert result.issue_count == 2
+    assert len(result.issues) == 2
+
+
 def test_schema_rejects_invalid_field_values_string(sample_csv):
     frame = ar.read_csv(sample_csv)
     with pytest.raises(TypeError, match="must be a Field instance"):
@@ -265,6 +325,52 @@ def test_validation_result_to_pandas_empty_has_stable_columns():
     ]
 
 
+def test_schema_validation_bool_max_errors_rejected():
+    frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
+    schema = ar.Schema({"a": ar.Field()})
+
+    with pytest.raises(TypeError, match="max_errors"):
+        ar.validate(frame, schema, max_errors=True)
+
+
+def test_schema_validation_float_max_errors_rejected():
+    frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
+    schema = ar.Schema({"a": ar.Field()})
+
+    with pytest.raises(TypeError, match="max_errors"):
+        ar.validate(frame, schema, max_errors=1.5)
+
+
+def test_schema_validation_custom_rule_respects_max_errors():
+    def bad_rule(df):
+        return [
+            ar.ValidationIssue(
+                column="a",
+                rule="custom",
+                message="error 1",
+                row_index=1,
+            ),
+            ar.ValidationIssue(
+                column="a",
+                rule="custom",
+                message="error 2",
+                row_index=2,
+            ),
+        ]
+
+    frame = ar.from_pandas(pd.DataFrame({"a": [1, 2]}))
+
+    schema = ar.Schema(
+        {"a": ar.Field()},
+        rules=[bad_rule],
+    )
+
+    result = ar.validate(frame, schema, max_errors=1)
+
+    assert result.issue_count == 1
+    assert result.bad_rows == [1]
+
+
 def test_validation_result_summary_counts_repeated_issues_in_one_column():
     result = ar.ValidationResult(
         row_count=3,
@@ -288,6 +394,114 @@ def test_validation_result_summary_counts_repeated_issues_in_one_column():
     assert summary["issues_by_rule"] == {"min": 3}
     assert summary["issues_by_column"] == {"age": 3}
     assert summary["issues_by_column_and_rule"] == {"age": {"min": 3}}
+
+
+def test_schema_validation_max_errors_zero(tmp_path):
+    path = tmp_path / "data.csv"
+
+    path.write_text("name,age\njohn,\n")
+
+    frame = ar.read_csv(path)
+
+    schema = ar.Schema(
+        {
+            "name": ar.String(),
+            "age": ar.Int64(nullable=False),
+        }
+    )
+    result = ar.validate(frame, schema, max_errors=0)
+
+    assert result.issue_count == 0
+    assert result.issues == []
+
+
+def test_schema_validation_negative_max_errors(tmp_path):
+    path = tmp_path / "data.csv"
+
+    path.write_text("name\njohn\n")
+
+    frame = ar.read_csv(path)
+
+    schema = ar.Schema(
+        {
+            "name": ar.String(),
+        }
+    )
+
+    with pytest.raises(ValueError):
+        ar.validate(frame, schema, max_errors=-1)
+
+
+def test_schema_validation_unique_missing_columns_respects_max_errors():
+    frame = ar.read_csv(io.StringIO("x\n1\n"))
+
+    schema = ar.Schema(
+        {},
+        unique=["a", "b"],
+    )
+
+    result = ar.validate(frame, schema, max_errors=1)
+
+    assert result.issue_count == 1
+
+
+def test_schema_validation_rule_keyerror_respects_max_errors():
+    def bad_rule(df):
+        _ = df["missing_column"]
+        return []
+
+    frame = ar.read_csv(io.StringIO("a\n1\n"))
+
+    schema = ar.Schema(
+        {
+            "a": ar.String(),
+        },
+        rules=[bad_rule],
+    )
+
+    result = ar.validate(frame, schema, max_errors=1)
+
+    assert result.issue_count == 1
+
+
+def test_schema_validation_strict_max_errors_cap(tmp_path):
+    path = tmp_path / "data.csv"
+
+    path.write_text("name,extra1,extra2\njohn,a,b\n")
+
+    frame = ar.read_csv(path)
+
+    schema = ar.Schema(
+        {
+            "name": ar.String(),
+        },
+        strict=True,
+    )
+
+    result = ar.validate(frame, schema, max_errors=1)
+
+    assert result.issue_count == 1
+    assert len(result.issues) == 1
+
+
+def test_schema_validation_unique_max_errors_cap(tmp_path):
+    path = tmp_path / "data.csv"
+
+    path.write_text("id\n1\n1\n1\n")
+
+    frame = ar.read_csv(path)
+
+    schema = ar.Schema(
+        {
+            "id": ar.Int64(),
+        },
+        unique=["id"],
+    )
+
+    result = ar.validate(frame, schema, max_errors=1)
+
+    assert result.issue_count == 1
+    assert len(result.issues) == 1
 
 
 def test_validation_result_summary_counts_issues_across_multiple_columns():

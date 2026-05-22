@@ -38,8 +38,9 @@ from .cleaning import (
     strip_whitespace,
     trim_column_names,
     validate_columns_exist,
+    winsorize_outliers,
 )
-from .convert import from_dict, from_pandas, to_pandas
+from .convert import from_dict, from_pandas, to_pandas, to_arrow
 from .exceptions import (
     ArnioError,
     CsvReadError,
@@ -105,6 +106,7 @@ from .schema import (
     register_validator,
     validate,
 )
+from .schema_export import schema_to_dict, schema_to_yaml
 
 from_records = ArFrame.from_records
 
@@ -133,6 +135,7 @@ __all__ = [
     "drop_constant_columns",
     "drop_empty_columns",
     "clip_numeric",
+    "winsorize_outliers",
     "coalesce_columns",
     "combine_columns",
     "drop_columns_matching",
@@ -148,6 +151,7 @@ __all__ = [
     "standardize_missing_tokens",
     # Conversion
     "to_pandas",
+    "to_arrow",
     "from_pandas",
     "from_records",
     "from_dict",
@@ -205,4 +209,6 @@ __all__ = [
     "Custom",
     "register_validator",
     "Date",
+    "schema_to_dict",
+    "schema_to_yaml",
 ]

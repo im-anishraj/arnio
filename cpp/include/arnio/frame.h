@@ -31,6 +31,7 @@ class Frame {
     // Column access
     const Column& column(size_t idx) const;
     const Column& column(const std::string& name) const;
+    Column& column_mut(size_t idx);
     bool has_column(const std::string& name) const;
     size_t column_index(const std::string& name) const;
 
