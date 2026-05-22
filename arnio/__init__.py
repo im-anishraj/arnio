@@ -62,6 +62,7 @@ from .io import (
     scan_csv,
     sniff_delimiter,
     write_csv,
+    write_jsonl,
     write_parquet,
 )
 from .pipeline import (

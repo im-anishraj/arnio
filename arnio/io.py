@@ -1056,6 +1056,55 @@ def read_jsonl(
     return from_pandas(df)
 
 
+def write_jsonl(
+    frame: ArFrame,
+    path: str | os.PathLike[str],
+    *,
+    encoding: str = "utf-8",
+) -> None:
+    """Write an ArFrame to a JSON Lines file.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        The data frame to write.
+    path : str or os.PathLike[str]
+        Destination file path. Must have .jsonl or .ndjson extension.
+    encoding : str, default "utf-8"
+        File encoding.
+
+    Raises
+    ------
+    ValueError
+        If the file format is unsupported.
+    OSError
+        If the file cannot be written.
+
+    Examples
+    --------
+    >>> ar.write_jsonl(frame, "output.jsonl")
+    """
+    import json
+
+    path = os.fspath(path)
+    path_lower = path.lower()
+    if not (path_lower.endswith(".jsonl") or path_lower.endswith(".ndjson")):
+        raise ValueError(
+            f"Unsupported file format: {path}. "
+            "write_jsonl only supports .jsonl and .ndjson files."
+        )
+
+    df = to_pandas(frame)
+    records = df.to_dict(orient="records")
+    try:
+        with open(path, "w", encoding=encoding) as fh:
+            for record in records:
+                json_line = json.dumps(record)
+                fh.write(json_line + "\n")
+    except OSError as exc:
+        raise JsonlReadError(f"Could not write to {path!r}: {exc}") from exc
+
+
 def sniff_delimiter(
     path: str | os.PathLike[str],
     *,
