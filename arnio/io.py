@@ -10,6 +10,7 @@ import os
 import shutil
 import tempfile
 import warnings
+from collections import Counter
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from typing import cast
@@ -1162,8 +1163,6 @@ def sniff_delimiter(
     # 5. Score Candidates and Detect Ties/Ambiguity
     best_candidates = []
     best_score = -1.0
-
-    from collections import Counter
 
     for delimiter in candidates:
         line_counts = counts[delimiter]
