@@ -6,6 +6,7 @@ Data quality profiling and safe automatic cleaning helpers.
 from __future__ import annotations
 
 import html
+import json
 import math
 from dataclasses import dataclass, field
 from typing import Any
