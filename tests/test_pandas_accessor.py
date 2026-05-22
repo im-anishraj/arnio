@@ -63,6 +63,7 @@ def test_pandas_accessor_auto_clean_returns_dataframe_and_report():
 # --- Issue: dry_run mode for auto_clean via pandas accessor ---
 # Tests added to verify dry_run=True returns report without mutating the frame
 
+
 def test_pandas_accessor_auto_clean_dry_run_returns_report():
     # dry_run=True should return a DataQualityReport without mutating the frame
     df = pd.DataFrame({"name": [" Alice ", " Bob "]})
