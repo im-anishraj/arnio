@@ -228,19 +228,17 @@ class DataQualityReport:
                     "step": s[0],
                     "kwargs": {
                         key: (
-                            [
-                                item
-                                for item in value
-                                if item not in exclude_columns
-                            ]
+                            [item for item in value if item not in exclude_columns]
                             if isinstance(value, list)
-                            else {
-                                k: v
-                                for k, v in value.items()
-                                if k not in exclude_columns
-                            }
-                            if isinstance(value, dict)
-                            else value
+                            else (
+                                {
+                                    k: v
+                                    for k, v in value.items()
+                                    if k not in exclude_columns
+                                }
+                                if isinstance(value, dict)
+                                else value
+                            )
                         )
                         for key, value in dict(s[1]).items()
                     },
