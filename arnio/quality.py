@@ -263,7 +263,6 @@ class DataQualityReport:
             ],
         }
 
-
     def __repr__(self) -> str:
         """Deterministic concise representation for terminals and notebooks."""
 
