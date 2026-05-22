@@ -406,6 +406,7 @@ def read_csv(
     dtype: dict[str, str] | None = None,
     mode: str = "strict",
     encoding_errors: str = "strict",
+    verbose: bool = False,
 ) -> ArFrame:
     """Read a CSV file into an ArFrame via C++ backend.
 
@@ -469,6 +470,10 @@ def read_csv(
         - permissive: fills missing trailing fields with nulls.
         - both modes reject extra fields because they would otherwise be
           silently dropped.
+
+    verbose : bool, default False
+        If True, prints progress information during CSV reading,
+        including the file path and number of rows loaded.
 
     Returns
     -------
@@ -542,6 +547,11 @@ def read_csv(
         ) as native_path:
             cpp_frame = reader.read(native_path)
 
+        if verbose:
+            print(f"[arnio] Reading: {path}")
+            frame = ArFrame(cpp_frame)
+            print(f"[arnio] Done! {len(frame)} rows loaded.")
+            return frame
         return ArFrame(cpp_frame)
 
     except ValueError:
@@ -571,6 +581,7 @@ def read_csv_chunked(
     thousands_separator: str | None = None,
     null_values: list[str] | None = None,
     mode: str = "strict",
+    verbose: bool = False,
 ) -> Iterator[ArFrame]:
     """Read a CSV file in chunks, yielding ArFrame objects.
 
@@ -676,7 +687,10 @@ def read_csv_chunked(
                 cpp_frame = reader.next_chunk(chunksize)
                 if cpp_frame is None:
                     break
-                yield ArFrame(cpp_frame)
+                chunk = ArFrame(cpp_frame)
+                if verbose:
+                    print(f"[arnio] Chunk loaded: {len(chunk)} rows")
+                yield chunk
     except ValueError:
         raise
     except CsvReadError:
