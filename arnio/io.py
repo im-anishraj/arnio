@@ -6,6 +6,7 @@ CSV reading and writing functions.
 from __future__ import annotations
 
 import io
+import json
 import os
 import shutil
 import tempfile
