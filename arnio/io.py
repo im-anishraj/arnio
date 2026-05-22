@@ -832,6 +832,7 @@ def scan_csv(
     null_values: list[str] | None = None,
     has_header: bool = True,
     encoding_errors: str = "strict",
+    usecols: list[str] | None = None,
 ) -> dict[str, str]:
     """Return schema (column names + inferred types) without loading data.
 
@@ -870,6 +871,11 @@ def scan_csv(
         When False, synthetic column names are generated
         in the form ``col_0``, ``col_1``, etc., matching
         the behavior of ``read_csv(..., has_header=False)``.
+    encoding_errors : str, default "strict"
+        How to handle encoding errors. Same options as the ``errors`` argument
+        in Python's ``open()`` function.
+    usecols : list[str], optional
+        Columns to scan. If None, scans all columns.
 
     Returns
     -------
@@ -933,11 +939,11 @@ def scan_csv(
             raise ValueError("sample_size must be a positive integer greater than 0.")
         config.sample_size = sample_size
 
+    if usecols is not None:
+        config.usecols = _validate_usecols(usecols)
+
     reader = _CsvReader(config)
     try:
-        # Schema inference only needs a sample, avoiding full-file transcode.
-        # sample_rows is passed so _utf8_csv_path uses record-aware sampling
-        # without rewriting decoded CSV text before native parsing.
         with _utf8_csv_path(
             path,
             encoding,
@@ -945,7 +951,10 @@ def scan_csv(
             delimiter=delimiter,
             sample_rows=100 if sample_size is None else sample_size,
         ) as native_path:
-            return cast(dict[str, str], reader.scan_schema(native_path))
+            schema = cast(dict[str, str], reader.scan_schema(native_path))
+            if usecols is not None:
+                schema = {col: schema[col] for col in usecols if col in schema}
+            return schema
     except RuntimeError as e:
         raise CsvReadError(str(e)) from e
 
