@@ -1250,6 +1250,36 @@ def test_country_code_validation_rejects_invalid_codes(tmp_path):
     assert [issue.row_index for issue in result.issues] == [1, 2, 3, 4, 5, 6, 7, 8, 9]
     assert all(issue.rule == "country_code" for issue in result.issues)
 
+def test_language_code_validation_accepts_iso_639_1_codes(tmp_path):
+    path = tmp_path / "languages.csv"
+    path.write_text("language\nen\nhi\nfr\nde\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"language": ar.LanguageCode(nullable=False)},
+    )
+
+    assert result.passed
+    assert result.issue_count == 0
+
+
+def test_language_code_validation_rejects_invalid_codes(tmp_path):
+    path = tmp_path / "bad_languages.csv"
+    path.write_text(
+        "language\nenglish\neng\nEN\nEN-US\nzz\n123\n\n"
+    )
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"language": ar.LanguageCode(nullable=False)},
+    )
+
+    assert not result.passed
+    assert result.issue_count == 6
+
+    assert [issue.row_index for issue in result.issues] == [1, 2, 3, 4, 5, 6]
+    assert all(issue.rule == "language_code" for issue in result.issues)
+
 
 def test_country_code_enforces_uniqueness(tmp_path):
     path = tmp_path / "duplicate_countries.csv"

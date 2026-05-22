@@ -1172,6 +1172,10 @@ schema = ar.Schema({
     # CurrencyCode validates 3-letter uppercase formats (e.g., USD, EUR, INR).
     "currency": ar.CurrencyCode(),
 
+   
+    # LanguageCode validates lowercase ISO 639-1 language codes (e.g., en, hi, fr).
+    "language": ar.LanguageCode(),
+
     "username": ar.String(min_length=3, max_length=20),
     "user_code": ar.Regex(r"^USR-\d{4}$", nullable=False),
     "revenue": ar.Custom("positive", nullable=True),

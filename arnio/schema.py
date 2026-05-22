@@ -304,6 +304,14 @@ ISO_3166_1_ALPHA_2 = {
     "ZW",
 }
 
+ISO_639_1_CODES = {
+    "ar", "bn", "cs", "da", "de", "el", "en", "es", "fa",
+    "fi", "fr", "gu", "he", "hi", "hu", "id", "it", "ja",
+    "kn", "ko", "ml", "mr", "nl", "no", "pa", "pl", "pt",
+    "ro", "ru", "sv", "ta", "te", "th", "tr", "uk", "ur",
+    "vi", "zh"
+}
+
 
 @dataclass(frozen=True)
 class Field:
@@ -1413,6 +1421,32 @@ def CountryCode(
         required_if=required_if,
         severity=severity,
     )
+def LanguageCode(
+    *,
+    nullable: bool = True,
+    unique: bool = False,
+    severity: str = "error",
+    required_if: tuple[str, Any] | None = None,
+) -> Field:
+    """Create a lowercase ISO 639-1 language-code schema field.
+
+    Args:
+        nullable: Whether null values are allowed.
+        unique: Whether non-null values must be unique.
+        severity: Severity level for validation issues.
+        required_if: Conditional requirement as a column/value pair.
+
+    Returns:
+        Field: Configured lowercase ISO 639-1 language-code schema field.
+    """
+    return Field(
+        dtype="string",
+        nullable=nullable,
+        semantic="language_code",
+        unique=unique,
+        required_if=required_if,
+        severity=severity,
+    )
 
 
 def CurrencyCode(*, nullable: bool = True, unique: bool = False) -> Field:
@@ -1800,6 +1834,10 @@ def _validate_column(
                     )
                 elif field_def.semantic == "country_code":
                     invalid = non_null[~non_null.isin(ISO_3166_1_ALPHA_2)]
+
+                elif field_def.semantic == "language_code":
+                    invalid = non_null[~non_null.isin(ISO_639_1_CODES)]
+                    
                 else:
                     invalid = non_null[~text.str.fullmatch(pattern, na=False)]
 
@@ -2039,6 +2077,7 @@ def _markdown_cell(value: Any) -> str:
 
 _SEMANTIC_PATTERNS = {
     "email": r"[^@\s]+@[^@\s]+\.[^@\s]+",
+    "language_code": r"[a-z]{2}",
     "email:strict": (
         r"[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+"
         r"@"
