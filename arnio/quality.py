@@ -189,6 +189,7 @@ class DataQualityReport:
     quality_score: float = 100.0
     score_components: dict[str, float] = field(default_factory=dict)
     suggestions: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
+    missingness_correlations: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self, *, redact_sample_values: bool = False) -> dict[str, Any]:
         """Return a JSON-friendly dictionary representation."""
@@ -213,6 +214,7 @@ class DataQualityReport:
                 }
                 for s in self.suggestions
             ],
+            "missingness_correlations": list(self.missingness_correlations),
         }
 
     def to_markdown(self) -> str:
@@ -280,6 +282,25 @@ class DataQualityReport:
                 else:
                     lines.append(f"- `{step[0]}`: `{kwargs_str}`")
 
+            lines.append("")
+
+        # Missingness correlations
+        if self.missingness_correlations:
+            lines.append("## Missingness Correlations")
+            lines.append("")
+            lines.append(
+                "> Columns that tend to be null together — may indicate a shared "
+                "upstream export or join problem."
+            )
+            lines.append("")
+            lines.append("| Column A | Column B | Correlation |")
+            lines.append("|---|---|---|")
+            for hint in self.missingness_correlations:
+                lines.append(
+                    f"| {_markdown_cell(hint['column_a'])} "
+                    f"| {_markdown_cell(hint['column_b'])} "
+                    f"| {hint['correlation']:.4f} |"
+                )
             lines.append("")
 
         return "\n".join(lines)
@@ -523,6 +544,28 @@ class DataQualityReport:
                 lines.append("</details>")
             lines.append("</div>")
 
+        if self.missingness_correlations:
+            lines.append('<div class="section">')
+            lines.append("<h2>Missingness Correlations</h2>")
+            lines.append(
+                '<p class="subtitle">Columns that tend to be null together — '
+                "may indicate a shared upstream export or join problem.</p>"
+            )
+            lines.append("<table>")
+            lines.append(
+                "<thead><tr><th>Column A</th><th>Column B</th><th>Correlation</th></tr></thead>"
+            )
+            lines.append("<tbody>")
+            for hint in self.missingness_correlations:
+                corr_str = f"{hint['correlation']:.4f}"
+                lines.append("<tr>")
+                lines.append(f"<td><code>{e(hint['column_a'])}</code></td>")
+                lines.append(f"<td><code>{e(hint['column_b'])}</code></td>")
+                lines.append(f"<td>{e(corr_str)}</td>")
+                lines.append("</tr>")
+            lines.append("</tbody></table>")
+            lines.append("</div>")
+
         lines.append("</div>")  # container
         lines.append("</div>")  # arnio-dqr
         if full_document:
@@ -548,6 +591,7 @@ class DataQualityReport:
                 if profile.whitespace_count > 0
             ],
             "suggestions": self.suggestions,
+            "missingness_correlations": list(self.missingness_correlations),
         }
 
     def to_pandas(self) -> pd.DataFrame:
@@ -722,6 +766,65 @@ class QualityGateResult:
         )
 
 
+def _missingness_correlations(
+    df: pd.DataFrame,
+    threshold: float,
+) -> list[dict[str, Any]]:
+    """Return column pairs whose null-indicator vectors are correlated >= threshold.
+
+    For each pair of columns that both have at least one null, compute the
+    Pearson correlation between their binary null-indicator vectors (1 = null,
+    0 = present).  Pairs where either vector has zero variance (all-null or
+    all-present) are skipped to avoid division-by-zero.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        The raw data frame.
+    threshold : float
+        Minimum absolute Pearson correlation to include a pair.
+
+    Returns
+    -------
+    list[dict[str, Any]]
+        Sorted list of ``{"column_a": str, "column_b": str, "correlation": float}``
+        objects, ordered by descending absolute correlation.
+    """
+    # Build null-indicator matrix only for columns that have at least one null
+    nullable_cols = [col for col in df.columns if df[col].isna().any()]
+    if len(nullable_cols) < 2:
+        return []
+
+    null_matrix = df[nullable_cols].isna().astype(np.float64)
+    results: list[dict[str, Any]] = []
+
+    col_list = list(nullable_cols)
+    for i in range(len(col_list)):
+        for j in range(i + 1, len(col_list)):
+            a, b = col_list[i], col_list[j]
+            vec_a = null_matrix[a].values
+            vec_b = null_matrix[b].values
+
+            # Skip zero-variance vectors (constant masks)
+            if vec_a.std() == 0.0 or vec_b.std() == 0.0:
+                continue
+
+            corr = float(np.corrcoef(vec_a, vec_b)[0, 1])
+            if not math.isfinite(corr):
+                continue
+            if abs(corr) >= threshold:
+                results.append(
+                    {
+                        "column_a": a,
+                        "column_b": b,
+                        "correlation": round(corr, 6),
+                    }
+                )
+
+    results.sort(key=lambda x: abs(x["correlation"]), reverse=True)
+    return results
+
+
 def profile(
     frame: ArFrame,
     *,
@@ -730,6 +833,7 @@ def profile(
     approx_top_values_min_unique: int = 1000,
     approx_top_values_min_ratio: float = 0.2,
     approx_top_values_sample_size: int = 2000,
+    missingness_correlation_threshold: float | None = 0.75,
 ) -> DataQualityReport:
     """Profile data quality for an ArFrame.
 
@@ -747,18 +851,25 @@ def profile(
         Minimum unique ratio (unique / non-null) required to enable approximation.
     approx_top_values_sample_size : int, default 2000
         Number of non-null values sampled to estimate top values.
+    missingness_correlation_threshold : float or None, default 0.75
+        Minimum absolute Pearson correlation between two columns' null-indicator
+        vectors required to include a pair in ``missingness_correlations``.
+        Must be a float in the range ``[0.0, 1.0]``.
+        Pass ``None`` to disable missingness-correlation hints entirely.
 
     Returns
     -------
     DataQualityReport
-        Report containing nulls, uniqueness, basic stats, semantic hints, and
-        safe cleaning suggestions.
+        Report containing nulls, uniqueness, basic stats, semantic hints,
+        safe cleaning suggestions, and missingness-correlation hints.
 
     Examples
     --------
     >>> frame = ar.read_csv("raw.csv")
     >>> report = ar.profile(frame, sample_size=3)
     >>> report.summary()
+    >>> report.missingness_correlations
+    [{"column_a": "col_a", "column_b": "col_b", "correlation": 1.0}]
     """
     if not isinstance(sample_size, int) or isinstance(sample_size, bool):
         raise TypeError("sample_size must be an integer")
@@ -784,6 +895,21 @@ def profile(
         raise TypeError("approx_top_values_sample_size must be an integer")
     if approx_top_values_sample_size <= 0:
         raise ValueError("approx_top_values_sample_size must be positive")
+    if missingness_correlation_threshold is not None:
+        if isinstance(missingness_correlation_threshold, bool) or not isinstance(
+            missingness_correlation_threshold, (int, float)
+        ):
+            raise TypeError(
+                "missingness_correlation_threshold must be a float between 0 and 1, or None"
+            )
+        if (
+            not math.isfinite(missingness_correlation_threshold)
+            or missingness_correlation_threshold < 0.0
+            or missingness_correlation_threshold > 1.0
+        ):
+            raise ValueError(
+                "missingness_correlation_threshold must be between 0.0 and 1.0"
+            )
 
     df = to_pandas(frame)
     row_count, column_count = frame.shape
@@ -819,6 +945,12 @@ def profile(
         row_count, duplicate_ratio, columns
     )
 
+    miss_corr = (
+        _missingness_correlations(df, missingness_correlation_threshold)
+        if missingness_correlation_threshold is not None
+        else []
+    )
+
     return DataQualityReport(
         row_count=report.row_count,
         column_count=report.column_count,
@@ -829,6 +961,7 @@ def profile(
         score_components=score_components,
         columns=report.columns,
         suggestions=suggest_cleaning(report),
+        missingness_correlations=miss_corr,
     )
 
 
