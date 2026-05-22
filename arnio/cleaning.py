@@ -335,31 +335,36 @@ def select_columns(frame: ArFrame, columns: Sequence[str]) -> ArFrame:
 
 def fill_nulls(
     frame: ArFrame,
-    value: Any,
+    value: Any = None,
     *,
     subset: list[str] | None = None,
+    method: str | None = None,
 ) -> ArFrame:
-    """Replace null/empty values with a given fill value.
+    """Replace null/empty values with a given fill value or forward/backward fill.
 
     Parameters
     ----------
     frame : ArFrame
         Input data frame.
-    value : Any
-        Value to replace nulls with. Can be a scalar or compatible type.
+    value : Any, optional
+        Value to replace nulls with.
     subset : list[str], optional
         Column names to fill nulls in. If None, fills all columns.
+    method : {"ffill", "bfill"}, optional
+        If specified, use forward-fill or backward-fill instead of a static value.
 
     Returns
     -------
     ArFrame
         New frame with null values replaced.
-
-    Examples
-    --------
-    >>> frame = ar.read_csv("data.csv")
-    >>> filled = ar.fill_nulls(frame, 0, subset=["age"])
     """
+    if method is not None and method not in ("ffill", "bfill"):
+        raise ValueError("method must be 'ffill', 'bfill', or None")
+    if method is None and value is None:
+        raise ValueError("Either value or method must be provided")
+    if method is not None and value is not None:
+        raise ValueError("Only one of value or method can be provided, not both")
+
     if subset is not None:
         subset = _validate_existing_column_sequence(
             subset,
@@ -370,6 +375,15 @@ def fill_nulls(
                 f"Available columns: {available}"
             ),
         )
+
+    if method is not None:
+        df = to_pandas(frame)
+        if method == "ffill":
+            result_df = df.ffill()
+        else:
+            result_df = df.bfill()
+        return from_pandas(result_df)
+
     result = _fill_nulls(frame._frame, value, subset=subset)
     return ArFrame(result)
 
