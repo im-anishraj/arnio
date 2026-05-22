@@ -7,13 +7,20 @@ from __future__ import annotations
 
 import html
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
 import pandas as pd
 
-from .cleaning import cast_types, drop_duplicates, strip_whitespace
+from .cleaning import (
+    _validate_column_sequence,
+    cast_types,
+    drop_duplicates,
+    strip_whitespace,
+    validate_columns_exist,
+)
 from .convert import to_pandas
 from .frame import ArFrame
 
@@ -725,6 +732,7 @@ class QualityGateResult:
 def profile(
     frame: ArFrame,
     *,
+    exclude_columns: Sequence[str] | None = None,
     sample_size: int = 5,
     approx_top_values: bool = False,
     approx_top_values_min_unique: int = 1000,
@@ -737,6 +745,8 @@ def profile(
     ----------
     frame : ArFrame
         Input frame to inspect.
+    exclude_columns : Sequence[str], optional
+        Column names to exclude from profiling.
     sample_size : int, default 5
         Number of non-null sample values to keep per column.
     approx_top_values : bool, default False
@@ -782,11 +792,30 @@ def profile(
         approx_top_values_sample_size, bool
     ):
         raise TypeError("approx_top_values_sample_size must be an integer")
+
     if approx_top_values_sample_size <= 0:
         raise ValueError("approx_top_values_sample_size must be positive")
 
+    has_exclusions = exclude_columns is not None and len(exclude_columns) > 0
+
+    if exclude_columns is not None:
+        exclude_columns = _validate_column_sequence(
+            exclude_columns,
+            argument_name="exclude_columns",
+        )
+        validate_columns_exist(
+            frame,
+            exclude_columns,
+            operation="profile",
+        )
+
     df = to_pandas(frame)
-    row_count, column_count = frame.shape
+
+    if has_exclusions:
+        df = df.drop(columns=list(exclude_columns))
+
+    row_count = len(df)
+    column_count = len(df.columns)
     duplicate_rows = int(df.duplicated().sum()) if row_count else 0
     duplicate_ratio = _ratio(duplicate_rows, row_count)
 
@@ -808,7 +837,11 @@ def profile(
     report = DataQualityReport(
         row_count=row_count,
         column_count=column_count,
-        memory_usage=frame.memory_usage(),
+        memory_usage=(
+            int(df.memory_usage(deep=True).sum())
+            if has_exclusions
+            else frame.memory_usage()
+        ),
         duplicate_rows=duplicate_rows,
         duplicate_ratio=duplicate_ratio,
         columns=columns,
