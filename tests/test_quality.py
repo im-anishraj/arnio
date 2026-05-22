@@ -1501,3 +1501,944 @@ def test_auto_clean_explain_dry_run_error(tmp_path):
         ValueError, match="explain=True cannot be used with dry_run=True"
     ):
         ar.auto_clean(frame, explain=True, dry_run=True)
+
+
+def test_compare_profiles_under_threshold_is_ok():
+    """Changes below warning thresholds should result in 'ok' status."""
+    baseline = ar.profile(ar.from_pandas(pd.DataFrame({"score": [10.0, 11.0, 12.0]})))
+    # Shift values by 0.1 to keep std constant but shift mean slightly
+    current = ar.profile(ar.from_pandas(pd.DataFrame({"score": [10.1, 11.1, 12.1]})))
+
+    comparison = ar.compare_profiles(baseline, current)
+    assert comparison.drift_report["score"]["status"] == "ok"
+    assert comparison.status_counts == {"ok": 1, "warning": 0, "changed": 0}
+
+
+def test_compare_profiles_above_warning_threshold_is_warning():
+    """Changes above warning but below changed threshold should result in 'warning' status."""
+    baseline = ar.profile(ar.from_pandas(pd.DataFrame({"score": [10.0, 11.0, 12.0]})))
+    # Shift values by 1.8 to trigger warning status (approx 15% shift)
+    current = ar.profile(ar.from_pandas(pd.DataFrame({"score": [11.8, 12.8, 13.8]})))
+
+    comparison = ar.compare_profiles(baseline, current)
+    assert comparison.drift_report["score"]["status"] == "warning"
+    assert comparison.status_counts == {"ok": 0, "warning": 1, "changed": 0}
+
+
+def test_compare_profiles_above_changed_threshold_is_changed():
+    """Changes above changed threshold should result in 'changed' status."""
+    baseline = ar.profile(ar.from_pandas(pd.DataFrame({"score": [10.0, 11.0, 12.0]})))
+    # Shift values by 5.0 to trigger changed status (approx 45% shift)
+    current = ar.profile(ar.from_pandas(pd.DataFrame({"score": [15.0, 16.0, 17.0]})))
+
+    comparison = ar.compare_profiles(baseline, current)
+    assert comparison.drift_report["score"]["status"] == "changed"
+    assert comparison.status_counts == {"ok": 0, "warning": 0, "changed": 1}
+
+
+# ── duplicate_rows correctness tests (Refs #662) ─────────────────────────────
+# These tests verify the duplicate_rows field in DataQualityReport against
+# the pandas df.duplicated().sum() baseline.  profile() continues to use
+# df.duplicated().sum() as its default; the hash_pandas_object candidate
+# is covered separately below for future comparison only.
+
+
+class TestProfileDuplicateRowsCorrectness:
+    """Focused correctness tests for duplicate_rows in DataQualityReport.
+
+    profile() uses df.duplicated().sum() as its default implementation.
+    Each test asserts ar.profile() against the pandas baseline directly so
+    any future change to the counting path is immediately caught.
+    """
+
+    def _baseline(self, frame: ar.ArFrame) -> int:
+        """Reference implementation: pandas df.duplicated().sum()."""
+        return int(ar.to_pandas(frame).duplicated().sum())
+
+    def test_no_duplicates(self):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1, 2, 3], "b": ["x", "y", "z"]}))
+        assert ar.profile(frame).duplicate_rows == 0
+        assert ar.profile(frame).duplicate_rows == self._baseline(frame)
+
+    def test_all_duplicate_rows(self):
+        frame = ar.from_pandas(pd.DataFrame({"a": [7, 7, 7], "b": ["q", "q", "q"]}))
+        # 3 rows, 1 unique → 2 duplicates
+        assert ar.profile(frame).duplicate_rows == 2
+        assert ar.profile(frame).duplicate_rows == self._baseline(frame)
+
+    def test_partial_duplicates(self):
+        frame = ar.from_pandas(
+            pd.DataFrame({"a": [1, 1, 2, 3, 3], "b": ["x", "x", "y", "z", "z"]})
+        )
+        # rows 0==1 and 3==4 → 2 duplicates
+        assert ar.profile(frame).duplicate_rows == 2
+        assert ar.profile(frame).duplicate_rows == self._baseline(frame)
+
+    def test_null_rows_treated_as_duplicates(self):
+        # Two rows where every cell is null should count as one duplicate,
+        # matching pandas default (NaN == NaN for deduplication purposes).
+        frame = ar.from_pandas(
+            pd.DataFrame({"a": [None, None, 1.0], "b": [None, None, 2.0]})
+        )
+        assert ar.profile(frame).duplicate_rows == 1
+        assert ar.profile(frame).duplicate_rows == self._baseline(frame)
+
+    def test_partial_null_rows(self):
+        # Only the null-containing column matches; the other differs.
+        frame = ar.from_pandas(
+            pd.DataFrame({"a": [None, None, 1.0], "b": [1.0, 2.0, 3.0]})
+        )
+        # All rows are distinct → 0 duplicates
+        assert ar.profile(frame).duplicate_rows == 0
+        assert ar.profile(frame).duplicate_rows == self._baseline(frame)
+
+    def test_mixed_dtypes_int_float_string_bool(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "i": [1, 1, 2],
+                    "f": [1.0, 1.0, 2.0],
+                    "s": ["a", "a", "b"],
+                    "b": [True, True, False],
+                }
+            )
+        )
+        assert ar.profile(frame).duplicate_rows == 1
+        assert ar.profile(frame).duplicate_rows == self._baseline(frame)
+
+    def test_single_row_frame(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [42]}))
+        assert ar.profile(frame).duplicate_rows == 0
+        assert ar.profile(frame).duplicate_rows == self._baseline(frame)
+
+    def test_empty_frame_returns_zero(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": pd.Series(dtype="float64")}))
+        assert ar.profile(frame).duplicate_rows == 0
+
+    def test_duplicate_ratio_consistent_with_duplicate_rows(self):
+        frame = ar.from_pandas(
+            pd.DataFrame({"a": [1, 1, 2, 3], "b": ["x", "x", "y", "z"]})
+        )
+        report = ar.profile(frame)
+        assert report.duplicate_rows == 1
+        assert abs(report.duplicate_ratio - 1 / 4) < 1e-9
+
+
+# ── duplicate_rows timing guard (perf/#662) ───────────────────────────────────
+
+
+def test_profile_duplicate_count_hash_path_matches_pandas_baseline_at_scale():
+    """Verify hash_pandas_object produces the same duplicate count as df.duplicated().
+
+    This test documents the candidate faster implementation explored in #662.
+    The hash path is NOT currently used as the default in profile() — benchmark
+    results were inconsistent across CI configurations (0.72x–1.58x depending
+    on Python version and OS).  The correctness equivalence is preserved here so
+    the implementation can be re-enabled once stable benchmark evidence is
+    available across the full CI matrix.
+
+    See benchmarks/benchmark_profile_duplicate_count.py for the manual timing
+    comparison.
+    """
+    import numpy as np
+
+    rng = np.random.default_rng(0)
+    n = 50_000
+    df = pd.DataFrame(
+        {
+            "a": rng.integers(0, int(n * 0.9), size=n).tolist(),
+            "b": rng.uniform(0, 1000, size=n).tolist(),
+            "c": [f"s{i % 5000}" for i in range(n)],
+        }
+    )
+    frame = ar.from_pandas(df)
+    df_converted = ar.to_pandas(frame)
+
+    # Candidate path (not yet the default)
+    hashes = pd.util.hash_pandas_object(df_converted, index=False)
+    hash_count = int(hashes.duplicated().sum())
+
+    # Current baseline — what profile() uses
+    baseline_count = int(df_converted.duplicated().sum())
+
+    assert hash_count == baseline_count
+    assert ar.profile(frame).duplicate_rows == baseline_count
+
+
+# ── numeric histogram tests ──────────────────────────────────────────────────
+
+
+def test_profile_numeric_histogram_normal():
+    # Test normal distribution / sequence
+    df = pd.DataFrame({"nums": list(range(1, 101))})
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+    profile = report.columns["nums"]
+
+    assert profile.histogram is not None
+    assert len(profile.histogram) == 10
+
+    # Check that counts sum to 100
+    counts = [c for _, _, c, _ in profile.histogram]
+    ratios = [r for _, _, _, r in profile.histogram]
+    assert sum(counts) == 100
+    assert abs(sum(ratios) - 1.0) < 1e-9
+
+    # Check bounds
+    assert profile.histogram[0][0] == 1.0
+    assert profile.histogram[-1][1] == 100.0
+
+    # Serialization test
+    dct = profile.to_dict()
+    assert "histogram" in dct
+    assert len(dct["histogram"]) == 10
+    assert dct["histogram"][0]["bucket_start"] == 1.0
+    assert dct["histogram"][0]["count"] == 10
+    assert abs(dct["histogram"][0]["ratio"] - 0.1) < 1e-9
+
+
+def test_profile_numeric_histogram_constant_values():
+    # Test constant values
+    df = pd.DataFrame({"nums": [5.0] * 20})
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+    profile = report.columns["nums"]
+
+    assert profile.histogram is not None
+    assert len(profile.histogram) == 10
+
+    counts = [c for _, _, c, _ in profile.histogram]
+    assert sum(counts) == 20
+
+    # numpy.histogram handles constant values by setting bin boundaries offset by a small delta (typically +/- 0.5)
+    # let's assert the counts are correct and serialize properly
+    dct = profile.to_dict()
+    assert "histogram" in dct
+    assert len(dct["histogram"]) == 10
+
+
+def test_profile_numeric_histogram_empty_and_all_nulls():
+    # All nulls
+    df = pd.DataFrame({"nums": [None, None, None]})
+    df["nums"] = df["nums"].astype("float64")
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+    profile = report.columns["nums"]
+    assert profile.histogram is None
+
+    # Empty column (0 rows)
+    df_empty = pd.DataFrame({"nums": pd.Series(dtype="float64")})
+    frame_empty = ar.from_pandas(df_empty)
+    report_empty = ar.profile(frame_empty)
+    profile_empty = report_empty.columns["nums"]
+    assert profile_empty.histogram is None
+
+
+def test_profile_numeric_histogram_missing_values():
+    # Mix of nulls and numeric values
+    df = pd.DataFrame({"nums": [10.0, None, 20.0, None, 30.0]})
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+    profile = report.columns["nums"]
+
+    assert profile.histogram is not None
+    assert len(profile.histogram) == 10
+    counts = [c for _, _, c, _ in profile.histogram]
+    assert sum(counts) == 3  # only non-null values are counted
+
+    ratios = [r for _, _, _, r in profile.histogram]
+    assert abs(sum(ratios) - 1.0) < 1e-5
+
+
+def test_profile_numeric_histogram_small_sample():
+    # Just 1 value
+    df = pd.DataFrame({"nums": [42.0]})
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+    profile = report.columns["nums"]
+
+    assert profile.histogram is not None
+    assert len(profile.histogram) == 10
+    counts = [c for _, _, c, _ in profile.histogram]
+    assert sum(counts) == 1
+
+
+def test_profile_numeric_histogram_non_numeric():
+    # String column should have histogram = None
+    df = pd.DataFrame({"names": ["Alice", "Bob", "Charlie"]})
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+    profile = report.columns["names"]
+
+    assert profile.histogram is None
+    assert "histogram" in profile.to_dict()
+    assert profile.to_dict()["histogram"] is None
+
+
+def test_profile_numeric_histogram_to_pandas():
+    df = pd.DataFrame({"nums": [1, 2, 3]})
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+
+    pdf = report.to_pandas()
+    assert "histogram" in pdf.columns
+    assert pdf.loc[pdf["name"] == "nums", "histogram"].values[0] is not None
+
+
+def test_profile_numeric_histogram_non_finite_values():
+    # Test handling of infinite values in histogram calculation
+    from arnio._core import _DType, _Frame
+    from arnio.frame import ArFrame
+
+    cpp_frame = _Frame.from_dict(
+        {"nums": [1.0, 2.0, float("inf"), float("-inf"), None, 3.0]},
+        {"nums": _DType.FLOAT64},
+    )
+    frame = ArFrame(cpp_frame)
+    report = ar.profile(frame)
+    profile = report.columns["nums"]
+
+    # The histogram should filter out +/- inf and NaNs, binning only [1.0, 2.0, 3.0]
+    assert profile.histogram is not None
+    assert len(profile.histogram) == 10
+
+    counts = [c for _, _, c, _ in profile.histogram]
+    assert sum(counts) == 3
+
+    # All infinities (no finite values to bin)
+    cpp_frame_all_inf = _Frame.from_dict(
+        {"nums": [float("inf"), float("-inf")]},
+        {"nums": _DType.FLOAT64},
+    )
+    frame_all_inf = ArFrame(cpp_frame_all_inf)
+    report_all_inf = ar.profile(frame_all_inf)
+    profile_all_inf = report_all_inf.columns["nums"]
+    assert profile_all_inf.histogram is None
+
+
+def test_report_to_markdown_escapes_newlines_in_column_cells():
+    report = ar.DataQualityReport(
+        row_count=2,
+        column_count=1,
+        memory_usage=128,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={
+            "multi\nline": ar.ColumnProfile(
+                name="multi\nline",
+                dtype="string",
+                semantic_type="free\ntext",
+                row_count=2,
+                null_count=0,
+                null_ratio=0.0,
+                unique_count=2,
+                unique_ratio=1.0,
+                warnings=["contains\nnewline"],
+            )
+        },
+        suggestions=[],
+    )
+    md = report.to_markdown()
+    assert "multi<br>line" in md
+    assert "free<br>text" in md
+    assert "contains<br>newline" in md
+    assert "| multi\nline |" not in md
+
+
+def test_quality_gate_markdown_escapes_pipe_characters():
+    report = ar.DataQualityReport(
+        row_count=2,
+        column_count=1,
+        memory_usage=128,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={
+            "col|name": ar.ColumnProfile(
+                name="col|name",
+                dtype="str|ing",
+                semantic_type="cat|egory",
+                row_count=2,
+                null_count=0,
+                null_ratio=0.0,
+                unique_count=2,
+                unique_ratio=1.0,
+                warnings=["pipe|warning"],
+            )
+        },
+        suggestions=[],
+    )
+
+    md = report.to_markdown()
+
+    assert r"col\|name" in md
+    assert r"str\|ing" in md
+    assert r"cat\|egory" in md
+    assert r"pipe\|warning" in md
+    assert "| col|name |" not in md
+
+
+# ── missingness correlation hints tests (#180) ───────────────────────────────
+
+
+def test_profile_detects_missingness_correlation():
+    """Columns that are always null together should appear as a correlated pair."""
+    df = pd.DataFrame(
+        {
+            "col_a": [1.0, None, None, 1.0, None],
+            "col_b": [1.0, None, None, 1.0, None],  # perfectly correlated with col_a
+            "col_c": [None, 1.0, None, 1.0, 1.0],  # independent
+        }
+    )
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+
+    pairs = {(h["column_a"], h["column_b"]) for h in report.missingness_correlations}
+    assert ("col_a", "col_b") in pairs
+    assert ("col_a", "col_c") not in pairs
+    assert ("col_b", "col_c") not in pairs
+
+
+def test_missingness_correlation_hint_is_json_friendly():
+    """Each hint must be a dict with column_a, column_b, and correlation keys."""
+    df = pd.DataFrame(
+        {
+            "x": [None, None, 1.0, 1.0],
+            "y": [None, None, 1.0, 1.0],
+        }
+    )
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+
+    assert len(report.missingness_correlations) == 1
+    hint = report.missingness_correlations[0]
+    assert set(hint.keys()) == {"column_a", "column_b", "correlation"}
+    assert isinstance(hint["column_a"], str)
+    assert isinstance(hint["column_b"], str)
+    assert isinstance(hint["correlation"], float)
+
+
+def test_missingness_correlation_in_to_dict():
+    """to_dict() must expose missingness_correlations as a list of dicts."""
+    df = pd.DataFrame(
+        {
+            "x": [None, None, 1.0, 1.0],
+            "y": [None, None, 1.0, 1.0],
+        }
+    )
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+    d = report.to_dict()
+
+    assert "missingness_correlations" in d
+    assert isinstance(d["missingness_correlations"], list)
+    assert len(d["missingness_correlations"]) == 1
+    hint = d["missingness_correlations"][0]
+    assert hint["column_a"] == "x"
+    assert hint["column_b"] == "y"
+    assert abs(hint["correlation"] - 1.0) < 1e-6
+
+
+def test_missingness_correlation_in_summary():
+    """summary() must include missingness_correlations."""
+    df = pd.DataFrame(
+        {
+            "x": [None, None, 1.0, 1.0],
+            "y": [None, None, 1.0, 1.0],
+        }
+    )
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+    s = report.summary()
+
+    assert "missingness_correlations" in s
+    assert len(s["missingness_correlations"]) == 1
+
+
+def test_missingness_correlation_in_to_markdown():
+    """to_markdown() must render a Missingness Correlations section when hints exist."""
+    df = pd.DataFrame(
+        {
+            "x": [None, None, 1.0, 1.0],
+            "y": [None, None, 1.0, 1.0],
+        }
+    )
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+    md = report.to_markdown()
+
+    assert "## Missingness Correlations" in md
+    assert "x" in md
+    assert "y" in md
+
+
+def test_missingness_correlation_in_to_html():
+    """to_html() must render a Missingness Correlations section when hints exist."""
+    df = pd.DataFrame(
+        {
+            "x": [None, None, 1.0, 1.0],
+            "y": [None, None, 1.0, 1.0],
+        }
+    )
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+    html_out = report.to_html()
+
+    assert "Missingness Correlations" in html_out
+    assert "<code>x</code>" in html_out
+    assert "<code>y</code>" in html_out
+
+
+def test_missingness_correlation_no_hints_when_no_nulls():
+    """A frame with no nulls should produce an empty missingness_correlations list."""
+    df = pd.DataFrame(
+        {
+            "a": [1.0, 2.0, 3.0],
+            "b": [4.0, 5.0, 6.0],
+        }
+    )
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+
+    assert report.missingness_correlations == []
+
+
+def test_missingness_correlation_single_column():
+    """A single-column frame cannot produce any pairs."""
+    df = pd.DataFrame({"a": [None, 1.0, None]})
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+
+    assert report.missingness_correlations == []
+
+
+def test_missingness_correlation_constant_null_mask_skipped():
+    """Columns where every row is null (zero-variance mask) must be skipped."""
+    df = pd.DataFrame(
+        {
+            "all_null": [None, None, None, None],
+            "partial": [None, 1.0, None, 1.0],
+        }
+    )
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+
+    # all_null has a constant mask (all 1s) — zero variance — must be excluded
+    assert report.missingness_correlations == []
+
+
+def test_missingness_correlation_all_present_mask_skipped():
+    """A column with no nulls at all has a constant zero mask and must be skipped."""
+    df = pd.DataFrame(
+        {
+            "no_null": [1.0, 2.0, 3.0, 4.0],
+            "partial": [None, 2.0, None, 4.0],
+        }
+    )
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+
+    # no_null has zero-variance mask (all 0s) — must be excluded
+    assert report.missingness_correlations == []
+
+
+def test_missingness_correlation_sparse_independent_no_hint():
+    """Columns with sparse, independent missingness should not produce hints."""
+    import numpy as np
+
+    rng = np.random.default_rng(42)
+    n = 200
+    # Each column independently has ~10% nulls — correlation should be near 0
+    mask_a = rng.random(n) < 0.1
+    mask_b = rng.random(n) < 0.1
+    col_a = [None if m else float(i) for i, m in enumerate(mask_a)]
+    col_b = [None if m else float(i) for i, m in enumerate(mask_b)]
+
+    df = pd.DataFrame({"a": col_a, "b": col_b})
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+
+    # With independent sparse missingness the correlation should be well below 0.75
+    assert report.missingness_correlations == []
+
+
+def test_missingness_correlation_threshold_none_disables_hints():
+    """Passing missingness_correlation_threshold=None must disable all hints."""
+    df = pd.DataFrame(
+        {
+            "x": [None, None, 1.0, 1.0],
+            "y": [None, None, 1.0, 1.0],
+        }
+    )
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame, missingness_correlation_threshold=None)
+
+    assert report.missingness_correlations == []
+
+
+def test_missingness_correlation_custom_threshold():
+    """A lower threshold should surface more pairs; a higher one fewer."""
+    df = pd.DataFrame(
+        {
+            "a": [None, None, 1.0, 1.0, None],
+            "b": [None, 1.0, 1.0, None, None],  # partial overlap
+        }
+    )
+    frame = ar.from_pandas(df)
+
+    # With a very low threshold the pair should appear
+    report_low = ar.profile(frame, missingness_correlation_threshold=0.0)
+    assert len(report_low.missingness_correlations) == 1
+
+    # With threshold=1.0 only perfect correlations pass
+    report_high = ar.profile(frame, missingness_correlation_threshold=1.0)
+    assert report_high.missingness_correlations == []
+
+
+def test_missingness_correlation_threshold_validation():
+    """Invalid threshold values must raise TypeError or ValueError."""
+    df = pd.DataFrame({"a": [None, 1.0], "b": [None, 1.0]})
+    frame = ar.from_pandas(df)
+
+    with pytest.raises(TypeError, match="missingness_correlation_threshold"):
+        ar.profile(frame, missingness_correlation_threshold="high")
+
+    with pytest.raises(TypeError, match="missingness_correlation_threshold"):
+        ar.profile(frame, missingness_correlation_threshold=True)
+
+    with pytest.raises(ValueError, match="missingness_correlation_threshold"):
+        ar.profile(frame, missingness_correlation_threshold=-0.1)
+
+    with pytest.raises(ValueError, match="missingness_correlation_threshold"):
+        ar.profile(frame, missingness_correlation_threshold=1.5)
+
+
+def test_missingness_correlation_no_markdown_section_when_empty():
+    """to_markdown() must NOT render the section when there are no hints."""
+    df = pd.DataFrame({"a": [1.0, 2.0], "b": [3.0, 4.0]})
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+
+    md = report.to_markdown()
+    assert "## Missingness Correlations" not in md
+
+
+def test_missingness_correlation_sorted_by_descending_abs_correlation():
+    """Hints must be ordered by descending absolute correlation."""
+    df = pd.DataFrame(
+        {
+            "p": [None, None, None, 1.0],  # 3 nulls
+            "q": [None, None, None, 1.0],  # perfectly correlated with p
+            "r": [None, None, 1.0, None],  # partially correlated with p
+        }
+    )
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame, missingness_correlation_threshold=0.0)
+
+    correlations = [abs(h["correlation"]) for h in report.missingness_correlations]
+    assert correlations == sorted(correlations, reverse=True)
+
+
+def test_data_quality_report_to_dict_exclude_columns():
+    frame = ar.read_csv(io.StringIO("name,age\nalice,20\nbob,30\n"))
+
+    report = ar.profile(frame)
+
+    result = report.to_dict(exclude_columns=["age"])
+
+    assert "age" not in result["columns"]
+    assert "name" in result["columns"]
+
+
+def test_data_quality_report_to_dict_default_behavior():
+    frame = ar.read_csv(io.StringIO("name\nalice\nbob\n"))
+
+    report = ar.profile(frame)
+
+    result = report.to_dict()
+
+    assert "name" in result["columns"]
+
+
+def test_data_quality_report_to_dict_unknown_column():
+    frame = ar.read_csv(io.StringIO("name\nalice\nbob\n"))
+
+    report = ar.profile(frame)
+
+    result = report.to_dict(exclude_columns=["missing_column"])
+
+    assert "name" in result["columns"]
+
+
+def test_data_quality_report_to_dict_invalid_exclude_columns_type():
+    frame = ar.read_csv(io.StringIO("name\nalice\nbob\n"))
+
+    report = ar.profile(frame)
+
+    with pytest.raises(TypeError):
+        report.to_dict(exclude_columns="name")
+
+
+def test_data_quality_report_to_dict_invalid_exclude_columns_entries():
+    frame = ar.read_csv(io.StringIO("name\nalice\nbob\n"))
+
+    report = ar.profile(frame)
+
+    with pytest.raises(TypeError):
+        report.to_dict(exclude_columns=["name", 123])
+
+
+def test_data_quality_report_to_dict_excludes_columns_from_suggestions():
+    report = ar.DataQualityReport(
+        row_count=2,
+        column_count=2,
+        memory_usage=100,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        quality_score=1.0,
+        score_components={},
+        columns={},
+        suggestions=[
+            (
+                "strip_whitespace",
+                {
+                    "subset": ["name", "age"],
+                    "cast_types": {
+                        "name": "string",
+                        "age": "int",
+                    },
+                },
+            )
+        ],
+    )
+
+    result = report.to_dict(exclude_columns=["age"])
+
+    kwargs = result["suggestions"][0]["kwargs"]
+
+    assert kwargs["subset"] == ["name"]
+    assert kwargs["cast_types"] == {"name": "string"}
+
+
+def test_data_quality_report_to_dict_preserves_non_column_suggestion_values():
+    report = ar.DataQualityReport(
+        row_count=2,
+        column_count=1,
+        memory_usage=100,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        quality_score=1.0,
+        score_components={},
+        columns={},
+        suggestions=[
+            (
+                "custom_step",
+                {
+                    "message": ["age"],
+                    "metadata": {"age": "keep"},
+                    "threshold": 5,
+                },
+            )
+        ],
+    )
+
+    result = report.to_dict(exclude_columns=["age"])
+
+    kwargs = result["suggestions"][0]["kwargs"]
+
+    assert kwargs["message"] == ["age"]
+    assert kwargs["metadata"] == {"age": "keep"}
+    assert kwargs["threshold"] == 5
+
+
+def test_data_quality_report_to_json_returns_valid_json():
+    report = ar.DataQualityReport(
+        row_count=10,
+        column_count=1,
+        memory_usage=100,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+    )
+
+    json_output = report.to_json()
+
+    parsed = json.loads(json_output)
+
+    assert parsed["row_count"] == 10
+    assert parsed["column_count"] == 1
+
+
+def test_data_quality_report_to_json_writes_to_stringio():
+    import io
+
+    report = ar.profile(
+        ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "name": ["Alice", "Bob"],
+                    "age": [30, 40],
+                }
+            )
+        )
+    )
+    buffer = io.StringIO()
+
+    result = report.to_json(output=buffer)
+
+    assert result is None
+    assert buffer.getvalue() == report.to_json()
+
+
+def test_data_quality_report_to_json_writes_to_text_file_handle(tmp_path):
+    report = ar.profile(
+        ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "name": ["Alice", "Bob"],
+                    "age": [30, 40],
+                }
+            )
+        )
+    )
+    out_path = tmp_path / "report.json"
+
+    with out_path.open("w", encoding="utf-8") as f:
+        result = report.to_json(output=f, indent=2)
+
+    assert result is None
+    assert out_path.read_text(encoding="utf-8") == report.to_json(indent=2)
+
+
+def test_data_quality_report_to_json_rejects_invalid_output():
+    report = ar.profile(
+        ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "name": ["Alice", "Bob"],
+                    "age": [30, 40],
+                }
+            )
+        )
+    )
+
+    with pytest.raises(TypeError, match="output must be a writable text stream"):
+        report.to_json(output=object())
+
+
+def test_data_quality_report_to_json_output_preserves_options():
+    import io
+
+    report = ar.profile(
+        ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "name": ["Alice", "Bob"],
+                    "age": [30, 40],
+                }
+            )
+        )
+    )
+    buffer = io.StringIO()
+
+    result = report.to_json(
+        output=buffer,
+        indent=2,
+        redact_sample_values=True,
+        exclude_columns=["age"],
+    )
+
+    assert result is None
+    assert buffer.getvalue() == report.to_json(
+        indent=2,
+        redact_sample_values=True,
+        exclude_columns=["age"],
+    )
+
+
+def test_data_quality_report_to_json_indent():
+    report = ar.DataQualityReport(
+        row_count=10,
+        column_count=1,
+        memory_usage=100,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+    )
+
+    json_output = report.to_json(indent=2)
+
+    assert "\n" in json_output
+    assert '  "row_count"' in json_output
+
+
+def test_data_quality_report_to_json_exclude_columns():
+    from arnio._core import _DType, _Frame
+    from arnio.frame import ArFrame
+
+    cpp_frame = _Frame.from_dict(
+        {
+            "name": ["John"],
+            "age": [21],
+        },
+        {
+            "name": _DType.STRING,
+            "age": _DType.INT64,
+        },
+    )
+
+    frame = ArFrame(cpp_frame)
+
+    report = ar.profile(frame)
+
+    json_output = report.to_json(exclude_columns=["age"])
+
+    parsed = json.loads(json_output)
+
+    assert "name" in parsed["columns"]
+    assert "age" not in parsed["columns"]
+
+
+def test_data_quality_report_exclude_columns_filters_missingness_correlations():
+    report = ar.DataQualityReport(
+        row_count=10,
+        column_count=3,
+        memory_usage=100,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+        missingness_correlations=[
+            {"column_a": "age", "column_b": "name", "correlation": 0.9},
+            {"column_a": "name", "column_b": "height", "correlation": 0.7},
+            {"column_a": "weight", "column_b": "age", "correlation": 0.5},
+        ],
+    )
+
+    as_dict = report.to_dict(exclude_columns=["age"])
+    assert as_dict["missingness_correlations"] == [
+        {"column_a": "name", "column_b": "height", "correlation": 0.7}
+    ]
+
+    as_json = json.loads(report.to_json(exclude_columns=["age"]))
+    assert as_json["missingness_correlations"] == [
+        {"column_a": "name", "column_b": "height", "correlation": 0.7}
+    ]
+
+
+def test_data_quality_report_to_json_redact_sample_values():
+    from arnio._core import _DType, _Frame
+    from arnio.frame import ArFrame
+
+    cpp_frame = _Frame.from_dict(
+        {"name": ["John"]},
+        {"name": _DType.STRING},
+    )
+
+    frame = ArFrame(cpp_frame)
+
+    report = ar.profile(frame)
+
+    json_output = report.to_json(redact_sample_values=True)
+
+    parsed = json.loads(json_output)
+
+    assert parsed["columns"]["name"]["sample_values"] == ["[REDACTED]"]

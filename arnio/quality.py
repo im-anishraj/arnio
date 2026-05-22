@@ -12,8 +12,7 @@ import os
 import re
 from collections.abc import Sequence, Set
 from dataclasses import dataclass, field
-from datetime import date
-from typing import Any
+from typing import Any, TextIO
 
 import numpy as np
 import pandas as pd
@@ -321,6 +320,7 @@ class DataQualityReport:
     quality_score: float = 100.0
     score_components: dict[str, float] = field(default_factory=dict)
     suggestions: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
+    missingness_correlations: list[dict[str, Any]] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         """Validate structural field invariants for DataQualityReport."""
@@ -391,20 +391,22 @@ class DataQualityReport:
 
             exclude_columns = set(exclude_columns)
 
-        unknown_exclude_columns = sorted(exclude_columns - set(self.columns))
-        if unknown_exclude_columns:
-            available_columns = ", ".join(self.columns) or "<none>"
-            raise KeyError(
-                "Unknown exclude_columns: "
-                f"{unknown_exclude_columns}. Available columns: {available_columns}"
+        missingness_correlations: list[dict[str, Any]] = []
+        for hint in self.missingness_correlations:
+            col_a = hint.get("column_a")
+            col_b = hint.get("column_b")
+            corr = hint.get("correlation")
+            if col_a is None or col_b is None or corr is None:
+                continue
+            if col_a in exclude_columns or col_b in exclude_columns:
+                continue
+            missingness_correlations.append(
+                {
+                    "column_a": str(col_a),
+                    "column_b": str(col_b),
+                    "correlation": float(corr),
+                }
             )
-
-        def _redact_reason(reason: str | None) -> str | None:
-            if not reason or not exclude_columns:
-                return reason
-            for col in exclude_columns:
-                reason = reason.replace(f"'{col}'", "'[REDACTED]'")
-            return reason
 
         return {
             "row_count": self.row_count,
@@ -438,6 +440,7 @@ class DataQualityReport:
                     ),
                 )
             ],
+            "missingness_correlations": missingness_correlations,
         }
 
     def score_breakdown(self) -> dict[str, float]:
@@ -479,7 +482,7 @@ class DataQualityReport:
         indent: int | None = None,
         redact_sample_values: bool = False,
         exclude_columns: list[str] | set[str] | tuple[str, ...] | None = None,
-        output: Any | None = None,
+        output: TextIO | None = None,
     ) -> str | None:
         """Return the report as a JSON string.
 
@@ -498,28 +501,14 @@ class DataQualityReport:
         if output is None:
             return json_out
 
+        # Must be a writable *text* stream (e.g., io.StringIO or an open file handle).
         if not hasattr(output, "write"):
             raise TypeError("output must be a writable text stream")
 
         output.write(json_out)
         return None
 
-    @staticmethod
-    def _validate_max_suggestions(max_suggestions: int | None) -> int | None:
-        if max_suggestions is None:
-            return None
-        if not isinstance(max_suggestions, int) or isinstance(max_suggestions, bool):
-            raise TypeError("max_suggestions must be an integer or None")
-        if max_suggestions <= 0:
-            raise ValueError("max_suggestions must be positive")
-        return max_suggestions
-
-    def to_markdown(
-        self,
-        output: Any | None = None,
-        max_suggestions: int | None = None,
-        exclude_columns: list[str] | set[str] | tuple[str, ...] | None = None,
-    ) -> str | None:
+    def to_markdown(self, output: TextIO | None = None) -> str | None:
         """Return a GitHub-friendly Markdown report."""
         max_suggestions = self._validate_max_suggestions(max_suggestions)
 
@@ -649,11 +638,31 @@ class DataQualityReport:
 
             lines.append("")
 
+        # Missingness correlations
+        if self.missingness_correlations:
+            lines.append("## Missingness Correlations")
+            lines.append("")
+            lines.append(
+                "> Columns that tend to be null together — may indicate a shared "
+                "upstream export or join problem."
+            )
+            lines.append("")
+            lines.append("| Column A | Column B | Correlation |")
+            lines.append("|---|---|---|")
+            for hint in self.missingness_correlations:
+                lines.append(
+                    f"| {_markdown_cell(hint['column_a'])} "
+                    f"| {_markdown_cell(hint['column_b'])} "
+                    f"| {hint['correlation']:.4f} |"
+                )
+            lines.append("")
+
         markdown = "\n".join(lines)
 
         if output is None:
             return markdown
 
+        # Must be a writable *text* stream (e.g., io.StringIO or an open file handle).
         if not hasattr(output, "write"):
             raise TypeError("output must be a writable text stream")
 
@@ -663,11 +672,7 @@ class DataQualityReport:
     def to_html(
         self,
         file_path: str | None = None,
-        output: Any | None = None,
-        max_suggestions: int | None = None,
-        *,
-        redact_top_values: bool = False,
-        exclude_columns: list[str] | set[str] | tuple[str, ...] | None = None,
+        output: TextIO | None = None,
     ) -> str | None:
         """Return a self-contained, dependency-free HTML data quality report.
 
@@ -735,6 +740,7 @@ class DataQualityReport:
         if output is None:
             return html_out
 
+        # Must be a writable *text* stream (e.g., io.StringIO or an open file handle).
         if not hasattr(output, "write"):
             raise TypeError("output must be a writable text stream")
 
@@ -988,6 +994,28 @@ class DataQualityReport:
                 )
             lines.append("</div>")
 
+        if self.missingness_correlations:
+            lines.append('<div class="section">')
+            lines.append("<h2>Missingness Correlations</h2>")
+            lines.append(
+                '<p class="subtitle">Columns that tend to be null together — '
+                "may indicate a shared upstream export or join problem.</p>"
+            )
+            lines.append("<table>")
+            lines.append(
+                "<thead><tr><th>Column A</th><th>Column B</th><th>Correlation</th></tr></thead>"
+            )
+            lines.append("<tbody>")
+            for hint in self.missingness_correlations:
+                corr_str = f"{hint['correlation']:.4f}"
+                lines.append("<tr>")
+                lines.append(f"<td><code>{e(hint['column_a'])}</code></td>")
+                lines.append(f"<td><code>{e(hint['column_b'])}</code></td>")
+                lines.append(f"<td>{e(corr_str)}</td>")
+                lines.append("</tr>")
+            lines.append("</tbody></table>")
+            lines.append("</div>")
+
         lines.append("</div>")  # container
         lines.append("</div>")  # arnio-dqr
         if full_document:
@@ -1018,6 +1046,16 @@ class DataQualityReport:
                 if profile.whitespace_count > 0
             ],
             "suggestions": self.suggestions,
+            # Normalize to JSON-friendly scalars for consistent downstream usage.
+            "missingness_correlations": [
+                {
+                    "column_a": str(hint["column_a"]),
+                    "column_b": str(hint["column_b"]),
+                    "correlation": float(hint["correlation"]),
+                }
+                for hint in self.missingness_correlations
+                if "column_a" in hint and "column_b" in hint and "correlation" in hint
+            ],
         }
 
     def to_pandas(self) -> pd.DataFrame:
@@ -1577,6 +1615,72 @@ class QualityGateResult:
         return None
 
 
+def _missingness_correlations(
+    df: pd.DataFrame,
+    threshold: float,
+) -> list[dict[str, Any]]:
+    """Return column pairs whose null-indicator vectors are correlated >= threshold.
+
+    For each pair of columns that both have at least one null, compute the
+    Pearson correlation between their binary null-indicator vectors (1 = null,
+    0 = present).  Pairs where either vector has zero variance (all-null or
+    all-present) are skipped to avoid division-by-zero.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        The raw data frame.
+    threshold : float
+        Minimum absolute Pearson correlation to include a pair.
+
+    Returns
+    -------
+    list[dict[str, Any]]
+        Sorted list of ``{"column_a": str, "column_b": str, "correlation": float}``
+        objects, ordered by descending absolute correlation.
+    """
+    # Build null-indicator matrix only for columns that have at least one null
+    nullable_cols = [col for col in df.columns if df[col].isna().any()]
+    if len(nullable_cols) < 2:
+        return []
+
+    null_matrix = df[nullable_cols].isna().astype(np.float64)
+    results: list[dict[str, Any]] = []
+
+    col_list = list(nullable_cols)
+    for i in range(len(col_list)):
+        for j in range(i + 1, len(col_list)):
+            a, b = col_list[i], col_list[j]
+            vec_a = null_matrix[a].values
+            vec_b = null_matrix[b].values
+
+            # Skip zero-variance vectors (constant masks)
+            if vec_a.std() == 0.0 or vec_b.std() == 0.0:
+                continue
+
+            corr = float(np.corrcoef(vec_a, vec_b)[0, 1])
+            if not math.isfinite(corr):
+                continue
+            if abs(corr) >= threshold:
+                results.append(
+                    {
+                        "column_a": a,
+                        "column_b": b,
+                        "correlation": round(corr, 6),
+                    }
+                )
+
+    # Deterministic ordering: abs(corr) desc, then column names for ties.
+    results.sort(
+        key=lambda x: (
+            -abs(x["correlation"]),
+            str(x["column_a"]),
+            str(x["column_b"]),
+        )
+    )
+    return results
+
+
 def profile(
     frame: ArFrame,
     *,
@@ -1586,6 +1690,7 @@ def profile(
     approx_top_values_min_unique: int = 1000,
     approx_top_values_min_ratio: float = 0.2,
     approx_top_values_sample_size: int = 2000,
+    missingness_correlation_threshold: float | None = 0.75,
 ) -> DataQualityReport:
     """Profile data quality for an ArFrame.
 
@@ -1605,23 +1710,79 @@ def profile(
         Minimum unique ratio (unique / non-null) required to enable approximation.
     approx_top_values_sample_size : int, default 2000
         Number of non-null values sampled to estimate top values.
+    missingness_correlation_threshold : float or None, default 0.75
+        Minimum absolute Pearson correlation between two columns' null-indicator
+        vectors required to include a pair in ``missingness_correlations``.
+        Must be a float in the range ``[0.0, 1.0]``.
+        Pass ``None`` to disable missingness-correlation hints entirely.
 
     Returns
     -------
     DataQualityReport
-        Report containing nulls, uniqueness, basic stats, semantic hints, and
-        safe cleaning suggestions.
+        Report containing nulls, uniqueness, basic stats, semantic hints,
+        safe cleaning suggestions, and missingness-correlation hints.
 
     Examples
     --------
     >>> frame = ar.read_csv("raw.csv")
     >>> report = ar.profile(frame, sample_size=3)
     >>> report.summary()
+    >>> report.missingness_correlations
+    [{"column_a": "col_a", "column_b": "col_b", "correlation": 1.0}]
     """
     if not isinstance(sample_size, int) or isinstance(sample_size, bool):
         raise TypeError("sample_size must be an integer")
     if sample_size < 0:
         raise ValueError("sample_size must be non-negative")
+    if not isinstance(approx_top_values, bool):
+        raise TypeError("approx_top_values must be a bool")
+    if not isinstance(approx_top_values_min_unique, int) or isinstance(
+        approx_top_values_min_unique, bool
+    ):
+        raise TypeError("approx_top_values_min_unique must be an integer")
+    if approx_top_values_min_unique < 0:
+        raise ValueError("approx_top_values_min_unique must be non-negative")
+    if not isinstance(approx_top_values_min_ratio, (int, float)) or isinstance(
+        approx_top_values_min_ratio, bool
+    ):
+        raise TypeError("approx_top_values_min_ratio must be a float")
+    if approx_top_values_min_ratio < 0 or approx_top_values_min_ratio > 1:
+        raise ValueError("approx_top_values_min_ratio must be between 0 and 1")
+    if not isinstance(approx_top_values_sample_size, int) or isinstance(
+        approx_top_values_sample_size, bool
+    ):
+        raise TypeError("approx_top_values_sample_size must be an integer")
+
+    if approx_top_values_sample_size <= 0:
+        raise ValueError("approx_top_values_sample_size must be positive")
+    if missingness_correlation_threshold is not None:
+        if isinstance(missingness_correlation_threshold, bool) or not isinstance(
+            missingness_correlation_threshold, (int, float)
+        ):
+            raise TypeError(
+                "missingness_correlation_threshold must be a float between 0 and 1, or None"
+            )
+        if (
+            not math.isfinite(missingness_correlation_threshold)
+            or missingness_correlation_threshold < 0.0
+            or missingness_correlation_threshold > 1.0
+        ):
+            raise ValueError(
+                "missingness_correlation_threshold must be between 0.0 and 1.0"
+            )
+
+    has_exclusions = exclude_columns is not None and len(exclude_columns) > 0
+
+    if exclude_columns is not None:
+        exclude_columns = _validate_column_sequence(
+            exclude_columns,
+            argument_name="exclude_columns",
+        )
+        validate_columns_exist(
+            frame,
+            exclude_columns,
+            operation="profile",
+        )
 
     df = to_pandas(frame)
     row_count, column_count = frame.shape
@@ -1661,6 +1822,12 @@ def profile(
         row_count, duplicate_ratio, columns
     )
 
+    miss_corr = (
+        _missingness_correlations(df, missingness_correlation_threshold)
+        if missingness_correlation_threshold is not None
+        else []
+    )
+
     return DataQualityReport(
         row_count=report.row_count,
         column_count=report.column_count,
@@ -1671,6 +1838,7 @@ def profile(
         score_components=score_components,
         columns=report.columns,
         suggestions=suggest_cleaning(report),
+        missingness_correlations=miss_corr,
     )
 
 
