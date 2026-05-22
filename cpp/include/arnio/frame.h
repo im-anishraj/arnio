@@ -1,9 +1,7 @@
 #pragma once
 
-#include <limits>
 #include <string>
 #include <unordered_map>
-#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -22,14 +20,11 @@ class Frame {
     size_t num_cols() const;
     std::vector<std::string> column_names() const;
     std::unordered_map<std::string, std::string> dtypes() const;
-    size_t memory_usage(bool deep = false) const;
-    std::vector<std::pair<std::string, std::vector<std::pair<std::string, double>>>> describe()
-        const;
+    size_t memory_usage() const;
 
     // Column access
     const Column& column(size_t idx) const;
     const Column& column(const std::string& name) const;
-    Column& column_mut(size_t idx);
     bool has_column(const std::string& name) const;
     size_t column_index(const std::string& name) const;
 
@@ -49,6 +44,9 @@ class Frame {
     size_t row_count_ = 0;
     std::unordered_map<std::string, size_t> name_index_;
     size_t row_count_ = 0;
+    // row_count_known_ tracks whether row_count_ has been explicitly set.
+    // - true: row_count_ is final and validated (set via constructor or first add_column if no columns provided)
+    // - false: only used temporarily during empty Frame() construction
     bool row_count_known_ = false;
     void validate_column_size(const Column& col) const;
     void rebuild_index();
