@@ -7,7 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from benchmarks.benchmark_vs_pandas import check_regression
+from benchmarks.benchmark_vs_pandas import (
+    BenchmarkCase,
+    check_regression,
+    run_case,
+)
 
 # Check if the C++ extension is compiled
 try:
@@ -148,7 +152,7 @@ def test_check_regression_detects_slowdown():
     is_regression, regression_percent = check_regression(
         current_time=12.0,
         baseline_time=10.0,
-        threshold_percent=10,
+        threshold_percent=5,
     )
 
     assert is_regression is True
@@ -160,8 +164,72 @@ def test_check_regression_allows_small_variance():
     is_regression, regression_percent = check_regression(
         current_time=10.5,
         baseline_time=10.0,
-        threshold_percent=10,
+        threshold_percent=5,
     )
 
     assert is_regression is False
     assert regression_percent == 5.0
+
+
+def test_run_case_raises_on_regression(monkeypatch):
+    """run_case should fail when benchmark regression exceeds threshold."""
+
+    benchmark_case = BenchmarkCase(
+        "Regression Test Case",
+        "dummy.csv",
+    )
+
+    monkeypatch.setattr(
+        "benchmarks.benchmark_vs_pandas.load_baseline",
+        lambda: {
+            "Regression Test Case": {
+                "arnio_exec_time": 10.0,
+            }
+        },
+    )
+
+    monkeypatch.setattr(
+        "benchmarks.benchmark_vs_pandas.verify_correctness",
+        lambda path: None,
+    )
+
+    monkeypatch.setattr(
+        "benchmarks.benchmark_vs_pandas.RUNS",
+        1,
+    )
+
+    def fake_run_subprocess(engine, path):
+        if engine == "arnio":
+            return {
+                "elapsed": 11.0,
+                "peak_trace_mb": 1,
+                "peak_rss_mb": 1,
+                "ops": {
+                    "read_csv": 1,
+                    "clean_strings": 1,
+                    "drop_nulls": 1,
+                    "drop_duplicates": 1,
+                    "to_pandas": 1,
+                },
+            }
+
+        return {
+            "elapsed": 1.0,
+            "peak_trace_mb": 1,
+            "peak_rss_mb": 1,
+            "ops": {
+                "read_csv": 1,
+                "clean_strings": 1,
+                "drop_nulls": 1,
+                "drop_duplicates": 1,
+                "to_pandas": 1,
+            },
+        }
+
+    monkeypatch.setattr(
+        "benchmarks.benchmark_vs_pandas.run_subprocess",
+        fake_run_subprocess,
+    )
+
+    with pytest.raises(RuntimeError, match="Benchmark regression detected"):
+        run_case(benchmark_case, skip_correctness=True)
