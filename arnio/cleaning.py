@@ -1053,6 +1053,14 @@ def cast_types(
     if errors not in {"raise", "coerce"}:
         raise ValueError("errors must be either 'raise' or 'coerce'")
 
+    allowed_dtypes = {"int64", "float64", "string", "bool", "null"}
+    for col, dtype in mapping.items():
+        if dtype not in allowed_dtypes:
+            raise ValueError(
+                f"Invalid dtype {dtype!r} for column {col!r}. "
+                f"Allowed values: {sorted(allowed_dtypes)}"
+            )
+
     mapping = _validate_string_mapping(mapping, argument_name="mapping")
     validate_columns_exist(
         frame,
