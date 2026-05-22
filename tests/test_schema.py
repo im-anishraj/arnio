@@ -6,6 +6,181 @@ import pytest
 import arnio as ar
 
 
+def test_dtype_validation_reports_safe_int_conversion_for_numeric_strings():
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "age": pd.Series(
+                    ["1", "2", "3"],
+                    dtype="string",
+                )
+            }
+        )
+    )
+
+    schema = ar.Schema({"age": ar.Int64()})
+
+    result = ar.validate(frame, schema)
+
+    assert not result.passed
+    assert "safely convertible to 'int64'" in result.issues[0].message
+
+
+def test_dtype_validation_reports_safe_float_conversion_for_numeric_strings():
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "score": pd.Series(
+                    ["1.5", "2.0", "3.25"],
+                    dtype="string",
+                )
+            }
+        )
+    )
+
+    schema = ar.Schema({"score": ar.Float64()})
+
+    result = ar.validate(frame, schema)
+
+    assert not result.passed
+    assert "safely convertible to 'float64'" in result.issues[0].message
+
+
+def test_dtype_validation_does_not_report_safe_conversion_for_invalid_numeric_strings():
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "age": pd.Series(
+                    ["1", "abc", "3"],
+                    dtype="string",
+                )
+            }
+        )
+    )
+
+    schema = ar.Schema({"age": ar.Int64()})
+
+    result = ar.validate(frame, schema)
+
+    assert not result.passed
+    assert "safely convertible" not in result.issues[0].message
+
+
+def test_validate_rejects_chunked_iterators(tmp_path):
+    path = tmp_path / "data.csv"
+    path.write_text("email\n" "a@example.com\n")
+
+    chunks = ar.read_csv_chunked(path, chunksize=1)
+
+    with pytest.raises(
+        TypeError, match="Chunked validation is not currently supported"
+    ):
+        ar.validate(chunks, {"email": ar.Email(nullable=False)})
+
+
+def test_dtype_validation_does_not_report_safe_conversion_for_identifier_like_columns():
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "user_id": pd.Series(
+                    ["001", "002", "003"],
+                    dtype="string",
+                )
+            }
+        )
+    )
+
+    schema = ar.Schema({"user_id": ar.Int64()})
+
+    result = ar.validate(frame, schema)
+
+    assert not result.passed
+    assert "safely convertible" not in result.issues[0].message
+
+
+def test_dtype_validation_does_not_report_safe_conversion_for_empty_strings():
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "age": pd.Series(
+                    [None, None],
+                    dtype="string",
+                )
+            }
+        )
+    )
+
+    schema = ar.Schema({"age": ar.Int64()})
+
+    result = ar.validate(frame, schema)
+
+    assert not result.passed
+    assert "safely convertible" not in result.issues[0].message
+
+
+def test_dtype_validation_preserves_warning_severity_for_numeric_strings():
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "age": pd.Series(
+                    ["1", "2", "3"],
+                    dtype="string",
+                )
+            }
+        )
+    )
+
+    schema = ar.Schema(
+        {
+            "age": ar.Int64(severity="warning"),
+        }
+    )
+
+    result = ar.validate(frame, schema)
+
+    assert result.issues[0].severity == "warning"
+
+
+def test_dtype_validation_does_not_report_safe_conversion_above_int64_max():
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "value": pd.Series(
+                    ["9223372036854775808"],
+                    dtype="string",
+                )
+            }
+        )
+    )
+
+    schema = ar.Schema({"value": ar.Int64()})
+
+    result = ar.validate(frame, schema)
+
+    assert not result.passed
+    assert "safely convertible" not in result.issues[0].message
+
+
+def test_dtype_validation_does_not_report_safe_conversion_below_int64_min():
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "value": pd.Series(
+                    ["-9223372036854775809"],
+                    dtype="string",
+                )
+            }
+        )
+    )
+
+    schema = ar.Schema({"value": ar.Int64()})
+
+    result = ar.validate(frame, schema)
+
+    assert not result.passed
+    assert "safely convertible" not in result.issues[0].message
+
+
 def test_schema_validation_passes_for_valid_frame(sample_csv):
     frame = ar.read_csv(sample_csv)
     schema = ar.Schema(
@@ -2134,3 +2309,80 @@ def test_empty_string_passes_when_nullable():
     result = ar.validate(ar.from_pandas(df), schema)
 
     assert result.issue_count == 0
+
+
+def test_url_https_only_accepts_https(tmp_path):
+    path = tmp_path / "urls.csv"
+    path.write_text("url\nhttps://example.com\nhttps://test.org\n")
+    result = ar.validate(ar.read_csv(path), {"url": ar.URL(allowed_schemes=["https"])})
+    assert result.passed
+
+
+def test_url_https_only_rejects_http(tmp_path):
+    path = tmp_path / "urls.csv"
+    path.write_text("url\nhttp://example.com\n")
+    result = ar.validate(ar.read_csv(path), {"url": ar.URL(allowed_schemes=["https"])})
+    assert not result.passed
+
+
+def test_url_multiple_schemes_accepted(tmp_path):
+    path = tmp_path / "urls.csv"
+    path.write_text("url\nhttps://example.com\nftp://files.example.com\n")
+    result = ar.validate(
+        ar.read_csv(path), {"url": ar.URL(allowed_schemes=["https", "ftp"])}
+    )
+    assert result.passed
+
+
+def test_url_multiple_schemes_rejects_unlisted(tmp_path):
+    path = tmp_path / "urls.csv"
+    path.write_text("url\nhttp://example.com\n")
+    result = ar.validate(
+        ar.read_csv(path), {"url": ar.URL(allowed_schemes=["https", "ftp"])}
+    )
+    assert not result.passed
+
+
+def test_url_default_accepts_http_and_https(tmp_path):
+    path = tmp_path / "urls.csv"
+    path.write_text("url\nhttp://example.com\nhttps://example.com\n")
+    result = ar.validate(ar.read_csv(path), {"url": ar.URL()})
+    assert result.passed
+
+
+def test_url_allowed_schemes_nullable_true_accepts_nulls(tmp_path):
+    path = tmp_path / "urls.csv"
+    path.write_text("url,dummy\nhttps://example.com,1\n,2\n")
+    result = ar.validate(
+        ar.read_csv(path), {"url": ar.URL(allowed_schemes=["https"], nullable=True)}
+    )
+    assert result.passed
+
+
+def test_url_allowed_schemes_nullable_false_rejects_nulls(tmp_path):
+    path = tmp_path / "urls.csv"
+    path.write_text("url,dummy\nhttps://example.com,1\n,2\n")
+    result = ar.validate(
+        ar.read_csv(path), {"url": ar.URL(allowed_schemes=["https"], nullable=False)}
+    )
+    assert not result.passed
+
+
+def test_url_allowed_schemes_empty_list_raises():
+    with pytest.raises(ValueError, match="non-empty"):
+        ar.URL(allowed_schemes=[])
+
+
+def test_url_allowed_schemes_empty_string_raises():
+    with pytest.raises(ValueError, match="non-empty strings"):
+        ar.URL(allowed_schemes=[""])
+
+
+def test_url_allowed_schemes_non_string_raises():
+    with pytest.raises(ValueError, match="non-empty strings"):
+        ar.URL(allowed_schemes=[123])
+
+
+def test_url_allowed_schemes_whitespace_string_raises():
+    with pytest.raises(ValueError, match="non-empty strings"):
+        ar.URL(allowed_schemes=["   "])
