@@ -368,15 +368,15 @@ class Schema:
         max_errors: int | None = None,
     ) -> ValidationResult:
         """
-        Validate a frame against this schema.
+        Validate an ArFrame against this schema.
 
         Args:
-        frame: Frame to validate.
-        max_errors:
-        Maximum number of validation issues to return.
-        Validation stops once this limit is reached.
+            frame:
+                frame to validate.
+            max_errors:
+                Maximum number of validation issues to return.
+                Validation stops once this limit is reached.
         """
-
         return validate(frame, self, max_errors=max_errors)
 
     def to_json(self) -> str:
