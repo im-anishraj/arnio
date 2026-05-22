@@ -2289,6 +2289,8 @@ def test_missingness_correlation_sorted_by_descending_abs_correlation():
 
     correlations = [abs(h["correlation"]) for h in report.missingness_correlations]
     assert correlations == sorted(correlations, reverse=True)
+
+
 def test_data_quality_report_to_dict_exclude_columns():
     frame = ar.read_csv(io.StringIO("name,age\nalice,20\nbob,30\n"))
 
