@@ -189,14 +189,26 @@ class RecordReader {
 
 namespace {
 
+// Return a copy of s with leading/trailing whitespace stripped.
+inline std::string trimmed_copy(std::string s) {
+    trim_in_place(s);
+    return s;
+}
+
 void validate_header(const std::vector<std::string>& header) {
     std::unordered_set<std::string> seen;
+    std::unordered_set<std::string> seen_trimmed;
     for (const auto& name : header) {
         if (name.empty()) {
             throw std::runtime_error("CSV header contains an empty column name");
         }
         if (!seen.insert(name).second) {
             throw std::runtime_error("Duplicate column name: " + name);
+        }
+        std::string t = trimmed_copy(name);
+        if (!seen_trimmed.insert(t).second) {
+            throw std::runtime_error("Duplicate column name after trimming whitespace: \"" + t +
+                                     "\"");
         }
     }
 }

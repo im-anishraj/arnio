@@ -190,8 +190,26 @@ class DataQualityReport:
     score_components: dict[str, float] = field(default_factory=dict)
     suggestions: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
 
-    def to_dict(self, *, redact_sample_values: bool = False) -> dict[str, Any]:
+    def to_dict(
+        self,
+        *,
+        redact_sample_values: bool = False,
+        exclude_columns: list[str] | set[str] | tuple[str, ...] | None = None,
+    ) -> dict[str, Any]:
         """Return a JSON-friendly dictionary representation."""
+
+        if exclude_columns is None:
+            exclude_columns = set()
+
+        elif not isinstance(exclude_columns, (list, tuple, set)):
+            raise TypeError("exclude_columns must be a list, tuple, set, or None")
+
+        else:
+            if not all(isinstance(column, str) for column in exclude_columns):
+                raise TypeError("exclude_columns must contain only string column names")
+
+            exclude_columns = set(exclude_columns)
+
         return {
             "row_count": self.row_count,
             "column_count": self.column_count,
@@ -204,12 +222,31 @@ class DataQualityReport:
                 name: self.columns[name].to_dict(
                     redact_sample_values=redact_sample_values
                 )
-                for name in sorted(self.columns)
+                for name in sorted(self.columns
+                name: column.to_dict(redact_sample_values=redact_sample_values)
+                for name, column in self.columns.items()
+                if name not in exclude_columns
             },
             "suggestions": [
                 {
                     "step": s[0],
                     "kwargs": dict(sorted(s[1].items())),
+                    "kwargs": {
+                        key: (
+                            [item for item in value if item not in exclude_columns]
+                            if key in {"subset", "columns"} and isinstance(value, list)
+                            else (
+                                {
+                                    k: v
+                                    for k, v in value.items()
+                                    if k not in exclude_columns
+                                }
+                                if key == "cast_types" and isinstance(value, dict)
+                                else value
+                            )
+                        )
+                        for key, value in dict(s[1]).items()
+                    },
                     "confidence_score": getattr(s, "confidence_score", None),
                     "confidence_reason": getattr(s, "confidence_reason", None),
                 }

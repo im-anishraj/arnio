@@ -459,7 +459,7 @@ class ArFrame:
 
         if not matched:
             raise ValueError(
-                "No columns match the dtype selection. " f"Frame dtypes: {col_dtypes}."
+                f"No columns match the dtype selection. Frame dtypes: {col_dtypes}."
             )
 
         return self.select_columns(matched)
@@ -502,42 +502,60 @@ class ArFrame:
     def __contains__(self, item: object) -> bool:
         return isinstance(item, str) and item in self.columns
 
-    def __getitem__(self, key: str) -> list:
-        """Return column data as a list.
+    def __getitem__(self, key: str | list[str]) -> list | ArFrame:
+        """Return column data as a list, or a subset ArFrame for list keys.
 
         Parameters
         ----------
-        key : str
-            Column name to access.
+        key : str or list[str]
+            A single column name returns the column values as a list.
+            A list of column names returns a new multi-column ArFrame.
 
         Returns
         -------
         list
-            Column values as a Python list.
+            Column values when key is a str.
+        ArFrame
+            Subset frame when key is a list of str.
 
         Raises
         ------
         TypeError
-            If key is not a string.
+            If key is not a string or list of strings.
         KeyError
-            If the column does not exist.
+            If a requested column does not exist.
 
         Examples
         --------
-        >>> frame = ar.read_csv("data.csv")
         >>> frame["name"]
         ['Alice', 'Bob', 'Charlie']
+        >>> frame[["name", "age"]]
+        ArFrame(3 rows × 2 cols)
         """
-        if not isinstance(key, str):
-            raise TypeError(f"column key must be a string, got {type(key).__name__!r}")
-
-        if key not in self.columns:
-            raise KeyError(
-                f"Column {key!r} not found. Available columns: {self.columns}"
-            )
-
-        col_index = self.columns.index(key)
-        return [self._frame.column_by_index(col_index).at(i) for i in range(len(self))]
+        if isinstance(key, str):
+            if key not in self.columns:
+                raise KeyError(
+                    f"Column {key!r} not found. Available columns: {self.columns}"
+                )
+            col_index = self.columns.index(key)
+            return [
+                self._frame.column_by_index(col_index).at(i) for i in range(len(self))
+            ]
+        elif isinstance(key, list):
+            non_strings = [k for k in key if not isinstance(k, str)]
+            if non_strings:
+                raise TypeError(
+                    f"column list must contain only strings, got {[type(k).__name__ for k in non_strings]}"
+                )
+            missing = [k for k in key if k not in self.columns]
+            if missing:
+                raise KeyError(
+                    f"Column(s) {missing} not found. Available columns: {self.columns}"
+                )
+            return self.select_columns(key)
+        raise TypeError(
+            f"column key must be a str or list of str, got {type(key).__name__!r}"
+        )
 
     def preview(self, n: int = 5) -> str:
         """Return a lightweight string preview of the first ``n`` rows.

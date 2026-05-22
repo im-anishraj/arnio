@@ -18,7 +18,7 @@ MESSY_CSV = str(Path(__file__).parent / "fixtures" / "messy_sales_data.csv")
 class TestReadCsv:
     def test_read_csv_dtype_override_string(self, tmp_path):
         path = tmp_path / "zip_codes.csv"
-        path.write_text("zip,quantity\n" "07001,5\n" "08002,10\n")
+        path.write_text("zip,quantity\n07001,5\n08002,10\n")
 
         frame = ar.read_csv(
             path,
@@ -32,7 +32,7 @@ class TestReadCsv:
 
     def test_read_csv_dtype_mixed_inference(self, tmp_path):
         path = tmp_path / "mixed_types.csv"
-        path.write_text("zip,price\n" "07001,12.5\n" "08002,20.0\n")
+        path.write_text("zip,price\n07001,12.5\n08002,20.0\n")
 
         frame = ar.read_csv(
             path,
@@ -54,7 +54,7 @@ class TestReadCsv:
 
     def test_read_csv_dtype_with_generated_column_names(self, tmp_path):
         path = tmp_path / "no_header.csv"
-        path.write_text("07001,5\n" "08002,10\n")
+        path.write_text("07001,5\n08002,10\n")
 
         frame = ar.read_csv(
             path,
@@ -71,7 +71,7 @@ class TestReadCsv:
 
     def test_read_csv_dtype_with_usecols(self, tmp_path):
         path = tmp_path / "usecols_dtype.csv"
-        path.write_text("zip,quantity,price\n" "07001,5,12.5\n" "08002,10,20.0\n")
+        path.write_text("zip,quantity,price\n07001,5,12.5\n08002,10,20.0\n")
 
         frame = ar.read_csv(
             path,
@@ -88,7 +88,7 @@ class TestReadCsv:
 
     def test_read_csv_dtype_parse_failure_becomes_null(self, tmp_path):
         path = tmp_path / "parse_failure.csv"
-        path.write_text("quantity\n" "abc\n")
+        path.write_text("quantity\nabc\n")
 
         frame = ar.read_csv(
             path,
@@ -102,7 +102,7 @@ class TestReadCsv:
 
     def test_read_csv_dtype_non_selected_usecols_column(self, tmp_path):
         path = tmp_path / "dtype_usecols_error.csv"
-        path.write_text("zip,price\n" "07001,12.5\n")
+        path.write_text("zip,price\n07001,12.5\n")
 
         with pytest.raises(
             ar.CsvReadError,
@@ -116,7 +116,7 @@ class TestReadCsv:
 
     def test_read_csv_dtype_override_string_to_int64(self, tmp_path):
         path = tmp_path / "quantities.csv"
-        path.write_text("quantity,label\n" "5,small\n" "10,large\n")
+        path.write_text("quantity,label\n5,small\n10,large\n")
 
         frame = ar.read_csv(
             path,
@@ -130,7 +130,7 @@ class TestReadCsv:
 
     def test_read_csv_invalid_dtype_name(self, tmp_path):
         path = tmp_path / "invalid_dtype.csv"
-        path.write_text("age\n" "25\n")
+        path.write_text("age\n25\n")
 
         with pytest.raises(ValueError, match="Unsupported dtype"):
             ar.read_csv(
@@ -140,7 +140,7 @@ class TestReadCsv:
 
     def test_read_csv_dtype_unknown_column(self, tmp_path):
         path = tmp_path / "unknown_column.csv"
-        path.write_text("age,name\n" "25,Alice\n")
+        path.write_text("age,name\n25,Alice\n")
 
         with pytest.raises(ar.CsvReadError, match="Column not found in dtype mapping"):
             ar.read_csv(
@@ -550,6 +550,102 @@ class TestReadCsv:
         schema = ar.scan_csv(csv_path, trim_headers=False)
         assert " score " in schema
         assert " active " in schema
+
+    # ------------------------------------------------------------------
+    # Whitespace-duplicate header tests (issue #117)
+    # ------------------------------------------------------------------
+
+    def test_exact_duplicate_headers_rejected(self, tmp_path):
+        """Exact duplicate column names are always rejected."""
+        csv_path = tmp_path / "dup.csv"
+        csv_path.write_text("a,a\n1,2\n")
+        with pytest.raises(ar.CsvReadError, match="[Dd]uplicate"):
+            ar.read_csv(csv_path)
+
+    def test_whitespace_duplicate_headers_rejected_default_trim(self, tmp_path):
+        """Headers differing only by whitespace are rejected (trim_headers=True)."""
+        csv_path = tmp_path / "ws_dup.csv"
+        csv_path.write_text("a , a\n1,2\n")
+        with pytest.raises(
+            ar.CsvReadError,
+            match="[Dd]uplicate column name",
+        ):
+            ar.read_csv(csv_path)
+
+    def test_whitespace_duplicate_headers_rejected_no_trim(self, tmp_path):
+        """Headers differing only by whitespace are rejected even with trim_headers=False."""
+        csv_path = tmp_path / "ws_dup_notrim.csv"
+        csv_path.write_text("a , a\n1,2\n")
+        with pytest.raises(
+            ar.CsvReadError,
+            match="[Dd]uplicate column name",
+        ):
+            ar.read_csv(csv_path, trim_headers=False)
+
+    def test_tab_whitespace_duplicate_headers_rejected(self, tmp_path):
+        """Tab-padded headers that collapse to the same name are rejected."""
+        csv_path = tmp_path / "tab_dup.csv"
+        csv_path.write_bytes(b"a\t,a\n1,2\n")  # "a\t" vs "a" after trim
+        with pytest.raises(
+            ar.CsvReadError,
+            match="[Dd]uplicate column name",
+        ):
+            ar.read_csv(csv_path)
+
+    def test_mixed_whitespace_duplicate_headers_rejected(self, tmp_path):
+        """Mixed leading/trailing spaces and tabs are caught."""
+        csv_path = tmp_path / "mixed_ws_dup.csv"
+        # " a " and "\ta\t" both trim to "a"
+        csv_path.write_bytes(b" a , \ta\t\n1,2\n")
+        with pytest.raises(
+            ar.CsvReadError,
+            match="[Dd]uplicate column name",
+        ):
+            ar.read_csv(csv_path)
+
+    def test_unique_headers_with_whitespace_accepted(self, tmp_path):
+        """Headers that are unique after trimming are accepted normally."""
+        csv_path = tmp_path / "unique_ws.csv"
+        csv_path.write_text(" name , age \n1,2\n")
+        frame = ar.read_csv(csv_path)
+        assert frame.columns == ["name", "age"]
+
+    def test_whitespace_duplicate_scan_csv_rejected(self, tmp_path):
+        """scan_csv also rejects whitespace-duplicate headers."""
+        csv_path = tmp_path / "scan_ws_dup.csv"
+        csv_path.write_text("a , a\n1,2\n")
+        with pytest.raises(
+            ar.CsvReadError,
+            match="[Dd]uplicate column name",
+        ):
+            ar.scan_csv(csv_path)
+
+    def test_whitespace_duplicate_scan_csv_no_trim_rejected(self, tmp_path):
+        """scan_csv with trim_headers=False still rejects whitespace-duplicate headers."""
+        csv_path = tmp_path / "scan_ws_dup_notrim.csv"
+        csv_path.write_text("a , a\n1,2\n")
+        with pytest.raises(
+            ar.CsvReadError,
+            match="[Dd]uplicate column name",
+        ):
+            ar.scan_csv(csv_path, trim_headers=False)
+
+    def test_whitespace_duplicate_chunked_rejected(self, tmp_path):
+        """read_csv_chunked also rejects whitespace-duplicate headers."""
+        csv_path = tmp_path / "chunked_ws_dup.csv"
+        csv_path.write_text("a , a\n1,2\n")
+        with pytest.raises(
+            ar.CsvReadError,
+            match="[Dd]uplicate column name",
+        ):
+            list(ar.read_csv_chunked(str(csv_path)))
+
+    def test_whitespace_duplicate_error_message_names_column(self, tmp_path):
+        """The error message includes the colliding column name."""
+        csv_path = tmp_path / "named_dup.csv"
+        csv_path.write_text("score , score\n1,2\n")
+        with pytest.raises(ar.CsvReadError, match="score"):
+            ar.read_csv(csv_path)
 
     def test_non_standard_extension_accepted(self, tmp_path):
         """Non-standard extensions no longer raise ValueError (fixes #34)."""
@@ -1144,7 +1240,7 @@ class TestScanCsv:
     def test_scan_non_utf8_crlf_split_across_chunk_boundary(self, tmp_path):
         csv_path = tmp_path / "latin1_crlf_boundary.csv"
         header = "pad,value\r\n"
-        row1 = f'{"x" * 8176},100\r\n'
+        row1 = f"{'x' * 8176},100\r\n"
         row2 = "y,hello\r\n"
         row3 = "z,200\r\n"
         csv_path.write_bytes((header + row1 + row2 + row3).encode("latin-1"))
@@ -2005,8 +2101,6 @@ class TestArFrameGetItem:
         frame = ar.read_csv(sample_csv)
         with pytest.raises(TypeError):
             frame[0]
-        with pytest.raises(TypeError):
-            frame[["name"]]
 
     def test_getitem_empty_frame(self, tmp_path):
         csv_path = tmp_path / "empty_rows.csv"

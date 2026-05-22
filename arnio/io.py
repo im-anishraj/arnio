@@ -464,7 +464,10 @@ def read_csv(
     encoding : str, default "utf-8"
         File encoding.
     trim_headers : bool, default True
-        Strip leading/trailing whitespace from column names.
+        Strip leading/trailing whitespace from column names.  Regardless
+        of this setting, headers that differ only by leading or trailing
+        whitespace are always rejected with a :exc:`CsvReadError` because
+        they would produce ambiguous column access.
     decimal_separator : str, default "."
         Single non-alphanumeric character used as the decimal separator
         during numeric parsing. Use "," to opt in to European-style decimals
@@ -642,7 +645,10 @@ def read_csv_chunked(
     encoding : str, default "utf-8"
         File encoding.
     trim_headers : bool, default True
-        Strip leading/trailing whitespace from column names.
+        Strip leading/trailing whitespace from column names.  Regardless
+        of this setting, headers that differ only by leading or trailing
+        whitespace are always rejected with a :exc:`CsvReadError` because
+        they would produce ambiguous column access.
     decimal_separator : str, default "."
         Single non-alphanumeric character used as the decimal separator
         during numeric parsing.
@@ -850,7 +856,10 @@ def scan_csv(
         File encoding. For non-UTF-8 inputs, a sample of the file is
         transcoded to infer the schema.
     trim_headers : bool, default True
-        Strip leading/trailing whitespace from column names.
+        Strip leading/trailing whitespace from column names.  Regardless
+        of this setting, headers that differ only by leading or trailing
+        whitespace are always rejected with a :exc:`CsvReadError` because
+        they would produce ambiguous column access.
     decimal_separator : str, default "."
         Single non-alphanumeric character used as the decimal separator
         during numeric parsing.
