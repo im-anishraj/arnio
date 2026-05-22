@@ -8,7 +8,9 @@
 #include <codecvt>
 #include <cstddef>
 #include <cstdlib>
+#ifdef _WIN32
 #include <filesystem>
+#endif
 #include <fstream>
 #include <limits>
 #include <locale>
@@ -19,6 +21,14 @@
 namespace arnio {
 
 namespace {
+inline void open_binary_input(std::ifstream& file, const std::string& path) {
+#ifdef _WIN32
+    file.open(std::filesystem::u8path(path), std::ios::binary);
+#else
+    file.open(path, std::ios::binary);
+#endif
+}
+
 inline void trim_in_place(std::string& s) {
     s.erase(s.begin(),
             std::find_if(s.begin(), s.end(), [](unsigned char ch) { return !std::isspace(ch); }));
@@ -658,7 +668,8 @@ CellValue CsvParser::parse_value(const std::string& raw, DType dtype) const {
 
 CsvParseResult CsvReader::read(const std::string& path, const std::string& on_bad_lines) const {
     const CsvConfig& config = parser_.config();
-    std::ifstream file(std::filesystem::u8path(path), std::ios::binary);
+    std::ifstream file;
+    open_binary_input(file, path);
     std::vector<BadRow> bad_rows;
 
     if (!file.is_open()) {
@@ -837,7 +848,8 @@ CsvParseResult CsvReader::read(const std::string& path, const std::string& on_ba
 std::vector<std::pair<std::string, std::string>> CsvReader::scan_schema(
     const std::string& path) const {
     const CsvConfig& config = parser_.config();
-    std::ifstream file(std::filesystem::u8path(path), std::ios::binary);
+    std::ifstream file;
+    open_binary_input(file, path);
     if (!file.is_open()) {
         throw std::runtime_error("Cannot open file: " + path);
     }
@@ -1009,7 +1021,7 @@ void CsvChunkReader::open(const std::string& path) {
     const CsvConfig& config = parser_.config();
     close();
 
-    file_.open(std::filesystem::u8path(path), std::ios::binary);
+    open_binary_input(file_, path);
     if (!file_.is_open()) {
         throw std::runtime_error("Cannot open file: " + path);
     }
