@@ -1461,3 +1461,108 @@ def test_reset_steps_removes_overwritten_custom_steps():
                 ("temp_step",),
             ],
         )
+
+
+def test_pipeline_verbose_disabled_by_default(caplog):
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "name": ["A", "B"],
+            }
+        )
+    )
+
+    ar.pipeline(
+        frame,
+        [
+            ("drop_nulls",),
+        ],
+    )
+
+    assert len(caplog.records) == 0
+
+
+def test_pipeline_verbose_logs_builtin_step(caplog):
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "name": [" A ", " B "],
+            }
+        )
+    )
+
+    caplog.set_level("INFO", logger="arnio")
+
+    ar.pipeline(
+        frame,
+        [
+            ("strip_whitespace",),
+        ],
+        verbose=True,
+    )
+
+    assert any("strip_whitespace" in record.message for record in caplog.records)
+
+
+def custom_step(df):
+    return df
+
+
+def test_pipeline_verbose_logs_custom_step(caplog):
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "x": [1, 2],
+            }
+        )
+    )
+
+    ar.register_step(
+        "custom_step",
+        custom_step,
+        overwrite=True,
+    )
+
+    caplog.set_level("INFO", logger="arnio")
+
+    ar.pipeline(
+        frame,
+        [
+            ("custom_step",),
+        ],
+        verbose=True,
+    )
+
+    assert any("custom_step" in record.message for record in caplog.records)
+
+
+def drop_first_row(df):
+    return df.head(1)
+
+
+def test_pipeline_verbose_logs_row_change(caplog):
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "x": [1, 2, 3],
+            }
+        )
+    )
+
+    ar.register_step(
+        "drop_first_row",
+        drop_first_row,
+        overwrite=True,
+    )
+
+    caplog.set_level("INFO", logger="arnio")
+
+    ar.pipeline(
+        frame,
+        [
+            ("drop_first_row",),
+        ],
+        verbose=True,
+    )
+
+    assert any("rows: 3 -> 1" in record.message for record in caplog.records)

@@ -219,4 +219,9 @@ Column Column::clone() const {
     return Column(name_, dtype_, data_, null_mask_);
 }
 
+Column Column::move_clone() {
+    assert_type_consistency();
+    return Column(name_, dtype_, std::move(data_), std::move(null_mask_));
+}
+
 }  // namespace arnio

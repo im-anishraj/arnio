@@ -257,6 +257,25 @@ frame = ar.read_csv("data.csv", null_values=["", "MISSING", "UNKNOWN"])
 # Disable null sentinel handling completely
 frame = ar.read_csv("data.csv", null_values=[])
 ```
+
+### Handling decimal separators
+
+Use `decimal_separator` when numeric CSV data uses a separator other than
+the default dot. This is explicit by design: Arnio does not auto-detect decimal
+formats because a comma can also be the CSV delimiter.
+
+```python
+# Semicolon-delimited CSV with unquoted European decimals
+frame = ar.read_csv("prices.csv", delimiter=";", decimal_separator=",")
+
+# Comma-delimited CSV still needs quoted comma-decimal values
+frame = ar.read_csv("prices.csv", decimal_separator=",")
+```
+
+The default remains `decimal_separator="."`, so existing dot-decimal files keep
+their current behavior. If you also use `thousands_separator`, it must differ
+from `decimal_separator`.
+
 ### Handling invalid UTF-8 bytes
 
 Use `encoding_errors` to control how invalid UTF-8 bytes are handled during CSV parsing.
@@ -539,6 +558,24 @@ frame.head(0)
 
 Raises `ValueError` for negative or boolean `n`.
 </details>
+
+### Pipeline verbose diagnostics
+
+Enable lightweight pipeline diagnostics with `verbose=True`:
+
+```python
+result = ar.pipeline(
+    frame,
+    [
+        ("strip_whitespace",),
+        ("drop_nulls",),
+    ],
+    verbose=True,
+)
+```
+
+This logs step execution order, execution path, elapsed time,
+and row-count changes through the `arnio` logger.
 
 <br>
 
@@ -933,6 +970,22 @@ clean = ar.pipeline(frame, [
     ("drop_duplicates", {"keep": "first"}),
 ])
 ```
+
+### Winsorize outliers
+
+`winsorize_outliers()` clips extreme numeric values using lower and upper quantiles. Non-numeric columns are ignored unless explicitly selected in `subset`.
+
+```python
+frame = ar.read_csv("data.csv")
+
+result = ar.winsorize_outliers(
+    frame,
+    lower=0.05,
+    upper=0.95,
+)
+```
+
+It can also be used inside `ar.pipeline()` as `("winsorize_outliers", {"lower": 0.05, "upper": 0.95})`.
 
 ### 🔁 Replace values
 
@@ -1570,6 +1623,7 @@ DataQualityReport(
 }
 ```
 Columns where a single non-null value represents at least 95% of rows are reported with a `near_constant` warning.
+Columns with a very high ratio of unique values are reported with a `high_cardinality` warning because they may represent identifiers, leakage risk, or modeling hazards.
 
 Example near-constant distribution:
 

@@ -351,6 +351,25 @@ def test_cpp_frame_explicit_zero_rows_rejects_nonempty_first_column():
         frame.add_column(column)
 
 
+def test_add_column_rejects_duplicate_name():
+    from arnio._arnio_cpp import Column, DType, Frame
+
+    frame = Frame()
+
+    c1 = Column("a", DType.INT64)
+    c1.push_back(1)
+    c1.push_back(2)
+
+    c2 = Column("a", DType.INT64)
+    c2.push_back(3)
+    c2.push_back(4)
+
+    frame.add_column(c1)
+
+    with pytest.raises(ValueError, match="already exists"):
+        frame.add_column(c2)
+
+
 # ArFrame.describe() Tests
 
 

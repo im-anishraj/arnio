@@ -1758,6 +1758,8 @@ def _profile_column(
         null_count=null_count,
         row_count=row_count,
         unique_count=unique_count,
+        unique_ratio=unique_ratio,
+        semantic_type=semantic_type,
         whitespace_count=whitespace_count,
         empty_string_count=empty_string_count,
         dominant_ratio=dominant_ratio,
@@ -1864,6 +1866,8 @@ def _column_warnings(
     null_count: int,
     row_count: int,
     unique_count: int,
+    unique_ratio: float,
+    semantic_type: str,
     whitespace_count: int,
     empty_string_count: int,
     dominant_ratio: float,
@@ -1877,6 +1881,14 @@ def _column_warnings(
         warnings.append("constant")
     if row_count and unique_count > 1 and dominant_ratio >= _NEAR_CONSTANT_THRESHOLD:
         warnings.append("near_constant")
+    non_null_count = row_count - null_count
+    if (
+        non_null_count > 0
+        and unique_count >= _HIGH_CARDINALITY_MIN_UNIQUE
+        and unique_ratio >= _HIGH_CARDINALITY_RATIO_THRESHOLD
+        and semantic_type in {"identifier", "text"}
+    ):
+        warnings.append("high_cardinality")
     if whitespace_count:
         warnings.append("leading_or_trailing_whitespace")
     if empty_string_count:
@@ -1919,6 +1931,8 @@ def _clean_scalar(value: Any) -> Any:
 
 _APPROX_TOP_VALUES_SEED = 0
 _NEAR_CONSTANT_THRESHOLD = 0.95
+_HIGH_CARDINALITY_RATIO_THRESHOLD = 0.9
+_HIGH_CARDINALITY_MIN_UNIQUE = 100
 
 
 def _top_values(

@@ -857,6 +857,51 @@ def test_profile_near_constant_threshold_boundary():
     assert "near_constant" in report.columns["status"].warnings
 
 
+def test_profile_detects_high_cardinality_identifier_column(tmp_path):
+    path = tmp_path / "ids.csv"
+    path.write_text(
+        "user_id\n" + "\n".join(f"id_{i}" for i in range(200)),
+        encoding="utf-8",
+    )
+
+    frame = ar.read_csv(path)
+    report = ar.profile(frame)
+
+    assert "high_cardinality" in report.columns["user_id"].warnings
+
+
+def test_profile_low_cardinality_column_not_marked_high_cardinality(tmp_path):
+    path = tmp_path / "status.csv"
+    values = ["active", "inactive"] * 100
+    path.write_text("status\n" + "\n".join(values), encoding="utf-8")
+
+    frame = ar.read_csv(path)
+    report = ar.profile(frame)
+
+    assert "high_cardinality" not in report.columns["status"].warnings
+
+
+def test_profile_constant_column_not_marked_high_cardinality(tmp_path):
+    path = tmp_path / "constant.csv"
+    path.write_text("user_id\n" + "\n".join(["same"] * 200), encoding="utf-8")
+
+    frame = ar.read_csv(path)
+    report = ar.profile(frame)
+
+    assert "high_cardinality" not in report.columns["user_id"].warnings
+
+
+def test_profile_null_heavy_column_not_marked_high_cardinality(tmp_path):
+    path = tmp_path / "null_heavy.csv"
+    values = [f"id_{i}" for i in range(20)] + [""] * 180
+    path.write_text("user_id\n" + "\n".join(values), encoding="utf-8")
+
+    frame = ar.read_csv(path)
+    report = ar.profile(frame)
+
+    assert "high_cardinality" not in report.columns["user_id"].warnings
+
+
 # ── string length statistics tests ───────────────────────────────────────────
 
 

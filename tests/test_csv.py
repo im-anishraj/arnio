@@ -255,6 +255,96 @@ class TestReadCsv:
         df = ar.to_pandas(frame)
         assert df["value"].iloc[0] == "1,234"
 
+    def test_decimal_separator_comma_with_semicolon_delimiter(self, tmp_path):
+        csv_path = tmp_path / "comma_decimal_semicolon.csv"
+        csv_path.write_text("value;label\n12,45;gross\n0,5;half\n")
+        frame = ar.read_csv(csv_path, delimiter=";", decimal_separator=",")
+        df = ar.to_pandas(frame)
+        assert frame.dtypes["value"] == "float64"
+        assert df["value"].tolist() == pytest.approx([12.45, 0.5])
+
+    def test_decimal_separator_comma_with_quoted_comma_delimiter(self, tmp_path):
+        csv_path = tmp_path / "quoted_comma_decimal.csv"
+        csv_path.write_text('value\n"12,45"\n"-0,5"\n')
+        frame = ar.read_csv(csv_path, decimal_separator=",")
+        df = ar.to_pandas(frame)
+        assert df["value"].tolist() == pytest.approx([12.45, -0.5])
+
+    def test_decimal_separator_default_preserves_comma_values(self, tmp_path):
+        csv_path = tmp_path / "default_comma_decimal.csv"
+        csv_path.write_text('value\n"12,45"\n')
+        frame = ar.read_csv(csv_path)
+        df = ar.to_pandas(frame)
+        assert frame.dtypes["value"] == "string"
+        assert df["value"].iloc[0] == "12,45"
+
+    def test_decimal_separator_with_dot_thousands_separator(self, tmp_path):
+        csv_path = tmp_path / "european_number.csv"
+        csv_path.write_text('value\n"1.234,56"\n')
+        frame = ar.read_csv(
+            csv_path,
+            decimal_separator=",",
+            thousands_separator=".",
+        )
+        df = ar.to_pandas(frame)
+        assert df["value"].iloc[0] == pytest.approx(1234.56)
+
+    def test_mixed_decimal_formats_become_null(self, tmp_path):
+        csv_path = tmp_path / "mixed_decimal_formats.csv"
+        csv_path.write_text('value\n"12,45"\n"12.45"\n')
+        frame = ar.read_csv(csv_path, decimal_separator=",")
+        df = ar.to_pandas(frame)
+        assert frame.dtypes["value"] == "float64"
+        assert df["value"].iloc[0] == pytest.approx(12.45)
+        assert pd.isna(df["value"].iloc[1])
+
+    def test_scan_csv_decimal_separator_matches_read_csv(self, tmp_path):
+        csv_path = tmp_path / "scan_comma_decimal.csv"
+        csv_path.write_text('value\n"12,45"\n')
+        assert ar.scan_csv(csv_path, decimal_separator=",")["value"] == "float64"
+        assert ar.read_csv(csv_path, decimal_separator=",").dtypes["value"] == "float64"
+
+    def test_read_csv_chunked_decimal_separator(self, tmp_path):
+        csv_path = tmp_path / "chunked_comma_decimal.csv"
+        csv_path.write_text("value;label\n12,45;a\n67,89;b\n")
+        chunks = list(
+            ar.read_csv_chunked(
+                csv_path,
+                chunksize=1,
+                delimiter=";",
+                decimal_separator=",",
+            )
+        )
+        assert [
+            ar.to_pandas(chunk)["value"].iloc[0] for chunk in chunks
+        ] == pytest.approx([12.45, 67.89])
+
+    @pytest.mark.parametrize("separator", ["", "a", "3", "ab", "\n", '"', "+", "-"])
+    def test_invalid_decimal_separator(self, tmp_path, separator):
+        csv_path = tmp_path / "decimal_separator.csv"
+        csv_path.write_text("value\n1234\n")
+        with pytest.raises(ValueError):
+            ar.read_csv(csv_path, decimal_separator=separator)
+        with pytest.raises(ValueError):
+            ar.scan_csv(csv_path, decimal_separator=separator)
+
+    @pytest.mark.parametrize("separator", [1, 1.5, True, [], {}])
+    def test_invalid_non_string_decimal_separator(self, tmp_path, separator):
+        csv_path = tmp_path / "decimal_separator_type.csv"
+        csv_path.write_text("value\n1234\n")
+        with pytest.raises(TypeError):
+            ar.read_csv(csv_path, decimal_separator=separator)
+        with pytest.raises(TypeError):
+            ar.scan_csv(csv_path, decimal_separator=separator)
+
+    def test_thousands_separator_must_differ_from_decimal_separator(self, tmp_path):
+        csv_path = tmp_path / "same_separators.csv"
+        csv_path.write_text("value\n1234\n")
+        with pytest.raises(ValueError, match="must differ"):
+            ar.read_csv(csv_path, decimal_separator=",", thousands_separator=",")
+        with pytest.raises(ValueError, match="must differ"):
+            ar.scan_csv(csv_path, decimal_separator=",", thousands_separator=",")
+
     @pytest.mark.parametrize(
         "separator", ["", "a", "3", "ab", "\n", '"', ".", "+", "-"]
     )
@@ -705,7 +795,9 @@ class TestReadCsv:
         csv_path = tmp_path / "unterminated.csv"
         csv_path.write_text('id,text\n1,"hello\n')
 
-        with pytest.raises(ar.CsvReadError, match="Unterminated quoted CSV record"):
+        with pytest.raises(
+            ar.CsvReadError, match="Unterminated quoted field starting at line 2"
+        ):
             ar.read_csv(csv_path)
 
     def test_duplicate_headers_rejected(self, tmp_path):
@@ -2134,3 +2226,118 @@ class TestUnicodeFilePath:
 
         total_rows = sum(chunk.shape[0] for chunk in chunks)
         assert total_rows == 2
+
+
+# --- Issue #113: unterminated quoted field errors must include line number ---
+
+
+class TestUnterminatedQuoteLocation:
+    """Regression tests for #113 — CsvReadError must include the line number
+    where an unterminated quoted field begins so users can locate the problem
+    in their input file quickly."""
+
+    def test_error_message_includes_line_number(self, tmp_path):
+        # Unterminated quote starts on line 2 (after the header).
+        csv_path = tmp_path / "bad.csv"
+        csv_path.write_text('name,note\nAlice,"unterminated\n')
+        with pytest.raises(ar.CsvReadError, match="line 2"):
+            ar.read_csv(csv_path)
+
+    def test_error_message_includes_correct_line_for_later_row(self, tmp_path):
+        # Two valid rows, then an unterminated quote on line 4.
+        csv_path = tmp_path / "bad.csv"
+        csv_path.write_text('a,b\n1,ok\n2,fine\n3,"oops\n')
+        with pytest.raises(ar.CsvReadError, match="line 4"):
+            ar.read_csv(csv_path)
+
+    def test_error_message_includes_line_for_multiline_field_start(self, tmp_path):
+        # A valid multiline field followed by an unterminated one.
+        # Valid: rows 1-3 (header + "hello\nworld" spanning lines 2-3).
+        # Invalid: unterminated quote starts on line 4.
+        csv_path = tmp_path / "bad.csv"
+        csv_path.write_bytes(b'id,text\n1,"hello\nworld"\n2,"oops\n')
+        with pytest.raises(ar.CsvReadError, match="line 4"):
+            ar.read_csv(csv_path)
+
+    def test_error_message_says_unterminated_quoted_field(self, tmp_path):
+        # The error message must mention "Unterminated quoted field".
+        csv_path = tmp_path / "bad.csv"
+        csv_path.write_text('x\n"no close\n')
+        with pytest.raises(ar.CsvReadError, match="Unterminated quoted field"):
+            ar.read_csv(csv_path)
+
+    def test_valid_multiline_field_still_parses(self, tmp_path):
+        # A properly closed multiline field must NOT raise.
+        csv_path = tmp_path / "ok.csv"
+        csv_path.write_bytes(b'id,text\n1,"hello\nworld"\n')
+        frame = ar.read_csv(csv_path)
+        assert frame.shape == (1, 2)
+        df = ar.to_pandas(frame)
+        assert df["text"].iloc[0] == "hello\nworld"
+
+    def test_no_header_unterminated_quote_line_number(self, tmp_path):
+        # Without a header, the unterminated quote is on line 1.
+        csv_path = tmp_path / "bad.csv"
+        csv_path.write_text('"oops\n')
+        with pytest.raises(ar.CsvReadError, match="line 1"):
+            ar.read_csv(csv_path, has_header=False)
+
+
+class TestArFrameToDict:
+    def test_to_dict_basic(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        result = frame.to_dict()
+        assert isinstance(result, dict)
+        assert list(result.keys()) == ["name", "age", "email", "active"]
+
+    def test_to_dict_values_are_lists(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        result = frame.to_dict()
+        for val in result.values():
+            assert isinstance(val, list)
+
+    def test_to_dict_string_column(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        result = frame.to_dict()
+        assert result["name"] == ["Alice", "Bob", "Charlie"]
+
+    def test_to_dict_integer_column(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        result = frame.to_dict()
+        assert result["age"] == [30, 25, 35]
+
+    def test_to_dict_bool_column(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        result = frame.to_dict()
+        assert result["active"] == [True, False, True]
+
+    def test_to_dict_preserves_column_order(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        result = frame.to_dict()
+        assert list(result.keys()) == frame.columns
+
+    def test_to_dict_empty_frame(self, tmp_path):
+        csv_path = tmp_path / "empty_rows.csv"
+        csv_path.write_text("name,age\n")
+        frame = ar.read_csv(csv_path)
+        result = frame.to_dict()
+        assert result == {"name": [], "age": []}
+
+    def test_to_dict_with_nulls(self, csv_with_nulls):
+        frame = ar.read_csv(csv_with_nulls)
+        result = frame.to_dict()
+        assert isinstance(result, dict)
+        assert result["name"][0] == "Alice"
+
+    def test_to_dict_single_column(self, tmp_path):
+        csv_path = tmp_path / "single.csv"
+        csv_path.write_text("value\n1\n2\n3\n")
+        frame = ar.read_csv(csv_path)
+        result = frame.to_dict()
+        assert result == {"value": [1, 2, 3]}
+
+    def test_to_dict_consistent_with_getitem(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        result = frame.to_dict()
+        for col in frame.columns:
+            assert result[col] == frame[col]

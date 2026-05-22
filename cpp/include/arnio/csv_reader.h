@@ -1,6 +1,7 @@
 #pragma once
 
 #include <fstream>
+#include <memory>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -20,6 +21,7 @@ struct CsvConfig {
     std::optional<size_t> skip_rows = std::nullopt;
     std::string encoding = "utf-8";  // Currently only utf-8 supported
     bool trim_headers = true;        // for implementing the trim_headers option
+    char decimal_separator = '.';
     std::optional<char> thousands_separator = std::nullopt;
     std::optional<size_t> sample_size = std::nullopt;
     std::optional<std::vector<std::string>> null_values = std::nullopt;
@@ -35,6 +37,7 @@ class CsvParser {
     const CsvConfig& config() const { return config_; }
 
     std::vector<std::string> parse_line(const std::string& line) const;
+    void parse_line(const std::string& line, std::vector<std::string>& out_fields) const;
     bool is_null_sentinel(const std::string& value) const;
     DType infer_type(const std::string& value) const;
     static DType promote_type(DType current, DType incoming);
@@ -62,6 +65,7 @@ class CsvReader {
 class CsvChunkReader {
    public:
     explicit CsvChunkReader(const CsvConfig& config = CsvConfig{});
+    ~CsvChunkReader();
 
     void open(const std::string& path);
     std::optional<Frame> next_chunk(size_t chunksize);
@@ -79,6 +83,7 @@ class CsvChunkReader {
     bool schema_locked_ = false;
     bool header_finalized_ = false;
     bool opened_ = false;
+    std::unique_ptr<class RecordReader> record_reader_;
 
     void resolve_col_indices();
     bool read_one_data_row(std::vector<std::string>& fields_out);

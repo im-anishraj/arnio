@@ -296,6 +296,29 @@ class ArFrame:
 
         return from_pandas(df.tail(n))
 
+    def to_dict(self) -> dict[str, list]:
+        """Export the frame as a Python dictionary.
+
+        Returns
+        -------
+        dict[str, list]
+            A dictionary mapping column names to lists of values.
+
+        Examples
+        --------
+        >>> frame = ar.read_csv("data.csv")
+        >>> frame.to_dict()
+        {'name': ['Alice', 'Bob'], 'age': [25, 30]}
+        """
+        col_names = self.columns
+        num_cols = self.shape[1]
+        return {
+            col_names[i]: [
+                self._frame.column_by_index(i).at(r) for r in range(len(self))
+            ]
+            for i in range(num_cols)
+        }
+
     def select_columns(self, columns: list[str]) -> ArFrame:
         """Return a new ArFrame with only the selected columns.
 

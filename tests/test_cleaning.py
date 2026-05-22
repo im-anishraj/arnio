@@ -124,6 +124,109 @@ class TestFillNulls:
             ar.fill_nulls(frame, "bad", subset=["x"])
 
 
+class TestWinsorizeOutliers:
+    def test_winsorize_outliers_clips_numeric_values(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "value": [1, 2, 3, 4, 100],
+                }
+            )
+        )
+
+        result = ar.winsorize_outliers(frame, lower=0.2, upper=0.8)
+        df = ar.to_pandas(result)
+
+        assert df["value"].tolist() == pytest.approx([1.8, 2.0, 3.0, 4.0, 23.2])
+
+    def test_winsorize_outliers_subset(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "a": [1, 2, 3, 4, 100],
+                    "b": [10, 20, 30, 40, 500],
+                }
+            )
+        )
+
+        result = ar.winsorize_outliers(
+            frame,
+            lower=0.2,
+            upper=0.8,
+            subset=["a"],
+        )
+        df = ar.to_pandas(result)
+
+        assert df["a"].tolist() == pytest.approx([1.8, 2.0, 3.0, 4.0, 23.2])
+        assert list(df["b"]) == [10, 20, 30, 40, 500]
+
+    def test_winsorize_outliers_ignores_non_numeric_without_subset(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "value": [1, 2, 3, 4, 100],
+                    "label": ["a", "b", "c", "d", "e"],
+                }
+            )
+        )
+
+        result = ar.winsorize_outliers(frame, lower=0.2, upper=0.8)
+        df = ar.to_pandas(result)
+
+        assert df["value"].tolist() == pytest.approx([1.8, 2.0, 3.0, 4.0, 23.2])
+        assert list(df["label"]) == ["a", "b", "c", "d", "e"]
+
+    def test_winsorize_outliers_rejects_non_numeric_subset(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "value": [1, 2, 3],
+                    "label": ["a", "b", "c"],
+                }
+            )
+        )
+
+        with pytest.raises(ValueError, match="only supports numeric columns"):
+            ar.winsorize_outliers(frame, subset=["label"])
+
+    def test_winsorize_outliers_rejects_unknown_subset_column(self):
+        frame = ar.from_pandas(pd.DataFrame({"value": [1, 2, 3]}))
+
+        with pytest.raises(ValueError, match="Unknown columns in subset"):
+            ar.winsorize_outliers(frame, subset=["missing"])
+
+    @pytest.mark.parametrize(
+        ("lower", "upper"),
+        [
+            (-0.1, 0.95),
+            (0.05, 1.1),
+            (0.8, 0.2),
+            (0.5, 0.5),
+        ],
+    )
+    def test_winsorize_outliers_rejects_invalid_bounds(self, lower, upper):
+        frame = ar.from_pandas(pd.DataFrame({"value": [1, 2, 3]}))
+
+        with pytest.raises(ValueError):
+            ar.winsorize_outliers(frame, lower=lower, upper=upper)
+
+    def test_winsorize_outliers_identical_values_noop(self):
+        frame = ar.from_pandas(pd.DataFrame({"value": [5, 5, 5]}))
+
+        result = ar.winsorize_outliers(frame)
+        df = ar.to_pandas(result)
+
+        assert list(df["value"]) == [5, 5, 5]
+
+    def test_winsorize_outliers_single_row_noop(self):
+        frame = ar.from_pandas(pd.DataFrame({"value": [10]}))
+
+        result = ar.winsorize_outliers(frame)
+        df = ar.to_pandas(result)
+
+        assert list(df["value"]) == [10]
+
+
 class TestValidateColumnsExist:
     def test_returns_original_frame_when_columns_exist(self, sample_csv):
         frame = ar.read_csv(sample_csv)
@@ -2490,6 +2593,93 @@ class TestSafeDivideColumns:
         assert list(df.columns) == ["revenue", "ratio", "cost"]
         assert list(df["ratio"]) == [4.0, 4.0]
 
+    # --- Regression tests for string zero denominators (bug fix) ---
+
+    def test_string_zero_denominator_uses_fill_value(self):
+        # String "0" must be treated as zero — not silently passed through.
+        frame = ar.from_pandas(
+            pd.DataFrame({"num": [10.0, 20.0, 30.0], "den": ["0", "2", "0"]})
+        )
+        result = ar.safe_divide_columns(
+            frame,
+            numerator="num",
+            denominator="den",
+            output_column="ratio",
+            fill_value=-1.0,
+        )
+        df = ar.to_pandas(result)
+        assert list(df["ratio"]) == [-1.0, 10.0, -1.0]
+
+    def test_string_zero_point_zero_denominator_uses_fill_value(self):
+        # String "0.0" must also be treated as zero.
+        frame = ar.from_pandas(pd.DataFrame({"num": [10.0, 20.0], "den": ["0.0", "4"]}))
+        result = ar.safe_divide_columns(
+            frame,
+            numerator="num",
+            denominator="den",
+            output_column="ratio",
+            fill_value=0.0,
+        )
+        df = ar.to_pandas(result)
+        assert df["ratio"].iloc[0] == 0.0
+        assert df["ratio"].iloc[1] == 5.0
+
+    def test_numeric_zero_denominator_uses_fill_value(self):
+        # Numeric 0 (int) must still be caught — regression guard.
+        frame = ar.from_pandas(pd.DataFrame({"num": [10.0, 20.0], "den": [0, 4]}))
+        result = ar.safe_divide_columns(
+            frame,
+            numerator="num",
+            denominator="den",
+            output_column="ratio",
+            fill_value=-99.0,
+        )
+        df = ar.to_pandas(result)
+        assert df["ratio"].iloc[0] == -99.0
+        assert df["ratio"].iloc[1] == 5.0
+
+    def test_nullable_denominator_uses_fill_value(self):
+        # None / pd.NA denominator must use fill_value, not raise.
+        frame = ar.from_pandas(
+            pd.DataFrame({"num": [10.0, 20.0, 30.0], "den": [None, 4.0, None]})
+        )
+        result = ar.safe_divide_columns(
+            frame,
+            numerator="num",
+            denominator="den",
+            output_column="ratio",
+            fill_value=0.0,
+        )
+        df = ar.to_pandas(result)
+        assert df["ratio"].iloc[0] == 0.0
+        assert df["ratio"].iloc[1] == 5.0
+        assert df["ratio"].iloc[2] == 0.0
+
+    def test_valid_nonzero_numeric_string_denominator_divides_correctly(self):
+        # String "2" and "4" must produce valid division, not be masked.
+        frame = ar.from_pandas(pd.DataFrame({"num": [10.0, 20.0], "den": ["2", "4"]}))
+        result = ar.safe_divide_columns(
+            frame,
+            numerator="num",
+            denominator="den",
+            output_column="ratio",
+            fill_value=-1.0,
+        )
+        df = ar.to_pandas(result)
+        assert df["ratio"].iloc[0] == 5.0
+        assert df["ratio"].iloc[1] == 5.0
+
+    def test_invalid_non_null_denominator_string_raises(self):
+        # A non-null, non-numeric string like "abc" must raise ValueError,
+        # not be silently treated as null.
+        frame = ar.from_pandas(pd.DataFrame({"num": [10.0, 20.0], "den": ["abc", "4"]}))
+        with pytest.raises(
+            ValueError, match="Denominator column 'den' contains non-numeric"
+        ):
+            ar.safe_divide_columns(
+                frame, numerator="num", denominator="den", output_column="ratio"
+            )
+
 
 class TestClipNumericNativeRegression:
     """Regression tests verifying the native C++ clip_numeric hot-path.
@@ -2636,6 +2826,27 @@ class TestClipNumericNativeRegression:
         frame = ar.from_pandas(pd.DataFrame({"score": [-10, 50, 200]}))
         result = ar.pipeline(frame, [("clip_numeric", {"lower": 0, "upper": 100})])
         assert ar.to_pandas(result)["score"].tolist() == [0, 50, 100]
+
+    def test_pipeline_winsorize_outliers(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "value": [1, 2, 3, 4, 100],
+                    "label": ["a", "b", "c", "d", "e"],
+                }
+            )
+        )
+
+        result = ar.pipeline(
+            frame,
+            [
+                ("winsorize_outliers", {"lower": 0.2, "upper": 0.8}),
+            ],
+        )
+        df = ar.to_pandas(result)
+
+        assert df["value"].tolist() == pytest.approx([1.8, 2.0, 3.0, 4.0, 23.2])
+        assert list(df["label"]) == ["a", "b", "c", "d", "e"]
 
     # ------------------------------------------------------------------
     # Large-frame determinism: result must be identical to the old
