@@ -1333,7 +1333,9 @@ def replace_values(frame, mapping, column=None):
         # Exclude tuple/list/ndarray/series/index keys which pandas.replace
         # does not support and can raise confusing errors (e.g. operand
         # length mismatch). Treat strings and true scalars as valid keys.
-        elif is_scalar(k) and not isinstance(k, (tuple, list, np.ndarray, pd.Series, pd.Index)):
+        elif is_scalar(k) and not isinstance(
+            k, (tuple, list, np.ndarray, pd.Series, pd.Index)
+        ):
             normalized_mapping[k] = v
         else:
             # pandas replace does not support non-scalar mapping keys like tuples
