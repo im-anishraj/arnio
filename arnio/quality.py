@@ -835,6 +835,8 @@ def profile(
 def compare_profiles(
     profile_a: DataQualityReport,
     profile_b: DataQualityReport,
+    *,
+    columns: list[str] | None = None,
 ) -> ProfileComparison:
     """Compare two data-quality profiles for drift.
 
@@ -846,6 +848,8 @@ def compare_profiles(
     ----------
     profile_a, profile_b : DataQualityReport
         Profiles produced by :func:`profile`.
+    columns : list[str], optional
+        Column names to compare. If None, compares all shared columns.
 
     Returns
     -------
@@ -873,7 +877,19 @@ def compare_profiles(
 
     columns_a = set(profile_a.columns)
     columns_b = set(profile_b.columns)
-    if columns_a != columns_b:
+
+    if columns is not None:
+        columns_a = columns_a.intersection(columns)
+        columns_b = columns_b.intersection(columns)
+        if columns_a != columns_b:
+            missing_from_a = sorted(columns_b - columns_a)
+            missing_from_b = sorted(columns_a - columns_b)
+            raise ValueError(
+                "Profiles have incompatible schemas: "
+                f"missing from profile_a={missing_from_a}, "
+                f"missing from profile_b={missing_from_b}"
+            )
+    elif columns_a != columns_b:
         missing_from_a = sorted(columns_b - columns_a)
         missing_from_b = sorted(columns_a - columns_b)
         raise ValueError(
