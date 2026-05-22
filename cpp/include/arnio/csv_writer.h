@@ -24,7 +24,7 @@ class CsvWriter {
    private:
     CsvWriteConfig config_;
 
-    static std::string quote_field(const std::string& field);
+    std::string quote_field(const std::string& field) const;
 
     std::string cell_to_string(
         const Frame& frame,
