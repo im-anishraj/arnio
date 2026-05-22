@@ -32,12 +32,12 @@ def test_pyproject_metadata_is_valid():
         if c.startswith("Programming Language :: Python ::")
     ]
 
-    assert "3" in python_classifiers, (
-        "Must include 'Programming Language :: Python :: 3'"
-    )
-    assert min_version in python_classifiers, (
-        f"Missing classifier for min version {min_version}"
-    )
+    assert (
+        "3" in python_classifiers
+    ), "Must include 'Programming Language :: Python :: 3'"
+    assert (
+        min_version in python_classifiers
+    ), f"Missing classifier for min version {min_version}"
 
     # 3. project URLs
     urls = project.get("urls", {})
