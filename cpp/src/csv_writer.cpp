@@ -1,4 +1,5 @@
 #include "arnio/csv_writer.h"
+#include "frame.h"
 
 #include <fstream>
 #include <iomanip>
