@@ -227,8 +227,10 @@ class DataQualityReport:
             "quality_score": self.quality_score,
             "score_components": self.score_components,
             "columns": {
-                name: column.to_dict(redact_sample_values=redact_sample_values)
-                for name, column in self.columns.items()
+                name: self.columns[name].to_dict(
+                    redact_sample_values=redact_sample_values
+                )
+                for name in sorted(self.columns)
                 if name not in exclude_columns
             },
             "suggestions": [
@@ -249,7 +251,7 @@ class DataQualityReport:
                                 else value
                             )
                         )
-                        for key, value in dict(s[1]).items()
+                        for key, value in sorted(dict(s[1]).items())
                     },
                     "confidence_score": getattr(s, "confidence_score", None),
                     "confidence_reason": getattr(s, "confidence_reason", None),
