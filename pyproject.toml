@@ -48,6 +48,7 @@ Changelog = "https://github.com/im-anishraj/arnio/blob/main/CHANGELOG.md"
 Discord = "https://discord.gg/xsEw7r78M"
 
 [project.optional-dependencies]
+arrow = ["pyarrow>=6.0"]
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",

@@ -40,7 +40,7 @@ from .cleaning import (
     validate_columns_exist,
     winsorize_outliers,
 )
-from .convert import from_pandas, to_pandas
+from .convert import from_pandas, to_arrow, to_pandas
 from .exceptions import (
     ArnioError,
     CsvReadError,
@@ -151,6 +151,7 @@ __all__ = [
     "standardize_missing_tokens",
     # Conversion
     "to_pandas",
+    "to_arrow",
     "from_pandas",
     "from_records",
     # Integrations
