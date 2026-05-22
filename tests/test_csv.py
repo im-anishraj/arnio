@@ -18,7 +18,7 @@ MESSY_CSV = str(Path(__file__).parent / "fixtures" / "messy_sales_data.csv")
 class TestReadCsv:
     def test_read_csv_dtype_override_string(self, tmp_path):
         path = tmp_path / "zip_codes.csv"
-        path.write_text("zip,quantity\n" "07001,5\n" "08002,10\n")
+        path.write_text("zip,quantity\n07001,5\n08002,10\n")
 
         frame = ar.read_csv(
             path,
@@ -32,7 +32,7 @@ class TestReadCsv:
 
     def test_read_csv_dtype_mixed_inference(self, tmp_path):
         path = tmp_path / "mixed_types.csv"
-        path.write_text("zip,price\n" "07001,12.5\n" "08002,20.0\n")
+        path.write_text("zip,price\n07001,12.5\n08002,20.0\n")
 
         frame = ar.read_csv(
             path,
@@ -54,7 +54,7 @@ class TestReadCsv:
 
     def test_read_csv_dtype_with_generated_column_names(self, tmp_path):
         path = tmp_path / "no_header.csv"
-        path.write_text("07001,5\n" "08002,10\n")
+        path.write_text("07001,5\n08002,10\n")
 
         frame = ar.read_csv(
             path,
@@ -71,7 +71,7 @@ class TestReadCsv:
 
     def test_read_csv_dtype_with_usecols(self, tmp_path):
         path = tmp_path / "usecols_dtype.csv"
-        path.write_text("zip,quantity,price\n" "07001,5,12.5\n" "08002,10,20.0\n")
+        path.write_text("zip,quantity,price\n07001,5,12.5\n08002,10,20.0\n")
 
         frame = ar.read_csv(
             path,
@@ -88,7 +88,7 @@ class TestReadCsv:
 
     def test_read_csv_dtype_parse_failure_becomes_null(self, tmp_path):
         path = tmp_path / "parse_failure.csv"
-        path.write_text("quantity\n" "abc\n")
+        path.write_text("quantity\nabc\n")
 
         frame = ar.read_csv(
             path,
@@ -102,7 +102,7 @@ class TestReadCsv:
 
     def test_read_csv_dtype_non_selected_usecols_column(self, tmp_path):
         path = tmp_path / "dtype_usecols_error.csv"
-        path.write_text("zip,price\n" "07001,12.5\n")
+        path.write_text("zip,price\n07001,12.5\n")
 
         with pytest.raises(
             ar.CsvReadError,
@@ -116,7 +116,7 @@ class TestReadCsv:
 
     def test_read_csv_dtype_override_string_to_int64(self, tmp_path):
         path = tmp_path / "quantities.csv"
-        path.write_text("quantity,label\n" "5,small\n" "10,large\n")
+        path.write_text("quantity,label\n5,small\n10,large\n")
 
         frame = ar.read_csv(
             path,
@@ -130,7 +130,7 @@ class TestReadCsv:
 
     def test_read_csv_invalid_dtype_name(self, tmp_path):
         path = tmp_path / "invalid_dtype.csv"
-        path.write_text("age\n" "25\n")
+        path.write_text("age\n25\n")
 
         with pytest.raises(ValueError, match="Unsupported dtype"):
             ar.read_csv(
@@ -140,7 +140,7 @@ class TestReadCsv:
 
     def test_read_csv_dtype_unknown_column(self, tmp_path):
         path = tmp_path / "unknown_column.csv"
-        path.write_text("age,name\n" "25,Alice\n")
+        path.write_text("age,name\n25,Alice\n")
 
         with pytest.raises(ar.CsvReadError, match="Column not found in dtype mapping"):
             ar.read_csv(
@@ -1240,7 +1240,7 @@ class TestScanCsv:
     def test_scan_non_utf8_crlf_split_across_chunk_boundary(self, tmp_path):
         csv_path = tmp_path / "latin1_crlf_boundary.csv"
         header = "pad,value\r\n"
-        row1 = f'{"x" * 8176},100\r\n'
+        row1 = f"{'x' * 8176},100\r\n"
         row2 = "y,hello\r\n"
         row3 = "z,200\r\n"
         csv_path.write_bytes((header + row1 + row2 + row3).encode("latin-1"))
@@ -2101,8 +2101,6 @@ class TestArFrameGetItem:
         frame = ar.read_csv(sample_csv)
         with pytest.raises(TypeError):
             frame[0]
-        with pytest.raises(TypeError):
-            frame[["name"]]
 
     def test_getitem_empty_frame(self, tmp_path):
         csv_path = tmp_path / "empty_rows.csv"

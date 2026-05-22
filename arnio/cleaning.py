@@ -10,6 +10,10 @@ import unicodedata
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
+import numpy as np
+import pandas as pd
+from pandas.api.types import is_scalar
+
 from ._core import (
     _cast_types,
     _clip_numeric,
@@ -1471,6 +1475,23 @@ def drop_columns_matching(frame, pattern):
     return from_pandas(result) if is_arframe else result
 
 
+def _is_null_mapping_key(value):
+    """
+    Return True when a mapping key represents a scalar null value.
+
+    Prevents ambiguous truth-value evaluation for tuple/list/array-like
+    objects when using pandas.isna().
+    """
+    if value is None:
+        return True
+
+    # Avoid calling pd.isna on tuple/list/array-like values
+    if not is_scalar(value):
+        return False
+
+    return bool(pd.isna(value))
+
+
 def replace_values(frame, mapping, column=None):
     """Replace values based on a mapping dict.
 
@@ -1531,12 +1552,22 @@ def replace_values(frame, mapping, column=None):
     normalized_mapping = {}
 
     for k, v in mapping.items():
-        # detect null-like keys (None, NaN, pd.NA)
-        if k is None or pd.isna(k):
+        # Handle scalar null-like keys safely without evaluating
+        # tuple/list/array-like objects in boolean context.
+        if _is_null_mapping_key(k):
             null_key_present = True
             null_replacement = v
-        else:
+        # Exclude tuple/list/ndarray/series/index keys which pandas.replace
+        # does not support and can raise confusing errors (e.g. operand
+        # length mismatch). Treat strings and true scalars as valid keys.
+        elif is_scalar(k) and not isinstance(
+            k, (tuple, list, np.ndarray, pd.Series, pd.Index)
+        ):
             normalized_mapping[k] = v
+        else:
+            # pandas replace does not support non-scalar mapping keys like tuples
+            # and lists. Ignore those keys rather than raising a user-facing error.
+            continue
 
     if column:
         s = df[column]
