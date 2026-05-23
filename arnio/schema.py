@@ -1845,13 +1845,18 @@ def _validate_column(
                 )
         elif field_def.semantic == "json":
             import json
+
             invalid_json_values = []
             for index, value in non_null.items():
                 value_str = str(value)
                 try:
                     parsed_val = json.loads(value_str)
-                    if not field_def.allow_primitives and not isinstance(parsed_val, (dict, list)):
-                        raise ValueError("JSON primitives are not allowed (must be an object or array)")
+                    if not field_def.allow_primitives and not isinstance(
+                        parsed_val, (dict, list)
+                    ):
+                        raise ValueError(
+                            "JSON primitives are not allowed (must be an object or array)"
+                        )
                 except Exception as e:
                     invalid_json_values.append((index, value, str(e)))
 
@@ -1868,6 +1873,7 @@ def _validate_column(
                 )
         elif field_def.semantic and field_def.semantic.startswith("ip_address:"):
             import ipaddress
+
             version = field_def.semantic.split(":")[1]
             version_str = "IP" if version == "both" else version.upper()
             invalid_ip_values = []

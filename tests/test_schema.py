@@ -2602,7 +2602,10 @@ def test_ipaddress_validation_ipv4(tmp_path):
     assert result.issues[0].row_index == 3
     assert result.issues[1].row_index == 4
     assert all(i.rule == "ip_address" for i in result.issues)
-    assert "ipv4" in result.issues[0].message.lower() or "ip" in result.issues[0].message.lower()
+    assert (
+        "ipv4" in result.issues[0].message.lower()
+        or "ip" in result.issues[0].message.lower()
+    )
 
 
 def test_ipaddress_validation_ipv6(tmp_path):
@@ -2661,7 +2664,7 @@ def test_json_validator_structured_objects():
 
 
 def test_json_validator_rejects_malformed_json():
-    df = pd.DataFrame({"json_col": ['{"a": 1,', '[1, 2,', 'invalid_json']})
+    df = pd.DataFrame({"json_col": ['{"a": 1,', "[1, 2,", "invalid_json"]})
     frame = ar.from_pandas(df)
     schema = ar.Schema({"json_col": ar.JSON(nullable=False)})
     result = schema.validate(frame)
@@ -2675,7 +2678,7 @@ def test_json_validator_rejects_malformed_json():
 
 
 def test_json_validator_rejects_primitives_by_default():
-    df = pd.DataFrame({"json_col": ['123', '"some_string"', 'true', 'null']})
+    df = pd.DataFrame({"json_col": ["123", '"some_string"', "true", "null"]})
     frame = ar.from_pandas(df)
     schema = ar.Schema({"json_col": ar.JSON(allow_primitives=False, nullable=False)})
     result = schema.validate(frame)
@@ -2687,7 +2690,7 @@ def test_json_validator_rejects_primitives_by_default():
 
 
 def test_json_validator_allows_primitives_when_enabled():
-    df = pd.DataFrame({"json_col": ['123', '"some_string"', 'true', 'null']})
+    df = pd.DataFrame({"json_col": ["123", '"some_string"', "true", "null"]})
     frame = ar.from_pandas(df)
     schema = ar.Schema({"json_col": ar.JSON(allow_primitives=True, nullable=False)})
     result = schema.validate(frame)
@@ -2725,4 +2728,3 @@ def test_schema_json_roundtrip_with_ip_and_json_validators():
 
     restored = ar.Schema.from_json(schema.to_json())
     assert restored == schema
-

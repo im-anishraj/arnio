@@ -83,6 +83,7 @@ from .quality import (
     suggest_cleaning,
 )
 from .schema import (
+    JSON,
     URL,
     Bool,
     CountryCode,
@@ -95,7 +96,6 @@ from .schema import (
     Float64,
     Int64,
     IPAddress,
-    JSON,
     PhoneNumber,
     Regex,
     Schema,
