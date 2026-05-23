@@ -1,7 +1,7 @@
 """Tests for _is_safely_convertible_to_dtype helper in arnio.schema."""
 
-import pytest
 import pandas as pd
+
 from arnio.schema import _is_safely_convertible_to_dtype
 
 
@@ -26,10 +26,16 @@ class TestIsSafelyConvertible:
         result = _is_safely_convertible_to_dtype(series, "int64", "uuid_col")
         assert result is False
 
-    def test_returns_false_for_zip_code_to_int(self):
-        """Returns False for zip code column strings to int."""
+    def test_returns_true_for_numeric_zip_code_to_int(self):
+        """Returns True for plain numeric zip code strings (without leading zero) to int."""
         series = pd.Series(["10001", "90210", "90211"])
         result = _is_safely_convertible_to_dtype(series, "int64", "zip")
+        assert result is True
+
+    def test_returns_false_for_leading_zero_id_to_int(self):
+        """Returns False for id/user_id columns with leading-zero string numbers to int."""
+        series = pd.Series(["00123", "00456"])
+        result = _is_safely_convertible_to_dtype(series, "int64", "user_id")
         assert result is False
 
     def test_returns_true_for_clean_int_strings_with_id_suffix(self):
