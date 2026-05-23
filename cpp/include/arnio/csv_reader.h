@@ -79,7 +79,8 @@ class CsvChunkReader {
 
     void resolve_col_indices();
     bool read_one_data_row(std::vector<std::string>& fields_out);
-    Frame build_frame(const std::vector<std::vector<std::string>>& raw_data) const;
+    Frame build_frame(const std::vector<std::vector<std::string>>& raw_data,
+                      bool validate_locked_schema = false) const;
 };
 
 }  // namespace arnio
