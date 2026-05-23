@@ -3192,7 +3192,7 @@ class TestSelectColumns:
         with pytest.raises(ValueError):
             ar.select_columns(frame, ["id", "id"])
 
-# ── combine_columns null semantics ────────────────────────────────────────────
+    # ── combine_columns null semantics ────────────────────────────────────────────
 
     def test_combine_columns_no_nulls():
         """Rows with no nulls join all values with separator."""
