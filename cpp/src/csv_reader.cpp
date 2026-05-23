@@ -718,14 +718,48 @@ bool CsvChunkReader::read_one_data_row(std::vector<std::string>& fields_out) {
     return false;
 }
 
-Frame CsvChunkReader::build_frame(const std::vector<std::vector<std::string>>& raw_data) const {
+Frame CsvChunkReader::build_frame(const std::vector<std::vector<std::string>>& raw_data,
+                                  bool validate_locked_schema) const {
     std::vector<Column> columns;
     columns.reserve(col_indices_.size());
     for (size_t ci : col_indices_) {
         Column col(header_[ci], col_types_[ci]);
         for (const auto& row : raw_data) {
             if (ci < row.size()) {
-                col.push_back(parser_.parse_value(row[ci], col_types_[ci]));
+                const std::string& raw_value = row[ci];
+                CellValue parsed = parser_.parse_value(raw_value, col_types_[ci]);
+
+                // Fail-fast validation for locked schema in subsequent chunks
+                if (validate_locked_schema && std::holds_alternative<std::monostate>(parsed)) {
+                    // Check if this is a genuine null or a type mismatch
+                    if (!parser_.is_null_sentinel(raw_value)) {
+                        // Type mismatch detected
+                        std::string type_name;
+                        switch (col_types_[ci]) {
+                            case DType::INT64:
+                                type_name = "int64";
+                                break;
+                            case DType::FLOAT64:
+                                type_name = "float64";
+                                break;
+                            case DType::BOOL:
+                                type_name = "bool";
+                                break;
+                            case DType::STRING:
+                                type_name = "string";
+                                break;
+                            default:
+                                type_name = "unknown";
+                        }
+                        throw std::runtime_error(
+                            "Type mismatch in chunk for column '" + header_[ci] +
+                            "': expected " + type_name + " but found incompatible value '" +
+                            raw_value +
+                            "'. Please specify 'dtypes' explicitly or use a larger 'sample_size'.");
+                    }
+                }
+
+                col.push_back(parsed);
             } else {
                 col.push_null();
             }
@@ -840,7 +874,7 @@ std::optional<Frame> CsvChunkReader::next_chunk(size_t chunksize) {
     }
 
     rows_read_total_ += raw_data.size();
-    return build_frame(raw_data);
+    return build_frame(raw_data, schema_locked_);
 }
 
 void CsvChunkReader::close() {
