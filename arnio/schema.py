@@ -339,6 +339,10 @@ class Schema:
     rules: list[Callable[[pd.DataFrame], list[ValidationIssue]]] | None = None
 
     def __post_init__(self) -> None:
+        if not isinstance(self.fields, dict):
+            raise TypeError(
+                f"Schema 'fields' must be a mapping (like a dict), got {type(self.fields).__name__}"
+            )
         for name, field_def in self.fields.items():
             if not isinstance(field_def, Field):
                 raise TypeError(
