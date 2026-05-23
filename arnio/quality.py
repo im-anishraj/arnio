@@ -278,7 +278,7 @@ class DataQualityReport:
             indent=indent,
         )
 
-    def to_markdown(self) -> str:
+    def to_markdown(self, *, max_issues: int | None = None) -> str:
         """Return a GitHub-friendly Markdown report."""
 
         lines: list[str] = []
@@ -331,7 +331,12 @@ class DataQualityReport:
             lines.append("## Suggested Cleaning Steps")
             lines.append("")
 
-            for step in self.suggestions:
+            suggestions = (
+                self.suggestions[:max_issues]
+                if max_issues is not None
+                else self.suggestions
+            )
+            for step in suggestions:
                 kwargs_str = json.dumps(step[1], sort_keys=True, default=str)
                 conf_score = getattr(step, "confidence_score", None)
                 conf_reason = getattr(step, "confidence_reason", None)
