@@ -3191,3 +3191,37 @@ class TestSelectColumns:
 
         with pytest.raises(ValueError):
             ar.select_columns(frame, ["id", "id"])
+
+    # ── combine_columns null semantics ────────────────────────────────────────────
+
+    def test_combine_columns_no_nulls(self):
+        """Rows with no nulls join all values with separator."""
+        import pandas as pd
+
+        import arnio as ar
+
+        df = pd.DataFrame({"first": ["Alice"], "last": ["Smith"]})
+        result = ar.combine_columns(df, subset=["first", "last"], output_column="full")
+        assert result["full"][0] == "Alice Smith"
+
+    def test_combine_columns_partial_nulls(self):
+        """Partial nulls are skipped — only non-null values are joined."""
+        import pandas as pd
+
+        import arnio as ar
+
+        df = pd.DataFrame({"first": ["Alice"], "middle": [None], "last": ["Smith"]})
+        result = ar.combine_columns(
+            df, subset=["first", "middle", "last"], output_column="full"
+        )
+        assert result["full"][0] == "Alice Smith"
+
+    def test_combine_columns_all_nulls_returns_na(self):
+        """Rows where all values are null return pd.NA."""
+        import pandas as pd
+
+        import arnio as ar
+
+        df = pd.DataFrame({"first": [None], "last": [None]})
+        result = ar.combine_columns(df, subset=["first", "last"], output_column="full")
+        assert pd.isna(result["full"][0])
