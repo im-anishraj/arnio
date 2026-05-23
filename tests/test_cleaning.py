@@ -1017,6 +1017,16 @@ class TestStandardizeMissingTokens:
         with pytest.raises(ValueError, match="Unknown columns in subset"):
             ar.standardize_missing_tokens(frame, subset=["missing"])
 
+    def test_standardize_missing_tokens_pandas_subset_returns_dataframe(self):
+        df = pd.DataFrame({"name": ["N/A", "Alice"], "city": ["-", "Paris"]})
+
+        result = ar.standardize_missing_tokens(df, subset=["name"])
+
+        assert isinstance(result, pd.DataFrame)
+        assert pd.isna(result.loc[0, "name"])
+        assert result.loc[1, "name"] == "Alice"
+        assert result["city"].tolist() == ["-", "Paris"]
+
 
 class TestStripWhitespace:
     def test_strip(self, csv_with_whitespace):
@@ -2138,6 +2148,16 @@ class TestReplaceValues:
 
         assert list(df["col"]) == ["A", "missing", "C"]
 
+    def test_replace_values_pandas_dataframe_input_returns_dataframe(self):
+        df = pd.DataFrame({"status": ["active", "inactive"], "flag": ["ok", "ok"]})
+
+        result = ar.replace_values(df, {"inactive": "paused"}, column="status")
+
+        assert isinstance(result, pd.DataFrame)
+        assert result["status"].tolist() == ["active", "paused"]
+        assert result["flag"].tolist() == ["ok", "ok"]
+        assert df["status"].tolist() == ["active", "inactive"]
+
 
 class TestRoundNumericColumns:
     def test_round_subset_missing_column_raises_clear_error(self):
@@ -2276,6 +2296,16 @@ class TestRoundNumericColumns:
         with pytest.raises(TypeError, match="decimals must be an integer"):
             ar.round_numeric_columns(frame, decimals=True)
 
+    def test_round_numeric_columns_pandas_input_returns_dataframe(self):
+        df = pd.DataFrame({"a": [1.234, 5.678], "label": ["x", "y"]})
+
+        result = ar.round_numeric_columns(df, decimals=1)
+
+        assert isinstance(result, pd.DataFrame)
+        assert result["a"].tolist() == [1.2, 5.7]
+        assert result["label"].tolist() == ["x", "y"]
+        assert df["a"].tolist() == [1.234, 5.678]
+
 
 class TestCombineColumns:
     def test_combines_columns_with_separator(self):
@@ -2353,6 +2383,20 @@ class TestCombineColumns:
                 separator="-",
                 output_column="combined",
             )
+
+    def test_combine_columns_pandas_input_returns_dataframe(self):
+        df = pd.DataFrame({"first": ["Alice", "Bob"], "last": ["Smith", "Jones"]})
+
+        result = ar.combine_columns(
+            df,
+            subset=["first", "last"],
+            separator=" ",
+            output_column="full_name",
+        )
+
+        assert isinstance(result, pd.DataFrame)
+        assert result["full_name"].tolist() == ["Alice Smith", "Bob Jones"]
+        assert "full_name" not in df.columns
 
 
 class TestCombineColumnsNativeRegression:
