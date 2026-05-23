@@ -809,6 +809,16 @@ class TestDropEmptyColumns:
         assert result.shape[0] in {0, 2}
         assert ar.to_pandas(result).shape[1] == 0
 
+    def test_drop_empty_columns_preserves_schema_on_empty_frame(self):
+        df = pd.DataFrame(columns=["a", "b", "c"])
+        frame = ar.from_pandas(df)
+        
+        result = ar.drop_empty_columns(frame)
+        
+        assert result.columns == ["a", "b", "c"]
+        assert result.shape[0] == 0
+        assert result.shape[1] == 3
+
 
 class TestClipNumeric:
     def test_clip_numeric_lower_only(self):

@@ -486,6 +486,9 @@ def drop_empty_columns(frame: ArFrame) -> ArFrame:
     """
     from .convert import to_pandas
 
+    if frame.shape[0] == 0:
+        return frame
+
     df = to_pandas(frame)
     empty_columns: list[str] = []
     for column in df.columns:
