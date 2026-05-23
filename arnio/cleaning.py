@@ -1122,7 +1122,34 @@ def clean(
 
 
 def filter_rows(frame, column, op, value):
-    """Filter rows based on a column condition."""
+    """Filter rows based on a column condition.
+
+    Removes rows where the specified column's value does not match
+    the given operator-value comparison.
+
+    Parameters
+    ----------
+    frame : ArFrame | pd.DataFrame
+        The input frame to filter.
+    column : str
+        Name of the column to evaluate.
+    op : str
+        Comparison operator. One of {'==', '!=', '<', '<=', '>', '>='}.
+    value : object
+        Reference value to compare against.
+
+    Returns
+    -------
+    ArFrame | pd.DataFrame
+        Filtered frame with only matching rows.
+
+    Raises
+    ------
+    ValueError
+        If `op` is not a supported operator.
+    KeyError
+        If `column` does not exist in the frame.
+    """
 
     import pandas as pd
 
