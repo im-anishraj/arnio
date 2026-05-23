@@ -4,17 +4,17 @@ A technical reference guide to the public classes and functions within the **Arn
 
 ## Arnio API Reference Index
 
-| Category              | Components                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| :-------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Core Class**        | [**`ArFrame`**](#arframe) � Properties: [`shape`](#shape), [`columns`](#columns), [`dtypes`](#dtypes) � [`is_empty`](#is_empty) � Methods: [`memory_usage`](#memory_usage), [`preview`](#preview), [`select_columns`](#select_columns), [`select_dtypes`](#select_dtypes)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| **I/O**               | [`read_csv`](#read_csv) � [`scan_csv`](#scan_csv) � [`write_csv`](#write_csv) � [`sniff_delimiter`](#sniff_delimiter)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| **Cleaning**          | [`cast_types`](#cast_types) � [`clean`](#clean) � [`clip_numeric`](#clip_numeric) � [`combine_columns`](#combine_columns) � [`drop_columns`](#drop_columns) � [`drop_constant_columns`](#drop_constant_columns) � [`drop_duplicates`](#drop_duplicates) � [`drop_nulls`](#drop_nulls) � [`fill_nulls`](#fill_nulls) � [`filter_rows`](#filter_rows) � [`keep_rows_with_nulls`](#keep_rows_with_nulls) � [`normalize_case`](#normalize_case) � [`normalize_unicode`](#normalize_unicode) � [`rename_columns`](#rename_columns) � [`replace_values`](#replace_values) � [`round_numeric_columns`](#round_numeric_columns) � [`safe_divide_columns`](#safe_divide_columns) � [`strip_whitespace`](#strip_whitespace) � [`trim_column_names`](#trim_column_names) � [`validate_columns_exist`](#validate_columns_exist) |
-| **Conversion**        | [`from_pandas`](#from_pandas) � [`to_pandas`](#to_pandas)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| **Integration**       | [`ArnioPandasAccessor`](#arniopandasaccessor)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| **Pipeline**          | [`pipeline`](#pipeline) � [`register_step`](#register_step)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| **Data Quality**      | [`profile`](#profile) • [`suggest_cleaning`](#suggest_cleaning) • [`auto_clean`](#auto_clean) • [`check_quality_gates`](#check_quality_gates) • [`DataQualityReport`](#dataqualityreport) • [`ColumnProfile`](#columnprofile)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| **Schema Validation** | [`Schema`](#schema) • [`Field`](#field) • [`validate`](#validate) • [`ValidationResult`](#validationresult) • [`ValidationIssue`](#validationissue) • [`Int64`](#int64) • [`Float64`](#float64) • [`String`](#string) • [`Bool`](#bool) • [`Email`](#email) • [`URL`](#url) • [`CountryCode`](#countrycode) • [`DateTime`](#datetime)                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| **Custom Exceptions** | [`ArnioError`](#arnioerror) • [`CsvReadError`](#csvreaderror) • [`TypeCastError`](#typecasterror) • [`UnknownStepError`](#unknownsteperror)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+• Category              • Components                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        •
+• :-------------------- • :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- •
+• **Core Class**        • [**`ArFrame`**](#arframe) • Properties: [`shape`](#shape), [`columns`](#columns), [`dtypes`](#dtypes) • [`is_empty`](#is_empty) • Methods: [`memory_usage`](#memory_usage), [`preview`](#preview), [`select_columns`](#select_columns), [`select_dtypes`](#select_dtypes)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         •
+• **I/O**               • [`read_csv`](#read_csv) • [`scan_csv`](#scan_csv) • [`write_csv`](#write_csv) • [`sniff_delimiter`](#sniff_delimiter)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       •
+• **Cleaning**          • [`cast_types`](#cast_types) • [`clean`](#clean) • [`clip_numeric`](#clip_numeric) • [`combine_columns`](#combine_columns) • [`drop_columns`](#drop_columns) • [`drop_constant_columns`](#drop_constant_columns) • [`drop_duplicates`](#drop_duplicates) • [`drop_nulls`](#drop_nulls) • [`fill_nulls`](#fill_nulls) • [`filter_rows`](#filter_rows) • [`keep_rows_with_nulls`](#keep_rows_with_nulls) • [`normalize_case`](#normalize_case) • [`normalize_unicode`](#normalize_unicode) • [`rename_columns`](#rename_columns) • [`replace_values`](#replace_values) • [`round_numeric_columns`](#round_numeric_columns) • [`safe_divide_columns`](#safe_divide_columns) • [`strip_whitespace`](#strip_whitespace) • [`trim_column_names`](#trim_column_names) • [`validate_columns_exist`](#validate_columns_exist) •
+• **Conversion**        • [`from_pandas`](#from_pandas) • [`to_pandas`](#to_pandas)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         •
+• **Integration**       • [`ArnioPandasAccessor`](#arniopandasaccessor)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     •
+• **Pipeline**          • [`pipeline`](#pipeline) • [`register_step`](#register_step)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       •
+• **Data Quality**      • [`profile`](#profile) • [`suggest_cleaning`](#suggest_cleaning) • [`auto_clean`](#auto_clean) • [`check_quality_gates`](#check_quality_gates) • [`DataQualityReport`](#dataqualityreport) • [`ColumnProfile`](#columnprofile)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   •
+• **Schema Validation** • [`Schema`](#schema) • [`Field`](#field) • [`validate`](#validate) • [`ValidationResult`](#validationresult) • [`ValidationIssue`](#validationissue) • [`Int64`](#int64) • [`Float64`](#float64) • [`String`](#string) • [`Bool`](#bool) • [`Email`](#email) • [`URL`](#url) • [`CountryCode`](#countrycode) • [`DateTime`](#datetime)                                                                                                                                                                                                                                                                                                                                                                                                                                             •
+• **Custom Exceptions** • [`ArnioError`](#arnioerror) • [`CsvReadError`](#csvreaderror) • [`TypeCastError`](#typecasterror) • [`UnknownStepError`](#unknownsteperror)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       •
 
 ---
 
@@ -28,19 +28,19 @@ df = ar.read_csv("data.csv")
 
 ### ArFrame
 
-| Property                            | Return Type       |
-| :---------------------------------- | :---------------- |
-| <a name="columns"></a>**columns**   | `list[str]`       |
-| <a name="dtypes"></a>**dtypes**     | `dict[str, str]`  |
-| <a name="shape"></a>**shape**       | `tuple[int, int]` |
-| <a name="is_empty"></a>**is_empty** | `bool`            |
+• Property                            • Return Type       •
+• :---------------------------------- • :---------------- •
+• <a name="columns"></a>**columns**   • `list[str]`       •
+• <a name="dtypes"></a>**dtypes**     • `dict[str, str]`  •
+• <a name="shape"></a>**shape**       • `tuple[int, int]` •
+• <a name="is_empty"></a>**is_empty** • `bool`            •
 
-| Method                                            | Return Type |
-| :------------------------------------------------ | :---------- |
-| <a name="memory_usage"></a>**memory_usage()**     | `int`       |
-| <a name="preview"></a>**preview()**               | `str`       |
-| <a name="select_columns"></a>**select_columns()** | `ArFrame`   |
-| <a name="select_dtypes"></a>**select_dtypes()**   | `ArFrame`   |
+• Method                                            • Return Type •
+• :------------------------------------------------ • :---------- •
+• <a name="memory_usage"></a>**memory_usage()**     • `int`       •
+• <a name="preview"></a>**preview()**               • `str`       •
+• <a name="select_columns"></a>**select_columns()** • `ArFrame`   •
+• <a name="select_dtypes"></a>**select_dtypes()**   • `ArFrame`   •
 
 ```python
 print(f"Column Names: {df.columns}")
@@ -80,21 +80,21 @@ ar.write_csv(frame, "output.csv")
 
 #### Parameters
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `frame` | `ArFrame` | required | The data frame to write |
-| `path` | `str \| os.PathLike[str]` | required | Destination file path. Supports `.csv`, `.txt`, `.tsv` |
-| `delimiter` | `str` | `","` | Single character field separator |
-| `write_header` | `bool` | `True` | Whether to write the column header row |
-| `line_terminator` | `str` | `"\n"` | Line terminator between rows |
+• Parameter • Type • Default • Description •
+•-----------•------•---------•-------------•
+• `frame` • `ArFrame` • required • The data frame to write •
+• `path` • `str \• os.PathLike[str]` • required • Destination file path. Supports `.csv`, `.txt`, `.tsv` •
+• `delimiter` • `str` • `","` • Single character field separator •
+• `write_header` • `bool` • `True` • Whether to write the column header row •
+• `line_terminator` • `str` • `"\n"` • Line terminator between rows •
 
 #### Raises
 
-| Error | When |
-|-------|------|
-| `ValueError` | File extension is not `.csv`, `.txt`, or `.tsv` |
-| `ValueError` | `delimiter` is not exactly one character |
-| `RuntimeError` | File cannot be opened or written |
+• Error • When •
+•-------•------•
+• `ValueError` • File extension is not `.csv`, `.txt`, or `.tsv` •
+• `ValueError` • `delimiter` is not exactly one character •
+• `RuntimeError` • File cannot be opened or written •
 
 #### Examples
 
@@ -122,25 +122,25 @@ delimiter = ar.sniff_delimiter("data.csv")
 
 #### Parameters
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `path` | `str \| os.PathLike[str]` | required | Path to the CSV file |
-| `encoding` | `str` | `"utf-8"` | File encoding |
-| `sample_size` | `int` | `2048` | Number of bytes to sample from the start of the file for sniffing |
+• Parameter • Type • Default • Description •
+•-----------•------•---------•-------------•
+• `path` • `str \• os.PathLike[str]` • required • Path to the CSV file •
+• `encoding` • `str` • `"utf-8"` • File encoding •
+• `sample_size` • `int` • `2048` • Number of bytes to sample from the start of the file for sniffing •
 
 #### Returns
 
 `str`
-The detected delimiter (one of `","`, `";"`, `"\t"`, `"|"`).
+The detected delimiter (one of `","`, `";"`, `"\t"`, `"•"`).
 
 #### Raises
 
-| Error | When |
-|-------|------|
-| `TypeError` | `encoding` is not a string, or `sample_size` is not an integer |
-| `ValueError` | `sample_size` is <= 0, the encoding is unknown, or the delimiter is ambiguous / tied |
-| `CsvReadError` | The file is empty, or contains binary data (NUL bytes) |
-| `FileNotFoundError` | The file does not exist |
+• Error • When •
+•-------•------•
+• `TypeError` • `encoding` is not a string, or `sample_size` is not an integer •
+• `ValueError` • `sample_size` is <= 0, the encoding is unknown, or the delimiter is ambiguous / tied •
+• `CsvReadError` • The file is empty, or contains binary data (NUL bytes) •
+• `FileNotFoundError` • The file does not exist •
 
 #### Examples
 
@@ -435,7 +435,7 @@ print(result.to_markdown())
 Summary of structural data quality metrics.
 
 #### Methods:
-* **`to_html(file_path: str | None = None) -> str`**: Generates a self-contained, offline-friendly, beautiful HTML dashboard report of your dataset's metrics, columns, and cleaning suggestions. Dynamically escapes all data values to prevent XSS. If `file_path` is provided, writes the HTML output to a file.
+* **`to_html(file_path: str • None = None) -> str`**: Generates a self-contained, offline-friendly, beautiful HTML dashboard report of your dataset's metrics, columns, and cleaning suggestions. Dynamically escapes all data values to prevent XSS. If `file_path` is provided, writes the HTML output to a file.
 * **`to_markdown() -> str`**: Returns a GitHub-friendly markdown representation of the report.
 * **`summary() -> dict`**: Returns a high-signal dictionary representation of the report metrics.
 
@@ -491,16 +491,16 @@ print(result.issues[0].row_index)  # 2
 
 Each helper maps to a specific data type rule.
 
-| Function                                  | Description                                     |
-| :---------------------------------------- | :---------------------------------------------- |
-| <a name="int64"></a>**Int64**             | Validates whole numbers.                        |
-| <a name="float64"></a>**Float64**         | Validates decimal numbers.                      |
-| <a name="string"></a>**String**           | Validates text.                                 |
-| <a name="bool"></a>**Bool**               | Validates True/False boolean values.            |
-| <a name="email"></a>**Email**             | Specialized String validator for email formats. |
-| <a name="url"></a>**URL**                 | Specialized String validator for web links.     |
-| <a name="countrycode"></a>**CountryCode** | Validates uppercase ISO alpha-2 country-code.   |
-| <a name="datetime"></a>**DateTime**       | Validates string timestamps.                    |
+• Function                                  • Description                                     •
+• :---------------------------------------- • :---------------------------------------------- •
+• <a name="int64"></a>**Int64**             • Validates whole numbers.                        •
+• <a name="float64"></a>**Float64**         • Validates decimal numbers.                      •
+• <a name="string"></a>**String**           • Validates text.                                 •
+• <a name="bool"></a>**Bool**               • Validates True/False boolean values.            •
+• <a name="email"></a>**Email**             • Specialized String validator for email formats. •
+• <a name="url"></a>**URL**                 • Specialized String validator for web links.     •
+• <a name="countrycode"></a>**CountryCode** • Validates uppercase ISO alpha-2 country-code.   •
+• <a name="datetime"></a>**DateTime**       • Validates string timestamps.                    •
 
 ---
 
@@ -517,11 +517,11 @@ result = ar.validate(df, user_schema)
 
 ### Custom Exceptions
 
-| Error Name                                                               | Meaning                                                 |
-| :----------------------------------------------------------------------- | :------------------------------------------------------ |
-| <a name="arnioerror"></a>[**ArnioError**](#arnioerror)                   | Base exception for all Arnio errors.                    |
-| <a name="csvreaderror"></a>[**CsvReadError**](#csvreaderror)             | Triggered when a CSV file cannot be read.               |
-| <a name="typecasterror"></a>[**TypeCastError**](#typecasterror)          | Raised when cast_types encounters an incompatible type. |
-| <a name="unknownsteperror"></a>[**UnknownStepError**](#unknownsteperror) | Triggered when a pipeline step name is not registered   |
+• Error Name                                                               • Meaning                                                 •
+• :----------------------------------------------------------------------- • :------------------------------------------------------ •
+• <a name="arnioerror"></a>[**ArnioError**](#arnioerror)                   • Base exception for all Arnio errors.                    •
+• <a name="csvreaderror"></a>[**CsvReadError**](#csvreaderror)             • Triggered when a CSV file cannot be read.               •
+• <a name="typecasterror"></a>[**TypeCastError**](#typecasterror)          • Raised when cast_types encounters an incompatible type. •
+• <a name="unknownsteperror"></a>[**UnknownStepError**](#unknownsteperror) • Triggered when a pipeline step name is not registered   •
 
 ---
