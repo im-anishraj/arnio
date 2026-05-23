@@ -142,3 +142,126 @@ class TestReadCsvChunkedParity:
             _chunked_concat(str(path), chunksize=1, mode="strict")
         with pytest.raises(CsvReadError, match="expected 2"):
             ar.read_csv(str(path), mode="strict")
+
+class TestReadCsvChunkedParamParity:
+    """Issue #1256 — encoding_errors, dtype, skiprows/skip_rows parity with read_csv."""
+
+    def test_encoding_errors_replace(self, tmp_path):
+        """encoding_errors='replace' substitutes bad bytes instead of crashing."""
+        path = tmp_path / "bad_encoding.csv"
+        # Write a CSV with a valid header and one row containing an invalid UTF-8 byte
+        path.write_bytes(b"name,score\nAlice\xff,90\nBob,85\n")
+        chunks = list(ar.read_csv_chunked(str(path), encoding_errors="replace"))
+        df = pd.concat([ar.to_pandas(c) for c in chunks], ignore_index=True)
+        assert df.shape[0] == 2
+        # The replacement character should appear somewhere in the bad row's value
+        assert "\ufffd" in df["name"].iloc[0]
+
+    def test_encoding_errors_ignore(self, tmp_path):
+        """encoding_errors='ignore' drops bad bytes silently."""
+        path = tmp_path / "bad_encoding.csv"
+        path.write_bytes(b"name,score\nAli\xffce,90\nBob,85\n")
+        chunks = list(ar.read_csv_chunked(str(path), encoding_errors="ignore"))
+        df = pd.concat([ar.to_pandas(c) for c in chunks], ignore_index=True)
+        assert df.shape[0] == 2
+        assert "\ufffd" not in df["name"].iloc[0]
+
+    def test_encoding_errors_strict_raises(self, tmp_path):
+        """encoding_errors='strict' (default) raises on bad bytes."""
+        path = tmp_path / "bad_encoding.csv"
+        path.write_bytes(b"name,score\nAlice\xff,90\n")
+        with pytest.raises(Exception):
+            list(ar.read_csv_chunked(str(path), encoding_errors="strict"))
+
+    def test_dtype_overrides_inference(self, tmp_path):
+        """dtype param forces a column to the requested type in every chunk."""
+        lines = ["id,age,score"]
+        for i in range(30):
+            lines.append(f"{i},{20 + i},9{i % 10}.5")
+        path = tmp_path / "dtype_test.csv"
+        path.write_text("\n".join(lines))
+
+        chunks = list(
+            ar.read_csv_chunked(str(path), chunksize=10, dtype={"age": "string"})
+        )
+        for chunk in chunks:
+            df = ar.to_pandas(chunk)
+            # age should be string in every chunk, not int64
+            assert str(df["age"].dtype) in ("object", "string", "StringDtype")
+
+    def test_dtype_applied_consistently_across_chunks(self, tmp_path):
+        """dtype is applied the same way in every chunk, not just the first."""
+        lines = ["code,value"]
+        for i in range(50):
+            lines.append(f"C{i:03d},{i}")
+        path = tmp_path / "dtype_chunks.csv"
+        path.write_text("\n".join(lines))
+
+        chunks = list(
+            ar.read_csv_chunked(str(path), chunksize=15, dtype={"value": "string"})
+        )
+        assert len(chunks) > 1
+        dtypes_per_chunk = [ar.to_pandas(c)["value"].dtype for c in chunks]
+        assert len(set(str(d) for d in dtypes_per_chunk)) == 1
+
+    def test_skiprows_new_name(self, tmp_path):
+        """skiprows (new name) skips the requested number of rows."""
+        lines = ["id,value"]
+        for i in range(20):
+            lines.append(f"{i},{i}")
+        path = tmp_path / "skiprows.csv"
+        path.write_text("\n".join(lines))
+
+        chunks = list(ar.read_csv_chunked(str(path), chunksize=5, skiprows=10))
+        df = pd.concat([ar.to_pandas(c) for c in chunks], ignore_index=True)
+        assert df.shape[0] == 10
+        assert df["id"].tolist() == list(range(10, 20))
+
+    def test_skip_rows_old_name_still_works_with_deprecation_warning(self, tmp_path):
+        """skip_rows still works but emits DeprecationWarning."""
+        lines = ["id,value"] + [f"{i},{i}" for i in range(10)]
+        path = tmp_path / "skip_rows_compat.csv"
+        path.write_text("\n".join(lines))
+
+        with pytest.warns(DeprecationWarning, match="skip_rows is deprecated"):
+            chunks = list(ar.read_csv_chunked(str(path), skip_rows=5))
+        df = pd.concat([ar.to_pandas(c) for c in chunks], ignore_index=True)
+        assert df.shape[0] == 5
+
+    def test_skip_rows_and_skiprows_together_raises(self, tmp_path):
+        """Passing both skip_rows and skiprows is an error."""
+        lines = ["id,value"] + [f"{i},{i}" for i in range(10)]
+        path = tmp_path / "both.csv"
+        path.write_text("\n".join(lines))
+
+        with pytest.raises(TypeError, match="Cannot pass both"):
+            list(ar.read_csv_chunked(str(path), skip_rows=2, skiprows=2))
+
+    def test_delimiter_auto_inferred_for_tsv(self, tmp_path):
+        """delimiter=None auto-infers tab for .tsv files, matching read_csv."""
+        path = tmp_path / "data.tsv"
+        path.write_text("name\tage\nAlice\t30\nBob\t25\n")
+
+        chunks = list(ar.read_csv_chunked(str(path)))
+        df = pd.concat([ar.to_pandas(c) for c in chunks], ignore_index=True)
+        assert list(df.columns) == ["name", "age"]
+        assert df.shape[0] == 2
+
+    def test_delimiter_auto_inferred_for_csv(self, tmp_path):
+        """delimiter=None defaults to comma for .csv files."""
+        path = tmp_path / "data.csv"
+        path.write_text("name,age\nAlice,30\nBob,25\n")
+
+        chunks = list(ar.read_csv_chunked(str(path)))
+        df = pd.concat([ar.to_pandas(c) for c in chunks], ignore_index=True)
+        assert list(df.columns) == ["name", "age"]
+
+    def test_explicit_delimiter_overrides_extension(self, tmp_path):
+        """Explicit delimiter always takes precedence over extension inference."""
+        path = tmp_path / "data.tsv"
+        path.write_text("name,age\nAlice,30\nBob,25\n")
+
+        chunks = list(ar.read_csv_chunked(str(path), delimiter=","))
+        df = pd.concat([ar.to_pandas(c) for c in chunks], ignore_index=True)
+        assert list(df.columns) == ["name", "age"]
+        
