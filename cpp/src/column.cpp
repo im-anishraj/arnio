@@ -96,7 +96,17 @@ struct PushbackVisitor {
             [&val](auto& vec) {
                 using T = std::decay_t<decltype(vec)>;
 
-                if constexpr (std::is_same_v<T, std::vector<std::string>>) vec.push_back(val);
+                if constexpr (std::is_same_v<T, std::vector<std::string>>)
+                    vec.push_back(val);
+
+                else if constexpr (std::is_same_v<T, std::vector<int64_t>>)
+                    vec.push_back(int64_t{});
+
+                else if constexpr (std::is_same_v<T, std::vector<double>>)
+                    vec.push_back(double{});
+
+                else if constexpr (std::is_same_v<T, std::vector<bool>>)
+                    vec.push_back(false);
             },
             data);
     }
