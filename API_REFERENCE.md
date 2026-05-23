@@ -324,9 +324,10 @@ df = ar.validate_columns_exist(df, ["age"])
 ### from_dict
 This adds support for creating an ArFrame from a Python dictionary.
 
-python
+```python
 data = {"name": ["Alice", "Bob"], "age": [25, 30]}
 frame = ar.from_dict(data)
+```
 
 ---
 ### from_pandas
