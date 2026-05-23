@@ -1120,6 +1120,40 @@ def test_report_to_markdown_basic(tmp_path):
     assert "| id | int64 | identifier |" in md
 
 
+def test_report_to_markdown_writes_to_stringio(sample_csv, tmp_path):
+    import io
+
+    frame = ar.read_csv(sample_csv)
+    report = ar.profile(frame)
+    buffer = io.StringIO()
+
+    result = report.to_markdown(output=buffer)
+
+    assert result is None
+    assert buffer.getvalue() == report.to_markdown()
+    assert "# Data Quality Report" in buffer.getvalue()
+
+
+def test_report_to_markdown_writes_to_text_file_handle(sample_csv, tmp_path):
+    frame = ar.read_csv(sample_csv)
+    report = ar.profile(frame)
+    out_path = tmp_path / "report.md"
+
+    with out_path.open("w", encoding="utf-8") as f:
+        result = report.to_markdown(output=f)
+
+    assert result is None
+    assert out_path.read_text(encoding="utf-8") == report.to_markdown()
+
+
+def test_report_to_markdown_rejects_invalid_output(sample_csv, tmp_path):
+    frame = ar.read_csv(sample_csv)
+    report = ar.profile(frame)
+
+    with pytest.raises(TypeError, match="output must be a writable text stream"):
+        report.to_markdown(output=object())
+
+
 def test_report_to_markdown_includes_uniqueness_metrics(tmp_path):
     path = tmp_path / "unique_metrics.csv"
 
@@ -1389,6 +1423,51 @@ def test_data_quality_report_to_html(tmp_path):
     report.to_html(file_path=str(out_path))
     assert out_path.exists()
     assert out_path.read_text(encoding="utf-8").startswith("<!DOCTYPE html>")
+
+
+def test_report_to_html_writes_to_stringio(sample_csv, tmp_path):
+    import io
+
+    frame = ar.read_csv(sample_csv)
+    report = ar.profile(frame)
+    buffer = io.StringIO()
+
+    result = report.to_html(output=buffer)
+
+    assert result is None
+    assert buffer.getvalue() == report.to_html()
+    assert "<html" in buffer.getvalue()
+
+
+def test_report_to_html_writes_to_text_file_handle(sample_csv, tmp_path):
+    frame = ar.read_csv(sample_csv)
+    report = ar.profile(frame)
+    out_path = tmp_path / "report.html"
+
+    with out_path.open("w", encoding="utf-8") as f:
+        result = report.to_html(output=f)
+
+    assert result is None
+    assert out_path.read_text(encoding="utf-8") == report.to_html()
+
+
+def test_report_to_html_rejects_invalid_output(sample_csv, tmp_path):
+    frame = ar.read_csv(sample_csv)
+    report = ar.profile(frame)
+
+    with pytest.raises(TypeError, match="output must be a writable text stream"):
+        report.to_html(output=object())
+
+
+def test_report_to_html_preserves_file_path_behavior(sample_csv, tmp_path):
+    frame = ar.read_csv(sample_csv)
+    report = ar.profile(frame)
+    out_path = tmp_path / "report.html"
+
+    result = report.to_html(file_path=str(out_path))
+
+    assert result == report.to_html()
+    assert out_path.read_text(encoding="utf-8") == result
 
 
 def test_data_quality_report_to_html_focused(tmp_path):
