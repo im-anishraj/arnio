@@ -876,11 +876,19 @@ def scan_csv(
         Number of rows to read for type inference. If None, defaults to 100 rows.
     has_header : bool, default True
         Whether the CSV file contains a header row.
-
         When False, synthetic column names are generated
         in the form ``col_0``, ``col_1``, etc., matching
         the behavior of ``read_csv(..., has_header=False)``.
 
+    encoding_errors : str, default "strict"
+        How encoding errors are handled. One of ``"strict"``, ``"replace"``,
+        or ``"ignore"``.
+        
+    on_bad_lines : str, default "error"
+        What to do when a malformed row is encountered during schema inference.
+        ``"error"`` raises :exc:`CsvReadError` immediately (default).
+        ``"warn"`` skips the bad row and emits a :class:`UserWarning`.
+        ``"skip"`` silently skips the bad row without any warning.
     Returns
     -------
     dict[str, str]
