@@ -458,6 +458,54 @@ def test_describe_all_string_columns(csv_with_whitespace):
         assert metric_keys == ["count", "nulls", "unique"]
 
 
+def test_astype_valid_single_type():
+    from arnio.convert import to_pandas
+    from arnio.frame import ArFrame
+
+    frame = ArFrame.from_records([{"a": 1, "b": 2}, {"a": 3, "b": 4}])
+    casted_frame = frame.astype(float)
+    df = to_pandas(casted_frame)
+
+    assert df["a"].dtype == "float64"
+    assert df["b"].dtype == "float64"
+
+
+def test_astype_dict_mapping():
+    # Test casting specific columns using a dictionary
+    from arnio.convert import to_pandas
+    from arnio.frame import ArFrame
+
+    frame = ArFrame.from_records(
+        [{"name": "Alice", "age": "25"}, {"name": "Bob", "age": "30"}]
+    )
+
+    # Cast 'age' column from string to int
+    casted_frame = frame.astype({"age": int})
+    df = to_pandas(casted_frame)
+
+    assert df["age"].dtype == "Int64"  # arnio uses Int64Dtype for integers
+
+
+def test_astype_invalid_raises_error():
+    # Test that invalid casting correctly raises clear errors
+    import pytest
+
+    from arnio.frame import ArFrame
+
+    frame = ArFrame.from_records([{"name": "Alice"}, {"name": "Bob"}])
+
+    # Trying to cast a text-string column to integer should raise a ValueError
+    with pytest.raises(
+        ValueError,
+        match="Value conversion error during astype|An error occurred during casting",
+    ):
+        frame.astype(int)
+
+    # Trying to pass None should raise a TypeError
+    with pytest.raises(TypeError, match="dtype cannot be None"):
+        frame.astype(None)
+
+
 # ── drop_columns ──────────────────────────────────────────────────────────────
 
 

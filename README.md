@@ -1789,6 +1789,21 @@ frame2 = ar.from_records(
 
 Missing keys in dict records are filled with `None`. Nested values raise `TypeError`. An empty list raises `ValueError`.
 
+## Type Casting
+
+You can cast columns to a different data type using the `.astype()` convenience wrapper:
+
+```python
+import arnio as ar
+
+# Assume 'frame' is an existing ArFrame
+# Cast the entire frame to a single type
+float_frame = frame.astype(float)
+
+# Cast specific columns using a dictionary mapping
+casted_frame = frame.astype({"age": int})
+```
+
 #### Windows build troubleshooting
 
 If `pip install -e ".[dev]"` fails on Windows, work through this checklist before retrying:
