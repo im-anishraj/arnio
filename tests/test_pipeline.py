@@ -150,6 +150,25 @@ class TestPipeline:
         assert list(df.columns) == ["value"]
         assert list(df["value"]) == [1, 2, 1]
 
+    def test_pipeline_drop_empty_columns(self, tmp_path):
+        csv_path = tmp_path / "pipeline_drop_empty_columns.csv"
+        csv_path.write_text(
+            'all_null,all_blank,value\n,"",1\n,"   ",2\n',
+            encoding="utf-8",
+        )
+        frame = ar.read_csv(csv_path)
+
+        result = ar.pipeline(
+            frame,
+            [
+                ("drop_empty_columns",),
+            ],
+        )
+        df = ar.to_pandas(result)
+
+        assert list(df.columns) == ["value"]
+        assert list(df["value"]) == [1, 2]
+
     def test_pipeline_trim_column_names(self):
         import pandas as pd
 
@@ -316,6 +335,39 @@ class TestPipeline:
 
         assert result.dtypes["years"] == "float64"
         assert "age" not in result.columns
+
+    def test_pipeline_shorthand_with_column_named_mapping_cast_types(self):
+        import pandas as pd
+
+        import arnio as ar
+
+        frame = ar.from_pandas(pd.DataFrame({"mapping": ["1", "2"]}))
+
+        result = ar.pipeline(
+            frame,
+            [
+                ("cast_types", {"mapping": "int64"}),
+            ],
+        )
+
+        assert result.dtypes["mapping"] == "int64"
+
+    def test_pipeline_shorthand_with_column_named_mapping_rename_columns(self):
+        import pandas as pd
+
+        import arnio as ar
+
+        frame = ar.from_pandas(pd.DataFrame({"mapping": [1, 2]}))
+
+        result = ar.pipeline(
+            frame,
+            [
+                ("rename_columns", {"mapping": "new_mapping_col"}),
+            ],
+        )
+
+        assert "new_mapping_col" in result.columns
+        assert "mapping" not in result.columns
 
     def test_pipeline_validate_columns_exist(self, sample_csv):
         frame = ar.read_csv(sample_csv)
@@ -1409,3 +1461,108 @@ def test_reset_steps_removes_overwritten_custom_steps():
                 ("temp_step",),
             ],
         )
+
+
+def test_pipeline_verbose_disabled_by_default(caplog):
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "name": ["A", "B"],
+            }
+        )
+    )
+
+    ar.pipeline(
+        frame,
+        [
+            ("drop_nulls",),
+        ],
+    )
+
+    assert len(caplog.records) == 0
+
+
+def test_pipeline_verbose_logs_builtin_step(caplog):
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "name": [" A ", " B "],
+            }
+        )
+    )
+
+    caplog.set_level("INFO", logger="arnio")
+
+    ar.pipeline(
+        frame,
+        [
+            ("strip_whitespace",),
+        ],
+        verbose=True,
+    )
+
+    assert any("strip_whitespace" in record.message for record in caplog.records)
+
+
+def custom_step(df):
+    return df
+
+
+def test_pipeline_verbose_logs_custom_step(caplog):
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "x": [1, 2],
+            }
+        )
+    )
+
+    ar.register_step(
+        "custom_step",
+        custom_step,
+        overwrite=True,
+    )
+
+    caplog.set_level("INFO", logger="arnio")
+
+    ar.pipeline(
+        frame,
+        [
+            ("custom_step",),
+        ],
+        verbose=True,
+    )
+
+    assert any("custom_step" in record.message for record in caplog.records)
+
+
+def drop_first_row(df):
+    return df.head(1)
+
+
+def test_pipeline_verbose_logs_row_change(caplog):
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "x": [1, 2, 3],
+            }
+        )
+    )
+
+    ar.register_step(
+        "drop_first_row",
+        drop_first_row,
+        overwrite=True,
+    )
+
+    caplog.set_level("INFO", logger="arnio")
+
+    ar.pipeline(
+        frame,
+        [
+            ("drop_first_row",),
+        ],
+        verbose=True,
+    )
+
+    assert any("rows: 3 -> 1" in record.message for record in caplog.records)

@@ -111,3 +111,49 @@ def test_arniocleaner_rejects_transform_with_missing_columns():
     cleaner.fit(train)
     with pytest.raises(ValueError, match="columns must match"):
         cleaner.transform(test)
+
+
+# --- Issue: ArnioCleaner row-dropping pipeline behavior ---
+# Tests added to cover drop_nulls and filter_rows changing row count
+# as required by the acceptance criteria
+
+
+def test_drop_nulls_changes_row_count_when_allowed():
+    df = pd.DataFrame({"name": ["Alice", "Bob", None], "age": [30, 25, 40]})
+    cleaner = ArnioCleaner(
+        steps=[("drop_nulls",)],
+        allow_row_count_change=True,
+    )
+    result = cleaner.fit_transform(df)
+    assert len(result) == 2
+    assert list(result["name"]) == ["Alice", "Bob"]
+
+
+def test_filter_rows_changes_row_count_when_allowed():
+    # filter_rows takes column, op, value as separate kwargs
+    df = pd.DataFrame({"score": [10, 50, 90], "label": ["low", "mid", "high"]})
+    cleaner = ArnioCleaner(
+        steps=[("filter_rows", {"column": "score", "op": ">", "value": 20})],
+        allow_row_count_change=True,
+    )
+    result = cleaner.fit_transform(df)
+    assert len(result) == 2
+    assert list(result["label"]) == ["mid", "high"]
+
+
+def test_drop_nulls_rejects_row_count_change_by_default():
+    # drop_nulls without allow_row_count_change=True must raise ValueError
+    df = pd.DataFrame({"name": ["Alice", None], "age": [30, 40]})
+    cleaner = ArnioCleaner(steps=[("drop_nulls",)])
+    with pytest.raises(ValueError, match="changed the row count"):
+        cleaner.fit_transform(df)
+
+
+def test_filter_rows_rejects_row_count_change_by_default():
+    # filter_rows without allow_row_count_change=True must raise ValueError
+    df = pd.DataFrame({"score": [10, 50, 90]})
+    cleaner = ArnioCleaner(
+        steps=[("filter_rows", {"column": "score", "op": ">", "value": 20})]
+    )
+    with pytest.raises(ValueError, match="changed the row count"):
+        cleaner.fit_transform(df)

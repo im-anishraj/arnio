@@ -905,6 +905,106 @@ def test_profile_null_heavy_column_not_marked_high_cardinality(tmp_path):
     assert "high_cardinality" not in report.columns["user_id"].warnings
 
 
+def test_profile_exclude_columns_default_behavior(sample_csv):
+    frame = ar.read_csv(sample_csv)
+
+    report = ar.profile(frame)
+
+    assert set(report.columns) == set(frame.columns)
+    assert report.column_count == len(frame.columns)
+
+
+def test_profile_exclude_columns_valid_exclusion(tmp_path):
+    path = tmp_path / "profile_exclude.csv"
+    path.write_text(
+        "id,status,raw_payload\n" "1,active,{a}\n" "2,inactive,{b}\n" "3,active,{c}\n",
+        encoding="utf-8",
+    )
+
+    frame = ar.read_csv(path)
+    report = ar.profile(frame, exclude_columns=["id", "raw_payload"])
+
+    assert list(report.columns) == ["status"]
+    assert report.column_count == 1
+    markdown = report.to_markdown()
+    html = report.to_html()
+
+    assert "| status |" in markdown
+    assert "| id |" not in markdown
+    assert "| raw_payload |" not in markdown
+    assert ">id<" not in html
+    assert ">raw_payload<" not in html
+
+
+def test_profile_exclude_columns_scopes_memory_usage(tmp_path):
+    path = tmp_path / "profile_memory_scope.csv"
+    large_values = ["x" * 1000 for _ in range(100)]
+    path.write_text(
+        "keep,drop\n" + "\n".join(f"{i},{large_values[i]}" for i in range(100)) + "\n",
+        encoding="utf-8",
+    )
+
+    frame = ar.read_csv(path)
+
+    full_report = ar.profile(frame)
+    scoped_report = ar.profile(frame, exclude_columns=["drop"])
+
+    assert scoped_report.memory_usage < full_report.memory_usage
+
+
+def test_profile_default_memory_usage_matches_frame_memory_usage(sample_csv):
+    frame = ar.read_csv(sample_csv)
+
+    report = ar.profile(frame)
+
+    assert report.memory_usage == frame.memory_usage()
+
+
+def test_profile_exclude_columns_rejects_missing_column(sample_csv):
+    frame = ar.read_csv(sample_csv)
+
+    with pytest.raises(KeyError, match="Missing columns for profile"):
+        ar.profile(frame, exclude_columns=["missing"])
+
+
+def test_profile_exclude_columns_rejects_bare_string(sample_csv):
+    frame = ar.read_csv(sample_csv)
+
+    with pytest.raises(TypeError, match="exclude_columns must be a sequence"):
+        ar.profile(frame, exclude_columns="name")
+
+
+def test_profile_exclude_columns_rejects_non_string_items(sample_csv):
+    frame = ar.read_csv(sample_csv)
+
+    with pytest.raises(TypeError, match="exclude_columns must contain only string"):
+        ar.profile(frame, exclude_columns=["name", 123])
+
+
+def test_profile_exclude_columns_scopes_report_metrics_and_suggestions(tmp_path):
+    path = tmp_path / "profile_scope.csv"
+    path.write_text(
+        "id,score\n" "1,10\n" "1,10\n" "2,20\n",
+        encoding="utf-8",
+    )
+
+    frame = ar.read_csv(path)
+    full_report = ar.profile(frame)
+    scoped_report = ar.profile(frame, exclude_columns=["id"])
+
+    assert full_report.column_count == 2
+    assert scoped_report.column_count == 1
+    assert list(scoped_report.columns) == ["score"]
+
+    assert full_report.duplicate_rows == 1
+    assert scoped_report.duplicate_rows == 1
+
+    assert all(
+        getattr(suggestion, "kwargs", {}).get("subset") != ["id"]
+        for suggestion in scoped_report.suggestions
+    )
+
+
 # ── string length statistics tests ───────────────────────────────────────────
 
 

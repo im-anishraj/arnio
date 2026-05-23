@@ -349,3 +349,228 @@ def test_cpp_frame_explicit_zero_rows_rejects_nonempty_first_column():
 
     with pytest.raises(ValueError, match="row count"):
         frame.add_column(column)
+
+
+def test_add_column_rejects_duplicate_name():
+    from arnio._arnio_cpp import Column, DType, Frame
+
+    frame = Frame()
+
+    c1 = Column("a", DType.INT64)
+    c1.push_back(1)
+    c1.push_back(2)
+
+    c2 = Column("a", DType.INT64)
+    c2.push_back(3)
+    c2.push_back(4)
+
+    frame.add_column(c1)
+
+    with pytest.raises(ValueError, match="already exists"):
+        frame.add_column(c2)
+
+
+# ArFrame.describe() Tests
+
+
+def test_describe_sample_metrics(sample_csv):
+    frame = ar.read_csv(sample_csv)
+    stats = frame.describe()
+
+    assert stats["age"]["count"] == 3.0
+    assert stats["age"]["nulls"] == 0.0
+    assert stats["age"]["mean"] == 30.0
+    assert stats["age"]["min"] == 25.0
+    assert stats["age"]["max"] == 35.0
+
+    assert stats["name"]["count"] == 3.0
+    assert stats["name"]["nulls"] == 0.0
+    assert stats["name"]["unique"] == 3.0
+    assert "mean" not in stats["name"]
+
+
+def test_describe_excludes_null_values(csv_with_nulls):
+    frame = ar.read_csv(csv_with_nulls)
+    stats = frame.describe()
+
+    assert stats["age"]["count"] == 3.0
+    assert stats["age"]["nulls"] == 1.0
+    assert stats["age"]["min"] == 25.0
+    assert stats["age"]["max"] == 30.0
+    assert stats["age"]["mean"] == pytest.approx(27.6666, rel=1e-3)
+
+    assert stats["name"]["count"] == 3.0
+    assert stats["name"]["nulls"] == 1.0
+    assert stats["name"]["unique"] == 3.0
+
+
+def test_describe_empty_frame_edge_case(tmp_path):
+    csv_path = tmp_path / "empty_input.csv"
+    csv_path.write_text("name,age\n")
+
+    frame = ar.read_csv(str(csv_path))
+    stats = frame.describe()
+
+    assert "name" in stats
+    assert "age" in stats
+
+    for col in frame.columns:
+        assert stats[col]["count"] == 0.0
+        assert stats[col]["nulls"] == 0.0
+
+        if "mean" in stats[col]:
+            assert stats[col]["mean"] == 0.0
+            assert stats[col]["min"] == 0.0
+            assert stats[col]["max"] == 0.0
+        elif "unique" in stats[col]:
+            assert stats[col]["unique"] == 0.0
+
+
+def test_describe_dictionary_subclass_repr(sample_csv):
+    frame = ar.read_csv(sample_csv)
+    stats = frame.describe()
+
+    assert stats["age"]["count"] == 3.0
+    assert "{\n" in repr(stats)
+
+
+def test_describe_all_numeric_columns(large_csv):
+    frame = ar.read_csv(large_csv)
+
+    numeric_frame = frame.select_dtypes(include=["int64", "float64"])
+    stats = numeric_frame.describe()
+
+    assert list(stats.keys()) == ["id", "value"]
+
+    for col in ["id", "value"]:
+        metric_keys = list(stats[col].keys())
+        assert metric_keys == ["count", "nulls", "mean", "min", "max"]
+
+
+def test_describe_all_string_columns(csv_with_whitespace):
+    frame = ar.read_csv(csv_with_whitespace)
+    stats = frame.describe()
+
+    assert list(stats.keys()) == ["name", "city"]
+
+    for col in ["name", "city"]:
+        metric_keys = list(stats[col].keys())
+        assert metric_keys == ["count", "nulls", "unique"]
+
+
+def test_astype_valid_single_type():
+    from arnio.convert import to_pandas
+    from arnio.frame import ArFrame
+
+    frame = ArFrame.from_records([{"a": 1, "b": 2}, {"a": 3, "b": 4}])
+    casted_frame = frame.astype(float)
+    df = to_pandas(casted_frame)
+
+    assert df["a"].dtype == "float64"
+    assert df["b"].dtype == "float64"
+
+
+def test_astype_dict_mapping():
+    # Test casting specific columns using a dictionary
+    from arnio.convert import to_pandas
+    from arnio.frame import ArFrame
+
+    frame = ArFrame.from_records(
+        [{"name": "Alice", "age": "25"}, {"name": "Bob", "age": "30"}]
+    )
+
+    # Cast 'age' column from string to int
+    casted_frame = frame.astype({"age": int})
+    df = to_pandas(casted_frame)
+
+    assert df["age"].dtype == "Int64"  # arnio uses Int64Dtype for integers
+
+
+def test_astype_invalid_raises_error():
+    # Test that invalid casting correctly raises clear errors
+    import pytest
+
+    from arnio.frame import ArFrame
+
+    frame = ArFrame.from_records([{"name": "Alice"}, {"name": "Bob"}])
+
+    # Trying to cast a text-string column to integer should raise a ValueError
+    with pytest.raises(
+        ValueError,
+        match="Value conversion error during astype|An error occurred during casting",
+    ):
+        frame.astype(int)
+
+    # Trying to pass None should raise a TypeError
+    with pytest.raises(TypeError, match="dtype cannot be None"):
+        frame.astype(None)
+
+
+# ── drop_columns ──────────────────────────────────────────────────────────────
+
+
+class TestDropColumns:
+    """Tests for ArFrame.drop_columns()."""
+
+    def test_drop_single_column(self):
+        df = pd.DataFrame({"a": [1, 2], "b": [3, 4], "c": [5, 6]})
+        frame = ar.from_pandas(df)
+        result = frame.drop_columns(["b"])
+        assert result.columns == ["a", "c"]
+        assert result.shape == (2, 2)
+
+    def test_drop_multiple_columns(self):
+        df = pd.DataFrame({"a": [1], "b": [2], "c": [3], "d": [4]})
+        frame = ar.from_pandas(df)
+        result = frame.drop_columns(["a", "c"])
+        assert result.columns == ["b", "d"]
+
+    def test_drop_preserves_column_order(self):
+        df = pd.DataFrame({"x": [1], "y": [2], "z": [3]})
+        frame = ar.from_pandas(df)
+        result = frame.drop_columns(["y"])
+        assert result.columns == ["x", "z"]
+
+    def test_drop_empty_list_returns_copy(self):
+        df = pd.DataFrame({"a": [1, 2], "b": [3, 4]})
+        frame = ar.from_pandas(df)
+        result = frame.drop_columns([])
+        assert result.columns == ["a", "b"]
+        assert result.shape == frame.shape
+
+    def test_drop_all_columns_returns_empty_frame(self):
+        df = pd.DataFrame({"a": [1], "b": [2]})
+        frame = ar.from_pandas(df)
+        result = frame.drop_columns(["a", "b"])
+        assert result.columns == []
+        assert result.shape == (1, 0)
+
+    def test_drop_duplicate_names_in_cols(self):
+        df = pd.DataFrame({"a": [1], "b": [2], "c": [3]})
+        frame = ar.from_pandas(df)
+        result = frame.drop_columns(["a", "a"])
+        assert result.columns == ["b", "c"]
+
+    def test_drop_unknown_column_raises_value_error(self):
+        df = pd.DataFrame({"a": [1], "b": [2]})
+        frame = ar.from_pandas(df)
+        with pytest.raises(ValueError, match="Unknown column"):
+            frame.drop_columns(["z"])
+
+    def test_drop_non_list_raises_type_error(self):
+        df = pd.DataFrame({"a": [1]})
+        frame = ar.from_pandas(df)
+        with pytest.raises(TypeError, match="cols must be a list"):
+            frame.drop_columns("a")
+
+    def test_drop_non_string_items_raises_type_error(self):
+        df = pd.DataFrame({"a": [1], "b": [2]})
+        frame = ar.from_pandas(df)
+        with pytest.raises(TypeError, match="strings"):
+            frame.drop_columns([1, 2])
+
+    def test_drop_does_not_mutate_original(self):
+        df = pd.DataFrame({"a": [1], "b": [2]})
+        frame = ar.from_pandas(df)
+        frame.drop_columns(["a"])
+        assert frame.columns == ["a", "b"]
