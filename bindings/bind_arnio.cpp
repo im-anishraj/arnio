@@ -406,4 +406,12 @@ PYBIND11_MODULE(_arnio_cpp, m) {
         },
         py::arg("frame"), py::arg("numerator"), py::arg("denominator"), py::arg("output_column"),
         py::arg("fill_value") = 0.0);
+
+    m.def(
+        "concat",
+        [](const std::vector<Frame>& frames) {
+            py::gil_scoped_release release;
+            return concat(frames);
+        },
+        py::arg("frames"), "Concatenate multiple Frames.");
 }

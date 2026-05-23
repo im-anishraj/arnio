@@ -54,4 +54,6 @@ class Frame {
     void rebuild_index();
 };
 
+Frame concat(const std::vector<Frame>& frames);
+
 }  // namespace arnio
