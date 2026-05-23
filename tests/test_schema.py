@@ -1280,6 +1280,68 @@ def test_language_code_validation_rejects_invalid_codes(tmp_path):
     assert all(issue.rule == "language_code" for issue in result.issues)
 
 
+def test_language_code_validation_accepts_extended_iso_codes(tmp_path):
+    path = tmp_path / "extended_languages.csv"
+    path.write_text("language\nzu\nxh\nvo\nwa\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"language": ar.LanguageCode(nullable=False)},
+    )
+
+    assert result.passed
+    assert result.issue_count == 0
+
+
+def test_language_code_validation_nullable_behavior(tmp_path):
+    path = tmp_path / "nullable_languages.csv"
+    path.write_text('language\nen\n""\nfr\n')
+
+    result_nullable = ar.validate(
+        ar.read_csv(path),
+        {"language": ar.LanguageCode(nullable=True)},
+    )
+
+    assert result_nullable.passed
+    assert result_nullable.issue_count == 0
+
+    result_non_nullable = ar.validate(
+        ar.read_csv(path),
+        {"language": ar.LanguageCode(nullable=False)},
+    )
+
+    assert not result_non_nullable.passed
+    assert result_non_nullable.issue_count == 1
+
+
+def test_language_code_validation_rejects_mixed_case_codes(tmp_path):
+    path = tmp_path / "mixed_case_languages.csv"
+    path.write_text("language\nEn\nHI\nFr\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"language": ar.LanguageCode(nullable=False)},
+    )
+
+    assert not result.passed
+    assert result.issue_count == 3
+
+
+def test_language_code_validation_rejects_non_string_values(tmp_path):
+    path = tmp_path / "numeric_languages.csv"
+    path.write_text("language\n123\n456\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"language": ar.LanguageCode(nullable=False)},
+    )
+
+    assert not result.passed
+    assert result.issue_count == 3
+    assert any(issue.rule == "dtype" for issue in result.issues)
+    assert sum(issue.rule == "language_code" for issue in result.issues) == 2
+
+
 def test_country_code_enforces_uniqueness(tmp_path):
     path = tmp_path / "duplicate_countries.csv"
     path.write_text("country\nIN\nUS\nIN\n")

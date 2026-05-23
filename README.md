@@ -1172,7 +1172,6 @@ schema = ar.Schema({
     # CurrencyCode validates 3-letter uppercase formats (e.g., USD, EUR, INR).
     "currency": ar.CurrencyCode(),
 
-   
     # LanguageCode validates lowercase ISO 639-1 language codes (e.g., en, hi, fr).
     "language": ar.LanguageCode(),
 
