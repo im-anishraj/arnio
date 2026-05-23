@@ -769,15 +769,20 @@ CsvParseResult CsvReader::read(const std::string& path, const std::string& on_ba
 
         raw_data.push_back(reusable_fields);
         ++row_count;
+        
+        // Intermediate Progress Signal
         if (config.progress_hook != nullptr && row_count > 0 && row_count % config.progress_interval_rows == 0) {
-            config.progress_hook(row_count, 0, std::nullopt, false);
+            config.progress_hook(row_count, (size_t)file.tellg(), std::nullopt, false);
         }
-    }
-    file.close();
-    if (config.progress_hook != nullptr) {
-        config.progress_hook(row_count, 0, std::nullopt, true);
-    }
+    } // while loop ends here
 
+    // Final Progress Signal (True means done!)
+    if (config.progress_hook != nullptr) {
+        config.progress_hook(row_count, (size_t)file.tellg(), std::nullopt, true);
+    }
+    
+    // Safely close the file at the very end
+    file.close();
     // If no header, generate column names
     if (!config.has_header && !raw_data.empty()) {
         for (size_t i = 0; i < raw_data[0].size(); ++i) {
@@ -1117,7 +1122,6 @@ std::optional<CsvParseResult> CsvChunkReader::next_chunk(size_t chunksize,
         size_t current_row = rows_read_total_ + raw_data.size();
         if (config.progress_hook != nullptr && current_row > 0 && current_row % config.progress_interval_rows == 0) {
             config.progress_hook(current_row, 0, std::nullopt, false);
-        
         }
     }
     

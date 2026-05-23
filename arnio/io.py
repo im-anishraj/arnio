@@ -593,8 +593,20 @@ def read_csv(
             raise TypeError("progress_interval_rows must be an integer")
         if progress_interval_rows <= 0:
             raise ValueError("progress_interval_rows must be a positive integer")
-        config.progress_hook = progress_hook
+            
+        def wrapper(rows: int, bytes_read: int, total_bytes: int, is_done: bool):
+            box = CSVProgress(
+                rows_read=rows,
+                bytes_read=bytes_read,
+                total_bytes=total_bytes,
+                done=is_done
+            )
+            progress_hook(box)
+            
+        config.progress_hook = wrapper
+        
         config.progress_interval_rows = progress_interval_rows
+        
     reader = _CsvReader(config)
 
     try:
@@ -637,6 +649,8 @@ def read_csv_chunked(
     null_values: list[str] | None = None,
     mode: str = "strict",
     on_bad_lines: str = "error",
+    progress_hook: Callable[[CSVProgress], None] | None = None,
+    progress_interval_rows: int = 10000,
 ) -> Iterator[ArFrame]:
     """Read a CSV file in chunks, yielding ArFrame objects.
 
@@ -748,6 +762,25 @@ def read_csv_chunked(
     if nrows is not None:
         config.nrows = _validate_nrows(nrows)
 
+    
+    if progress_hook is not None:
+        if isinstance(progress_interval_rows, bool) or not isinstance(progress_interval_rows, int):
+            raise TypeError("progress_interval_rows must be an integer")
+        if progress_interval_rows <= 0:
+            raise ValueError("progress_interval_rows must be a positive integer")
+            
+        def wrapper(rows: int, bytes_read: int, total_bytes: int, is_done: bool):
+            box = CSVProgress(
+                rows_read=rows,
+                bytes_read=bytes_read,
+                total_bytes=total_bytes,
+                done=is_done
+            )
+            progress_hook(box)
+            
+        config.progress_hook = wrapper
+        config.progress_interval_rows = progress_interval_rows
+
     reader = _CsvChunkReader(config)
     try:
         with _utf8_csv_path(path, encoding, delimiter=delimiter) as native_path:
@@ -755,6 +788,14 @@ def read_csv_chunked(
             while True:
                 chunk = reader.next_chunk(chunksize, on_bad_lines)
                 if chunk is None:
+                    if progress_hook is not None:
+                        final_box = CSVProgress(
+                            rows_read=0, 
+                            bytes_read=0, 
+                            total_bytes=0, 
+                            done=True
+                        )
+                        progress_hook(final_box)
                     break
                 cpp_frame, bad_rows = chunk
 
