@@ -498,17 +498,7 @@ class DataQualityReport:
             indent=indent,
         )
 
-        if output is None:
-            return json_out
-
-        # Must be a writable *text* stream (e.g., io.StringIO or an open file handle).
-        if not hasattr(output, "write"):
-            raise TypeError("output must be a writable text stream")
-
-        output.write(json_out)
-        return None
-
-    def to_markdown(self, output: TextIO | None = None) -> str | None:
+    def to_markdown(self, *, max_issues: int | None = None) -> str:
         """Return a GitHub-friendly Markdown report."""
         max_suggestions = self._validate_max_suggestions(max_suggestions)
 
@@ -589,36 +579,13 @@ class DataQualityReport:
             lines.append("## Suggested Cleaning Steps")
             lines.append("")
 
-            rendered_suggestions = self.suggestions
-            if max_suggestions is not None:
-                rendered_suggestions = self.suggestions[:max_suggestions]
-
-            for step in rendered_suggestions:
-                filtered_kwargs: dict[str, Any] = {}
-                for key, value in sorted(dict(step[1]).items()):
-                    if key in {"subset", "columns"}:
-                        if isinstance(value, Sequence) and not isinstance(value, str):
-                            filtered_kwargs[key] = [
-                                item for item in value if item not in exclude_columns
-                            ]
-                        elif isinstance(value, Set):
-                            filtered_kwargs[key] = sorted(
-                                item for item in value if item not in exclude_columns
-                            )
-                        else:
-                            filtered_kwargs[key] = value
-                    elif key == "cast_types" and isinstance(value, dict):
-                        filtered_kwargs[key] = {
-                            col_name: col_type
-                            for col_name, col_type in value.items()
-                            if col_name not in exclude_columns
-                        }
-                    elif isinstance(value, str) and value in exclude_columns:
-                        filtered_kwargs[key] = "[REDACTED]"
-                    else:
-                        filtered_kwargs[key] = value
-
-                kwargs_str = json.dumps(filtered_kwargs, sort_keys=True, default=str)
+            suggestions = (
+                self.suggestions[:max_issues]
+                if max_issues is not None
+                else self.suggestions
+            )
+            for step in suggestions:
+                kwargs_str = json.dumps(step[1], sort_keys=True, default=str)
                 conf_score = getattr(step, "confidence_score", None)
                 conf_reason = _redact_reason(getattr(step, "confidence_reason", None))
                 if conf_score is not None and conf_reason is not None:
