@@ -6,6 +6,62 @@ import pandas as pd
 import pytest
 
 import arnio as ar
+from arnio.schema import _is_safely_convertible_to_dtype
+
+
+@pytest.mark.parametrize(
+    ("series", "expected_dtype", "column_name"),
+    [
+        (pd.Series(["1", "-2", "3"], dtype="string"), "int64", "age"),
+        (pd.Series(["1.5", "-2", "3.25"], dtype="string"), "float64", "score"),
+        (pd.Series(["1", None, "3"], dtype="string"), "int64", "age"),
+    ],
+)
+def test_is_safely_convertible_to_dtype_accepts_numeric_strings(
+    series,
+    expected_dtype,
+    column_name,
+):
+    assert _is_safely_convertible_to_dtype(series, expected_dtype, column_name)
+
+
+@pytest.mark.parametrize(
+    ("series", "expected_dtype", "column_name"),
+    [
+        (pd.Series(["1.5", "2.0"], dtype="string"), "int64", "age"),
+        (pd.Series(["1", "abc"], dtype="string"), "float64", "score"),
+        (pd.Series([None, None], dtype="string"), "int64", "age"),
+        (
+            pd.Series([str(2**63)], dtype="string"),
+            "int64",
+            "age",
+        ),
+    ],
+)
+def test_is_safely_convertible_to_dtype_rejects_unsafe_numeric_strings(
+    series,
+    expected_dtype,
+    column_name,
+):
+    assert not _is_safely_convertible_to_dtype(series, expected_dtype, column_name)
+
+
+@pytest.mark.parametrize(
+    "column_name",
+    ["id", "user_id", "uuid", "zip", "zipcode", "zip_code"],
+)
+def test_is_safely_convertible_to_dtype_rejects_identifier_leading_zeroes(
+    column_name,
+):
+    series = pd.Series(["00123", "456"], dtype="string")
+
+    assert not _is_safely_convertible_to_dtype(series, "int64", column_name)
+
+
+def test_is_safely_convertible_to_dtype_allows_identifier_without_leading_zeroes():
+    series = pd.Series(["123", "456"], dtype="string")
+
+    assert _is_safely_convertible_to_dtype(series, "int64", "user_id")
 
 
 def test_dtype_validation_reports_safe_int_conversion_for_numeric_strings():
