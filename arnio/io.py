@@ -277,7 +277,10 @@ def _warn_bad_rows(bad_rows: list) -> None:
         stacklevel=3,
     )
 
-def _scan_collect_bad_rows(path: str, delimiter: str, num_cols: int | None) -> list[str]:
+
+def _scan_collect_bad_rows(
+    path: str, delimiter: str, num_cols: int | None
+) -> list[str]:
     """Parse CSV to find rows with wrong field count during scan_csv warn mode."""
     msgs = []
     with open(path, encoding="utf-8", errors="replace") as f:
@@ -984,9 +987,7 @@ def scan_csv(
             sample_rows=100 if sample_size is None else sample_size,
         ) as native_path:
             if on_bad_lines == "warn":
-                bad_msgs = _scan_collect_bad_rows(
-                    native_path, delimiter, num_cols=None
-                )
+                bad_msgs = _scan_collect_bad_rows(native_path, delimiter, num_cols=None)
                 schema = cast(dict[str, str], reader.scan_schema(native_path, "skip"))
                 if bad_msgs:
                     warnings.warn(
