@@ -332,15 +332,6 @@ df = ar.validate_columns_exist(df, ["age"])
 ### from_dict
 This adds support for creating an `ArFrame` from a Python dictionary.
 
-<<<<<<< HEAD
-```python
-def test_dict():
-    data = {"name": ["Alice", "Bob"], "age": [25, 30]}
-
-    frame = ar.from_dict(data)
-```
----
-=======
 ### from_dict
 This adds support for creating an `ArFrame` from a Python dictionary.
 
@@ -350,7 +341,6 @@ frame = ar.from_dict(data)
 ```
 ---
 
->>>>>>> 9a6e7e1 (All files updated.)
 ### from_pandas
 
 Converts a `pandas.DataFrame` into an Arnio `ArFrame`.
