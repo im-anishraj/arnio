@@ -157,6 +157,47 @@ class ArFrame:
 
         return from_pandas(df)
 
+    def astype(self, dtype):
+        """Cast ArFrame columns to a specified type.
+
+        Parameters
+        ----------
+        dtype : Any
+            The data type to cast to (e.g., str, int, float, or a dict of column names to types).
+
+        Returns
+        -------
+        ArFrame
+            A new ArFrame with the applied type changes.
+
+        Raises
+        ------
+        TypeError
+            If the input dtype is invalid or if conversion fails due to type mismatch.
+        ValueError
+            If invalid values are passed or column conversion fails.
+        """
+        from .convert import from_pandas, to_pandas
+
+        if dtype is None:
+            raise TypeError("dtype cannot be None")
+
+        try:
+            df = to_pandas(self)
+        except Exception as e:
+            raise RuntimeError(f"Failed to convert ArFrame to pandas for casting: {e}")
+
+        try:
+            df_casted = df.astype(dtype)
+        except TypeError as te:
+            raise TypeError(f"Invalid type conversion requested: {te}")
+        except ValueError as ve:
+            raise ValueError(f"Value conversion error during astype: {ve}")
+        except Exception as e:
+            raise ValueError(f"An error occurred during casting: {e}")
+
+        return from_pandas(df_casted)
+
     # --- Properties ---
 
     @property
