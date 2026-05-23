@@ -298,6 +298,58 @@ class TestPipeline:
                 "strip_whitespace",
             )
 
+    def test_register_deprecated_step_alias_records_alias_target(self):
+        pipeline_module._register_deprecated_step_alias(
+            "legacy_strip_whitespace",
+            "strip_whitespace",
+        )
+
+        assert (
+            pipeline_module._DEPRECATED_STEP_ALIASES["legacy_strip_whitespace"]
+            == "strip_whitespace"
+        )
+
+    def test_register_deprecated_step_alias_is_idempotent_for_same_target(self):
+        pipeline_module._register_deprecated_step_alias(
+            "legacy_strip_whitespace",
+            "strip_whitespace",
+        )
+
+        pipeline_module._register_deprecated_step_alias(
+            "legacy_strip_whitespace",
+            "strip_whitespace",
+        )
+
+        assert pipeline_module._DEPRECATED_STEP_ALIASES == {
+            "legacy_strip_whitespace": "strip_whitespace"
+        }
+
+    def test_register_deprecated_step_alias_rejects_different_target_reuse(self):
+        pipeline_module._register_deprecated_step_alias(
+            "legacy_cleanup",
+            "strip_whitespace",
+        )
+
+        with pytest.raises(ValueError, match="already points to 'strip_whitespace'"):
+            pipeline_module._register_deprecated_step_alias(
+                "legacy_cleanup",
+                "drop_nulls",
+            )
+
+    def test_resolve_step_name_warns_and_returns_canonical_step(self):
+        aliases = {"legacy_strip": "strip_whitespace"}
+
+        with pytest.warns(
+            DeprecationWarning,
+            match="legacy_strip.*strip_whitespace",
+        ):
+            resolved = pipeline_module._resolve_step_name("legacy_strip", aliases)
+
+        assert resolved == "strip_whitespace"
+
+    def test_resolve_step_name_returns_unknown_non_alias_unchanged(self):
+        assert pipeline_module._resolve_step_name("plain_step", {}) == "plain_step"
+
     def test_register_step_rejects_reserved_deprecated_alias_name(self):
         pipeline_module._register_deprecated_step_alias(
             "legacy_strip",
