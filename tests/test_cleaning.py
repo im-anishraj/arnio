@@ -3196,8 +3196,9 @@ class TestSelectColumns:
 
     def test_combine_columns_no_nulls():
         """Rows with no nulls join all values with separator."""
-        import arnio as ar
         import pandas as pd
+
+        import arnio as ar
 
         df = pd.DataFrame({"first": ["Alice"], "last": ["Smith"]})
         frame = ar.from_pandas(df)
@@ -3209,8 +3210,9 @@ class TestSelectColumns:
 
     def test_combine_columns_partial_nulls():
         """Partial nulls are skipped — only non-null values are joined."""
-        import arnio as ar
         import pandas as pd
+
+        import arnio as ar
 
         df = pd.DataFrame({"first": ["Alice"], "middle": [None], "last": ["Smith"]})
         frame = ar.from_pandas(df)
@@ -3222,8 +3224,9 @@ class TestSelectColumns:
 
     def test_combine_columns_all_nulls_returns_na():
         """Rows where all values are null return pd.NA."""
-        import arnio as ar
         import pandas as pd
+
+        import arnio as ar
 
         df = pd.DataFrame({"first": [None], "last": [None]})
         frame = ar.from_pandas(df)
