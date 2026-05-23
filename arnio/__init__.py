@@ -94,6 +94,8 @@ from .schema import (
     Field,
     Float64,
     Int64,
+    IPAddress,
+    JSON,
     PhoneNumber,
     Regex,
     Schema,
@@ -196,6 +198,8 @@ __all__ = [
     "URL",
     "PhoneNumber",
     "DateTime",
+    "IPAddress",
+    "JSON",
     # Exceptions
     "UnknownStepError",
     "ArnioError",

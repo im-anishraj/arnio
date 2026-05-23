@@ -2588,3 +2588,141 @@ def test_url_allowed_schemes_non_string_raises():
 def test_url_allowed_schemes_whitespace_string_raises():
     with pytest.raises(ValueError, match="non-empty strings"):
         ar.URL(allowed_schemes=["   "])
+
+
+def test_ipaddress_validation_ipv4(tmp_path):
+    path = tmp_path / "ip_ipv4.csv"
+    path.write_text("ip\n192.168.1.1\n10.0.0.254\n256.0.0.1\nhello\n")
+    frame = ar.read_csv(path)
+    schema = ar.Schema({"ip": ar.IPAddress(version="ipv4", nullable=False)})
+    result = schema.validate(frame)
+
+    assert not result.passed
+    assert result.issue_count == 2
+    assert result.issues[0].row_index == 3
+    assert result.issues[1].row_index == 4
+    assert all(i.rule == "ip_address" for i in result.issues)
+    assert "ipv4" in result.issues[0].message.lower() or "ip" in result.issues[0].message.lower()
+
+
+def test_ipaddress_validation_ipv6(tmp_path):
+    path = tmp_path / "ip_ipv6.csv"
+    path.write_text("ip\n2001:db8::\n::1\n192.168.1.1\nhello\n")
+    frame = ar.read_csv(path)
+    schema = ar.Schema({"ip": ar.IPAddress(version="ipv6", nullable=False)})
+    result = schema.validate(frame)
+
+    assert not result.passed
+    assert result.issue_count == 2
+    assert result.issues[0].row_index == 3
+    assert result.issues[1].row_index == 4
+
+
+def test_ipaddress_validation_both(tmp_path):
+    path = tmp_path / "ip_both.csv"
+    path.write_text("ip\n192.168.1.1\n2001:db8::\nhello\n")
+    frame = ar.read_csv(path)
+    schema = ar.Schema({"ip": ar.IPAddress(version="both", nullable=False)})
+    result = schema.validate(frame)
+
+    assert not result.passed
+    assert result.issue_count == 1
+    assert result.issues[0].row_index == 3
+
+
+def test_ipaddress_invalid_version_raises():
+    with pytest.raises(ValueError, match="version must be"):
+        ar.IPAddress(version="invalid")
+
+
+def test_ipaddress_nullable_handling(tmp_path):
+    path = tmp_path / "ip_null.csv"
+    path.write_text("ip,dummy\n192.168.1.1,1\n,2\n")
+    frame = ar.read_csv(path)
+
+    # nullable=True passes
+    result_ok = ar.validate(frame, {"ip": ar.IPAddress(nullable=True)})
+    assert result_ok.passed
+
+    # nullable=False fails
+    result_fail = ar.validate(frame, {"ip": ar.IPAddress(nullable=False)})
+    assert not result_fail.passed
+    assert result_fail.issues[0].rule == "nullable"
+
+
+def test_json_validator_structured_objects():
+    df = pd.DataFrame({"json_col": ['{"a": 1, "b": [2, 3]}', '[1, 2, "three"]']})
+    frame = ar.from_pandas(df)
+    schema = ar.Schema({"json_col": ar.JSON(allow_primitives=False, nullable=False)})
+    result = schema.validate(frame)
+
+    assert result.passed
+    assert result.issue_count == 0
+
+
+def test_json_validator_rejects_malformed_json():
+    df = pd.DataFrame({"json_col": ['{"a": 1,', '[1, 2,', 'invalid_json']})
+    frame = ar.from_pandas(df)
+    schema = ar.Schema({"json_col": ar.JSON(nullable=False)})
+    result = schema.validate(frame)
+
+    assert not result.passed
+    assert result.issue_count == 3
+    assert result.issues[0].row_index == 1
+    assert result.issues[1].row_index == 2
+    assert result.issues[2].row_index == 3
+    assert all(i.rule == "json" for i in result.issues)
+
+
+def test_json_validator_rejects_primitives_by_default():
+    df = pd.DataFrame({"json_col": ['123', '"some_string"', 'true', 'null']})
+    frame = ar.from_pandas(df)
+    schema = ar.Schema({"json_col": ar.JSON(allow_primitives=False, nullable=False)})
+    result = schema.validate(frame)
+
+    assert not result.passed
+    assert result.issue_count == 4
+    assert all(i.rule == "json" for i in result.issues)
+    assert all("primitives are not allowed" in i.message for i in result.issues)
+
+
+def test_json_validator_allows_primitives_when_enabled():
+    df = pd.DataFrame({"json_col": ['123', '"some_string"', 'true', 'null']})
+    frame = ar.from_pandas(df)
+    schema = ar.Schema({"json_col": ar.JSON(allow_primitives=True, nullable=False)})
+    result = schema.validate(frame)
+
+    assert result.passed
+    assert result.issue_count == 0
+
+
+def test_json_validator_invalid_argument_type():
+    with pytest.raises(TypeError, match="allow_primitives must be a boolean"):
+        ar.JSON(allow_primitives="not-a-bool")  # type: ignore[arg-type]
+
+
+def test_json_nullable_handling():
+    df = pd.DataFrame({"json_col": ['{"a": 1}', None]})
+    frame = ar.from_pandas(df)
+
+    # nullable=True passes
+    result_ok = ar.validate(frame, {"json_col": ar.JSON(nullable=True)})
+    assert result_ok.passed
+
+    # nullable=False fails
+    result_fail = ar.validate(frame, {"json_col": ar.JSON(nullable=False)})
+    assert not result_fail.passed
+    assert result_fail.issues[0].rule == "nullable"
+
+
+def test_schema_json_roundtrip_with_ip_and_json_validators():
+    schema = ar.Schema(
+        fields={
+            "ip": ar.IPAddress(version="ipv6", nullable=False),
+            "payload": ar.JSON(allow_primitives=True, nullable=True),
+        }
+    )
+
+    restored = ar.Schema.from_json(schema.to_json())
+    assert restored == schema
+
