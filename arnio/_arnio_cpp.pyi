@@ -6,6 +6,7 @@ from typing import Any, overload
 import numpy as np
 
 __all__ = [
+    "BadRow",
     "DType",
     "Column",
     "Frame",
@@ -25,6 +26,14 @@ __all__ = [
     "combine_columns",
     "strip_whitespace",
 ]
+
+class BadRow:
+    # File-global 1-based logical row number (excludes header).
+    row: int
+    # Expected number of fields for the row.
+    expected: int
+    # Number of fields actually parsed from the row.
+    actual: int
 
 class DType:
     STRING: DType
@@ -105,12 +114,16 @@ class CsvConfig:
 class CsvChunkReader:
     def __init__(self, config: CsvConfig | None = None) -> None: ...
     def open(self, path: str) -> None: ...
-    def next_chunk(self, chunk_size: int) -> Frame | None: ...
+    def next_chunk(
+        self, chunksize: int, on_bad_lines: str = "error"
+    ) -> tuple[Frame, list[BadRow]] | None: ...
     def close(self) -> None: ...
 
 class CsvReader:
     def __init__(self, config: CsvConfig | None = None) -> None: ...
-    def read(self, path: str) -> Frame: ...
+    def read(
+        self, path: str, on_bad_lines: str = "error"
+    ) -> tuple[Frame, list[BadRow]]: ...
     def scan_schema(self, path: str) -> Mapping[str, str]: ...
 
 class CsvWriteConfig:
