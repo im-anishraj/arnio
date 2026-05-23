@@ -3225,5 +3225,3 @@ class TestSelectColumns:
         df = pd.DataFrame({"first": [None], "last": [None]})
         result = ar.combine_columns(df, subset=["first", "last"], output_column="full")
         assert pd.isna(result["full"][0])
-        
-    # trigger ci re-run    
