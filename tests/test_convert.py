@@ -1004,6 +1004,51 @@ class TestToArrow:
         assert table.num_rows == 0
         assert table.num_columns == 1
 
+    def test_zero_column_empty_frame_preserves_empty_schema(self):
+        import pyarrow
+
+        frame = ar.from_pandas(pd.DataFrame(index=pd.RangeIndex(0)))
+        table = ar.to_arrow(frame)
+
+        assert table.schema == pyarrow.schema([])
+        assert table.num_columns == 0
+        assert table.num_rows == 0
+
+    def test_all_null_columns_preserve_schema_and_null_counts(self):
+        import pyarrow
+
+        df = pd.DataFrame(
+            {
+                "id": pd.Series([pd.NA, pd.NA, pd.NA], dtype=pd.Int64Dtype()),
+                "name": pd.Series([pd.NA, pd.NA, pd.NA], dtype="string"),
+                "active": pd.Series([pd.NA, pd.NA, pd.NA], dtype="boolean"),
+            }
+        )
+
+        table = ar.to_arrow(ar.from_pandas(df))
+
+        assert table.num_rows == 3
+        assert table.column_names == ["id", "name", "active"]
+        assert table.column("id").type == pyarrow.int64()
+        assert table.column("name").type == pyarrow.string()
+        assert table.column("active").type == pyarrow.bool_()
+        for column_name in table.column_names:
+            column = table.column(column_name)
+            assert column.null_count == 3
+            assert column.to_pylist() == [None, None, None]
+
+    def test_float_nan_values_are_distinct_from_arrow_nulls(self, tmp_path):
+        path = tmp_path / "nan_and_null.csv"
+        path.write_text("value,label\n1.5,valid\nnan,nan-value\n,missing\n")
+
+        table = ar.to_arrow(ar.read_csv(path))
+        values = table.column("value").to_pylist()
+
+        assert table.column("value").null_count == 1
+        assert values[0] == 1.5
+        assert np.isnan(values[1])
+        assert values[2] is None
+
     def test_invalid_frame_type(self):
         with pytest.raises(TypeError, match="to_arrow.*expects an ArFrame"):
             ar.to_arrow("not_a_frame")
