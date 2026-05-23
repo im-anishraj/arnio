@@ -639,6 +639,7 @@ class ArFrame:
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, ArFrame):
             return NotImplemented
+
         if (
             self.shape != other.shape
             or self.columns != other.columns
