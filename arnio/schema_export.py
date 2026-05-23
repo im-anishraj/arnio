@@ -51,6 +51,7 @@ def _emit_scalar(value: Any) -> str:
         needs_quoting = (
             not value
             or value.lower() in {"true", "false", "null", "yes", "no", "on", "off"}
+            or any(c in value for c in ("\n", "\r"))
             or value[0]
             in (
                 '"',
@@ -78,7 +79,7 @@ def _emit_scalar(value: Any) -> str:
         )
         if needs_quoting:
             # Use double-quote style; escape backslashes and double-quotes.
-            escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+            escaped = value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r")
             return f'"{escaped}"'
         return value
     raise TypeError(f"Unsupported scalar type: {type(value)!r}")
