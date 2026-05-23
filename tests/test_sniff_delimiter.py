@@ -54,7 +54,7 @@ class TestSniffDelimiter:
     def test_raises_value_error_for_ambiguous_delimiter(self, tmp_path):
         """sniff_delimiter raises ValueError when delimiter is ambiguous."""
         path = tmp_path / "ambiguous.csv"
-        path.write_text("a,b;c,d\ne,f;g,h\n")
+        path.write_text("a,b;c,d\ne,f;g,h\ni,j;k,l\nm,n;o,p\n")
         with pytest.raises(ValueError, match="multiple candidate delimiters"):
             sniff_delimiter(path)
 
