@@ -202,7 +202,9 @@ def to_pandas(frame: ArFrame, *, copy: bool = False) -> pd.DataFrame:
         raise TypeError("copy must be a bool")
 
     if not isinstance(frame, ArFrame):
-        raise TypeError(f"to_pandas() expects an ArFrame, got {type(frame).__name__}. Use arnio.from_pandas() first.")
+        raise TypeError(
+            f"to_pandas() expects an ArFrame, got {type(frame).__name__}. Use arnio.from_pandas() first."
+        )
 
     cpp_frame = frame._frame
     data = {}

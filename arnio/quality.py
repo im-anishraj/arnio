@@ -827,7 +827,9 @@ def profile(
     >>> report.summary()
     """
     if not isinstance(frame, ArFrame):
-        raise TypeError(f"profile() expects an ArFrame, got {type(frame).__name__}. Use arnio.from_pandas() first.")
+        raise TypeError(
+            f"profile() expects an ArFrame, got {type(frame).__name__}. Use arnio.from_pandas() first."
+        )
 
     if not isinstance(sample_size, int) or isinstance(sample_size, bool):
         raise TypeError("sample_size must be an integer")
@@ -1659,7 +1661,9 @@ def auto_clean(
     >>> print(explanation)
     """
     if not isinstance(frame, ArFrame):
-        raise TypeError(f"auto_clean() expects an ArFrame, got {type(frame).__name__}. Use arnio.from_pandas() first.")
+        raise TypeError(
+            f"auto_clean() expects an ArFrame, got {type(frame).__name__}. Use arnio.from_pandas() first."
+        )
 
     if mode not in {"safe", "strict"}:
         raise ValueError("mode must be 'safe' or 'strict'")
