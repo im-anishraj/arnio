@@ -3194,7 +3194,7 @@ class TestSelectColumns:
 
     # ── combine_columns null semantics ────────────────────────────────────────────
 
-    def test_combine_columns_no_nulls():
+    def test_combine_columns_no_nulls(self):
         """Rows with no nulls join all values with separator."""
         import pandas as pd
 
@@ -3208,7 +3208,7 @@ class TestSelectColumns:
         out = ar.to_pandas(result)
         assert out["full"][0] == "Alice Smith"
 
-    def test_combine_columns_partial_nulls():
+    def test_combine_columns_partial_nulls(self):
         """Partial nulls are skipped — only non-null values are joined."""
         import pandas as pd
 
@@ -3222,7 +3222,7 @@ class TestSelectColumns:
         out = ar.to_pandas(result)
         assert out["full"][0] == "Alice Smith"
 
-    def test_combine_columns_all_nulls_returns_na():
+    def test_combine_columns_all_nulls_returns_na(self):
         """Rows where all values are null return pd.NA."""
         import pandas as pd
 
