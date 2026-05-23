@@ -1121,8 +1121,38 @@ def clean(
     return pipeline(frame, steps)
 
 
-def filter_rows(frame, column, op, value):
-    """Filter rows based on a column condition."""
+def filter_rows(
+    frame: "ArFrame | pd.DataFrame",
+    column: str,
+    op: str,
+    value: object,
+) -> "ArFrame | pd.DataFrame":
+    """Filter rows based on a column condition.
+
+    Parameters
+    ----------
+    frame : ArFrame or pd.DataFrame
+        Input data frame. When an ``ArFrame`` is supplied the return value
+        is also an ``ArFrame``; when a ``pd.DataFrame`` is supplied the
+        return value is a ``pd.DataFrame``.
+    column : str
+        Name of the column to filter on.
+    op : str
+        Comparison operator.  Supported values: ``">"``, ``"<"``,
+        ``">="``, ``"<="``, ``"=="``, ``"!="``.
+    value : object
+        Scalar value to compare each cell against.
+
+    Returns
+    -------
+    ArFrame or pd.DataFrame
+        Filtered frame of the same type as the input.
+
+    Examples
+    --------
+    >>> frame = ar.read_csv("data.csv")
+    >>> filtered = ar.filter_rows(frame, column="age", op=">", value=18)
+    """
 
     import pandas as pd
 
@@ -1492,34 +1522,45 @@ def _is_null_mapping_key(value):
     return bool(pd.isna(value))
 
 
-def replace_values(frame, mapping, column=None):
+def replace_values(
+    frame: "ArFrame | pd.DataFrame",
+    mapping: dict,
+    column: str | None = None,
+) -> "ArFrame | pd.DataFrame":
     """Replace values based on a mapping dict.
 
-    If column is None, applies to all columns.
+    If ``column`` is ``None``, the mapping is applied to every column.
 
-    Handles None/NaN in mappings:
-    - If mapping has a null-like key (None / NaN / pd.NA), this replaces existing nulls via fillna.
-    - If mapping maps to a null-like value, the replacement will result in real nulls (NaN/NA).
+    Handles ``None``/``NaN`` in mappings:
+
+    - If the mapping has a null-like key (``None`` / ``NaN`` / ``pd.NA``),
+      existing nulls in the frame are replaced via ``fillna``.
+    - If the mapping maps a value *to* a null-like value, the result will
+      contain real nulls (``NaN`` / ``NA``).
 
     Parameters
     ----------
-    frame : ArFrame
-        Input data frame.
+    frame : ArFrame or pd.DataFrame
+        Input data frame. When an ``ArFrame`` is supplied the return value
+        is also an ``ArFrame``; when a ``pd.DataFrame`` is supplied the
+        return value is a ``pd.DataFrame``.
     mapping : dict
-        Mapping of values to replace.
+        Mapping of ``{old_value: new_value}`` pairs.
     column : str, optional
-        Specific column to apply replacements to. If None, applies to all columns.
+        Specific column to apply replacements to.  When ``None`` (default)
+        the mapping is applied across all columns.
 
     Returns
     -------
-    ArFrame
-        New frame with values replaced.
+    ArFrame or pd.DataFrame
+        New frame with values replaced, same type as the input.
 
     Examples
     --------
     >>> frame = ar.read_csv("data.csv")
     >>> replaced = ar.replace_values(frame, {"old_value": "new_value"}, column="name")
     """
+    
     import pandas as pd
 
     from .convert import from_pandas, to_pandas
