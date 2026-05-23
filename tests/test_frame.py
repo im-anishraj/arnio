@@ -17,6 +17,10 @@ def test_dict():
     frame = ar.from_dict(data)
     assert frame.columns == ["name", "age"]
     assert frame.shape == (2, 2)
+    assert frame.columns[0] == "name"
+    assert frame.columns[1] == "age"
+    assert frame["name"][0] == "Alice"
+    assert frame["age"][1] == 30
 
 
 def test_dict_ArFrame():
@@ -25,6 +29,10 @@ def test_dict_ArFrame():
     frame = ar.ArFrame.from_dict(data)
     assert frame.columns == ["name", "age"]
     assert frame.shape == (2, 2)
+    assert frame.columns[0] == "name"
+    assert frame.columns[1] == "age"
+    assert frame["name"][0] == "Alice"
+    assert frame["age"][1] == 30
 
 
 def test_preview_returns_string(sample_csv):
@@ -91,6 +99,10 @@ def test_none_value():
     frame = ar.from_dict(data)
     assert frame.shape == (2, 2)
     assert frame.columns == ["name", "age"]
+    assert frame.columns[0] == "name"
+    assert frame.columns[1] == "age"
+    assert frame["name"][0] == "Alice"
+    assert frame["age"][1] is None
 
 
 def test_none_value_ArFrame():
@@ -100,6 +112,10 @@ def test_none_value_ArFrame():
     frame = ar.ArFrame.from_dict(data)
     assert frame.shape == (2, 2)
     assert frame.columns == ["name", "age"]
+    assert frame.columns[0] == "name"
+    assert frame.columns[1] == "age"
+    assert frame["name"][0] == "Alice"
+    assert frame["age"][1] is None
 
 
 def test_preview_n_exceeds_row_count(sample_csv):
