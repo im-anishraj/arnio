@@ -10,6 +10,10 @@ import unicodedata
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
+import numpy as np
+import pandas as pd
+from pandas.api.types import is_scalar
+
 from ._core import (
     _cast_types,
     _clip_numeric,
@@ -23,6 +27,7 @@ from ._core import (
     _safe_divide_columns,
     _strip_whitespace,
 )
+from .convert import from_pandas, to_pandas
 from .exceptions import TypeCastError
 from .frame import ArFrame
 
@@ -137,14 +142,15 @@ def _validate_string_mapping(
     argument_name: str,
     allow_empty: bool = True,
 ) -> dict[str, str]:
-    normalized = _validate_mapping(
-        mapping,
-        argument_name=argument_name,
-        allow_empty=allow_empty,
-        non_mapping_message=(
-            f"{argument_name} must be a mapping of string keys to strings"
-        ),
-    )
+    if not isinstance(mapping, Mapping):
+        raise TypeError(
+            f"{argument_name} must be a mapping of string keys to strings, "
+            f"got {type(mapping).__name__!r}"
+        )
+
+    normalized = dict(mapping)
+    if not normalized and not allow_empty:
+        raise ValueError(f"{argument_name} must not be empty")
 
     invalid_keys = [key for key in normalized if not isinstance(key, str)]
     if invalid_keys:
@@ -612,6 +618,81 @@ def clip_numeric(
         subset=subset,
     )
     return ArFrame(result)
+
+
+def winsorize_outliers(
+    frame: ArFrame,
+    *,
+    lower: float = 0.05,
+    upper: float = 0.95,
+    subset: list[str] | None = None,
+) -> ArFrame:
+    """Winsorize numeric columns using quantile-based clipping.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input data frame.
+    lower : float, default 0.05
+        Lower quantile bound.
+    upper : float, default 0.95
+        Upper quantile bound.
+    subset : list[str], optional
+        Numeric columns to winsorize. If None, applies to all numeric columns.
+
+    Returns
+    -------
+    ArFrame
+        New frame with winsorized numeric values.
+    """
+
+    if lower < 0 or upper > 1:
+        raise ValueError("lower and upper must be between 0 and 1")
+
+    if lower >= upper:
+        raise ValueError("lower must be less than upper")
+
+    dtypes = frame.dtypes
+
+    numeric_columns = [
+        col for col, dtype in dtypes.items() if dtype in ("int64", "float64")
+    ]
+
+    if subset is not None:
+        unknown_columns = [col for col in subset if col not in dtypes]
+        if unknown_columns:
+            raise ValueError(f"Unknown columns in subset: {unknown_columns}")
+
+        non_numeric_columns = [
+            col for col in subset if dtypes.get(col) not in ("int64", "float64")
+        ]
+        if non_numeric_columns:
+            raise ValueError(
+                "winsorize_outliers only supports numeric columns: "
+                f"{non_numeric_columns}"
+            )
+
+        target_columns = subset
+    else:
+        target_columns = numeric_columns
+
+    if not target_columns:
+        return frame
+
+    df = to_pandas(frame).copy()
+
+    for column in target_columns:
+        lower_bound = df[column].quantile(lower)
+        upper_bound = df[column].quantile(upper)
+
+        series = df[column].astype("float64")
+
+        df[column] = series.clip(
+            lower=lower_bound,
+            upper=upper_bound,
+        )
+
+    return from_pandas(df)
 
 
 def strip_whitespace(
@@ -1301,19 +1382,19 @@ def safe_divide_columns(
     numerator_series = df[numerator]
     denominator_series = df[denominator]
 
-    if pd.api.types.is_numeric_dtype(
-        numerator_series
-    ) and pd.api.types.is_numeric_dtype(denominator_series):
-        numerator_values = numerator_series
-        denominator_values = denominator_series
-        bad_numerator = numerator_values.isna() & numerator_series.notna()
-        bad_denominator = denominator_values.isna() & denominator_series.notna()
-    else:
-        numerator_values = pd.to_numeric(numerator_series, errors="coerce")
-        denominator_values = pd.to_numeric(denominator_series, errors="coerce")
+    # Always coerce through pd.to_numeric so that numeric-looking strings
+    # ("0", "0.0", "2.5") are handled identically to their numeric equivalents.
+    # This fixes the bug where string "0" was not caught as a zero denominator.
+    numerator_values = pd.to_numeric(numerator_series, errors="coerce")
+    denominator_values = pd.to_numeric(denominator_series, errors="coerce")
 
-        bad_numerator = numerator_values.isna() & numerator_series.notna()
-        bad_denominator = denominator_values.isna() & denominator_series.notna()
+    # Distinguish null originals (None / pd.NA → use fill_value) from
+    # invalid non-null strings ("abc" → raise ValueError).
+    # A value is "bad" if pd.to_numeric produced NaN but the original was
+    # not null — i.e. it was a non-null, non-numeric string.
+    bad_numerator = numerator_values.isna() & numerator_series.notna()
+    bad_denominator = denominator_values.isna() & denominator_series.notna()
+
     if bad_numerator.any():
         bad_values = df.loc[bad_numerator, numerator].head(3).tolist()
         raise ValueError(
@@ -1325,9 +1406,10 @@ def safe_divide_columns(
             f"Denominator column '{denominator}' contains non-numeric values: {bad_values}"
         )
 
-    safe_denom = denominator_values.mask(
-        denominator_values.isna() | denominator_values.eq(0)
-    )
+    # Mask zero and null denominators — both numeric 0 and string "0" / "0.0"
+    # are caught here because denominator_values is already coerced to float.
+    is_zero_or_null = denominator_values.isna() | (denominator_values == 0)
+    safe_denom = denominator_values.mask(is_zero_or_null)
     result = numerator_values / safe_denom
     df = df.copy()
     df[output_column] = result.fillna(fill_value)
@@ -1393,6 +1475,23 @@ def drop_columns_matching(frame, pattern):
     return from_pandas(result) if is_arframe else result
 
 
+def _is_null_mapping_key(value):
+    """
+    Return True when a mapping key represents a scalar null value.
+
+    Prevents ambiguous truth-value evaluation for tuple/list/array-like
+    objects when using pandas.isna().
+    """
+    if value is None:
+        return True
+
+    # Avoid calling pd.isna on tuple/list/array-like values
+    if not is_scalar(value):
+        return False
+
+    return bool(pd.isna(value))
+
+
 def replace_values(frame, mapping, column=None):
     """Replace values based on a mapping dict.
 
@@ -1453,12 +1552,22 @@ def replace_values(frame, mapping, column=None):
     normalized_mapping = {}
 
     for k, v in mapping.items():
-        # detect null-like keys (None, NaN, pd.NA)
-        if k is None or pd.isna(k):
+        # Handle scalar null-like keys safely without evaluating
+        # tuple/list/array-like objects in boolean context.
+        if _is_null_mapping_key(k):
             null_key_present = True
             null_replacement = v
-        else:
+        # Exclude tuple/list/ndarray/series/index keys which pandas.replace
+        # does not support and can raise confusing errors (e.g. operand
+        # length mismatch). Treat strings and true scalars as valid keys.
+        elif is_scalar(k) and not isinstance(
+            k, (tuple, list, np.ndarray, pd.Series, pd.Index)
+        ):
             normalized_mapping[k] = v
+        else:
+            # pandas replace does not support non-scalar mapping keys like tuples
+            # and lists. Ignore those keys rather than raising a user-facing error.
+            continue
 
     if column:
         s = df[column]

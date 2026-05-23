@@ -362,9 +362,22 @@ class Schema:
                         f"Schema 'unique' members must be strings, got {type(item).__name__} for element {item!r}."
                     )
 
-    def validate(self, frame: ArFrame) -> ValidationResult:
-        """Validate a frame against this schema."""
-        return validate(frame, self)
+    def validate(
+        self,
+        frame: ArFrame,
+        max_errors: int | None = None,
+    ) -> ValidationResult:
+        """
+        Validate an ArFrame against this schema.
+
+        Args:
+            frame:
+                frame to validate.
+            max_errors:
+                Maximum number of validation issues to return.
+                Validation stops once this limit is reached.
+        """
+        return validate(frame, self, max_errors=max_errors)
 
     def to_json(self) -> str:
         """Serialize the schema to a stable JSON string."""
@@ -813,15 +826,24 @@ def diff_schema(
     return SchemaDiff(differences)
 
 
-def validate(frame: ArFrame, schema: Schema | dict[str, Field]) -> ValidationResult:
+def validate(
+    frame: ArFrame,
+    schema: Schema | dict[str, Field],
+    max_errors: int | None = None,
+) -> ValidationResult:
     """Validate an ArFrame against a schema.
 
     Parameters
     ----------
     frame : ArFrame
-        Input frame.
+        Input frame. Must be a single in-memory ArFrame. Chunked validation
+        is not currently supported by this function.
     schema : Schema or dict[str, Field]
-        Validation contract.
+        Validation schema.
+
+    max_errors : int | None
+        Maximum number of validation issues to return.
+        Validation stops once this limit is reached.
 
     Returns
     -------
@@ -839,10 +861,37 @@ def validate(frame: ArFrame, schema: Schema | dict[str, Field]) -> ValidationRes
     >>> result = ar.validate(frame, schema)
     >>> result.passed
     """
+    if not isinstance(frame, ArFrame):
+        raise TypeError(
+            "validate() expects a single ArFrame. Chunked validation is not "
+            "currently supported; validate each chunk explicitly or materialize "
+            "the data before validation."
+        )
+
     schema = schema if isinstance(schema, Schema) else Schema(schema)
+    if max_errors is not None:
+        if isinstance(max_errors, bool) or not isinstance(max_errors, int):
+            raise TypeError("max_errors must be an int or None")
+
+    if max_errors is not None and max_errors < 0:
+        raise ValueError("max_errors must be >= 0")
+
     df = to_pandas(frame)
     dtypes = frame.dtypes
     issues: list[ValidationIssue] = []
+
+    if max_errors == 0:
+        return ValidationResult(
+            row_count=len(df),
+            issue_count=0,
+            issues=[],
+            bad_rows=sorted(
+                {issue.row_index for issue in issues if issue.row_index is not None}
+            ),
+        )
+
+    def reached_limit() -> bool:
+        return max_errors is not None and len(issues) >= max_errors
 
     for name, field_def in schema.fields.items():
         if name not in df.columns:
@@ -854,11 +903,53 @@ def validate(frame: ArFrame, schema: Schema | dict[str, Field]) -> ValidationRes
                     severity=field_def.severity,
                 )
             )
+
+            if reached_limit():
+                issues = issues[:max_errors]
+
+                return ValidationResult(
+                    row_count=len(df),
+                    issue_count=len(issues),
+                    issues=issues,
+                    bad_rows=sorted(
+                        {
+                            issue.row_index
+                            for issue in issues
+                            if issue.row_index is not None
+                        }
+                    ),
+                )
+
             continue
-        issues.extend(_validate_column(df, df[name], dtypes.get(name), name, field_def))
+        column_issues = _validate_column(
+            df,
+            df[name],
+            dtypes.get(name),
+            name,
+            field_def,
+        )
+
+        remaining = None if max_errors is None else max_errors - len(issues)
+        if remaining is not None:
+            column_issues = column_issues[:remaining]
+
+        issues.extend(column_issues)
+
+        if reached_limit():
+            issues = issues[:max_errors]
+
+            return ValidationResult(
+                row_count=len(df),
+                issue_count=len(issues),
+                issues=issues,
+                bad_rows=sorted(
+                    {issue.row_index for issue in issues if issue.row_index is not None}
+                ),
+            )
 
     if schema.strict:
         expected = set(schema.fields)
+
         for name in df.columns:
             if name not in expected:
                 issues.append(
@@ -868,6 +959,22 @@ def validate(frame: ArFrame, schema: Schema | dict[str, Field]) -> ValidationRes
                         message=f"Unexpected column: {name}",
                     )
                 )
+
+                if reached_limit():
+                    issues = issues[:max_errors]
+
+                    return ValidationResult(
+                        row_count=len(df),
+                        issue_count=len(issues),
+                        issues=issues,
+                        bad_rows=sorted(
+                            {
+                                issue.row_index
+                                for issue in issues
+                                if issue.row_index is not None
+                            }
+                        ),
+                    )
 
     if schema.unique is not None:
         if not isinstance(schema.unique, (list, tuple)):
@@ -890,6 +997,22 @@ def validate(frame: ArFrame, schema: Schema | dict[str, Field]) -> ValidationRes
                     message="Composite unique columns cannot be empty",
                 )
             )
+            if reached_limit():
+                issues = issues[:max_errors]
+
+                return ValidationResult(
+                    row_count=len(df),
+                    issue_count=len(issues),
+                    issues=issues,
+                    bad_rows=sorted(
+                        {
+                            issue.row_index
+                            for issue in issues
+                            if issue.row_index is not None
+                        }
+                    ),
+                )
+
         else:
             missing_cols = [c for c in schema.unique if c not in df.columns]
             if missing_cols:
@@ -901,8 +1024,28 @@ def validate(frame: ArFrame, schema: Schema | dict[str, Field]) -> ValidationRes
                             message=f"Column {col!r} not found",
                         )
                     )
+
+                    if reached_limit():
+                        issues = issues[:max_errors]
+
+                        return ValidationResult(
+                            row_count=len(df),
+                            issue_count=len(issues),
+                            issues=issues,
+                            bad_rows=sorted(
+                                {
+                                    issue.row_index
+                                    for issue in issues
+                                    if issue.row_index is not None
+                                }
+                            ),
+                        )
             else:
-                duplicate_mask = df.duplicated(subset=list(schema.unique), keep=False)
+                duplicate_mask = df.duplicated(
+                    subset=list(schema.unique),
+                    keep=False,
+                )
+
                 if duplicate_mask.any():
                     for index in df[duplicate_mask].index:
                         issues.append(
@@ -916,6 +1059,23 @@ def validate(frame: ArFrame, schema: Schema | dict[str, Field]) -> ValidationRes
                                 row_index=int(index) + 1,
                             )
                         )
+
+                        if reached_limit():
+                            issues = issues[:max_errors]
+
+                            return ValidationResult(
+                                row_count=len(df),
+                                issue_count=len(issues),
+                                issues=issues,
+                                bad_rows=sorted(
+                                    {
+                                        issue.row_index
+                                        for issue in issues
+                                        if issue.row_index is not None
+                                    }
+                                ),
+                            )
+
     if schema.rules:
         for rule_fn in schema.rules:
             rule_name = getattr(rule_fn, "__name__", type(rule_fn).__name__)
@@ -933,6 +1093,22 @@ def validate(frame: ArFrame, schema: Schema | dict[str, Field]) -> ValidationRes
                             f"item: {type(item).__name__!r}"
                         )
                 issues.extend(result)
+                if reached_limit():
+                    issues = issues[:max_errors]
+
+                    return ValidationResult(
+                        row_count=len(df),
+                        issue_count=len(issues),
+                        issues=issues,
+                        bad_rows=sorted(
+                            {
+                                issue.row_index
+                                for issue in issues
+                                if issue.row_index is not None
+                            }
+                        ),
+                    )
+
             except KeyError as e:
                 issues.append(
                     ValidationIssue(
@@ -941,6 +1117,21 @@ def validate(frame: ArFrame, schema: Schema | dict[str, Field]) -> ValidationRes
                         message=f"Cross-field rule referenced a missing column: {e}",
                     )
                 )
+                if reached_limit():
+                    issues = issues[:max_errors]
+
+                    return ValidationResult(
+                        row_count=len(df),
+                        issue_count=len(issues),
+                        issues=issues,
+                        bad_rows=sorted(
+                            {
+                                issue.row_index
+                                for issue in issues
+                                if issue.row_index is not None
+                            }
+                        ),
+                    )
 
     bad_rows = sorted(
         {issue.row_index for issue in issues if issue.row_index is not None}
