@@ -121,7 +121,8 @@ TEST_CASE("parse_line bulk fast path handles long unquoted field", "[csv_parser]
     REQUIRE(fields[2] == "end");
 }
 
-TEST_CASE("parse_line bulk fast path preserves quoted fields alongside long unquoted", "[csv_parser]") {
+TEST_CASE("parse_line bulk fast path preserves quoted fields alongside long unquoted",
+          "[csv_parser]") {
     CsvParser parser;
     std::string long_field(200, 'a');
     std::string line = long_field + ",\"quoted, value\",end";

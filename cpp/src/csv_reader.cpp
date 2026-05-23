@@ -495,8 +495,8 @@ static std::string handle_utf8_errors(const std::string& input, const std::strin
 CsvParser::CsvParser(const CsvConfig& config) : config_(config) {
     // Build stop-character table for the unquoted bulk-scan fast path.
     stop_unquoted_.fill(0);
-    stop_unquoted_[static_cast<unsigned char>('"')]            = 1;
-    stop_unquoted_[static_cast<unsigned char>('\r')]           = 1;
+    stop_unquoted_[static_cast<unsigned char>('"')] = 1;
+    stop_unquoted_[static_cast<unsigned char>('\r')] = 1;
     stop_unquoted_[static_cast<unsigned char>(config.delimiter)] = 1;
 }
 
@@ -549,11 +549,10 @@ void CsvParser::parse_line(const std::string& line, std::vector<std::string>& fi
                 // (delimiter, '"', '\r') using a precomputed 256-byte lookup
                 // table, then append the whole plain-text run in one call
                 // instead of N individual field += c assignments.
-                const char* ptr     = line.data() + i;
+                const char* ptr = line.data() + i;
                 const char* end_ptr = line.data() + line.size();
-                const char* scan    = ptr;
-                while (scan < end_ptr &&
-                       !stop_unquoted_[static_cast<unsigned char>(*scan)]) {
+                const char* scan = ptr;
+                while (scan < end_ptr && !stop_unquoted_[static_cast<unsigned char>(*scan)]) {
                     ++scan;
                 }
                 field.append(ptr, scan - ptr);
