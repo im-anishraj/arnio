@@ -1046,9 +1046,8 @@ Frame CsvChunkReader::build_frame(const std::vector<std::vector<std::string>>& r
                                 type_name = "unknown";
                         }
                         throw std::runtime_error(
-                            "Type mismatch in chunk for column '" + header_[ci] +
-                            "': expected " + type_name + " but found incompatible value '" +
-                            raw_value +
+                            "Type mismatch in chunk for column '" + header_[ci] + "': expected " +
+                            type_name + " but found incompatible value '" + raw_value +
                             "'. Please specify 'dtypes' explicitly or use a larger 'sample_size'.");
                     }
                 }
@@ -1178,8 +1177,8 @@ std::optional<CsvParseResult> CsvChunkReader::next_chunk(size_t chunksize,
         schema_locked_ = true;
     }
 
-rows_read_total_ += raw_data.size() + bad_rows.size();
-        return CsvParseResult{build_frame(raw_data, schema_locked_), std::move(bad_rows)};
+    rows_read_total_ += raw_data.size() + bad_rows.size();
+    return CsvParseResult{build_frame(raw_data, schema_locked_), std::move(bad_rows)};
 }
 
 void CsvChunkReader::close() {
