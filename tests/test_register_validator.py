@@ -1,8 +1,9 @@
 """Tests for register_validator and Custom validator in arnio.schema."""
 
 import pytest
+
 from arnio import schema
-from arnio.schema import register_validator, Custom, Schema, Field
+from arnio.schema import Custom, register_validator
 
 
 class TestRegisterValidator:
@@ -19,6 +20,7 @@ class TestRegisterValidator:
 
     def test_register_custom_validator_by_name(self):
         """register_validator registers a validator function under a name."""
+
         def my_validator(value):
             return isinstance(value, int) and value > 0
 
@@ -28,6 +30,7 @@ class TestRegisterValidator:
 
     def test_register_validator_returns_none(self):
         """register_validator returns None on success."""
+
         def my_validator(value):
             return True
 
@@ -56,6 +59,7 @@ class TestRegisterValidator:
 
     def test_overwrites_existing_validator(self):
         """register_validator allows overwriting an existing validator."""
+
         def validator_a(value):
             return value > 0
 
@@ -82,72 +86,79 @@ class TestCustomValidator:
         schema._CUSTOM_VALIDATORS.update(self._original_validators)
 
     def test_custom_validator_stores_name(self):
-        """Custom stores the validator name correctly."""
+        """Custom stores the validator name correctly in semantic field."""
+
         def my_validator(value):
             return True
 
         register_validator("test_name", my_validator)
         field = Custom("test_name")
 
-        assert field.name == "test_name"
+        assert field.semantic == "custom:test_name"
 
     def test_custom_validator_default_nullable(self):
         """Custom defaults nullable to True."""
+
         def my_validator(value):
             return True
 
         register_validator("test_nullable", my_validator)
-        field = Custom("test_name")
+        field = Custom("test_nullable")
 
         assert field.nullable is True
 
     def test_custom_validator_default_unique(self):
         """Custom defaults unique to False."""
+
         def my_validator(value):
             return True
 
         register_validator("test_unique", my_validator)
-        field = Custom("test_name")
+        field = Custom("test_unique")
 
         assert field.unique is False
 
     def test_custom_validator_explicit_nullable_false(self):
         """Custom respects explicit nullable=False."""
+
         def my_validator(value):
             return True
 
         register_validator("test_nullable_false", my_validator)
-        field = Custom("test_name", nullable=False)
+        field = Custom("test_nullable_false", nullable=False)
 
         assert field.nullable is False
 
     def test_custom_validator_explicit_unique_true(self):
         """Custom respects explicit unique=True."""
+
         def my_validator(value):
             return True
 
         register_validator("test_unique_true", my_validator)
-        field = Custom("test_name", unique=True)
+        field = Custom("test_unique_true", unique=True)
 
         assert field.unique is True
 
     def test_custom_validator_default_severity(self):
         """Custom defaults severity to error."""
+
         def my_validator(value):
             return True
 
         register_validator("test_severity", my_validator)
-        field = Custom("test_name")
+        field = Custom("test_severity")
 
         assert field.severity == "error"
 
     def test_custom_validator_explicit_severity(self):
         """Custom respects explicit severity parameter."""
+
         def my_validator(value):
             return True
 
         register_validator("test_severity_warn", my_validator)
-        field = Custom("test_name", severity="warning")
+        field = Custom("test_severity_warn", severity="warning")
 
         assert field.severity == "warning"
 
@@ -158,6 +169,7 @@ class TestCustomValidator:
 
     def test_custom_repr_contains_name(self):
         """Custom repr includes the validator name."""
+
         def my_validator(value):
             return True
 
@@ -168,17 +180,19 @@ class TestCustomValidator:
 
     def test_custom_in_schema_integration(self):
         """Custom validator can be used in a Schema definition."""
+
         def is_positive(value):
             return isinstance(value, (int, float)) and value > 0
 
         register_validator("positive", is_positive)
 
         field = Custom("positive", nullable=False)
-        assert field.name == "positive"
+        assert field.semantic == "custom:positive"
         assert field.nullable is False
 
     def test_multiple_custom_validators_in_schema(self):
         """Multiple Custom validators can coexist in a schema."""
+
         def is_positive(value):
             return isinstance(value, (int, float)) and value > 0
 
@@ -191,5 +205,5 @@ class TestCustomValidator:
         f1 = Custom("positive")
         f2 = Custom("email")
 
-        assert f1.name == "positive"
-        assert f2.name == "email"
+        assert f1.semantic == "custom:positive"
+        assert f2.semantic == "custom:email"
