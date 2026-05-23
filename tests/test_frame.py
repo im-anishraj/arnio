@@ -504,6 +504,8 @@ def test_astype_invalid_raises_error():
     # Trying to pass None should raise a TypeError
     with pytest.raises(TypeError, match="dtype cannot be None"):
         frame.astype(None)
+
+
 # ── drop_columns ──────────────────────────────────────────────────────────────
 
 
