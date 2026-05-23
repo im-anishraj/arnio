@@ -61,3 +61,9 @@ def large_csv(tmp_path):
     path = tmp_path / "large.csv"
     path.write_text("\n".join(lines))
     return str(path)
+
+
+@pytest.fixture
+def unicode_csv():
+    """CSV content for Unicode file path testing."""
+    return "name,value\nAlice,1\nBob,2\n"
