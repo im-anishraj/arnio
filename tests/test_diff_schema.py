@@ -39,7 +39,9 @@ class TestDiffSchema:
         s1 = Schema().add("age", dtype="int")
         s2 = Schema().add("age", dtype="string")
         diff = diff_schema(s1, s2)
-        changed = [d for d in diff if d.change == "changed_field" and d.attribute == "dtype"]
+        changed = [
+            d for d in diff if d.change == "changed_field" and d.attribute == "dtype"
+        ]
         assert len(changed) == 1
         assert changed[0].column == "age"
         assert changed[0].expected == "int"
@@ -50,7 +52,9 @@ class TestDiffSchema:
         s1 = Schema().add("name", dtype="string", nullable=True)
         s2 = Schema().add("name", dtype="string", nullable=False)
         diff = diff_schema(s1, s2)
-        changed = [d for d in diff if d.change == "changed_field" and d.attribute == "nullable"]
+        changed = [
+            d for d in diff if d.change == "changed_field" and d.attribute == "nullable"
+        ]
         assert len(changed) == 1
         assert changed[0].column == "name"
 
@@ -59,7 +63,9 @@ class TestDiffSchema:
         s1 = Schema(strict=False)
         s2 = Schema(strict=True)
         diff = diff_schema(s1, s2)
-        changed = [d for d in diff if d.change == "changed_schema" and d.attribute == "strict"]
+        changed = [
+            d for d in diff if d.change == "changed_schema" and d.attribute == "strict"
+        ]
         assert len(changed) == 1
         assert changed[0].expected is False
         assert changed[0].observed is True
@@ -69,7 +75,9 @@ class TestDiffSchema:
         s1 = Schema(unique=False)
         s2 = Schema(unique=True)
         diff = diff_schema(s1, s2)
-        changed = [d for d in diff if d.change == "changed_schema" and d.attribute == "unique"]
+        changed = [
+            d for d in diff if d.change == "changed_schema" and d.attribute == "unique"
+        ]
         assert len(changed) == 1
         assert changed[0].expected is False
         assert changed[0].observed is True
@@ -116,7 +124,9 @@ class TestDiffSchema:
         s1 = Schema().add("name", dtype="string", description="The name")
         s2 = Schema().add("name", dtype="string")
         diff = diff_schema(s1, s2)
-        changed = [d for d in diff if d.column == "name" and d.attribute == "description"]
+        changed = [
+            d for d in diff if d.column == "name" and d.attribute == "description"
+        ]
         assert len(changed) == 1
 
     def test_changed_field_with_only_observed(self):
@@ -124,5 +134,7 @@ class TestDiffSchema:
         s1 = Schema().add("name", dtype="string")
         s2 = Schema().add("name", dtype="string", description="The name")
         diff = diff_schema(s1, s2)
-        changed = [d for d in diff if d.column == "name" and d.attribute == "description"]
+        changed = [
+            d for d in diff if d.column == "name" and d.attribute == "description"
+        ]
         assert len(changed) == 1
