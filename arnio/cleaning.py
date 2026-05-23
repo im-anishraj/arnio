@@ -1465,11 +1465,14 @@ def combine_columns(
 
     # Pandas fallback
     df = frame.copy()
-    combined = (
-        df[subset_columns].astype("string").fillna("").agg(separator.join, axis=1)
-    )
-    null_mask = df[subset_columns].isna().all(axis=1)
-    combined = combined.mask(null_mask, pd.NA)
+
+    def join_row(row):
+        non_null = [str(v) for v in row if pd.notna(v)]
+        if not non_null:
+            return pd.NA
+        return separator.join(non_null)
+
+    combined = df[subset_columns].apply(join_row, axis=1)
 
     df[output_column] = combined
 
