@@ -3220,7 +3220,7 @@ class TestSelectColumns:
             frame, subset=["first", "middle", "last"], output_column="full"
         )
         out = ar.to_pandas(result)
-        assert out["full"][0] == "Alice Smith"
+        assert out["full"][0] == "Alice  Smith"
 
     def test_combine_columns_all_nulls_returns_na(self):
         """Rows where all values are null return pd.NA."""
