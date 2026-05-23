@@ -812,9 +812,9 @@ class TestDropEmptyColumns:
     def test_drop_empty_columns_preserves_schema_on_empty_frame(self):
         df = pd.DataFrame(columns=["a", "b", "c"])
         frame = ar.from_pandas(df)
-        
+
         result = ar.drop_empty_columns(frame)
-        
+
         assert result.columns == ["a", "b", "c"]
         assert result.shape[0] == 0
         assert result.shape[1] == 3
