@@ -9,10 +9,7 @@ import inspect
 import warnings
 from threading import Lock
 from time import perf_counter
-from typing import Any, Callable, Dict, List, Tuple
-
-StepCallable = Callable[..., Any]
-StepSpec = Tuple[str, Dict[str, Any]], Dict, List, Tuple
+from typing import Any, Callable
 
 import pandas as pd
 
@@ -21,11 +18,14 @@ from .convert import from_pandas, to_pandas
 from .exceptions import PipelineStepError, UnknownStepError
 from .frame import ArFrame
 
+StepCallable = Callable[..., Any]
+StepSpec = tuple[str, dict[str, Any]]
+
 _BUILTIN_STEP_NAMESPACE = "builtin"
 _STEP_NAMESPACE_SEPARATOR = ":"
 
 # Map step names to cleaning functions
-_STEP_REGISTRY: Dict[str, StepCallable] = {
+_STEP_REGISTRY: dict[str, StepCallable] = {
     "drop_nulls": cleaning.drop_nulls,
     "drop_columns": cleaning.drop_columns,
     "keep_rows_with_nulls": cleaning.keep_rows_with_nulls,
@@ -47,7 +47,7 @@ _STEP_REGISTRY: Dict[str, StepCallable] = {
 
 _REGISTRY_LOCK = Lock()
 _DEPRECATED_STEP_ALIASES: dict[str, str] = {}
-_PYTHON_STEP_REGISTRY: Dict[str, StepCallable] = {
+_PYTHON_STEP_REGISTRY: dict[str, StepCallable] = {
     "standardize_missing_tokens": cleaning.standardize_missing_tokens,
     "coalesce_columns": cleaning.coalesce_columns,
 }
@@ -212,8 +212,8 @@ def _resolve_step_name(name: str, deprecated_step_aliases: dict[str, str]) -> st
 
 
 def _validate_pipeline_steps(
-    steps: List[StepSpec],
-    python_step_registry: Dict[str, StepCallable],
+    steps: list[StepSpec],
+    python_step_registry: dict[str, StepCallable],
     deprecated_step_aliases: dict[str, str],
 ) -> None:
     """Validate pipeline steps before execution begins."""
@@ -252,7 +252,7 @@ def _validate_pipeline_steps(
 
 def pipeline(
     frame: ArFrame,
-    steps: List[StepSpec],
+    steps: list[StepSpec],
     *,
     return_metadata: bool = False,
     dry_run: bool = False,
