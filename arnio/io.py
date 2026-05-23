@@ -613,6 +613,7 @@ def read_csv_chunked(
     usecols: list[str] | None = None,
     nrows: int | None = None,
     skip_rows: int = 0,
+    skiprows: int | None = None,
     encoding: str = "utf-8",
     trim_headers: bool = True,
     decimal_separator: str = ".",
@@ -642,6 +643,11 @@ def read_csv_chunked(
         Maximum total number of data rows to read across all chunks.
     skip_rows : int, default 0
         Number of data rows to skip after the header row.
+        Deprecated alias: use ``skiprows`` instead (matches ``read_csv``).
+    skiprows : int, optional
+        Alias for ``skip_rows``, matching the ``read_csv`` parameter name.
+        If both ``skiprows`` and ``skip_rows`` are provided they must agree;
+        conflicting values raise ``ValueError``.
     encoding : str, default "utf-8"
         File encoding.
     trim_headers : bool, default True
@@ -709,6 +715,22 @@ def read_csv_chunked(
     delimiter = _validate_delimiter(delimiter)
     mode = _validate_parser_mode(mode)
     chunksize = _validate_chunksize(chunksize)
+
+    # Resolve skiprows / skip_rows alias.
+    # skiprows is the canonical name (matches read_csv); skip_rows is kept
+    # for backward compatibility.  Both may be passed as long as they agree.
+    if skiprows is not None:
+        if isinstance(skiprows, bool) or not isinstance(skiprows, int):
+            raise TypeError("skiprows must be an integer")
+        if skiprows < 0:
+            raise ValueError("skiprows must be non-negative")
+        if skip_rows != 0 and skip_rows != skiprows:
+            raise ValueError(
+                f"Conflicting values: skiprows={skiprows!r} and "
+                f"skip_rows={skip_rows!r}. Pass only one of them."
+            )
+        skip_rows = skiprows
+
     skip_rows = _validate_skip_rows(skip_rows)
     on_bad_lines = _validate_on_bad_lines(on_bad_lines)
 
