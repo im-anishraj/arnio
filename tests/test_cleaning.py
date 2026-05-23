@@ -3201,9 +3201,7 @@ class TestSelectColumns:
         import arnio as ar
 
         df = pd.DataFrame({"first": ["Alice"], "last": ["Smith"]})
-        result = ar.combine_columns(
-            df, subset=["first", "last"], output_column="full"
-        )
+        result = ar.combine_columns(df, subset=["first", "last"], output_column="full")
         assert result["full"][0] == "Alice Smith"
 
     def test_combine_columns_partial_nulls(self):
@@ -3225,7 +3223,5 @@ class TestSelectColumns:
         import arnio as ar
 
         df = pd.DataFrame({"first": [None], "last": [None]})
-        result = ar.combine_columns(
-            df, subset=["first", "last"], output_column="full"
-        )
-        assert pd.isna(result["full"][0])
+        result = ar.combine_columns(df, subset=["first", "last"], output_column="full")
+        assert pd.isna(result["full"][0]) 
