@@ -274,16 +274,19 @@ PYBIND11_MODULE(_arnio_cpp, m) {
         .def(
             "scan_schema",
             [](const CsvReader& reader, const std::string& path, const std::string& on_bad_lines) {
-                std::vector<std::pair<std::string, std::string>> result;
+                std::vector<std::pair<std::string, std::string>> schema_vec;
+                std::vector<std::string> bad_rows;
                 {
                     py::gil_scoped_release release;
-                    result = reader.scan_schema(path, on_bad_lines);
+                    auto result = reader.scan_schema(path, on_bad_lines);
+                    schema_vec = std::move(result.first);
+                    bad_rows = std::move(result.second);
                 }
                 py::dict schema;
-                for (const auto& pair : result) {
+                for (const auto& pair : schema_vec) {
                     schema[py::str(pair.first)] = py::str(pair.second);
                 }
-                return schema;
+                return py::make_tuple(schema, bad_rows);
             },
             py::arg("path"), py::arg("on_bad_lines") = "error");
 

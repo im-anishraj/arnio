@@ -278,28 +278,6 @@ def _warn_bad_rows(bad_rows: list) -> None:
     )
 
 
-def _scan_collect_bad_rows(
-    path: str, delimiter: str, num_cols: int | None
-) -> list[str]:
-    """Parse CSV to find rows with wrong field count during scan_csv warn mode."""
-    msgs: list[str] = []
-    with open(path, encoding="utf-8", errors="replace") as f:
-        header_line = f.readline().strip()
-        if not header_line:
-            return msgs
-        expected = header_line.count(delimiter) + 1
-        for row_num, line in enumerate(f, start=2):
-            line = line.strip()
-            if not line:
-                continue
-            actual = line.count(delimiter) + 1
-            if actual != expected:
-                msgs.append(
-                    f"CSV row {row_num} has {actual} fields; expected {expected}"
-                )
-    return msgs
-
-
 def _validate_skip_rows(skip_rows: int) -> int:
     """Validate skip_rows parameter."""
     if isinstance(skip_rows, bool) or not isinstance(skip_rows, int):
@@ -986,18 +964,15 @@ def scan_csv(
             delimiter=delimiter,
             sample_rows=100 if sample_size is None else sample_size,
         ) as native_path:
-            if on_bad_lines == "warn":
-                bad_msgs = _scan_collect_bad_rows(native_path, delimiter, num_cols=None)
-                schema = cast(dict[str, str], reader.scan_schema(native_path, "skip"))
-                if bad_msgs:
-                    warnings.warn(
-                        f"{len(bad_msgs)} malformed CSV row(s) skipped during schema inference:\n"
-                        + "\n".join(f"  {m}" for m in bad_msgs),
-                        UserWarning,
-                        stacklevel=2,
-                    )
-                return schema
-            return cast(dict[str, str], reader.scan_schema(native_path, on_bad_lines))
+            schema, bad_row_msgs = reader.scan_schema(native_path, on_bad_lines)
+            if on_bad_lines == "warn" and bad_row_msgs:
+                warnings.warn(
+                    f"{len(bad_row_msgs)} malformed CSV row(s) skipped during schema inference:\n"
+                    + "\n".join(f"  {m}" for m in bad_row_msgs),
+                    UserWarning,
+                    stacklevel=2,
+                )
+            return cast(dict[str, str], schema)
     except RuntimeError as e:
         raise CsvReadError(str(e)) from e
 
