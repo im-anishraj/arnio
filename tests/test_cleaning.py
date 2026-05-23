@@ -227,6 +227,26 @@ class TestWinsorizeOutliers:
 
         assert list(df["value"]) == [10]
 
+    def test_winsorize_outliers_already_within_bounds_noop(self):
+        frame = ar.from_pandas(pd.DataFrame({"value": [2.0, 2.0, 3.0, 4.0, 4.0]}))
+
+        result = ar.winsorize_outliers(frame, lower=0.25, upper=0.75)
+        df = ar.to_pandas(result)
+
+        assert list(df["value"]) == [2.0, 2.0, 3.0, 4.0, 4.0]
+
+    def test_winsorize_outliers_preserves_nan_while_clipping_values(self):
+        frame = ar.from_pandas(pd.DataFrame({"value": [1.0, np.nan, 100.0, 5.0]}))
+
+        result = ar.winsorize_outliers(frame, lower=0.25, upper=0.75)
+        df = ar.to_pandas(result)
+
+        values = df["value"].tolist()
+        assert values[0] == 3.0
+        assert np.isnan(values[1])
+        assert values[2] == 52.5
+        assert values[3] == 5.0
+
 
 class TestValidateColumnsExist:
     def test_returns_original_frame_when_columns_exist(self, sample_csv):
