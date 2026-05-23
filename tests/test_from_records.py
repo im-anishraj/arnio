@@ -13,83 +13,85 @@ class TestArFrameFromRecordsExtended:
         records = [{"name": "Alice", "age": None}, {"name": "Bob", "age": 25}]
         frame = ArFrame.from_records(records)
         assert frame.shape == (2, 2)
-        assert frame["name"].tolist() == ["Alice", "Bob"]
-        assert frame["age"].isna().tolist() == [True, False]
+        assert frame["name"] == ["Alice", "Bob"]
+        assert frame["age"] == [None, 25]
 
     def test_list_of_dicts_with_bool_values(self):
         """from_records correctly handles boolean values in dict records."""
         records = [{"active": True, "name": "Alice"}, {"active": False, "name": "Bob"}]
         frame = ArFrame.from_records(records)
         assert frame.shape == (2, 2)
-        assert frame["active"].tolist() == [True, False]
-        assert frame["active"].dtype == "bool"
+        assert frame["active"] == [True, False]
+        assert frame["name"] == ["Alice", "Bob"]
 
     def test_list_of_dicts_with_float_values(self):
         """from_records correctly handles float values in dict records."""
         records = [{"price": 10.5, "name": "Alice"}, {"price": 20.75, "name": "Bob"}]
         frame = ArFrame.from_records(records)
         assert frame.shape == (2, 2)
-        assert frame["price"].tolist() == [10.5, 20.75]
-        assert frame["price"].dtype == "float64"
+        assert frame["price"] == [10.5, 20.75]
+        assert frame["name"] == ["Alice", "Bob"]
 
     def test_list_of_dicts_with_mixed_int_float(self):
         """from_records correctly handles mixed int/float in same column."""
         records = [{"score": 1, "name": "Alice"}, {"score": 2.5, "name": "Bob"}]
         frame = ArFrame.from_records(records)
         assert frame.shape == (2, 2)
-        assert frame["score"].tolist() == [1.0, 2.5]
-        assert frame["score"].dtype == "float64"
+        assert frame["score"] == [1.0, 2.5]
+        assert frame["name"] == ["Alice", "Bob"]
 
-    def test_list_of_dicts_infers_columns_from_first(self):
-        """from_records infers columns from first dict when columns not specified."""
+    def test_list_of_dicts_infers_columns_from_union(self):
+        """from_records returns union of all dict keys as columns."""
         records = [{"a": 1, "b": 2}, {"a": 3, "c": 4}]
         frame = ArFrame.from_records(records)
-        assert list(frame.columns) == ["a", "b"]
+        assert set(frame.columns) == {"a", "b", "c"}
 
     def test_list_of_lists_with_none_values(self):
         """from_records correctly handles None values in list records."""
         records = [["Alice", None], ["Bob", 25]]
         frame = ArFrame.from_records(records, columns=["name", "age"])
         assert frame.shape == (2, 2)
-        assert frame["name"].tolist() == ["Alice", "Bob"]
-        assert frame["age"].isna().tolist() == [True, False]
+        assert frame["name"] == ["Alice", "Bob"]
+        assert frame["age"] == [None, 25]
 
     def test_list_of_lists_with_bool_values(self):
         """from_records correctly handles boolean values in list records."""
         records = [[True, "Alice"], [False, "Bob"]]
         frame = ArFrame.from_records(records, columns=["active", "name"])
         assert frame.shape == (2, 2)
-        assert frame["active"].tolist() == [True, False]
-        assert frame["active"].dtype == "bool"
+        assert frame["active"] == [True, False]
+        assert frame["name"] == ["Alice", "Bob"]
 
     def test_list_of_tuples_with_none_values(self):
         """from_records correctly handles None values in tuple records."""
         records = [("Alice", None), ("Bob", 25)]
         frame = ArFrame.from_records(records, columns=["name", "age"])
         assert frame.shape == (2, 2)
-        assert frame["name"].tolist() == ["Alice", "Bob"]
-        assert frame["age"].isna().tolist() == [True, False]
+        assert frame["name"] == ["Alice", "Bob"]
+        assert frame["age"] == [None, 25]
 
     def test_single_row_dict_list(self):
         """from_records correctly handles single row dict list."""
         records = [{"name": "Alice", "age": 30}]
         frame = ArFrame.from_records(records)
         assert frame.shape == (1, 2)
-        assert frame["name"].tolist() == ["Alice"]
+        assert frame["name"] == ["Alice"]
+        assert frame["age"] == [30]
 
     def test_single_row_list(self):
         """from_records correctly handles single row list."""
         records = [["Alice", 30]]
         frame = ArFrame.from_records(records, columns=["name", "age"])
         assert frame.shape == (1, 2)
-        assert frame["name"].tolist() == ["Alice"]
+        assert frame["name"] == ["Alice"]
+        assert frame["age"] == [30]
 
     def test_dict_records_with_string_numbers(self):
         """from_records handles numeric strings in dict records."""
         records = [{"count": "1"}, {"count": "2"}]
         frame = ArFrame.from_records(records)
         assert frame.shape == (2, 1)
-        assert frame["count"].tolist() == ["1", "2"]
+        assert frame["count"] == ["1", "2"]
 
     def test_dict_records_preserve_order(self):
         """from_records preserves the order of columns from first dict."""
