@@ -271,18 +271,21 @@ PYBIND11_MODULE(_arnio_cpp, m) {
                 return py::make_tuple(std::move(result.frame), std::move(result.bad_rows));
             },
             py::arg("path"), py::arg("on_bad_lines") = std::string("error"))
-        .def("scan_schema", [](const CsvReader& reader, const std::string& path, const std::string& on_bad_lines) {
-            std::vector<std::pair<std::string, std::string>> result;
-            {
-                py::gil_scoped_release release;
-                result = reader.scan_schema(path, on_bad_lines);
-            }
-            py::dict schema;
-            for (const auto& pair : result) {
-                schema[py::str(pair.first)] = py::str(pair.second);
-            }
-            return schema;
-        }, py::arg("path"), py::arg("on_bad_lines") = "error");
+        .def(
+            "scan_schema",
+            [](const CsvReader& reader, const std::string& path, const std::string& on_bad_lines) {
+                std::vector<std::pair<std::string, std::string>> result;
+                {
+                    py::gil_scoped_release release;
+                    result = reader.scan_schema(path, on_bad_lines);
+                }
+                py::dict schema;
+                for (const auto& pair : result) {
+                    schema[py::str(pair.first)] = py::str(pair.second);
+                }
+                return schema;
+            },
+            py::arg("path"), py::arg("on_bad_lines") = "error");
 
     py::class_<CsvChunkReader>(m, "CsvChunkReader")
         .def(py::init<const CsvConfig&>(), py::arg("config") = CsvConfig{})
