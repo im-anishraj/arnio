@@ -883,7 +883,7 @@ def scan_csv(
     encoding_errors : str, default "strict"
         How encoding errors are handled. One of ``"strict"``, ``"replace"``,
         or ``"ignore"``.
-        
+
     on_bad_lines : str, default "error"
         What to do when a malformed row is encountered during schema inference.
         ``"error"`` raises :exc:`CsvReadError` immediately (default).
