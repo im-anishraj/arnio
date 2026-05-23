@@ -339,7 +339,15 @@ df = ar.to_pandas(af)
 ```
 
 ---
+### from_dict
+This adds support for creating an ArFrame from a Python dictionary.
 
+```python
+python
+data = {"name": ["Alice", "Bob"], "age": [25, 30]}
+frame = ar.from_dict(data)
+```
+---
 ### ArnioPandasAccessor
 
 Run Arnio preparation helpers from an existing pandas DataFrame.
