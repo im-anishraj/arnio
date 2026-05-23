@@ -79,7 +79,12 @@ def _emit_scalar(value: Any) -> str:
         )
         if needs_quoting:
             # Use double-quote style; escape backslashes and double-quotes.
-            escaped = value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r")
+            escaped = (
+                value.replace("\\", "\\\\")
+                .replace('"', '\\"')
+                .replace("\n", "\\n")
+                .replace("\r", "\\r")
+            )
             return f'"{escaped}"'
         return value
     raise TypeError(f"Unsupported scalar type: {type(value)!r}")
