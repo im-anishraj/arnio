@@ -149,26 +149,26 @@ class TestCsvChunkedIssue924:
 
     def test_late_mixed_types_raises_error(self, tmp_path):
         """Verify that type mismatches in later chunks raise errors (fail-fast).
-        
+
         Uses pandas with string values to prevent auto-casting, ensuring the CSV
         file itself contains the mixed types that will trigger the type mismatch error.
         """
         path = tmp_path / "type_mismatch.csv"
-        
+
         # Create DataFrame with string values: first two are integers, next two are floats
         # This prevents pandas from auto-upcasting to float64 before writing the CSV
         df = pd.DataFrame({"value": ["1", "2", "3.5", "4.8"]})
         df.to_csv(path, index=False)
-        
+
         # Read with chunksize=2
         # Chunk 1: "1", "2" → inferred as int64
         # Chunk 2: "3.5", "4.8" → contains floats, should raise Type mismatch error
         reader = ar.read_csv_chunked(str(path), chunksize=2)
-        
+
         # First chunk should succeed
         chunk1 = next(reader)
         assert chunk1 is not None
-        
+
         # Second chunk should raise because floats don't match int64 type
         with pytest.raises(Exception, match="Type mismatch"):
             next(reader)
