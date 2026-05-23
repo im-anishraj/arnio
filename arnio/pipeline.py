@@ -9,7 +9,7 @@ import inspect
 import warnings
 from threading import Lock
 from time import perf_counter
-from typing import Any, Callable
+from typing import Any, Callable, Union
 
 import pandas as pd
 
@@ -19,7 +19,7 @@ from .exceptions import PipelineStepError, UnknownStepError
 from .frame import ArFrame
 
 StepCallable = Callable[..., Any]
-StepSpec = tuple[str, dict[str, Any]]
+StepSpec = Union[tuple[str], tuple[str, dict[str, Any]]]
 
 _BUILTIN_STEP_NAMESPACE = "builtin"
 _STEP_NAMESPACE_SEPARATOR = ":"
