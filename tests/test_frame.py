@@ -68,7 +68,7 @@ def test_preview_n_equals_one(sample_csv):
 # ── Edge cases ────────────────────────────────────────────────────────────────
 
 
-def test_Empty_dict():
+def test_empty_dict():
     data = {}
     frame = ar.from_dict(data)
 
@@ -76,7 +76,7 @@ def test_Empty_dict():
     assert frame.columns == []
 
 
-def test_Empty_dict_ArFrame():
+def test_empty_dict_ArFrame():
     data = {}
     frame = ar.ArFrame.from_dict(data)
 
