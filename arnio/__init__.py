@@ -48,6 +48,7 @@ from .exceptions import (
     CsvReadError,
     JsonlReadError,
     PipelineStepError,
+    SchemaValidationError,
     TypeCastError,
     UnknownStepError,
 )
@@ -214,6 +215,7 @@ __all__ = [
     "JsonlReadError",
     "TypeCastError",
     "PipelineStepError",
+    "SchemaValidationError",
     "normalize_unicode",
     "Regex",
     "Custom",

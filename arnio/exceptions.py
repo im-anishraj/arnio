@@ -48,3 +48,11 @@ class PipelineStepError(ArnioError):
         super().__init__(
             f"Error occurred during custom pipeline step '{step_name}': {orig_err}"
         )
+
+
+class SchemaValidationError(ArnioError):
+    """Raised when a dataframe fails schema validation."""
+
+    def __init__(self, message: str, result: "ValidationResult" = None):
+        self.result = result
+        super().__init__(message)
