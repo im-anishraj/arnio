@@ -6,11 +6,12 @@ Data quality profiling and safe automatic cleaning helpers.
 from __future__ import annotations
 
 import html
+import io
 import json
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, TextIO
 
 import numpy as np
 import pandas as pd
@@ -297,8 +298,12 @@ class DataQualityReport:
             indent=indent,
         )
 
-    def to_markdown(self, output: Any | None = None) -> str | None:
-        """Return a GitHub-friendly Markdown report."""
+    def to_markdown(self, output: TextIO | None = None) -> str | None:
+        """Return a GitHub-friendly Markdown report.
+
+        If ``output`` is provided, the markdown is written to that writable text
+        stream and this method returns ``None``.
+        """
 
         lines: list[str] = []
 
@@ -383,13 +388,13 @@ class DataQualityReport:
                 )
             lines.append("")
 
-        return "\n".join(lines)
         markdown = "\n".join(lines)
 
         if output is None:
             return markdown
 
-        if not hasattr(output, "write"):
+        # Must be a writable *text* stream (e.g., io.StringIO or an open file handle).
+        if not isinstance(output, io.TextIOBase) or not output.writable():
             raise TypeError("output must be a writable text stream")
 
         output.write(markdown)
