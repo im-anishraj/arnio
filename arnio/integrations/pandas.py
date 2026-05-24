@@ -56,9 +56,24 @@ class ArnioPandasAccessor:
         )
         return to_pandas(frame)
 
-    def profile(self, *, sample_size: int = 5) -> DataQualityReport:
+    def profile(
+        self,
+        *,
+        sample_size: int = 5,
+        approx_top_values: bool = False,
+        approx_top_values_min_unique: int = 1000,
+        approx_top_values_min_ratio: float = 0.2,
+        approx_top_values_sample_size: int = 2000,
+    ) -> DataQualityReport:
         """Profile DataFrame quality with Arnio."""
-        return profile(self.to_arframe(), sample_size=sample_size)
+        return profile(
+            self.to_arframe(),
+            sample_size=sample_size,
+            approx_top_values=approx_top_values,
+            approx_top_values_min_unique=approx_top_values_min_unique,
+            approx_top_values_min_ratio=approx_top_values_min_ratio,
+            approx_top_values_sample_size=approx_top_values_sample_size,
+        )
 
     def suggest_cleaning(self) -> list[tuple[str, dict[str, Any]]]:
         """Return Arnio pipeline-compatible cleaning suggestions."""
@@ -69,13 +84,20 @@ class ArnioPandasAccessor:
         *,
         mode: str = "safe",
         return_report: bool = False,
-    ) -> pd.DataFrame | tuple[pd.DataFrame, DataQualityReport]:
+        dry_run: bool = False,
+        allow_lossy_casts: bool = False,
+    ) -> pd.DataFrame | DataQualityReport | tuple[pd.DataFrame, DataQualityReport]:
         """Run Arnio's automatic cleaning and return pandas output."""
         result = auto_clean(
             self.to_arframe(),
             mode=mode,
             return_report=return_report,
+            dry_run=dry_run,
+            allow_lossy_casts=allow_lossy_casts,
         )
+
+        if dry_run and not return_report:
+            return result
 
         if return_report:
             frame, report = result

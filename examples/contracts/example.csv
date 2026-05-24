@@ -1,0 +1,5 @@
+user_id,email,is_active,revenue
+101,test@arnio.ai,true,12.5
+102,valid@example.com,false,0
+103,another@example.com,true,99.99
+
