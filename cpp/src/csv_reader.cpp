@@ -793,7 +793,8 @@ CsvParseResult CsvReader::read(const std::string& path, const std::string& on_ba
 
             for (size_t ci = 0; ci < col_types.size(); ++ci) {
                 if (ci < reusable_fields.size()) {
-                    col_types[ci] = CsvParser::promote_type(col_types[ci], parser_.infer_type(reusable_fields[ci]));
+                    col_types[ci] = CsvParser::promote_type(
+                        col_types[ci], parser_.infer_type(reusable_fields[ci]));
                 }
             }
             ++row_count;
@@ -835,7 +836,8 @@ CsvParseResult CsvReader::read(const std::string& path, const std::string& on_ba
                 throw std::runtime_error("Column not found in dtype mapping: " + column_name);
             }
             size_t column_index = static_cast<size_t>(std::distance(header.begin(), header_it));
-            bool selected = std::find(col_indices.begin(), col_indices.end(), column_index) != col_indices.end();
+            bool selected = std::find(col_indices.begin(), col_indices.end(), column_index) !=
+                            col_indices.end();
             if (!selected) {
                 throw std::runtime_error("dtype specified for non-selected column: " + column_name);
             }
@@ -873,7 +875,8 @@ CsvParseResult CsvReader::read(const std::string& path, const std::string& on_ba
             ++record_number2;
         }
 
-        std::optional<size_t> expected_cols2 = config.has_header ? std::optional<size_t>{header.size()} : std::nullopt;
+        std::optional<size_t> expected_cols2 =
+            config.has_header ? std::optional<size_t>{header.size()} : std::nullopt;
         size_t row_count2 = 0;
         size_t bad_row_count2 = 0;
         std::vector<std::string> reusable_fields2;

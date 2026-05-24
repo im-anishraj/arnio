@@ -2518,6 +2518,7 @@ class TestArFrameToDict:
         for col in frame.columns:
             assert result[col] == frame[col]
 
+
 # --- Tests added for CsvReader streaming memory optimization ---
 
 
