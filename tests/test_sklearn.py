@@ -163,6 +163,7 @@ def test_filter_rows_rejects_row_count_change_by_default():
 
 # --- Issue #1278: dtype drift warning in transform() ---
 
+
 def test_arniocleaner_warns_on_dtype_change_in_transform():
     """transform() emits UserWarning when a column dtype changed since fit()."""
     train_df = pd.DataFrame({"age": [25, 30, 35], "score": [1.0, 2.0, 3.0]})
