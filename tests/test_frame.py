@@ -444,8 +444,9 @@ def test_describe_all_numeric_columns(large_csv):
 
     for col in ["id", "value"]:
         metric_keys = list(stats[col].keys())
- 
- # ── _repr_html_() ─────────────────────────────────────────────────────────────
+
+
+# ── _repr_html_() ─────────────────────────────────────────────────────────────
 
 
 def test_repr_html_returns_str(sample_csv):
@@ -506,7 +507,7 @@ def test_repr_html_no_truncation_for_small_frame(sample_csv):
 def test_repr_html_body_capped_at_ten_rows(large_csv):
     frame = ar.read_csv(large_csv)
     out = frame._repr_html_()
-    tbody = out[out.index("<tbody>"):out.index("</tbody>") + len("</tbody>")]
+    tbody = out[out.index("<tbody>") : out.index("</tbody>") + len("</tbody>")]
     assert tbody.count("<tr>") == 10
 
 

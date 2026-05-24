@@ -674,7 +674,7 @@ class ArFrame:
 
         label = f"ArFrame preview (showing {actual_n} of {num_rows} rows):"
         return "\n".join([label, header, separator] + rows)
-    
+
     def _repr_html_(self) -> str:
         """Return a bounded HTML table for Jupyter/IPython display.
 
@@ -703,12 +703,11 @@ class ArFrame:
 
         # ── summary line ──────────────────────────────────────────────────
         dtype_parts = ", ".join(
-            f"{_html.escape(c)}: {_html.escape(dtypes.get(c, '?'))}"
-            for c in col_names
+            f"{_html.escape(c)}: {_html.escape(dtypes.get(c, '?'))}" for c in col_names
         )
         summary = (
-            "<p style=\"font-family:monospace;font-size:0.85em;"
-            "color:#555;margin:0 0 4px 0;\">"
+            '<p style="font-family:monospace;font-size:0.85em;'
+            'color:#555;margin:0 0 4px 0;">'
             f"ArFrame [{num_rows} rows \u00d7 {num_cols} cols]"
             + (f"&nbsp;&nbsp;|&nbsp;&nbsp;{dtype_parts}" if dtype_parts else "")
             + "</p>"
@@ -757,16 +756,14 @@ class ArFrame:
 
         tbody = f"<tbody>{rows_html}</tbody>"
         table = (
-            "<table style='border-collapse:collapse;'>"
-            f"{header}{tbody}"
-            "</table>"
+            "<table style='border-collapse:collapse;'>" f"{header}{tbody}" "</table>"
         )
 
         # ── truncation notice ─────────────────────────────────────────────
         notice = ""
         if num_rows > _REPR_HTML_MAX_ROWS:
             notice = (
-                "<p style=\"font-size:0.82em;color:#888;margin:4px 0 0 0;\">"
+                '<p style="font-size:0.82em;color:#888;margin:4px 0 0 0;">'
                 f"Showing {_REPR_HTML_MAX_ROWS} of {num_rows} rows"
                 "</p>"
             )
