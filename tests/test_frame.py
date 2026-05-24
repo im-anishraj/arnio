@@ -443,7 +443,7 @@ def test_describe_all_numeric_columns(large_csv):
     assert list(stats.keys()) == ["id", "value"]
 
     for col in ["id", "value"]:
-        metric_keys = list(stats[col].keys())
+        list(stats[col].keys())
 
 
 # ── _repr_html_() ─────────────────────────────────────────────────────────────
