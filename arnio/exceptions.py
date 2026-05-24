@@ -3,6 +3,11 @@ arnio.exceptions
 Custom exceptions for the Arnio library.
 """
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .schema import ValidationResult
+
 
 class ArnioError(Exception):
     """Base exception for all Arnio errors."""
