@@ -198,6 +198,7 @@ cython_debug/
 #   Visual Studio Code specific template is maintained in a separate VisualStudioCode.gitignore 
 #   that can be found at https://github.com/github/gitignore/blob/main/Global/VisualStudioCode.gitignore
 #   and can be added to the global gitignore or merged into this file. However, if you prefer, 
+
 #   you could uncomment the following to ignore the entire vscode folder
 .vscode/
 # Temporary file for partial code execution
@@ -220,6 +221,8 @@ __marimo__/
 # ── Arnio-specific ──────────────────────────────────
 # Generated benchmark data (regenerate with: python benchmarks/generate_data.py)
 benchmarks/benchmark_1m.csv
+benchmarks/benchmark_wide.csv
+benchmarks/benchmark_multiline.csv
 
 # Wheel build outputs
 wheelhouse/
@@ -227,7 +230,11 @@ wheelhouse/
 # C++ build artifacts
 *.pyd
 *.dll
-_arnio_cpp*
+*.so
+*_arnio_cpp*.dylib
+_arnio_cpp*.so
+_arnio_cpp*.pyd
+_arnio_cpp*.dll
 
 # csv
 /*.csv

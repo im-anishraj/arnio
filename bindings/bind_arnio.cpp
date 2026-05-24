@@ -2,6 +2,8 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
+#include <cstring>
+
 #include "arnio/cleaning.h"
 #include "arnio/column.h"
 #include "arnio/csv_reader.h"
@@ -59,19 +61,21 @@ PYBIND11_MODULE(_arnio_cpp, m) {
                  return py::none();
              })
         .def("to_numpy_float",
-             [](py::object col_obj) {
-                 const Column& col = col_obj.cast<const Column&>();
+             [](const Column& col) {
                  if (col.dtype() != DType::FLOAT64)
                      throw std::runtime_error("Not a FLOAT64 column");
                  const auto& vec = std::get<std::vector<double>>(col.data());
-                 return py::array_t<double>({vec.size()}, {sizeof(double)}, vec.data(), col_obj);
+                 auto result = py::array_t<double>(vec.size());
+                 std::memcpy(result.mutable_data(), vec.data(), vec.size() * sizeof(double));
+                 return result;
              })
         .def("to_numpy_int",
-             [](py::object col_obj) {
-                 const Column& col = col_obj.cast<const Column&>();
+             [](const Column& col) {
                  if (col.dtype() != DType::INT64) throw std::runtime_error("Not an INT64 column");
                  const auto& vec = std::get<std::vector<int64_t>>(col.data());
-                 return py::array_t<int64_t>({vec.size()}, {sizeof(int64_t)}, vec.data(), col_obj);
+                 auto result = py::array_t<int64_t>(vec.size());
+                 std::memcpy(result.mutable_data(), vec.data(), vec.size() * sizeof(int64_t));
+                 return result;
              })
         .def("to_numpy_bool",
              [](py::object col_obj) {
@@ -137,7 +141,9 @@ PYBIND11_MODULE(_arnio_cpp, m) {
 
     // --- Frame ---
     py::class_<Frame>(m, "Frame")
+        .def("select_columns", &Frame::select_columns)
         .def(py::init<>())
+        .def(py::init<size_t>(), py::arg("row_count"))
         .def("shape", &Frame::shape)
         .def("num_rows", &Frame::num_rows)
         .def("num_cols", &Frame::num_cols)
@@ -155,10 +161,25 @@ PYBIND11_MODULE(_arnio_cpp, m) {
             py::return_value_policy::reference_internal)
         .def("add_column", &Frame::add_column)
         .def("clone", &Frame::clone)
+        .def("describe",
+             [](const Frame& f) {
+                 py::dict summary;
+                 auto raw_summary = f.describe();
+                 for (const auto& col_pair : raw_summary) {
+                     py::dict stats;
+                     for (const auto& metric_pair : col_pair.second) {
+                         stats[py::str(metric_pair.first)] = metric_pair.second;
+                     }
+                     summary[py::str(col_pair.first)] = stats;
+                 }
+
+                 return summary;
+             })
         .def_static(
             "from_dict",
-            [](py::dict cols_dict, py::dict dtype_hints) {
-                Frame frame;
+            [](py::dict cols_dict, py::dict dtype_hints, py::object row_count_obj) {
+                Frame frame =
+                    row_count_obj.is_none() ? Frame() : Frame(row_count_obj.cast<size_t>());
 
                 for (auto item : cols_dict) {
                     std::string name = py::cast<std::string>(item.first);
@@ -210,39 +231,88 @@ PYBIND11_MODULE(_arnio_cpp, m) {
 
                 return frame;
             },
-            py::arg("cols_dict"), py::arg("dtype_hints") = py::dict());
+            py::arg("cols_dict"), py::arg("dtype_hints") = py::dict(),
+            py::arg("row_count") = py::none());
 
     // --- CsvReader ---
+    py::class_<BadRow>(m, "BadRow")
+        .def_readonly("row", &BadRow::row)
+        .def_readonly("expected", &BadRow::expected)
+        .def_readonly("actual", &BadRow::actual);
+
     py::class_<CsvConfig>(m, "CsvConfig")
         .def(py::init<>())
         .def_readwrite("delimiter", &CsvConfig::delimiter)
         .def_readwrite("has_header", &CsvConfig::has_header)
+        .def_readwrite("dtype", &CsvConfig::dtype)
         .def_readwrite("usecols", &CsvConfig::usecols)
         .def_readwrite("nrows", &CsvConfig::nrows)
+        .def_readwrite("skip_rows", &CsvConfig::skip_rows)
         .def_readwrite("encoding", &CsvConfig::encoding)
         .def_readwrite("trim_headers", &CsvConfig::trim_headers)
+        .def_readwrite("decimal_separator", &CsvConfig::decimal_separator)
         .def_readwrite("thousands_separator", &CsvConfig::thousands_separator)
-        .def_readwrite("sample_size", &CsvConfig::sample_size);
+        .def_readwrite("sample_size", &CsvConfig::sample_size)
+        .def_readwrite("mode", &CsvConfig::mode)
+        .def_readwrite("encoding_errors", &CsvConfig::encoding_errors)
+        .def_readwrite("null_values", &CsvConfig::null_values);
 
     py::class_<CsvReader>(m, "CsvReader")
         .def(py::init<const CsvConfig&>(), py::arg("config") = CsvConfig{})
-        .def("read",
-             [](const CsvReader& reader, const std::string& path) {
+        .def(
+            "read",
+            [](const CsvReader& reader, const std::string& path, const std::string& on_bad_lines) {
+                CsvParseResult result;
+                {
+                    py::gil_scoped_release release;
+                    result = reader.read(path, on_bad_lines);
+                }
+
+                return py::make_tuple(std::move(result.frame), std::move(result.bad_rows));
+            },
+            py::arg("path"), py::arg("on_bad_lines") = std::string("error"))
+        .def(
+            "scan_schema",
+            [](const CsvReader& reader, const std::string& path, const std::string& on_bad_lines) {
+                std::vector<std::pair<std::string, std::string>> schema_vec;
+                std::vector<std::string> bad_rows;
+                {
+                    py::gil_scoped_release release;
+                    auto result = reader.scan_schema(path, on_bad_lines);
+                    schema_vec = std::move(result.first);
+                    bad_rows = std::move(result.second);
+                }
+                py::dict schema;
+                for (const auto& pair : schema_vec) {
+                    schema[py::str(pair.first)] = py::str(pair.second);
+                }
+                return py::make_tuple(schema, bad_rows);
+            },
+            py::arg("path"), py::arg("on_bad_lines") = "error");
+
+    py::class_<CsvChunkReader>(m, "CsvChunkReader")
+        .def(py::init<const CsvConfig&>(), py::arg("config") = CsvConfig{})
+        .def("open",
+             [](CsvChunkReader& reader, const std::string& path) {
                  py::gil_scoped_release release;
-                 return reader.read(path);
+                 reader.open(path);
              })
-        .def("scan_schema", [](const CsvReader& reader, const std::string& path) {
-            std::vector<std::pair<std::string, std::string>> result;
-            {
-                py::gil_scoped_release release;
-                result = reader.scan_schema(path);
-            }
-            py::dict schema;
-            for (const auto& pair : result) {
-                schema[py::str(pair.first)] = py::str(pair.second);
-            }
-            return schema;
-        });
+        .def(
+            "next_chunk",
+            [](CsvChunkReader& reader, size_t chunksize,
+               const std::string& on_bad_lines) -> py::object {
+                std::optional<CsvParseResult> result;
+                {
+                    py::gil_scoped_release release;
+                    result = reader.next_chunk(chunksize, on_bad_lines);
+                }
+                if (!result.has_value()) {
+                    return py::none();
+                }
+                return py::make_tuple(std::move(result->frame), std::move(result->bad_rows));
+            },
+            py::arg("chunksize"), py::arg("on_bad_lines") = std::string("error"))
+        .def("close", &CsvChunkReader::close);
 
     // --- CsvWriter ---
     py::class_<CsvWriteConfig>(m, "CsvWriteConfig")
@@ -314,4 +384,32 @@ PYBIND11_MODULE(_arnio_cpp, m) {
 
     m.def("cast_types", &cast_types, py::arg("frame"), py::arg("mapping"),
           py::arg("coerce_invalid") = false);
+
+    m.def(
+        "clip_numeric",
+        [](const Frame& frame, std::optional<double> lower, std::optional<double> upper,
+           const std::optional<std::vector<std::string>>& subset) {
+            py::gil_scoped_release release;
+            return clip_numeric(frame, lower, upper, subset);
+        },
+        py::arg("frame"), py::arg("lower") = std::nullopt, py::arg("upper") = std::nullopt,
+        py::arg("subset") = std::nullopt);
+    m.def(
+        "combine_columns",
+        [](const Frame& frame, const std::vector<std::string>& subset, const std::string& separator,
+           const std::string& output_column) {
+            py::gil_scoped_release release;
+            return combine_columns(frame, subset, separator, output_column);
+        },
+        py::arg("frame"), py::arg("subset"), py::arg("separator"), py::arg("output_column"));
+
+    m.def(
+        "safe_divide_columns",
+        [](const Frame& frame, const std::string& numerator, const std::string& denominator,
+           const std::string& output_column, double fill_value) {
+            py::gil_scoped_release release;
+            return safe_divide_columns(frame, numerator, denominator, output_column, fill_value);
+        },
+        py::arg("frame"), py::arg("numerator"), py::arg("denominator"), py::arg("output_column"),
+        py::arg("fill_value") = 0.0);
 }

@@ -56,9 +56,24 @@ class ArnioPandasAccessor:
         )
         return to_pandas(frame)
 
-    def profile(self, *, sample_size: int = 5) -> DataQualityReport:
+    def profile(
+        self,
+        *,
+        sample_size: int = 5,
+        approx_top_values: bool = False,
+        approx_top_values_min_unique: int = 1000,
+        approx_top_values_min_ratio: float = 0.2,
+        approx_top_values_sample_size: int = 2000,
+    ) -> DataQualityReport:
         """Profile DataFrame quality with Arnio."""
-        return profile(self.to_arframe(), sample_size=sample_size)
+        return profile(
+            self.to_arframe(),
+            sample_size=sample_size,
+            approx_top_values=approx_top_values,
+            approx_top_values_min_unique=approx_top_values_min_unique,
+            approx_top_values_min_ratio=approx_top_values_min_ratio,
+            approx_top_values_sample_size=approx_top_values_sample_size,
+        )
 
     def suggest_cleaning(self) -> list[tuple[str, dict[str, Any]]]:
         """Return Arnio pipeline-compatible cleaning suggestions."""
