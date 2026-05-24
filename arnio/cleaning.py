@@ -2041,3 +2041,39 @@ def clean_column_names(
 
     result = _rename_columns(frame._frame, mapping)
     return ArFrame(result)
+
+def slugify_column_names(frame, on_duplicates="raise"):
+    import re
+    import pandas as pd
+    from .convert import from_pandas, to_pandas
+    from .frame import ArFrame
+
+    is_arframe = isinstance(frame, ArFrame)
+    df = to_pandas(frame) if is_arframe else frame
+
+    new_cols = []
+    for col in df.columns:
+        slug = col.strip()
+        slug = re.sub(r"[\s\-]+", "_", slug)
+        slug = re.sub(r"[^\w]", "", slug)
+        slug = re.sub(r"_+", "_", slug)
+        slug = slug.lower()
+        if not slug:
+            raise ValueError(f"Column name {col!r} slugifies to an empty string.")
+        new_cols.append(slug)
+
+    if on_duplicates == "raise" and len(new_cols) != len(set(new_cols)):
+        dupes = [c for c in new_cols if new_cols.count(c) > 1]
+        raise ValueError(f"Duplicate slugs after slugifying: {set(dupes)}")
+    elif on_duplicates == "ignore":
+        seen, deduped = set(), []
+        for c in new_cols:
+            if c not in seen:
+                seen.add(c)
+                deduped.append(c)
+        df = df[[df.columns[i] for i, c in enumerate(new_cols) if c in seen]]
+        new_cols = [c for c in new_cols if c in seen]
+
+    df = df.copy()
+    df.columns = new_cols
+    return from_pandas(df) if is_arframe else df

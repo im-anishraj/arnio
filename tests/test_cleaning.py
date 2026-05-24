@@ -3870,3 +3870,29 @@ class TestCleanColumnNames:
         frame = from_pandas(df)
         result = ar.pipeline(frame, [("clean_column_names", {"case_type": "upper"})])
         assert to_pandas(result).columns.tolist() == ["MY_NAME", "AGE"]
+
+class TestSlugifyColumnNames:
+    def test_spaces_become_underscores(self):
+        frame = ar.from_pandas(pd.DataFrame({"First Name": ["Alice"]}))
+        result = ar.slugify_column_names(frame)
+        assert result.columns == ["first_name"]
+
+    def test_mixed_case_lowercased(self):
+        frame = ar.from_pandas(pd.DataFrame({"UserID": [1]}))
+        result = ar.slugify_column_names(frame)
+        assert result.columns == ["userid"]
+
+    def test_special_chars_removed(self):
+        frame = ar.from_pandas(pd.DataFrame({"Revenue ($)": [100.0]}))
+        result = ar.slugify_column_names(frame)
+        assert result.columns == ["revenue"]
+
+    def test_empty_slug_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"!!!": [1]}))
+        with pytest.raises(ValueError):
+            ar.slugify_column_names(frame)
+
+    def test_duplicate_slugs_raise_by_default(self):
+        frame = ar.from_pandas(pd.DataFrame({"First Name": [1], "first name": [2]}))
+        with pytest.raises(ValueError):
+            ar.slugify_column_names(frame)
