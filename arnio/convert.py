@@ -313,10 +313,17 @@ def to_arrow(frame: ArFrame) -> pa.Table:
 def _pandas_dtype_to_arnio(dtype: object) -> _DType | None:
     if dtype == pd.Int64Dtype():
         return _DType.INT64
-    if str(dtype) == "float64":
+    if dtype == pd.Float64Dtype() or dtype == np.dtype("float64"):
         return _DType.FLOAT64
+
+    if dtype == pd.BooleanDtype() or dtype == np.dtype("bool"):
+        return _DType.BOOL
+    if dtype == pd.StringDtype():
+        return _DType.STRING
+    # object dtype is intentionally left to value-based inference
     if dtype == pd.BooleanDtype() or str(dtype) == "bool":
         return _DType.BOOL
+
     return None
 
 
@@ -386,7 +393,7 @@ def from_pandas(df: pd.DataFrame) -> ArFrame:
         series = df[col_name]
         name = str(col_name)
 
-        _check_unsupported_dtype(col_name, series)  # NEW: check before converting
+        _check_unsupported_dtype(col_name, series)
 
         columns[name] = _series_to_python_values(series, col_name)
 

@@ -7,7 +7,9 @@ from __future__ import annotations
 
 import json
 
-from ._core import _Frame
+import numpy as np
+
+from ._core import _DType, _Frame
 
 #: Dtype strings recognised by ArFrame.select_dtypes().
 _VALID_DTYPES: frozenset[str] = frozenset(
@@ -403,6 +405,31 @@ class ArFrame:
 
         return ArFrame(self._frame.select_columns(columns))
 
+
+    def to_numpy(self, fill_value: object = None) -> np.ndarray:
+        """Convert a numeric/bool-only ArFrame to a 2D NumPy array.
+
+        Provides a direct export path without routing through pandas,
+        suitable for numeric workflows requiring fast array conversion.
+
+        Parameters
+        ----------
+        fill_value : scalar, optional
+            Value used to replace null entries. Must be compatible with
+            the column dtype — use int/float for numeric columns, bool
+            for bool columns. If ``None`` and any null values are present,
+            ``ValueError`` is raised.
+
+        Returns
+        -------
+        numpy.ndarray
+            2D array of shape ``(n_rows, n_cols)`` in column order.
+            dtype is preserved when all columns share the same type
+            (e.g. all int64, all float64, or all bool). When columns
+            have mixed types (e.g. int and float together), NumPy
+            promotes to a common dtype (typically float64).
+            A zero-row frame returns shape ``(0, n_cols)``.
+
     def drop_columns(self, cols: list[str]) -> ArFrame:
         """Return a new ArFrame with the specified columns removed.
 
@@ -418,16 +445,78 @@ class ArFrame:
             New ArFrame without the dropped columns. Original column
             order is preserved.
 
+
         Raises
         ------
         TypeError
+
+            If any column has a non-numeric, non-bool dtype (e.g. string).
+        ValueError
+            If any column contains null values and ``fill_value`` is not
+            provided.
+
             If cols is not a list, or contains non-string elements.
         ValueError
             If any name in cols does not exist in the frame.
 
+
         Examples
         --------
         >>> frame = ar.read_csv("data.csv")
+
+        >>> arr = frame.to_numpy()
+        >>> arr = frame.to_numpy(fill_value=0)
+        """
+        SUPPORTED_DTYPES = {_DType.INT64, _DType.FLOAT64, _DType.BOOL}
+
+        n_rows, n_cols = self.shape
+
+        if n_cols == 0:
+            return np.empty((n_rows, 0))
+
+        columns = []
+        for i in range(n_cols):
+            col = self._frame.column_by_index(i)
+            dtype = col.dtype()
+
+            if dtype not in SUPPORTED_DTYPES:
+                if n_rows == 0:
+                    return np.empty((0, n_cols), dtype=object)
+                raise TypeError(
+                    f"to_numpy() requires all columns to be numeric or bool. "
+                    f"Column '{col.name()}' has unsupported dtype '{dtype}'."
+                )
+
+            mask = col.get_null_mask()
+            has_nulls = mask.any()
+
+            if has_nulls and fill_value is None:
+                raise ValueError(
+                    f"Column '{col.name()}' contains null values. "
+                    f"Provide fill_value=... to substitute nulls, "
+                    f"e.g. frame.to_numpy(fill_value=0)."
+                )
+
+            if dtype == _DType.INT64:
+                arr = col.to_numpy_int().copy()
+                if has_nulls:
+                    arr[mask] = fill_value
+            elif dtype == _DType.FLOAT64:
+                arr = col.to_numpy_float().copy()
+                if has_nulls:
+                    arr[mask] = fill_value
+            else:
+                arr = col.to_numpy_bool().copy()
+                if has_nulls:
+                    arr[mask] = fill_value
+
+            columns.append(arr)
+
+        if n_rows == 0:
+            return np.empty((0, n_cols))
+
+        return np.column_stack(columns)
+
         >>> smaller = frame.drop_columns(["col1", "col2"])
         """
         if not isinstance(cols, list):
@@ -470,6 +559,7 @@ class ArFrame:
             return from_pandas(pd.DataFrame(index=range(len(self))))
 
         return ArFrame(self._frame.select_columns(remaining))
+
 
     def select_dtypes(
         self,
@@ -558,7 +648,7 @@ class ArFrame:
 
         col_dtypes = self.dtypes
         matched: list[str] = []
-        for col in self.columns:  # iterate columns to preserve original order
+        for col in self.columns:
             dtype = col_dtypes[col]
             if include_set is not None and dtype not in include_set:
                 continue
