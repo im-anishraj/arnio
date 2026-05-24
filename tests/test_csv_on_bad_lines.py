@@ -500,3 +500,21 @@ class TestScanCsvOnBadLines:
             warnings.simplefilter("always")
             ar.scan_csv(csv_path, on_bad_lines="skip")
         assert [w for w in caught if w.category is UserWarning] == []
+
+    def test_warn_quoted_delimiter_not_classified_bad(self, tmp_path):
+        """A quoted field containing the delimiter must not be reported as malformed."""
+        csv_path = tmp_path / "quoted.csv"
+        csv_path.write_text('a,b\n"x,y",2\n1,2\n')
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            schema = ar.scan_csv(csv_path, on_bad_lines="warn")
+        assert schema == {"a": "string", "b": "int64"}
+        assert [w for w in caught if w.category is UserWarning] == []
+
+    def test_warn_real_bad_row_among_quoted_still_caught(self, tmp_path):
+        """Real malformed row warns while quoted-delimiter rows pass through."""
+        csv_path = tmp_path / "mixed.csv"
+        csv_path.write_text('a,b\n"x,y",2\nbad_row\n1,2\n')
+        with pytest.warns(UserWarning, match="malformed CSV row"):
+            schema = ar.scan_csv(csv_path, on_bad_lines="warn")
+        assert schema == {"a": "string", "b": "int64"}
