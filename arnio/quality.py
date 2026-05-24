@@ -6,14 +6,22 @@ Data quality profiling and safe automatic cleaning helpers.
 from __future__ import annotations
 
 import html
+import json
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
 import pandas as pd
 
-from .cleaning import cast_types, drop_duplicates, strip_whitespace
+from .cleaning import (
+    _validate_column_sequence,
+    cast_types,
+    drop_duplicates,
+    strip_whitespace,
+    validate_columns_exist,
+)
 from .convert import to_pandas
 from .frame import ArFrame
 
@@ -190,8 +198,26 @@ class DataQualityReport:
     score_components: dict[str, float] = field(default_factory=dict)
     suggestions: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
 
-    def to_dict(self, *, redact_sample_values: bool = False) -> dict[str, Any]:
+    def to_dict(
+        self,
+        *,
+        redact_sample_values: bool = False,
+        exclude_columns: list[str] | set[str] | tuple[str, ...] | None = None,
+    ) -> dict[str, Any]:
         """Return a JSON-friendly dictionary representation."""
+
+        if exclude_columns is None:
+            exclude_columns = set()
+
+        elif not isinstance(exclude_columns, (list, tuple, set)):
+            raise TypeError("exclude_columns must be a list, tuple, set, or None")
+
+        else:
+            if not all(isinstance(column, str) for column in exclude_columns):
+                raise TypeError("exclude_columns must contain only string column names")
+
+            exclude_columns = set(exclude_columns)
+
         return {
             "row_count": self.row_count,
             "column_count": self.column_count,
@@ -203,11 +229,27 @@ class DataQualityReport:
             "columns": {
                 name: column.to_dict(redact_sample_values=redact_sample_values)
                 for name, column in self.columns.items()
+                if name not in exclude_columns
             },
             "suggestions": [
                 {
                     "step": s[0],
-                    "kwargs": dict(s[1]),
+                    "kwargs": {
+                        key: (
+                            [item for item in value if item not in exclude_columns]
+                            if key in {"subset", "columns"} and isinstance(value, list)
+                            else (
+                                {
+                                    k: v
+                                    for k, v in value.items()
+                                    if k not in exclude_columns
+                                }
+                                if key == "cast_types" and isinstance(value, dict)
+                                else value
+                            )
+                        )
+                        for key, value in dict(s[1]).items()
+                    },
                     "confidence_score": getattr(s, "confidence_score", None),
                     "confidence_reason": getattr(s, "confidence_reason", None),
                 }
@@ -215,7 +257,28 @@ class DataQualityReport:
             ],
         }
 
-    def to_markdown(self) -> str:
+    def to_json(
+        self,
+        *,
+        indent: int | None = None,
+        redact_sample_values: bool = False,
+        exclude_columns: list[str] | set[str] | tuple[str, ...] | None = None,
+    ) -> str:
+        """Return the report as a JSON string.
+
+        Example:
+        report.to_json(indent=2)
+        """
+
+        return json.dumps(
+            self.to_dict(
+                redact_sample_values=redact_sample_values,
+                exclude_columns=exclude_columns,
+            ),
+            indent=indent,
+        )
+
+    def to_markdown(self, output: Any | None = None) -> str | None:
         """Return a GitHub-friendly Markdown report."""
 
         lines: list[str] = []
@@ -282,9 +345,22 @@ class DataQualityReport:
 
             lines.append("")
 
-        return "\n".join(lines)
+        markdown = "\n".join(lines)
 
-    def to_html(self, file_path: str | None = None) -> str:
+        if output is None:
+            return markdown
+
+        if not hasattr(output, "write"):
+            raise TypeError("output must be a writable text stream")
+
+        output.write(markdown)
+        return None
+
+    def to_html(
+        self,
+        file_path: str | None = None,
+        output: Any | None = None,
+    ) -> str | None:
         """Return a self-contained, dependency-free HTML data quality report.
 
         In notebook environments, ``DataQualityReport`` will render a compact dashboard
@@ -296,7 +372,14 @@ class DataQualityReport:
             with open(file_path, "w", encoding="utf-8") as f:
                 f.write(html_out)
 
-        return html_out
+        if output is None:
+            return html_out
+
+        if not hasattr(output, "write"):
+            raise TypeError("output must be a writable text stream")
+
+        output.write(html_out)
+        return None
 
     def _repr_html_(self) -> str:  # pragma: no cover - exercised via tests directly
         """Notebook-friendly HTML representation."""
@@ -725,6 +808,7 @@ class QualityGateResult:
 def profile(
     frame: ArFrame,
     *,
+    exclude_columns: Sequence[str] | None = None,
     sample_size: int = 5,
     approx_top_values: bool = False,
     approx_top_values_min_unique: int = 1000,
@@ -737,6 +821,8 @@ def profile(
     ----------
     frame : ArFrame
         Input frame to inspect.
+    exclude_columns : Sequence[str], optional
+        Column names to exclude from profiling.
     sample_size : int, default 5
         Number of non-null sample values to keep per column.
     approx_top_values : bool, default False
@@ -760,6 +846,11 @@ def profile(
     >>> report = ar.profile(frame, sample_size=3)
     >>> report.summary()
     """
+    if not isinstance(frame, ArFrame):
+        raise TypeError(
+            f"profile() expects an ArFrame, got {type(frame).__name__}. Use arnio.from_pandas() first."
+        )
+
     if not isinstance(sample_size, int) or isinstance(sample_size, bool):
         raise TypeError("sample_size must be an integer")
     if sample_size < 0:
@@ -782,11 +873,30 @@ def profile(
         approx_top_values_sample_size, bool
     ):
         raise TypeError("approx_top_values_sample_size must be an integer")
+
     if approx_top_values_sample_size <= 0:
         raise ValueError("approx_top_values_sample_size must be positive")
 
+    has_exclusions = exclude_columns is not None and len(exclude_columns) > 0
+
+    if exclude_columns is not None:
+        exclude_columns = _validate_column_sequence(
+            exclude_columns,
+            argument_name="exclude_columns",
+        )
+        validate_columns_exist(
+            frame,
+            exclude_columns,
+            operation="profile",
+        )
+
     df = to_pandas(frame)
-    row_count, column_count = frame.shape
+
+    if has_exclusions:
+        df = df.drop(columns=list(exclude_columns))
+
+    row_count = len(df)
+    column_count = len(df.columns)
     duplicate_rows = int(df.duplicated().sum()) if row_count else 0
     duplicate_ratio = _ratio(duplicate_rows, row_count)
 
@@ -808,7 +918,11 @@ def profile(
     report = DataQualityReport(
         row_count=row_count,
         column_count=column_count,
-        memory_usage=frame.memory_usage(),
+        memory_usage=(
+            int(df.memory_usage(deep=True).sum())
+            if has_exclusions
+            else frame.memory_usage()
+        ),
         duplicate_rows=duplicate_rows,
         duplicate_ratio=duplicate_ratio,
         columns=columns,
@@ -1244,7 +1358,13 @@ def _markdown_cell(value: Any) -> str:
     if value is None:
         return "-"
     text = str(_clean_scalar(value))
-    return text.replace("\\", "\\\\").replace("|", "\\|").replace("\n", "<br>")
+    return (
+        text.replace("\\", "\\\\")
+        .replace("|", "\\|")
+        .replace("\r\n", "<br>")
+        .replace("\r", "<br>")
+        .replace("\n", "<br>")
+    )
 
 
 def _compare_column_profiles(
@@ -1560,6 +1680,11 @@ def auto_clean(
     >>> clean, explanation = ar.auto_clean(frame, explain=True)
     >>> print(explanation)
     """
+    if not isinstance(frame, ArFrame):
+        raise TypeError(
+            f"auto_clean() expects an ArFrame, got {type(frame).__name__}. Use arnio.from_pandas() first."
+        )
+
     if mode not in {"safe", "strict"}:
         raise ValueError("mode must be 'safe' or 'strict'")
 
@@ -1659,6 +1784,11 @@ def _profile_column(
     non_null = series.dropna()
     unique_count = int(non_null.nunique(dropna=True))
     unique_ratio = _ratio(unique_count, len(non_null))
+    dominant_ratio = 0.0
+
+    if len(non_null):
+        value_counts = non_null.value_counts(dropna=True)
+        dominant_ratio = _ratio(int(value_counts.iloc[0]), len(non_null))
     sample_values = non_null.head(sample_size).tolist()
 
     empty_string_count = 0
@@ -1747,8 +1877,11 @@ def _profile_column(
         null_count=null_count,
         row_count=row_count,
         unique_count=unique_count,
+        unique_ratio=unique_ratio,
+        semantic_type=semantic_type,
         whitespace_count=whitespace_count,
         empty_string_count=empty_string_count,
+        dominant_ratio=dominant_ratio,
     )
 
     return ColumnProfile(
@@ -1852,8 +1985,11 @@ def _column_warnings(
     null_count: int,
     row_count: int,
     unique_count: int,
+    unique_ratio: float,
+    semantic_type: str,
     whitespace_count: int,
     empty_string_count: int,
+    dominant_ratio: float,
 ) -> list[str]:
     warnings: list[str] = []
     if null_count:
@@ -1862,6 +1998,16 @@ def _column_warnings(
         warnings.append("all_null")
     if row_count and unique_count == 1:
         warnings.append("constant")
+    if row_count and unique_count > 1 and dominant_ratio >= _NEAR_CONSTANT_THRESHOLD:
+        warnings.append("near_constant")
+    non_null_count = row_count - null_count
+    if (
+        non_null_count > 0
+        and unique_count >= _HIGH_CARDINALITY_MIN_UNIQUE
+        and unique_ratio >= _HIGH_CARDINALITY_RATIO_THRESHOLD
+        and semantic_type in {"identifier", "text"}
+    ):
+        warnings.append("high_cardinality")
     if whitespace_count:
         warnings.append("leading_or_trailing_whitespace")
     if empty_string_count:
@@ -1903,6 +2049,9 @@ def _clean_scalar(value: Any) -> Any:
 
 
 _APPROX_TOP_VALUES_SEED = 0
+_NEAR_CONSTANT_THRESHOLD = 0.95
+_HIGH_CARDINALITY_RATIO_THRESHOLD = 0.9
+_HIGH_CARDINALITY_MIN_UNIQUE = 100
 
 
 def _top_values(

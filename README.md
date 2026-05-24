@@ -124,6 +124,9 @@ frame = arnio.read_csv("sample.csv")
 
 # Preview first 5 rows
 frame.preview(5)
+
+# Generate and view scannable summary statistics
+print(frame.describe())
 ```
 
 ### Pipeline validation behavior
@@ -229,12 +232,16 @@ Example contract files are included under `examples/contracts/`.
 Use `select_columns()` to create a new `ArFrame` with only the required columns before converting to pandas.
 
 ```python
-selected = frame.select_columns(["name", "revenue"])
+selected = ar.select_columns(frame, ["name", "revenue"])
 
 print(selected.columns)
 # ['name', 'revenue']
 ```
 
+- Preserves the requested column order.
+- Returns a new `ArFrame`.
+- Raises `ValueError` if any requested column does not exist.
+- Raises `TypeError` if `columns` is not a sequence of strings.
 
 ### Handling missing values
 
@@ -251,6 +258,52 @@ frame = ar.read_csv("data.csv", null_values=["", "MISSING", "UNKNOWN"])
 frame = ar.read_csv("data.csv", null_values=[])
 ```
 
+### Handling decimal separators
+
+Use `decimal_separator` when numeric CSV data uses a separator other than
+the default dot. This is explicit by design: Arnio does not auto-detect decimal
+formats because a comma can also be the CSV delimiter.
+
+```python
+# Semicolon-delimited CSV with unquoted European decimals
+frame = ar.read_csv("prices.csv", delimiter=";", decimal_separator=",")
+
+# Comma-delimited CSV still needs quoted comma-decimal values
+frame = ar.read_csv("prices.csv", decimal_separator=",")
+```
+
+The default remains `decimal_separator="."`, so existing dot-decimal files keep
+their current behavior. If you also use `thousands_separator`, it must differ
+from `decimal_separator`.
+
+### Handling invalid UTF-8 bytes
+
+Use `encoding_errors` to control how invalid UTF-8 bytes are handled during CSV parsing.
+
+```python
+# Raise an error on invalid UTF-8 bytes (default)
+frame = ar.read_csv(
+    "data.csv",
+    encoding_errors="strict",
+)
+
+# Replace invalid bytes with the Unicode replacement character (�)
+frame = ar.read_csv(
+    "data.csv",
+    encoding_errors="replace",
+)
+
+# Ignore invalid bytes completely
+frame = ar.read_csv(
+    "data.csv",
+    encoding_errors="ignore",
+)
+```
+Supported values:
+
+- `"strict"` (default)
+- `"replace"`
+- `"ignore"`
 > Every step above executes in C++. Your Python code is a _configuration_ — not the execution engine.
 
 > Explore more in the **[examples/](./examples/)** folder — ready-to-run recipes for sales, customers, survey, logs, and finance datasets.
@@ -289,6 +342,8 @@ export policy should stay explicit in the application that writes the file.
 ### Schema Validation
 
 `ar.validate()` returns a `ValidationResult`; it does not raise for validation failures. Check `result.passed` and `result.issues` for `dtype` or `required_column` rule violations.
+
+`validate()` currently operates on a single in-memory `ArFrame`. Chunked validation via `read_csv_chunked()` iterators is not yet supported directly. Validate each chunk individually or materialize the data before validation when working with streamed/chunked inputs.
 
 ### Pipeline Step Errors
 
@@ -426,6 +481,11 @@ ar.register_step("team:drop_nulls", remove_outliers)  # namespaced custom step
 # Introspect built-in and custom step names without reaching into internals.
 print(ar.list_steps())
 
+# Opt in to a context object only when you need execution metadata.
+def capture_context(df, context=None):
+    print(context.step_name, context.step_index, context.total_steps)
+    return df
+
 # Now use it in any pipeline alongside native C++ steps
 clean = ar.pipeline(frame, [
     ("builtin:strip_whitespace",),
@@ -501,6 +561,24 @@ frame.head(0)
 Raises `ValueError` for negative or boolean `n`.
 </details>
 
+### Pipeline verbose diagnostics
+
+Enable lightweight pipeline diagnostics with `verbose=True`:
+
+```python
+result = ar.pipeline(
+    frame,
+    [
+        ("strip_whitespace",),
+        ("drop_nulls",),
+    ],
+    verbose=True,
+)
+```
+
+This logs step execution order, execution path, elapsed time,
+and row-count changes through the `arnio` logger.
+
 <br>
 
 ---
@@ -517,8 +595,22 @@ not to replace it.
 | **pandas** | Clean, validate, and profile messy `DataFrame`s through `df.arnio`. |
 | **NumPy** | Prepare typed numeric data before array/modeling workflows. |
 | **scikit-learn** | Use Arnio cleaning as a preprocessing layer before model training. |
-| **DuckDB / Arrow** | Validate and prepare data before analytics and columnar exchange. |
+| **DuckDB / Arrow** | Validate and prepare data before analytics and columnar exchange. Export ArFrame to pyarrow.Table via ``ar.to_arrow(frame)``. |
 | **notebooks** | Inspect quality issues and cleaning suggestions before analysis. |
+
+### DuckDB registration
+
+Use `ar.register_duckdb(frame, conn, "table_name")` to register an ArFrame directly as a DuckDB relation without writing pandas conversion glue yourself. DuckDB is an optional dependency — install it with `pip install duckdb` when needed.
+
+```python
+import duckdb
+import arnio as ar
+
+frame = ar.read_csv("data.csv")
+conn = duckdb.connect()
+ar.register_duckdb(frame, conn, "my_table")
+result = conn.execute("SELECT * FROM my_table").fetchdf()
+```
 
 ### Row-dropping pipeline behavior
 
@@ -598,6 +690,13 @@ They follow a simple workflow:
   Run:
 ```bash
   python examples/arnio_with_duckdb.py
+```
+
+- **Arnio + Arrow**
+  Export ArFrame to pyarrow.Table using ``ar.to_arrow()`` for zero-copy interop with Arrow-native tools.
+  Run:
+```bash
+  python examples/arnio_with_arrow.py
 ```
 
 
@@ -822,6 +921,7 @@ Most operations below run natively in C++. Currently, `filter_rows`, `replace_va
 |:---|:---|:---|
 | `drop_nulls` | Remove rows with null/empty values | `ar.drop_nulls(frame, subset=["age"])` |
 | `drop_columns` | Remove selected columns while preserving the remaining order | `frame = ar.drop_columns(frame, ["debug_col"])` |
+| `drop_empty_columns` | Remove columns whose values are all null/empty | `frame = ar.drop_empty_columns(frame)` |
 | `keep_rows_with_nulls` | Keep only rows that contain at least one null | `ar.keep_rows_with_nulls(frame, subset=["age"])` |
 | `validate_columns_exist` | Fail early when required columns are missing | `ar.validate_columns_exist(frame, ["age"])` |
 | `filter_rows` | Filter rows using comparison operators | `ar.filter_rows(frame, column="age", op=">", value=18)` |
@@ -842,6 +942,7 @@ Most operations below run natively in C++. Currently, `filter_rows`, `replace_va
 | `safe_divide_columns` | Divide one column by another, handling zero/null denominators | `ar.safe_divide_columns(frame, numerator="revenue", denominator="cost", output_column="ratio")` |
 | `drop_columns_matching` | Drop columns whose names match a regex pattern | `ar.drop_columns_matching(frame, pattern="^temp_")` |
 | `trim_column_names` | Strip leading/trailing whitespace from column names | `ar.trim_column_names(frame)` |
+| `select_columns` | Return a new frame containing only selected columns | `ar.select_columns(frame, ["id", "name"])` |
 
 #### `ArFrame.select_dtypes` — type-based column selection
 
@@ -878,6 +979,22 @@ clean = ar.pipeline(frame, [
     ("drop_duplicates", {"keep": "first"}),
 ])
 ```
+
+### Winsorize outliers
+
+`winsorize_outliers()` clips extreme numeric values using lower and upper quantiles. Non-numeric columns are ignored unless explicitly selected in `subset`.
+
+```python
+frame = ar.read_csv("data.csv")
+
+result = ar.winsorize_outliers(
+    frame,
+    lower=0.05,
+    upper=0.95,
+)
+```
+
+It can also be used inside `ar.pipeline()` as `("winsorize_outliers", {"lower": 0.05, "upper": 0.95})`.
 
 ### 🔁 Replace values
 
@@ -1073,6 +1190,32 @@ if not result.passed:
     print(result.to_pandas())
     print(result.to_markdown(max_issues=10))
 ```
+### Numeric string compatibility hints
+
+Validation messages indicate when string values appear safely convertible
+to numeric dtypes.
+
+```python
+frame = ar.from_pandas(
+    pd.DataFrame(
+        {
+            "age": ["1", "2", "3"],
+        }
+    )
+)
+
+schema = ar.Schema(
+    {
+        "age": ar.Int64(),
+    }
+)
+
+result = ar.validate(frame, schema)
+
+print(result.issues[0].message)
+# Column 'age' has dtype 'string'; expected 'int64'.
+# Values appear safely convertible to 'int64'
+```
 
 In this example, `country` becomes required only when
 `user_type == "international"`.
@@ -1117,6 +1260,34 @@ print(result.issue_count)  # Warning issues are still reported
 
 Warning-level issues remain visible in validation results without failing the overall validation status.
 
+### URL validation
+
+`URL()` validates that values are well-formed URLs. By default, both `http` and `https` schemes are accepted.
+
+```python
+schema = ar.Schema({
+    "website": ar.URL(nullable=False),
+})
+result = ar.validate(frame, schema)
+print(result.passed)
+```
+
+Use `allowed_schemes` to restrict which URL schemes are valid:
+
+```python
+# https only
+schema = ar.Schema({
+    "website": ar.URL(allowed_schemes=["https"]),
+})
+
+# multiple schemes
+schema = ar.Schema({
+    "endpoint": ar.URL(allowed_schemes=["https", "ftp"]),
+})
+```
+
+Any URL with a scheme not in `allowed_schemes` will fail validation.
+
 ### Schema JSON round-trips
 
 ```python
@@ -1133,6 +1304,8 @@ payload = schema.to_json()
 restored = ar.Schema.from_json(payload)
 ```
 
+See [examples/schema_validation.py](examples/schema_validation.py) for a complete runnable tutorial covering `Schema`, field types, invalid-row reporting, and `ValidationResult` output.
+
 `ValidationResult.to_markdown()` is useful in CI logs, GitHub comments, or data quality reports because it renders a compact validation summary plus a GitHub-friendly issue table.
 
 For multi-column uniqueness (composite keys):
@@ -1147,7 +1320,16 @@ result = ar.validate(frame, schema)
 ```
 
 
-For low-risk automatic cleanup:
+For automatic cleaning suggestions based on the profile:
+
+```python
+suggestions = ar.suggest_cleaning(frame)
+# e.g. [("strip_whitespace", {"subset": ["name", "city"]}),
+#       ("drop_duplicates", {"keep": "first"})]
+clean = ar.pipeline(frame, suggestions)
+```
+
+For low-risk automatic cleanup in one call:
 
 ```python
 clean, report = ar.auto_clean(frame, mode="strict", return_report=True)
@@ -1208,7 +1390,7 @@ Expected cleaned output with `mode="strict"`:
 
 `mode="safe"` only trims whitespace. Use `mode="strict"` when you also want deterministic built-in cleanup such as exact duplicate removal.
 
-See [examples/auto_clean_tutorial.py](examples/auto_clean_tutorial.py) for a runnable version of this walkthrough.
+See [examples/auto_clean_tutorial.py](examples/auto_clean_tutorial.py) for a runnable version of this walkthrough, and [examples/schema_validation.py](examples/schema_validation.py) for a focused validation tutorial.
 
 > For strict mode data-loss risks and safe workflow, see [AUTO_CLEAN_GUIDE.md](AUTO_CLEAN_GUIDE.md).
 
@@ -1458,6 +1640,21 @@ DataQualityReport(
   ]
 }
 ```
+Columns where a single non-null value represents at least 95% of rows are reported with a `near_constant` warning.
+Columns with a very high ratio of unique values are reported with a `high_cardinality` warning because they may represent identifiers, leakage risk, or modeling hazards.
+
+Example near-constant distribution:
+
+```json
+{
+  "row_count": 100,
+  "top_values": [
+    {"value": "London", "count": 95, "ratio": 0.95},
+    {"value": "Paris", "count": 5, "ratio": 0.05}
+  ],
+  "warnings": ["near_constant"]
+}
+```
 
 ### 3. Example Summary Table
 *A manually formatted Markdown table representing the core metrics:*
@@ -1577,6 +1774,77 @@ pip install -e ".[dev]"
 pre-commit install
 pytest tests/ -v
 ```
+### Building frames without a CSV
+
+Use `ArFrame.from_records` (also available as `ar.from_records`) to build
+small frames inline — useful for tests, quick experiments, or feeding
+hand-crafted data into the pipeline without writing a CSV file.
+
+```python
+import arnio as ar
+
+# list-of-dicts — column names inferred from keys
+frame = ar.from_records([
+    {"id": 1, "name": "alice", "score": 95},
+    {"id": 2, "name": "bob",   "score": 88},
+])
+
+# list-of-lists or tuples — columns must be supplied
+frame2 = ar.from_records(
+    [(1, "alice", 95), (2, "bob", 88)],
+    columns=["id", "name", "score"],
+)
+```
+
+Missing keys in dict records are filled with `None`. Nested values raise `TypeError`. An empty list raises `ValueError`.
+
+## Type Casting
+
+You can cast columns to a different data type using the `.astype()` convenience wrapper:
+
+```python
+import arnio as ar
+
+# Assume 'frame' is an existing ArFrame
+# Cast the entire frame to a single type
+float_frame = frame.astype(float)
+
+# Cast specific columns using a dictionary mapping
+casted_frame = frame.astype({"age": int})
+```
+
+#### Windows build troubleshooting
+
+If `pip install -e ".[dev]"` fails on Windows, work through this checklist before retrying:
+
+1. Install [Visual Studio Build Tools 2022](https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2022) with the `Desktop development with C++` workload.
+2. Upgrade packaging tools:
+   ```bash
+   python -m pip install --upgrade pip setuptools wheel
+   ```
+3. Confirm the MSVC compiler is on `PATH` by running `cl` from a Developer Command Prompt.
+4. Retry the editable install:
+   ```bash
+   pip install -e ".[dev]"
+   pre-commit install
+   pytest tests/ -v
+   ```
+
+If you want a quick wheel-build smoke test before running the full suite, use:
+
+```bash
+pip wheel . --no-deps -w dist/
+python tests/smoke_wheel_install.py --wheelhouse dist
+```
+
+Common symptoms:
+
+- `Microsoft Visual C++ 14.x is required`: install the Build Tools workload above, then reopen your shell.
+- `'cl' is not recognized`: use a Developer Command Prompt or repair the Build Tools installation.
+- `pip install -e ".[dev]"` succeeds but `pre-commit` is missing: rerun `python -m pip install -e ".[dev]"` after upgrading `pip`, `setuptools`, and `wheel`.
+- The wheel build passes but tests fail: rerun `pytest tests/ -v` and debug the failing test output separately from the build step.
+
+If you prefer a Linux-like toolchain on Windows, WSL is also supported.
 
 > **PR titles must follow [Conventional Commits](https://www.conventionalcommits.org/)** — `feat:`, `fix:`, `docs:`, `chore:`. Our release pipeline auto-generates changelogs from these.
 
@@ -1688,4 +1956,3 @@ arnio/
 <sub>Built with C++ and pybind11 · Licensed under MIT · Maintained by <a href="https://github.com/im-anishraj">@im-anishraj</a></sub>
 
 </div>
-
