@@ -784,7 +784,7 @@ def read_csv_chunked(
         with _utf8_csv_path(path, encoding, delimiter=delimiter) as native_path:
             reader.open(native_path)
             while True:
-            chunk = reader.next_chunk(chunksize, on_bad_lines)
+                chunk = reader.next_chunk(chunksize, on_bad_lines)
                 if chunk is None:
                     break
                 cpp_frame, bad_rows = chunk
@@ -795,8 +795,9 @@ def read_csv_chunked(
                 ar_frame = ArFrame(cpp_frame)
                 if dtype is not None:
                     from .cleaning import cast_types as _apply_dtype
+
                     ar_frame = _apply_dtype(ar_frame, dtype)
-                yield ar_frame    
+                yield ar_frame
     except ValueError:
         raise
     except CsvReadError:
