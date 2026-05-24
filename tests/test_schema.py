@@ -1,6 +1,8 @@
 """Tests for schema validation."""
 
 import io
+import json
+import warnings
 
 import pandas as pd
 import pytest
@@ -2465,14 +2467,18 @@ def test_schema_from_json_rejects_invalid_json():
         ar.Schema.from_json("{bad json}")
 
 
-def test_schema_to_json_rejects_rules():
+def test_schema_to_json_warns_and_omits_rules():
     schema = ar.Schema(
         {"id": ar.String()},
         rules=[lambda df: []],
     )
 
-    with pytest.raises(ValueError, match="not JSON serializable"):
-        schema.to_json()
+    with pytest.warns(UserWarning, match="rules_omitted"):
+        payload_str = schema.to_json()
+
+    payload = json.loads(payload_str)
+    assert payload["rules_omitted"] is True
+    assert "id" in payload["fields"]
 
 
 def test_schema_from_json_rejects_non_object_field_definition():
@@ -2588,3 +2594,95 @@ def test_url_allowed_schemes_non_string_raises():
 def test_url_allowed_schemes_whitespace_string_raises():
     with pytest.raises(ValueError, match="non-empty strings"):
         ar.URL(allowed_schemes=["   "])
+
+
+# --- Issue #1279: Schema.to_json() rules_omitted contract ---
+
+
+def test_schema_to_json_with_rules_emits_warning():
+    """to_json() emits UserWarning when rules are present."""
+    schema = ar.Schema(
+        {"start_date": ar.String(), "end_date": ar.String()},
+        rules=[lambda df: []],
+    )
+    with pytest.warns(UserWarning, match="rules_omitted"):
+        schema.to_json()
+
+
+def test_schema_to_json_with_rules_includes_marker():
+    """to_json() payload contains rules_omitted: true when rules are present."""
+    schema = ar.Schema(
+        {"id": ar.String()},
+        rules=[lambda df: []],
+    )
+    with pytest.warns(UserWarning):
+        payload = json.loads(schema.to_json())
+    assert payload["rules_omitted"] is True
+
+
+def test_schema_to_json_without_rules_no_marker():
+    """to_json() payload does not include rules_omitted when no rules are present."""
+    schema = ar.Schema({"id": ar.String()})
+    payload = json.loads(schema.to_json())
+    assert "rules_omitted" not in payload
+
+
+def test_schema_to_json_without_rules_no_warning():
+    """to_json() emits no warning when no rules are present."""
+    schema = ar.Schema({"id": ar.String()})
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", UserWarning)
+        schema.to_json()  # must not raise
+
+
+def test_schema_to_json_with_rules_fields_are_preserved():
+    """Field definitions are fully serialized even when rules are omitted."""
+    schema = ar.Schema(
+        {
+            "start_date": ar.String(nullable=False),
+            "end_date": ar.String(nullable=True),
+        },
+        rules=[lambda df: []],
+    )
+    with pytest.warns(UserWarning):
+        payload = json.loads(schema.to_json())
+    assert set(payload["fields"].keys()) == {"start_date", "end_date"}
+
+
+def test_schema_from_json_tolerates_rules_omitted_marker():
+    """from_json() accepts a payload with rules_omitted: true without error or warning."""
+    schema = ar.Schema(
+        {"id": ar.String(nullable=False)},
+        rules=[lambda df: []],
+    )
+    with pytest.warns(UserWarning):
+        json_str = schema.to_json()
+
+    # Must not raise or warn
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", UserWarning)
+        restored = ar.Schema.from_json(json_str)
+
+    assert "id" in restored.fields
+    assert not restored.rules
+
+
+def test_schema_field_only_roundtrip_with_rules_present():
+    """Fields, strict, and unique survive a to_json/from_json round-trip even when rules exist."""
+    schema = ar.Schema(
+        {
+            "id": ar.String(nullable=False),
+            "score": ar.Int64(nullable=True),
+        },
+        strict=True,
+        unique=["id"],
+        rules=[lambda df: []],
+    )
+    with pytest.warns(UserWarning):
+        restored = ar.Schema.from_json(schema.to_json())
+
+    assert restored.fields["id"] == schema.fields["id"]
+    assert restored.fields["score"] == schema.fields["score"]
+    assert restored.strict is True
+    assert list(restored.unique) == ["id"]
+    assert not restored.rules
