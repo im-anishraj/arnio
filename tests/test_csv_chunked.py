@@ -142,3 +142,87 @@ class TestReadCsvChunkedParity:
             _chunked_concat(str(path), chunksize=1, mode="strict")
         with pytest.raises(CsvReadError, match="expected 2"):
             ar.read_csv(str(path), mode="strict")
+
+
+class TestCsvChunkedIssue924:
+    """Regression tests for Issue #924: Type mismatch in chunked reads."""
+
+    def test_late_mixed_types_raises_error(self, tmp_path):
+        """Verify that type mismatches in later chunks raise errors (fail-fast).
+
+        Uses pandas with string values to prevent auto-casting, ensuring the CSV
+        file itself contains the mixed types that will trigger the type mismatch error.
+        """
+        path = tmp_path / "type_mismatch.csv"
+
+        # Create DataFrame with string values: first two are integers, next two are floats
+        # This prevents pandas from auto-upcasting to float64 before writing the CSV
+        df = pd.DataFrame({"value": ["1", "2", "3.5", "4.8"]})
+        df.to_csv(path, index=False)
+
+        # Read with chunksize=2
+        # Chunk 1: "1", "2" → inferred as int64
+        # Chunk 2: "3.5", "4.8" → contains floats, should raise Type mismatch error
+        reader = ar.read_csv_chunked(str(path), chunksize=2)
+
+        # First chunk should succeed
+        chunk1 = next(reader)
+        assert chunk1 is not None
+
+        # Second chunk should raise because floats don't match int64 type
+        with pytest.raises(Exception, match="Type mismatch"):
+            next(reader)
+
+    def test_valid_null_handling_preserved(self, tmp_path):
+        """Ensure genuine empty/null values don't trigger mismatch errors."""
+        path = tmp_path / "valid_nulls.csv"
+        # Chunk 1: has some integers
+        # Chunk 2: has empty strings and commas (genuine nulls, should be parsed as NaN/None)
+        lines = [
+            "id,value",
+            "1,100",
+            "2,200",
+            "3,",  # Empty value = genuine null
+            "4,400",
+            "5,",  # Another empty value
+        ]
+        path.write_text("\n".join(lines))
+
+        chunks = list(ar.read_csv_chunked(str(path), chunksize=2))
+        assert len(chunks) == 3
+
+        # Verify that empty values are parsed as NaN (not errors)
+        chunked_df = pd.concat([ar.to_pandas(c) for c in chunks], ignore_index=True)
+        assert chunked_df.shape[0] == 5
+        # Rows 2 and 4 (0-indexed) should have NaN in value column
+        assert pd.isna(chunked_df.loc[2, "value"])
+        assert pd.isna(chunked_df.loc[4, "value"])
+
+    def test_multiple_chunk_boundaries(self, tmp_path):
+        """Test that type mismatch is detected at the correct chunk boundary (chunk 3)."""
+        path = tmp_path / "multi_chunk_mismatch.csv"
+        # Chunk 1: integers (1, 2)
+        # Chunk 2: integers (3, 4)
+        # Chunk 3: has a float (5.5) - should raise here
+        # Chunk 4: would have more data
+        lines = [
+            "number",
+            "1",
+            "2",
+            "3",
+            "4",
+            "5.5",
+            "6",
+        ]
+        path.write_text("\n".join(lines))
+
+        reader = ar.read_csv_chunked(str(path), chunksize=2)
+        chunk1 = next(reader)
+        assert chunk1 is not None  # Rows 1, 2
+
+        chunk2 = next(reader)
+        assert chunk2 is not None  # Rows 3, 4
+
+        # Chunk 3 should raise on row 5 (value 5.5)
+        with pytest.raises(Exception, match="Type mismatch"):
+            next(reader)
