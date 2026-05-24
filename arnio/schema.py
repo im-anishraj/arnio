@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import re
+import warnings
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Callable
@@ -382,9 +383,10 @@ class Schema:
     def to_json(self) -> str:
         """Serialize the schema to a stable JSON string."""
         if self.rules:
-            raise ValueError(
-                "Schema rules are not JSON serializable. "
-                "Serialize only fields/strict/unique for now."
+            warnings.warn(
+                "Schema rules are not JSON serializable and will be excluded from the JSON output. "
+                "Serializing only fields/strict/unique.",
+                UserWarning,
             )
 
         payload = {

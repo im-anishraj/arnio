@@ -2588,3 +2588,28 @@ def test_url_allowed_schemes_non_string_raises():
 def test_url_allowed_schemes_whitespace_string_raises():
     with pytest.raises(ValueError, match="non-empty strings"):
         ar.URL(allowed_schemes=["   "])
+
+def test_schema_to_json_with_rules_warns():
+    import arnio as ar
+    import warnings
+    
+    def my_rule(frame):
+        return []
+        
+    schema = ar.Schema(
+        fields={'a': ar.Int64()},
+        rules=[my_rule]
+    )
+    
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter('always')
+        json_str = schema.to_json()
+        
+        assert len(w) == 1
+        assert issubclass(w[-1].category, UserWarning)
+        assert 'Schema rules are not JSON serializable' in str(w[-1].message)
+        
+    import json
+    parsed = json.loads(json_str)
+    assert 'fields' in parsed
+    assert 'a' in parsed['fields']
