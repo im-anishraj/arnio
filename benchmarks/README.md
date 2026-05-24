@@ -26,7 +26,7 @@ pip install -e ".[dev]"
 ```
 
 ### Step 2: Generate Deterministic Datasets
-Run the data generator to create deterministic tall, wide, and multiline CSV files with fixed random seeds:
+Run the data generator to create deterministic tall, wide, multiline, and sparse-null CSV files with fixed random seeds:
 ```bash
 python benchmarks/generate_data.py
 ```
@@ -34,11 +34,19 @@ This generates the following files:
 * `benchmarks/benchmark_1m.csv` (Tall CSV: 1M rows x 12 columns)
 * `benchmarks/benchmark_wide.csv` (Wide CSV: 5,000 rows x 256 columns)
 * `benchmarks/benchmark_multiline.csv` (Multiline CSV: 100,000 rows x 4 columns)
+* `benchmarks/benchmark_sparse_nulls.csv` (Sparse-null CSV: 1M rows x 6 columns, 1% nulls)
+* `benchmarks/benchmark_sparse_nulls_dense.csv` (Dense-null CSV: 1M rows x 6 columns, 20% nulls)
 
 ### Step 3: Run the Benchmark Suite
 Run the suite using the standard comparison script:
 ```bash
 python benchmarks/benchmark_vs_pandas.py
+```
+
+### Focused benchmark: sparse-null workloads
+Benchmark null-related operations (read_csv, drop_nulls, fill_nulls, keep_rows_with_nulls) across five null densities from 0.1% to 20%:
+```bash
+python benchmarks/benchmark_sparse_nulls.py --rows 1000000 --runs 5
 ```
 
 ---

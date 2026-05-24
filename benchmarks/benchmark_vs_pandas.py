@@ -21,6 +21,8 @@ import arnio as ar
 CSV_FILE = "benchmarks/benchmark_1m.csv"
 WIDE_CSV_FILE = "benchmarks/benchmark_wide.csv"
 MULTILINE_CSV_FILE = "benchmarks/benchmark_multiline.csv"
+SPARSE_NULLS_FILE = "benchmarks/benchmark_sparse_nulls.csv"
+DENSE_NULLS_FILE = "benchmarks/benchmark_sparse_nulls_dense.csv"
 DRY_RUN = os.getenv("ARNIO_BENCHMARK_DRY_RUN") == "1"
 RUNS = 1 if DRY_RUN else 3
 
@@ -38,6 +40,12 @@ ALL_BENCHMARKS = (
     BenchmarkCase("Tall CSV (1,000,000 rows x 12 columns)", CSV_FILE),
     BenchmarkCase("Wide CSV (5,000 rows x 256 columns)", WIDE_CSV_FILE),
     BenchmarkCase("Multiline CSV (100,000 rows x 4 columns)", MULTILINE_CSV_FILE),
+    BenchmarkCase(
+        "Sparse-null CSV (1,000,000 rows x 6 columns, 1% nulls)", SPARSE_NULLS_FILE
+    ),
+    BenchmarkCase(
+        "Dense-null CSV (1,000,000 rows x 6 columns, 20% nulls)", DENSE_NULLS_FILE
+    ),
 )
 BENCHMARKS = ALL_BENCHMARKS[:1] if DRY_RUN else ALL_BENCHMARKS
 
@@ -282,6 +290,12 @@ def calculate_regression(current, baseline):
     ) * 100  # How much slower current benchmark is compared to baseline
 
 
+def check_regression(current_time, baseline_time, threshold_percent):
+    regression_percent = ((current_time - baseline_time) / baseline_time) * 100
+
+    return regression_percent > threshold_percent, regression_percent
+
+
 def run_case(case, skip_correctness=False):
     baseline_data = load_baseline()
 
@@ -395,18 +409,28 @@ def run_case(case, skip_correctness=False):
         baseline_time = baseline_case["arnio_exec_time"]
         current_time = avg(ar_times)
 
-        regression = calculate_regression(current_time, baseline_time)
+        is_regression, regression_percent = check_regression(
+            current_time,
+            baseline_time,
+            REGRESSION_THRESHOLD,
+        )
 
-        if regression > REGRESSION_THRESHOLD:
-            print(
-                f"WARNING: Regression detected:"
-                f"{regression:.1f}% slower than baseline "
+        if is_regression:
+            raise RuntimeError(
+                f"Benchmark regression detected: "
+                f"{regression_percent:.1f}% slower than baseline "
                 f"(threshold: {REGRESSION_THRESHOLD}%)"
             )
     else:
         print("No baseline found for regression comparison.")
 
     print()
+    return {
+        "case": case.name,
+        "pandas_exec_time": avg(pd_times),
+        "arnio_exec_time": avg(ar_times),
+        "speedup": avg(pd_times) / avg(ar_times),
+    }
 
 
 def run_child(engine, case_path):
@@ -451,5 +475,20 @@ if __name__ == "__main__":
         )
     elif rss_source == "unavailable":
         print("Note: Peak RSS unavailable (install psutil for process RSS).")
+
+    results = {}
     for benchmark_case in BENCHMARKS:
-        run_case(benchmark_case)
+        result = run_case(benchmark_case)
+        results[result["case"]] = {
+            "pandas_exec_time": result["pandas_exec_time"],
+            "arnio_exec_time": result["arnio_exec_time"],
+            "speedup": result["speedup"],
+        }
+
+    output_path = Path("benchmark_results.json")
+
+    with open(output_path, "w") as f:
+        json.dump(results, f, indent=2)
+
+    if DRY_RUN and output_path.exists():
+        output_path.unlink()
