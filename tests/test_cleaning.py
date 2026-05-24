@@ -1035,7 +1035,7 @@ class TestStandardizeMissingTokens:
         assert result["value"].iloc[2] == "-"
 
     def test_standardize_missing_tokens_unknown_subset_column_raises(self):
-        frame = ar.from_pandas(pd.DataFrame({"value": [1, 2, 3]}))
+        frame = pd.DataFrame({"value": [1, 2, 3]})
         with pytest.raises(ValueError, match="Unknown columns in subset"):
             ar.standardize_missing_tokens(frame, subset=["missing"])
 
@@ -1048,6 +1048,36 @@ class TestStandardizeMissingTokens:
         assert pd.isna(result.loc[0, "name"])
         assert result.loc[1, "name"] == "Alice"
         assert result["city"].tolist() == ["-", "Paris"]
+
+    def test_standardize_missing_tokens_normalizes_whitespace_wrapped_defaults(self):
+        df = pd.DataFrame({"value": ["NULL ", " NaN", "  ", "", "Alice "]})
+
+        result = ar.standardize_missing_tokens(df)
+
+        assert pd.isna(result["value"].iloc[0])
+        assert pd.isna(result["value"].iloc[1])
+        assert pd.isna(result["value"].iloc[2])
+        assert pd.isna(result["value"].iloc[3])
+        assert result["value"].iloc[4] == "Alice "
+
+    def test_standardize_missing_tokens_normalizes_whitespace_wrapped_custom_tokens(
+        self,
+    ):
+        df = pd.DataFrame(
+            {
+                "status": [" unknown ", "pending", " custom-null "],
+                "note": [" untouched ", "unknown", "kept"],
+            }
+        )
+
+        result = ar.standardize_missing_tokens(
+            df, tokens=["unknown", "custom-null"], subset=["status"]
+        )
+
+        assert pd.isna(result["status"].iloc[0])
+        assert result["status"].iloc[1] == "pending"
+        assert pd.isna(result["status"].iloc[2])
+        assert result["note"].tolist() == [" untouched ", "unknown", "kept"]
 
 
 class TestStripWhitespace:
