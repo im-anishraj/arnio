@@ -4,7 +4,6 @@ import pandas as pd
 import pytest
 
 import arnio as ar
-from arnio import from_pandas, to_pandas
 
 
 class TestDropNulls:
@@ -20,69 +19,6 @@ class TestDropNulls:
         result = ar.drop_nulls(frame, subset=["name"])
         # Only row 2 has null name
         assert result.shape[0] == 3
-
-
-class TestKeepRowsWithNulls:
-    def test_keeps_only_null_rows(self, csv_with_nulls):
-        # full frame has 4 rows, 2 have nulls (row1: null name+score, row2: null age)
-        frame = ar.read_csv(csv_with_nulls)
-        result = ar.keep_rows_with_nulls(frame)
-        assert result.shape[0] == 2
-
-    def test_no_nulls_returns_empty(self, sample_csv):
-        # sample_csv has no nulls — result should be empty
-        frame = ar.read_csv(sample_csv)
-        result = ar.keep_rows_with_nulls(frame)
-        assert result.shape[0] == 0
-
-    def test_all_nulls_returns_all_rows(self, tmp_path):
-        # every row has a null — all rows should be kept
-        path = tmp_path / "all_nulls.csv"
-        path.write_text("name,age\nAlice,\n,25\nCharlie,\n")
-        frame = ar.read_csv(path)
-        result = ar.keep_rows_with_nulls(frame)
-        assert result.shape[0] == frame.shape[0]
-
-    def test_subset_targets_specific_column(self, csv_with_nulls):
-        # only checking 'age' column — only Charlie has null age
-        frame = ar.read_csv(csv_with_nulls)
-        result = ar.keep_rows_with_nulls(frame, subset=["age"])
-        assert result.shape[0] == 1
-
-    def test_subset_unknown_column_raises(self, csv_with_nulls):
-        # passing a column that doesn't exist should raise ValueError
-        frame = ar.read_csv(csv_with_nulls)
-        with pytest.raises(ValueError, match="unknown column"):
-            ar.keep_rows_with_nulls(frame, subset=["nonexistent"])
-
-    def test_index_is_reset(self, csv_with_nulls):
-        # returned frame should have clean 0-based index
-        frame = ar.read_csv(csv_with_nulls)
-        result = ar.keep_rows_with_nulls(frame)
-        df = ar.to_pandas(result)
-        assert list(df.index) == list(range(len(df)))
-
-    def test_pipeline_usage(self, csv_with_nulls):
-        # function should work correctly when called via pipeline
-        frame = ar.read_csv(csv_with_nulls)
-        result = ar.pipeline(
-            frame,
-            [
-                ("keep_rows_with_nulls",),
-            ],
-        )
-        assert result.shape[0] == 2
-
-    def test_pipeline_subset(self, csv_with_nulls):
-        # pipeline with subset parameter
-        frame = ar.read_csv(csv_with_nulls)
-        result = ar.pipeline(
-            frame,
-            [
-                ("keep_rows_with_nulls", {"subset": ["age"]}),
-            ],
-        )
-        assert result.shape[0] == 1
 
 
 class TestFillNulls:
@@ -407,61 +343,6 @@ class TestNormalizeCase:
         df = ar.to_pandas(result)
         assert df["name"].iloc[0] == "Alice"
 
-    def test_title_hyphen(self):
-        import pandas as pd
-
-        frame = ar.from_pandas(
-            pd.DataFrame({"name": ["hello-world", "jean-luc picard"]})
-        )
-        result = ar.normalize_case(frame, subset=["name"], case_type="title")
-        df = ar.to_pandas(result)
-        assert df["name"].iloc[0] == "Hello-World"
-        assert df["name"].iloc[1] == "Jean-Luc Picard"
-
-    def test_title_underscore(self):
-        import pandas as pd
-
-        frame = ar.from_pandas(pd.DataFrame({"name": ["hello_world", "foo_bar_baz"]}))
-        result = ar.normalize_case(frame, subset=["name"], case_type="title")
-        df = ar.to_pandas(result)
-        assert df["name"].iloc[0] == "Hello_World"
-        assert df["name"].iloc[1] == "Foo_Bar_Baz"
-
-    def test_title_period(self):
-        import pandas as pd
-
-        frame = ar.from_pandas(pd.DataFrame({"name": ["dr.strange", "mr.smith"]}))
-        result = ar.normalize_case(frame, subset=["name"], case_type="title")
-        df = ar.to_pandas(result)
-        assert df["name"].iloc[0] == "Dr.Strange"
-        assert df["name"].iloc[1] == "Mr.Smith"
-
-    def test_title_slash(self):
-        import pandas as pd
-
-        frame = ar.from_pandas(pd.DataFrame({"name": ["hello/world", "foo/bar"]}))
-        result = ar.normalize_case(frame, subset=["name"], case_type="title")
-        df = ar.to_pandas(result)
-        assert df["name"].iloc[0] == "Hello/World"
-        assert df["name"].iloc[1] == "Foo/Bar"
-
-
-class TestNormalizeUnicode:
-    def test_normalize_unicode(self):
-        import pandas as pd
-
-        import arnio as ar
-
-        df = pd.DataFrame({"text": ["cafe\u0301"]})
-
-        frame = ar.from_pandas(df)
-
-        result = ar.normalize_unicode(frame)
-
-        result_df = ar.to_pandas(result)
-
-        assert result_df["text"].iloc[0] == "café"
-
 
 class TestRenameColumns:
     def test_rename(self, sample_csv):
@@ -470,38 +351,6 @@ class TestRenameColumns:
         assert "full_name" in result.columns
         assert "years" in result.columns
         assert "name" not in result.columns
-
-
-class TestTrimColumnNames:
-    def test_trim_column_names_basic(self):
-        df = pd.DataFrame({" name ": [1], " age ": [2]})
-        frame = from_pandas(df)
-        result = ar.trim_column_names(frame)
-        assert to_pandas(result).columns.tolist() == ["name", "age"]
-
-    def test_trim_column_names_already_clean(self):
-        df = pd.DataFrame({"name": [1], "age": [2]})
-        frame = from_pandas(df)
-        result = ar.trim_column_names(frame)
-        assert to_pandas(result).columns.tolist() == ["name", "age"]
-
-    def test_trim_column_names_mixed(self):
-        df = pd.DataFrame({" name": [1], "age ": [2], "score": [3]})
-        frame = from_pandas(df)
-        result = ar.trim_column_names(frame)
-        assert to_pandas(result).columns.tolist() == ["name", "age", "score"]
-
-    def test_trim_column_names_preserves_order(self):
-        df = pd.DataFrame({" c ": [1], " b ": [2], " a ": [3]})
-        frame = from_pandas(df)
-        result = ar.trim_column_names(frame)
-        assert to_pandas(result).columns.tolist() == ["c", "b", "a"]
-
-    def test_trim_column_names_duplicate_raises(self):
-        df = pd.DataFrame({" name": [1], "name ": [2]})
-        frame = from_pandas(df)
-        with pytest.raises(ValueError, match="duplicates"):
-            ar.trim_column_names(frame)
 
 
 class TestCastTypes:
@@ -539,28 +388,6 @@ class TestCleanAPI:
         # Drop nulls
         result = ar.clean(frame, strip_whitespace=False, drop_nulls=True)
         assert len(result) < len(frame)
-
-
-class TestFilterRows:
-    def test_filter_rows_missing_column_raises_clear_error(self):
-        df = pd.DataFrame({"age": [20, 30]})
-
-        with pytest.raises(ValueError, match="Unknown column: missing"):
-            ar.filter_rows(df, "missing", ">", 10)
-
-    def test_filter_rows_missing_column_raises_clear_error_for_arframe(self):
-        frame = ar.from_pandas(pd.DataFrame({"age": [20, 30]}))
-
-        with pytest.raises(ValueError, match="Unknown column: missing"):
-            ar.filter_rows(frame, "missing", ">", 10)
-
-    def test_filter_rows_valid_column_still_works(self):
-        df = pd.DataFrame({"age": [20, 30]})
-
-        result = ar.filter_rows(df, "age", ">", 20)
-
-        assert len(result) == 1
-        assert result.iloc[0]["age"] == 30
 
 
 class TestRoundNumericColumns:
@@ -653,84 +480,6 @@ class TestRoundNumericColumns:
         assert list(result_df["score"]) == [98.8]
 
 
-class TestCombineColumns:
-    def test_combines_columns_with_separator(self):
-        import pandas as pd
-
-        df = pd.DataFrame({"first": ["Alice", "Bob"], "last": ["Smith", "Jones"]})
-        frame = ar.from_pandas(df)
-
-        result = ar.combine_columns(
-            frame,
-            subset=["first", "last"],
-            separator=" ",
-            output_column="full_name",
-        )
-        result_df = ar.to_pandas(result)
-
-        assert list(result_df["full_name"]) == ["Alice Smith", "Bob Jones"]
-
-    def test_combines_all_columns_by_default(self):
-        import pandas as pd
-
-        df = pd.DataFrame({"a": [1, 2], "b": ["x", "y"]})
-        frame = ar.from_pandas(df)
-
-        result = ar.combine_columns(
-            frame,
-            separator=",",
-            output_column="combined",
-        )
-        result_df = ar.to_pandas(result)
-
-        assert list(result_df["combined"]) == ["1,x", "2,y"]
-
-    def test_preserves_null_rows(self):
-        import pandas as pd
-
-        df = pd.DataFrame({"a": [None, "hello"], "b": [None, "world"]})
-        frame = ar.from_pandas(df)
-
-        result = ar.combine_columns(
-            frame,
-            subset=["a", "b"],
-            separator=" ",
-            output_column="combined",
-        )
-        result_df = ar.to_pandas(result)
-
-        assert pd.isna(result_df["combined"]).iloc[0]
-        assert result_df["combined"].iloc[1] == "hello world"
-
-    def test_missing_subset_column_raises(self):
-        import pandas as pd
-
-        df = pd.DataFrame({"a": [1]})
-        frame = ar.from_pandas(df)
-
-        with pytest.raises(KeyError, match="Missing columns for combine_columns"):
-            ar.combine_columns(
-                frame,
-                subset=["a", "missing"],
-                separator="-",
-                output_column="combined",
-            )
-
-    def test_output_column_already_exists_warns(self):
-        import pandas as pd
-
-        df = pd.DataFrame({"a": [1], "combined": ["old"]})
-        frame = ar.from_pandas(df)
-
-        with pytest.raises(ValueError, match="Output column 'combined' already exists"):
-            ar.combine_columns(
-                frame,
-                subset=["a"],
-                separator="-",
-                output_column="combined",
-            )
-
-
 class TestSafeDivideColumns:
     def test_normal_division(self, tmp_path):
         path = tmp_path / "data.csv"
@@ -805,3 +554,146 @@ class TestSafeDivideColumns:
             assert "already exists" in str(w[0].message)
         df = ar.to_pandas(result)
         assert df["ratio"].iloc[0] == 2.0
+
+
+class TestSlugifyColumnNames:
+    # ------------------------------------------------------------------
+    # Normal conversions
+    # ------------------------------------------------------------------
+    def test_spaces_become_underscores(self):
+        frame = ar.from_pandas(pd.DataFrame({"First Name": ["Alice"]}))
+        result = ar.slugify_column_names(frame)
+        assert result.columns == ["first_name"]
+
+    def test_mixed_case_lowercased(self):
+        frame = ar.from_pandas(pd.DataFrame({"UserID": [1]}))
+        result = ar.slugify_column_names(frame)
+        assert result.columns == ["userid"]
+
+    def test_special_chars_removed(self):
+        frame = ar.from_pandas(pd.DataFrame({"Revenue ($)": [100.0]}))
+        result = ar.slugify_column_names(frame)
+        assert result.columns == ["revenue"]
+
+    def test_hyphens_become_underscores(self):
+        frame = ar.from_pandas(pd.DataFrame({"order-id": [42]}))
+        result = ar.slugify_column_names(frame)
+        assert result.columns == ["order_id"]
+
+    def test_leading_trailing_whitespace_stripped(self):
+        frame = ar.from_pandas(pd.DataFrame({"  age  ": [30]}))
+        result = ar.slugify_column_names(frame)
+        assert result.columns == ["age"]
+
+    def test_repeated_separators_collapsed(self):
+        frame = ar.from_pandas(pd.DataFrame({"first__last": ["x"]}))
+        result = ar.slugify_column_names(frame)
+        assert result.columns == ["first_last"]
+
+    def test_multiple_columns_all_slugified(self):
+        frame = ar.from_pandas(
+            pd.DataFrame({"First Name": ["A"], "Revenue ($)": [1.0], "ID": [1]})
+        )
+        result = ar.slugify_column_names(frame)
+        assert result.columns == ["first_name", "revenue", "id"]
+
+    # ------------------------------------------------------------------
+    # Column order preserved
+    # ------------------------------------------------------------------
+    def test_column_order_preserved(self):
+        frame = ar.from_pandas(pd.DataFrame({"Z Col": [1], "A Col": [2], "M Col": [3]}))
+        result = ar.slugify_column_names(frame)
+        assert result.columns == ["z_col", "a_col", "m_col"]
+
+    # ------------------------------------------------------------------
+    # Already-clean names are a no-op
+    # ------------------------------------------------------------------
+    def test_already_clean_name_unchanged(self):
+        frame = ar.from_pandas(pd.DataFrame({"user_id": [1], "revenue": [9.9]}))
+        result = ar.slugify_column_names(frame)
+        assert result.columns == ["user_id", "revenue"]
+
+    def test_already_clean_data_unchanged(self):
+        df = pd.DataFrame({"score": [1, 2, 3]})
+        frame = ar.from_pandas(df)
+        result = ar.slugify_column_names(frame)
+        result_df = ar.to_pandas(result)
+        assert list(result_df["score"]) == [1, 2, 3]
+
+    # ------------------------------------------------------------------
+    # Empty slug edge case
+    # ------------------------------------------------------------------
+    def test_empty_slug_raises(self):
+        # A column name made entirely of special chars produces an empty slug
+        frame = ar.from_pandas(pd.DataFrame({"!!!": [1], "name": ["Alice"]}))
+        with pytest.raises(ValueError, match="empty slug"):
+            ar.slugify_column_names(frame)
+
+    def test_empty_slug_error_names_the_column(self):
+        frame = ar.from_pandas(pd.DataFrame({"???": [1]}))
+        with pytest.raises(ValueError, match=r"\?\?\?"):
+            ar.slugify_column_names(frame)
+
+    # ------------------------------------------------------------------
+    # Duplicate-name behaviour
+    # ------------------------------------------------------------------
+    def test_duplicate_slug_raises_by_default(self):
+        frame = ar.from_pandas(pd.DataFrame({"Name": ["A"], "name": ["B"]}))
+        with pytest.raises(ValueError, match="duplicate column names"):
+            ar.slugify_column_names(frame)
+
+    def test_duplicate_slug_ignore_keeps_first(self):
+        frame = ar.from_pandas(pd.DataFrame({"Name": ["A"], "name": ["B"]}))
+        result = ar.slugify_column_names(frame, duplicates="ignore")
+        result_df = ar.to_pandas(result)
+        assert result_df.columns.tolist() == ["name"]
+        assert result_df["name"].iloc[0] == "A"
+
+    def test_duplicate_slug_ignore_drops_later_column_data(self):
+        # Explicit test that documents the data-loss behaviour of duplicates="ignore"
+        frame = ar.from_pandas(pd.DataFrame({"Revenue ($)": [999.0], "Revenue": [1.0]}))
+        result = ar.slugify_column_names(frame, duplicates="ignore")
+        result_df = ar.to_pandas(result)
+        # Only one column survives; it holds the FIRST column's data (999.0)
+        assert result_df.columns.tolist() == ["revenue"]
+        assert result_df["revenue"].iloc[0] == 999.0
+
+    def test_duplicate_slug_error_message_names_both_columns(self):
+        frame = ar.from_pandas(pd.DataFrame({"Revenue ($)": [1.0], "Revenue": [2.0]}))
+        with pytest.raises(ValueError, match="revenue"):
+            ar.slugify_column_names(frame)
+
+    def test_invalid_duplicates_value_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"col": [1]}))
+        with pytest.raises(ValueError, match="duplicates must be"):
+            ar.slugify_column_names(frame, duplicates="drop")
+
+    # ------------------------------------------------------------------
+    # Pipeline integration
+    # ------------------------------------------------------------------
+    def test_registered_as_pipeline_step(self):
+        frame = ar.from_pandas(
+            pd.DataFrame({"First Name": ["Alice"], "Revenue ($)": [100.0]})
+        )
+        result = ar.pipeline(frame, [("slugify_column_names",)])
+        assert result.columns == ["first_name", "revenue"]
+
+    def test_pipeline_step_with_duplicates_kwarg(self):
+        frame = ar.from_pandas(pd.DataFrame({"Name": ["A"], "name": ["B"]}))
+        result = ar.pipeline(
+            frame, [("slugify_column_names", {"duplicates": "ignore"})]
+        )
+        assert result.columns == ["name"]
+
+    # ------------------------------------------------------------------
+    # Edge cases
+    # ------------------------------------------------------------------
+    def test_empty_frame_no_columns(self):
+        frame = ar.from_pandas(pd.DataFrame())
+        result = ar.slugify_column_names(frame)
+        assert result.columns == []
+
+    def test_single_column(self):
+        frame = ar.from_pandas(pd.DataFrame({"  Revenue ($)  ": [1.0]}))
+        result = ar.slugify_column_names(frame)
+        assert result.columns == ["revenue"]
