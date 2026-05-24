@@ -364,6 +364,7 @@ def pipeline(
                     result = step_result
 
             if return_metadata:
+                elapsed_sec = perf_counter() - started_at
                 applied_steps.append(name)
                 row_counts.append(
                     {
@@ -415,6 +416,7 @@ def pipeline(
                 result = step_result
 
             if return_metadata:
+                elapsed_sec = perf_counter() - started_at
                 applied_steps.append(name)
                 row_counts.append(
                     {
