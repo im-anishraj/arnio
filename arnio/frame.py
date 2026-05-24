@@ -612,12 +612,52 @@ class ArFrame:
         return f"ArFrame({rows} rows × {cols} cols)"
 
     def __str__(self) -> str:
-        """Return a detailed string summary of the ArFrame."""
-        lines = [f"ArFrame: {self.shape[0]} rows × {self.shape[1]} columns"]
-        lines.append(f"Columns: {self._truncate_column_names()}")
-        lines.append(f"DTypes:  {self.dtypes}")
-        lines.append(f"Memory:  {self.memory_usage()} bytes")
-        return "\n".join(lines)
+        """Return a detailed string summary of the ArFrame with data preview."""
+        rows, cols = self.shape
+        header = f"ArFrame: {rows} rows × {cols} columns"
+        truncated_names = self._truncate_column_names()
+
+        if rows == 0:
+            return f"{header}\nColumns: {truncated_names}\n(empty frame)"
+
+        actual_n = min(5, rows)
+        col_data = [
+            [self._frame.column_by_index(i).at(r) for r in range(actual_n)]
+            for i in range(cols)
+        ]
+
+        col_widths = [
+            max(
+                len(truncated_names[i]),
+                max((len(str(col_data[i][r])) for r in range(actual_n)), default=0),
+            )
+            for i in range(cols)
+        ]
+
+        col_header = "  ".join(
+            truncated_names[i].ljust(col_widths[i]) for i in range(cols)
+        )
+        separator = "  ".join("-" * col_widths[i] for i in range(cols))
+        data_rows = [
+            "  ".join(str(col_data[i][r]).ljust(col_widths[i]) for i in range(cols))
+            for r in range(actual_n)
+        ]
+
+        suffix = f"\n... ({rows - actual_n} more rows)" if rows > actual_n else ""
+        columns_line = f"Columns: {truncated_names}"
+        dtypes_line = f"DTypes: {self.dtypes}"
+        memory_line = f"Memory: {self.memory_usage()} bytes"
+
+        parts = [
+            header,
+            columns_line,
+            dtypes_line,
+            memory_line,
+            col_header,
+            separator,
+        ] + data_rows
+
+        return "\n".join(parts) + suffix
 
     def __contains__(self, item: object) -> bool:
         return isinstance(item, str) and item in self.columns
