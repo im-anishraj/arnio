@@ -1048,7 +1048,7 @@ Frame CsvChunkReader::build_frame(const std::vector<std::vector<std::string>>& r
                         throw std::runtime_error(
                             "Type mismatch in chunk for column '" + header_[ci] + "': expected " +
                             type_name + " but found incompatible value '" + raw_value +
-                            "'. Please specify 'dtypes' explicitly or use a larger 'sample_size'.");
+                            "'. Please ensure consistent column types throughout the file, or use read_csv() to load the entire file at once if memory permits.");
                     }
                 }
 
