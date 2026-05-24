@@ -263,20 +263,30 @@ class DataQualityReport:
         indent: int | None = None,
         redact_sample_values: bool = False,
         exclude_columns: list[str] | set[str] | tuple[str, ...] | None = None,
-    ) -> str:
+        output: Any | None = None,
+    ) -> str | None:
         """Return the report as a JSON string.
 
         Example:
         report.to_json(indent=2)
         """
 
-        return json.dumps(
+        json_out = json.dumps(
             self.to_dict(
                 redact_sample_values=redact_sample_values,
                 exclude_columns=exclude_columns,
             ),
             indent=indent,
         )
+
+        if output is None:
+            return json_out
+
+        if not hasattr(output, "write"):
+            raise TypeError("output must be a writable text stream")
+
+        output.write(json_out)
+        return None
 
     def to_markdown(self, output: Any | None = None) -> str | None:
         """Return a GitHub-friendly Markdown report."""
