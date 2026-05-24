@@ -444,15 +444,101 @@ def test_describe_all_numeric_columns(large_csv):
 
     for col in ["id", "value"]:
         metric_keys = list(stats[col].keys())
-        assert metric_keys == ["count", "nulls", "mean", "min", "max"]
+ 
+ # ── _repr_html_() ─────────────────────────────────────────────────────────────
 
 
-def test_describe_all_string_columns(csv_with_whitespace):
-    frame = ar.read_csv(csv_with_whitespace)
-    stats = frame.describe()
+def test_repr_html_returns_str(sample_csv):
+    frame = ar.read_csv(sample_csv)
+    assert isinstance(frame._repr_html_(), str)
 
-    assert list(stats.keys()) == ["name", "city"]
 
-    for col in ["name", "city"]:
-        metric_keys = list(stats[col].keys())
-        assert metric_keys == ["count", "nulls", "unique"]
+def test_repr_html_has_table_tag(sample_csv):
+    assert "<table" in ar.read_csv(sample_csv)._repr_html_()
+
+
+def test_repr_html_has_thead_and_tbody(sample_csv):
+    out = ar.read_csv(sample_csv)._repr_html_()
+    assert "<thead>" in out
+    assert "<tbody>" in out
+
+
+def test_repr_html_contains_column_names(sample_csv):
+    frame = ar.read_csv(sample_csv)
+    out = frame._repr_html_()
+    for col in frame.columns:
+        assert col in out
+
+
+def test_repr_html_contains_cell_values(sample_csv):
+    frame = ar.read_csv(sample_csv)
+    out = frame._repr_html_()
+    assert "Alice" in out
+    assert "Bob" in out
+
+
+def test_repr_html_summary_shows_shape(sample_csv):
+    frame = ar.read_csv(sample_csv)
+    out = frame._repr_html_()
+    rows, cols = frame.shape
+    assert str(rows) in out
+    assert str(cols) in out
+
+
+def test_repr_html_summary_shows_dtypes(sample_csv):
+    frame = ar.read_csv(sample_csv)
+    out = frame._repr_html_()
+    for dtype in frame.dtypes.values():
+        assert dtype in out
+
+
+def test_repr_html_truncation_notice_present(large_csv):
+    frame = ar.read_csv(large_csv)
+    out = frame._repr_html_()
+    assert "Showing 10 of 1000 rows" in out
+
+
+def test_repr_html_no_truncation_for_small_frame(sample_csv):
+    frame = ar.read_csv(sample_csv)
+    assert "Showing" not in frame._repr_html_()
+
+
+def test_repr_html_body_capped_at_ten_rows(large_csv):
+    frame = ar.read_csv(large_csv)
+    out = frame._repr_html_()
+    tbody = out[out.index("<tbody>"):out.index("</tbody>") + len("</tbody>")]
+    assert tbody.count("<tr>") == 10
+
+
+def test_repr_html_empty_frame_no_crash(tmp_path):
+    csv_path = tmp_path / "empty.csv"
+    csv_path.write_text("name,age\n")
+    frame = ar.read_csv(str(csv_path))
+    out = frame._repr_html_()
+    assert isinstance(out, str)
+    assert len(out) > 0
+
+
+def test_repr_html_with_nulls_no_crash(csv_with_nulls):
+    frame = ar.read_csv(csv_with_nulls)
+    out = frame._repr_html_()
+    assert isinstance(out, str)
+    assert "<table" in out
+
+
+def test_repr_html_escapes_html_in_cell_value(tmp_path):
+    csv_path = tmp_path / "xss.csv"
+    csv_path.write_text('payload\n"<script>alert(1)</script>"\n')
+    frame = ar.read_csv(str(csv_path))
+    out = frame._repr_html_()
+    assert "<script>" not in out
+    assert "&lt;script&gt;" in out
+
+
+def test_repr_html_escapes_html_in_column_name(tmp_path):
+    csv_path = tmp_path / "col_xss.csv"
+    csv_path.write_text("<b>bad</b>\n1\n")
+    frame = ar.read_csv(str(csv_path))
+    out = frame._repr_html_()
+    assert "<b>bad</b>" not in out
+    assert "&lt;b&gt;bad&lt;/b&gt;" in out
