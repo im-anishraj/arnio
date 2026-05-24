@@ -8,7 +8,9 @@
 #include <codecvt>
 #include <cstddef>
 #include <cstdlib>
+#ifdef _WIN32
 #include <filesystem>
+#endif
 #include <fstream>
 #include <limits>
 #include <locale>
@@ -19,6 +21,14 @@
 namespace arnio {
 
 namespace {
+inline void open_binary_input(std::ifstream& file, const std::string& path) {
+#ifdef _WIN32
+    file.open(std::filesystem::u8path(path), std::ios::binary);
+#else
+    file.open(path, std::ios::binary);
+#endif
+}
+
 inline void trim_in_place(std::string& s) {
     s.erase(s.begin(),
             std::find_if(s.begin(), s.end(), [](unsigned char ch) { return !std::isspace(ch); }));
@@ -179,14 +189,26 @@ class RecordReader {
 
 namespace {
 
+// Return a copy of s with leading/trailing whitespace stripped.
+inline std::string trimmed_copy(std::string s) {
+    trim_in_place(s);
+    return s;
+}
+
 void validate_header(const std::vector<std::string>& header) {
     std::unordered_set<std::string> seen;
+    std::unordered_set<std::string> seen_trimmed;
     for (const auto& name : header) {
         if (name.empty()) {
             throw std::runtime_error("CSV header contains an empty column name");
         }
         if (!seen.insert(name).second) {
             throw std::runtime_error("Duplicate column name: " + name);
+        }
+        std::string t = trimmed_copy(name);
+        if (!seen_trimmed.insert(t).second) {
+            throw std::runtime_error("Duplicate column name after trimming whitespace: \"" + t +
+                                     "\"");
         }
     }
 }
@@ -658,7 +680,8 @@ CellValue CsvParser::parse_value(const std::string& raw, DType dtype) const {
 
 CsvParseResult CsvReader::read(const std::string& path, const std::string& on_bad_lines) const {
     const CsvConfig& config = parser_.config();
-    std::ifstream file(std::filesystem::u8path(path), std::ios::binary);
+    std::ifstream file;
+    open_binary_input(file, path);
     std::vector<BadRow> bad_rows;
 
     if (!file.is_open()) {
@@ -834,10 +857,11 @@ CsvParseResult CsvReader::read(const std::string& path, const std::string& on_ba
     return CsvParseResult{Frame(std::move(columns)), std::move(bad_rows)};
 }
 
-std::vector<std::pair<std::string, std::string>> CsvReader::scan_schema(
-    const std::string& path) const {
+std::pair<std::vector<std::pair<std::string, std::string>>, std::vector<std::string>>
+CsvReader::scan_schema(const std::string& path, const std::string& on_bad_lines) const {
     const CsvConfig& config = parser_.config();
-    std::ifstream file(std::filesystem::u8path(path), std::ios::binary);
+    std::ifstream file;
+    open_binary_input(file, path);
     if (!file.is_open()) {
         throw std::runtime_error("Cannot open file: " + path);
     }
@@ -893,15 +917,28 @@ std::vector<std::pair<std::string, std::string>> CsvReader::scan_schema(
 
     std::vector<std::string> reusable_fields;
     reusable_fields.reserve(num_cols);
+    std::vector<std::string> bad_rows;
+    size_t record_number = 1;
 
     while (record_reader.read(line)) {
         if (sample_count >= max_samples) {
             break;
         }
-
+        ++record_number;  // increment before blank-line skip
         if (line.empty()) continue;
         parser_.parse_line(line, reusable_fields);
-        validate_row_width(sample_count + 2, num_cols, reusable_fields.size());
+        if (reusable_fields.size() != num_cols) {
+            if (on_bad_lines == "error") {
+                validate_row_width(record_number, num_cols, reusable_fields.size());
+            } else if (on_bad_lines == "warn") {
+                bad_rows.push_back("CSV row " + std::to_string(record_number) + " has " +
+                                   std::to_string(reusable_fields.size()) + " fields; expected " +
+                                   std::to_string(num_cols));
+                continue;
+            } else if (on_bad_lines == "skip") {
+                continue;
+            }
+        }
         for (size_t i = 0; i < num_cols && i < reusable_fields.size(); ++i) {
             col_types[i] =
                 CsvParser::promote_type(col_types[i], parser_.infer_type(reusable_fields[i]));
@@ -918,7 +955,7 @@ std::vector<std::pair<std::string, std::string>> CsvReader::scan_schema(
     for (size_t i = 0; i < num_cols; ++i) {
         schema.emplace_back(header[i], dtype_to_string(col_types[i]));
     }
-    return schema;
+    return {schema, bad_rows};
 }
 
 // --- CsvChunkReader (streaming) ---
@@ -988,14 +1025,48 @@ bool CsvChunkReader::read_one_data_row(std::vector<std::string>& fields_out,
     return false;
 }
 
-Frame CsvChunkReader::build_frame(const std::vector<std::vector<std::string>>& raw_data) const {
+Frame CsvChunkReader::build_frame(const std::vector<std::vector<std::string>>& raw_data,
+                                  bool validate_locked_schema) const {
     std::vector<Column> columns;
     columns.reserve(col_indices_.size());
     for (size_t ci : col_indices_) {
         Column col(header_[ci], col_types_[ci]);
         for (const auto& row : raw_data) {
             if (ci < row.size()) {
-                col.push_back(parser_.parse_value(row[ci], col_types_[ci]));
+                const std::string& raw_value = row[ci];
+                CellValue parsed = parser_.parse_value(raw_value, col_types_[ci]);
+
+                // Fail-fast validation for locked schema in subsequent chunks
+                if (validate_locked_schema && std::holds_alternative<std::monostate>(parsed)) {
+                    // Check if this is a genuine null or a type mismatch
+                    if (!parser_.is_null_sentinel(raw_value)) {
+                        // Type mismatch detected
+                        std::string type_name;
+                        switch (col_types_[ci]) {
+                            case DType::INT64:
+                                type_name = "int64";
+                                break;
+                            case DType::FLOAT64:
+                                type_name = "float64";
+                                break;
+                            case DType::BOOL:
+                                type_name = "bool";
+                                break;
+                            case DType::STRING:
+                                type_name = "string";
+                                break;
+                            default:
+                                type_name = "unknown";
+                        }
+                        throw std::runtime_error(
+                            "Type mismatch in chunk for column '" + header_[ci] + "': expected " +
+                            type_name + " but found incompatible value '" + raw_value +
+                            "'. Please ensure consistent column types throughout the file, or use "
+                            "read_csv() to load the entire file at once if memory permits.");
+                    }
+                }
+
+                col.push_back(parsed);
             } else {
                 col.push_null();
             }
@@ -1009,7 +1080,7 @@ void CsvChunkReader::open(const std::string& path) {
     const CsvConfig& config = parser_.config();
     close();
 
-    file_.open(std::filesystem::u8path(path), std::ios::binary);
+    open_binary_input(file_, path);
     if (!file_.is_open()) {
         throw std::runtime_error("Cannot open file: " + path);
     }
@@ -1121,7 +1192,7 @@ std::optional<CsvParseResult> CsvChunkReader::next_chunk(size_t chunksize,
     }
 
     rows_read_total_ += raw_data.size() + bad_rows.size();
-    return CsvParseResult{build_frame(raw_data), std::move(bad_rows)};
+    return CsvParseResult{build_frame(raw_data, schema_locked_), std::move(bad_rows)};
 }
 
 void CsvChunkReader::close() {

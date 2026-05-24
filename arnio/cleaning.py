@@ -10,6 +10,10 @@ import unicodedata
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
+import numpy as np
+import pandas as pd
+from pandas.api.types import is_scalar
+
 from ._core import (
     _cast_types,
     _clip_numeric,
@@ -138,14 +142,15 @@ def _validate_string_mapping(
     argument_name: str,
     allow_empty: bool = True,
 ) -> dict[str, str]:
-    normalized = _validate_mapping(
-        mapping,
-        argument_name=argument_name,
-        allow_empty=allow_empty,
-        non_mapping_message=(
-            f"{argument_name} must be a mapping of string keys to strings"
-        ),
-    )
+    if not isinstance(mapping, Mapping):
+        raise TypeError(
+            f"{argument_name} must be a mapping of string keys to strings, "
+            f"got {type(mapping).__name__!r}"
+        )
+
+    normalized = dict(mapping)
+    if not normalized and not allow_empty:
+        raise ValueError(f"{argument_name} must not be empty")
 
     invalid_keys = [key for key in normalized if not isinstance(key, str)]
     if invalid_keys:
@@ -1116,8 +1121,38 @@ def clean(
     return pipeline(frame, steps)
 
 
-def filter_rows(frame, column, op, value):
-    """Filter rows based on a column condition."""
+def filter_rows(
+    frame: ArFrame | pd.DataFrame,
+    column: str,
+    op: str,
+    value: object,
+) -> ArFrame | pd.DataFrame:
+    """Filter rows based on a column condition.
+
+    Parameters
+    ----------
+    frame : ArFrame or pd.DataFrame
+        Input data frame. When an ``ArFrame`` is supplied the return value
+        is also an ``ArFrame``; when a ``pd.DataFrame`` is supplied the
+        return value is a ``pd.DataFrame``.
+    column : str
+        Name of the column to filter on.
+    op : str
+        Comparison operator.  Supported values: ``">"``, ``"<"``,
+        ``">="``, ``"<="``, ``"=="``, ``"!="``.
+    value : object
+        Scalar value to compare each cell against.
+
+    Returns
+    -------
+    ArFrame or pd.DataFrame
+        Filtered frame of the same type as the input.
+
+    Examples
+    --------
+    >>> frame = ar.read_csv("data.csv")
+    >>> filtered = ar.filter_rows(frame, column="age", op=">", value=18)
+    """
 
     import pandas as pd
 
@@ -1470,34 +1505,62 @@ def drop_columns_matching(frame, pattern):
     return from_pandas(result) if is_arframe else result
 
 
-def replace_values(frame, mapping, column=None):
+def _is_null_mapping_key(value):
+    """
+    Return True when a mapping key represents a scalar null value.
+
+    Prevents ambiguous truth-value evaluation for tuple/list/array-like
+    objects when using pandas.isna().
+    """
+    if value is None:
+        return True
+
+    # Avoid calling pd.isna on tuple/list/array-like values
+    if not is_scalar(value):
+        return False
+
+    return bool(pd.isna(value))
+
+
+def replace_values(
+    frame: ArFrame | pd.DataFrame,
+    mapping: dict,
+    column: str | None = None,
+) -> ArFrame | pd.DataFrame:
     """Replace values based on a mapping dict.
 
-    If column is None, applies to all columns.
+    If ``column`` is ``None``, the mapping is applied to every column.
 
-    Handles None/NaN in mappings:
-    - If mapping has a null-like key (None / NaN / pd.NA), this replaces existing nulls via fillna.
-    - If mapping maps to a null-like value, the replacement will result in real nulls (NaN/NA).
+    Handles ``None``/``NaN`` in mappings:
+
+    - If the mapping has a null-like key (``None`` / ``NaN`` / ``pd.NA``),
+      existing nulls in the frame are replaced via ``fillna``.
+    - If the mapping maps a value *to* a null-like value, the result will
+      contain real nulls (``NaN`` / ``NA``).
 
     Parameters
     ----------
-    frame : ArFrame
-        Input data frame.
+    frame : ArFrame or pd.DataFrame
+        Input data frame. When an ``ArFrame`` is supplied the return value
+        is also an ``ArFrame``; when a ``pd.DataFrame`` is supplied the
+        return value is a ``pd.DataFrame``.
     mapping : dict
-        Mapping of values to replace.
+        Mapping of ``{old_value: new_value}`` pairs.
     column : str, optional
-        Specific column to apply replacements to. If None, applies to all columns.
+        Specific column to apply replacements to.  When ``None`` (default)
+        the mapping is applied across all columns.
 
     Returns
     -------
-    ArFrame
-        New frame with values replaced.
+    ArFrame or pd.DataFrame
+        New frame with values replaced, same type as the input.
 
     Examples
     --------
     >>> frame = ar.read_csv("data.csv")
     >>> replaced = ar.replace_values(frame, {"old_value": "new_value"}, column="name")
     """
+
     import pandas as pd
 
     from .convert import from_pandas, to_pandas
@@ -1530,12 +1593,22 @@ def replace_values(frame, mapping, column=None):
     normalized_mapping = {}
 
     for k, v in mapping.items():
-        # detect null-like keys (None, NaN, pd.NA)
-        if k is None or pd.isna(k):
+        # Handle scalar null-like keys safely without evaluating
+        # tuple/list/array-like objects in boolean context.
+        if _is_null_mapping_key(k):
             null_key_present = True
             null_replacement = v
-        else:
+        # Exclude tuple/list/ndarray/series/index keys which pandas.replace
+        # does not support and can raise confusing errors (e.g. operand
+        # length mismatch). Treat strings and true scalars as valid keys.
+        elif is_scalar(k) and not isinstance(
+            k, (tuple, list, np.ndarray, pd.Series, pd.Index)
+        ):
             normalized_mapping[k] = v
+        else:
+            # pandas replace does not support non-scalar mapping keys like tuples
+            # and lists. Ignore those keys rather than raising a user-facing error.
+            continue
 
     if column:
         s = df[column]

@@ -1,5 +1,6 @@
 """Tests for data cleaning functions."""
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -1016,6 +1017,16 @@ class TestStandardizeMissingTokens:
         with pytest.raises(ValueError, match="Unknown columns in subset"):
             ar.standardize_missing_tokens(frame, subset=["missing"])
 
+    def test_standardize_missing_tokens_pandas_subset_returns_dataframe(self):
+        df = pd.DataFrame({"name": ["N/A", "Alice"], "city": ["-", "Paris"]})
+
+        result = ar.standardize_missing_tokens(df, subset=["name"])
+
+        assert isinstance(result, pd.DataFrame)
+        assert pd.isna(result.loc[0, "name"])
+        assert result.loc[1, "name"] == "Alice"
+        assert result["city"].tolist() == ["-", "Paris"]
+
 
 class TestStripWhitespace:
     def test_strip(self, csv_with_whitespace):
@@ -1674,6 +1685,34 @@ class TestRenameColumns:
         ):
             ar.rename_columns(frame, {"name": "   "})
 
+    # --- Regression tests for non-dict mapping validation (bug fix) ---
+
+    def test_rename_rejects_none_with_clear_type_error(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        with pytest.raises(TypeError, match="must be a mapping.*'NoneType'"):
+            ar.rename_columns(frame, None)
+
+    def test_rename_rejects_list_of_tuples_with_clear_type_error(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        with pytest.raises(TypeError, match="must be a mapping.*'list'"):
+            ar.rename_columns(frame, [("name", "full_name")])
+
+    def test_rename_rejects_integer_with_clear_type_error(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        with pytest.raises(TypeError, match="must be a mapping.*'int'"):
+            ar.rename_columns(frame, 42)
+
+    def test_rename_rejects_string_with_clear_type_error(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        with pytest.raises(TypeError, match="must be a mapping.*'str'"):
+            ar.rename_columns(frame, "name:full_name")
+
+    def test_rename_valid_dict_still_works(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        result = ar.rename_columns(frame, {"name": "full_name"})
+        assert "full_name" in result.columns
+        assert "name" not in result.columns
+
 
 class TestTrimColumnNames:
     def test_trim_column_names_basic(self):
@@ -2080,6 +2119,45 @@ class TestReplaceValues:
         assert pd.isna(df.loc[1, "flag"])
         assert df.loc[2, "flag"] == "ok"
 
+    def test_replace_values_tuple_mapping_key_does_not_crash(self):
+        frame = ar.from_pandas(pd.DataFrame({"col": ["A", "B", "C"]}))
+
+        result = ar.replace_values(
+            frame,
+            {("A", "B"): "X"},
+            column="col",
+        )
+
+        df = ar.to_pandas(result)
+
+        assert list(df["col"]) == ["A", "B", "C"]
+
+    def test_replace_values_mixed_tuple_and_null_keys(self):
+        frame = ar.from_pandas(pd.DataFrame({"col": ["A", np.nan, "C"]}))
+
+        result = ar.replace_values(
+            frame,
+            {
+                ("A", "B"): "X",
+                np.nan: "missing",
+            },
+            column="col",
+        )
+
+        df = ar.to_pandas(result)
+
+        assert list(df["col"]) == ["A", "missing", "C"]
+
+    def test_replace_values_pandas_dataframe_input_returns_dataframe(self):
+        df = pd.DataFrame({"status": ["active", "inactive"], "flag": ["ok", "ok"]})
+
+        result = ar.replace_values(df, {"inactive": "paused"}, column="status")
+
+        assert isinstance(result, pd.DataFrame)
+        assert result["status"].tolist() == ["active", "paused"]
+        assert result["flag"].tolist() == ["ok", "ok"]
+        assert df["status"].tolist() == ["active", "inactive"]
+
 
 class TestRoundNumericColumns:
     def test_round_subset_missing_column_raises_clear_error(self):
@@ -2148,6 +2226,26 @@ class TestRoundNumericColumns:
         assert list(result_df["a"]) == [1.1, 2.5]
         assert list(result_df["c"]) == ["str1", "str2"]
 
+    def test_round_numeric_columns_with_arframe_input(self):
+        df = pd.DataFrame({"a": [1.123, 2.456], "b": [3.789, 4.0]})
+        frame = ar.from_pandas(df)
+
+        result = ar.round_numeric_columns(frame, decimals=1)
+
+        assert isinstance(result, ar.ArFrame)
+        result_df = ar.to_pandas(result)
+        assert list(result_df["a"]) == [1.1, 2.5]
+        assert list(result_df["b"]) == [3.8, 4.0]
+
+    def test_round_numeric_columns_with_dataframe_input(self):
+        df = pd.DataFrame({"a": [1.123, 2.456], "b": [3.789, 4.0]})
+
+        result = ar.round_numeric_columns(df, decimals=1)
+
+        assert isinstance(result, pd.DataFrame)
+        assert list(result["a"]) == [1.1, 2.5]
+        assert list(result["b"]) == [3.8, 4.0]
+
     def test_missing_column(self):
         import pandas as pd
 
@@ -2197,6 +2295,16 @@ class TestRoundNumericColumns:
         frame = ar.from_pandas(df)
         with pytest.raises(TypeError, match="decimals must be an integer"):
             ar.round_numeric_columns(frame, decimals=True)
+
+    def test_round_numeric_columns_pandas_input_returns_dataframe(self):
+        df = pd.DataFrame({"a": [1.234, 5.678], "label": ["x", "y"]})
+
+        result = ar.round_numeric_columns(df, decimals=1)
+
+        assert isinstance(result, pd.DataFrame)
+        assert result["a"].tolist() == [1.2, 5.7]
+        assert result["label"].tolist() == ["x", "y"]
+        assert df["a"].tolist() == [1.234, 5.678]
 
 
 class TestCombineColumns:
@@ -2275,6 +2383,20 @@ class TestCombineColumns:
                 separator="-",
                 output_column="combined",
             )
+
+    def test_combine_columns_pandas_input_returns_dataframe(self):
+        df = pd.DataFrame({"first": ["Alice", "Bob"], "last": ["Smith", "Jones"]})
+
+        result = ar.combine_columns(
+            df,
+            subset=["first", "last"],
+            separator=" ",
+            output_column="full_name",
+        )
+
+        assert isinstance(result, pd.DataFrame)
+        assert result["full_name"].tolist() == ["Alice Smith", "Bob Jones"]
+        assert "full_name" not in df.columns
 
 
 class TestCombineColumnsNativeRegression:
@@ -3069,3 +3191,66 @@ class TestSelectColumns:
 
         with pytest.raises(ValueError):
             ar.select_columns(frame, ["id", "id"])
+
+
+class TestFilterReplaceTypeAnnotations:
+    """Issue #1257 — filter_rows and replace_values accept and return both ArFrame and pd.DataFrame."""
+
+    def test_filter_rows_arframe_in_arframe_out(self, tmp_path):
+        """ArFrame input returns ArFrame."""
+        path = tmp_path / "data.csv"
+        path.write_text("id,score\n1,10\n2,50\n3,90\n")
+        frame = ar.read_csv(str(path))
+        result = ar.filter_rows(frame, column="score", op=">", value=20)
+        assert isinstance(result, ar.ArFrame)
+        assert ar.to_pandas(result).shape[0] == 2
+
+    def test_filter_rows_dataframe_in_dataframe_out(self):
+        """pd.DataFrame input returns pd.DataFrame."""
+        import pandas as pd
+
+        df = pd.DataFrame({"id": [1, 2, 3], "score": [10, 50, 90]})
+        result = ar.filter_rows(df, column="score", op=">", value=20)
+        assert isinstance(result, pd.DataFrame)
+        assert result.shape[0] == 2
+
+    def test_replace_values_arframe_in_arframe_out(self, tmp_path):
+        """ArFrame input returns ArFrame."""
+        path = tmp_path / "data.csv"
+        path.write_text("status\nactive\ninactive\nactive\n")
+        frame = ar.read_csv(str(path))
+        result = ar.replace_values(
+            frame, {"active": "A", "inactive": "I"}, column="status"
+        )
+        assert isinstance(result, ar.ArFrame)
+        df = ar.to_pandas(result)
+        assert set(df["status"].tolist()) == {"A", "I"}
+
+    def test_replace_values_dataframe_in_dataframe_out(self):
+        """pd.DataFrame input returns pd.DataFrame."""
+        import pandas as pd
+
+        df = pd.DataFrame({"status": ["active", "inactive", "active"]})
+        result = ar.replace_values(
+            df, {"active": "A", "inactive": "I"}, column="status"
+        )
+        assert isinstance(result, pd.DataFrame)
+        assert set(result["status"].tolist()) == {"A", "I"}
+
+    def test_filter_rows_preserves_index_for_dataframe(self):
+        """pd.DataFrame return preserves the original index."""
+        import pandas as pd
+
+        df = pd.DataFrame({"score": [10, 50, 90]}, index=[100, 200, 300])
+        result = ar.filter_rows(df, column="score", op=">=", value=50)
+        assert list(result.index) == [200, 300]
+
+    def test_replace_values_whole_frame_dataframe(self):
+        """replace_values with no column applies across all columns for pd.DataFrame."""
+        import pandas as pd
+
+        df = pd.DataFrame({"a": ["x", "y"], "b": ["x", "z"]})
+        result = ar.replace_values(df, {"x": "X"})
+        assert isinstance(result, pd.DataFrame)
+        assert result["a"].tolist() == ["X", "y"]
+        assert result["b"].tolist() == ["X", "z"]

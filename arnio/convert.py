@@ -8,10 +8,13 @@ from __future__ import annotations
 import copy as copylib
 import decimal
 import math
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
+
+if TYPE_CHECKING:
+    import pyarrow as pa
 
 from ._core import _DType, _Frame
 from .frame import ArFrame
@@ -243,16 +246,84 @@ def to_pandas(frame: ArFrame, *, copy: bool = False) -> pd.DataFrame:
     return result
 
 
+def to_arrow(frame: ArFrame) -> pa.Table:
+    """Convert ArFrame to pyarrow.Table.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input ArFrame to convert.
+
+    Returns
+    -------
+    pa.Table
+        Equivalent pyarrow Table with typed columns.
+
+    Raises
+    ------
+    TypeError
+        If the input is not an ArFrame.
+    ImportError
+        If pyarrow is not installed.
+
+    Examples
+    --------
+    >>> frame = ar.read_csv("data.csv")
+    >>> table = ar.to_arrow(frame)
+    """
+    if not isinstance(frame, ArFrame):
+        raise TypeError(f"to_arrow() expects an ArFrame, got {type(frame).__name__}")
+
+    try:
+        import pyarrow as pa
+    except ImportError as e:
+        raise ImportError(
+            "to_arrow() requires pyarrow. Install it with: pip install arnio[arrow]"
+        ) from e
+
+    cpp_frame = frame._frame
+    arrays: list[pa.Array] = []
+    names: list[str] = []
+
+    for i in range(cpp_frame.num_cols()):
+        col = cpp_frame.column_by_index(i)
+        name = col.name()
+        dtype = col.dtype()
+        mask = col.get_null_mask()
+
+        if dtype == _DType.INT64:
+            arr = col.to_numpy_int()
+            pa_arr = pa.array(arr, mask=mask, type=pa.int64())
+        elif dtype == _DType.FLOAT64:
+            arr = col.to_numpy_float()
+            pa_arr = pa.array(arr, mask=mask, type=pa.float64())
+        elif dtype == _DType.BOOL:
+            arr = col.to_numpy_bool()
+            pa_arr = pa.array(arr, mask=mask, type=pa.bool_())
+        else:
+            values = col.to_python_list()
+            pa_arr = pa.array(values, type=pa.string())
+
+        arrays.append(pa_arr)
+        names.append(name)
+
+    return pa.Table.from_arrays(arrays, names=names)
+
+
 def _pandas_dtype_to_arnio(dtype: object) -> _DType | None:
     if dtype == pd.Int64Dtype():
         return _DType.INT64
     if dtype == pd.Float64Dtype() or dtype == np.dtype("float64"):
         return _DType.FLOAT64
+
     if dtype == pd.BooleanDtype() or dtype == np.dtype("bool"):
         return _DType.BOOL
     if dtype == pd.StringDtype():
         return _DType.STRING
     # object dtype is intentionally left to value-based inference
+    if dtype == pd.BooleanDtype() or str(dtype) == "bool":
+        return _DType.BOOL
+
     return None
 
 

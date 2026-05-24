@@ -343,6 +343,8 @@ export policy should stay explicit in the application that writes the file.
 
 `ar.validate()` returns a `ValidationResult`; it does not raise for validation failures. Check `result.passed` and `result.issues` for `dtype` or `required_column` rule violations.
 
+`validate()` currently operates on a single in-memory `ArFrame`. Chunked validation via `read_csv_chunked()` iterators is not yet supported directly. Validate each chunk individually or materialize the data before validation when working with streamed/chunked inputs.
+
 ### Pipeline Step Errors
 
 Unknown step names raise `UnknownStepError` before execution begins.
@@ -593,7 +595,7 @@ not to replace it.
 | **pandas** | Clean, validate, and profile messy `DataFrame`s through `df.arnio`. |
 | **NumPy** | Prepare typed numeric data before array/modeling workflows. |
 | **scikit-learn** | Use Arnio cleaning as a preprocessing layer before model training. |
-| **DuckDB / Arrow** | Validate and prepare data before analytics and columnar exchange. |
+| **DuckDB / Arrow** | Validate and prepare data before analytics and columnar exchange. Export ArFrame to pyarrow.Table via ``ar.to_arrow(frame)``. |
 | **notebooks** | Inspect quality issues and cleaning suggestions before analysis. |
 
 ### DuckDB registration
@@ -688,6 +690,13 @@ They follow a simple workflow:
   Run:
 ```bash
   python examples/arnio_with_duckdb.py
+```
+
+- **Arnio + Arrow**
+  Export ArFrame to pyarrow.Table using ``ar.to_arrow()`` for zero-copy interop with Arrow-native tools.
+  Run:
+```bash
+  python examples/arnio_with_arrow.py
 ```
 
 
@@ -1779,6 +1788,21 @@ frame2 = ar.from_records(
 ```
 
 Missing keys in dict records are filled with `None`. Nested values raise `TypeError`. An empty list raises `ValueError`.
+
+## Type Casting
+
+You can cast columns to a different data type using the `.astype()` convenience wrapper:
+
+```python
+import arnio as ar
+
+# Assume 'frame' is an existing ArFrame
+# Cast the entire frame to a single type
+float_frame = frame.astype(float)
+
+# Cast specific columns using a dictionary mapping
+casted_frame = frame.astype({"age": int})
+```
 
 #### Windows build troubleshooting
 
