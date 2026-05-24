@@ -369,13 +369,15 @@ def pipeline(
                     {
                         "step": name,
                         "before": rows_before,
-                        "after": step_result.shape[0],
+                        "after": result.shape[0] if dry_run else step_result.shape[0],
+                        "dry_run": dry_run,
                     }
                 )
                 step_timings.append(
                     {
                         "step": name,
-                        "seconds": round(perf_counter() - started_at, 9),
+                        "seconds": round(elapsed_sec, 9),
+                        "dry_run": dry_run,
                     }
                 )
         elif name in python_step_registry:
@@ -418,13 +420,15 @@ def pipeline(
                     {
                         "step": name,
                         "before": rows_before,
-                        "after": step_result.shape[0],
+                        "after": result.shape[0] if dry_run else step_result.shape[0],
+                        "dry_run": dry_run,
                     }
                 )
                 step_timings.append(
                     {
                         "step": name,
-                        "seconds": round(perf_counter() - started_at, 9),
+                        "seconds": round(elapsed_sec, 9),
+                        "dry_run": dry_run,
                     }
                 )
         else:

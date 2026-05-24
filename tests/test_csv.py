@@ -896,6 +896,20 @@ class TestReadCsv:
         ):
             ar.read_csv(csv_path)
 
+    def test_tsv_delimiter(self, tmp_path):
+        csv_path = tmp_path / "data.tsv"
+        csv_path.write_text("name\tage\tcity\nAlice\t30\tNYC\nBob\t25\tLA\n")
+        frame = ar.read_csv(str(csv_path))
+        assert frame.shape == (2, 3)
+        assert frame.columns == ["name", "age", "city"]
+
+    def test_custom_delimiter(self, tmp_path):
+        csv_path = tmp_path / "data.csv"
+        csv_path.write_text("name|age|city\nAlice|30|NYC\nBob|25|LA\n")
+        frame = ar.read_csv(str(csv_path), delimiter="|")
+        assert frame.shape == (2, 3)
+        assert list(ar.to_pandas(frame)["name"]) == ["Alice", "Bob"]
+
     def test_duplicate_headers_rejected(self, tmp_path):
         csv_path = tmp_path / "duplicate_headers.csv"
         csv_path.write_text("a,a\n1,2\n")

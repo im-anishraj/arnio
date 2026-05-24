@@ -28,7 +28,15 @@ def main():
     print("\n--- Raw Data Schema ---")
     print(frame.dtypes)
 
-    # 3. Define a strict, readable cleaning pipeline
+    # 3. Profile the data quality before cleaning
+    report = ar.profile(frame)
+    print("\n--- Data Quality Report ---")
+    print(f"Rows: {report.row_count}, Columns: {report.column_count}")
+    print(f"Duplicates: {report.duplicate_rows}")
+    if report.suggestions:
+        print(f"Suggested steps: {report.suggestions}")
+
+    # 4. Define a strict, readable cleaning pipeline
     clean_frame = ar.pipeline(
         frame,
         [
@@ -40,7 +48,7 @@ def main():
         ],
     )
 
-    # 4. Export to a clean pandas DataFrame
+    # 5. Export to a clean pandas DataFrame
     df = ar.to_pandas(clean_frame)
     print("\n--- Cleaned Pandas DataFrame ---")
     print(df)
