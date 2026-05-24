@@ -289,6 +289,17 @@ def _validate_skip_rows(skip_rows: int) -> int:
     return skip_rows
 
 
+def _validate_skiprows(skiprows: int | None) -> int | None:
+    """Validate skiprows parameter."""
+    if skiprows is None:
+        return None
+    if isinstance(skiprows, bool) or not isinstance(skiprows, int):
+        raise TypeError("skiprows must be an integer or None")
+    if skiprows < 0:
+        raise ValueError("skiprows must be non-negative")
+    return skiprows
+
+
 def _validate_chunksize(chunksize: int) -> int:
     """Validate chunksize parameter."""
     if isinstance(chunksize, bool) or not isinstance(chunksize, int):
@@ -608,17 +619,20 @@ def read_csv_chunked(
     path: str | os.PathLike[str],
     *,
     chunksize: int = 10_000,
-    delimiter: str = ",",
+    delimiter: str | None = None,
     has_header: bool = True,
     usecols: list[str] | None = None,
     nrows: int | None = None,
-    skip_rows: int = 0,
+    skiprows: int | None = None,
+    skip_rows: int | None = None,
     encoding: str = "utf-8",
     trim_headers: bool = True,
     decimal_separator: str = ".",
     thousands_separator: str | None = None,
     null_values: list[str] | None = None,
+    dtype: dict[str, str] | None = None,
     mode: str = "strict",
+    encoding_errors: str = "strict",
     on_bad_lines: str = "error",
 ) -> Iterator[ArFrame]:
     """Read a CSV file in chunks, yielding ArFrame objects.
@@ -640,8 +654,16 @@ def read_csv_chunked(
         Columns to read. If None, reads all columns.
     nrows : int, optional
         Maximum total number of data rows to read across all chunks.
-    skip_rows : int, default 0
+    skiprows : int, optional
         Number of data rows to skip after the header row.
+        Alias ``skip_rows`` is still accepted but deprecated and
+        will be removed in a future release.
+    dtype : dict[str, str], optional
+        Explicit column dtype mapping. Specified columns skip automatic
+        type inference and use the requested dtype directly.
+        Supported dtypes: ``"string"``, ``"int64"``, ``"float64"``, ``"bool"``.
+    encoding_errors : {"strict", "replace", "ignore"}, default "strict"
+        Controls how invalid UTF-8 bytes are handled during CSV parsing.
     encoding : str, default "utf-8"
         File encoding.
     trim_headers : bool, default True
@@ -704,13 +726,35 @@ def read_csv_chunked(
     except FileNotFoundError:
         pass
 
+    # Handle skip_rows → skiprows deprecation shim
+    if skip_rows is not None:
+        import warnings
+
+        warnings.warn(
+            "skip_rows is deprecated and will be removed in a future release. "
+            "Use skiprows instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        if skiprows is not None:
+            raise TypeError(
+                "Cannot pass both skip_rows and skiprows. Use skiprows only."
+            )
+        skiprows = skip_rows
+
+    # Delimiter auto-inference (matches read_csv behaviour)
+    if delimiter is None:
+        delimiter = "\t" if path.lower().endswith(".tsv") else ","
+
     decimal_separator = _validate_decimal_separator(decimal_separator)
     _validate_thousands_separator(thousands_separator, decimal_separator)
     delimiter = _validate_delimiter(delimiter)
     mode = _validate_parser_mode(mode)
     chunksize = _validate_chunksize(chunksize)
-    skip_rows = _validate_skip_rows(skip_rows)
+    encoding_errors = _validate_encoding_errors(encoding_errors)
     on_bad_lines = _validate_on_bad_lines(on_bad_lines)
+
+    resolved_skiprows = _validate_skiprows(skiprows)
 
     config = _CsvConfig()
     config.delimiter = delimiter
@@ -720,7 +764,11 @@ def read_csv_chunked(
     config.decimal_separator = decimal_separator
     config.thousands_separator = thousands_separator
     config.mode = mode
-    config.skip_rows = skip_rows
+    config.encoding_errors = encoding_errors
+    if resolved_skiprows is not None:
+        config.skip_rows = resolved_skiprows
+    if dtype is not None:
+        config.dtype = _validate_dtype_mapping(dtype)
 
     if null_values is not None:
         config.null_values = _validate_null_values(null_values)
@@ -744,7 +792,12 @@ def read_csv_chunked(
                 if on_bad_lines == "warn" and bad_rows:
                     _warn_bad_rows(bad_rows)
 
-                yield ArFrame(cpp_frame)
+                ar_frame = ArFrame(cpp_frame)
+                if dtype is not None:
+                    from .cleaning import cast_types as _apply_dtype
+
+                    ar_frame = _apply_dtype(ar_frame, dtype)
+                yield ar_frame
     except ValueError:
         raise
     except CsvReadError:
@@ -771,7 +824,7 @@ def write_csv(
         The data frame to write.
     path : str
         Destination file path. Supports .csv, .txt, and .tsv extensions.
-    delimiter : str, default ","
+    delimiter : str or default ","
         Field delimiter character.
     write_header : bool, default True
         Whether to write the column header row.
