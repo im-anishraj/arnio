@@ -124,7 +124,9 @@ class CsvReader:
     def read(
         self, path: str, on_bad_lines: str = "error"
     ) -> tuple[Frame, list[BadRow]]: ...
-    def scan_schema(self, path: str) -> Mapping[str, str]: ...
+    def scan_schema(
+        self, path: str, on_bad_lines: str = "error"
+    ) -> tuple[Mapping[str, str], list[str]]: ...
 
 class CsvWriteConfig:
     delimiter: str

@@ -1,5 +1,7 @@
 """Scikit-learn integration for Arnio's data preparation engine."""
 
+import warnings
+
 import numpy as np
 import pandas as pd
 
@@ -39,9 +41,15 @@ class ArnioCleaner(BaseEstimator, TransformerMixin):
         if not isinstance(X, pd.DataFrame):
             raise TypeError(f"ArnioCleaner requires a pandas DataFrame, got {type(X)}")
 
-        # Scikit-learn expectation: store feature names as a numpy array and track feature count
+        # Scikit-learn expectation: store feature names as a numpy array and
+        # track feature count.
         self.feature_names_in_ = np.array(X.columns, dtype=object)
         self.n_features_in_ = X.shape[1]
+
+        # Store column dtypes so transform() can warn when they change
+        # between fit and transform (e.g. after a CSV round-trip).
+        self.feature_dtypes_in_ = {col: str(X[col].dtype) for col in X.columns}
+
         return self
 
     def transform(self, X, y=None):
@@ -56,6 +64,21 @@ class ArnioCleaner(BaseEstimator, TransformerMixin):
                 "ArnioCleaner transform input columns must match the columns seen "
                 "during fit, including order."
             )
+
+        # Warn when a column's dtype differs from what was seen in fit().
+        # This is a warning-only signal — it does not block the transform —
+        # because some pipelines intentionally apply dtype changes upstream.
+        for col in X.columns:
+            fitted_dtype = self.feature_dtypes_in_.get(col)
+            current_dtype = str(X[col].dtype)
+            if fitted_dtype is not None and current_dtype != fitted_dtype:
+                warnings.warn(
+                    f"ArnioCleaner: column '{col}' dtype changed from "
+                    f"'{fitted_dtype}' (fit) to '{current_dtype}' (transform). "
+                    f"This may cause unexpected behaviour in the Arnio pipeline.",
+                    UserWarning,
+                    stacklevel=2,
+                )
 
         X_in = X.copy() if self.copy else X
 

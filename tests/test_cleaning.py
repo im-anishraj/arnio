@@ -3191,3 +3191,66 @@ class TestSelectColumns:
 
         with pytest.raises(ValueError):
             ar.select_columns(frame, ["id", "id"])
+
+
+class TestFilterReplaceTypeAnnotations:
+    """Issue #1257 — filter_rows and replace_values accept and return both ArFrame and pd.DataFrame."""
+
+    def test_filter_rows_arframe_in_arframe_out(self, tmp_path):
+        """ArFrame input returns ArFrame."""
+        path = tmp_path / "data.csv"
+        path.write_text("id,score\n1,10\n2,50\n3,90\n")
+        frame = ar.read_csv(str(path))
+        result = ar.filter_rows(frame, column="score", op=">", value=20)
+        assert isinstance(result, ar.ArFrame)
+        assert ar.to_pandas(result).shape[0] == 2
+
+    def test_filter_rows_dataframe_in_dataframe_out(self):
+        """pd.DataFrame input returns pd.DataFrame."""
+        import pandas as pd
+
+        df = pd.DataFrame({"id": [1, 2, 3], "score": [10, 50, 90]})
+        result = ar.filter_rows(df, column="score", op=">", value=20)
+        assert isinstance(result, pd.DataFrame)
+        assert result.shape[0] == 2
+
+    def test_replace_values_arframe_in_arframe_out(self, tmp_path):
+        """ArFrame input returns ArFrame."""
+        path = tmp_path / "data.csv"
+        path.write_text("status\nactive\ninactive\nactive\n")
+        frame = ar.read_csv(str(path))
+        result = ar.replace_values(
+            frame, {"active": "A", "inactive": "I"}, column="status"
+        )
+        assert isinstance(result, ar.ArFrame)
+        df = ar.to_pandas(result)
+        assert set(df["status"].tolist()) == {"A", "I"}
+
+    def test_replace_values_dataframe_in_dataframe_out(self):
+        """pd.DataFrame input returns pd.DataFrame."""
+        import pandas as pd
+
+        df = pd.DataFrame({"status": ["active", "inactive", "active"]})
+        result = ar.replace_values(
+            df, {"active": "A", "inactive": "I"}, column="status"
+        )
+        assert isinstance(result, pd.DataFrame)
+        assert set(result["status"].tolist()) == {"A", "I"}
+
+    def test_filter_rows_preserves_index_for_dataframe(self):
+        """pd.DataFrame return preserves the original index."""
+        import pandas as pd
+
+        df = pd.DataFrame({"score": [10, 50, 90]}, index=[100, 200, 300])
+        result = ar.filter_rows(df, column="score", op=">=", value=50)
+        assert list(result.index) == [200, 300]
+
+    def test_replace_values_whole_frame_dataframe(self):
+        """replace_values with no column applies across all columns for pd.DataFrame."""
+        import pandas as pd
+
+        df = pd.DataFrame({"a": ["x", "y"], "b": ["x", "z"]})
+        result = ar.replace_values(df, {"x": "X"})
+        assert isinstance(result, pd.DataFrame)
+        assert result["a"].tolist() == ["X", "y"]
+        assert result["b"].tolist() == ["X", "z"]

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import re
+import warnings
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Callable
@@ -381,11 +382,23 @@ class Schema:
         return validate(frame, self, max_errors=max_errors)
 
     def to_json(self) -> str:
-        """Serialize the schema to a stable JSON string."""
-        if self.rules:
-            raise ValueError(
-                "Schema rules are not JSON serializable. "
-                "Serialize only fields/strict/unique for now."
+        """Serialize the schema to a stable JSON string.
+
+        Cross-field ``rules`` cannot be serialized. When rules are present
+        they are silently omitted and a ``UserWarning`` is emitted. The
+        returned payload includes ``"rules_omitted": true`` so downstream
+        consumers can detect the gap. Call ``from_json()`` to restore the
+        field-only schema; rules must be re-attached manually afterward.
+        """
+        rules_omitted = bool(self.rules)
+        if rules_omitted:
+            warnings.warn(
+                "Schema.to_json(): cross-field rules cannot be serialized "
+                "and have been omitted. The JSON payload includes "
+                '"rules_omitted": true. Restore rules manually after '
+                "from_json().",
+                UserWarning,
+                stacklevel=2,
             )
 
         payload = {
@@ -396,6 +409,8 @@ class Schema:
             "strict": self.strict,
             "unique": list(self.unique) if self.unique is not None else None,
         }
+        if rules_omitted:
+            payload["rules_omitted"] = True
         return json.dumps(payload, sort_keys=True)
 
     @classmethod
@@ -430,6 +445,9 @@ class Schema:
         if unique is not None and not isinstance(unique, list):
             raise TypeError("Schema JSON 'unique' must be a list of strings or null.")
 
+        # rules_omitted marker is accepted and silently ignored — rules
+        # cannot be round-tripped through JSON and must be re-attached
+        # manually by the caller if needed.
         return cls(fields=fields, strict=strict, unique=unique)
 
     @classmethod
