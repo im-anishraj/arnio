@@ -1172,6 +1172,12 @@ schema = ar.Schema({
     # CurrencyCode validates 3-letter uppercase formats (e.g., USD, EUR, INR).
     "currency": ar.CurrencyCode(),
 
+    # IPAddress validates IPv4 and IPv6 string formats.
+    "ip_address": ar.IPAddress(version="both", nullable=True),
+
+    # JSON validates standard JSON string format (must be object/array by default).
+    "payload": ar.JSON(allow_primitives=False, nullable=True),
+
     "username": ar.String(min_length=3, max_length=20),
     "user_code": ar.Regex(r"^USR-\d{4}$", nullable=False),
     "revenue": ar.Custom("positive", nullable=True),

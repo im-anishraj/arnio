@@ -83,6 +83,7 @@ from .quality import (
     suggest_cleaning,
 )
 from .schema import (
+    JSON,
     URL,
     Bool,
     CountryCode,
@@ -94,6 +95,7 @@ from .schema import (
     Field,
     Float64,
     Int64,
+    IPAddress,
     PhoneNumber,
     Regex,
     Schema,
@@ -196,6 +198,8 @@ __all__ = [
     "URL",
     "PhoneNumber",
     "DateTime",
+    "IPAddress",
+    "JSON",
     # Exceptions
     "UnknownStepError",
     "ArnioError",

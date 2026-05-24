@@ -325,6 +325,7 @@ class Field:
     _datetime_max: pd.Timestamp | None = None
     required_if: tuple[str, Any] | None = None
     severity: str = "error"
+    allow_primitives: bool | None = None
 
     def __post_init__(self) -> None:
         _validate_severity(self.severity)
@@ -1552,6 +1553,78 @@ def DateTime(
     )
 
 
+def IPAddress(
+    *,
+    version: str = "both",
+    nullable: bool = True,
+    unique: bool = False,
+    severity: str = "error",
+    required_if: tuple[str, Any] | None = None,
+) -> Field:
+    """Create an IP address validation field.
+
+    Parameters
+    ----------
+    version : str, default "both"
+        The IP address version to validate. Must be one of:
+        - ``"both"``: validates both IPv4 and IPv6.
+        - ``"ipv4"``: validates IPv4 only.
+        - ``"ipv6"``: validates IPv6 only.
+    nullable : bool, default True
+        Whether null values are allowed.
+    unique : bool, default False
+        Whether all non-null values must be unique.
+    severity : str, default "error"
+        Severity level for validation issues.
+    required_if : tuple[str, Any] or None
+        Conditional requirement as a column/value pair.
+    """
+    if version not in {"ipv4", "ipv6", "both"}:
+        raise ValueError("version must be 'ipv4', 'ipv6', or 'both'")
+    return Field(
+        dtype="string",
+        nullable=nullable,
+        semantic=f"ip_address:{version}",
+        unique=unique,
+        required_if=required_if,
+        severity=severity,
+    )
+
+
+def JSON(
+    *,
+    allow_primitives: bool = False,
+    nullable: bool = True,
+    severity: str = "error",
+    required_if: tuple[str, Any] | None = None,
+) -> Field:
+    """Create a JSON validation field.
+
+    Parameters
+    ----------
+    allow_primitives : bool, default False
+        Whether to allow flat JSON primitives (numbers, booleans, strings, null).
+        When False (default), only structured JSON objects (dicts) and arrays (lists)
+        are accepted.
+    nullable : bool, default True
+        Whether null values are allowed.
+    severity : str, default "error"
+        Severity level for validation issues.
+    required_if : tuple[str, Any] or None
+        Conditional requirement as a column/value pair.
+    """
+    if not isinstance(allow_primitives, bool):
+        raise TypeError("allow_primitives must be a boolean")
+    return Field(
+        dtype="string",
+        nullable=nullable,
+        semantic="json",
+        allow_primitives=allow_primitives,
+        required_if=required_if,
+        severity=severity,
+    )
+
+
 def _is_safely_convertible_to_dtype(
     series: pd.Series,
     expected_dtype: str,
@@ -1788,6 +1861,68 @@ def _validate_column(
                         severity=field_def.severity,
                     )
                 )
+        elif field_def.semantic == "json":
+            import json
+
+            invalid_json_values = []
+            for index, value in non_null.items():
+                value_str = str(value)
+                try:
+                    parsed_val = json.loads(value_str)
+                    if not field_def.allow_primitives and not isinstance(
+                        parsed_val, (dict, list)
+                    ):
+                        raise ValueError(
+                            "JSON primitives are not allowed (must be an object or array)"
+                        )
+                except Exception as e:
+                    invalid_json_values.append((index, value, str(e)))
+
+            for index, value, err_msg in invalid_json_values:
+                issues.append(
+                    ValidationIssue(
+                        column=name,
+                        rule="json",
+                        message=f"Column {name!r} contains invalid JSON values: {err_msg}",
+                        row_index=int(index) + 1,
+                        value=value,
+                        severity=field_def.severity,
+                    )
+                )
+        elif field_def.semantic and field_def.semantic.startswith("ip_address:"):
+            import ipaddress
+
+            version = field_def.semantic.split(":")[1]
+            version_str = "IP" if version == "both" else version.upper()
+            invalid_ip_values = []
+            for index, value in non_null.items():
+                value_str = str(value)
+                is_valid = False
+                try:
+                    ip = ipaddress.ip_address(value_str)
+                    if version == "both":
+                        is_valid = True
+                    elif version == "ipv4" and ip.version == 4:
+                        is_valid = True
+                    elif version == "ipv6" and ip.version == 6:
+                        is_valid = True
+                except ValueError:
+                    pass
+
+                if not is_valid:
+                    invalid_ip_values.append((index, value))
+
+            for index, value in invalid_ip_values:
+                issues.append(
+                    ValidationIssue(
+                        column=name,
+                        rule="ip_address",
+                        message=f"Column {name!r} contains invalid {version_str} address values",
+                        row_index=int(index) + 1,
+                        value=value,
+                        severity=field_def.severity,
+                    )
+                )
         else:
             pattern = _SEMANTIC_PATTERNS.get(field_def.semantic)
             if pattern is None and field_def.semantic.startswith("url:"):
@@ -1956,6 +2091,7 @@ def _field_to_dict(field_def: Field) -> dict[str, Any]:
         "datetime_min": _clean_scalar(field_def._datetime_min),
         "datetime_max": _clean_scalar(field_def._datetime_max),
         "required_if": _normalize_sequence(field_def.required_if),
+        "allow_primitives": field_def.allow_primitives,
     }
 
 
@@ -2017,6 +2153,7 @@ def _field_from_json_dict(name: str, payload: Any) -> Field:
         ),
         required_if=required_if,
         severity=payload.get("severity", "error"),
+        allow_primitives=payload.get("allow_primitives"),
     )
 
 
