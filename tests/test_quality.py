@@ -1735,6 +1735,20 @@ def test_auto_clean_explain_dry_run_error(tmp_path):
         ar.auto_clean(frame, explain=True, dry_run=True)
 
 
+def test_auto_clean_return_report_dry_run_error(tmp_path):
+    """Using return_report=True with dry_run=True should raise a ValueError."""
+    path = tmp_path / "data.csv"
+    path.write_text("id,name\n1,Alice\n2,Bob\n")
+    frame = ar.read_csv(path)
+
+    import pytest
+
+    with pytest.raises(
+        ValueError, match="return_report=True cannot be used with dry_run=True"
+    ):
+        ar.auto_clean(frame, return_report=True, dry_run=True)
+
+
 def test_compare_profiles_under_threshold_is_ok():
     """Changes below warning thresholds should result in 'ok' status."""
     baseline = ar.profile(ar.from_pandas(pd.DataFrame({"score": [10.0, 11.0, 12.0]})))
