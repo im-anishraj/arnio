@@ -242,7 +242,7 @@ Frame concat(const std::vector<Frame>& frames) {
         for (size_t c = 0; c < num_cols; ++c) {
             const Column& col = f.column(c);
             if (col.name() != target_names[c]) {
-                throw std::invalid_argument("Column name or order mismatch in concat: expected '" + 
+                throw std::invalid_argument("Column name or order mismatch in concat: expected '" +
                                             target_names[c] + "', got '" + col.name() + "'");
             }
             if (col.dtype() != target_dtypes[c]) {
