@@ -1122,11 +1122,11 @@ def clean(
 
 
 def filter_rows(
-    frame: "ArFrame | pd.DataFrame",
+    frame: ArFrame | pd.DataFrame,
     column: str,
     op: str,
     value: object,
-) -> "ArFrame | pd.DataFrame":
+) -> ArFrame | pd.DataFrame:
     """Filter rows based on a column condition.
 
     Parameters
@@ -1523,10 +1523,10 @@ def _is_null_mapping_key(value):
 
 
 def replace_values(
-    frame: "ArFrame | pd.DataFrame",
+    frame: ArFrame | pd.DataFrame,
     mapping: dict,
     column: str | None = None,
-) -> "ArFrame | pd.DataFrame":
+) -> ArFrame | pd.DataFrame:
     """Replace values based on a mapping dict.
 
     If ``column`` is ``None``, the mapping is applied to every column.
@@ -1560,7 +1560,7 @@ def replace_values(
     >>> frame = ar.read_csv("data.csv")
     >>> replaced = ar.replace_values(frame, {"old_value": "new_value"}, column="name")
     """
-    
+
     import pandas as pd
 
     from .convert import from_pandas, to_pandas
