@@ -918,19 +918,20 @@ CsvReader::scan_schema(const std::string& path, const std::string& on_bad_lines)
     std::vector<std::string> reusable_fields;
     reusable_fields.reserve(num_cols);
     std::vector<std::string> bad_rows;
+    size_t record_number = config.has_header ? 1 : 0;
 
     while (record_reader.read(line)) {
         if (sample_count >= max_samples) {
             break;
         }
-
         if (line.empty()) continue;
+        ++record_number;  // increment for every physical row
         parser_.parse_line(line, reusable_fields);
         if (reusable_fields.size() != num_cols) {
             if (on_bad_lines == "error") {
-                validate_row_width(sample_count + 2, num_cols, reusable_fields.size());
+                validate_row_width(record_number, num_cols, reusable_fields.size());
             } else if (on_bad_lines == "warn") {
-                bad_rows.push_back("CSV row " + std::to_string(sample_count + 2) + " has " +
+                bad_rows.push_back("CSV row " + std::to_string(record_number) + " has " +
                                    std::to_string(reusable_fields.size()) + " fields; expected " +
                                    std::to_string(num_cols));
                 continue;

@@ -518,3 +518,21 @@ class TestScanCsvOnBadLines:
         with pytest.warns(UserWarning, match="malformed CSV row"):
             schema = ar.scan_csv(csv_path, on_bad_lines="warn")
         assert schema == {"a": "string", "b": "int64"}
+
+    def test_warn_multiple_bad_rows_correct_row_numbers(self, tmp_path):
+        """Row numbers in warning must reflect physical CSV row, not accepted-row count."""
+        csv_path = tmp_path / "multi_bad.csv"
+        csv_path.write_text(
+            "a,b\n"
+            "1,2\n"  # row 2: good
+            "bad\n"  # row 3: bad
+            "3,4\n"  # row 4: good
+            "also_bad\n"  # row 5: bad
+            "5,6\n"  # row 6: good
+        )
+        with pytest.warns(UserWarning) as caught:
+            schema = ar.scan_csv(csv_path, on_bad_lines="warn")
+        msg = str(caught[0].message)
+        assert "CSV row 3 has 1 fields; expected 2" in msg
+        assert "CSV row 5 has 1 fields; expected 2" in msg
+        assert schema == {"a": "int64", "b": "int64"}
