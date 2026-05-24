@@ -109,6 +109,19 @@ class TestReadCsv:
         assert df["revenue"].isna().sum() == 1
         assert pd.isna(df.loc[1, "revenue"])
 
+    def test_empty_csv(self, empty_csv):
+        frame = ar.read_csv(empty_csv)
+        assert frame.shape == (0, 3)
+        assert frame.columns == ["name", "age", "score"]
+
+    def test_csv_with_all_nulls(self, csv_with_all_nulls):
+        frame = ar.read_csv(csv_with_all_nulls)
+        assert frame.shape == (2, 3)
+        df = ar.to_pandas(frame)
+        assert df["a"].isna().all()
+        assert df["b"].isna().all()
+        assert df["c"].isna().all()
+
     def test_utf8_bom_handling(self, tmp_path):
         csv_path = tmp_path / "bom.csv"
         csv_path.write_bytes(b"\xef\xbb\xbfname,age\nAlice,30\nBob,25\n")
