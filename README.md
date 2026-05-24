@@ -1717,6 +1717,7 @@ Discord is for fast conversation and support. GitHub remains the source of truth
 ## 📚 Documentation
 
 - [Troubleshooting Guide](docs/TROUBLESHOOTING.md)
+- [Nullable dtype compatibility](docs/nullable_dtype_compat.md)
 
 ## 🤝 Contribute
 
