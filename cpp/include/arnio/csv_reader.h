@@ -29,6 +29,17 @@ struct CsvConfig {
     std::string encoding_errors = "strict";
 };
 
+struct BadRow {
+    size_t row;
+    size_t expected;
+    size_t actual;
+};
+
+struct CsvParseResult {
+    Frame frame;
+    std::vector<BadRow> bad_rows;
+};
+
 // Shared CSV field parsing and type inference used by CsvReader and CsvChunkReader.
 class CsvParser {
    public:
@@ -52,10 +63,11 @@ class CsvReader {
     explicit CsvReader(const CsvConfig& config = CsvConfig{});
 
     // Read full CSV into a Frame
-    Frame read(const std::string& path) const;
+    CsvParseResult read(const std::string& path, const std::string& on_bad_lines = "error") const;
 
     // Scan schema only (column names + inferred types)
-    std::vector<std::pair<std::string, std::string>> scan_schema(const std::string& path) const;
+    std::pair<std::vector<std::pair<std::string, std::string>>, std::vector<std::string>>
+    scan_schema(const std::string& path, const std::string& on_bad_lines = "error") const;
 
    private:
     CsvParser parser_;
@@ -68,7 +80,8 @@ class CsvChunkReader {
     ~CsvChunkReader();
 
     void open(const std::string& path);
-    std::optional<Frame> next_chunk(size_t chunksize);
+    std::optional<CsvParseResult> next_chunk(size_t chunksize,
+                                             const std::string& on_bad_lines = "error");
     void close();
 
    private:
@@ -86,8 +99,11 @@ class CsvChunkReader {
     std::unique_ptr<class RecordReader> record_reader_;
 
     void resolve_col_indices();
-    bool read_one_data_row(std::vector<std::string>& fields_out);
-    Frame build_frame(const std::vector<std::vector<std::string>>& raw_data) const;
+    bool read_one_data_row(std::vector<std::string>& fields_out,
+                           const std::string& on_bad_lines = "error",
+                           std::vector<BadRow>* bad_rows_out = nullptr);
+    Frame build_frame(const std::vector<std::vector<std::string>>& raw_data,
+                      bool validate_locked_schema = false) const;
 };
 
 }  // namespace arnio

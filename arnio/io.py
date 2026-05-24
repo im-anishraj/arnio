@@ -9,11 +9,12 @@ import io
 import os
 import shutil
 import tempfile
+import warnings
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from typing import cast
 
-from ._core import (  # type: ignore
+from ._core import (
     _CsvChunkReader,
     _CsvConfig,
     _CsvReader,
@@ -258,6 +259,25 @@ def _validate_nrows(nrows: int) -> int:
     return nrows
 
 
+_PREVIEW_BAD_ROWS = 10
+
+
+def _warn_bad_rows(bad_rows: list) -> None:
+    """Emit a UserWarning summarizing rows dropped by on_bad_lines='warn'."""
+    lines = [
+        f"  CSV row {br.row} has {br.actual} fields; expected {br.expected}"
+        for br in bad_rows[:_PREVIEW_BAD_ROWS]
+    ]
+    extra = len(bad_rows) - _PREVIEW_BAD_ROWS
+    if extra > 0:
+        lines.append(f"  (+{extra} more)")
+    warnings.warn(
+        f"{len(bad_rows)} malformed CSV row(s):\n" + "\n".join(lines),
+        UserWarning,
+        stacklevel=3,
+    )
+
+
 def _validate_skip_rows(skip_rows: int) -> int:
     """Validate skip_rows parameter."""
     if isinstance(skip_rows, bool) or not isinstance(skip_rows, int):
@@ -311,6 +331,14 @@ def _validate_parser_mode(mode: str) -> str:
     if mode not in {"strict", "permissive"}:
         raise ValueError("mode must be either 'strict' or 'permissive'")
     return mode
+
+
+def _validate_on_bad_lines(on_bad_lines: str) -> str:
+    if not isinstance(on_bad_lines, str):
+        raise TypeError("on_bad_lines must be a string")
+    if on_bad_lines not in {"error", "warn", "skip"}:
+        raise ValueError("on_bad_lines must be either 'error', 'warn', 'skip'")
+    return on_bad_lines
 
 
 def _materialize_csv_input(
@@ -406,6 +434,7 @@ def read_csv(
     dtype: dict[str, str] | None = None,
     mode: str = "strict",
     encoding_errors: str = "strict",
+    on_bad_lines: str = "error",
 ) -> ArFrame:
     """Read a CSV file into an ArFrame via C++ backend.
 
@@ -435,7 +464,10 @@ def read_csv(
     encoding : str, default "utf-8"
         File encoding.
     trim_headers : bool, default True
-        Strip leading/trailing whitespace from column names.
+        Strip leading/trailing whitespace from column names.  Regardless
+        of this setting, headers that differ only by leading or trailing
+        whitespace are always rejected with a :exc:`CsvReadError` because
+        they would produce ambiguous column access.
     decimal_separator : str, default "."
         Single non-alphanumeric character used as the decimal separator
         during numeric parsing. Use "," to opt in to European-style decimals
@@ -469,6 +501,17 @@ def read_csv(
         - permissive: fills missing trailing fields with nulls.
         - both modes reject extra fields because they would otherwise be
           silently dropped.
+
+    on_bad_lines : {"error", "warn", "skip"}, default "error"
+        Action to take on rows classified as bad by ``mode``.
+
+        - error: raise CsvReadError on the first bad row.
+        - warn: drop the row and emit a UserWarning.
+        - skip: drop the row silently.
+
+        In permissive mode, narrow rows are still padded silently and do
+        not reach this dispatch; only wide rows do. Dropped rows count
+        toward ``nrows``.
 
     Returns
     -------
@@ -511,6 +554,7 @@ def read_csv(
     delimiter = _validate_delimiter(delimiter)
     mode = _validate_parser_mode(mode)
     encoding_errors = _validate_encoding_errors(encoding_errors)
+    on_bad_lines = _validate_on_bad_lines(on_bad_lines)
     config = _CsvConfig()
     config.delimiter = delimiter
     config.has_header = _validate_bool_option(has_header, "has_header")
@@ -540,7 +584,11 @@ def read_csv(
         with _utf8_csv_path(
             path, encoding, encoding_errors=encoding_errors, delimiter=delimiter
         ) as native_path:
-            cpp_frame = reader.read(native_path)
+            cpp_frame, bad_rows = reader.read(native_path, on_bad_lines)
+
+        # on_bad_lines == "error" will raise RuntimeError then converted to CsvReadError as before
+        if on_bad_lines == "warn" and bad_rows:
+            _warn_bad_rows(bad_rows)
 
         return ArFrame(cpp_frame)
 
@@ -571,6 +619,7 @@ def read_csv_chunked(
     thousands_separator: str | None = None,
     null_values: list[str] | None = None,
     mode: str = "strict",
+    on_bad_lines: str = "error",
 ) -> Iterator[ArFrame]:
     """Read a CSV file in chunks, yielding ArFrame objects.
 
@@ -596,7 +645,10 @@ def read_csv_chunked(
     encoding : str, default "utf-8"
         File encoding.
     trim_headers : bool, default True
-        Strip leading/trailing whitespace from column names.
+        Strip leading/trailing whitespace from column names.  Regardless
+        of this setting, headers that differ only by leading or trailing
+        whitespace are always rejected with a :exc:`CsvReadError` because
+        they would produce ambiguous column access.
     decimal_separator : str, default "."
         Single non-alphanumeric character used as the decimal separator
         during numeric parsing.
@@ -612,6 +664,16 @@ def read_csv_chunked(
         Controls malformed row handling.
         Both modes reject extra fields; permissive mode only allows missing
         trailing fields, which are filled with nulls.
+    on_bad_lines : {"error", "warn", "skip"}, default "error"
+        Action to take on rows classified as bad by ``mode``.
+
+        - error: raise CsvReadError on the first bad row.
+        - warn: drop the row and emit a UserWarning.
+        - skip: drop the row silently.
+
+        In permissive mode, narrow rows are still padded silently and do
+        not reach this dispatch; only wide rows do. Dropped rows count
+        toward ``nrows``.
 
     Yields
     ------
@@ -648,6 +710,7 @@ def read_csv_chunked(
     mode = _validate_parser_mode(mode)
     chunksize = _validate_chunksize(chunksize)
     skip_rows = _validate_skip_rows(skip_rows)
+    on_bad_lines = _validate_on_bad_lines(on_bad_lines)
 
     config = _CsvConfig()
     config.delimiter = delimiter
@@ -673,9 +736,14 @@ def read_csv_chunked(
         with _utf8_csv_path(path, encoding, delimiter=delimiter) as native_path:
             reader.open(native_path)
             while True:
-                cpp_frame = reader.next_chunk(chunksize)
-                if cpp_frame is None:
+                chunk = reader.next_chunk(chunksize, on_bad_lines)
+                if chunk is None:
                     break
+                cpp_frame, bad_rows = chunk
+
+                if on_bad_lines == "warn" and bad_rows:
+                    _warn_bad_rows(bad_rows)
+
                 yield ArFrame(cpp_frame)
     except ValueError:
         raise
@@ -770,6 +838,7 @@ def scan_csv(
     null_values: list[str] | None = None,
     has_header: bool = True,
     encoding_errors: str = "strict",
+    on_bad_lines: str = "error",
 ) -> dict[str, str]:
     """Return schema (column names + inferred types) without loading data.
 
@@ -788,7 +857,10 @@ def scan_csv(
         File encoding. For non-UTF-8 inputs, a sample of the file is
         transcoded to infer the schema.
     trim_headers : bool, default True
-        Strip leading/trailing whitespace from column names.
+        Strip leading/trailing whitespace from column names.  Regardless
+        of this setting, headers that differ only by leading or trailing
+        whitespace are always rejected with a :exc:`CsvReadError` because
+        they would produce ambiguous column access.
     decimal_separator : str, default "."
         Single non-alphanumeric character used as the decimal separator
         during numeric parsing.
@@ -804,11 +876,19 @@ def scan_csv(
         Number of rows to read for type inference. If None, defaults to 100 rows.
     has_header : bool, default True
         Whether the CSV file contains a header row.
-
         When False, synthetic column names are generated
         in the form ``col_0``, ``col_1``, etc., matching
         the behavior of ``read_csv(..., has_header=False)``.
 
+    encoding_errors : str, default "strict"
+        How encoding errors are handled. One of ``"strict"``, ``"replace"``,
+        or ``"ignore"``.
+
+    on_bad_lines : str, default "error"
+        What to do when a malformed row is encountered during schema inference.
+        ``"error"`` raises :exc:`CsvReadError` immediately (default).
+        ``"warn"`` skips the bad row and emits a :class:`UserWarning`.
+        ``"skip"`` silently skips the bad row without any warning.
     Returns
     -------
     dict[str, str]
@@ -852,6 +932,7 @@ def scan_csv(
     _validate_thousands_separator(thousands_separator, decimal_separator)
     delimiter = _validate_delimiter(delimiter)
     encoding_errors = _validate_encoding_errors(encoding_errors)
+    on_bad_lines = _validate_on_bad_lines(on_bad_lines)
     config = _CsvConfig()
     config.delimiter = delimiter
     config.encoding = encoding
@@ -883,7 +964,15 @@ def scan_csv(
             delimiter=delimiter,
             sample_rows=100 if sample_size is None else sample_size,
         ) as native_path:
-            return cast(dict[str, str], reader.scan_schema(native_path))
+            schema, bad_row_msgs = reader.scan_schema(native_path, on_bad_lines)
+            if on_bad_lines == "warn" and bad_row_msgs:
+                warnings.warn(
+                    f"{len(bad_row_msgs)} malformed CSV row(s) skipped during schema inference:\n"
+                    + "\n".join(f"  {m}" for m in bad_row_msgs),
+                    UserWarning,
+                    stacklevel=2,
+                )
+            return cast(dict[str, str], schema)
     except RuntimeError as e:
         raise CsvReadError(str(e)) from e
 
