@@ -372,15 +372,41 @@ class ArFrame:
 
     # --- Methods ---
 
-    def memory_usage(self) -> int:
+    def memory_usage(self, deep: bool = False) -> int:
         """Total bytes consumed in memory.
+
+        Parameters
+        ----------
+        deep : bool, optional
+            When ``False`` (default), returns the same value as the original
+            ``memory_usage()`` API: for string columns, counts each string's
+            *reserved* capacity (``s.capacity()``). This is fully
+            backward-compatible with existing callers.
+
+            When ``True``, performs a deeper inspection of string columns:
+            counts each string's *actual used* bytes (``s.size()``) rather
+            than the reserved capacity. This gives a tighter, more accurate
+            estimate of real memory consumed and will typically return a
+            smaller number than the default path for string-heavy frames
+            because unused reserved capacity is excluded.
+
+            For non-string columns (int64, float64, bool) the result is
+            identical in both modes because those types store all data inline.
 
         Returns
         -------
         int
-            Memory usage in bytes.
+            Total memory usage in bytes.
+
+        Examples
+        --------
+        >>> frame = ar.read_csv("data.csv")
+        >>> frame.memory_usage()                 # backward-compatible default
+        2048
+        >>> frame.memory_usage(deep=True)        # tighter actual-bytes estimate
+        1800
         """
-        return self._frame.memory_usage()
+        return self._frame.memory_usage(deep)
 
     def head(self, n: int = 5) -> ArFrame:
         """Return the first n rows as an ArFrame.

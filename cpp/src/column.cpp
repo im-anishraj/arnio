@@ -58,7 +58,7 @@ const CellValue Column::at(size_t idx) const {
     return std::monostate{};
 }
 
-size_t Column::memory_usage() const {
+size_t Column::memory_usage(bool deep) const {
     assert_type_consistency();
     size_t usage = sizeof(Column);
     usage += name_.capacity();
@@ -67,7 +67,17 @@ size_t Column::memory_usage() const {
     if (std::holds_alternative<std::vector<std::string>>(data_)) {
         const auto& vec = std::get<std::vector<std::string>>(data_);
         usage += vec.capacity() * sizeof(std::string);
-        for (const auto& s : vec) usage += s.capacity();
+        if (deep) {
+            // deep=True: count exact bytes used by each string's content
+            // (s.size()), rather than reserved capacity. This avoids
+            // double-counting the SSO buffer already included in sizeof(string)
+            // and gives a tighter, accurate byte estimate.
+            for (const auto& s : vec) usage += s.size();
+        } else {
+            // deep=False (default): count each string's reserved capacity,
+            // preserving the pre-existing memory_usage() behavior.
+            for (const auto& s : vec) usage += s.capacity();
+        }
     } else if (std::holds_alternative<std::vector<int64_t>>(data_)) {
         usage += std::get<std::vector<int64_t>>(data_).capacity() * sizeof(int64_t);
     } else if (std::holds_alternative<std::vector<double>>(data_)) {
