@@ -557,6 +557,7 @@ def read_csv(
     on_bad_lines = _validate_on_bad_lines(on_bad_lines)
     config = _CsvConfig()
     config.delimiter = delimiter
+    config.on_bad_lines = on_bad_lines
     config.has_header = _validate_bool_option(has_header, "has_header")
     config.encoding = encoding
     config.trim_headers = _validate_bool_option(trim_headers, "trim_headers")

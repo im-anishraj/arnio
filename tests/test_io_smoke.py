@@ -1,3 +1,4 @@
+import pandas as pd
 import pytest
 
 # Only skip the module when the package or its native extension is missing.
@@ -39,3 +40,65 @@ def test_from_pandas_smoke():
     assert list(out.columns) == ["x", "y"]
     assert out["x"].tolist() == [1, 2]
     assert out["y"].tolist() == ["a", "b"]
+
+def test_on_bad_lines_warn_truncates_and_pads(self, tmp_path):
+    csv_path = tmp_path / "warn.csv"
+
+    csv_path.write_text(
+        "name,age\n"
+        "Alice,30\n"
+        "Bob,25,extra\n"
+        "Charlie\n"
+    )
+
+    frame = ar.read_csv(
+        csv_path,
+        mode="permissive",
+        on_bad_lines="warn",
+    )
+
+    df = ar.to_pandas(frame)
+
+    assert frame.shape == (3, 2)
+
+    assert df["name"].iloc[1] == "Bob"
+    assert df["age"].iloc[1] == 25
+
+    assert pd.isna(df["age"].iloc[2])
+
+def test_on_bad_lines_skip_drops_rows(self, tmp_path):
+    csv_path = tmp_path / "skip.csv"
+
+    csv_path.write_text(
+        "name,age\n"
+        "Alice,30\n"
+        "Bob,25,extra\n"
+        "Charlie\n"
+    )
+
+    frame = ar.read_csv(
+        csv_path,
+        mode="permissive",
+        on_bad_lines="skip",
+    )
+
+    df = ar.to_pandas(frame)
+
+    assert frame.shape == (1, 2)
+    assert df["name"].iloc[0] == "Alice"
+
+def test_on_bad_lines_error_raises(self, tmp_path):
+    csv_path = tmp_path / "error.csv"
+
+    csv_path.write_text(
+        "name,age\n"
+        "Alice,30\n"
+        "Bob,25,extra\n"
+    )
+
+    with pytest.raises(RuntimeError, match="expected 2"):
+        ar.read_csv(
+            csv_path,
+            mode="permissive",
+            on_bad_lines="error",
+        )

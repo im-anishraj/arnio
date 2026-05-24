@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <iostream>
 #include <cerrno>
 #include <charconv>
 #include <cmath>
@@ -744,33 +745,60 @@ CsvParseResult CsvReader::read(const std::string& path, const std::string& on_ba
         parser_.parse_line(line, reusable_fields);
 
         if (!config.has_header && !expected_cols.has_value()) {
-            expected_cols = reusable_fields.size();
-        }
+    expected_cols = reusable_fields.size();
+}
 
-        if (expected_cols.has_value() && reusable_fields.size() != expected_cols.value()) {
-            const size_t expected = expected_cols.value();
-            const size_t actual = reusable_fields.size();
-            // The definition of "bad rows" will remain the same as before for consistency.
-            if (actual > expected || config.mode == "strict") {
-                if (on_bad_lines == "error") {
-                    validate_row_width(record_number, expected, actual);
-                }
-                // on_bad_lines='warn' also skips the row to be consistent with pandas
-                bad_rows.push_back(BadRow{record_number, expected, actual});
-                continue;
-            }
-        }
+if (expected_cols.has_value() &&
+    reusable_fields.size() != expected_cols.value()) {
 
-        if (expected_cols.has_value()) {
-            while (reusable_fields.size() < expected_cols.value()) {
-                reusable_fields.push_back("");
-            }
-        }
+    const size_t expected = expected_cols.value();
+    const size_t actual = reusable_fields.size();
 
-        raw_data.push_back(reusable_fields);
-        ++row_count;
+    if (on_bad_lines == "error") {
+        validate_row_width(record_number, expected, actual);
     }
-    file.close();
+
+    if (on_bad_lines == "warn") {
+        std::cerr
+            << "Warning: Row "
+            << record_number
+            << " has "
+            << actual
+            << " columns; expected "
+            << expected
+            << std::endl;
+    }
+
+    if (on_bad_lines == "skip") {
+        bad_rows.push_back(BadRow{
+            record_number,
+            expected,
+            actual
+        });
+        continue;
+    }
+}
+
+if (config.mode == "strict" && expected_cols.has_value()) {
+    validate_row_width(
+        record_number,
+        expected_cols.value(),
+        reusable_fields.size()
+    );
+}
+
+if (expected_cols.has_value()) {
+    while (reusable_fields.size() < expected_cols.value()) {
+        reusable_fields.push_back("");
+    }
+
+    if (reusable_fields.size() > expected_cols.value()) {
+        reusable_fields.resize(expected_cols.value());
+    }
+}
+
+raw_data.push_back(reusable_fields);
+++row_count;
 
     // If no header, generate column names
     if (!config.has_header && !raw_data.empty()) {
