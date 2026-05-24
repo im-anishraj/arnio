@@ -219,6 +219,23 @@ class DataQualityReport:
 
             exclude_columns = set(exclude_columns)
 
+        missingness_correlations: list[dict[str, Any]] = []
+        for hint in self.missingness_correlations:
+            col_a = hint.get("column_a")
+            col_b = hint.get("column_b")
+            corr = hint.get("correlation")
+            if col_a is None or col_b is None or corr is None:
+                continue
+            if col_a in exclude_columns or col_b in exclude_columns:
+                continue
+            missingness_correlations.append(
+                {
+                    "column_a": str(col_a),
+                    "column_b": str(col_b),
+                    "correlation": float(corr),
+                }
+            )
+
         return {
             "row_count": self.row_count,
             "column_count": self.column_count,
@@ -256,12 +273,7 @@ class DataQualityReport:
                 }
                 for s in self.suggestions
             ],
-            "missingness_correlations": [
-                hint
-                for hint in self.missingness_correlations
-                if hint.get("column_a") not in exclude_columns
-                and hint.get("column_b") not in exclude_columns
-            ],
+            "missingness_correlations": missingness_correlations,
         }
 
     def to_json(
@@ -680,7 +692,16 @@ class DataQualityReport:
                 if profile.whitespace_count > 0
             ],
             "suggestions": self.suggestions,
-            "missingness_correlations": list(self.missingness_correlations),
+            # Normalize to JSON-friendly scalars for consistent downstream usage.
+            "missingness_correlations": [
+                {
+                    "column_a": str(hint["column_a"]),
+                    "column_b": str(hint["column_b"]),
+                    "correlation": float(hint["correlation"]),
+                }
+                for hint in self.missingness_correlations
+                if "column_a" in hint and "column_b" in hint and "correlation" in hint
+            ],
         }
 
     def to_pandas(self) -> pd.DataFrame:
@@ -910,7 +931,14 @@ def _missingness_correlations(
                     }
                 )
 
-    results.sort(key=lambda x: abs(x["correlation"]), reverse=True)
+    # Deterministic ordering: abs(corr) desc, then column names for ties.
+    results.sort(
+        key=lambda x: (
+            -abs(x["correlation"]),
+            str(x["column_a"]),
+            str(x["column_b"]),
+        )
+    )
     return results
 
 
