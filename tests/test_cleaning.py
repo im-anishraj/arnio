@@ -1079,6 +1079,15 @@ class TestStandardizeMissingTokens:
         assert pd.isna(result["status"].iloc[2])
         assert result["note"].tolist() == [" untouched ", "unknown", "kept"]
 
+    def test_standardize_missing_tokens_normalizes_custom_token_list_entries(self):
+        df = pd.DataFrame({"value": ["unknown", " Unknown ", "kept"]})
+
+        result = ar.standardize_missing_tokens(df, tokens=["  UNKNOWN  "])
+
+        assert pd.isna(result["value"].iloc[0])
+        assert pd.isna(result["value"].iloc[1])
+        assert result["value"].iloc[2] == "kept"
+
 
 class TestStripWhitespace:
     def test_strip(self, csv_with_whitespace):
