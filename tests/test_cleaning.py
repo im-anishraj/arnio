@@ -3541,7 +3541,9 @@ class TestValidateStringMapping:
     def test_invalid_non_string_keys_raise_type_error(self):
         from arnio.cleaning import _validate_string_mapping
 
-        with pytest.raises(TypeError, match="keys must contain only string column names"):
+        with pytest.raises(
+            TypeError, match="keys must contain only string column names"
+        ):
             _validate_string_mapping({1: "a", 2: "b"}, argument_name="mapping")
 
     def test_empty_value_raises_type_error(self):
@@ -3554,12 +3556,16 @@ class TestValidateStringMapping:
         from arnio.cleaning import _validate_string_mapping
 
         with pytest.raises(TypeError, match="values must be non-empty strings"):
-            _validate_string_mapping({"a": "   ", "b": "value"}, argument_name="mapping")
+            _validate_string_mapping(
+                {"a": "   ", "b": "value"}, argument_name="mapping"
+            )
 
     def test_valid_string_mapping_returns_dict(self):
         from arnio.cleaning import _validate_string_mapping
 
-        result = _validate_string_mapping({"a": "value1", "b": "value2"}, argument_name="mapping")
+        result = _validate_string_mapping(
+            {"a": "value1", "b": "value2"}, argument_name="mapping"
+        )
         assert result == {"a": "value1", "b": "value2"}
 
     def test_empty_mapping_allow_empty_true(self):
