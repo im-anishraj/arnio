@@ -2118,6 +2118,267 @@ def test_quality_gate_markdown_escapes_pipe_characters():
     assert "| col|name |" not in md
 
 
+# ── missingness correlation hints tests (#180) ───────────────────────────────
+
+
+def test_profile_detects_missingness_correlation():
+    """Columns that are always null together should appear as a correlated pair."""
+    df = pd.DataFrame(
+        {
+            "col_a": [1.0, None, None, 1.0, None],
+            "col_b": [1.0, None, None, 1.0, None],  # perfectly correlated with col_a
+            "col_c": [None, 1.0, None, 1.0, 1.0],  # independent
+        }
+    )
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+
+    pairs = {(h["column_a"], h["column_b"]) for h in report.missingness_correlations}
+    assert ("col_a", "col_b") in pairs
+    assert ("col_a", "col_c") not in pairs
+    assert ("col_b", "col_c") not in pairs
+
+
+def test_missingness_correlation_hint_is_json_friendly():
+    """Each hint must be a dict with column_a, column_b, and correlation keys."""
+    df = pd.DataFrame(
+        {
+            "x": [None, None, 1.0, 1.0],
+            "y": [None, None, 1.0, 1.0],
+        }
+    )
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+
+    assert len(report.missingness_correlations) == 1
+    hint = report.missingness_correlations[0]
+    assert set(hint.keys()) == {"column_a", "column_b", "correlation"}
+    assert isinstance(hint["column_a"], str)
+    assert isinstance(hint["column_b"], str)
+    assert isinstance(hint["correlation"], float)
+
+
+def test_missingness_correlation_in_to_dict():
+    """to_dict() must expose missingness_correlations as a list of dicts."""
+    df = pd.DataFrame(
+        {
+            "x": [None, None, 1.0, 1.0],
+            "y": [None, None, 1.0, 1.0],
+        }
+    )
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+    d = report.to_dict()
+
+    assert "missingness_correlations" in d
+    assert isinstance(d["missingness_correlations"], list)
+    assert len(d["missingness_correlations"]) == 1
+    hint = d["missingness_correlations"][0]
+    assert hint["column_a"] == "x"
+    assert hint["column_b"] == "y"
+    assert abs(hint["correlation"] - 1.0) < 1e-6
+
+
+def test_missingness_correlation_in_summary():
+    """summary() must include missingness_correlations."""
+    df = pd.DataFrame(
+        {
+            "x": [None, None, 1.0, 1.0],
+            "y": [None, None, 1.0, 1.0],
+        }
+    )
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+    s = report.summary()
+
+    assert "missingness_correlations" in s
+    assert len(s["missingness_correlations"]) == 1
+
+
+def test_missingness_correlation_in_to_markdown():
+    """to_markdown() must render a Missingness Correlations section when hints exist."""
+    df = pd.DataFrame(
+        {
+            "x": [None, None, 1.0, 1.0],
+            "y": [None, None, 1.0, 1.0],
+        }
+    )
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+    md = report.to_markdown()
+
+    assert "## Missingness Correlations" in md
+    assert "x" in md
+    assert "y" in md
+
+
+def test_missingness_correlation_in_to_html():
+    """to_html() must render a Missingness Correlations section when hints exist."""
+    df = pd.DataFrame(
+        {
+            "x": [None, None, 1.0, 1.0],
+            "y": [None, None, 1.0, 1.0],
+        }
+    )
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+    html_out = report.to_html()
+
+    assert "Missingness Correlations" in html_out
+    assert "<code>x</code>" in html_out
+    assert "<code>y</code>" in html_out
+
+
+def test_missingness_correlation_no_hints_when_no_nulls():
+    """A frame with no nulls should produce an empty missingness_correlations list."""
+    df = pd.DataFrame(
+        {
+            "a": [1.0, 2.0, 3.0],
+            "b": [4.0, 5.0, 6.0],
+        }
+    )
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+
+    assert report.missingness_correlations == []
+
+
+def test_missingness_correlation_single_column():
+    """A single-column frame cannot produce any pairs."""
+    df = pd.DataFrame({"a": [None, 1.0, None]})
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+
+    assert report.missingness_correlations == []
+
+
+def test_missingness_correlation_constant_null_mask_skipped():
+    """Columns where every row is null (zero-variance mask) must be skipped."""
+    df = pd.DataFrame(
+        {
+            "all_null": [None, None, None, None],
+            "partial": [None, 1.0, None, 1.0],
+        }
+    )
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+
+    # all_null has a constant mask (all 1s) — zero variance — must be excluded
+    assert report.missingness_correlations == []
+
+
+def test_missingness_correlation_all_present_mask_skipped():
+    """A column with no nulls at all has a constant zero mask and must be skipped."""
+    df = pd.DataFrame(
+        {
+            "no_null": [1.0, 2.0, 3.0, 4.0],
+            "partial": [None, 2.0, None, 4.0],
+        }
+    )
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+
+    # no_null has zero-variance mask (all 0s) — must be excluded
+    assert report.missingness_correlations == []
+
+
+def test_missingness_correlation_sparse_independent_no_hint():
+    """Columns with sparse, independent missingness should not produce hints."""
+    import numpy as np
+
+    rng = np.random.default_rng(42)
+    n = 200
+    # Each column independently has ~10% nulls — correlation should be near 0
+    mask_a = rng.random(n) < 0.1
+    mask_b = rng.random(n) < 0.1
+    col_a = [None if m else float(i) for i, m in enumerate(mask_a)]
+    col_b = [None if m else float(i) for i, m in enumerate(mask_b)]
+
+    df = pd.DataFrame({"a": col_a, "b": col_b})
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+
+    # With independent sparse missingness the correlation should be well below 0.75
+    assert report.missingness_correlations == []
+
+
+def test_missingness_correlation_threshold_none_disables_hints():
+    """Passing missingness_correlation_threshold=None must disable all hints."""
+    df = pd.DataFrame(
+        {
+            "x": [None, None, 1.0, 1.0],
+            "y": [None, None, 1.0, 1.0],
+        }
+    )
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame, missingness_correlation_threshold=None)
+
+    assert report.missingness_correlations == []
+
+
+def test_missingness_correlation_custom_threshold():
+    """A lower threshold should surface more pairs; a higher one fewer."""
+    df = pd.DataFrame(
+        {
+            "a": [None, None, 1.0, 1.0, None],
+            "b": [None, 1.0, 1.0, None, None],  # partial overlap
+        }
+    )
+    frame = ar.from_pandas(df)
+
+    # With a very low threshold the pair should appear
+    report_low = ar.profile(frame, missingness_correlation_threshold=0.0)
+    assert len(report_low.missingness_correlations) == 1
+
+    # With threshold=1.0 only perfect correlations pass
+    report_high = ar.profile(frame, missingness_correlation_threshold=1.0)
+    assert report_high.missingness_correlations == []
+
+
+def test_missingness_correlation_threshold_validation():
+    """Invalid threshold values must raise TypeError or ValueError."""
+    df = pd.DataFrame({"a": [None, 1.0], "b": [None, 1.0]})
+    frame = ar.from_pandas(df)
+
+    with pytest.raises(TypeError, match="missingness_correlation_threshold"):
+        ar.profile(frame, missingness_correlation_threshold="high")
+
+    with pytest.raises(TypeError, match="missingness_correlation_threshold"):
+        ar.profile(frame, missingness_correlation_threshold=True)
+
+    with pytest.raises(ValueError, match="missingness_correlation_threshold"):
+        ar.profile(frame, missingness_correlation_threshold=-0.1)
+
+    with pytest.raises(ValueError, match="missingness_correlation_threshold"):
+        ar.profile(frame, missingness_correlation_threshold=1.5)
+
+
+def test_missingness_correlation_no_markdown_section_when_empty():
+    """to_markdown() must NOT render the section when there are no hints."""
+    df = pd.DataFrame({"a": [1.0, 2.0], "b": [3.0, 4.0]})
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+
+    md = report.to_markdown()
+    assert "## Missingness Correlations" not in md
+
+
+def test_missingness_correlation_sorted_by_descending_abs_correlation():
+    """Hints must be ordered by descending absolute correlation."""
+    df = pd.DataFrame(
+        {
+            "p": [None, None, None, 1.0],  # 3 nulls
+            "q": [None, None, None, 1.0],  # perfectly correlated with p
+            "r": [None, None, 1.0, None],  # partially correlated with p
+        }
+    )
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame, missingness_correlation_threshold=0.0)
+
+    correlations = [abs(h["correlation"]) for h in report.missingness_correlations]
+    assert correlations == sorted(correlations, reverse=True)
+
+
 def test_data_quality_report_to_dict_exclude_columns():
     frame = ar.read_csv(io.StringIO("name,age\nalice,20\nbob,30\n"))
 
@@ -2376,6 +2637,32 @@ def test_data_quality_report_to_json_exclude_columns():
 
     assert "name" in parsed["columns"]
     assert "age" not in parsed["columns"]
+
+
+def test_data_quality_report_exclude_columns_filters_missingness_correlations():
+    report = ar.DataQualityReport(
+        row_count=10,
+        column_count=3,
+        memory_usage=100,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+        missingness_correlations=[
+            {"column_a": "age", "column_b": "name", "correlation": 0.9},
+            {"column_a": "name", "column_b": "height", "correlation": 0.7},
+            {"column_a": "weight", "column_b": "age", "correlation": 0.5},
+        ],
+    )
+
+    as_dict = report.to_dict(exclude_columns=["age"])
+    assert as_dict["missingness_correlations"] == [
+        {"column_a": "name", "column_b": "height", "correlation": 0.7}
+    ]
+
+    as_json = json.loads(report.to_json(exclude_columns=["age"]))
+    assert as_json["missingness_correlations"] == [
+        {"column_a": "name", "column_b": "height", "correlation": 0.7}
+    ]
 
 
 def test_data_quality_report_to_json_redact_sample_values():
