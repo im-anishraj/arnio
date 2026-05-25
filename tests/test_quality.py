@@ -2618,7 +2618,6 @@ def test_data_quality_report_to_json_redact_sample_values():
     assert parsed["columns"]["name"]["sample_values"] == ["[REDACTED]"]
 
 
-
 def test_report_suggestions_are_deterministic_with_nested_kwargs():
     report = ar.DataQualityReport(
         row_count=1,
@@ -2650,7 +2649,7 @@ def test_report_suggestions_are_deterministic_with_nested_kwargs():
     assert result["suggestions"][0]["step"] == "same_step"
     assert result["suggestions"][1]["step"] == "same_step"
 
-    
+
 # --- Tests for ProfileComparison.to_json() ---
 
 
