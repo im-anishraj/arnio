@@ -2396,3 +2396,15 @@ def test_data_quality_report_to_json_redact_sample_values():
     parsed = json.loads(json_output)
 
     assert parsed["columns"]["name"]["sample_values"] == ["[REDACTED]"]
+
+def test_auto_clean_dry_run_with_return_report_raises_value_error():
+    frame = ar.from_pandas(pd.DataFrame({"name": [" Alice "]}))
+    with pytest.raises(ValueError, match="return_report=True cannot be used with dry_run=True"):
+        ar.auto_clean(frame, dry_run=True, return_report=True)
+
+
+def test_auto_clean_dry_run_never_returns_tuple():
+    frame = ar.from_pandas(pd.DataFrame({"name": [" Alice "]}))
+    result = ar.auto_clean(frame, dry_run=True)
+    assert isinstance(result, ar.DataQualityReport)
+    assert not isinstance(result, tuple)

@@ -695,18 +695,29 @@ class ProfileComparison:
     drift_report: dict[str, dict[str, Any]]
     status_counts: dict[str, int] = field(default_factory=dict)
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(
+        self,
+        *,
+        exclude_columns: list[str] | set[str] | tuple[str, ...] | None = None,
+    ) -> dict[str, Any]:
         """Return a JSON-friendly dictionary representation."""
+        if exclude_columns is not None:
+            exclude_columns = set(exclude_columns)
+
         return {
-            "left_profile": self.left_profile.to_dict(),
-            "right_profile": self.right_profile.to_dict(),
+            "left_profile": self.left_profile.to_dict(
+                exclude_columns=exclude_columns
+            ),
+            "right_profile": self.right_profile.to_dict(
+                exclude_columns=exclude_columns
+            ),
             "status_counts": dict(self.status_counts),
             "drift_report": {
                 name: _clean_drift_entry(entry)
                 for name, entry in self.drift_report.items()
+                if exclude_columns is None or name not in exclude_columns
             },
         }
-
 
 @dataclass(frozen=True)
 class QualityGateIssue:
