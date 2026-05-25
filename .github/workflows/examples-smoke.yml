@@ -58,7 +58,9 @@ jobs:
   examples-duckdb:
     name: Smoke – duckdb example
     runs-on: ubuntu-latest
-    continue-on-error: true
+
+    # Required smoke test: duckdb is explicitly installed here, so failures
+    # in examples/arnio_with_duckdb.py must block the workflow visibly.
 
     steps:
       - uses: actions/checkout@v4
