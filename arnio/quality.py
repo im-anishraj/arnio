@@ -263,20 +263,30 @@ class DataQualityReport:
         indent: int | None = None,
         redact_sample_values: bool = False,
         exclude_columns: list[str] | set[str] | tuple[str, ...] | None = None,
-    ) -> str:
+        output: Any | None = None,
+    ) -> str | None:
         """Return the report as a JSON string.
 
         Example:
         report.to_json(indent=2)
         """
 
-        return json.dumps(
+        json_out = json.dumps(
             self.to_dict(
                 redact_sample_values=redact_sample_values,
                 exclude_columns=exclude_columns,
             ),
             indent=indent,
         )
+
+        if output is None:
+            return json_out
+
+        if not hasattr(output, "write"):
+            raise TypeError("output must be a writable text stream")
+
+        output.write(json_out)
+        return None
 
     def to_markdown(self, output: Any | None = None) -> str | None:
         """Return a GitHub-friendly Markdown report."""
@@ -1697,11 +1707,11 @@ def auto_clean(
 
     if dry_run and explain:
         raise ValueError("explain=True cannot be used with dry_run=True")
+    if dry_run and return_report:
+        raise ValueError("return_report=True cannot be used with dry_run=True")
 
     report = profile(frame)
     if dry_run:
-        if return_report:
-            return frame, report
         return report
 
     result = frame

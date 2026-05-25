@@ -53,6 +53,7 @@ _DEPRECATED_STEP_ALIASES: dict[str, str] = {}
 _PYTHON_STEP_REGISTRY: dict[str, Callable] = {
     "standardize_missing_tokens": cleaning.standardize_missing_tokens,
     "coalesce_columns": cleaning.coalesce_columns,
+    "normalize_whitespace": cleaning.normalize_whitespace,
 }
 
 
