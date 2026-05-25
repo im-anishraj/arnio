@@ -218,6 +218,13 @@ class DataQualityReport:
 
             exclude_columns = set(exclude_columns)
 
+        def _redact_reason(reason: str | None) -> str | None:
+            if not reason or not exclude_columns:
+                return reason
+            for col in exclude_columns:
+                reason = reason.replace(f"'{col}'", "'[REDACTED]'")
+            return reason
+
         return {
             "row_count": self.row_count,
             "column_count": self.column_count,
@@ -247,7 +254,7 @@ class DataQualityReport:
                         }
                     ),
                     "confidence_score": getattr(s, "confidence_score", None),
-                    "confidence_reason": getattr(s, "confidence_reason", None),
+                    "confidence_reason": _redact_reason(getattr(s, "confidence_reason", None)),
                 }
                 for s in self.suggestions
             ],
