@@ -3299,3 +3299,47 @@ class TestFilterReplaceTypeAnnotations:
         assert isinstance(result, pd.DataFrame)
         assert result["a"].tolist() == ["X", "y"]
         assert result["b"].tolist() == ["X", "z"]
+
+
+class TestValidateColumnSequence:
+    def test_string_raises_type_error(self):
+        from arnio.cleaning import _validate_column_sequence
+
+        with pytest.raises(TypeError, match="must be a sequence of column names, not a string"):
+            _validate_column_sequence("col1", argument_name="columns")
+
+    def test_bytes_raises_type_error(self):
+        from arnio.cleaning import _validate_column_sequence
+
+        with pytest.raises(TypeError, match="must be a sequence of column names, not a string"):
+            _validate_column_sequence(b"col1", argument_name="columns")
+
+    def test_non_sequence_raises_type_error(self):
+        from arnio.cleaning import _validate_column_sequence
+
+        with pytest.raises(TypeError, match="must be a sequence of column names"):
+            _validate_column_sequence({"col1", "col2"}, argument_name="columns")
+
+    def test_non_string_elements_raise_type_error(self):
+        from arnio.cleaning import _validate_column_sequence
+
+        with pytest.raises(TypeError, match="must contain only string column names"):
+            _validate_column_sequence(["col1", 123, "col2"], argument_name="columns")
+
+    def test_valid_list_returns_normalized(self):
+        from arnio.cleaning import _validate_column_sequence
+
+        result = _validate_column_sequence(["col1", "col2"], argument_name="columns")
+        assert result == ["col1", "col2"]
+
+    def test_valid_tuple_returns_normalized(self):
+        from arnio.cleaning import _validate_column_sequence
+
+        result = _validate_column_sequence(("col1", "col2"), argument_name="columns")
+        assert result == ["col1", "col2"]
+
+    def test_empty_list_returns_empty(self):
+        from arnio.cleaning import _validate_column_sequence
+
+        result = _validate_column_sequence([], argument_name="columns")
+        assert result == []
