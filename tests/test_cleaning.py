@@ -3208,7 +3208,7 @@ class TestSelectColumns:
     def test_select_columns_rejects_non_string_items(self, sample_csv):
         frame = ar.read_csv(sample_csv)
 
-        with pytest.raises(TypeError, match="All column names must be strings"):
+        with pytest.raises(TypeError, match="must contain only string column names"):
             ar.select_columns(frame, ["age", 1])
 
     def test_select_columns_rejects_empty(self):
@@ -3236,6 +3236,28 @@ class TestSelectColumns:
 
         with pytest.raises(ValueError):
             ar.select_columns(frame, ["id", "id"])
+
+    def test_select_columns_allows_tuple(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "id": [1, 2],
+                    "name": ["Alice", "Bob"],
+                }
+            )
+        )
+
+        # Standalone function with tuple
+        res_tuple = ar.select_columns(frame, ("name", "id"))
+        assert list(ar.to_pandas(res_tuple).columns) == ["name", "id"]
+
+        # Class method with tuple
+        res_tuple_method = frame.select_columns(("name", "id"))
+        assert list(ar.to_pandas(res_tuple_method).columns) == ["name", "id"]
+
+        # Verify set is rejected because it is not a sequence
+        with pytest.raises(TypeError, match="must be a sequence of column names"):
+            ar.select_columns(frame, {"id", "name"})
 
 
 class TestFilterReplaceTypeAnnotations:

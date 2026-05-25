@@ -8,6 +8,7 @@ from __future__ import annotations
 import copy
 import json
 import math
+from collections.abc import Sequence
 
 from ._core import _Frame
 
@@ -362,13 +363,13 @@ class ArFrame:
             for i in range(num_cols)
         }
 
-    def select_columns(self, columns: list[str]) -> ArFrame:
+    def select_columns(self, columns: Sequence[str]) -> ArFrame:
         """Return a new ArFrame with only the selected columns.
 
         Parameters
         ----------
-        columns : list[str]
-            List of column names to select.
+        columns : sequence of str
+            Sequence of column names to select.
 
         Returns
         -------
@@ -383,27 +384,29 @@ class ArFrame:
             If the selection is empty, contains duplicates,
             or includes unknown columns.
         """
-        if isinstance(columns, str):
+        if isinstance(columns, (str, bytes)):
             raise TypeError("columns must be a sequence of column names, not a string.")
 
-        if not isinstance(columns, (list, tuple)):
-            raise TypeError("columns must be a list or tuple of column names.")
+        try:
+            cols_list = list(columns)
+        except TypeError:
+            raise TypeError("columns must be a sequence of column names.")
 
-        if not columns:
+        if not cols_list:
             raise ValueError("Column selection cannot be empty.")
 
-        if any(not isinstance(col, str) for col in columns):
-            raise TypeError("All column names must be strings.")
+        if any(not isinstance(col, str) for col in cols_list):
+            raise TypeError("columns must contain only string column names")
 
-        if len(columns) != len(set(columns)):
+        if len(cols_list) != len(set(cols_list)):
             raise ValueError("Duplicate column names are not allowed.")
 
-        missing = [col for col in columns if col not in self.columns]
+        missing = [col for col in cols_list if col not in self.columns]
 
         if missing:
             raise ValueError(f"Unknown columns: {missing}")
 
-        return ArFrame(self._frame.select_columns(columns))
+        return ArFrame(self._frame.select_columns(cols_list))
 
     def drop_columns(self, cols: list[str]) -> ArFrame:
         """Return a new ArFrame with the specified columns removed.

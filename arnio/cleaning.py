@@ -329,8 +329,43 @@ def keep_rows_with_nulls(
 
 
 def select_columns(frame: ArFrame, columns: Sequence[str]) -> ArFrame:
-    """Return a new frame containing only the requested columns."""
-    return frame.select_columns(columns)
+    """Return a new frame containing only the requested columns.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input data frame.
+    columns : sequence of str
+        Column names to select.
+
+    Returns
+    -------
+    ArFrame
+        New frame containing only the requested columns.
+
+    Raises
+    ------
+    TypeError
+        If columns is not a valid sequence of strings.
+    ValueError
+        If the selection is empty, contains duplicates,
+        or includes unknown columns.
+    """
+    requested_columns = _validate_existing_column_sequence(
+        columns,
+        available_columns=frame.columns,
+        argument_name="columns",
+        missing_error=ValueError,
+        missing_message=lambda missing, _available: (
+            f"Unknown columns: {missing}"
+        ),
+    )
+    if len(requested_columns) == 0:
+        raise ValueError("Column selection cannot be empty.")
+    if len(requested_columns) != len(set(requested_columns)):
+        raise ValueError("Duplicate column names are not allowed.")
+
+    return frame.select_columns(requested_columns)
 
 
 def fill_nulls(
