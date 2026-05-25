@@ -257,7 +257,10 @@ class DataQualityReport:
                 }
                 for s in sorted(
                     self.suggestions,
-                    key=lambda item: (item[0], sorted(item[1].items())),
+                    key=lambda item: (
+                        item[0],
+                        json.dumps(item[1], sort_keys=True, default=str),
+                    ),
                 )
             ],
         }

@@ -2295,3 +2295,36 @@ def test_data_quality_report_to_json_redact_sample_values():
     parsed = json.loads(json_output)
 
     assert parsed["columns"]["name"]["sample_values"] == ["[REDACTED]"]
+
+
+def test_report_suggestions_are_deterministic_with_nested_kwargs():
+    report = ar.DataQualityReport(
+        row_count=1,
+        column_count=1,
+        memory_usage=1,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+        suggestions=[
+            (
+                "same_step",
+                {
+                    "config": {"z": 1, "a": 2},
+                    "values": [3, 2, 1],
+                },
+            ),
+            (
+                "same_step",
+                {
+                    "config": {"a": 2, "z": 1},
+                    "values": [1, 2, 3],
+                },
+            ),
+        ],
+    )
+
+    result = report.to_dict()
+
+    assert result["suggestions"][0]["step"] == "same_step"
+    assert result["suggestions"][1]["step"] == "same_step"
+    
