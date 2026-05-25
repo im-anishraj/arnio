@@ -23,6 +23,18 @@ class TestToPandas:
         df = ar.to_pandas(frame)
         assert df.isna().any().any()  # Should have some NaN/NA values
 
+    def test_roundtrip_values(self):
+        df = pd.DataFrame(
+            {
+                "name": ["Alice", "Bob"],
+                "score": [95.5, 87.0],
+            }
+        )
+        frame = ar.from_pandas(df)
+        df2 = ar.to_pandas(frame)
+        assert list(df2["name"]) == ["Alice", "Bob"]
+        assert list(df2["score"]) == [95.5, 87.0]
+
     def test_to_python_list_with_nulls(self):
         frame = ar.from_pandas(
             pd.DataFrame(
