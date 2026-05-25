@@ -331,7 +331,7 @@ def keep_rows_with_nulls(
 def select_columns(frame: ArFrame, columns: Sequence[str]) -> ArFrame:
     """Return a new frame containing only the requested columns.
 
-     Parameters
+    Parameters
     ----------
     frame : ArFrame
         Input data frame.
@@ -1380,7 +1380,6 @@ def combine_columns(
     ArFrame or pd.DataFrame
         Frame with the combined output column appended.
 
-
     Raises
     ------
     TypeError
@@ -1836,7 +1835,7 @@ def coalesce_columns(
     ArFrame or pd.DataFrame
         New frame with coalesced column.
 
-     Raises
+    Raises
     ------
     TypeError
         If subset is not a list, or frame is not an ArFrame or DataFrame.
