@@ -976,6 +976,20 @@ def test_profile_exclude_columns_rejects_missing_column(sample_csv):
         ar.profile(frame, exclude_columns=["missing"])
 
 
+@pytest.mark.parametrize(
+    "exclude_columns",
+    [
+        123,
+        (name for name in ["name"]),
+    ],
+)
+def test_profile_exclude_columns_rejects_non_sequences(sample_csv, exclude_columns):
+    frame = ar.read_csv(sample_csv)
+
+    with pytest.raises(TypeError, match="exclude_columns must be a sequence"):
+        ar.profile(frame, exclude_columns=exclude_columns)
+
+
 def test_profile_exclude_columns_rejects_bare_string(sample_csv):
     frame = ar.read_csv(sample_csv)
 
@@ -988,6 +1002,16 @@ def test_profile_exclude_columns_rejects_non_string_items(sample_csv):
 
     with pytest.raises(TypeError, match="exclude_columns must contain only string"):
         ar.profile(frame, exclude_columns=["name", 123])
+
+
+def test_profile_exclude_columns_accepts_empty_list(sample_csv):
+    frame = ar.read_csv(sample_csv)
+
+    full_report = ar.profile(frame)
+    report = ar.profile(frame, exclude_columns=[])
+
+    assert list(report.columns) == list(full_report.columns)
+    assert report.column_count == full_report.column_count
 
 
 def test_profile_exclude_columns_scopes_report_metrics_and_suggestions(tmp_path):
