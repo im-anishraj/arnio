@@ -25,6 +25,8 @@ from .cleaning import (
 from .convert import to_pandas
 from .frame import ArFrame
 
+import os
+
 
 class CleaningSuggestion(tuple):
     """A data quality cleaning suggestion that is backwards-compatible with tuples.
@@ -403,6 +405,10 @@ class DataQualityReport:
         In notebook environments, ``DataQualityReport`` will render a compact dashboard
         automatically via ``_repr_html_``.
         """
+        if file_path is not None:
+            if isinstance(file_path, bool) or not isinstance(file_path, (str, bytes, os.PathLike)):
+                raise TypeError(f"file_path must be a string, bytes, or os.PathLike object, got {type(file_path).__name__}")
+        
         max_suggestions = self._validate_max_suggestions(max_suggestions)
         html_out = self._to_html_dashboard(
             full_document=True,
