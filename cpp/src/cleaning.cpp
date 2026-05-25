@@ -2,21 +2,16 @@
 
 #include <algorithm>
 #include <cctype>
-
-#include <cstdint>
-
 #include <charconv>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <functional>
 #include <limits>
 #include <sstream>
 #include <stdexcept>
-
-#include <unordered_map>
-
 #include <system_error>
-
+#include <unordered_map>
 #include <unordered_set>
 
 namespace arnio {
@@ -76,7 +71,6 @@ static size_t row_hash(const Frame& frame, size_t row, const std::vector<size_t>
     }
     return seed;
 }
-
 
 static std::string cell_to_string(const CellValue& cell) {
     if (std::holds_alternative<std::string>(cell)) {
