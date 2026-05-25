@@ -1034,6 +1034,13 @@ class TestStandardizeMissingTokens:
         result = ar.standardize_missing_tokens(df, tokens=[])
         assert result["value"].iloc[2] == "-"
 
+    def test_whitespace_only_values_remain_when_tokens_disabled(self):
+        df = pd.DataFrame({"value": ["  ", "\t", "\n"]})
+
+        result = ar.standardize_missing_tokens(df, tokens=[])
+
+        assert result["value"].tolist() == ["  ", "\t", "\n"]
+
     def test_standardize_missing_tokens_unknown_subset_column_raises(self):
         frame = pd.DataFrame({"value": [1, 2, 3]})
         with pytest.raises(ValueError, match="Unknown columns in subset"):
