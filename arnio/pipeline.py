@@ -53,6 +53,7 @@ _DEPRECATED_STEP_ALIASES: dict[str, str] = {}
 _PYTHON_STEP_REGISTRY: dict[str, Callable] = {
     "standardize_missing_tokens": cleaning.standardize_missing_tokens,
     "coalesce_columns": cleaning.coalesce_columns,
+    "normalize_whitespace": cleaning.normalize_whitespace,
 }
 
 
@@ -382,7 +383,8 @@ def pipeline(
                 if not dry_run:
                     result = step_result
 
-            elapsed_ms = (perf_counter() - started_at) * 1000
+            elapsed_sec = perf_counter() - started_at
+            elapsed_ms = elapsed_sec * 1000
 
             if verbose:
                 execution_path = f"{fn.__module__}.{fn.__name__}"
@@ -404,13 +406,15 @@ def pipeline(
                     {
                         "step": name,
                         "before": rows_before,
-                        "after": step_result.shape[0],
+                        "after": rows_before if dry_run else step_result.shape[0],
+                        "dry_run": dry_run,
                     }
                 )
                 step_timings.append(
                     {
                         "step": name,
-                        "seconds": round(perf_counter() - started_at, 9),
+                        "seconds": round(elapsed_sec, 9),
+                        "dry_run": dry_run,
                     }
                 )
         elif name in python_step_registry:
@@ -456,7 +460,8 @@ def pipeline(
             if not dry_run:
                 result = step_result
 
-            elapsed_ms = (perf_counter() - started_at) * 1000
+            elapsed_sec = perf_counter() - started_at
+            elapsed_ms = elapsed_sec * 1000
 
             if verbose:
                 step_name = getattr(fn, "__name__", name)
@@ -479,13 +484,15 @@ def pipeline(
                     {
                         "step": name,
                         "before": rows_before,
-                        "after": step_result.shape[0],
+                        "after": rows_before if dry_run else step_result.shape[0],
+                        "dry_run": dry_run,
                     }
                 )
                 step_timings.append(
                     {
                         "step": name,
-                        "seconds": round(perf_counter() - started_at, 9),
+                        "seconds": round(elapsed_sec, 9),
+                        "dry_run": dry_run,
                     }
                 )
         else:

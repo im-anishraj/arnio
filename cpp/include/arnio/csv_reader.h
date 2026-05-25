@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <fstream>
 #include <memory>
 #include <optional>
@@ -58,6 +59,9 @@ class CsvParser {
 
    private:
     CsvConfig config_;
+    // 256-byte lookup table: non-zero for chars that stop the unquoted
+    // bulk-scan (delimiter, '"', '\r'). Initialised once in the constructor.
+    std::array<uint8_t, 256> stop_unquoted_{};
 };
 
 class CsvReader {
@@ -68,7 +72,8 @@ class CsvReader {
     CsvParseResult read(const std::string& path, const std::string& on_bad_lines = "error") const;
 
     // Scan schema only (column names + inferred types)
-    std::vector<std::pair<std::string, std::string>> scan_schema(const std::string& path) const;
+    std::pair<std::vector<std::pair<std::string, std::string>>, std::vector<std::string>>
+    scan_schema(const std::string& path, const std::string& on_bad_lines = "error") const;
 
    private:
     CsvParser parser_;
@@ -103,7 +108,8 @@ class CsvChunkReader {
     bool read_one_data_row(std::vector<std::string>& fields_out,
                            const std::string& on_bad_lines = "error",
                            std::vector<BadRow>* bad_rows_out = nullptr);
-    Frame build_frame(const std::vector<std::vector<std::string>>& raw_data) const;
+    Frame build_frame(const std::vector<std::vector<std::string>>& raw_data,
+                      bool validate_locked_schema = false) const;
 };
 
 }  // namespace arnio

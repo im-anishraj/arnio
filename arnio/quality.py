@@ -6,14 +6,22 @@ Data quality profiling and safe automatic cleaning helpers.
 from __future__ import annotations
 
 import html
+import json
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
 import pandas as pd
 
-from .cleaning import cast_types, drop_duplicates, strip_whitespace
+from .cleaning import (
+    _validate_column_sequence,
+    cast_types,
+    drop_duplicates,
+    strip_whitespace,
+    validate_columns_exist,
+)
 from .convert import to_pandas
 from .frame import ArFrame
 
@@ -190,8 +198,26 @@ class DataQualityReport:
     score_components: dict[str, float] = field(default_factory=dict)
     suggestions: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
 
-    def to_dict(self, *, redact_sample_values: bool = False) -> dict[str, Any]:
+    def to_dict(
+        self,
+        *,
+        redact_sample_values: bool = False,
+        exclude_columns: list[str] | set[str] | tuple[str, ...] | None = None,
+    ) -> dict[str, Any]:
         """Return a JSON-friendly dictionary representation."""
+
+        if exclude_columns is None:
+            exclude_columns = set()
+
+        elif not isinstance(exclude_columns, (list, tuple, set)):
+            raise TypeError("exclude_columns must be a list, tuple, set, or None")
+
+        else:
+            if not all(isinstance(column, str) for column in exclude_columns):
+                raise TypeError("exclude_columns must contain only string column names")
+
+            exclude_columns = set(exclude_columns)
+
         return {
             "row_count": self.row_count,
             "column_count": self.column_count,
@@ -203,11 +229,27 @@ class DataQualityReport:
             "columns": {
                 name: column.to_dict(redact_sample_values=redact_sample_values)
                 for name, column in self.columns.items()
+                if name not in exclude_columns
             },
             "suggestions": [
                 {
                     "step": s[0],
-                    "kwargs": dict(s[1]),
+                    "kwargs": {
+                        key: (
+                            [item for item in value if item not in exclude_columns]
+                            if key in {"subset", "columns"} and isinstance(value, list)
+                            else (
+                                {
+                                    k: v
+                                    for k, v in value.items()
+                                    if k not in exclude_columns
+                                }
+                                if key == "cast_types" and isinstance(value, dict)
+                                else value
+                            )
+                        )
+                        for key, value in dict(s[1]).items()
+                    },
                     "confidence_score": getattr(s, "confidence_score", None),
                     "confidence_reason": getattr(s, "confidence_reason", None),
                 }
@@ -215,8 +257,54 @@ class DataQualityReport:
             ],
         }
 
-    def to_markdown(self) -> str:
+    def to_json(
+        self,
+        *,
+        indent: int | None = None,
+        redact_sample_values: bool = False,
+        exclude_columns: list[str] | set[str] | tuple[str, ...] | None = None,
+        output: Any | None = None,
+    ) -> str | None:
+        """Return the report as a JSON string.
+
+        Example:
+        report.to_json(indent=2)
+        """
+
+        json_out = json.dumps(
+            self.to_dict(
+                redact_sample_values=redact_sample_values,
+                exclude_columns=exclude_columns,
+            ),
+            indent=indent,
+        )
+
+        if output is None:
+            return json_out
+
+        if not hasattr(output, "write"):
+            raise TypeError("output must be a writable text stream")
+
+        output.write(json_out)
+        return None
+
+    @staticmethod
+    def _validate_max_suggestions(max_suggestions: int | None) -> int | None:
+        if max_suggestions is None:
+            return None
+        if not isinstance(max_suggestions, int) or isinstance(max_suggestions, bool):
+            raise TypeError("max_suggestions must be an integer or None")
+        if max_suggestions <= 0:
+            raise ValueError("max_suggestions must be positive")
+        return max_suggestions
+
+    def to_markdown(
+        self,
+        output: Any | None = None,
+        max_suggestions: int | None = None,
+    ) -> str | None:
         """Return a GitHub-friendly Markdown report."""
+        max_suggestions = self._validate_max_suggestions(max_suggestions)
 
         lines: list[str] = []
 
@@ -268,7 +356,11 @@ class DataQualityReport:
             lines.append("## Suggested Cleaning Steps")
             lines.append("")
 
-            for step in self.suggestions:
+            rendered_suggestions = self.suggestions
+            if max_suggestions is not None:
+                rendered_suggestions = self.suggestions[:max_suggestions]
+
+            for step in rendered_suggestions:
                 kwargs_str = json.dumps(step[1], sort_keys=True, default=str)
                 conf_score = getattr(step, "confidence_score", None)
                 conf_reason = getattr(step, "confidence_reason", None)
@@ -280,29 +372,65 @@ class DataQualityReport:
                 else:
                     lines.append(f"- `{step[0]}`: `{kwargs_str}`")
 
+            if max_suggestions is not None and len(self.suggestions) > len(
+                rendered_suggestions
+            ):
+                lines.append(
+                    f"Showing {len(rendered_suggestions)} of {len(self.suggestions)} suggestions."
+                )
+
             lines.append("")
 
-        return "\n".join(lines)
+        markdown = "\n".join(lines)
 
-    def to_html(self, file_path: str | None = None) -> str:
+        if output is None:
+            return markdown
+
+        if not hasattr(output, "write"):
+            raise TypeError("output must be a writable text stream")
+
+        output.write(markdown)
+        return None
+
+    def to_html(
+        self,
+        file_path: str | None = None,
+        output: Any | None = None,
+        max_suggestions: int | None = None,
+    ) -> str | None:
         """Return a self-contained, dependency-free HTML data quality report.
 
         In notebook environments, ``DataQualityReport`` will render a compact dashboard
         automatically via ``_repr_html_``.
         """
-
-        html_out = self._to_html_dashboard(full_document=True)
+        max_suggestions = self._validate_max_suggestions(max_suggestions)
+        html_out = self._to_html_dashboard(
+            full_document=True,
+            max_suggestions=max_suggestions,
+        )
         if file_path:
             with open(file_path, "w", encoding="utf-8") as f:
                 f.write(html_out)
 
-        return html_out
+        if output is None:
+            return html_out
+
+        if not hasattr(output, "write"):
+            raise TypeError("output must be a writable text stream")
+
+        output.write(html_out)
+        return None
 
     def _repr_html_(self) -> str:  # pragma: no cover - exercised via tests directly
         """Notebook-friendly HTML representation."""
         return self._to_html_dashboard(full_document=False)
 
-    def _to_html_dashboard(self, *, full_document: bool) -> str:
+    def _to_html_dashboard(
+        self,
+        *,
+        full_document: bool,
+        max_suggestions: int | None = None,
+    ) -> str:
         def e(text: Any) -> str:
             return html.escape(str(text), quote=True)
 
@@ -502,9 +630,13 @@ class DataQualityReport:
             lines.append("</div>")
 
         if self.suggestions:
+            rendered_suggestions = self.suggestions
+            if max_suggestions is not None:
+                rendered_suggestions = self.suggestions[:max_suggestions]
+
             lines.append('<div class="section">')
             lines.append("<h2>Cleaning Suggestions</h2>")
-            for step in self.suggestions:
+            for step in rendered_suggestions:
                 conf_score = getattr(step, "confidence_score", None)
                 conf_reason = getattr(step, "confidence_reason", None)
                 conf_bits: list[str] = []
@@ -521,6 +653,12 @@ class DataQualityReport:
                     f'<div class="subtitle">{conf_text}</div>' if conf_text else ""
                 )
                 lines.append("</details>")
+            if max_suggestions is not None and len(self.suggestions) > len(
+                rendered_suggestions
+            ):
+                lines.append(
+                    f'<div class="muted">Showing {len(rendered_suggestions)} of {len(self.suggestions)} suggestions.</div>'
+                )
             lines.append("</div>")
 
         lines.append("</div>")  # container
@@ -725,6 +863,7 @@ class QualityGateResult:
 def profile(
     frame: ArFrame,
     *,
+    exclude_columns: Sequence[str] | None = None,
     sample_size: int = 5,
     approx_top_values: bool = False,
     approx_top_values_min_unique: int = 1000,
@@ -737,6 +876,8 @@ def profile(
     ----------
     frame : ArFrame
         Input frame to inspect.
+    exclude_columns : Sequence[str], optional
+        Column names to exclude from profiling.
     sample_size : int, default 5
         Number of non-null sample values to keep per column.
     approx_top_values : bool, default False
@@ -760,6 +901,11 @@ def profile(
     >>> report = ar.profile(frame, sample_size=3)
     >>> report.summary()
     """
+    if not isinstance(frame, ArFrame):
+        raise TypeError(
+            f"profile() expects an ArFrame, got {type(frame).__name__}. Use arnio.from_pandas() first."
+        )
+
     if not isinstance(sample_size, int) or isinstance(sample_size, bool):
         raise TypeError("sample_size must be an integer")
     if sample_size < 0:
@@ -782,11 +928,30 @@ def profile(
         approx_top_values_sample_size, bool
     ):
         raise TypeError("approx_top_values_sample_size must be an integer")
+
     if approx_top_values_sample_size <= 0:
         raise ValueError("approx_top_values_sample_size must be positive")
 
+    has_exclusions = exclude_columns is not None and len(exclude_columns) > 0
+
+    if exclude_columns is not None:
+        exclude_columns = _validate_column_sequence(
+            exclude_columns,
+            argument_name="exclude_columns",
+        )
+        validate_columns_exist(
+            frame,
+            exclude_columns,
+            operation="profile",
+        )
+
     df = to_pandas(frame)
-    row_count, column_count = frame.shape
+
+    if has_exclusions:
+        df = df.drop(columns=list(exclude_columns))
+
+    row_count = len(df)
+    column_count = len(df.columns)
     duplicate_rows = int(df.duplicated().sum()) if row_count else 0
     duplicate_ratio = _ratio(duplicate_rows, row_count)
 
@@ -808,7 +973,11 @@ def profile(
     report = DataQualityReport(
         row_count=row_count,
         column_count=column_count,
-        memory_usage=frame.memory_usage(),
+        memory_usage=(
+            int(df.memory_usage(deep=True).sum())
+            if has_exclusions
+            else frame.memory_usage()
+        ),
         duplicate_rows=duplicate_rows,
         duplicate_ratio=duplicate_ratio,
         columns=columns,
@@ -1566,6 +1735,11 @@ def auto_clean(
     >>> clean, explanation = ar.auto_clean(frame, explain=True)
     >>> print(explanation)
     """
+    if not isinstance(frame, ArFrame):
+        raise TypeError(
+            f"auto_clean() expects an ArFrame, got {type(frame).__name__}. Use arnio.from_pandas() first."
+        )
+
     if mode not in {"safe", "strict"}:
         raise ValueError("mode must be 'safe' or 'strict'")
 
@@ -1578,11 +1752,11 @@ def auto_clean(
 
     if dry_run and explain:
         raise ValueError("explain=True cannot be used with dry_run=True")
+    if dry_run and return_report:
+        raise ValueError("return_report=True cannot be used with dry_run=True")
 
     report = profile(frame)
     if dry_run:
-        if return_report:
-            return frame, report
         return report
 
     result = frame

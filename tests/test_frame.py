@@ -2,6 +2,9 @@
 Tests for ArFrame.preview()
 """
 
+import copy
+import math
+
 import pandas as pd
 import pytest
 
@@ -261,6 +264,146 @@ class TestArFrame:
         assert frame.is_empty is False
         assert len(frame) == 1
 
+    # --- Equality tests ---
+
+    def test_arframe_equality_same_values(self):
+        frame1 = ar.ArFrame.from_records([{"a": 1, "b": "x"}])
+        frame2 = ar.ArFrame.from_records([{"a": 1, "b": "x"}])
+        assert frame1 == frame2
+
+    def test_arframe_inequality_different_values(self):
+        frame1 = ar.ArFrame.from_records([{"a": 1}])
+        frame2 = ar.ArFrame.from_records([{"a": 2}])
+        assert frame1 != frame2
+
+    def test_arframe_inequality_different_columns(self):
+        frame1 = ar.ArFrame.from_records([{"a": 1}])
+        frame2 = ar.ArFrame.from_records([{"b": 1}])
+        assert frame1 != frame2
+
+    def test_arframe_inequality_different_column_order(self):
+        frame1 = ar.ArFrame.from_records([{"a": 1, "b": 2}])
+        frame2 = ar.ArFrame.from_records([{"b": 2, "a": 1}], columns=["b", "a"])
+        assert frame1 != frame2
+
+    def test_arframe_inequality_different_shape(self):
+        frame1 = ar.ArFrame.from_records([{"a": 1}])
+        frame2 = ar.ArFrame.from_records([{"a": 1}, {"a": 2}])
+        assert frame1 != frame2
+
+    def test_arframe_inequality_different_dtypes(self):
+        frame1 = ar.ArFrame.from_records([{"a": 1}])
+        frame2 = ar.ArFrame.from_records([{"a": 1.0}])
+        assert frame1 != frame2
+
+    def test_arframe_equality_with_nan(self):
+        frame1 = ar.ArFrame.from_records([{"a": math.nan}])
+        frame2 = ar.ArFrame.from_records([{"a": math.nan}])
+        assert frame1 == frame2
+
+    def test_arframe_equality_with_none(self):
+        frame1 = ar.ArFrame.from_records([{"a": None}])
+        frame2 = ar.ArFrame.from_records([{"a": None}])
+        assert frame1 == frame2
+
+    def test_arframe_inequality_non_arframe(self):
+        frame = ar.ArFrame.from_records([{"a": 1}])
+        result = frame.__eq__(123)
+        assert result is NotImplemented
+
+    def test_arframe_inequality_different_null_positions(self):
+        frame1 = ar.ArFrame.from_records([{"a": None}, {"a": 1}])
+        frame2 = ar.ArFrame.from_records([{"a": 1}, {"a": None}])
+        assert frame1 != frame2
+
+    def test_arframe_equality_is_reflexive(self):
+        frame = ar.ArFrame.from_records([{"a": 1}])
+        assert frame == frame
+
+    def test_arframe_equality_is_symmetric(self):
+        frame1 = ar.ArFrame.from_records([{"a": 1}])
+        frame2 = ar.ArFrame.from_records([{"a": 1}])
+        assert frame1 == frame2
+        assert frame2 == frame1
+
+    def test_arframe_equality_is_transitive(self):
+        frame1 = ar.ArFrame.from_records([{"a": 1}])
+        frame2 = ar.ArFrame.from_records([{"a": 1}])
+        frame3 = ar.ArFrame.from_records([{"a": 1}])
+        assert frame1 == frame2
+        assert frame2 == frame3
+        assert frame1 == frame3
+
+    def test_arframe_equality_ignores_attrs(self):
+        frame1 = ar.ArFrame.from_records([{"a": 1}])
+        frame2 = ar.ArFrame.from_records([{"a": 1}])
+        frame1._attrs["x"] = 1
+        assert frame1 == frame2
+
+    def test_empty_frames_are_equal(self):
+        frame1 = ar.from_pandas(pd.DataFrame(columns=["a"]))
+        frame2 = ar.from_pandas(pd.DataFrame(columns=["a"]))
+        assert frame1 == frame2
+
+    def test_empty_frames_different_columns_not_equal(self):
+        frame1 = ar.from_pandas(pd.DataFrame(columns=["a"]))
+        frame2 = ar.from_pandas(pd.DataFrame(columns=["b"]))
+        assert frame1 != frame2
+
+    def test_arframe_nan_not_equal_to_number(self):
+        frame1 = ar.ArFrame.from_records([{"a": math.nan}])
+        frame2 = ar.ArFrame.from_records([{"a": 1.0}])
+        assert frame1 != frame2
+
+    # --- Copy tests ---
+
+    def test_arframe_shallow_copy(self):
+        frame = ar.ArFrame.from_records([{"a": 1}])
+        copied = copy.copy(frame)
+        assert copied == frame
+        assert copied is not frame
+        assert copied._frame is frame._frame
+
+    def test_arframe_deep_copy(self):
+        frame = ar.ArFrame.from_records([{"a": 1}])
+        copied = copy.deepcopy(frame)
+        assert copied == frame
+        assert copied is not frame
+        assert copied._frame is not frame._frame
+
+    def test_arframe_shallow_copy_attrs_shared(self):
+        frame = ar.ArFrame.from_records([{"a": 1}])
+        frame._attrs["x"] = [1, 2]
+        copied = copy.copy(frame)
+        assert copied._attrs == frame._attrs
+        assert copied._attrs is not frame._attrs
+        copied._attrs["x"].append(3)
+        assert frame._attrs["x"] == [1, 2, 3]
+
+    def test_arframe_deep_copy_attrs_independent(self):
+        frame = ar.ArFrame.from_records([{"a": 1}])
+        frame._attrs["x"] = [1, 2]
+        copied = copy.deepcopy(frame)
+        assert copied._attrs == frame._attrs
+        assert copied._attrs is not frame._attrs
+        assert copied._attrs["x"] is not frame._attrs["x"]
+        copied._attrs["x"].append(3)
+        assert frame._attrs["x"] == [1, 2]
+
+    def test_arframe_deep_copy_nested_attrs_independent(self):
+        frame = ar.ArFrame.from_records([{"a": 1}])
+        frame._attrs["x"] = {"nested": [1, 2]}
+        copied = copy.deepcopy(frame)
+        copied._attrs["x"]["nested"].append(3)
+        assert frame._attrs["x"]["nested"] == [1, 2]
+
+    def test_arframe_deep_copy_self_referential_attrs(self):
+        frame = ar.ArFrame.from_records([{"a": 1}])
+        frame._attrs["self"] = frame
+        copied = copy.deepcopy(frame)
+        assert copied is not frame
+        assert copied._attrs["self"] is copied
+
 
 def test_str_truncates_long_column_names():
     df = pd.DataFrame({"very_very_very_long_column_name_for_testing": [1, 2]})
@@ -456,3 +599,121 @@ def test_describe_all_string_columns(csv_with_whitespace):
     for col in ["name", "city"]:
         metric_keys = list(stats[col].keys())
         assert metric_keys == ["count", "nulls", "unique"]
+
+
+def test_astype_valid_single_type():
+    from arnio.convert import to_pandas
+    from arnio.frame import ArFrame
+
+    frame = ArFrame.from_records([{"a": 1, "b": 2}, {"a": 3, "b": 4}])
+    casted_frame = frame.astype(float)
+    df = to_pandas(casted_frame)
+
+    assert df["a"].dtype == "float64"
+    assert df["b"].dtype == "float64"
+
+
+def test_astype_dict_mapping():
+    # Test casting specific columns using a dictionary
+    from arnio.convert import to_pandas
+    from arnio.frame import ArFrame
+
+    frame = ArFrame.from_records(
+        [{"name": "Alice", "age": "25"}, {"name": "Bob", "age": "30"}]
+    )
+
+    # Cast 'age' column from string to int
+    casted_frame = frame.astype({"age": int})
+    df = to_pandas(casted_frame)
+
+    assert df["age"].dtype == "Int64"  # arnio uses Int64Dtype for integers
+
+
+def test_astype_invalid_raises_error():
+    # Test that invalid casting correctly raises clear errors
+    import pytest
+
+    from arnio.frame import ArFrame
+
+    frame = ArFrame.from_records([{"name": "Alice"}, {"name": "Bob"}])
+
+    # Trying to cast a text-string column to integer should raise a ValueError
+    with pytest.raises(
+        ValueError,
+        match="Value conversion error during astype|An error occurred during casting",
+    ):
+        frame.astype(int)
+
+    # Trying to pass None should raise a TypeError
+    with pytest.raises(TypeError, match="dtype cannot be None"):
+        frame.astype(None)
+
+
+# ── drop_columns ──────────────────────────────────────────────────────────────
+
+
+class TestDropColumns:
+    """Tests for ArFrame.drop_columns()."""
+
+    def test_drop_single_column(self):
+        df = pd.DataFrame({"a": [1, 2], "b": [3, 4], "c": [5, 6]})
+        frame = ar.from_pandas(df)
+        result = frame.drop_columns(["b"])
+        assert result.columns == ["a", "c"]
+        assert result.shape == (2, 2)
+
+    def test_drop_multiple_columns(self):
+        df = pd.DataFrame({"a": [1], "b": [2], "c": [3], "d": [4]})
+        frame = ar.from_pandas(df)
+        result = frame.drop_columns(["a", "c"])
+        assert result.columns == ["b", "d"]
+
+    def test_drop_preserves_column_order(self):
+        df = pd.DataFrame({"x": [1], "y": [2], "z": [3]})
+        frame = ar.from_pandas(df)
+        result = frame.drop_columns(["y"])
+        assert result.columns == ["x", "z"]
+
+    def test_drop_empty_list_returns_copy(self):
+        df = pd.DataFrame({"a": [1, 2], "b": [3, 4]})
+        frame = ar.from_pandas(df)
+        result = frame.drop_columns([])
+        assert result.columns == ["a", "b"]
+        assert result.shape == frame.shape
+
+    def test_drop_all_columns_returns_empty_frame(self):
+        df = pd.DataFrame({"a": [1], "b": [2]})
+        frame = ar.from_pandas(df)
+        result = frame.drop_columns(["a", "b"])
+        assert result.columns == []
+        assert result.shape == (1, 0)
+
+    def test_drop_duplicate_names_in_cols(self):
+        df = pd.DataFrame({"a": [1], "b": [2], "c": [3]})
+        frame = ar.from_pandas(df)
+        result = frame.drop_columns(["a", "a"])
+        assert result.columns == ["b", "c"]
+
+    def test_drop_unknown_column_raises_value_error(self):
+        df = pd.DataFrame({"a": [1], "b": [2]})
+        frame = ar.from_pandas(df)
+        with pytest.raises(ValueError, match="Unknown column"):
+            frame.drop_columns(["z"])
+
+    def test_drop_non_list_raises_type_error(self):
+        df = pd.DataFrame({"a": [1]})
+        frame = ar.from_pandas(df)
+        with pytest.raises(TypeError, match="cols must be a list"):
+            frame.drop_columns("a")
+
+    def test_drop_non_string_items_raises_type_error(self):
+        df = pd.DataFrame({"a": [1], "b": [2]})
+        frame = ar.from_pandas(df)
+        with pytest.raises(TypeError, match="strings"):
+            frame.drop_columns([1, 2])
+
+    def test_drop_does_not_mutate_original(self):
+        df = pd.DataFrame({"a": [1], "b": [2]})
+        frame = ar.from_pandas(df)
+        frame.drop_columns(["a"])
+        assert frame.columns == ["a", "b"]

@@ -28,6 +28,7 @@ cd arnio
 pip install -e ".[dev]"
 pre-commit install
 ```
+> `pip install -e ".[dev]"` builds Arnio's native C++ extension. If you see `nmake` or `CMAKE_CXX_COMPILER` errors on Windows, install the "Desktop development with C++" workload in Visual Studio Build Tools or use WSL, then retry the install.
 Alternatively, use WSL for a faster setup experience.
 
 If the editable install or wheel build fails, see the Windows build troubleshooting section in the [README](../README.md#windows-build-troubleshooting).

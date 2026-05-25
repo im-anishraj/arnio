@@ -7,9 +7,11 @@ from __future__ import annotations
 
 import json
 import re
+import warnings
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Callable
+from zoneinfo import available_timezones
 
 import numpy as np
 import pandas as pd
@@ -304,6 +306,195 @@ ISO_3166_1_ALPHA_2 = {
     "ZW",
 }
 
+ISO_639_1_CODES = {
+    "aa",
+    "ab",
+    "ae",
+    "af",
+    "ak",
+    "am",
+    "an",
+    "ar",
+    "as",
+    "av",
+    "ay",
+    "az",
+    "ba",
+    "be",
+    "bg",
+    "bh",
+    "bi",
+    "bm",
+    "bn",
+    "bo",
+    "br",
+    "bs",
+    "ca",
+    "ce",
+    "ch",
+    "co",
+    "cr",
+    "cs",
+    "cu",
+    "cv",
+    "cy",
+    "da",
+    "de",
+    "dv",
+    "dz",
+    "ee",
+    "el",
+    "en",
+    "eo",
+    "es",
+    "et",
+    "eu",
+    "fa",
+    "ff",
+    "fi",
+    "fj",
+    "fo",
+    "fr",
+    "fy",
+    "ga",
+    "gd",
+    "gl",
+    "gn",
+    "gu",
+    "gv",
+    "ha",
+    "he",
+    "hi",
+    "ho",
+    "hr",
+    "ht",
+    "hu",
+    "hy",
+    "hz",
+    "ia",
+    "id",
+    "ie",
+    "ig",
+    "ii",
+    "ik",
+    "io",
+    "is",
+    "it",
+    "iu",
+    "ja",
+    "jv",
+    "ka",
+    "kg",
+    "ki",
+    "kj",
+    "kk",
+    "kl",
+    "km",
+    "kn",
+    "ko",
+    "kr",
+    "ks",
+    "ku",
+    "kv",
+    "kw",
+    "ky",
+    "la",
+    "lb",
+    "lg",
+    "li",
+    "ln",
+    "lo",
+    "lt",
+    "lu",
+    "lv",
+    "mg",
+    "mh",
+    "mi",
+    "mk",
+    "ml",
+    "mn",
+    "mr",
+    "ms",
+    "mt",
+    "my",
+    "na",
+    "nb",
+    "nd",
+    "ne",
+    "ng",
+    "nl",
+    "nn",
+    "no",
+    "nr",
+    "nv",
+    "ny",
+    "oc",
+    "oj",
+    "om",
+    "or",
+    "os",
+    "pa",
+    "pi",
+    "pl",
+    "ps",
+    "pt",
+    "qu",
+    "rm",
+    "rn",
+    "ro",
+    "ru",
+    "rw",
+    "sa",
+    "sc",
+    "sd",
+    "se",
+    "sg",
+    "si",
+    "sk",
+    "sl",
+    "sm",
+    "sn",
+    "so",
+    "sq",
+    "sr",
+    "ss",
+    "st",
+    "su",
+    "sv",
+    "sw",
+    "ta",
+    "te",
+    "tg",
+    "th",
+    "ti",
+    "tk",
+    "tl",
+    "tn",
+    "to",
+    "tr",
+    "ts",
+    "tt",
+    "tw",
+    "ty",
+    "ug",
+    "uk",
+    "ur",
+    "uz",
+    "ve",
+    "vi",
+    "vo",
+    "wa",
+    "wo",
+    "xh",
+    "yi",
+    "yo",
+    "za",
+    "zh",
+    "zu",
+}
+
+IANA_TIMEZONES = available_timezones()
+
 
 @dataclass(frozen=True)
 class Field:
@@ -339,6 +530,10 @@ class Schema:
     rules: list[Callable[[pd.DataFrame], list[ValidationIssue]]] | None = None
 
     def __post_init__(self) -> None:
+        if not isinstance(self.fields, dict):
+            raise TypeError(
+                f"Schema 'fields' must be a mapping (like a dict), got {type(self.fields).__name__}"
+            )
         for name, field_def in self.fields.items():
             if not isinstance(field_def, Field):
                 raise TypeError(
@@ -380,11 +575,23 @@ class Schema:
         return validate(frame, self, max_errors=max_errors)
 
     def to_json(self) -> str:
-        """Serialize the schema to a stable JSON string."""
-        if self.rules:
-            raise ValueError(
-                "Schema rules are not JSON serializable. "
-                "Serialize only fields/strict/unique for now."
+        """Serialize the schema to a stable JSON string.
+
+        Cross-field ``rules`` cannot be serialized. When rules are present
+        they are silently omitted and a ``UserWarning`` is emitted. The
+        returned payload includes ``"rules_omitted": true`` so downstream
+        consumers can detect the gap. Call ``from_json()`` to restore the
+        field-only schema; rules must be re-attached manually afterward.
+        """
+        rules_omitted = bool(self.rules)
+        if rules_omitted:
+            warnings.warn(
+                "Schema.to_json(): cross-field rules cannot be serialized "
+                "and have been omitted. The JSON payload includes "
+                '"rules_omitted": true. Restore rules manually after '
+                "from_json().",
+                UserWarning,
+                stacklevel=2,
             )
 
         payload = {
@@ -395,6 +602,8 @@ class Schema:
             "strict": self.strict,
             "unique": list(self.unique) if self.unique is not None else None,
         }
+        if rules_omitted:
+            payload["rules_omitted"] = True
         return json.dumps(payload, sort_keys=True)
 
     @classmethod
@@ -429,6 +638,9 @@ class Schema:
         if unique is not None and not isinstance(unique, list):
             raise TypeError("Schema JSON 'unique' must be a list of strings or null.")
 
+        # rules_omitted marker is accepted and silently ignored — rules
+        # cannot be round-tripped through JSON and must be re-attached
+        # manually by the caller if needed.
         return cls(fields=fields, strict=strict, unique=unique)
 
     @classmethod
@@ -1415,6 +1627,62 @@ def CountryCode(
     )
 
 
+def LanguageCode(
+    *,
+    nullable: bool = True,
+    unique: bool = False,
+    severity: str = "error",
+    required_if: tuple[str, Any] | None = None,
+) -> Field:
+    """Create a lowercase ISO 639-1 language-code schema field.
+
+    Args:
+        nullable: Whether null values are allowed.
+        unique: Whether non-null values must be unique.
+        severity: Severity level for validation issues.
+        required_if: Conditional requirement as a column/value pair.
+
+    Returns:
+        Field: Configured lowercase ISO 639-1 language-code schema field.
+    """
+    return Field(
+        dtype="string",
+        nullable=nullable,
+        semantic="language_code",
+        unique=unique,
+        required_if=required_if,
+        severity=severity,
+    )
+
+
+def TimeZone(
+    *,
+    nullable: bool = True,
+    unique: bool = False,
+    severity: str = "error",
+    required_if: tuple[str, Any] | None = None,
+) -> Field:
+    """Create an IANA timezone schema field.
+
+    Args:
+        nullable: Whether null values are allowed.
+        unique: Whether non-null values must be unique.
+        severity: Severity level for validation issues.
+        required_if: Conditional requirement as a column/value pair.
+
+    Returns:
+        Field: Configured IANA timezone schema field.
+    """
+    return Field(
+        dtype="string",
+        nullable=nullable,
+        semantic="timezone",
+        unique=unique,
+        required_if=required_if,
+        severity=severity,
+    )
+
+
 def CurrencyCode(*, nullable: bool = True, unique: bool = False) -> Field:
     """Create a currency-code schema field.
 
@@ -1800,6 +2068,12 @@ def _validate_column(
                     )
                 elif field_def.semantic == "country_code":
                     invalid = non_null[~non_null.isin(ISO_3166_1_ALPHA_2)]
+
+                elif field_def.semantic == "language_code":
+                    invalid = non_null[~non_null.isin(ISO_639_1_CODES)]
+                elif field_def.semantic == "timezone":
+                    invalid = non_null[~non_null.isin(IANA_TIMEZONES)]
+
                 else:
                     invalid = non_null[~text.str.fullmatch(pattern, na=False)]
 
@@ -2039,6 +2313,8 @@ def _markdown_cell(value: Any) -> str:
 
 _SEMANTIC_PATTERNS = {
     "email": r"[^@\s]+@[^@\s]+\.[^@\s]+",
+    "language_code": r"[a-z]{2}",
+    "timezone": r"[A-Za-z_]+(?:/[A-Za-z_\-]+)+",
     "email:strict": (
         r"[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+"
         r"@"
