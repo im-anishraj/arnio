@@ -537,10 +537,21 @@ def read_csv(
 
     Examples
     --------
-    >>> frame = ar.read_csv("data.csv")           # comma delimiter
-    >>> frame = ar.read_csv("data.tsv")           # tab auto-detected
-    >>> frame = ar.read_csv("data.tsv", delimiter=",")  # explicit comma honoured
-    >>> frame = ar.read_csv("data.dat")           # non-standard extension accepted
+    >>> import arnio as ar
+
+    Read a basic CSV file:
+    
+    >>> df = ar.read_csv("data.csv")              # comma delimiter
+
+    Read a CSV with specific columns and row limit:
+    
+    >>> df = ar.read_csv("large_data.csv", usecols=["id", "name"], nrows=1000)
+
+    Other important behaviors:
+    
+    >>> df = ar.read_csv("data.tsv")              # tab auto-detected
+    >>> df = ar.read_csv("data.tsv", delimiter=",")  # explicit comma honoured
+    >>> df = ar.read_csv("data.dat")              # non-standard extension accepted
     """
     path, should_cleanup = _materialize_csv_input(path)
 
