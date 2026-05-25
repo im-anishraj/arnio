@@ -1117,6 +1117,22 @@ class TestStandardizeMissingTokens:
         assert pd.isna(result["value"].iloc[1])
         assert result["value"].iloc[2] == "\t kept \n"
 
+    def test_standardize_missing_tokens_subset_does_not_normalize_excluded_whitespace(
+        self,
+    ):
+        df = pd.DataFrame(
+            {
+                "status": ["  ", "NULL "],
+                "note": ["  ", "NULL "],
+            }
+        )
+
+        result = ar.standardize_missing_tokens(df, subset=["status"])
+
+        assert pd.isna(result["status"].iloc[0])
+        assert pd.isna(result["status"].iloc[1])
+        assert result["note"].tolist() == ["  ", "NULL "]
+
 
 class TestStripWhitespace:
     def test_strip(self, csv_with_whitespace):
