@@ -1994,7 +1994,11 @@ def _validate_column(
                     )
                 )
             else:
-                invalid = non_null[~non_null.map(fn).astype(bool)]
+                invalid = non_null[
+                    ~non_null.map(
+                        lambda v: _normalize_validator_result(fn(v), validator_name)
+                    )
+                ]
                 issues.extend(
                     _row_issues(
                         invalid,
@@ -2320,6 +2324,40 @@ def register_validator(name: str, fn: callable) -> None:
     if not isinstance(name, str) or not name:
         raise ValueError("name must be a non-empty string")
     _CUSTOM_VALIDATORS[name] = fn
+
+
+def _normalize_validator_result(result: object, validator_name: str) -> bool:
+    """Normalize a custom validator return value to a strict bool.
+
+    Contract:
+    - ``True``  → passes validation
+    - ``False`` → fails validation
+    - ``None``  → fails validation
+    - ``pd.NA`` → fails validation
+    - anything else → raises TypeError naming the validator
+
+    This avoids calling bool() on pd.NA (which raises
+    "TypeError: boolean value of NA is ambiguous") and enforces a clear
+    return-value contract for custom validators.
+    """
+    if result is True:
+        return True
+    if result is False or result is None:
+        return False
+    # Check for pd.NA without importing pandas at module level
+    try:
+        import pandas as _pd
+
+        if result is _pd.NA:
+            return False
+    except ImportError:
+        pass
+    raise TypeError(
+        f"Custom validator {validator_name!r} returned "
+        f"{type(result).__name__!r} ({result!r}); "
+        "validators must return True (pass) or False (fail)."
+    )
+
 
 
 def Custom(

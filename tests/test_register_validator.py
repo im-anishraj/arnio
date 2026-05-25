@@ -207,3 +207,117 @@ class TestCustomValidator:
 
         assert f1.semantic == "custom:positive"
         assert f2.semantic == "custom:email"
+
+
+class TestCustomValidatorReturnNormalization:
+    """Regression tests for issue #1469.
+
+    Custom validators must return a strict bool. The normalization contract:
+    - True  → passes validation
+    - False → fails validation (row reported as invalid)
+    - None  → fails validation (row reported as invalid)
+    - pd.NA → fails validation (row reported as invalid, no TypeError)
+    - any other non-bool value → raises TypeError naming the validator
+    """
+
+    def setup_method(self):
+        self._original_validators = dict(schema._CUSTOM_VALIDATORS)
+
+    def teardown_method(self):
+        schema._CUSTOM_VALIDATORS.clear()
+        schema._CUSTOM_VALIDATORS.update(self._original_validators)
+
+    def test_validator_returning_true_passes(self):
+        """True return value marks the row as valid."""
+        import arnio as ar
+        import pandas as pd
+
+        register_validator("always_true", lambda v: True)
+        frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+        result = ar.validate(frame, {"x": ar.Custom("always_true")})
+        assert result.passed
+        assert result.issue_count == 0
+
+    def test_validator_returning_false_fails(self):
+        """False return value marks the row as invalid with a structured issue."""
+        import arnio as ar
+        import pandas as pd
+
+        register_validator("always_false", lambda v: False)
+        frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+        result = ar.validate(frame, {"x": ar.Custom("always_false")})
+        assert not result.passed
+        assert result.issue_count == 3
+        assert all(i.rule == "custom" for i in result.issues)
+
+    def test_validator_returning_none_fails(self):
+        """None return value is treated as a validation failure, not an error."""
+        import arnio as ar
+        import pandas as pd
+
+        register_validator("returns_none", lambda v: None)
+        frame = ar.from_pandas(pd.DataFrame({"x": [1, 2]}))
+        result = ar.validate(frame, {"x": ar.Custom("returns_none")})
+        assert not result.passed
+        assert all(i.rule == "custom" for i in result.issues)
+
+    def test_validator_returning_pd_na_fails(self):
+        """pd.NA return value is treated as a validation failure, not a TypeError."""
+        import arnio as ar
+        import pandas as pd
+
+        register_validator(
+            "nullable_bool",
+            lambda v: pd.NA if v == 0 else True,
+        )
+        frame = ar.from_pandas(pd.DataFrame({"x": [1, 0, -1]}))
+        # Before the fix this raised: TypeError: boolean value of NA is ambiguous
+        result = ar.validate(frame, {"x": ar.Custom("nullable_bool")})
+        assert not result.passed
+        failing = [i for i in result.issues if i.rule == "custom"]
+        assert len(failing) == 1
+        assert failing[0].row_index == 1  # the row where v == 0
+
+    def test_validator_returning_non_bool_raises_type_error(self):
+        """A non-bool, non-None, non-NA return value raises TypeError naming the validator."""
+        import arnio as ar
+        import pandas as pd
+
+        register_validator("returns_int", lambda v: 1)
+        frame = ar.from_pandas(pd.DataFrame({"x": [42]}))
+        with pytest.raises(TypeError, match="returns_int"):
+            ar.validate(frame, {"x": ar.Custom("returns_int")})
+
+    def test_validator_returning_string_raises_type_error(self):
+        """A string return value raises TypeError naming the validator."""
+        import arnio as ar
+        import pandas as pd
+
+        register_validator("returns_str", lambda v: "yes")
+        frame = ar.from_pandas(pd.DataFrame({"x": [1]}))
+        with pytest.raises(TypeError, match="returns_str"):
+            ar.validate(frame, {"x": ar.Custom("returns_str")})
+
+    def test_mixed_true_false_none_pd_na(self):
+        """Mixed True/False/None/pd.NA: only True rows pass, others fail."""
+        import arnio as ar
+        import pandas as pd
+
+        def mixed_validator(v):
+            if v == 1:
+                return True
+            if v == 2:
+                return False
+            if v == 3:
+                return None
+            if v == 4:
+                return pd.NA
+            return True
+
+        register_validator("mixed", mixed_validator)
+        frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3, 4, 5]}))
+        result = ar.validate(frame, {"x": ar.Custom("mixed")})
+        assert not result.passed
+        failing_rows = {i.row_index for i in result.issues if i.rule == "custom"}
+        # rows at index 1 (v=2), 2 (v=3), 3 (v=4) should fail
+        assert failing_rows == {1, 2, 3}
