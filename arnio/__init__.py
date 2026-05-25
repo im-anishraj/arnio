@@ -21,12 +21,14 @@ from .cleaning import (
     drop_columns_matching,
     drop_constant_columns,
     drop_duplicates,
+    drop_empty_columns,
     drop_nulls,
     fill_nulls,
     filter_rows,
     keep_rows_with_nulls,
     normalize_case,
     normalize_unicode,
+    normalize_whitespace,
     parse_bool_strings,
     rename_columns,
     replace_values,
@@ -37,8 +39,9 @@ from .cleaning import (
     strip_whitespace,
     trim_column_names,
     validate_columns_exist,
+    winsorize_outliers,
 )
-from .convert import from_pandas, to_pandas
+from .convert import from_pandas, to_arrow, to_pandas
 from .exceptions import (
     ArnioError,
     CsvReadError,
@@ -47,7 +50,7 @@ from .exceptions import (
     TypeCastError,
     UnknownStepError,
 )
-from .frame import ArFrame
+from .frame import ArFrame, ColumnSummary
 from .integrations import ArnioPandasAccessor, register_duckdb
 from .io import (
     read_csv,
@@ -92,6 +95,7 @@ from .schema import (
     Field,
     Float64,
     Int64,
+    LanguageCode,
     PhoneNumber,
     Regex,
     Schema,
@@ -104,10 +108,14 @@ from .schema import (
     register_validator,
     validate,
 )
+from .schema_export import schema_to_dict, schema_to_yaml
+
+from_records = ArFrame.from_records
 
 __all__ = [
     # Core class
     "ArFrame",
+    "ColumnSummary",
     # I/O
     "read_csv",
     "read_csv_chunked",
@@ -125,9 +133,12 @@ __all__ = [
     "validate_columns_exist",
     "filter_rows",
     "replace_values",
+    "normalize_whitespace",
     "drop_duplicates",
     "drop_constant_columns",
+    "drop_empty_columns",
     "clip_numeric",
+    "winsorize_outliers",
     "coalesce_columns",
     "combine_columns",
     "drop_columns_matching",
@@ -143,7 +154,9 @@ __all__ = [
     "standardize_missing_tokens",
     # Conversion
     "to_pandas",
+    "to_arrow",
     "from_pandas",
+    "from_records",
     # Integrations
     "ArnioPandasAccessor",
     "register_duckdb",
@@ -181,6 +194,7 @@ __all__ = [
     "String",
     "CountryCode",
     "CurrencyCode",
+    "LanguageCode",
     "Bool",
     "Email",
     "URL",
@@ -198,4 +212,6 @@ __all__ = [
     "Custom",
     "register_validator",
     "Date",
+    "schema_to_dict",
+    "schema_to_yaml",
 ]

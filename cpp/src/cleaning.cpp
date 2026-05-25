@@ -308,10 +308,16 @@ Frame strip_whitespace(const Frame& frame, const std::optional<std::vector<std::
     auto target_indices_set = resolve_subset(frame, subset);
     std::unordered_set<size_t> targets(target_indices_set.begin(), target_indices_set.end());
 
+    // Clone the frame once so we can move unmodified columns out of it
+    // (move_clone is O(1) vs clone which is O(n)).  Modified columns are
+    // rebuilt from scratch as before.
+    Frame src_frame = frame.clone();
+
     std::vector<Column> new_cols;
-    new_cols.reserve(frame.num_cols());
-    for (size_t ci = 0; ci < frame.num_cols(); ++ci) {
-        const auto& src = frame.column(ci);
+    new_cols.reserve(src_frame.num_cols());
+
+    for (size_t ci = 0; ci < src_frame.num_cols(); ++ci) {
+        auto& src = src_frame.column_mut(ci);
         if (targets.count(ci) && src.dtype() == DType::STRING) {
             Column col(src.name(), src.dtype());
             for (size_t r = 0; r < src.size(); ++r) {
@@ -319,20 +325,20 @@ Frame strip_whitespace(const Frame& frame, const std::optional<std::vector<std::
                     col.push_null();
                 } else {
                     std::string val = std::get<std::string>(src.at(r));
-                    // Trim leading
-                    size_t start = val.find_first_not_of(" \t\n\r");
-                    // Trim trailing
-                    size_t end = val.find_last_not_of(" \t\n\r");
-                    if (start == std::string::npos) {
-                        col.push_back(std::string(""));
-                    } else {
-                        col.push_back(val.substr(start, end - start + 1));
-                    }
+                    val.erase(val.begin(),
+                              std::find_if(val.begin(), val.end(),
+                                           [](unsigned char c) { return !std::isspace(c); }));
+                    val.erase(std::find_if(val.rbegin(), val.rend(),
+                                           [](unsigned char c) { return !std::isspace(c); })
+                                  .base(),
+                              val.end());
+                    col.push_back(std::move(val));
                 }
             }
             new_cols.push_back(std::move(col));
         } else {
-            new_cols.push_back(src.clone());
+            // O(1) move instead of O(n) clone for unmodified columns.
+            new_cols.push_back(src.move_clone());
         }
     }
     return Frame(frame.num_rows(), std::move(new_cols));
@@ -413,8 +419,12 @@ Frame normalize_case(const Frame& frame, const std::optional<std::vector<std::st
 
     std::vector<Column> new_cols;
     new_cols.reserve(frame.num_cols());
-    for (size_t ci = 0; ci < frame.num_cols(); ++ci) {
-        const auto& src = frame.column(ci);
+
+    // Clone the frame once so we can move unmodified columns out of it.
+    Frame src_frame = frame.clone();
+
+    for (size_t ci = 0; ci < src_frame.num_cols(); ++ci) {
+        auto& src = src_frame.column_mut(ci);
         if (targets.count(ci) && src.dtype() == DType::STRING) {
             Column col(src.name(), src.dtype());
             for (size_t r = 0; r < src.size(); ++r) {
@@ -426,7 +436,8 @@ Frame normalize_case(const Frame& frame, const std::optional<std::vector<std::st
             }
             new_cols.push_back(std::move(col));
         } else {
-            new_cols.push_back(src.clone());
+            // O(1) move instead of O(n) clone for unmodified columns.
+            new_cols.push_back(src.move_clone());
         }
     }
     return Frame(frame.num_rows(), std::move(new_cols));

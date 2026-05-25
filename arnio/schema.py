@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import re
+import warnings
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Callable
@@ -304,6 +305,193 @@ ISO_3166_1_ALPHA_2 = {
     "ZW",
 }
 
+ISO_639_1_CODES = {
+    "aa",
+    "ab",
+    "ae",
+    "af",
+    "ak",
+    "am",
+    "an",
+    "ar",
+    "as",
+    "av",
+    "ay",
+    "az",
+    "ba",
+    "be",
+    "bg",
+    "bh",
+    "bi",
+    "bm",
+    "bn",
+    "bo",
+    "br",
+    "bs",
+    "ca",
+    "ce",
+    "ch",
+    "co",
+    "cr",
+    "cs",
+    "cu",
+    "cv",
+    "cy",
+    "da",
+    "de",
+    "dv",
+    "dz",
+    "ee",
+    "el",
+    "en",
+    "eo",
+    "es",
+    "et",
+    "eu",
+    "fa",
+    "ff",
+    "fi",
+    "fj",
+    "fo",
+    "fr",
+    "fy",
+    "ga",
+    "gd",
+    "gl",
+    "gn",
+    "gu",
+    "gv",
+    "ha",
+    "he",
+    "hi",
+    "ho",
+    "hr",
+    "ht",
+    "hu",
+    "hy",
+    "hz",
+    "ia",
+    "id",
+    "ie",
+    "ig",
+    "ii",
+    "ik",
+    "io",
+    "is",
+    "it",
+    "iu",
+    "ja",
+    "jv",
+    "ka",
+    "kg",
+    "ki",
+    "kj",
+    "kk",
+    "kl",
+    "km",
+    "kn",
+    "ko",
+    "kr",
+    "ks",
+    "ku",
+    "kv",
+    "kw",
+    "ky",
+    "la",
+    "lb",
+    "lg",
+    "li",
+    "ln",
+    "lo",
+    "lt",
+    "lu",
+    "lv",
+    "mg",
+    "mh",
+    "mi",
+    "mk",
+    "ml",
+    "mn",
+    "mr",
+    "ms",
+    "mt",
+    "my",
+    "na",
+    "nb",
+    "nd",
+    "ne",
+    "ng",
+    "nl",
+    "nn",
+    "no",
+    "nr",
+    "nv",
+    "ny",
+    "oc",
+    "oj",
+    "om",
+    "or",
+    "os",
+    "pa",
+    "pi",
+    "pl",
+    "ps",
+    "pt",
+    "qu",
+    "rm",
+    "rn",
+    "ro",
+    "ru",
+    "rw",
+    "sa",
+    "sc",
+    "sd",
+    "se",
+    "sg",
+    "si",
+    "sk",
+    "sl",
+    "sm",
+    "sn",
+    "so",
+    "sq",
+    "sr",
+    "ss",
+    "st",
+    "su",
+    "sv",
+    "sw",
+    "ta",
+    "te",
+    "tg",
+    "th",
+    "ti",
+    "tk",
+    "tl",
+    "tn",
+    "to",
+    "tr",
+    "ts",
+    "tt",
+    "tw",
+    "ty",
+    "ug",
+    "uk",
+    "ur",
+    "uz",
+    "ve",
+    "vi",
+    "vo",
+    "wa",
+    "wo",
+    "xh",
+    "yi",
+    "yo",
+    "za",
+    "zh",
+    "zu",
+}
+
 
 @dataclass(frozen=True)
 class Field:
@@ -339,6 +527,10 @@ class Schema:
     rules: list[Callable[[pd.DataFrame], list[ValidationIssue]]] | None = None
 
     def __post_init__(self) -> None:
+        if not isinstance(self.fields, dict):
+            raise TypeError(
+                f"Schema 'fields' must be a mapping (like a dict), got {type(self.fields).__name__}"
+            )
         for name, field_def in self.fields.items():
             if not isinstance(field_def, Field):
                 raise TypeError(
@@ -362,16 +554,41 @@ class Schema:
                         f"Schema 'unique' members must be strings, got {type(item).__name__} for element {item!r}."
                     )
 
-    def validate(self, frame: ArFrame) -> ValidationResult:
-        """Validate a frame against this schema."""
-        return validate(frame, self)
+    def validate(
+        self,
+        frame: ArFrame,
+        max_errors: int | None = None,
+    ) -> ValidationResult:
+        """
+        Validate an ArFrame against this schema.
+
+        Args:
+            frame:
+                frame to validate.
+            max_errors:
+                Maximum number of validation issues to return.
+                Validation stops once this limit is reached.
+        """
+        return validate(frame, self, max_errors=max_errors)
 
     def to_json(self) -> str:
-        """Serialize the schema to a stable JSON string."""
-        if self.rules:
-            raise ValueError(
-                "Schema rules are not JSON serializable. "
-                "Serialize only fields/strict/unique for now."
+        """Serialize the schema to a stable JSON string.
+
+        Cross-field ``rules`` cannot be serialized. When rules are present
+        they are silently omitted and a ``UserWarning`` is emitted. The
+        returned payload includes ``"rules_omitted": true`` so downstream
+        consumers can detect the gap. Call ``from_json()`` to restore the
+        field-only schema; rules must be re-attached manually afterward.
+        """
+        rules_omitted = bool(self.rules)
+        if rules_omitted:
+            warnings.warn(
+                "Schema.to_json(): cross-field rules cannot be serialized "
+                "and have been omitted. The JSON payload includes "
+                '"rules_omitted": true. Restore rules manually after '
+                "from_json().",
+                UserWarning,
+                stacklevel=2,
             )
 
         payload = {
@@ -382,6 +599,8 @@ class Schema:
             "strict": self.strict,
             "unique": list(self.unique) if self.unique is not None else None,
         }
+        if rules_omitted:
+            payload["rules_omitted"] = True
         return json.dumps(payload, sort_keys=True)
 
     @classmethod
@@ -416,6 +635,9 @@ class Schema:
         if unique is not None and not isinstance(unique, list):
             raise TypeError("Schema JSON 'unique' must be a list of strings or null.")
 
+        # rules_omitted marker is accepted and silently ignored — rules
+        # cannot be round-tripped through JSON and must be re-attached
+        # manually by the caller if needed.
         return cls(fields=fields, strict=strict, unique=unique)
 
     @classmethod
@@ -813,15 +1035,24 @@ def diff_schema(
     return SchemaDiff(differences)
 
 
-def validate(frame: ArFrame, schema: Schema | dict[str, Field]) -> ValidationResult:
+def validate(
+    frame: ArFrame,
+    schema: Schema | dict[str, Field],
+    max_errors: int | None = None,
+) -> ValidationResult:
     """Validate an ArFrame against a schema.
 
     Parameters
     ----------
     frame : ArFrame
-        Input frame.
+        Input frame. Must be a single in-memory ArFrame. Chunked validation
+        is not currently supported by this function.
     schema : Schema or dict[str, Field]
-        Validation contract.
+        Validation schema.
+
+    max_errors : int | None
+        Maximum number of validation issues to return.
+        Validation stops once this limit is reached.
 
     Returns
     -------
@@ -839,10 +1070,37 @@ def validate(frame: ArFrame, schema: Schema | dict[str, Field]) -> ValidationRes
     >>> result = ar.validate(frame, schema)
     >>> result.passed
     """
+    if not isinstance(frame, ArFrame):
+        raise TypeError(
+            "validate() expects a single ArFrame. Chunked validation is not "
+            "currently supported; validate each chunk explicitly or materialize "
+            "the data before validation."
+        )
+
     schema = schema if isinstance(schema, Schema) else Schema(schema)
+    if max_errors is not None:
+        if isinstance(max_errors, bool) or not isinstance(max_errors, int):
+            raise TypeError("max_errors must be an int or None")
+
+    if max_errors is not None and max_errors < 0:
+        raise ValueError("max_errors must be >= 0")
+
     df = to_pandas(frame)
     dtypes = frame.dtypes
     issues: list[ValidationIssue] = []
+
+    if max_errors == 0:
+        return ValidationResult(
+            row_count=len(df),
+            issue_count=0,
+            issues=[],
+            bad_rows=sorted(
+                {issue.row_index for issue in issues if issue.row_index is not None}
+            ),
+        )
+
+    def reached_limit() -> bool:
+        return max_errors is not None and len(issues) >= max_errors
 
     for name, field_def in schema.fields.items():
         if name not in df.columns:
@@ -854,11 +1112,53 @@ def validate(frame: ArFrame, schema: Schema | dict[str, Field]) -> ValidationRes
                     severity=field_def.severity,
                 )
             )
+
+            if reached_limit():
+                issues = issues[:max_errors]
+
+                return ValidationResult(
+                    row_count=len(df),
+                    issue_count=len(issues),
+                    issues=issues,
+                    bad_rows=sorted(
+                        {
+                            issue.row_index
+                            for issue in issues
+                            if issue.row_index is not None
+                        }
+                    ),
+                )
+
             continue
-        issues.extend(_validate_column(df, df[name], dtypes.get(name), name, field_def))
+        column_issues = _validate_column(
+            df,
+            df[name],
+            dtypes.get(name),
+            name,
+            field_def,
+        )
+
+        remaining = None if max_errors is None else max_errors - len(issues)
+        if remaining is not None:
+            column_issues = column_issues[:remaining]
+
+        issues.extend(column_issues)
+
+        if reached_limit():
+            issues = issues[:max_errors]
+
+            return ValidationResult(
+                row_count=len(df),
+                issue_count=len(issues),
+                issues=issues,
+                bad_rows=sorted(
+                    {issue.row_index for issue in issues if issue.row_index is not None}
+                ),
+            )
 
     if schema.strict:
         expected = set(schema.fields)
+
         for name in df.columns:
             if name not in expected:
                 issues.append(
@@ -868,6 +1168,22 @@ def validate(frame: ArFrame, schema: Schema | dict[str, Field]) -> ValidationRes
                         message=f"Unexpected column: {name}",
                     )
                 )
+
+                if reached_limit():
+                    issues = issues[:max_errors]
+
+                    return ValidationResult(
+                        row_count=len(df),
+                        issue_count=len(issues),
+                        issues=issues,
+                        bad_rows=sorted(
+                            {
+                                issue.row_index
+                                for issue in issues
+                                if issue.row_index is not None
+                            }
+                        ),
+                    )
 
     if schema.unique is not None:
         if not isinstance(schema.unique, (list, tuple)):
@@ -890,6 +1206,22 @@ def validate(frame: ArFrame, schema: Schema | dict[str, Field]) -> ValidationRes
                     message="Composite unique columns cannot be empty",
                 )
             )
+            if reached_limit():
+                issues = issues[:max_errors]
+
+                return ValidationResult(
+                    row_count=len(df),
+                    issue_count=len(issues),
+                    issues=issues,
+                    bad_rows=sorted(
+                        {
+                            issue.row_index
+                            for issue in issues
+                            if issue.row_index is not None
+                        }
+                    ),
+                )
+
         else:
             missing_cols = [c for c in schema.unique if c not in df.columns]
             if missing_cols:
@@ -901,8 +1233,28 @@ def validate(frame: ArFrame, schema: Schema | dict[str, Field]) -> ValidationRes
                             message=f"Column {col!r} not found",
                         )
                     )
+
+                    if reached_limit():
+                        issues = issues[:max_errors]
+
+                        return ValidationResult(
+                            row_count=len(df),
+                            issue_count=len(issues),
+                            issues=issues,
+                            bad_rows=sorted(
+                                {
+                                    issue.row_index
+                                    for issue in issues
+                                    if issue.row_index is not None
+                                }
+                            ),
+                        )
             else:
-                duplicate_mask = df.duplicated(subset=list(schema.unique), keep=False)
+                duplicate_mask = df.duplicated(
+                    subset=list(schema.unique),
+                    keep=False,
+                )
+
                 if duplicate_mask.any():
                     for index in df[duplicate_mask].index:
                         issues.append(
@@ -916,6 +1268,23 @@ def validate(frame: ArFrame, schema: Schema | dict[str, Field]) -> ValidationRes
                                 row_index=int(index) + 1,
                             )
                         )
+
+                        if reached_limit():
+                            issues = issues[:max_errors]
+
+                            return ValidationResult(
+                                row_count=len(df),
+                                issue_count=len(issues),
+                                issues=issues,
+                                bad_rows=sorted(
+                                    {
+                                        issue.row_index
+                                        for issue in issues
+                                        if issue.row_index is not None
+                                    }
+                                ),
+                            )
+
     if schema.rules:
         for rule_fn in schema.rules:
             rule_name = getattr(rule_fn, "__name__", type(rule_fn).__name__)
@@ -933,6 +1302,22 @@ def validate(frame: ArFrame, schema: Schema | dict[str, Field]) -> ValidationRes
                             f"item: {type(item).__name__!r}"
                         )
                 issues.extend(result)
+                if reached_limit():
+                    issues = issues[:max_errors]
+
+                    return ValidationResult(
+                        row_count=len(df),
+                        issue_count=len(issues),
+                        issues=issues,
+                        bad_rows=sorted(
+                            {
+                                issue.row_index
+                                for issue in issues
+                                if issue.row_index is not None
+                            }
+                        ),
+                    )
+
             except KeyError as e:
                 issues.append(
                     ValidationIssue(
@@ -941,6 +1326,21 @@ def validate(frame: ArFrame, schema: Schema | dict[str, Field]) -> ValidationRes
                         message=f"Cross-field rule referenced a missing column: {e}",
                     )
                 )
+                if reached_limit():
+                    issues = issues[:max_errors]
+
+                    return ValidationResult(
+                        row_count=len(df),
+                        issue_count=len(issues),
+                        issues=issues,
+                        bad_rows=sorted(
+                            {
+                                issue.row_index
+                                for issue in issues
+                                if issue.row_index is not None
+                            }
+                        ),
+                    )
 
     bad_rows = sorted(
         {issue.row_index for issue in issues if issue.row_index is not None}
@@ -1134,22 +1534,34 @@ def URL(
     unique: bool = False,
     severity: str = "error",
     required_if: tuple[str, Any] | None = None,
+    allowed_schemes: list[str] | None = None,
 ) -> Field:
     """Create a URL schema field.
-
     Args:
         nullable: Whether null values are allowed.
         unique: Whether non-null values must be unique.
         severity: Severity level for validation issues.
         required_if: Conditional requirement as a column/value pair.
-
+        allowed_schemes: List of allowed URL schemes e.g. ["https"].
+            If None, both http and https are accepted.
     Returns:
         Field: Configured URL schema field.
     """
+    if allowed_schemes is not None:
+        if not isinstance(allowed_schemes, list) or len(allowed_schemes) == 0:
+            raise ValueError("allowed_schemes must be a non-empty list")
+        for scheme in allowed_schemes:
+            if not isinstance(scheme, str) or scheme.strip() == "":
+                raise ValueError("allowed_schemes must contain non-empty strings")
+        schemes = "|".join(re.escape(s) for s in allowed_schemes)
+        semantic = f"url:{schemes}"
+
+    else:
+        semantic = "url"
     return Field(
         dtype="string",
         nullable=nullable,
-        semantic="url",
+        semantic=semantic,
         unique=unique,
         required_if=required_if,
         severity=severity,
@@ -1206,6 +1618,34 @@ def CountryCode(
         dtype="string",
         nullable=nullable,
         semantic="country_code",
+        unique=unique,
+        required_if=required_if,
+        severity=severity,
+    )
+
+
+def LanguageCode(
+    *,
+    nullable: bool = True,
+    unique: bool = False,
+    severity: str = "error",
+    required_if: tuple[str, Any] | None = None,
+) -> Field:
+    """Create a lowercase ISO 639-1 language-code schema field.
+
+    Args:
+        nullable: Whether null values are allowed.
+        unique: Whether non-null values must be unique.
+        severity: Severity level for validation issues.
+        required_if: Conditional requirement as a column/value pair.
+
+    Returns:
+        Field: Configured lowercase ISO 639-1 language-code schema field.
+    """
+    return Field(
+        dtype="string",
+        nullable=nullable,
+        semantic="language_code",
         unique=unique,
         required_if=required_if,
         severity=severity,
@@ -1569,6 +2009,9 @@ def _validate_column(
                 )
         else:
             pattern = _SEMANTIC_PATTERNS.get(field_def.semantic)
+            if pattern is None and field_def.semantic.startswith("url:"):
+                schemes = field_def.semantic[len("url:") :]
+                pattern = rf"({schemes})://[^\s]+"
             if pattern is None:
                 issues.append(
                     ValidationIssue(
@@ -1594,6 +2037,10 @@ def _validate_column(
                     )
                 elif field_def.semantic == "country_code":
                     invalid = non_null[~non_null.isin(ISO_3166_1_ALPHA_2)]
+
+                elif field_def.semantic == "language_code":
+                    invalid = non_null[~non_null.isin(ISO_639_1_CODES)]
+
                 else:
                     invalid = non_null[~text.str.fullmatch(pattern, na=False)]
 
@@ -1833,6 +2280,7 @@ def _markdown_cell(value: Any) -> str:
 
 _SEMANTIC_PATTERNS = {
     "email": r"[^@\s]+@[^@\s]+\.[^@\s]+",
+    "language_code": r"[a-z]{2}",
     "email:strict": (
         r"[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+"
         r"@"

@@ -6,6 +6,7 @@ Chained cleaning pipeline.
 from __future__ import annotations
 
 import inspect
+import logging
 import warnings
 from dataclasses import dataclass
 from threading import Lock
@@ -19,6 +20,7 @@ from .convert import from_pandas, to_pandas
 from .exceptions import PipelineStepError, UnknownStepError
 from .frame import ArFrame
 
+logger = logging.getLogger("arnio")
 _BUILTIN_STEP_NAMESPACE = "builtin"
 _STEP_NAMESPACE_SEPARATOR = ":"
 
@@ -32,7 +34,9 @@ _STEP_REGISTRY: dict[str, Callable] = {
     "validate_columns_exist": cleaning.validate_columns_exist,
     "drop_duplicates": cleaning.drop_duplicates,
     "drop_constant_columns": cleaning.drop_constant_columns,
+    "drop_empty_columns": cleaning.drop_empty_columns,
     "clip_numeric": cleaning.clip_numeric,
+    "winsorize_outliers": cleaning.winsorize_outliers,
     "strip_whitespace": cleaning.strip_whitespace,
     "parse_bool_strings": cleaning.parse_bool_strings,
     "normalize_case": cleaning.normalize_case,
@@ -49,6 +53,7 @@ _DEPRECATED_STEP_ALIASES: dict[str, str] = {}
 _PYTHON_STEP_REGISTRY: dict[str, Callable] = {
     "standardize_missing_tokens": cleaning.standardize_missing_tokens,
     "coalesce_columns": cleaning.coalesce_columns,
+    "normalize_whitespace": cleaning.normalize_whitespace,
 }
 
 
@@ -265,6 +270,7 @@ def pipeline(
     *,
     return_metadata: bool = False,
     dry_run: bool = False,
+    verbose: bool = False,
 ) -> ArFrame | tuple[ArFrame, dict[str, Any]]:
     """Apply a list of cleaning steps sequentially.
 
@@ -281,6 +287,11 @@ def pipeline(
     return_metadata : bool, default False
         When True, also return a metadata dictionary with per-step timing
         information in execution order.
+
+    verbose : bool, default False
+        Enable lightweight diagnostic logging through the ``arnio`` logger.
+        Logs step index, step name, execution path, elapsed execution
+        time, and row-count changes for each pipeline step.
 
     dry_run : bool, default False
         Validates pipeline structure and step execution without
@@ -348,13 +359,17 @@ def pipeline(
             rows_before = result.shape[0]
 
             started_at = perf_counter()
-            if name == "rename_columns" and "mapping" not in kwargs:
+            if name == "rename_columns" and (
+                "mapping" not in kwargs or not isinstance(kwargs["mapping"], dict)
+            ):
                 step_result = fn(result, mapping=kwargs)
 
                 if not dry_run:
                     result = step_result
 
-            elif name == "cast_types" and "mapping" not in kwargs:
+            elif name == "cast_types" and (
+                "mapping" not in kwargs or not isinstance(kwargs["mapping"], dict)
+            ):
                 step_result = fn(result, kwargs)
 
                 if not dry_run:
@@ -368,19 +383,38 @@ def pipeline(
                 if not dry_run:
                     result = step_result
 
+            elapsed_sec = perf_counter() - started_at
+            elapsed_ms = elapsed_sec * 1000
+
+            if verbose:
+                execution_path = f"{fn.__module__}.{fn.__name__}"
+
+                logger.info(
+                    "[%s/%s] %s | path=%s | rows: %s -> %s | %.2fms",
+                    step_index + 1,
+                    total_steps,
+                    name,
+                    execution_path,
+                    rows_before,
+                    step_result.shape[0],
+                    elapsed_ms,
+                )
+
             if return_metadata:
                 applied_steps.append(name)
                 row_counts.append(
                     {
                         "step": name,
                         "before": rows_before,
-                        "after": step_result.shape[0],
+                        "after": rows_before if dry_run else step_result.shape[0],
+                        "dry_run": dry_run,
                     }
                 )
                 step_timings.append(
                     {
                         "step": name,
-                        "seconds": round(perf_counter() - started_at, 9),
+                        "seconds": round(elapsed_sec, 9),
+                        "dry_run": dry_run,
                     }
                 )
         elif name in python_step_registry:
@@ -426,19 +460,39 @@ def pipeline(
             if not dry_run:
                 result = step_result
 
+            elapsed_sec = perf_counter() - started_at
+            elapsed_ms = elapsed_sec * 1000
+
+            if verbose:
+                step_name = getattr(fn, "__name__", name)
+                execution_path = f"{fn.__module__}.{step_name}"
+
+                logger.info(
+                    "[%s/%s] %s | path=%s | rows: %s -> %s | %.2fms",
+                    step_index + 1,
+                    total_steps,
+                    name,
+                    execution_path,
+                    rows_before,
+                    step_result.shape[0],
+                    elapsed_ms,
+                )
+
             if return_metadata:
                 applied_steps.append(name)
                 row_counts.append(
                     {
                         "step": name,
                         "before": rows_before,
-                        "after": step_result.shape[0],
+                        "after": rows_before if dry_run else step_result.shape[0],
+                        "dry_run": dry_run,
                     }
                 )
                 step_timings.append(
                     {
                         "step": name,
-                        "seconds": round(perf_counter() - started_at, 9),
+                        "seconds": round(elapsed_sec, 9),
+                        "dry_run": dry_run,
                     }
                 )
         else:

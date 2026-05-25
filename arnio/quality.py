@@ -8,13 +8,20 @@ from __future__ import annotations
 import html
 import json
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
 import pandas as pd
 
-from .cleaning import cast_types, drop_duplicates, strip_whitespace
+from .cleaning import (
+    _validate_column_sequence,
+    cast_types,
+    drop_duplicates,
+    strip_whitespace,
+    validate_columns_exist,
+)
 from .convert import to_pandas
 from .frame import ArFrame
 
@@ -256,14 +263,15 @@ class DataQualityReport:
         indent: int | None = None,
         redact_sample_values: bool = False,
         exclude_columns: list[str] | set[str] | tuple[str, ...] | None = None,
-    ) -> str:
+        output: Any | None = None,
+    ) -> str | None:
         """Return the report as a JSON string.
 
         Example:
         report.to_json(indent=2)
         """
 
-        return json.dumps(
+        json_out = json.dumps(
             self.to_dict(
                 redact_sample_values=redact_sample_values,
                 exclude_columns=exclude_columns,
@@ -271,7 +279,16 @@ class DataQualityReport:
             indent=indent,
         )
 
-    def to_markdown(self) -> str:
+        if output is None:
+            return json_out
+
+        if not hasattr(output, "write"):
+            raise TypeError("output must be a writable text stream")
+
+        output.write(json_out)
+        return None
+
+    def to_markdown(self, output: Any | None = None) -> str | None:
         """Return a GitHub-friendly Markdown report."""
 
         lines: list[str] = []
@@ -338,9 +355,22 @@ class DataQualityReport:
 
             lines.append("")
 
-        return "\n".join(lines)
+        markdown = "\n".join(lines)
 
-    def to_html(self, file_path: str | None = None) -> str:
+        if output is None:
+            return markdown
+
+        if not hasattr(output, "write"):
+            raise TypeError("output must be a writable text stream")
+
+        output.write(markdown)
+        return None
+
+    def to_html(
+        self,
+        file_path: str | None = None,
+        output: Any | None = None,
+    ) -> str | None:
         """Return a self-contained, dependency-free HTML data quality report.
 
         In notebook environments, ``DataQualityReport`` will render a compact dashboard
@@ -352,7 +382,14 @@ class DataQualityReport:
             with open(file_path, "w", encoding="utf-8") as f:
                 f.write(html_out)
 
-        return html_out
+        if output is None:
+            return html_out
+
+        if not hasattr(output, "write"):
+            raise TypeError("output must be a writable text stream")
+
+        output.write(html_out)
+        return None
 
     def _repr_html_(self) -> str:  # pragma: no cover - exercised via tests directly
         """Notebook-friendly HTML representation."""
@@ -781,6 +818,7 @@ class QualityGateResult:
 def profile(
     frame: ArFrame,
     *,
+    exclude_columns: Sequence[str] | None = None,
     sample_size: int = 5,
     approx_top_values: bool = False,
     approx_top_values_min_unique: int = 1000,
@@ -793,6 +831,8 @@ def profile(
     ----------
     frame : ArFrame
         Input frame to inspect.
+    exclude_columns : Sequence[str], optional
+        Column names to exclude from profiling.
     sample_size : int, default 5
         Number of non-null sample values to keep per column.
     approx_top_values : bool, default False
@@ -816,6 +856,11 @@ def profile(
     >>> report = ar.profile(frame, sample_size=3)
     >>> report.summary()
     """
+    if not isinstance(frame, ArFrame):
+        raise TypeError(
+            f"profile() expects an ArFrame, got {type(frame).__name__}. Use arnio.from_pandas() first."
+        )
+
     if not isinstance(sample_size, int) or isinstance(sample_size, bool):
         raise TypeError("sample_size must be an integer")
     if sample_size < 0:
@@ -838,11 +883,30 @@ def profile(
         approx_top_values_sample_size, bool
     ):
         raise TypeError("approx_top_values_sample_size must be an integer")
+
     if approx_top_values_sample_size <= 0:
         raise ValueError("approx_top_values_sample_size must be positive")
 
+    has_exclusions = exclude_columns is not None and len(exclude_columns) > 0
+
+    if exclude_columns is not None:
+        exclude_columns = _validate_column_sequence(
+            exclude_columns,
+            argument_name="exclude_columns",
+        )
+        validate_columns_exist(
+            frame,
+            exclude_columns,
+            operation="profile",
+        )
+
     df = to_pandas(frame)
-    row_count, column_count = frame.shape
+
+    if has_exclusions:
+        df = df.drop(columns=list(exclude_columns))
+
+    row_count = len(df)
+    column_count = len(df.columns)
     duplicate_rows = int(df.duplicated().sum()) if row_count else 0
     duplicate_ratio = _ratio(duplicate_rows, row_count)
 
@@ -864,7 +928,11 @@ def profile(
     report = DataQualityReport(
         row_count=row_count,
         column_count=column_count,
-        memory_usage=frame.memory_usage(),
+        memory_usage=(
+            int(df.memory_usage(deep=True).sum())
+            if has_exclusions
+            else frame.memory_usage()
+        ),
         duplicate_rows=duplicate_rows,
         duplicate_ratio=duplicate_ratio,
         columns=columns,
@@ -1622,6 +1690,11 @@ def auto_clean(
     >>> clean, explanation = ar.auto_clean(frame, explain=True)
     >>> print(explanation)
     """
+    if not isinstance(frame, ArFrame):
+        raise TypeError(
+            f"auto_clean() expects an ArFrame, got {type(frame).__name__}. Use arnio.from_pandas() first."
+        )
+
     if mode not in {"safe", "strict"}:
         raise ValueError("mode must be 'safe' or 'strict'")
 
@@ -1634,11 +1707,11 @@ def auto_clean(
 
     if dry_run and explain:
         raise ValueError("explain=True cannot be used with dry_run=True")
+    if dry_run and return_report:
+        raise ValueError("return_report=True cannot be used with dry_run=True")
 
     report = profile(frame)
     if dry_run:
-        if return_report:
-            return frame, report
         return report
 
     result = frame
