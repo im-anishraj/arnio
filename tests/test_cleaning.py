@@ -104,6 +104,18 @@ class TestKeepRowsWithNulls:
         )
         assert result.shape[0] == 1
 
+    def test_invalid_subset_string(self, csv_with_nulls):
+        """keep_rows_with_nulls raises TypeError when subset is a string."""
+        frame = ar.read_csv(csv_with_nulls)
+        with pytest.raises(TypeError, match="must be a list"):
+            ar.keep_rows_with_nulls(frame, subset="age")
+
+    def test_missing_column_raises(self, csv_with_nulls):
+        """keep_rows_with_nulls raises KeyError when subset column is missing."""
+        frame = ar.read_csv(csv_with_nulls)
+        with pytest.raises(KeyError, match="nonexistent"):
+            ar.keep_rows_with_nulls(frame, subset=["nonexistent"])
+
 
 class TestFillNulls:
     def test_fill_with_string(self, csv_with_nulls):
@@ -809,6 +821,16 @@ class TestDropEmptyColumns:
         assert result.shape[0] in {0, 2}
         assert ar.to_pandas(result).shape[1] == 0
 
+    def test_drop_empty_columns_preserves_schema_on_empty_frame(self):
+        df = pd.DataFrame(columns=["a", "b", "c"])
+        frame = ar.from_pandas(df)
+
+        result = ar.drop_empty_columns(frame)
+
+        assert result.columns == ["a", "b", "c"]
+        assert result.shape[0] == 0
+        assert result.shape[1] == 3
+
 
 class TestClipNumeric:
     def test_clip_numeric_lower_only(self):
@@ -1012,10 +1034,178 @@ class TestStandardizeMissingTokens:
         result = ar.standardize_missing_tokens(df, tokens=[])
         assert result["value"].iloc[2] == "-"
 
+    def test_whitespace_only_values_remain_when_tokens_disabled(self):
+        df = pd.DataFrame({"value": ["  ", "\t", "\n"]})
+
+        result = ar.standardize_missing_tokens(df, tokens=[])
+
+        assert result["value"].tolist() == ["  ", "\t", "\n"]
+
     def test_standardize_missing_tokens_unknown_subset_column_raises(self):
-        frame = ar.from_pandas(pd.DataFrame({"value": [1, 2, 3]}))
+        frame = pd.DataFrame({"value": [1, 2, 3]})
         with pytest.raises(ValueError, match="Unknown columns in subset"):
             ar.standardize_missing_tokens(frame, subset=["missing"])
+
+    def test_standardize_missing_tokens_pandas_subset_returns_dataframe(self):
+        df = pd.DataFrame({"name": ["N/A", "Alice"], "city": ["-", "Paris"]})
+
+        result = ar.standardize_missing_tokens(df, subset=["name"])
+
+        assert isinstance(result, pd.DataFrame)
+        assert pd.isna(result.loc[0, "name"])
+        assert result.loc[1, "name"] == "Alice"
+        assert result["city"].tolist() == ["-", "Paris"]
+
+    def test_standardize_missing_tokens_normalizes_whitespace_wrapped_defaults(self):
+        df = pd.DataFrame({"value": ["NULL ", " NaN", "  ", "", "Alice "]})
+
+        result = ar.standardize_missing_tokens(df)
+
+        assert pd.isna(result["value"].iloc[0])
+        assert pd.isna(result["value"].iloc[1])
+        assert pd.isna(result["value"].iloc[2])
+        assert pd.isna(result["value"].iloc[3])
+        assert result["value"].iloc[4] == "Alice "
+
+    def test_standardize_missing_tokens_normalizes_whitespace_wrapped_custom_tokens(
+        self,
+    ):
+        df = pd.DataFrame(
+            {
+                "status": [" unknown ", "pending", " custom-null "],
+                "note": [" untouched ", "unknown", "kept"],
+            }
+        )
+
+        result = ar.standardize_missing_tokens(
+            df, tokens=["unknown", "custom-null"], subset=["status"]
+        )
+
+        assert pd.isna(result["status"].iloc[0])
+        assert result["status"].iloc[1] == "pending"
+        assert pd.isna(result["status"].iloc[2])
+        assert result["note"].tolist() == [" untouched ", "unknown", "kept"]
+
+    def test_standardize_missing_tokens_normalizes_custom_token_list_entries(self):
+        df = pd.DataFrame({"value": ["unknown", " Unknown ", "kept"]})
+
+        result = ar.standardize_missing_tokens(df, tokens=["  UNKNOWN  "])
+
+        assert pd.isna(result["value"].iloc[0])
+        assert pd.isna(result["value"].iloc[1])
+        assert result["value"].iloc[2] == "kept"
+
+    def test_standardize_missing_tokens_normalizes_custom_token_list_entries_in_subset(
+        self,
+    ):
+        df = pd.DataFrame(
+            {
+                "status": [" unknown ", "kept"],
+                "note": ["UNKNOWN", "still here"],
+            }
+        )
+
+        result = ar.standardize_missing_tokens(
+            df, tokens=["  UNKNOWN  "], subset=["status"]
+        )
+
+        assert pd.isna(result["status"].iloc[0])
+        assert result["status"].iloc[1] == "kept"
+        assert result["note"].tolist() == ["UNKNOWN", "still here"]
+
+    def test_standardize_missing_tokens_normalizes_tab_and_newline_wrapped_tokens(
+        self,
+    ):
+        df = pd.DataFrame({"value": ["\tNULL\t", "\n NaN\n", "\t kept \n"]})
+
+        result = ar.standardize_missing_tokens(df)
+
+        assert pd.isna(result["value"].iloc[0])
+        assert pd.isna(result["value"].iloc[1])
+        assert result["value"].iloc[2] == "\t kept \n"
+
+    def test_standardize_missing_tokens_subset_does_not_normalize_excluded_whitespace(
+        self,
+    ):
+        df = pd.DataFrame(
+            {
+                "status": ["  ", "NULL "],
+                "note": ["  ", "NULL "],
+            }
+        )
+
+        result = ar.standardize_missing_tokens(df, subset=["status"])
+
+        assert pd.isna(result["status"].iloc[0])
+        assert pd.isna(result["status"].iloc[1])
+        assert result["note"].tolist() == ["  ", "NULL "]
+
+    def test_standardize_missing_tokens_normalizes_carriage_return_wrapped_tokens(
+        self,
+    ):
+        df = pd.DataFrame({"value": ["\r\nNULL\r", "\r\n nAn \r\n", "\r kept \r"]})
+
+        result = ar.standardize_missing_tokens(df)
+
+        assert pd.isna(result["value"].iloc[0])
+        assert pd.isna(result["value"].iloc[1])
+        assert result["value"].iloc[2] == "\r kept \r"
+
+    def test_standardize_missing_tokens_normalizes_nonbreaking_space_wrapped_tokens(
+        self,
+    ):
+        nbsp = "\u00a0"
+        df = pd.DataFrame({"value": [f"{nbsp}NULL{nbsp}", f"{nbsp} kept {nbsp}"]})
+
+        result = ar.standardize_missing_tokens(df)
+
+        assert pd.isna(result["value"].iloc[0])
+        assert result["value"].iloc[1] == f"{nbsp} kept {nbsp}"
+
+    def test_standardize_missing_tokens_custom_tokens_do_not_fall_back_to_defaults(
+        self,
+    ):
+        df = pd.DataFrame({"value": [" NULL ", " custom-null ", "kept"]})
+
+        result = ar.standardize_missing_tokens(df, tokens=["custom-null"])
+
+        assert result["value"].iloc[0] == " NULL "
+        assert pd.isna(result["value"].iloc[1])
+        assert result["value"].iloc[2] == "kept"
+
+    def test_standardize_missing_tokens_whitespace_only_custom_tokens_match_blank_values(
+        self,
+    ):
+        df = pd.DataFrame({"value": ["  ", "\t", "\n", "kept"]})
+
+        result = ar.standardize_missing_tokens(df, tokens=["   "])
+
+        assert pd.isna(result["value"].iloc[0])
+        assert pd.isna(result["value"].iloc[1])
+        assert pd.isna(result["value"].iloc[2])
+        assert result["value"].iloc[3] == "kept"
+
+    def test_standardize_missing_tokens_preserves_existing_nulls_while_normalizing_wrapped_tokens(
+        self,
+    ):
+        df = pd.DataFrame({"value": [None, pd.NA, " NULL ", "kept"]})
+
+        result = ar.standardize_missing_tokens(df)
+
+        assert pd.isna(result["value"].iloc[0])
+        assert pd.isna(result["value"].iloc[1])
+        assert pd.isna(result["value"].iloc[2])
+        assert result["value"].iloc[3] == "kept"
+
+    def test_standardize_missing_tokens_normalizes_wrapped_punctuation_defaults(self):
+        df = pd.DataFrame({"value": [" ? ", "\t-\t", "--", "kept"]})
+
+        result = ar.standardize_missing_tokens(df)
+
+        assert pd.isna(result["value"].iloc[0])
+        assert pd.isna(result["value"].iloc[1])
+        assert result["value"].iloc[2] == "--"
+        assert result["value"].iloc[3] == "kept"
 
 
 class TestStripWhitespace:
@@ -1392,6 +1582,29 @@ class TestParseBoolStrings:
 
         assert cleaned["active"].tolist() == [True, False]
         assert cleaned["other"].tolist() == ["YES", "no"]
+
+    def test_parse_bool_strings_subset_skips_existing_bool_columns(self):
+        import pandas as pd
+
+        import arnio as ar
+
+        df = pd.DataFrame(
+            {
+                "flag": [True, False, True],
+            }
+        )
+
+        frame = ar.from_pandas(df)
+
+        result = ar.parse_bool_strings(
+            frame,
+            subset=["flag"],
+        )
+
+        result_df = ar.to_pandas(result)
+
+        assert result_df["flag"].tolist() == [True, False, True]
+        assert str(result_df["flag"].dtype) == "boolean"
 
     def test_parse_bool_strings_custom_values(self):
         import pandas as pd
@@ -1975,6 +2188,35 @@ class TestCleanAPI:
         result = ar.clean(frame, strip_whitespace=False, drop_nulls=True)
         assert len(result) < len(frame)
 
+    @pytest.mark.parametrize("invalid_val", ["yes", 1, None, []])
+    def test_clean_invalid_strip_whitespace(self, csv_with_whitespace, invalid_val):
+        frame = ar.read_csv(csv_with_whitespace)
+        with pytest.raises(TypeError, match="strip_whitespace must be a bool"):
+            ar.clean(frame, strip_whitespace=invalid_val)
+
+    @pytest.mark.parametrize("invalid_val", ["yes", 1, None, []])
+    def test_clean_invalid_drop_nulls(self, csv_with_whitespace, invalid_val):
+        frame = ar.read_csv(csv_with_whitespace)
+        with pytest.raises(TypeError, match="drop_nulls must be a bool"):
+            ar.clean(frame, drop_nulls=invalid_val)
+
+    @pytest.mark.parametrize("invalid_val", ["yes", 1, None, []])
+    def test_clean_invalid_drop_duplicates(self, csv_with_whitespace, invalid_val):
+        frame = ar.read_csv(csv_with_whitespace)
+        with pytest.raises(TypeError, match="drop_duplicates must be a bool"):
+            ar.clean(frame, drop_duplicates=invalid_val)
+
+    def test_clean_valid_booleans(self, csv_with_whitespace):
+        frame = ar.read_csv(csv_with_whitespace)
+        # Should not raise
+        result = ar.clean(
+            frame,
+            strip_whitespace=True,
+            drop_nulls=False,
+            drop_duplicates=True,
+        )
+        assert len(ar.to_pandas(result)) > 0
+
 
 class TestFilterRows:
     def test_filter_rows_missing_column_raises_clear_error(self):
@@ -2138,6 +2380,16 @@ class TestReplaceValues:
 
         assert list(df["col"]) == ["A", "missing", "C"]
 
+    def test_replace_values_pandas_dataframe_input_returns_dataframe(self):
+        df = pd.DataFrame({"status": ["active", "inactive"], "flag": ["ok", "ok"]})
+
+        result = ar.replace_values(df, {"inactive": "paused"}, column="status")
+
+        assert isinstance(result, pd.DataFrame)
+        assert result["status"].tolist() == ["active", "paused"]
+        assert result["flag"].tolist() == ["ok", "ok"]
+        assert df["status"].tolist() == ["active", "inactive"]
+
 
 class TestRoundNumericColumns:
     def test_round_subset_missing_column_raises_clear_error(self):
@@ -2276,6 +2528,16 @@ class TestRoundNumericColumns:
         with pytest.raises(TypeError, match="decimals must be an integer"):
             ar.round_numeric_columns(frame, decimals=True)
 
+    def test_round_numeric_columns_pandas_input_returns_dataframe(self):
+        df = pd.DataFrame({"a": [1.234, 5.678], "label": ["x", "y"]})
+
+        result = ar.round_numeric_columns(df, decimals=1)
+
+        assert isinstance(result, pd.DataFrame)
+        assert result["a"].tolist() == [1.2, 5.7]
+        assert result["label"].tolist() == ["x", "y"]
+        assert df["a"].tolist() == [1.234, 5.678]
+
 
 class TestCombineColumns:
     def test_combines_columns_with_separator(self):
@@ -2353,6 +2615,20 @@ class TestCombineColumns:
                 separator="-",
                 output_column="combined",
             )
+
+    def test_combine_columns_pandas_input_returns_dataframe(self):
+        df = pd.DataFrame({"first": ["Alice", "Bob"], "last": ["Smith", "Jones"]})
+
+        result = ar.combine_columns(
+            df,
+            subset=["first", "last"],
+            separator=" ",
+            output_column="full_name",
+        )
+
+        assert isinstance(result, pd.DataFrame)
+        assert result["full_name"].tolist() == ["Alice Smith", "Bob Jones"]
+        assert "full_name" not in df.columns
 
 
 class TestCombineColumnsNativeRegression:
@@ -2978,6 +3254,14 @@ def test_drop_columns_matching_normal():
     assert list(result.columns) == ["keep_c"]
 
 
+def test_drop_columns_matching_handles_non_string_pandas_columns():
+    df = pd.DataFrame([[1, 2, 3]], columns=[1, ("sensor", "temp"), "temp_a"])
+
+    result = ar.drop_columns_matching(df, "^temp")
+
+    assert list(result.columns) == [1, ("sensor", "temp")]
+
+
 def test_drop_columns_matching_no_match():
     df = pd.DataFrame({"a": [1], "b": [2]})
     result = ar.drop_columns_matching(df, "^temp_")
@@ -3147,3 +3431,66 @@ class TestSelectColumns:
 
         with pytest.raises(ValueError):
             ar.select_columns(frame, ["id", "id"])
+
+
+class TestFilterReplaceTypeAnnotations:
+    """Issue #1257 — filter_rows and replace_values accept and return both ArFrame and pd.DataFrame."""
+
+    def test_filter_rows_arframe_in_arframe_out(self, tmp_path):
+        """ArFrame input returns ArFrame."""
+        path = tmp_path / "data.csv"
+        path.write_text("id,score\n1,10\n2,50\n3,90\n")
+        frame = ar.read_csv(str(path))
+        result = ar.filter_rows(frame, column="score", op=">", value=20)
+        assert isinstance(result, ar.ArFrame)
+        assert ar.to_pandas(result).shape[0] == 2
+
+    def test_filter_rows_dataframe_in_dataframe_out(self):
+        """pd.DataFrame input returns pd.DataFrame."""
+        import pandas as pd
+
+        df = pd.DataFrame({"id": [1, 2, 3], "score": [10, 50, 90]})
+        result = ar.filter_rows(df, column="score", op=">", value=20)
+        assert isinstance(result, pd.DataFrame)
+        assert result.shape[0] == 2
+
+    def test_replace_values_arframe_in_arframe_out(self, tmp_path):
+        """ArFrame input returns ArFrame."""
+        path = tmp_path / "data.csv"
+        path.write_text("status\nactive\ninactive\nactive\n")
+        frame = ar.read_csv(str(path))
+        result = ar.replace_values(
+            frame, {"active": "A", "inactive": "I"}, column="status"
+        )
+        assert isinstance(result, ar.ArFrame)
+        df = ar.to_pandas(result)
+        assert set(df["status"].tolist()) == {"A", "I"}
+
+    def test_replace_values_dataframe_in_dataframe_out(self):
+        """pd.DataFrame input returns pd.DataFrame."""
+        import pandas as pd
+
+        df = pd.DataFrame({"status": ["active", "inactive", "active"]})
+        result = ar.replace_values(
+            df, {"active": "A", "inactive": "I"}, column="status"
+        )
+        assert isinstance(result, pd.DataFrame)
+        assert set(result["status"].tolist()) == {"A", "I"}
+
+    def test_filter_rows_preserves_index_for_dataframe(self):
+        """pd.DataFrame return preserves the original index."""
+        import pandas as pd
+
+        df = pd.DataFrame({"score": [10, 50, 90]}, index=[100, 200, 300])
+        result = ar.filter_rows(df, column="score", op=">=", value=50)
+        assert list(result.index) == [200, 300]
+
+    def test_replace_values_whole_frame_dataframe(self):
+        """replace_values with no column applies across all columns for pd.DataFrame."""
+        import pandas as pd
+
+        df = pd.DataFrame({"a": ["x", "y"], "b": ["x", "z"]})
+        result = ar.replace_values(df, {"x": "X"})
+        assert isinstance(result, pd.DataFrame)
+        assert result["a"].tolist() == ["X", "y"]
+        assert result["b"].tolist() == ["X", "z"]

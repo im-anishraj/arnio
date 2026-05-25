@@ -329,7 +329,32 @@ def keep_rows_with_nulls(
 
 
 def select_columns(frame: ArFrame, columns: Sequence[str]) -> ArFrame:
-    """Return a new frame containing only the requested columns."""
+    """Return a new frame containing only the requested columns.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input data frame.
+    columns : sequence of str
+        Column names to keep.
+
+    Returns
+    -------
+    ArFrame
+        New frame containing only the specified columns, in the order given.
+
+    Raises
+    ------
+    TypeError
+        If columns is a string/bytes value or contains non-string items.
+    KeyError
+        If any requested column does not exist in the frame.
+
+    Examples
+    --------
+    >>> frame = ar.read_csv("data.csv")
+    >>> subset = ar.select_columns(frame, ["name", "revenue"])
+    """
     return frame.select_columns(columns)
 
 
@@ -485,6 +510,9 @@ def drop_empty_columns(frame: ArFrame) -> ArFrame:
     >>> reduced = ar.drop_empty_columns(frame)
     """
     from .convert import to_pandas
+
+    if frame.shape[0] == 0:
+        return frame
 
     df = to_pandas(frame)
     empty_columns: list[str] = []
@@ -733,6 +761,48 @@ def strip_whitespace(
     return ArFrame(result)
 
 
+def normalize_whitespace(frame, columns=None):
+    """Collapse internal whitespace runs to a single space in string columns.
+    Also strips leading and trailing whitespace.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input data frame.
+    columns : list of str, optional
+        Column names to process. Defaults to all string (object) columns.
+
+    Returns
+    -------
+    ArFrame
+        New frame with normalized whitespace in the specified columns.
+
+    Examples
+    --------
+    >>> frame = ar.read_csv("data.csv")
+    >>> clean = ar.pipeline(frame, [("normalize_whitespace",)])
+    """
+    is_arframe = not isinstance(frame, pd.DataFrame)
+    df = to_pandas(frame) if is_arframe else frame.copy()
+
+    if columns is not None:
+        cols = list(columns)
+        missing = [c for c in cols if c not in df.columns]
+        if missing:
+            available = list(df.columns)
+            raise ValueError(
+                f"Missing columns for normalize_whitespace: {missing}. "
+                f"Available columns: {available}"
+            )
+        cols = [c for c in cols if df[c].dtype in ("object", "string")]
+    else:
+        cols = list(df.select_dtypes(include=["object", "string"]).columns)
+
+    for col in cols:
+        df[col] = df[col].str.replace(r"\s+", " ", regex=True).str.strip()
+    return from_pandas(df) if is_arframe else df
+
+
 def parse_bool_strings(
     frame: ArFrame,
     *,
@@ -801,7 +871,7 @@ def parse_bool_strings(
         )
 
     if subset is not None:
-        columns = _validate_existing_column_sequence(
+        validated_columns = _validate_existing_column_sequence(
             subset,
             available_columns=df.columns,
             argument_name="subset",
@@ -811,6 +881,10 @@ def parse_bool_strings(
                 f"Columns not found in frame: {missing}"
             ),
         )
+
+        columns = [
+            col for col in validated_columns if not pd.api.types.is_bool_dtype(df[col])
+        ]
     else:
         columns = df.select_dtypes(include=["object", "string"]).columns.tolist()
 
@@ -886,6 +960,32 @@ def normalize_unicode(
     This implementation operates natively on the ArFrame's internal columnar
     representation, avoiding a full pandas roundtrip. Only STRING columns are
     processed; all other column types are cloned unchanged.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input data frame.
+    subset : list[str], optional
+        Column names to normalize. If None, applies to all string columns.
+    form : str, default "NFC"
+        Unicode normalization form. One of "NFC", "NFD", "NFKC", "NFKD".
+
+    Returns
+    -------
+    ArFrame
+        New frame with Unicode-normalized string columns.
+
+    Raises
+    ------
+    ValueError
+        If form is not one of the supported normalization forms.
+    KeyError
+        If any column in subset does not exist in the frame.
+
+    Examples
+    --------
+    >>> frame = ar.read_csv("data.csv")
+    >>> normalized = ar.normalize_unicode(frame, form="NFC")
     """
     valid_forms = {"NFC", "NFD", "NFKC", "NFKD"}
     if form not in valid_forms:
@@ -1105,6 +1205,13 @@ def clean(
     >>> frame = ar.read_csv("data.csv")
     >>> cleaned = ar.clean(frame, strip_whitespace=True, drop_nulls=True)
     """
+    if not isinstance(strip_whitespace, bool):
+        raise TypeError("strip_whitespace must be a bool")
+    if not isinstance(drop_nulls, bool):
+        raise TypeError("drop_nulls must be a bool")
+    if not isinstance(drop_duplicates, bool):
+        raise TypeError("drop_duplicates must be a bool")
+
     from .pipeline import pipeline
 
     steps = []
@@ -1121,8 +1228,38 @@ def clean(
     return pipeline(frame, steps)
 
 
-def filter_rows(frame, column, op, value):
-    """Filter rows based on a column condition."""
+def filter_rows(
+    frame: ArFrame | pd.DataFrame,
+    column: str,
+    op: str,
+    value: object,
+) -> ArFrame | pd.DataFrame:
+    """Filter rows based on a column condition.
+
+    Parameters
+    ----------
+    frame : ArFrame or pd.DataFrame
+        Input data frame. When an ``ArFrame`` is supplied the return value
+        is also an ``ArFrame``; when a ``pd.DataFrame`` is supplied the
+        return value is a ``pd.DataFrame``.
+    column : str
+        Name of the column to filter on.
+    op : str
+        Comparison operator.  Supported values: ``">"``, ``"<"``,
+        ``">="``, ``"<="``, ``"=="``, ``"!="``.
+    value : object
+        Scalar value to compare each cell against.
+
+    Returns
+    -------
+    ArFrame or pd.DataFrame
+        Filtered frame of the same type as the input.
+
+    Examples
+    --------
+    >>> frame = ar.read_csv("data.csv")
+    >>> filtered = ar.filter_rows(frame, column="age", op=">", value=18)
+    """
 
     import pandas as pd
 
@@ -1249,6 +1386,22 @@ def combine_columns(
     -------
     ArFrame or pd.DataFrame
         Frame with the combined output column appended.
+
+    Raises
+    ------
+    TypeError
+        If separator is not a string, or frame is not an ArFrame or DataFrame.
+    ValueError
+        If output_column is empty, output_column already exists in the frame,
+        or subset is provided but empty.
+    KeyError
+        If any column in subset does not exist in the frame.
+
+    Examples
+    --------
+    >>> frame = ar.read_csv("data.csv")
+    >>> result = ar.combine_columns(frame, subset=["first_name", "last_name"],
+    ...                             separator=" ", output_column="full_name")
     """
     import pandas as pd
 
@@ -1463,7 +1616,7 @@ def drop_columns_matching(frame, pattern):
     is_arframe = not isinstance(frame, pd.DataFrame)
     df = to_pandas(frame) if is_arframe else frame
 
-    cols_to_drop = [col for col in df.columns if re.search(pattern, col)]
+    cols_to_drop = [col for col in df.columns if re.search(pattern, str(col))]
 
     if len(cols_to_drop) == len(df.columns):
         raise ValueError(
@@ -1492,34 +1645,45 @@ def _is_null_mapping_key(value):
     return bool(pd.isna(value))
 
 
-def replace_values(frame, mapping, column=None):
+def replace_values(
+    frame: ArFrame | pd.DataFrame,
+    mapping: dict,
+    column: str | None = None,
+) -> ArFrame | pd.DataFrame:
     """Replace values based on a mapping dict.
 
-    If column is None, applies to all columns.
+    If ``column`` is ``None``, the mapping is applied to every column.
 
-    Handles None/NaN in mappings:
-    - If mapping has a null-like key (None / NaN / pd.NA), this replaces existing nulls via fillna.
-    - If mapping maps to a null-like value, the replacement will result in real nulls (NaN/NA).
+    Handles ``None``/``NaN`` in mappings:
+
+    - If the mapping has a null-like key (``None`` / ``NaN`` / ``pd.NA``),
+      existing nulls in the frame are replaced via ``fillna``.
+    - If the mapping maps a value *to* a null-like value, the result will
+      contain real nulls (``NaN`` / ``NA``).
 
     Parameters
     ----------
-    frame : ArFrame
-        Input data frame.
+    frame : ArFrame or pd.DataFrame
+        Input data frame. When an ``ArFrame`` is supplied the return value
+        is also an ``ArFrame``; when a ``pd.DataFrame`` is supplied the
+        return value is a ``pd.DataFrame``.
     mapping : dict
-        Mapping of values to replace.
+        Mapping of ``{old_value: new_value}`` pairs.
     column : str, optional
-        Specific column to apply replacements to. If None, applies to all columns.
+        Specific column to apply replacements to.  When ``None`` (default)
+        the mapping is applied across all columns.
 
     Returns
     -------
-    ArFrame
-        New frame with values replaced.
+    ArFrame or pd.DataFrame
+        New frame with values replaced, same type as the input.
 
     Examples
     --------
     >>> frame = ar.read_csv("data.csv")
     >>> replaced = ar.replace_values(frame, {"old_value": "new_value"}, column="name")
     """
+
     import pandas as pd
 
     from .convert import from_pandas, to_pandas
@@ -1592,7 +1756,7 @@ def replace_values(frame, mapping, column=None):
 
 
 def standardize_missing_tokens(frame, tokens=None, subset=None):
-    """Converting missing tokens in the DataFrame to the standard form NaN
+    """Convert null-like string tokens in the frame to the standard NaN form.
 
     Parameters
     ----------
@@ -1603,6 +1767,12 @@ def standardize_missing_tokens(frame, tokens=None, subset=None):
     subset : list[str], optional
         Column names to replace missing tokens in. If None, applies to all columns.
 
+    Notes
+    -----
+    Matching is case-insensitive and trims surrounding whitespace before checking
+    token membership. Values that do not match a missing token preserve their
+    original whitespace.
+
     Returns
     -------
     ArFrame
@@ -1611,6 +1781,8 @@ def standardize_missing_tokens(frame, tokens=None, subset=None):
     Examples
     --------
     >>> frame = ar.from_pandas(pd.DataFrame({"value": [1, 2, "N/A"]}))
+    >>> result = ar.standardize_missing_tokens(frame)
+    >>> frame = ar.from_pandas(pd.DataFrame({"value": [" NULL ", "\\tNaN\\t", "kept"]}))
     >>> result = ar.standardize_missing_tokens(frame)
     """
 
@@ -1628,13 +1800,38 @@ def standardize_missing_tokens(frame, tokens=None, subset=None):
             f"Did you mean subset=['{subset}']?"
         )
 
-    default_tokens = ["N/A", "NA", "n/a", "na", "-", "none", "nil", "null", "", "?"]
+    default_tokens = [
+        "N/A",
+        "NA",
+        "n/a",
+        "na",
+        "nan",
+        "-",
+        "none",
+        "nil",
+        "null",
+        "",
+        "?",
+    ]
+
+    token_values = default_tokens if tokens is None else list(tokens)
+    normalized_tokens = {
+        token.strip().lower() for token in token_values if isinstance(token, str)
+    }
+
+    def _normalize_missing_value(value):
+        if not isinstance(value, str):
+            return value
+        if value.strip().lower() in normalized_tokens:
+            return float("nan")
+        return value
+
+    def _normalize_columns(columns):
+        for column in columns:
+            df[column] = df[column].map(_normalize_missing_value)
 
     if subset is None:
-        if tokens is None:
-            df = df.replace(default_tokens, float("nan"))
-        else:
-            df = df.replace(tokens, float("nan"))
+        _normalize_columns(df.columns)
 
     else:
         subset_columns = _validate_existing_column_sequence(
@@ -1646,12 +1843,7 @@ def standardize_missing_tokens(frame, tokens=None, subset=None):
                 f"Unknown columns in subset: {missing}"
             ),
         )
-        if tokens is None:
-            df[subset_columns] = df[subset_columns].replace(
-                default_tokens, float("nan")
-            )
-        else:
-            df[subset_columns] = df[subset_columns].replace(tokens, float("nan"))
+        _normalize_columns(subset_columns)
 
     return from_pandas(df) if is_arframe else df
 
@@ -1677,6 +1869,22 @@ def coalesce_columns(
     -------
     ArFrame or pd.DataFrame
         New frame with coalesced column.
+
+    Raises
+    ------
+    TypeError
+        If subset is not a list, or frame is not an ArFrame or DataFrame.
+    ValueError
+        If subset is empty, output_column is empty, or output_column already
+        exists in the frame.
+    KeyError
+        If any column in subset does not exist in the frame.
+
+    Examples
+    --------
+    >>> frame = ar.read_csv("data.csv")
+    >>> result = ar.coalesce_columns(frame, subset=["col_a", "col_b"],
+    ...                              output_column="first_non_null")
     """
     import pandas as pd
 

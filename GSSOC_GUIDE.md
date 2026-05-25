@@ -2,6 +2,12 @@
 
 Arnio is a GSSoC 2026 project focused on fast, reliable data preparation before pandas. The best contributions improve correctness, usability, test coverage, performance, documentation, and contributor experience.
 
+During the current stability phase, the best issues are the ones that make Arnio
+more trustworthy: install reliability, CSV correctness, safe cleaning behavior,
+schema validation, tests, examples, and benchmark proof. Read
+[CORE_STABILITY_SPRINT.md](CORE_STABILITY_SPRINT.md) before proposing broad new
+features.
+
 ## Before You Start
 
 1. Read the issue carefully.
@@ -49,11 +55,18 @@ Share what you tried, the exact command or code, the error output, and your oper
 
 Start with issues labeled:
 - `gssoc: good first issue`
-- `difficulty: beginner`
+- `level:beginner`
 - `size: xs` or `size: s`
 - `status: ready`
 
 Good first tasks usually involve tests, docs, examples, small API validation, or focused Python wrappers.
+
+For GSSoC scoring, PR labels must use the official exact strings where
+applicable: `gssoc:approved`, `level:beginner`, `level:intermediate`,
+`level:advanced`, `level:critical`, `quality:clean`, `quality:exceptional`,
+and `type:*` labels such as `type:bug`, `type:feature`, `type:docs`,
+`type:testing`, `type:security`, `type:performance`, `type:design`, and
+`type:refactor`.
 
 ## Contribution Levels
 

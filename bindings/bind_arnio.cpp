@@ -142,6 +142,7 @@ PYBIND11_MODULE(_arnio_cpp, m) {
     // --- Frame ---
     py::class_<Frame>(m, "Frame")
         .def("select_columns", &Frame::select_columns)
+        .def("select_rows", &Frame::select_rows)
         .def(py::init<>())
         .def(py::init<size_t>(), py::arg("row_count"))
         .def("shape", &Frame::shape)
@@ -271,18 +272,24 @@ PYBIND11_MODULE(_arnio_cpp, m) {
                 return py::make_tuple(std::move(result.frame), std::move(result.bad_rows));
             },
             py::arg("path"), py::arg("on_bad_lines") = std::string("error"))
-        .def("scan_schema", [](const CsvReader& reader, const std::string& path) {
-            std::vector<std::pair<std::string, std::string>> result;
-            {
-                py::gil_scoped_release release;
-                result = reader.scan_schema(path);
-            }
-            py::dict schema;
-            for (const auto& pair : result) {
-                schema[py::str(pair.first)] = py::str(pair.second);
-            }
-            return schema;
-        });
+        .def(
+            "scan_schema",
+            [](const CsvReader& reader, const std::string& path, const std::string& on_bad_lines) {
+                std::vector<std::pair<std::string, std::string>> schema_vec;
+                std::vector<std::string> bad_rows;
+                {
+                    py::gil_scoped_release release;
+                    auto result = reader.scan_schema(path, on_bad_lines);
+                    schema_vec = std::move(result.first);
+                    bad_rows = std::move(result.second);
+                }
+                py::dict schema;
+                for (const auto& pair : schema_vec) {
+                    schema[py::str(pair.first)] = py::str(pair.second);
+                }
+                return py::make_tuple(schema, bad_rows);
+            },
+            py::arg("path"), py::arg("on_bad_lines") = "error");
 
     py::class_<CsvChunkReader>(m, "CsvChunkReader")
         .def(py::init<const CsvConfig&>(), py::arg("config") = CsvConfig{})

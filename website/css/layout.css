@@ -1,0 +1,232 @@
+/* ============================================================
+   Arnio Layout — Containers, Grid, Responsive
+   ============================================================ */
+
+/* ── Container ───────────────────────────────────────────── */
+.container {
+  width: 100%;
+  max-width: var(--container-max);
+  margin: 0 auto;
+  padding: 0 var(--space-6);
+}
+
+.container--wide {
+  max-width: var(--container-wide);
+}
+
+/* ── Main Content Area ───────────────────────────────────── */
+.main-content {
+  padding-top: calc(var(--nav-height) + var(--space-8));
+  padding-bottom: var(--space-16);
+  min-height: calc(100vh - var(--nav-height));
+}
+
+/* ── Section Spacing ─────────────────────────────────────── */
+.section {
+  padding: var(--space-16) 0;
+}
+
+.section--alt {
+  background: var(--color-bg-alt);
+}
+
+.section--navy {
+  background: var(--color-navy);
+  color: #e6edf3;
+}
+
+.section--navy h1,
+.section--navy h2,
+.section--navy h3,
+.section--navy h4 {
+  color: #ffffff;
+}
+
+.section--navy .text-secondary {
+  color: #8b949e;
+}
+
+.section--navy a {
+  color: #58a6ff;
+}
+
+/* ── Flex Utilities ──────────────────────────────────────── */
+.flex {
+  display: flex;
+}
+
+.flex-col {
+  flex-direction: column;
+}
+
+.flex-wrap {
+  flex-wrap: wrap;
+}
+
+.items-center {
+  align-items: center;
+}
+
+.items-start {
+  align-items: flex-start;
+}
+
+.justify-center {
+  justify-content: center;
+}
+
+.justify-between {
+  justify-content: space-between;
+}
+
+.gap-2 { gap: var(--space-2); }
+.gap-3 { gap: var(--space-3); }
+.gap-4 { gap: var(--space-4); }
+.gap-6 { gap: var(--space-6); }
+.gap-8 { gap: var(--space-8); }
+
+/* ── Grid System ─────────────────────────────────────────── */
+.grid {
+  display: grid;
+  gap: var(--space-6);
+}
+
+.grid-2 {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.grid-3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.grid-4 {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+/* ── Docs Layout (Sidebar + Content) ─────────────────────── */
+.docs-layout {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: var(--space-10);
+  align-items: start;
+}
+
+.docs-sidebar {
+  position: sticky;
+  top: calc(var(--nav-height) + var(--space-6));
+  max-height: calc(100vh - var(--nav-height) - var(--space-12));
+  overflow-y: auto;
+  padding-right: var(--space-4);
+}
+
+.docs-sidebar::-webkit-scrollbar {
+  width: 4px;
+}
+
+.docs-sidebar::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: var(--radius-full);
+}
+
+.docs-content {
+  min-width: 0;
+}
+
+/* ── Sidebar Navigation ──────────────────────────────────── */
+.sidebar-nav-group {
+  margin-bottom: var(--space-6);
+}
+
+.sidebar-nav-title {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: var(--letter-spacing-wide);
+  color: var(--color-text-tertiary);
+  margin-bottom: var(--space-2);
+  padding: var(--space-1) 0;
+}
+
+.sidebar-nav-link {
+  display: block;
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  border-radius: var(--radius-sm);
+  border-left: 2px solid transparent;
+  transition: all var(--transition-fast);
+  text-decoration: none;
+}
+
+.sidebar-nav-link:hover {
+  color: var(--color-text);
+  background: var(--color-surface);
+  text-decoration: none;
+}
+
+.sidebar-nav-link.active {
+  color: var(--color-accent-text);
+  border-left-color: var(--color-accent);
+  background: var(--color-accent-subtle);
+  font-weight: var(--font-weight-medium);
+}
+
+/* ── Text Utilities ──────────────────────────────────────── */
+.text-center  { text-align: center; }
+.text-secondary { color: var(--color-text-secondary); }
+.text-sm { font-size: var(--font-size-sm); }
+.text-lg { font-size: var(--font-size-lg); }
+.text-xl { font-size: var(--font-size-xl); }
+
+/* ── Spacing Utilities ───────────────────────────────────── */
+.mt-4  { margin-top: var(--space-4); }
+.mt-6  { margin-top: var(--space-6); }
+.mt-8  { margin-top: var(--space-8); }
+.mt-12 { margin-top: var(--space-12); }
+.mb-4  { margin-bottom: var(--space-4); }
+.mb-6  { margin-bottom: var(--space-6); }
+.mb-8  { margin-bottom: var(--space-8); }
+
+/* ── Responsive ──────────────────────────────────────────── */
+@media (max-width: 1199px) {
+  .container {
+    padding: 0 var(--space-5);
+  }
+}
+
+@media (max-width: 991px) {
+  .docs-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .docs-sidebar {
+    position: static;
+    max-height: none;
+    padding-right: 0;
+    border-bottom: 1px solid var(--color-border-subtle);
+    padding-bottom: var(--space-4);
+    margin-bottom: var(--space-6);
+  }
+}
+
+@media (max-width: 767px) {
+  .grid-2, .grid-3, .grid-4 {
+    grid-template-columns: 1fr;
+  }
+
+  .section {
+    padding: var(--space-10) 0;
+  }
+
+  h1 { font-size: var(--font-size-2xl); }
+  h2 { font-size: var(--font-size-xl); margin-top: var(--space-10); }
+  h3 { font-size: var(--font-size-lg); }
+}
+
+@media (max-width: 480px) {
+  .container {
+    padding: 0 var(--space-4);
+  }
+
+  h1 { font-size: var(--font-size-xl); }
+}

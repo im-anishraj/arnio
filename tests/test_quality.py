@@ -447,6 +447,15 @@ def test_auto_clean_dry_run_returns_report_without_mutating():
     assert frame.dtypes["active"] == "string"
 
 
+def test_auto_clean_dry_run_with_return_report_raises():
+    frame = ar.from_pandas(pd.DataFrame({"name": [" Alice ", " Bob "]}))
+
+    with pytest.raises(
+        ValueError, match="return_report=True cannot be used with dry_run=True"
+    ):
+        ar.auto_clean(frame, dry_run=True, return_report=True)
+
+
 def test_auto_clean_rejects_unknown_mode(sample_csv):
     frame = ar.read_csv(sample_csv)
 
@@ -1120,6 +1129,40 @@ def test_report_to_markdown_basic(tmp_path):
     assert "| id | int64 | identifier |" in md
 
 
+def test_report_to_markdown_writes_to_stringio(sample_csv, tmp_path):
+    import io
+
+    frame = ar.read_csv(sample_csv)
+    report = ar.profile(frame)
+    buffer = io.StringIO()
+
+    result = report.to_markdown(output=buffer)
+
+    assert result is None
+    assert buffer.getvalue() == report.to_markdown()
+    assert "# Data Quality Report" in buffer.getvalue()
+
+
+def test_report_to_markdown_writes_to_text_file_handle(sample_csv, tmp_path):
+    frame = ar.read_csv(sample_csv)
+    report = ar.profile(frame)
+    out_path = tmp_path / "report.md"
+
+    with out_path.open("w", encoding="utf-8") as f:
+        result = report.to_markdown(output=f)
+
+    assert result is None
+    assert out_path.read_text(encoding="utf-8") == report.to_markdown()
+
+
+def test_report_to_markdown_rejects_invalid_output(sample_csv, tmp_path):
+    frame = ar.read_csv(sample_csv)
+    report = ar.profile(frame)
+
+    with pytest.raises(TypeError, match="output must be a writable text stream"):
+        report.to_markdown(output=object())
+
+
 def test_report_to_markdown_includes_uniqueness_metrics(tmp_path):
     path = tmp_path / "unique_metrics.csv"
 
@@ -1270,6 +1313,79 @@ def test_report_to_markdown_suggestions_stable_ordering():
     assert expected_substring in md
 
 
+def test_report_to_markdown_limits_suggestions():
+    report = ar.DataQualityReport(
+        row_count=2,
+        column_count=1,
+        memory_usage=100,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+        suggestions=[
+            ("strip_whitespace", {"columns": ["name"]}),
+            ("drop_nulls", {"subset": ["age"]}),
+            ("normalize_case", {"columns": ["city"]}),
+        ],
+    )
+
+    md = report.to_markdown(max_suggestions=2)
+
+    assert "strip_whitespace" in md
+    assert "drop_nulls" in md
+    assert "normalize_case" not in md
+    assert "Showing 2 of 3 suggestions." in md
+    assert len(report.suggestions) == 3
+
+
+def test_report_to_markdown_max_suggestions_none_preserves_default():
+    report = ar.DataQualityReport(
+        row_count=2,
+        column_count=1,
+        memory_usage=100,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+        suggestions=[
+            ("strip_whitespace", {"columns": ["name"]}),
+            ("drop_nulls", {"subset": ["age"]}),
+        ],
+    )
+
+    assert report.to_markdown(max_suggestions=None) == report.to_markdown()
+
+
+@pytest.mark.parametrize("value", [0, -1])
+def test_report_to_markdown_rejects_non_positive_max_suggestions(value):
+    report = ar.DataQualityReport(
+        row_count=0,
+        column_count=0,
+        memory_usage=0,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+        suggestions=[],
+    )
+
+    with pytest.raises(ValueError, match="max_suggestions must be positive"):
+        report.to_markdown(max_suggestions=value)
+
+
+@pytest.mark.parametrize("value", [True, 1.5, "2"])
+def test_report_to_markdown_rejects_invalid_max_suggestions_type(value):
+    report = ar.DataQualityReport(
+        row_count=0,
+        column_count=0,
+        memory_usage=0,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+        suggestions=[],
+    )
+
+    with pytest.raises(TypeError, match="max_suggestions must be an integer or None"):
+        report.to_markdown(max_suggestions=value)
+
+
 def test_report_to_markdown_suggestions_normal_existing_output(tmp_path):
     path = tmp_path / "sample_data.csv"
     path.write_text("id,name\n1,Alice\n2,Bob\n2,Bob\n")
@@ -1389,6 +1505,124 @@ def test_data_quality_report_to_html(tmp_path):
     report.to_html(file_path=str(out_path))
     assert out_path.exists()
     assert out_path.read_text(encoding="utf-8").startswith("<!DOCTYPE html>")
+
+
+def test_report_to_html_limits_suggestions():
+    report = ar.DataQualityReport(
+        row_count=2,
+        column_count=1,
+        memory_usage=100,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+        suggestions=[
+            ("strip_whitespace", {"columns": ["name"]}),
+            ("drop_nulls", {"subset": ["age"]}),
+            ("normalize_case", {"columns": ["city"]}),
+        ],
+    )
+
+    html = report.to_html(max_suggestions=2)
+
+    assert "strip_whitespace" in html
+    assert "drop_nulls" in html
+    assert "normalize_case" not in html
+    assert "Showing 2 of 3 suggestions." in html
+    assert len(report.suggestions) == 3
+
+
+def test_report_to_html_max_suggestions_none_preserves_default():
+    report = ar.DataQualityReport(
+        row_count=2,
+        column_count=1,
+        memory_usage=100,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+        suggestions=[
+            ("strip_whitespace", {"columns": ["name"]}),
+            ("drop_nulls", {"subset": ["age"]}),
+        ],
+    )
+
+    assert report.to_html(max_suggestions=None) == report.to_html()
+
+
+@pytest.mark.parametrize("value", [0, -1])
+def test_report_to_html_rejects_non_positive_max_suggestions(value):
+    report = ar.DataQualityReport(
+        row_count=0,
+        column_count=0,
+        memory_usage=0,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+        suggestions=[],
+    )
+
+    with pytest.raises(ValueError, match="max_suggestions must be positive"):
+        report.to_html(max_suggestions=value)
+
+
+@pytest.mark.parametrize("value", [True, 1.5, "2"])
+def test_report_to_html_rejects_invalid_max_suggestions_type(value):
+    report = ar.DataQualityReport(
+        row_count=0,
+        column_count=0,
+        memory_usage=0,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+        suggestions=[],
+    )
+
+    with pytest.raises(TypeError, match="max_suggestions must be an integer or None"):
+        report.to_html(max_suggestions=value)
+
+
+def test_report_to_html_writes_to_stringio(sample_csv, tmp_path):
+    import io
+
+    frame = ar.read_csv(sample_csv)
+    report = ar.profile(frame)
+    buffer = io.StringIO()
+
+    result = report.to_html(output=buffer)
+
+    assert result is None
+    assert buffer.getvalue() == report.to_html()
+    assert "<html" in buffer.getvalue()
+
+
+def test_report_to_html_writes_to_text_file_handle(sample_csv, tmp_path):
+    frame = ar.read_csv(sample_csv)
+    report = ar.profile(frame)
+    out_path = tmp_path / "report.html"
+
+    with out_path.open("w", encoding="utf-8") as f:
+        result = report.to_html(output=f)
+
+    assert result is None
+    assert out_path.read_text(encoding="utf-8") == report.to_html()
+
+
+def test_report_to_html_rejects_invalid_output(sample_csv, tmp_path):
+    frame = ar.read_csv(sample_csv)
+    report = ar.profile(frame)
+
+    with pytest.raises(TypeError, match="output must be a writable text stream"):
+        report.to_html(output=object())
+
+
+def test_report_to_html_preserves_file_path_behavior(sample_csv, tmp_path):
+    frame = ar.read_csv(sample_csv)
+    report = ar.profile(frame)
+    out_path = tmp_path / "report.html"
+
+    result = report.to_html(file_path=str(out_path))
+
+    assert result == report.to_html()
+    assert out_path.read_text(encoding="utf-8") == result
 
 
 def test_data_quality_report_to_html_focused(tmp_path):
@@ -2234,6 +2468,93 @@ def test_data_quality_report_to_json_returns_valid_json():
     assert parsed["column_count"] == 1
 
 
+def test_data_quality_report_to_json_writes_to_stringio():
+    import io
+
+    report = ar.profile(
+        ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "name": ["Alice", "Bob"],
+                    "age": [30, 40],
+                }
+            )
+        )
+    )
+    buffer = io.StringIO()
+
+    result = report.to_json(output=buffer)
+
+    assert result is None
+    assert buffer.getvalue() == report.to_json()
+
+
+def test_data_quality_report_to_json_writes_to_text_file_handle(tmp_path):
+    report = ar.profile(
+        ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "name": ["Alice", "Bob"],
+                    "age": [30, 40],
+                }
+            )
+        )
+    )
+    out_path = tmp_path / "report.json"
+
+    with out_path.open("w", encoding="utf-8") as f:
+        result = report.to_json(output=f, indent=2)
+
+    assert result is None
+    assert out_path.read_text(encoding="utf-8") == report.to_json(indent=2)
+
+
+def test_data_quality_report_to_json_rejects_invalid_output():
+    report = ar.profile(
+        ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "name": ["Alice", "Bob"],
+                    "age": [30, 40],
+                }
+            )
+        )
+    )
+
+    with pytest.raises(TypeError, match="output must be a writable text stream"):
+        report.to_json(output=object())
+
+
+def test_data_quality_report_to_json_output_preserves_options():
+    import io
+
+    report = ar.profile(
+        ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "name": ["Alice", "Bob"],
+                    "age": [30, 40],
+                }
+            )
+        )
+    )
+    buffer = io.StringIO()
+
+    result = report.to_json(
+        output=buffer,
+        indent=2,
+        redact_sample_values=True,
+        exclude_columns=["age"],
+    )
+
+    assert result is None
+    assert buffer.getvalue() == report.to_json(
+        indent=2,
+        redact_sample_values=True,
+        exclude_columns=["age"],
+    )
+
+
 def test_data_quality_report_to_json_indent():
     report = ar.DataQualityReport(
         row_count=10,
@@ -2297,6 +2618,7 @@ def test_data_quality_report_to_json_redact_sample_values():
     assert parsed["columns"]["name"]["sample_values"] == ["[REDACTED]"]
 
 
+
 def test_report_suggestions_are_deterministic_with_nested_kwargs():
     report = ar.DataQualityReport(
         row_count=1,
@@ -2327,3 +2649,113 @@ def test_report_suggestions_are_deterministic_with_nested_kwargs():
 
     assert result["suggestions"][0]["step"] == "same_step"
     assert result["suggestions"][1]["step"] == "same_step"
+    
+# --- Tests for ProfileComparison.to_json() ---
+
+
+def test_profile_comparison_to_json_returns_string():
+    frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+    p = ar.profile(frame)
+    comparison = ar.compare_profiles(p, p)
+    result = comparison.to_json()
+    assert isinstance(result, str)
+    parsed = json.loads(result)
+    assert "drift_report" in parsed
+    assert "status_counts" in parsed
+
+
+def test_profile_comparison_to_json_indent():
+    frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+    p = ar.profile(frame)
+    comparison = ar.compare_profiles(p, p)
+    result = comparison.to_json(indent=2)
+    assert "\n" in result
+
+
+def test_profile_comparison_to_json_output_stream():
+    frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+    p = ar.profile(frame)
+    comparison = ar.compare_profiles(p, p)
+    buf = io.StringIO()
+    ret = comparison.to_json(output=buf)
+    assert ret is None
+    assert len(buf.getvalue()) > 0
+
+
+def test_profile_comparison_to_json_invalid_output_raises():
+    frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+    p = ar.profile(frame)
+    comparison = ar.compare_profiles(p, p)
+    with pytest.raises(TypeError, match="writable text stream"):
+        comparison.to_json(output="not_a_stream")
+
+
+# --- ProfileComparison.to_markdown() ---
+
+
+def test_profile_comparison_to_markdown_returns_string():
+    frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+    p = ar.profile(frame)
+    comparison = ar.compare_profiles(p, p)
+    result = comparison.to_markdown()
+    assert isinstance(result, str)
+    assert "Profile Comparison Report" in result
+    assert "Column Drift" in result
+
+
+def test_profile_comparison_to_markdown_output_stream():
+    frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+    p = ar.profile(frame)
+    comparison = ar.compare_profiles(p, p)
+    buf = io.StringIO()
+    ret = comparison.to_markdown(output=buf)
+    assert ret is None
+    assert "Profile Comparison" in buf.getvalue()
+
+
+def test_profile_comparison_to_markdown_invalid_output_raises():
+    frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+    p = ar.profile(frame)
+    comparison = ar.compare_profiles(p, p)
+    with pytest.raises(TypeError, match="writable text stream"):
+        comparison.to_markdown(output=42)
+
+
+# --- Tests for QualityGateResult.to_json() ---
+
+
+def test_quality_gate_result_to_json_returns_string():
+    frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+    p = ar.profile(frame)
+    result = ar.check_quality_gates(p, p)
+    out = result.to_json()
+    assert isinstance(out, str)
+    parsed = json.loads(out)
+    assert "passed" in parsed
+    assert "issues" in parsed
+
+
+def test_quality_gate_result_to_json_indent():
+    frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+    p = ar.profile(frame)
+    result = ar.check_quality_gates(p, p)
+    out = result.to_json(indent=2)
+    assert "\n" in out
+
+
+def test_quality_gate_result_to_json_output_stream():
+    frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+    p = ar.profile(frame)
+    result = ar.check_quality_gates(p, p)
+    buf = io.StringIO()
+    ret = result.to_json(output=buf)
+    assert ret is None
+    assert len(buf.getvalue()) > 0
+
+
+def test_quality_gate_result_to_json_invalid_output_raises():
+    frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+    p = ar.profile(frame)
+    result = ar.check_quality_gates(p, p)
+    with pytest.raises(TypeError, match="writable text stream"):
+        result.to_json(output=123)
