@@ -1132,7 +1132,10 @@ def compare_profiles(
         raise ValueError(
             "Profiles have incompatible schemas: "
             f"missing from profile_a={missing_from_a}, "
-            f"missing from profile_b={missing_from_b}"
+            f"missing from profile_b={missing_from_b}. "
+            "This is likely caused by calling profile() with different exclude_columns "
+            "on each dataset. Profile both datasets with the same included/excluded "
+            "columns before comparing."
         )
 
     drift_report: dict[str, dict[str, Any]] = {}
