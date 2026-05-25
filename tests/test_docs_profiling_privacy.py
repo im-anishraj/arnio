@@ -22,6 +22,6 @@ def test_readme_privacy_table_covers_key_exports():
         "to_markdown()",
         "to_html()",
         "ProfileComparison.to_dict()",
-        "`top_values[*].value` → `\"[REDACTED]\"`",
+        '`top_values[*].value` → `"[REDACTED]"`',
     ):
         assert phrase in section, f"privacy section missing: {phrase!r}"
