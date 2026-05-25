@@ -1,0 +1,11 @@
+{
+  "name": "arnio-website-tooling",
+  "private": true,
+  "scripts": {
+    "format:check": "prettier --check \"website/**/*.{html,css,js}\" \"docs/**/*.md\" \"*.md\"",
+    "format:write": "prettier --write \"website/**/*.{html,css,js}\" \"docs/**/*.md\" \"*.md\""
+  },
+  "devDependencies": {
+    "prettier": "^3.2.5"
+  }
+}

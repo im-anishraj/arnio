@@ -22,10 +22,11 @@ repos:
       - id: check-yaml
         files: ^\.github/
 
-  - repo: local
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v4.0.0-alpha.8
     hooks:
-      - id: check-docs-utf8
-        name: Check docs are valid UTF-8
-        entry: python scripts/check_docs_utf8.py
-        language: python
-        files: (?i)(^docs/.*\.(md|rst|txt)$|^[^/]+\.(md|rst)$)
+      - id: prettier
+        types_or: [html, css, javascript, markdown]
+        additional_dependencies:
+          - prettier@3.2.5
+

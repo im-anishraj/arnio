@@ -79,6 +79,18 @@ jobs:
           find cpp/ bindings/ -type f \( -name '*.cpp' -o -name '*.h' \) \
             | xargs clang-format-17 --dry-run --Werror
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Prettier (check-only)
+        run: npm run format:check
+
+
   cpp_tests:
     name: C++ Native Tests (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
