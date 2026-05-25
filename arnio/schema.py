@@ -5,12 +5,14 @@ Production data contracts and validation.
 
 from __future__ import annotations
 
+
 import json
 import re
 import warnings
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Callable
+from zoneinfo import available_timezones
 
 import numpy as np
 import pandas as pd
@@ -491,6 +493,8 @@ ISO_639_1_CODES = {
     "zh",
     "zu",
 }
+
+IANA_TIMEZONES = available_timezones()
 
 
 @dataclass(frozen=True)
@@ -1652,6 +1656,34 @@ def LanguageCode(
     )
 
 
+def TimeZone(
+    *,
+    nullable: bool = True,
+    unique: bool = False,
+    severity: str = "error",
+    required_if: tuple[str, Any] | None = None,
+) -> Field:
+    """Create an IANA timezone schema field.
+
+    Args:
+        nullable: Whether null values are allowed.
+        unique: Whether non-null values must be unique.
+        severity: Severity level for validation issues.
+        required_if: Conditional requirement as a column/value pair.
+
+    Returns:
+        Field: Configured IANA timezone schema field.
+    """
+    return Field(
+        dtype="string",
+        nullable=nullable,
+        semantic="timezone",
+        unique=unique,
+        required_if=required_if,
+        severity=severity,
+    )
+
+
 def CurrencyCode(*, nullable: bool = True, unique: bool = False) -> Field:
     """Create a currency-code schema field.
 
@@ -2040,6 +2072,8 @@ def _validate_column(
 
                 elif field_def.semantic == "language_code":
                     invalid = non_null[~non_null.isin(ISO_639_1_CODES)]
+                elif field_def.semantic == "timezone":
+                    invalid = non_null[~non_null.isin(IANA_TIMEZONES)]
 
                 else:
                     invalid = non_null[~text.str.fullmatch(pattern, na=False)]
@@ -2281,6 +2315,7 @@ def _markdown_cell(value: Any) -> str:
 _SEMANTIC_PATTERNS = {
     "email": r"[^@\s]+@[^@\s]+\.[^@\s]+",
     "language_code": r"[a-z]{2}",
+    "timezone": r"[A-Za-z_]+(?:/[A-Za-z_\-]+)+",
     "email:strict": (
         r"[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+"
         r"@"
