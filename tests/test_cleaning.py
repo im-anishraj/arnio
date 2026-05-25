@@ -3305,13 +3305,17 @@ class TestValidateColumnSequence:
     def test_string_raises_type_error(self):
         from arnio.cleaning import _validate_column_sequence
 
-        with pytest.raises(TypeError, match="must be a sequence of column names, not a string"):
+        with pytest.raises(
+            TypeError, match="must be a sequence of column names, not a string"
+        ):
             _validate_column_sequence("col1", argument_name="columns")
 
     def test_bytes_raises_type_error(self):
         from arnio.cleaning import _validate_column_sequence
 
-        with pytest.raises(TypeError, match="must be a sequence of column names, not a string"):
+        with pytest.raises(
+            TypeError, match="must be a sequence of column names, not a string"
+        ):
             _validate_column_sequence(b"col1", argument_name="columns")
 
     def test_non_sequence_raises_type_error(self):
