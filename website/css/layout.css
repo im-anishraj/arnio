@@ -230,3 +230,70 @@
 
   h1 { font-size: var(--font-size-xl); }
 }
+
+/* =========================
+   Page transition animation
+========================= */
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  opacity: 0;
+  animation: pageFadeIn 0.25s ease-in-out forwards;
+  transition: opacity 0.2s ease-in-out;
+}
+
+body.fade-out {
+  opacity: 0;
+}
+
+@keyframes pageFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Smooth navbar hover */
+
+.nav-links a {
+  position: relative;
+  transition:
+    color 0.2s ease,
+    opacity 0.2s ease;
+}
+
+.nav-links a::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -4px;
+  width: 0%;
+  height: 2px;
+  background: currentColor;
+  transition: width 0.2s ease;
+}
+
+.nav-links a:hover::after,
+.nav-links a:focus-visible::after {
+  width: 100%;
+}
+
+/* Accessibility */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}
