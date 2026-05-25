@@ -514,6 +514,10 @@ class Field:
     severity: str = "error"
 
     def __post_init__(self) -> None:
+        if not isinstance(self.nullable, bool):
+            raise TypeError("nullable must be a bool")
+        if not isinstance(self.unique, bool):
+            raise TypeError("unique must be a bool")
         _validate_severity(self.severity)
 
 
