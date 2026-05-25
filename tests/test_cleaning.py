@@ -384,6 +384,25 @@ class TestSharedColumnSequenceValidation:
         with pytest.raises(ValueError, match="subset must contain at least one column"):
             ar.coalesce_columns(frame, subset=[])
 
+    def test_coalesce_columns_allows_tuple(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "nickname": [None, "Bee", None],
+                    "name": ["Alice", "Bob", "Cara"],
+                }
+            )
+        )
+
+        result = ar.coalesce_columns(
+            frame,
+            subset=("nickname", "name"),
+            output_column="display_name",
+        )
+        df = ar.to_pandas(result)
+
+        assert df["display_name"].tolist() == ["Alice", "Bee", "Cara"]
+
     @pytest.mark.parametrize(
         ("func", "kwargs", "message"),
         [
@@ -413,7 +432,7 @@ class TestSharedColumnSequenceValidation:
             (
                 "coalesce_columns",
                 {"subset": 123, "output_column": "combined"},
-                "must be a list of column names",
+                "must be a sequence of column names",
             ),
         ],
     )
