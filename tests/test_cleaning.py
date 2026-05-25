@@ -2030,6 +2030,35 @@ class TestCleanAPI:
         result = ar.clean(frame, strip_whitespace=False, drop_nulls=True)
         assert len(result) < len(frame)
 
+    @pytest.mark.parametrize("invalid_val", ["yes", 1, None, []])
+    def test_clean_invalid_strip_whitespace(self, csv_with_whitespace, invalid_val):
+        frame = ar.read_csv(csv_with_whitespace)
+        with pytest.raises(TypeError, match="strip_whitespace must be a bool"):
+            ar.clean(frame, strip_whitespace=invalid_val)
+
+    @pytest.mark.parametrize("invalid_val", ["yes", 1, None, []])
+    def test_clean_invalid_drop_nulls(self, csv_with_whitespace, invalid_val):
+        frame = ar.read_csv(csv_with_whitespace)
+        with pytest.raises(TypeError, match="drop_nulls must be a bool"):
+            ar.clean(frame, drop_nulls=invalid_val)
+
+    @pytest.mark.parametrize("invalid_val", ["yes", 1, None, []])
+    def test_clean_invalid_drop_duplicates(self, csv_with_whitespace, invalid_val):
+        frame = ar.read_csv(csv_with_whitespace)
+        with pytest.raises(TypeError, match="drop_duplicates must be a bool"):
+            ar.clean(frame, drop_duplicates=invalid_val)
+
+    def test_clean_valid_booleans(self, csv_with_whitespace):
+        frame = ar.read_csv(csv_with_whitespace)
+        # Should not raise
+        result = ar.clean(
+            frame,
+            strip_whitespace=True,
+            drop_nulls=False,
+            drop_duplicates=True,
+        )
+        assert len(ar.to_pandas(result)) > 0
+
 
 class TestFilterRows:
     def test_filter_rows_missing_column_raises_clear_error(self):
