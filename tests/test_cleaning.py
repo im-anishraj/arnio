@@ -1133,6 +1133,17 @@ class TestStandardizeMissingTokens:
         assert pd.isna(result["status"].iloc[1])
         assert result["note"].tolist() == ["  ", "NULL "]
 
+    def test_standardize_missing_tokens_normalizes_carriage_return_wrapped_tokens(
+        self,
+    ):
+        df = pd.DataFrame({"value": ["\r\nNULL\r", "\r\n nAn \r\n", "\r kept \r"]})
+
+        result = ar.standardize_missing_tokens(df)
+
+        assert pd.isna(result["value"].iloc[0])
+        assert pd.isna(result["value"].iloc[1])
+        assert result["value"].iloc[2] == "\r kept \r"
+
 
 class TestStripWhitespace:
     def test_strip(self, csv_with_whitespace):

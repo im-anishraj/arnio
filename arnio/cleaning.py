@@ -1708,6 +1708,8 @@ def standardize_missing_tokens(frame, tokens=None, subset=None):
     --------
     >>> frame = ar.from_pandas(pd.DataFrame({"value": [1, 2, "N/A"]}))
     >>> result = ar.standardize_missing_tokens(frame)
+    >>> frame = ar.from_pandas(pd.DataFrame({"value": [" NULL ", "\\tNaN\\t", "kept"]}))
+    >>> result = ar.standardize_missing_tokens(frame)
     """
 
     import pandas as pd
