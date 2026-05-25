@@ -2833,3 +2833,75 @@ def test_schema_field_only_roundtrip_with_rules_present():
     assert restored.strict is True
     assert list(restored.unique) == ["id"]
     assert not restored.rules
+
+
+class TestIsSafelyConvertibleToDtype:
+    def test_id_column_rejects_leading_zeros(self):
+        import pandas as pd
+        from arnio.schema import _is_safely_convertible_to_dtype
+
+        series = pd.Series(["001", "002", "003"])
+        assert _is_safely_convertible_to_dtype(series, "int64", "id") is False
+
+    def test_user_id_column_rejects_leading_zeros(self):
+        import pandas as pd
+        from arnio.schema import _is_safely_convertible_to_dtype
+
+        series = pd.Series(["0001", "0002"])
+        assert _is_safely_convertible_to_dtype(series, "int64", "user_id") is False
+
+    def test_uuid_column_rejects_leading_zeros(self):
+        import pandas as pd
+        from arnio.schema import _is_safely_convertible_to_dtype
+
+        series = pd.Series(["0123", "0456"])
+        assert _is_safely_convertible_to_dtype(series, "int64", "uuid") is False
+
+    def test_zip_column_rejects_leading_zeros(self):
+        import pandas as pd
+        from arnio.schema import _is_safely_convertible_to_dtype
+
+        series = pd.Series(["01234", "02345"])
+        assert _is_safely_convertible_to_dtype(series, "int64", "zip") is False
+
+    def test_valid_int64_conversion(self):
+        import pandas as pd
+        from arnio.schema import _is_safely_convertible_to_dtype
+
+        series = pd.Series(["1", "2", "3"])
+        assert _is_safely_convertible_to_dtype(series, "int64", "count") is True
+
+    def test_negative_int64_conversion(self):
+        import pandas as pd
+        from arnio.schema import _is_safely_convertible_to_dtype
+
+        series = pd.Series(["-1", "2", "3"])
+        assert _is_safely_convertible_to_dtype(series, "int64", "delta") is True
+
+    def test_float64_conversion(self):
+        import pandas as pd
+        from arnio.schema import _is_safely_convertible_to_dtype
+
+        series = pd.Series(["1.5", "2.5", "3.0"])
+        assert _is_safely_convertible_to_dtype(series, "float64", "price") is True
+
+    def test_invalid_string_for_int64(self):
+        import pandas as pd
+        from arnio.schema import _is_safely_convertible_to_dtype
+
+        series = pd.Series(["abc", "def"])
+        assert _is_safely_convertible_to_dtype(series, "int64", "data") is False
+
+    def test_empty_series_returns_false(self):
+        import pandas as pd
+        from arnio.schema import _is_safely_convertible_to_dtype
+
+        series = pd.Series([], dtype="string")
+        assert _is_safely_convertible_to_dtype(series, "int64", "col") is False
+
+    def test_all_null_series_returns_false(self):
+        import pandas as pd
+        from arnio.schema import _is_safely_convertible_to_dtype
+
+        series = pd.Series([None, None])
+        assert _is_safely_convertible_to_dtype(series, "int64", "col") is False
