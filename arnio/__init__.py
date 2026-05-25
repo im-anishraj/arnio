@@ -31,6 +31,7 @@ from .cleaning import (
     parse_bool_strings,
     rename_columns,
     replace_values,
+    rolling_window,
     round_numeric_columns,
     safe_divide_columns,
     select_columns,
@@ -39,7 +40,6 @@ from .cleaning import (
     trim_column_names,
     validate_columns_exist,
     winsorize_outliers,
-    rolling_window,
 )
 from .convert import from_pandas, to_arrow, to_pandas
 from .exceptions import (
