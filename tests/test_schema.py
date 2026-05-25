@@ -818,6 +818,16 @@ def test_validation_result_to_markdown_none_value_redacted():
     assert "[REDACTED]" not in markdown_raw
 
 
+def test_unique_constraint_detects_duplicates(tmp_path):
+    path = tmp_path / "unique.csv"
+    path.write_text("id,value\n1,100\n2,200\n1,300\n3,400\n")
+    result = ar.validate(ar.read_csv(path), {"id": ar.Int64(unique=True)})
+    assert not result.passed
+    assert any(
+        issue.rule == "unique" and issue.column == "id" for issue in result.issues
+    )
+
+
 def test_custom_pattern_validation(tmp_path):
     path = tmp_path / "codes.csv"
     path.write_text("code\nAA-123\nbad\n")
@@ -1251,6 +1261,97 @@ def test_country_code_validation_rejects_invalid_codes(tmp_path):
 
     assert [issue.row_index for issue in result.issues] == [1, 2, 3, 4, 5, 6, 7, 8, 9]
     assert all(issue.rule == "country_code" for issue in result.issues)
+
+
+def test_language_code_validation_accepts_iso_639_1_codes(tmp_path):
+    path = tmp_path / "languages.csv"
+    path.write_text("language\nen\nhi\nfr\nde\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"language": ar.LanguageCode(nullable=False)},
+    )
+
+    assert result.passed
+    assert result.issue_count == 0
+
+
+def test_language_code_validation_rejects_invalid_codes(tmp_path):
+    path = tmp_path / "bad_languages.csv"
+    path.write_text("language\nenglish\neng\nEN\nEN-US\nzz\n123\n\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"language": ar.LanguageCode(nullable=False)},
+    )
+
+    assert not result.passed
+    assert result.issue_count == 6
+
+    assert [issue.row_index for issue in result.issues] == [1, 2, 3, 4, 5, 6]
+    assert all(issue.rule == "language_code" for issue in result.issues)
+
+
+def test_language_code_validation_accepts_extended_iso_codes(tmp_path):
+    path = tmp_path / "extended_languages.csv"
+    path.write_text("language\nzu\nxh\nvo\nwa\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"language": ar.LanguageCode(nullable=False)},
+    )
+
+    assert result.passed
+    assert result.issue_count == 0
+
+
+def test_language_code_validation_nullable_behavior(tmp_path):
+    path = tmp_path / "nullable_languages.csv"
+    path.write_text('language\nen\n""\nfr\n')
+
+    result_nullable = ar.validate(
+        ar.read_csv(path),
+        {"language": ar.LanguageCode(nullable=True)},
+    )
+
+    assert result_nullable.passed
+    assert result_nullable.issue_count == 0
+
+    result_non_nullable = ar.validate(
+        ar.read_csv(path),
+        {"language": ar.LanguageCode(nullable=False)},
+    )
+
+    assert not result_non_nullable.passed
+    assert result_non_nullable.issue_count == 1
+
+
+def test_language_code_validation_rejects_mixed_case_codes(tmp_path):
+    path = tmp_path / "mixed_case_languages.csv"
+    path.write_text("language\nEn\nHI\nFr\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"language": ar.LanguageCode(nullable=False)},
+    )
+
+    assert not result.passed
+    assert result.issue_count == 3
+
+
+def test_language_code_validation_rejects_non_string_values(tmp_path):
+    path = tmp_path / "numeric_languages.csv"
+    path.write_text("language\n123\n456\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"language": ar.LanguageCode(nullable=False)},
+    )
+
+    assert not result.passed
+    assert result.issue_count == 3
+    assert any(issue.rule == "dtype" for issue in result.issues)
+    assert sum(issue.rule == "language_code" for issue in result.issues) == 2
 
 
 def test_country_code_enforces_uniqueness(tmp_path):

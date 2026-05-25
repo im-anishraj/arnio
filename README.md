@@ -1189,6 +1189,9 @@ schema = ar.Schema({
     # CurrencyCode validates 3-letter uppercase formats (e.g., USD, EUR, INR).
     "currency": ar.CurrencyCode(),
 
+    # LanguageCode validates lowercase ISO 639-1 language codes (e.g., en, hi, fr).
+    "language": ar.LanguageCode(),
+
     "username": ar.String(min_length=3, max_length=20),
     "user_code": ar.Regex(r"^USR-\d{4}$", nullable=False),
     "revenue": ar.Custom("positive", nullable=True),
@@ -1337,7 +1340,16 @@ result = ar.validate(frame, schema)
 ```
 
 
-For low-risk automatic cleanup:
+For automatic cleaning suggestions based on the profile:
+
+```python
+suggestions = ar.suggest_cleaning(frame)
+# e.g. [("strip_whitespace", {"subset": ["name", "city"]}),
+#       ("drop_duplicates", {"keep": "first"})]
+clean = ar.pipeline(frame, suggestions)
+```
+
+For low-risk automatic cleanup in one call:
 
 ```python
 clean, report = ar.auto_clean(frame, mode="strict", return_report=True)
@@ -1708,6 +1720,11 @@ null values were observed during profiling.
 | **v1.3** | Chunked / streaming processing · Parquet & JSON readers | 📋 Planned |
 | **v1.4** | Parallel column processing · SIMD string operations | 💭 Exploring |
 
+Before expanding the backlog again, maintainers should complete the
+**[Core Stability Sprint](CORE_STABILITY_SPRINT.md)**: install reliability,
+correctness hardening, public API stability, benchmark baselines, and PR queue
+hygiene.
+
 > For CLI command reference and examples, see [CLI_REFERENCE.md](CLI_REFERENCE.md).
 <br>
 
@@ -1733,6 +1750,9 @@ Discord is for fast conversation and support. GitHub remains the source of truth
 
 ## 📚 Documentation
 
+- [Project Direction](PROJECT_DIRECTION.md)
+- [Core Stability Sprint](CORE_STABILITY_SPRINT.md)
+- [Roadmap](ROADMAP.md)
 - [Troubleshooting Guide](docs/TROUBLESHOOTING.md)
 
 ## 🤝 Contribute
@@ -1778,6 +1798,7 @@ make test      # pytest with coverage
 make lint      # ruff + black
 
 # Windows
+python examples/check_env.py
 pip install -e ".[dev]"
 pre-commit install
 pytest tests/ -v
@@ -1837,6 +1858,15 @@ If `pip install -e ".[dev]"` fails on Windows, work through this checklist befor
    pre-commit install
    pytest tests/ -v
    ```
+
+Before retrying, run the environment doctor:
+
+```bash
+python examples/check_env.py
+```
+
+If it reports `[BUILD BLOCKED]`, fix the missing compiler/CMake/NMake entry
+first. That is a build-toolchain problem, not a test failure.
 
 If you want a quick wheel-build smoke test before running the full suite, use:
 
@@ -1964,3 +1994,7 @@ arnio/
 <sub>Built with C++ and pybind11 · Licensed under MIT · Maintained by <a href="https://github.com/im-anishraj">@im-anishraj</a></sub>
 
 </div>
+
+## Security
+
+Please review our [Security Policy](SECURITY.md) for responsible vulnerability reporting guidelines.

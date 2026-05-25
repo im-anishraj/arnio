@@ -70,3 +70,20 @@ TEST_CASE("Column bool memory layout is independent per element", "[column]") {
     REQUIRE(col.at(2) == CellValue(bool(true)));
     REQUIRE(col.size() == 3);
 }
+
+TEST_CASE("push_back string into numeric column keeps data aligned with null mask", "[column]") {
+    Column int_col("integer", DType::INT64);
+    int_col.push_back(std::string("hello"));
+    REQUIRE(int_col.size() == 1);
+    REQUIRE(int_col.null_mask().size() == 1);
+
+    Column dbl_col("double", DType::FLOAT64);
+    dbl_col.push_back(std::string("hello"));
+    REQUIRE(dbl_col.size() == 1);
+    REQUIRE(dbl_col.null_mask().size() == 1);
+
+    Column bl_col("bool", DType::BOOL);
+    bl_col.push_back(std::string("hello"));
+    REQUIRE(bl_col.size() == 1);
+    REQUIRE(bl_col.null_mask().size() == 1);
+}
