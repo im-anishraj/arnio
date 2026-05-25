@@ -707,6 +707,66 @@ class ProfileComparison:
             },
         }
 
+    def to_json(
+        self,
+        *,
+        indent: int | None = None,
+        output: Any | None = None,
+    ) -> str | None:
+        """Return the comparison as a JSON string.
+
+        Example:
+        comparison.to_json(indent=2)
+        """
+        json_out = json.dumps(self.to_dict(), indent=indent)
+
+        if output is None:
+            return json_out
+
+        if not hasattr(output, "write"):
+            raise TypeError("output must be a writable text stream")
+
+        output.write(json_out)
+        return None
+
+    def to_markdown(self, output: Any | None = None) -> str | None:
+        """Return a GitHub-friendly Markdown drift report."""
+        lines: list[str] = ["# Profile Comparison Report", ""]
+
+        status_summary = ", ".join(
+            f"{count} {status}" for status, count in sorted(self.status_counts.items())
+        )
+        lines.append(f"**Status summary:** {status_summary}")
+        lines.append("")
+
+        if self.drift_report:
+            lines.append("## Column Drift")
+            lines.append("")
+            lines.append("| Column | Status | Changes | Reasons |")
+            lines.append("|---|---|---|---|")
+            for name, entry in sorted(self.drift_report.items()):
+                status = entry.get("status", "-")
+                changes = ", ".join(entry.get("changes", {}).keys()) or "-"
+                reasons = "; ".join(entry.get("reasons", [])) or "-"
+                lines.append(
+                    f"| {_markdown_cell(name)} "
+                    f"| {_markdown_cell(status)} "
+                    f"| {_markdown_cell(changes)} "
+                    f"| {_markdown_cell(reasons)} |"
+                )
+            lines.append("")
+
+        markdown = "\n".join(lines)
+
+        if output is None:
+            return markdown
+
+        if not hasattr(output, "write"):
+            raise TypeError("output must be a writable text stream")
+
+        output.write(markdown)
+        return None
+
 
 @dataclass(frozen=True)
 class QualityGateIssue:
@@ -813,6 +873,28 @@ class QualityGateResult:
             f"{len(self.issues)} data quality gate(s) failed. "
             "Inspect result.issues or result.to_markdown() for details."
         )
+
+    def to_json(
+        self,
+        *,
+        indent: int | None = None,
+        output: Any | None = None,
+    ) -> str | None:
+        """Return the quality gate result as a JSON string.
+
+        Example:
+        result.to_json(indent=2)
+        """
+        json_out = json.dumps(self.to_dict(), indent=indent)
+
+        if output is None:
+            return json_out
+
+        if not hasattr(output, "write"):
+            raise TypeError("output must be a writable text stream")
+
+        output.write(json_out)
+        return None
 
 
 def profile(

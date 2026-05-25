@@ -2396,3 +2396,114 @@ def test_data_quality_report_to_json_redact_sample_values():
     parsed = json.loads(json_output)
 
     assert parsed["columns"]["name"]["sample_values"] == ["[REDACTED]"]
+
+
+# --- Tests for ProfileComparison.to_json() ---
+
+
+def test_profile_comparison_to_json_returns_string():
+    frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+    p = ar.profile(frame)
+    comparison = ar.compare_profiles(p, p)
+    result = comparison.to_json()
+    assert isinstance(result, str)
+    parsed = json.loads(result)
+    assert "drift_report" in parsed
+    assert "status_counts" in parsed
+
+
+def test_profile_comparison_to_json_indent():
+    frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+    p = ar.profile(frame)
+    comparison = ar.compare_profiles(p, p)
+    result = comparison.to_json(indent=2)
+    assert "\n" in result
+
+
+def test_profile_comparison_to_json_output_stream():
+    frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+    p = ar.profile(frame)
+    comparison = ar.compare_profiles(p, p)
+    buf = io.StringIO()
+    ret = comparison.to_json(output=buf)
+    assert ret is None
+    assert len(buf.getvalue()) > 0
+
+
+def test_profile_comparison_to_json_invalid_output_raises():
+    frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+    p = ar.profile(frame)
+    comparison = ar.compare_profiles(p, p)
+    with pytest.raises(TypeError, match="writable text stream"):
+        comparison.to_json(output="not_a_stream")
+
+
+# --- ProfileComparison.to_markdown() ---
+
+
+def test_profile_comparison_to_markdown_returns_string():
+    frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+    p = ar.profile(frame)
+    comparison = ar.compare_profiles(p, p)
+    result = comparison.to_markdown()
+    assert isinstance(result, str)
+    assert "Profile Comparison Report" in result
+    assert "Column Drift" in result
+
+
+def test_profile_comparison_to_markdown_output_stream():
+    frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+    p = ar.profile(frame)
+    comparison = ar.compare_profiles(p, p)
+    buf = io.StringIO()
+    ret = comparison.to_markdown(output=buf)
+    assert ret is None
+    assert "Profile Comparison" in buf.getvalue()
+
+
+def test_profile_comparison_to_markdown_invalid_output_raises():
+    frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+    p = ar.profile(frame)
+    comparison = ar.compare_profiles(p, p)
+    with pytest.raises(TypeError, match="writable text stream"):
+        comparison.to_markdown(output=42)
+
+
+# --- Tests for QualityGateResult.to_json() ---
+
+
+def test_quality_gate_result_to_json_returns_string():
+    frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+    p = ar.profile(frame)
+    result = ar.check_quality_gates(p, p)
+    out = result.to_json()
+    assert isinstance(out, str)
+    parsed = json.loads(out)
+    assert "passed" in parsed
+    assert "issues" in parsed
+
+
+def test_quality_gate_result_to_json_indent():
+    frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+    p = ar.profile(frame)
+    result = ar.check_quality_gates(p, p)
+    out = result.to_json(indent=2)
+    assert "\n" in out
+
+
+def test_quality_gate_result_to_json_output_stream():
+    frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+    p = ar.profile(frame)
+    result = ar.check_quality_gates(p, p)
+    buf = io.StringIO()
+    ret = result.to_json(output=buf)
+    assert ret is None
+    assert len(buf.getvalue()) > 0
+
+
+def test_quality_gate_result_to_json_invalid_output_raises():
+    frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+    p = ar.profile(frame)
+    result = ar.check_quality_gates(p, p)
+    with pytest.raises(TypeError, match="writable text stream"):
+        result.to_json(output=123)
