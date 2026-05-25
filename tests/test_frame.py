@@ -234,6 +234,158 @@ def test_select_columns_native_path_avoids_pandas_roundtrip(monkeypatch):
     assert list(df.columns) == ["salary", "name"]
 
 
+def test_head_native_path_avoids_pandas_roundtrip(monkeypatch):
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "name": ["alice", "bob", "charlie"],
+                "salary": [100, 200, 300],
+            }
+        )
+    )
+
+    from arnio import convert
+
+    def fail_to_pandas(_):
+        raise AssertionError("head() should avoid to_pandas")
+
+    monkeypatch.setattr(convert, "to_pandas", fail_to_pandas)
+
+    result = frame.head(2)
+
+    assert result.shape == (2, 2)
+    assert result.columns == ["name", "salary"]
+
+
+def test_tail_native_path_avoids_pandas_roundtrip(monkeypatch):
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "name": ["alice", "bob", "charlie"],
+                "salary": [100, 200, 300],
+            }
+        )
+    )
+
+    from arnio import convert
+
+    def fail_to_pandas(_):
+        raise AssertionError("tail() should avoid to_pandas")
+
+    monkeypatch.setattr(convert, "to_pandas", fail_to_pandas)
+
+    result = frame.tail(2)
+
+    assert result.shape == (2, 2)
+    assert result.columns == ["name", "salary"]
+
+
+def test_head_default_n():
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "a": [1, 2, 3, 4, 5, 6],
+            }
+        )
+    )
+
+    result = frame.head()
+
+    assert result.shape == (5, 1)
+    assert result["a"] == [1, 2, 3, 4, 5]
+
+
+def test_tail_default_n():
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "a": [1, 2, 3, 4, 5, 6],
+            }
+        )
+    )
+
+    result = frame.tail()
+
+    assert result.shape == (5, 1)
+    assert result["a"] == [2, 3, 4, 5, 6]
+
+
+def test_head_zero_rows():
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "a": [1, 2, 3],
+            }
+        )
+    )
+
+    result = frame.head(0)
+
+    assert result.shape == (0, 1)
+    assert result["a"] == []
+
+
+def test_tail_zero_rows():
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "a": [1, 2, 3],
+            }
+        )
+    )
+
+    result = frame.tail(0)
+
+    assert result.shape == (0, 1)
+    assert result["a"] == []
+
+
+def test_head_oversized_n():
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "a": [1, 2, 3],
+            }
+        )
+    )
+
+    result = frame.head(999)
+
+    assert result.shape == (3, 1)
+    assert result["a"] == [1, 2, 3]
+
+
+def test_tail_oversized_n():
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "a": [1, 2, 3],
+            }
+        )
+    )
+
+    result = frame.tail(999)
+
+    assert result.shape == (3, 1)
+    assert result["a"] == [1, 2, 3]
+
+
+@pytest.mark.parametrize("invalid_n", [-1, 1.5, "5", True, None])
+def test_head_invalid_n(invalid_n):
+    frame = ar.from_pandas(pd.DataFrame({"a": [1, 2, 3]}))
+
+    with pytest.raises(ValueError):
+        frame.head(invalid_n)
+
+
+@pytest.mark.parametrize("invalid_n", [-1, 1.5, "5", True, None])
+def test_tail_invalid_n(invalid_n):
+    frame = ar.from_pandas(pd.DataFrame({"a": [1, 2, 3]}))
+
+    with pytest.raises(ValueError):
+        frame.tail(invalid_n)
+
+
 class TestArFrame:
     """Test ArFrame properties and methods."""
 
