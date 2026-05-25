@@ -794,12 +794,18 @@ def read_csv_chunked(
     try:
         with _utf8_csv_path(path, encoding, delimiter=delimiter) as native_path:
             reader.open(native_path)
+
+            # Smart counter for small files
+            total_yielded_rows = 0
+
             while True:
                 chunk = reader.next_chunk(chunksize, on_bad_lines)
                 if chunk is None:
                     if progress_hook is not None:
+                        # Use our manual count if C++ never fired (small files)
+                        final_rows = last_rows if last_rows > 0 else total_yielded_rows
                         final_box = CSVProgress(
-                            rows_read=last_rows,
+                            rows_read=final_rows,
                             bytes_read=last_bytes,
                             total_bytes=last_total,
                             done=True
@@ -808,6 +814,7 @@ def read_csv_chunked(
                     break
 
                 cpp_frame, bad_rows = chunk
+                total_yielded_rows += cpp_frame.num_rows()
 
                 if on_bad_lines == "warn" and bad_rows:
                     _warn_bad_rows(bad_rows)

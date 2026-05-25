@@ -787,8 +787,8 @@ CsvParseResult CsvReader::read(const std::string& path, const std::string& on_ba
             bytes_read,
             std::nullopt,
             false);
-    }
-    // while loop ends here
+        }
+    }// while loop ends here
 
     // Final Progress Signal (True means done!)
     if (config.progress_hook != nullptr) {
@@ -1144,15 +1144,27 @@ std::optional<CsvParseResult> CsvChunkReader::next_chunk(size_t chunksize,
             break;
         }
         raw_data.push_back(std::move(fields));
+
         size_t current_row = rows_read_total_ + raw_data.size();
+
         if (config.progress_hook != nullptr &&
             current_row > 0 &&
             current_row % config.progress_interval_rows == 0) {
-            auto pos = file_.tellg();
-            size_t bytes_read = (pos >= 0) ? (size_t)pos : 0;
-            config.progress_hook(current_row, bytes_read, std::nullopt, false);
-        }
 
+            std::streampos pos = file_.tellg();
+
+            size_t bytes_read =
+                (pos == std::streampos(-1))
+                    ? 0
+                    : static_cast<size_t>(pos);
+
+            config.progress_hook(
+                current_row,
+                bytes_read,
+                std::nullopt,
+                false);
+        }
+    }
     if (raw_data.empty()) {
         if (bad_rows.empty()) {
             return std::nullopt;
