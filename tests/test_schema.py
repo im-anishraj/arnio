@@ -1292,6 +1292,33 @@ def test_language_code_validation_rejects_invalid_codes(tmp_path):
     assert all(issue.rule == "language_code" for issue in result.issues)
 
 
+def test_timezone_validation_accepts_iana_timezones(tmp_path):
+    path = tmp_path / "timezones.csv"
+    path.write_text("timezone\nAsia/Kolkata\nAmerica/New_York\nEurope/Paris\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"timezone": ar.TimeZone(nullable=False)},
+    )
+
+    assert result.passed
+    assert result.issue_count == 0
+
+
+def test_timezone_validation_rejects_invalid_values(tmp_path):
+    path = tmp_path / "bad_timezones.csv"
+    path.write_text("timezone\nIST\nGMT+5:30\nIndia\nAsia\\Kolkata\nrandom_text\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"timezone": ar.TimeZone(nullable=False)},
+    )
+
+    assert not result.passed
+    assert result.issue_count == 5
+    assert all(issue.rule == "timezone" for issue in result.issues)
+
+
 def test_language_code_validation_accepts_extended_iso_codes(tmp_path):
     path = tmp_path / "extended_languages.csv"
     path.write_text("language\nzu\nxh\nvo\nwa\n")
