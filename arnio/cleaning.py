@@ -1154,6 +1154,13 @@ def clean(
     >>> frame = ar.read_csv("data.csv")
     >>> cleaned = ar.clean(frame, strip_whitespace=True, drop_nulls=True)
     """
+    if not isinstance(strip_whitespace, bool):
+        raise TypeError("strip_whitespace must be a bool")
+    if not isinstance(drop_nulls, bool):
+        raise TypeError("drop_nulls must be a bool")
+    if not isinstance(drop_duplicates, bool):
+        raise TypeError("drop_duplicates must be a bool")
+
     from .pipeline import pipeline
 
     steps = []
