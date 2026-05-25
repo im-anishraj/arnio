@@ -447,6 +447,15 @@ def test_auto_clean_dry_run_returns_report_without_mutating():
     assert frame.dtypes["active"] == "string"
 
 
+def test_auto_clean_dry_run_with_return_report_raises():
+    frame = ar.from_pandas(pd.DataFrame({"name": [" Alice ", " Bob "]}))
+
+    with pytest.raises(
+        ValueError, match="return_report=True cannot be used with dry_run=True"
+    ):
+        ar.auto_clean(frame, dry_run=True, return_report=True)
+
+
 def test_auto_clean_rejects_unknown_mode(sample_csv):
     frame = ar.read_csv(sample_csv)
 
@@ -2498,6 +2507,93 @@ def test_data_quality_report_to_json_returns_valid_json():
 
     assert parsed["row_count"] == 10
     assert parsed["column_count"] == 1
+
+
+def test_data_quality_report_to_json_writes_to_stringio():
+    import io
+
+    report = ar.profile(
+        ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "name": ["Alice", "Bob"],
+                    "age": [30, 40],
+                }
+            )
+        )
+    )
+    buffer = io.StringIO()
+
+    result = report.to_json(output=buffer)
+
+    assert result is None
+    assert buffer.getvalue() == report.to_json()
+
+
+def test_data_quality_report_to_json_writes_to_text_file_handle(tmp_path):
+    report = ar.profile(
+        ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "name": ["Alice", "Bob"],
+                    "age": [30, 40],
+                }
+            )
+        )
+    )
+    out_path = tmp_path / "report.json"
+
+    with out_path.open("w", encoding="utf-8") as f:
+        result = report.to_json(output=f, indent=2)
+
+    assert result is None
+    assert out_path.read_text(encoding="utf-8") == report.to_json(indent=2)
+
+
+def test_data_quality_report_to_json_rejects_invalid_output():
+    report = ar.profile(
+        ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "name": ["Alice", "Bob"],
+                    "age": [30, 40],
+                }
+            )
+        )
+    )
+
+    with pytest.raises(TypeError, match="output must be a writable text stream"):
+        report.to_json(output=object())
+
+
+def test_data_quality_report_to_json_output_preserves_options():
+    import io
+
+    report = ar.profile(
+        ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "name": ["Alice", "Bob"],
+                    "age": [30, 40],
+                }
+            )
+        )
+    )
+    buffer = io.StringIO()
+
+    result = report.to_json(
+        output=buffer,
+        indent=2,
+        redact_sample_values=True,
+        exclude_columns=["age"],
+    )
+
+    assert result is None
+    assert buffer.getvalue() == report.to_json(
+        indent=2,
+        redact_sample_values=True,
+        exclude_columns=["age"],
+    )
 
 
 def test_data_quality_report_to_json_indent():

@@ -486,6 +486,9 @@ def drop_empty_columns(frame: ArFrame) -> ArFrame:
     """
     from .convert import to_pandas
 
+    if frame.shape[0] == 0:
+        return frame
+
     df = to_pandas(frame)
     empty_columns: list[str] = []
     for column in df.columns:
@@ -733,6 +736,48 @@ def strip_whitespace(
     return ArFrame(result)
 
 
+def normalize_whitespace(frame, columns=None):
+    """Collapse internal whitespace runs to a single space in string columns.
+    Also strips leading and trailing whitespace.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input data frame.
+    columns : list of str, optional
+        Column names to process. Defaults to all string (object) columns.
+
+    Returns
+    -------
+    ArFrame
+        New frame with normalized whitespace in the specified columns.
+
+    Examples
+    --------
+    >>> frame = ar.read_csv("data.csv")
+    >>> clean = ar.pipeline(frame, [("normalize_whitespace",)])
+    """
+    is_arframe = not isinstance(frame, pd.DataFrame)
+    df = to_pandas(frame) if is_arframe else frame.copy()
+
+    if columns is not None:
+        cols = list(columns)
+        missing = [c for c in cols if c not in df.columns]
+        if missing:
+            available = list(df.columns)
+            raise ValueError(
+                f"Missing columns for normalize_whitespace: {missing}. "
+                f"Available columns: {available}"
+            )
+        cols = [c for c in cols if df[c].dtype in ("object", "string")]
+    else:
+        cols = list(df.select_dtypes(include=["object", "string"]).columns)
+
+    for col in cols:
+        df[col] = df[col].str.replace(r"\s+", " ", regex=True).str.strip()
+    return from_pandas(df) if is_arframe else df
+
+
 def parse_bool_strings(
     frame: ArFrame,
     *,
@@ -801,7 +846,7 @@ def parse_bool_strings(
         )
 
     if subset is not None:
-        columns = _validate_existing_column_sequence(
+        validated_columns = _validate_existing_column_sequence(
             subset,
             available_columns=df.columns,
             argument_name="subset",
@@ -811,6 +856,10 @@ def parse_bool_strings(
                 f"Columns not found in frame: {missing}"
             ),
         )
+
+        columns = [
+            col for col in validated_columns if not pd.api.types.is_bool_dtype(df[col])
+        ]
     else:
         columns = df.select_dtypes(include=["object", "string"]).columns.tolist()
 

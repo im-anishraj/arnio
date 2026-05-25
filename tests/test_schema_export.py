@@ -157,6 +157,17 @@ class TestSchemaToYamlOutput:
         assert "ts:" in out
         assert "TIMESTAMP" in out
 
+    def test_emit_scalar_prevents_yaml_injection(self):
+        # test \n
+        raw1 = {"key": {"type": "STRING", "description": "safe\nmalicious_key: true"}}
+        out1 = schema_to_yaml(raw1)
+        assert '"safe\\nmalicious_key: true"' in out1
+
+        # test \r
+        raw2 = {"key": {"type": "STRING", "description": "safe\rmalicious_key: true"}}
+        out2 = schema_to_yaml(raw2)
+        assert '"safe\\rmalicious_key: true"' in out2
+
 
 class TestSchemaToYamlFileWrite:
     def test_writes_file(self, tmp_path):
