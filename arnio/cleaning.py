@@ -329,7 +329,32 @@ def keep_rows_with_nulls(
 
 
 def select_columns(frame: ArFrame, columns: Sequence[str]) -> ArFrame:
-    """Return a new frame containing only the requested columns."""
+    """Return a new frame containing only the requested columns.
+
+     Parameters
+    ----------
+    frame : ArFrame
+        Input data frame.
+    columns : sequence of str
+        Column names to keep.
+
+    Returns
+    -------
+    ArFrame
+        New frame containing only the specified columns, in the order given.
+
+    Raises
+    ------
+    TypeError
+        If columns is a string/bytes value or contains non-string items.
+    KeyError
+        If any requested column does not exist in the frame.
+
+    Examples
+    --------
+    >>> frame = ar.read_csv("data.csv")
+    >>> subset = ar.select_columns(frame, ["name", "revenue"])
+    """
     return frame.select_columns(columns)
 
 
@@ -935,6 +960,32 @@ def normalize_unicode(
     This implementation operates natively on the ArFrame's internal columnar
     representation, avoiding a full pandas roundtrip. Only STRING columns are
     processed; all other column types are cloned unchanged.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input data frame.
+    subset : list[str], optional
+        Column names to normalize. If None, applies to all string columns.
+    form : str, default "NFC"
+        Unicode normalization form. One of "NFC", "NFD", "NFKC", "NFKD".
+
+    Returns
+    -------
+    ArFrame
+        New frame with Unicode-normalized string columns.
+
+    Raises
+    ------
+    ValueError
+        If form is not one of the supported normalization forms.
+    KeyError
+        If any column in subset does not exist in the frame.
+
+    Examples
+    --------
+    >>> frame = ar.read_csv("data.csv")
+    >>> normalized = ar.normalize_unicode(frame, form="NFC")
     """
     valid_forms = {"NFC", "NFD", "NFKC", "NFKD"}
     if form not in valid_forms:
@@ -1328,6 +1379,23 @@ def combine_columns(
     -------
     ArFrame or pd.DataFrame
         Frame with the combined output column appended.
+
+
+    Raises
+    ------
+    TypeError
+        If separator is not a string, or frame is not an ArFrame or DataFrame.
+    ValueError
+        If output_column is empty, output_column already exists in the frame,
+        or subset is provided but empty.
+    KeyError
+        If any column in subset does not exist in the frame.
+
+    Examples
+    --------
+    >>> frame = ar.read_csv("data.csv")
+    >>> result = ar.combine_columns(frame, subset=["first_name", "last_name"],
+    ...                             separator=" ", output_column="full_name")
     """
     import pandas as pd
 
@@ -1767,6 +1835,22 @@ def coalesce_columns(
     -------
     ArFrame or pd.DataFrame
         New frame with coalesced column.
+
+     Raises
+    ------
+    TypeError
+        If subset is not a list, or frame is not an ArFrame or DataFrame.
+    ValueError
+        If subset is empty, output_column is empty, or output_column already
+        exists in the frame.
+    KeyError
+        If any column in subset does not exist in the frame.
+
+    Examples
+    --------
+    >>> frame = ar.read_csv("data.csv")
+    >>> result = ar.coalesce_columns(frame, subset=["col_a", "col_b"],
+    ...                              output_column="first_non_null")
     """
     import pandas as pd
 
