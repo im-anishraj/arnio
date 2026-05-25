@@ -415,7 +415,7 @@ class DataQualityReport:
     def to_html(
         self,
         file_path: str | None = None,
-        output: Any | None = None,
+        output: TextIO | None = None,
     ) -> str | None:
         """Return a self-contained, dependency-free HTML data quality report.
 
@@ -431,7 +431,8 @@ class DataQualityReport:
         if output is None:
             return html_out
 
-        if not hasattr(output, "write"):
+        # Must be a writable *text* stream (e.g., io.StringIO or an open file handle).
+        if not isinstance(output, io.TextIOBase) or not output.writable():
             raise TypeError("output must be a writable text stream")
 
         output.write(html_out)
