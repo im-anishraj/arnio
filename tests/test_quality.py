@@ -2649,6 +2649,7 @@ def test_report_suggestions_are_deterministic_with_nested_kwargs():
 
     assert result["suggestions"][0]["step"] == "same_step"
     assert result["suggestions"][1]["step"] == "same_step"
+
     
 # --- Tests for ProfileComparison.to_json() ---
 
@@ -2759,3 +2760,6 @@ def test_quality_gate_result_to_json_invalid_output_raises():
     result = ar.check_quality_gates(p, p)
     with pytest.raises(TypeError, match="writable text stream"):
         result.to_json(output=123)
+
+
+# --- Tests for ProfileComparison.to_json() ---
