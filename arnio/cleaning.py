@@ -1682,7 +1682,7 @@ def replace_values(
 
 
 def standardize_missing_tokens(frame, tokens=None, subset=None):
-    """Converting missing tokens in the DataFrame to the standard form NaN
+    """Convert null-like string tokens in the frame to the standard NaN form.
 
     Parameters
     ----------
@@ -1692,6 +1692,12 @@ def standardize_missing_tokens(frame, tokens=None, subset=None):
         List of strings to treat as missing. If None, then a built-in default tokens list is used
     subset : list[str], optional
         Column names to replace missing tokens in. If None, applies to all columns.
+
+    Notes
+    -----
+    Matching is case-insensitive and trims surrounding whitespace before checking
+    token membership. Values that do not match a missing token preserve their
+    original whitespace.
 
     Returns
     -------
