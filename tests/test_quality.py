@@ -631,6 +631,24 @@ def test_column_profile_to_dict_redacts_sample_values_direct(tmp_path):
     assert report.columns["name"].sample_values == ["Alice", "Bob"]
 
 
+def test_quality_to_dict_redacts_top_values_when_requested(tmp_path):
+    path = tmp_path / "dict_redacted_top_values.csv"
+    path.write_text("email\nalice@example.com\nalice@example.com\nbob@example.com\n")
+    report = ar.profile(ar.read_csv(path), sample_size=2)
+
+    d = report.to_dict(redact_sample_values=True)
+
+    assert d["columns"]["email"]["sample_values"] == ["[REDACTED]", "[REDACTED]"]
+    assert d["columns"]["email"]["top_values"] == [
+        {"value": "[REDACTED]", "count": 2, "ratio": pytest.approx(2 / 3)},
+        {"value": "[REDACTED]", "count": 1, "ratio": pytest.approx(1 / 3)},
+    ]
+    assert report.columns["email"].top_values == [
+        ("alice@example.com", 2, pytest.approx(2 / 3)),
+        ("bob@example.com", 1, pytest.approx(1 / 3)),
+    ]
+
+
 def test_profile_sample_size_validation(tmp_path):
     path = tmp_path / "sample.csv"
     path.write_text("id\n1\n")
@@ -2221,3 +2239,28 @@ def test_data_quality_report_to_json_redact_sample_values():
     parsed = json.loads(json_output)
 
     assert parsed["columns"]["name"]["sample_values"] == ["[REDACTED]"]
+
+
+def test_data_quality_report_to_json_redacts_top_values():
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "email": [
+                    "alice@example.com",
+                    "alice@example.com",
+                    "bob@example.com",
+                ]
+            }
+        )
+    )
+    report = ar.profile(frame, sample_size=2)
+
+    json_output = report.to_json(redact_sample_values=True)
+
+    parsed = json.loads(json_output)
+
+    assert parsed["columns"]["email"]["sample_values"] == ["[REDACTED]", "[REDACTED]"]
+    assert parsed["columns"]["email"]["top_values"] == [
+        {"value": "[REDACTED]", "count": 2, "ratio": pytest.approx(2 / 3)},
+        {"value": "[REDACTED]", "count": 1, "ratio": pytest.approx(1 / 3)},
+    ]

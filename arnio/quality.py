@@ -127,6 +127,21 @@ class ColumnProfile:
             if redact_sample_values
             else [_clean_scalar(value) for value in self.sample_values]
         )
+        top_values = (
+            [
+                {"value": "[REDACTED]", "count": c, "ratio": r}
+                for _value, c, r in self.top_values
+            ]
+            if redact_sample_values and self.top_values is not None
+            else (
+                [
+                    {"value": _clean_scalar(v), "count": c, "ratio": r}
+                    for v, c, r in self.top_values
+                ]
+                if self.top_values is not None
+                else None
+            )
+        )
         return {
             "name": self.name,
             "dtype": self.dtype,
@@ -157,14 +172,7 @@ class ColumnProfile:
             ),
             "sample_values": sample_values,
             "warnings": list(self.warnings),
-            "top_values": (
-                [
-                    {"value": _clean_scalar(v), "count": c, "ratio": r}
-                    for v, c, r in self.top_values
-                ]
-                if self.top_values is not None
-                else None
-            ),
+            "top_values": top_values,
             "top_values_is_approximate": self.top_values_is_approximate,
             "top_values_sample_count": self.top_values_sample_count,
             "top_values_sample_ratio": self.top_values_sample_ratio,
