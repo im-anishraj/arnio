@@ -53,5 +53,8 @@ def register_duckdb(
     if not name:
         raise ValueError("name must not be empty")
 
+    if not hasattr(conn, "register"):
+        raise TypeError("conn must be a DuckDB connection with a register() method")
+
     df = to_pandas(frame)
     conn.register(name, df)
