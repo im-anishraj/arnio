@@ -2,6 +2,7 @@
 
 import io
 import json
+import math
 
 import pandas as pd
 import pytest
@@ -2759,7 +2760,6 @@ class TestValidateGateThreshold:
             _validate_gate_threshold(-0.1, "max_row_count_delta_ratio")
 
     def test_infinity_raises_value_error(self):
-        import math
         from arnio.quality import _validate_gate_threshold
 
         with pytest.raises(ValueError, match="must be a finite non-negative number"):
