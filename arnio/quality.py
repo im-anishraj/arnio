@@ -288,8 +288,23 @@ class DataQualityReport:
         output.write(json_out)
         return None
 
-    def to_markdown(self, output: Any | None = None) -> str | None:
+    @staticmethod
+    def _validate_max_suggestions(max_suggestions: int | None) -> int | None:
+        if max_suggestions is None:
+            return None
+        if not isinstance(max_suggestions, int) or isinstance(max_suggestions, bool):
+            raise TypeError("max_suggestions must be an integer or None")
+        if max_suggestions <= 0:
+            raise ValueError("max_suggestions must be positive")
+        return max_suggestions
+
+    def to_markdown(
+        self,
+        output: Any | None = None,
+        max_suggestions: int | None = None,
+    ) -> str | None:
         """Return a GitHub-friendly Markdown report."""
+        max_suggestions = self._validate_max_suggestions(max_suggestions)
 
         lines: list[str] = []
 
@@ -341,7 +356,11 @@ class DataQualityReport:
             lines.append("## Suggested Cleaning Steps")
             lines.append("")
 
-            for step in self.suggestions:
+            rendered_suggestions = self.suggestions
+            if max_suggestions is not None:
+                rendered_suggestions = self.suggestions[:max_suggestions]
+
+            for step in rendered_suggestions:
                 kwargs_str = json.dumps(step[1], sort_keys=True, default=str)
                 conf_score = getattr(step, "confidence_score", None)
                 conf_reason = getattr(step, "confidence_reason", None)
@@ -352,6 +371,13 @@ class DataQualityReport:
                     )
                 else:
                     lines.append(f"- `{step[0]}`: `{kwargs_str}`")
+
+            if max_suggestions is not None and len(self.suggestions) > len(
+                rendered_suggestions
+            ):
+                lines.append(
+                    f"Showing {len(rendered_suggestions)} of {len(self.suggestions)} suggestions."
+                )
 
             lines.append("")
 
@@ -370,14 +396,18 @@ class DataQualityReport:
         self,
         file_path: str | None = None,
         output: Any | None = None,
+        max_suggestions: int | None = None,
     ) -> str | None:
         """Return a self-contained, dependency-free HTML data quality report.
 
         In notebook environments, ``DataQualityReport`` will render a compact dashboard
         automatically via ``_repr_html_``.
         """
-
-        html_out = self._to_html_dashboard(full_document=True)
+        max_suggestions = self._validate_max_suggestions(max_suggestions)
+        html_out = self._to_html_dashboard(
+            full_document=True,
+            max_suggestions=max_suggestions,
+        )
         if file_path:
             with open(file_path, "w", encoding="utf-8") as f:
                 f.write(html_out)
@@ -395,7 +425,12 @@ class DataQualityReport:
         """Notebook-friendly HTML representation."""
         return self._to_html_dashboard(full_document=False)
 
-    def _to_html_dashboard(self, *, full_document: bool) -> str:
+    def _to_html_dashboard(
+        self,
+        *,
+        full_document: bool,
+        max_suggestions: int | None = None,
+    ) -> str:
         def e(text: Any) -> str:
             return html.escape(str(text), quote=True)
 
@@ -595,9 +630,13 @@ class DataQualityReport:
             lines.append("</div>")
 
         if self.suggestions:
+            rendered_suggestions = self.suggestions
+            if max_suggestions is not None:
+                rendered_suggestions = self.suggestions[:max_suggestions]
+
             lines.append('<div class="section">')
             lines.append("<h2>Cleaning Suggestions</h2>")
-            for step in self.suggestions:
+            for step in rendered_suggestions:
                 conf_score = getattr(step, "confidence_score", None)
                 conf_reason = getattr(step, "confidence_reason", None)
                 conf_bits: list[str] = []
@@ -614,6 +653,12 @@ class DataQualityReport:
                     f'<div class="subtitle">{conf_text}</div>' if conf_text else ""
                 )
                 lines.append("</details>")
+            if max_suggestions is not None and len(self.suggestions) > len(
+                rendered_suggestions
+            ):
+                lines.append(
+                    f'<div class="muted">Showing {len(rendered_suggestions)} of {len(self.suggestions)} suggestions.</div>'
+                )
             lines.append("</div>")
 
         lines.append("</div>")  # container
