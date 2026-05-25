@@ -26,7 +26,7 @@ from .convert import from_pandas, to_pandas
 from .exceptions import ArnioError, CsvReadError, TypeCastError, UnknownStepError
 from .frame import ArFrame
 from .io import read_csv, scan_csv
-from .pipeline import pipeline, register_step
+from .pipeline import list_registered_steps, pipeline, register_step
 from .quality import (
     ColumnProfile,
     DataQualityReport,
@@ -70,6 +70,7 @@ __all__ = [
     # Pipeline
     "pipeline",
     "register_step",
+    "list_registered_steps",
     # Data quality
     "profile",
     "suggest_cleaning",

@@ -121,3 +121,22 @@ def pipeline(
 
 
 register_step("filter_rows", cleaning.filter_rows)
+
+
+def list_registered_steps() -> dict[str, list[str]]:
+    """Return all available pipeline step names.
+
+    Returns
+    -------
+    dict[str, list[str]]
+        Dictionary with 'native' (built-in) and 'custom' (user-registered) step lists.
+
+    Examples
+    --------
+    >>> steps = ar.list_registered_steps()
+    >>> print(steps['native'])  # Built-in steps
+    >>> print(steps['custom'])  # Custom user steps
+    """
+    native = sorted(_STEP_REGISTRY.keys())
+    custom = sorted(_PYTHON_STEP_REGISTRY.keys())
+    return {"native": native, "custom": custom}
