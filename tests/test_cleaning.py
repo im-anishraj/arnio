@@ -1197,6 +1197,16 @@ class TestStandardizeMissingTokens:
         assert pd.isna(result["value"].iloc[2])
         assert result["value"].iloc[3] == "kept"
 
+    def test_standardize_missing_tokens_normalizes_wrapped_punctuation_defaults(self):
+        df = pd.DataFrame({"value": [" ? ", "\t-\t", "--", "kept"]})
+
+        result = ar.standardize_missing_tokens(df)
+
+        assert pd.isna(result["value"].iloc[0])
+        assert pd.isna(result["value"].iloc[1])
+        assert result["value"].iloc[2] == "--"
+        assert result["value"].iloc[3] == "kept"
+
 
 class TestStripWhitespace:
     def test_strip(self, csv_with_whitespace):
