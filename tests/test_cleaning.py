@@ -1162,6 +1162,17 @@ class TestStandardizeMissingTokens:
         assert pd.isna(result["value"].iloc[0])
         assert result["value"].iloc[1] == f"{nbsp} kept {nbsp}"
 
+    def test_standardize_missing_tokens_custom_tokens_do_not_fall_back_to_defaults(
+        self,
+    ):
+        df = pd.DataFrame({"value": [" NULL ", " custom-null ", "kept"]})
+
+        result = ar.standardize_missing_tokens(df, tokens=["custom-null"])
+
+        assert result["value"].iloc[0] == " NULL "
+        assert pd.isna(result["value"].iloc[1])
+        assert result["value"].iloc[2] == "kept"
+
 
 class TestStripWhitespace:
     def test_strip(self, csv_with_whitespace):
