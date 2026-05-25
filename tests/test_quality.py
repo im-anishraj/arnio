@@ -2576,4 +2576,3 @@ def test_compare_profiles_mismatched_exclude_columns_hints_user():
 
     with pytest.raises(ValueError, match="exclude_columns"):
         ar.compare_profiles(profile_a, profile_b)
-
