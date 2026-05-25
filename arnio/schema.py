@@ -35,6 +35,7 @@ _VALID_SEVERITIES = {"error", "warning"}
 
 
 def _validate_severity(severity: str) -> None:
+    """Raise ValueError if severity is not 'error' or 'warning'."""
     if severity not in _VALID_SEVERITIES:
         raise ValueError("severity must be 'error' or 'warning'")
 
@@ -1807,6 +1808,7 @@ def _is_safely_convertible_to_dtype(
     expected_dtype: str,
     column_name: str,
 ) -> bool:
+    """Return True if series values can be safely cast to expected_dtype without data loss."""
     try:
         non_null = series.dropna()
 
@@ -1862,6 +1864,7 @@ def _validate_column(
     name: str,
     field_def: Field,
 ) -> list[ValidationIssue]:
+    """Validate a single column against its Field definition and return all issues found."""
     issues: list[ValidationIssue] = []
 
     if field_def.dtype is not None and actual_dtype != field_def.dtype:
@@ -2118,6 +2121,7 @@ def _validate_datetime(
     name: str,
     field_def: Field,
 ) -> list[ValidationIssue]:
+    """Validate non-null datetime values against the format and min/max bounds in field_def."""
     issues: list[ValidationIssue] = []
     parsed = pd.to_datetime(non_null, format=field_def.format, errors="coerce")
 
@@ -2161,6 +2165,7 @@ def _validate_datetime(
 
 
 def _parse_datetime_bound(value: Any, name: str) -> pd.Timestamp | None:
+    """Parse a datetime bound value into a pd.Timestamp, raising ValueError on failure."""
     if value is None:
         return None
     try:
@@ -2183,6 +2188,7 @@ def _row_issues(
     message: str,
     severity: str = "error",
 ) -> list[ValidationIssue]:
+    """Convert a series of invalid rows into a list of ValidationIssue objects."""
     return [
         ValidationIssue(
             column=column,
@@ -2197,6 +2203,7 @@ def _row_issues(
 
 
 def _field_to_dict(field_def: Field) -> dict[str, Any]:
+    """Serialize a Field definition to a plain dict suitable for in-memory use."""
     return {
         "dtype": field_def.dtype,
         "nullable": field_def.nullable,
@@ -2216,6 +2223,7 @@ def _field_to_dict(field_def: Field) -> dict[str, Any]:
 
 
 def _field_to_json_dict(field_def: Field) -> dict[str, Any]:
+    """Serialize a Field definition to a JSON-safe dict, converting timestamps to ISO strings."""
     data = _field_to_dict(field_def)
     data["severity"] = field_def.severity
     data["datetime_min"] = (
@@ -2232,6 +2240,7 @@ def _field_to_json_dict(field_def: Field) -> dict[str, Any]:
 
 
 def _field_from_json_dict(name: str, payload: Any) -> Field:
+    """Deserialize a JSON dict payload into a Field definition for the given column name."""
     if not isinstance(payload, dict):
         raise TypeError(
             f"Schema JSON field for column {name!r} must be an object, got {type(payload).__name__}."
@@ -2279,12 +2288,14 @@ def _field_from_json_dict(name: str, payload: Any) -> Field:
 def _normalize_unique(
     value: list[str] | tuple[str, ...] | None,
 ) -> tuple[str, ...] | None:
+    """Normalize a unique-constraint value into a sorted tuple, or None if not set."""
     if value is None:
         return None
     return tuple(sorted(value))
 
 
 def _normalize_sequence(value: Any) -> Any:
+    """Convert sets and tuples to lists for JSON-serializable output."""
     if isinstance(value, set):
         return sorted(value)
     if isinstance(value, tuple):
@@ -2293,6 +2304,7 @@ def _normalize_sequence(value: Any) -> Any:
 
 
 def _clean_scalar(value: Any) -> Any:
+    """Recursively convert numpy scalars and NaN values to JSON-safe Python types."""
     if isinstance(value, dict):
         return {key: _clean_scalar(val) for key, val in value.items()}
     if isinstance(value, (list, tuple, set)):
@@ -2305,6 +2317,7 @@ def _clean_scalar(value: Any) -> Any:
 
 
 def _markdown_cell(value: Any) -> str:
+    """Escape a value for safe rendering inside a Markdown table cell."""
     if value is None:
         return ""
     text = str(value).replace("\n", "<br>").replace("|", "\\|")
