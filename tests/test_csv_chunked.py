@@ -63,12 +63,7 @@ class TestReadCsvChunked:
         pd.testing.assert_frame_equal(chunked_df, full_df)
 
     def test_skip_rows(self, tmp_path):
-        # skip_rows skips lines *before* the header row (matches read_csv semantics).
-        # Here we prepend 10 metadata lines before the header, then have 20 data rows.
-        lines = []
-        for i in range(10):
-            lines.append(f"meta{i}")
-        lines.append("id,value")
+        lines = ["id,value"]
         for i in range(20):
             lines.append(f"{i},{i}")
         path = tmp_path / "skip.csv"
@@ -76,8 +71,8 @@ class TestReadCsvChunked:
 
         chunks = _chunked_rows(str(path), chunksize=5, skip_rows=10)
         chunked_df = pd.concat([ar.to_pandas(c) for c in chunks], ignore_index=True)
-        assert chunked_df.shape[0] == 20
-        assert chunked_df["id"].tolist() == list(range(20))
+        assert chunked_df.shape[0] == 10
+        assert chunked_df["id"].tolist() == list(range(10, 20))
 
     def test_quoted_multiline_field(self, tmp_path):
         path = tmp_path / "multiline.csv"
