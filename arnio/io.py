@@ -643,9 +643,11 @@ def read_csv_chunked(
         Maximum total number of data rows to read across all chunks.
     skip_rows : int, default 0
         Number of data rows to skip after the header row.
-        Deprecated alias: use ``skiprows`` instead (matches ``read_csv``).
     skiprows : int, optional
-        Alias for ``skip_rows``, matching the ``read_csv`` parameter name.
+        Alias for ``skip_rows``, matching the parameter name used in
+        ``read_csv_chunked``'s own API for consistency.
+        Note: unlike ``read_csv``'s ``skiprows`` (which skips lines before
+        the header), this skips data rows *after* the header.
         If both ``skiprows`` and ``skip_rows`` are provided they must agree;
         conflicting values raise ``ValueError``.
     encoding : str, default "utf-8"

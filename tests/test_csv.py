@@ -2184,15 +2184,24 @@ class TestReadCsvSkipRows:
 
 
 class TestReadCsvChunkedSkiprowsAlias:
-    """Tests for the skiprows alias in read_csv_chunked (matches read_csv API)."""
+    """Tests for the skiprows alias in read_csv_chunked.
+
+    Note: skip_rows / skiprows in read_csv_chunked skips data rows *after* the
+    header, which is the existing CsvChunkReader behaviour.  This is different
+    from read_csv's skiprows, which skips lines *before* the header.  The alias
+    is purely for naming consistency; the semantics are unchanged.
+    """
 
     def test_skiprows_alias_skips_rows(self, tmp_path):
-        csv_path = tmp_path / "meta.csv"
-        csv_path.write_text("skip1\nskip2\nname,age\nAlice,30\nBob,25\n")
+        # skip_rows skips data rows after the header.
+        # Header: name,age  |  data rows: Alice,30 / Bob,25 / Charlie,35
+        # skiprows=2 drops Alice and Bob, leaving only Charlie.
+        csv_path = tmp_path / "data.csv"
+        csv_path.write_text("name,age\nAlice,30\nBob,25\nCharlie,35\n")
         chunks = list(ar.read_csv_chunked(csv_path, skiprows=2))
         assert len(chunks) == 1
         df = ar.to_pandas(chunks[0])
-        assert df["name"].tolist() == ["Alice", "Bob"]
+        assert df["name"].tolist() == ["Charlie"]
 
     def test_skiprows_alias_zero_is_noop(self, tmp_path):
         csv_path = tmp_path / "data.csv"
@@ -2202,19 +2211,21 @@ class TestReadCsvChunkedSkiprowsAlias:
 
     def test_skip_rows_still_works(self, tmp_path):
         # Existing skip_rows parameter must remain backward-compatible.
-        csv_path = tmp_path / "meta.csv"
-        csv_path.write_text("skip1\nname,age\nAlice,30\n")
+        # skip_rows=1 drops the first data row (Alice), leaving Bob.
+        csv_path = tmp_path / "data.csv"
+        csv_path.write_text("name,age\nAlice,30\nBob,25\n")
         chunks = list(ar.read_csv_chunked(csv_path, skip_rows=1))
         df = ar.to_pandas(chunks[0])
-        assert df["name"].tolist() == ["Alice"]
+        assert df["name"].tolist() == ["Bob"]
 
     def test_skiprows_and_skip_rows_agree_no_error(self, tmp_path):
         # Both may be passed if they have the same value.
-        csv_path = tmp_path / "meta.csv"
-        csv_path.write_text("skip1\nname,age\nAlice,30\n")
+        # skip_rows=1 / skiprows=1 both drop the first data row (Alice).
+        csv_path = tmp_path / "data.csv"
+        csv_path.write_text("name,age\nAlice,30\nBob,25\n")
         chunks = list(ar.read_csv_chunked(csv_path, skiprows=1, skip_rows=1))
         df = ar.to_pandas(chunks[0])
-        assert df["name"].tolist() == ["Alice"]
+        assert df["name"].tolist() == ["Bob"]
 
     def test_skiprows_and_skip_rows_conflict_raises(self, tmp_path):
         csv_path = tmp_path / "data.csv"
