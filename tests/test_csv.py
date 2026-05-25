@@ -963,8 +963,10 @@ class TestReadCsv:
         csv_path = tmp_path / "duplicate_headers.csv"
         csv_path.write_text("a,a\n1,2\n")
 
-        with pytest.raises(ar.CsvReadError, match="Duplicate column name: a"):
+        with pytest.raises(ar.CsvReadError, match="Duplicate column name: a") as exc:
             ar.read_csv(csv_path)
+
+        assert exc.value.__cause__ is None
 
     def test_empty_file_raises(self, tmp_path):
         csv_path = tmp_path / "empty.csv"

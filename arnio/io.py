@@ -607,7 +607,7 @@ def read_csv(
     except CsvReadError:
         raise
     except RuntimeError as e:
-        raise CsvReadError(str(e)) from e
+        raise CsvReadError(str(e)) from None
 
     finally:
         if should_cleanup and os.path.exists(path):
@@ -766,7 +766,7 @@ def read_csv_chunked(
     except CsvReadError:
         raise
     except RuntimeError as e:
-        raise CsvReadError(str(e)) from e
+        raise CsvReadError(str(e)) from None
     finally:
         reader.close()
         if should_cleanup and os.path.exists(path):
@@ -992,7 +992,7 @@ def scan_csv(
                 )
             return cast(dict[str, str], schema)
     except RuntimeError as e:
-        raise CsvReadError(str(e)) from e
+        raise CsvReadError(str(e)) from None
 
 
 def read_jsonl(
