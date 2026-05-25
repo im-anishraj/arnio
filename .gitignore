@@ -238,7 +238,8 @@ _arnio_cpp*.dll
 
 # csv
 /*.csv
-benchmarks/benchmark_gil_temp.csvbenchmarks/benchmark_sparse_nulls.csv
+benchmarks/benchmark_gil_temp.csv
+benchmarks/benchmark_sparse_nulls.csv
 benchmarks/benchmark_sparse_nulls_dense.csv
 benchmark_results.json
 benchmark_run_output.txt
