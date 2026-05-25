@@ -5,9 +5,7 @@ ArFrame — the core data container wrapping the C++ Frame.
 
 from __future__ import annotations
 
-import copy
 import json
-import math
 
 from ._core import _Frame
 
@@ -153,47 +151,6 @@ class ArFrame:
 
         return from_pandas(df)
 
-    def astype(self, dtype):
-        """Cast ArFrame columns to a specified type.
-
-        Parameters
-        ----------
-        dtype : Any
-            The data type to cast to (e.g., str, int, float, or a dict of column names to types).
-
-        Returns
-        -------
-        ArFrame
-            A new ArFrame with the applied type changes.
-
-        Raises
-        ------
-        TypeError
-            If the input dtype is invalid or if conversion fails due to type mismatch.
-        ValueError
-            If invalid values are passed or column conversion fails.
-        """
-        from .convert import from_pandas, to_pandas
-
-        if dtype is None:
-            raise TypeError("dtype cannot be None")
-
-        try:
-            df = to_pandas(self)
-        except Exception as e:
-            raise RuntimeError(f"Failed to convert ArFrame to pandas for casting: {e}")
-
-        try:
-            df_casted = df.astype(dtype)
-        except TypeError as te:
-            raise TypeError(f"Invalid type conversion requested: {te}")
-        except ValueError as ve:
-            raise ValueError(f"Value conversion error during astype: {ve}")
-        except Exception as e:
-            raise ValueError(f"An error occurred during casting: {e}")
-
-        return from_pandas(df_casted)
-
     # --- Properties ---
 
     @property
@@ -311,11 +268,9 @@ class ArFrame:
         if isinstance(n, bool) or not isinstance(n, int) or n < 0:
             raise ValueError(f"`n` must be a non-negative integer, got {n!r}")
 
-        from .convert import from_pandas, to_pandas
+        actual_n = min(n, len(self))
 
-        df = to_pandas(self)
-
-        return from_pandas(df.head(n))
+        return ArFrame(self._frame.select_rows(0, actual_n))
 
     def tail(self, n: int = 5) -> ArFrame:
         """Return the last n rows as an ArFrame.
@@ -333,11 +288,10 @@ class ArFrame:
         if isinstance(n, bool) or not isinstance(n, int) or n < 0:
             raise ValueError(f"`n` must be a non-negative integer, got {n!r}")
 
-        from .convert import from_pandas, to_pandas
+        actual_n = min(n, len(self))
+        start = max(0, len(self) - actual_n)
 
-        df = to_pandas(self)
-
-        return from_pandas(df.tail(n))
+        return ArFrame(self._frame.select_rows(start, actual_n))
 
     def to_dict(self) -> dict[str, list]:
         """Export the frame as a Python dictionary.
@@ -404,74 +358,6 @@ class ArFrame:
             raise ValueError(f"Unknown columns: {missing}")
 
         return ArFrame(self._frame.select_columns(columns))
-
-    def drop_columns(self, cols: list[str]) -> ArFrame:
-        """Return a new ArFrame with the specified columns removed.
-
-        Parameters
-        ----------
-        cols : list[str]
-            Column names to drop. Duplicates are silently ignored.
-            An empty list returns a copy of the frame unchanged.
-
-        Returns
-        -------
-        ArFrame
-            New ArFrame without the dropped columns. Original column
-            order is preserved.
-
-        Raises
-        ------
-        TypeError
-            If cols is not a list, or contains non-string elements.
-        ValueError
-            If any name in cols does not exist in the frame.
-
-        Examples
-        --------
-        >>> frame = ar.read_csv("data.csv")
-        >>> smaller = frame.drop_columns(["col1", "col2"])
-        """
-        if not isinstance(cols, list):
-            raise TypeError(
-                f"cols must be a list of column names, got {type(cols).__name__!r}"
-            )
-
-        if any(not isinstance(col, str) for col in cols):
-            raise TypeError("All column names in cols must be strings.")
-
-        # Deduplicate while preserving order
-        seen: set[str] = set()
-        unique_cols: list[str] = []
-        for col in cols:
-            if col not in seen:
-                seen.add(col)
-                unique_cols.append(col)
-
-        # Validate all names exist
-        missing = [col for col in unique_cols if col not in self.columns]
-        if missing:
-            raise ValueError(
-                f"Unknown column(s): {missing}. " f"Available columns: {self.columns}"
-            )
-
-        # Empty input — return unchanged copy
-        if not unique_cols:
-            return ArFrame(self._frame.select_columns(self.columns))
-
-        # Preserve original order of remaining columns
-        drop_set = set(unique_cols)
-        remaining = [col for col in self.columns if col not in drop_set]
-
-        # Dropping all columns — preserve row count
-        if not remaining:
-            import pandas as pd
-
-            from .convert import from_pandas
-
-            return from_pandas(pd.DataFrame(index=range(len(self))))
-
-        return ArFrame(self._frame.select_columns(remaining))
 
     def select_dtypes(
         self,
@@ -570,7 +456,7 @@ class ArFrame:
 
         if not matched:
             raise ValueError(
-                f"No columns match the dtype selection. Frame dtypes: {col_dtypes}."
+                "No columns match the dtype selection. " f"Frame dtypes: {col_dtypes}."
             )
 
         return self.select_columns(matched)
@@ -591,15 +477,6 @@ class ArFrame:
             for col in self.columns
         ]
 
-    @staticmethod
-    def _values_equal(a, b):
-        if a is None and b is None:
-            return True
-        if isinstance(a, float) and isinstance(b, float):
-            if math.isnan(a) and math.isnan(b):
-                return True
-        return a == b
-
     # --- Dunder methods ---
 
     def __len__(self) -> int:
@@ -612,142 +489,52 @@ class ArFrame:
         return f"ArFrame({rows} rows × {cols} cols)"
 
     def __str__(self) -> str:
-        """Return a detailed string summary of the ArFrame with data preview."""
-        rows, cols = self.shape
-        header = f"ArFrame: {rows} rows × {cols} columns"
-        truncated_names = self._truncate_column_names()
-
-        if rows == 0:
-            return f"{header}\nColumns: {truncated_names}\n(empty frame)"
-
-        actual_n = min(5, rows)
-        col_data = [
-            [self._frame.column_by_index(i).at(r) for r in range(actual_n)]
-            for i in range(cols)
-        ]
-
-        col_widths = [
-            max(
-                len(truncated_names[i]),
-                max((len(str(col_data[i][r])) for r in range(actual_n)), default=0),
-            )
-            for i in range(cols)
-        ]
-
-        col_header = "  ".join(
-            truncated_names[i].ljust(col_widths[i]) for i in range(cols)
-        )
-        separator = "  ".join("-" * col_widths[i] for i in range(cols))
-        data_rows = [
-            "  ".join(str(col_data[i][r]).ljust(col_widths[i]) for i in range(cols))
-            for r in range(actual_n)
-        ]
-
-        suffix = f"\n... ({rows - actual_n} more rows)" if rows > actual_n else ""
-        columns_line = f"Columns: {truncated_names}"
-        dtypes_line = f"DTypes: {self.dtypes}"
-        memory_line = f"Memory: {self.memory_usage()} bytes"
-
-        parts = [
-            header,
-            columns_line,
-            dtypes_line,
-            memory_line,
-            col_header,
-            separator,
-        ] + data_rows
-
-        return "\n".join(parts) + suffix
+        """Return a detailed string summary of the ArFrame."""
+        lines = [f"ArFrame: {self.shape[0]} rows × {self.shape[1]} columns"]
+        lines.append(f"Columns: {self._truncate_column_names()}")
+        lines.append(f"DTypes:  {self.dtypes}")
+        lines.append(f"Memory:  {self.memory_usage()} bytes")
+        return "\n".join(lines)
 
     def __contains__(self, item: object) -> bool:
         return isinstance(item, str) and item in self.columns
 
-    def __getitem__(self, key: str | list[str]) -> list | ArFrame:
-        """Return column data as a list, or a subset ArFrame for list keys.
+    def __getitem__(self, key: str) -> list:
+        """Return column data as a list.
 
         Parameters
         ----------
-        key : str or list[str]
-            A single column name returns the column values as a list.
-            A list of column names returns a new multi-column ArFrame.
+        key : str
+            Column name to access.
 
         Returns
         -------
         list
-            Column values when key is a str.
-        ArFrame
-            Subset frame when key is a list of str.
+            Column values as a Python list.
 
         Raises
         ------
         TypeError
-            If key is not a string or list of strings.
+            If key is not a string.
         KeyError
-            If a requested column does not exist.
+            If the column does not exist.
 
         Examples
         --------
+        >>> frame = ar.read_csv("data.csv")
         >>> frame["name"]
         ['Alice', 'Bob', 'Charlie']
-        >>> frame[["name", "age"]]
-        ArFrame(3 rows × 2 cols)
         """
-        if isinstance(key, str):
-            if key not in self.columns:
-                raise KeyError(
-                    f"Column {key!r} not found. Available columns: {self.columns}"
-                )
-            col_index = self.columns.index(key)
-            return [
-                self._frame.column_by_index(col_index).at(i) for i in range(len(self))
-            ]
-        elif isinstance(key, list):
-            non_strings = [k for k in key if not isinstance(k, str)]
-            if non_strings:
-                raise TypeError(
-                    f"column list must contain only strings, got {[type(k).__name__ for k in non_strings]}"
-                )
-            missing = [k for k in key if k not in self.columns]
-            if missing:
-                raise KeyError(
-                    f"Column(s) {missing} not found. Available columns: {self.columns}"
-                )
-            return self.select_columns(key)
-        raise TypeError(
-            f"column key must be a str or list of str, got {type(key).__name__!r}"
-        )
+        if not isinstance(key, str):
+            raise TypeError(f"column key must be a string, got {type(key).__name__!r}")
 
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, ArFrame):
-            return NotImplemented
+        if key not in self.columns:
+            raise KeyError(
+                f"Column {key!r} not found. Available columns: {self.columns}"
+            )
 
-        if (
-            self.shape != other.shape
-            or self.columns != other.columns
-            or self.dtypes != other.dtypes
-        ):
-            return False
-
-        for i in range(self._frame.num_cols()):
-            left = self._frame.column_by_index(i).to_python_list()
-            right = other._frame.column_by_index(i).to_python_list()
-
-            for lval, rval in zip(left, right):
-                if not self._values_equal(lval, rval):
-                    return False
-
-        return True
-
-    def __copy__(self) -> ArFrame:
-        return ArFrame(self._frame, attrs=self._attrs.copy())
-
-    def __deepcopy__(self, memo: dict) -> ArFrame:
-        if id(self) in memo:
-            return memo[id(self)]
-        copied = ArFrame(self._frame.clone(), attrs={})
-        memo[id(self)] = copied
-        copied._attrs = copy.deepcopy(self._attrs, memo)
-        return copied
+        col_index = self.columns.index(key)
+        return [self._frame.column_by_index(col_index).at(i) for i in range(len(self))]
 
     def preview(self, n: int = 5) -> str:
         """Return a lightweight string preview of the first ``n`` rows.
