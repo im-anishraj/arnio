@@ -1549,7 +1549,7 @@ def drop_columns_matching(frame, pattern):
     is_arframe = not isinstance(frame, pd.DataFrame)
     df = to_pandas(frame) if is_arframe else frame
 
-    cols_to_drop = [col for col in df.columns if re.search(pattern, col)]
+    cols_to_drop = [col for col in df.columns if re.search(pattern, str(col))]
 
     if len(cols_to_drop) == len(df.columns):
         raise ValueError(

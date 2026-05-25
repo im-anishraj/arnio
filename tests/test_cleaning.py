@@ -3096,6 +3096,14 @@ def test_drop_columns_matching_normal():
     assert list(result.columns) == ["keep_c"]
 
 
+def test_drop_columns_matching_handles_non_string_pandas_columns():
+    df = pd.DataFrame([[1, 2, 3]], columns=[1, ("sensor", "temp"), "temp_a"])
+
+    result = ar.drop_columns_matching(df, "^temp")
+
+    assert list(result.columns) == [1, ("sensor", "temp")]
+
+
 def test_drop_columns_matching_no_match():
     df = pd.DataFrame({"a": [1], "b": [2]})
     result = ar.drop_columns_matching(df, "^temp_")
