@@ -1,7 +1,9 @@
 """Tests for register_validator and Custom validator in arnio.schema."""
 
+import pandas as pd
 import pytest
 
+import arnio as ar
 from arnio import schema
 from arnio.schema import Custom, register_validator
 
@@ -229,9 +231,6 @@ class TestCustomValidatorReturnNormalization:
 
     def test_validator_returning_true_passes(self):
         """True return value marks the row as valid."""
-        import arnio as ar
-        import pandas as pd
-
         register_validator("always_true", lambda v: True)
         frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
         result = ar.validate(frame, {"x": ar.Custom("always_true")})
@@ -240,9 +239,6 @@ class TestCustomValidatorReturnNormalization:
 
     def test_validator_returning_false_fails(self):
         """False return value marks the row as invalid with a structured issue."""
-        import arnio as ar
-        import pandas as pd
-
         register_validator("always_false", lambda v: False)
         frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
         result = ar.validate(frame, {"x": ar.Custom("always_false")})
@@ -252,9 +248,6 @@ class TestCustomValidatorReturnNormalization:
 
     def test_validator_returning_none_fails(self):
         """None return value is treated as a validation failure, not an error."""
-        import arnio as ar
-        import pandas as pd
-
         register_validator("returns_none", lambda v: None)
         frame = ar.from_pandas(pd.DataFrame({"x": [1, 2]}))
         result = ar.validate(frame, {"x": ar.Custom("returns_none")})
@@ -263,9 +256,6 @@ class TestCustomValidatorReturnNormalization:
 
     def test_validator_returning_pd_na_fails(self):
         """pd.NA return value is treated as a validation failure, not a TypeError."""
-        import arnio as ar
-        import pandas as pd
-
         register_validator(
             "nullable_bool",
             lambda v: pd.NA if v == 0 else True,
@@ -280,9 +270,6 @@ class TestCustomValidatorReturnNormalization:
 
     def test_validator_returning_non_bool_raises_type_error(self):
         """A non-bool, non-None, non-NA return value raises TypeError naming the validator."""
-        import arnio as ar
-        import pandas as pd
-
         register_validator("returns_int", lambda v: 1)
         frame = ar.from_pandas(pd.DataFrame({"x": [42]}))
         with pytest.raises(TypeError, match="returns_int"):
@@ -290,9 +277,6 @@ class TestCustomValidatorReturnNormalization:
 
     def test_validator_returning_string_raises_type_error(self):
         """A string return value raises TypeError naming the validator."""
-        import arnio as ar
-        import pandas as pd
-
         register_validator("returns_str", lambda v: "yes")
         frame = ar.from_pandas(pd.DataFrame({"x": [1]}))
         with pytest.raises(TypeError, match="returns_str"):
@@ -300,8 +284,6 @@ class TestCustomValidatorReturnNormalization:
 
     def test_mixed_true_false_none_pd_na(self):
         """Mixed True/False/None/pd.NA: only True rows pass, others fail."""
-        import arnio as ar
-        import pandas as pd
 
         def mixed_validator(v):
             if v == 1:

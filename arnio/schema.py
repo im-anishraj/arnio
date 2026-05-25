@@ -2359,7 +2359,6 @@ def _normalize_validator_result(result: object, validator_name: str) -> bool:
     )
 
 
-
 def Custom(
     name: str,
     *,
