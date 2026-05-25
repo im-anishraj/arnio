@@ -1106,6 +1106,17 @@ class TestStandardizeMissingTokens:
         assert result["status"].iloc[1] == "kept"
         assert result["note"].tolist() == ["UNKNOWN", "still here"]
 
+    def test_standardize_missing_tokens_normalizes_tab_and_newline_wrapped_tokens(
+        self,
+    ):
+        df = pd.DataFrame({"value": ["\tNULL\t", "\n NaN\n", "\t kept \n"]})
+
+        result = ar.standardize_missing_tokens(df)
+
+        assert pd.isna(result["value"].iloc[0])
+        assert pd.isna(result["value"].iloc[1])
+        assert result["value"].iloc[2] == "\t kept \n"
+
 
 class TestStripWhitespace:
     def test_strip(self, csv_with_whitespace):
