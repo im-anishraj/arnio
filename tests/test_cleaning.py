@@ -767,6 +767,24 @@ class TestDropConstantColumns:
         assert cloned.num_rows() == 4
         assert cloned.num_cols() == 0
 
+    def test_drop_constant_columns_pandas_input(self):
+        df = pd.DataFrame(
+            {
+                "value": [1, 2, 3],
+                "constant_num": [7, 7, 7],
+                "constant_text": ["x", "x", "x"],
+            }
+        )
+
+        result = ar.drop_constant_columns(df)
+        assert isinstance(result, pd.DataFrame)
+        assert list(result.columns) == ["value"]
+        assert list(result["value"]) == [1, 2, 3]
+
+    def test_drop_constant_columns_invalid_type_raises(self):
+        with pytest.raises(TypeError, match="frame must be an ArFrame or a pandas DataFrame"):
+            ar.drop_constant_columns([1, 2, 3])
+
 
 class TestDropEmptyColumns:
     def test_drop_empty_columns_removes_fully_empty_columns(self, tmp_path):

@@ -426,7 +426,9 @@ def drop_duplicates(
     return ArFrame(result)
 
 
-def drop_constant_columns(frame: ArFrame) -> ArFrame:
+def drop_constant_columns(
+    frame: ArFrame | pd.DataFrame,
+) -> ArFrame | pd.DataFrame:
     """Remove columns with exactly one unique value.
 
     Nulls are counted as values when determining whether a column is constant.
@@ -439,12 +441,12 @@ def drop_constant_columns(frame: ArFrame) -> ArFrame:
 
     Parameters
     ----------
-    frame : ArFrame
+    frame : ArFrame or pd.DataFrame
         Input data frame.
 
     Returns
     -------
-    ArFrame
+    ArFrame or pd.DataFrame
         New frame without constant columns.
 
     Examples
@@ -452,16 +454,24 @@ def drop_constant_columns(frame: ArFrame) -> ArFrame:
     >>> frame = ar.read_csv("data.csv")
     >>> reduced = ar.drop_constant_columns(frame)
     """
-    from .convert import from_pandas, to_pandas
+    import pandas as pd
 
-    df = to_pandas(frame)
+    from .convert import from_pandas, to_pandas
+    from .frame import ArFrame
+
+    is_arframe = isinstance(frame, ArFrame)
+    if not is_arframe and not isinstance(frame, pd.DataFrame):
+        raise TypeError("frame must be an ArFrame or a pandas DataFrame")
+
+    df = to_pandas(frame) if is_arframe else frame.copy()
     if len(df.index) == 0:
         return frame
 
     constant_columns = [
         column for column in df.columns if df[column].nunique(dropna=False) == 1
     ]
-    return from_pandas(df.drop(columns=constant_columns))
+    result_df = df.drop(columns=constant_columns)
+    return from_pandas(result_df) if is_arframe else result_df
 
 
 def drop_empty_columns(frame: ArFrame) -> ArFrame:
