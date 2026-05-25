@@ -149,6 +149,7 @@ __all__ = [
     "round_numeric_columns",
     "cast_types",
     "clean",
+    "winsorize_outliers",
     "safe_divide_columns",
     "trim_column_names",
     "standardize_missing_tokens",

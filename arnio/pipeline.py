@@ -509,6 +509,8 @@ def pipeline(
 
 
 register_step("filter_rows", cleaning.filter_rows)
+register_step("winsorize_outliers", cleaning.winsorize_outliers)
+
 register_step("drop_columns_matching", cleaning.drop_columns_matching)
 register_step("safe_divide_columns", cleaning.safe_divide_columns)
 register_step("replace_values", cleaning.replace_values)

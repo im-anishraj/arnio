@@ -238,4 +238,8 @@ _arnio_cpp*.dll
 
 # csv
 /*.csv
+.DS_Store
+tests/.DS_Store
+.DS_Store
+tests/.DS_Store
 benchmarks/benchmark_gil_temp.csv
