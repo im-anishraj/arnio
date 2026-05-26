@@ -1223,6 +1223,23 @@ class TestStripWhitespace:
         df = ar.to_pandas(result)
         assert df["name"].iloc[0] == "Alice"
 
+    def test_strip_tabs_and_newlines(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "name": ["\tAlice\n", "  Bob\t"],
+                    "city": ["\nLondon ", "\tParis\t"],
+                }
+            )
+        )
+
+        result = ar.strip_whitespace(frame)
+
+        df = ar.to_pandas(result)
+
+        assert df["name"].tolist() == ["Alice", "Bob"]
+        assert df["city"].tolist() == ["London", "Paris"]
+
 
 class TestNormalizeCase:
     def test_lower(self, sample_csv):
