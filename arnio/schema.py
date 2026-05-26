@@ -522,6 +522,17 @@ class Field:
             raise TypeError("nullable must be a bool")
         if not isinstance(self.unique, bool):
             raise TypeError("unique must be a bool")
+
+        if self.required_if is not None:
+            if not isinstance(self.required_if, tuple):
+                raise TypeError("required_if must be a tuple or None")
+            if len(self.required_if) != 2:
+                raise TypeError(
+                    "required_if must be a (column_name, expected_value) tuple"
+                )
+            if not isinstance(self.required_if[0], str):
+                raise TypeError("required_if column name must be a string")
+
         _validate_severity(self.severity)
 
 

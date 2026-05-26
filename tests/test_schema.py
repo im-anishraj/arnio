@@ -1719,6 +1719,42 @@ def test_field_nullable_and_unique_accept_valid_bools():
     assert field.unique is True
 
 
+@pytest.mark.parametrize("value", ["status", 123])
+def test_required_if_rejects_non_tuple_shapes(value):
+    with pytest.raises(TypeError, match="required_if must be a tuple or None"):
+        ar.String(required_if=value)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("value", [("status",), ("status", "active", "extra")])
+def test_required_if_rejects_wrong_tuple_lengths(value):
+    with pytest.raises(
+        TypeError, match=r"required_if must be a \(column_name, expected_value\) tuple"
+    ):
+        ar.String(required_if=value)  # type: ignore[arg-type]
+
+
+def test_required_if_rejects_non_string_column_name():
+    with pytest.raises(TypeError, match="required_if column name must be a string"):
+        ar.String(required_if=(123, "active"))  # type: ignore[arg-type]
+
+
+def test_required_if_valid_conditional_validation(tmp_path):
+    path = tmp_path / "conditional_req.csv"
+    path.write_text("status,notes\n" "active,has notes\n" "inactive,\n" "active,\n")
+    frame = ar.read_csv(path)
+    schema = ar.Schema(
+        {"notes": ar.String(required_if=("status", "active"), nullable=True)}
+    )
+
+    result = ar.validate(frame, schema)
+    rules = [issue.rule for issue in result.issues]
+
+    assert not result.passed
+    assert result.issue_count == 1
+    assert "required_if" in rules
+    assert result.bad_rows == [3]
+
+
 def test_email_default_keeps_backward_compatibility(sample_csv):
     frame = ar.read_csv(sample_csv)
 
