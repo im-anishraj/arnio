@@ -919,6 +919,7 @@ class TestStripWhitespace:
         frame = ar.read_csv(csv_with_whitespace)
         result = ar.strip_whitespace(frame)
         df = ar.to_pandas(result)
+
         assert df["name"].iloc[0] == "Alice"
         assert df["city"].iloc[1] == "London"
 
@@ -926,8 +927,77 @@ class TestStripWhitespace:
         frame = ar.read_csv(csv_with_whitespace)
         result = ar.strip_whitespace(frame, subset=["name"])
         df = ar.to_pandas(result)
+
         assert df["name"].iloc[0] == "Alice"
 
+    def test_strip_whitespace_tabs(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "name": ["\tAlice\t", "\tBob\t"],
+                }
+            )
+        )
+
+        result = ar.strip_whitespace(frame)
+        df = ar.to_pandas(result)
+
+        assert df["name"].tolist() == ["Alice", "Bob"]
+
+    def test_strip_whitespace_newlines(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "name": ["\nAlice\n", "\nBob\n"],
+                }
+            )
+        )
+
+        result = ar.strip_whitespace(frame)
+        df = ar.to_pandas(result)
+
+        assert df["name"].tolist() == ["Alice", "Bob"]
+
+    def test_strip_whitespace_mixed_whitespace(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "name": [
+                        " \t\nAlice\n\t ",
+                        "\n\t Bob \t",
+                    ],
+                }
+            )
+        )
+
+        result = ar.strip_whitespace(frame)
+        df = ar.to_pandas(result)
+
+        assert df["name"].tolist() == ["Alice", "Bob"]
+
+    def test_strip_whitespace_multiple_rows_consistent(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "name": [
+                        " Alice ",
+                        "\tBob\t",
+                        "\nCharlie\n",
+                        " \tDavid\n ",
+                    ],
+                }
+            )
+        )
+
+        result = ar.strip_whitespace(frame)
+        df = ar.to_pandas(result)
+
+        assert df["name"].tolist() == [
+            "Alice",
+            "Bob",
+            "Charlie",
+            "David",
+        ]
 
 class TestNormalizeCase:
     def test_lower(self, sample_csv):
