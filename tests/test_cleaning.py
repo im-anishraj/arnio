@@ -2057,6 +2057,13 @@ class TestRenameColumns:
         assert "full_name" in result.columns
         assert "name" not in result.columns
 
+    def test_rename_rejects_non_string_key(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        with pytest.raises(
+            TypeError, match="keys must contain only string column names"
+        ):
+            ar.rename_columns(frame, {123: "new_name"})
+
 
 class TestTrimColumnNames:
     def test_trim_column_names_basic(self):
