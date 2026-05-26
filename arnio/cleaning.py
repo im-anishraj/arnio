@@ -644,6 +644,12 @@ def winsorize_outliers(
     -------
     ArFrame
         New frame with winsorized numeric values.
+
+    Examples
+    --------
+    >>> import arnio as ar
+    >>> frame = ar.read_csv("data.csv")
+    >>> clean = ar.winsorize_outliers(frame, lower=0.01, upper=0.99, subset=["revenue"])
     """
 
     if lower < 0 or upper > 1:
