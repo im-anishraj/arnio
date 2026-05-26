@@ -1519,6 +1519,9 @@ def safe_divide_columns(
 
         numeric_types = {"int64", "float64"}
 
+        if not isinstance(fill_value, (int, float)) or isinstance(fill_value, bool):
+            raise TypeError("fill_value must be an int or float")
+
         if numerator_dtype in numeric_types and denominator_dtype in numeric_types:
             return ArFrame(
                 _safe_divide_columns(

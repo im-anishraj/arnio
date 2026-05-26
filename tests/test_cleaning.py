@@ -3034,7 +3034,72 @@ class TestSafeDivideColumns:
             ar.safe_divide_columns(
                 frame, numerator="num", denominator="den", output_column="ratio"
             )
+def test_fill_value_must_be_numeric():
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "num": [10.0, 20.0],
+                "den": [2.0, 0.0],
+            }
+        )
+    )
 
+    with pytest.raises(
+        TypeError,
+        match="fill_value must be an int or float",
+    ):
+        ar.safe_divide_columns(
+            frame,
+            numerator="num",
+            denominator="den",
+            output_column="ratio",
+            fill_value="invalid",
+        )
+
+def test_fill_value_accepts_int():
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "num": [10.0, 20.0],
+                "den": [2.0, 0.0],
+            }
+        )
+    )
+
+    result = ar.safe_divide_columns(
+        frame,
+        numerator="num",
+        denominator="den",
+        output_column="ratio",
+        fill_value=0,
+    )
+
+    df = ar.to_pandas(result)
+
+    assert list(df["ratio"]) == [5.0, 0.0]
+
+
+def test_fill_value_accepts_float():
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "num": [10.0, 20.0],
+                "den": [2.0, 0.0],
+            }
+        )
+    )
+
+    result = ar.safe_divide_columns(
+        frame,
+        numerator="num",
+        denominator="den",
+        output_column="ratio",
+        fill_value=-1.5,
+    )
+
+    df = ar.to_pandas(result)
+
+    assert list(df["ratio"]) == [5.0, -1.5]
 
 class TestClipNumericNativeRegression:
     """Regression tests verifying the native C++ clip_numeric hot-path.
