@@ -1855,6 +1855,18 @@ class TestParseBoolStrings:
         ):
             ar.parse_bool_strings(frame, false_values="no")
 
+        with pytest.raises(
+            TypeError,
+            match="true_values must be a set/list/tuple of strings, not a bare string",
+        ):
+            ar.parse_bool_strings(frame, true_values=b"yes")
+
+        with pytest.raises(
+            TypeError,
+            match="false_values must be a set/list/tuple of strings, not a bare string",
+        ):
+            ar.parse_bool_strings(frame, false_values=b"no")
+
 
 class TestRenameColumns:
     def test_rename(self, sample_csv):

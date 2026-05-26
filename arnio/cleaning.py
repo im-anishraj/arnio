@@ -840,11 +840,11 @@ def parse_bool_strings(
     """
     from .convert import from_pandas, to_pandas
 
-    if true_values is not None and isinstance(true_values, str):
+    if true_values is not None and isinstance(true_values, (str, bytes)):
         raise TypeError(
             "true_values must be a set/list/tuple of strings, not a bare string"
         )
-    if false_values is not None and isinstance(false_values, str):
+    if false_values is not None and isinstance(false_values, (str, bytes)):
         raise TypeError(
             "false_values must be a set/list/tuple of strings, not a bare string"
         )
