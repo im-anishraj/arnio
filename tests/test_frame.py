@@ -833,7 +833,6 @@ def test_repr_html_does_not_convert_full_frame(large_csv, monkeypatch):
     monkeypatch.setattr(convert, "to_pandas", tracking_to_pandas)
     frame._repr_html_()
 
-    assert call_sizes == [], (
-        f"_repr_html_() should not call to_pandas(), but got calls with {call_sizes} rows"
-    )
- 
+    assert (
+        call_sizes == []
+    ), f"_repr_html_() should not call to_pandas(), but got calls with {call_sizes} rows"

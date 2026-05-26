@@ -831,7 +831,6 @@ class ArFrame:
         """
         import html as _html
 
-
         _REPR_HTML_MAX_ROWS = 10
 
         num_rows, num_cols = self.shape
@@ -865,7 +864,7 @@ class ArFrame:
         )
         header = f"<thead><tr>{header_cells}</tr></thead>"
 
-                # Read only the rows needed for display; do not convert the full frame.
+        # Read only the rows needed for display; do not convert the full frame.
         preview_rows = min(num_rows, _REPR_HTML_MAX_ROWS)
 
         try:
