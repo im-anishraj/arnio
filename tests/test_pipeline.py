@@ -1663,6 +1663,7 @@ def test_pipeline_dry_run_false_metadata_unchanged():
     assert meta["step_timings"][0]["seconds"] >= 0
     assert meta["row_counts"][0].get("dry_run") is False
 
+
 class TestRegisterStepValidation:
 
     @pytest.fixture(autouse=True)
@@ -1740,6 +1741,8 @@ class TestRegisterStepValidation:
 
         with pytest.raises(ValueError, match="must be a non-empty string"):
             register_step(42, dummy_clean)  # type: igno
+
+
 def test_pipeline_return_metadata_non_bool_raises():
     frame = ar.from_pandas(pd.DataFrame({"a": [1, 2, 3]}))
     with pytest.raises(TypeError, match="return_metadata"):
