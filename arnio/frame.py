@@ -778,7 +778,7 @@ class ArFrame:
         if num_cols == 0:
             return (
                 f"ArFrame preview: {num_rows} rows x 0 columns "
-                f"(no columns to display)"
+                "(no columns to display)"
             )
 
         if num_rows == 0:
