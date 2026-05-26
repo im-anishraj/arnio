@@ -123,6 +123,9 @@ class ColumnProfile:
 
     def to_dict(self, *, redact_sample_values: bool = False) -> dict[str, Any]:
         """Return a JSON-friendly dictionary."""
+        redact_sample_values = _validate_bool_option(
+            redact_sample_values, "redact_sample_values"
+        )
         sample_values = (
             ["[REDACTED]" for _ in self.sample_values]
             if redact_sample_values
@@ -206,6 +209,9 @@ class DataQualityReport:
         exclude_columns: list[str] | set[str] | tuple[str, ...] | None = None,
     ) -> dict[str, Any]:
         """Return a JSON-friendly dictionary representation."""
+        redact_sample_values = _validate_bool_option(
+            redact_sample_values, "redact_sample_values"
+        )
 
         if exclude_columns is None:
             exclude_columns = set()
@@ -1427,7 +1433,10 @@ def _validate_gate_threshold(value: float | None, name: str) -> float | None:
 
 
 def _validate_gate_bool(value: bool, name: str) -> bool:
-    """Validate that a quality gate flag is a bool and return it."""
+    return _validate_bool_option(value, name)
+
+
+def _validate_bool_option(value: bool, name: str) -> bool:
     if not isinstance(value, bool):
         raise TypeError(f"{name} must be a bool")
     return value
