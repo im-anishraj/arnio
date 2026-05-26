@@ -8,10 +8,13 @@ from __future__ import annotations
 import copy as copylib
 import decimal
 import math
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
+
+if TYPE_CHECKING:
+    import pyarrow as pa
 
 from ._core import _DType, _Frame
 from .frame import ArFrame
@@ -94,6 +97,12 @@ def _normalize_scalar(value: object) -> object:
         return None
     if isinstance(value, np.generic):
         value = value.item()
+    if isinstance(value, int) and not isinstance(value, bool):
+        if value < -9223372036854775808 or value > 9223372036854775807:
+            raise ValueError(
+                f"Integer value {value} is out of bounds for signed 64-bit integer. "
+                "arnio only supports signed 64-bit integers (-9223372036854775808 to 9223372036854775807)."
+            )
     if isinstance(value, float):
         return _to_binding_safe(value)
     if not isinstance(value, (bool, int, str)):
@@ -121,6 +130,29 @@ def _series_to_python_values(series: pd.Series, col_name: object) -> list[object
                 f"Column '{col_name}' contains unsupported nested value "
                 f"of type '{type(raw).__name__}' at value {raw!r}. "
                 "Convert nested objects to strings or flatten them first."
+            )
+
+        if isinstance(raw, pd.Timestamp):
+            raise TypeError(
+                f"Column '{col_name}' contains unsupported scalar value "
+                f"of type 'Timestamp' at value {raw!r}. "
+                f'Fix: df["{col_name}"] = df["{col_name}"].astype(str)'
+            )
+
+        if isinstance(raw, pd.Timedelta):
+            raise TypeError(
+                f"Column '{col_name}' contains unsupported scalar value "
+                f"of type 'Timedelta' at value {raw!r}. "
+                f'Fix: convert df["{col_name}"] to strings or a supported '
+                "numeric duration before from_pandas()"
+            )
+
+        if isinstance(raw, (complex, np.complexfloating)):
+            raise TypeError(
+                f"Column '{col_name}' contains unsupported scalar value "
+                f"of type '{type(raw).__name__}' at value {raw!r}. "
+                f'Fix: split df["{col_name}"] into real/imag columns or '
+                "convert it to strings before from_pandas()"
             )
 
         value = _normalize_scalar(raw)
@@ -169,6 +201,11 @@ def to_pandas(frame: ArFrame, *, copy: bool = False) -> pd.DataFrame:
     if not isinstance(copy, bool):
         raise TypeError("copy must be a bool")
 
+    if not isinstance(frame, ArFrame):
+        raise TypeError(
+            f"to_pandas() expects an ArFrame, got {type(frame).__name__}. Use arnio.from_pandas() first."
+        )
+
     cpp_frame = frame._frame
     data = {}
 
@@ -205,10 +242,77 @@ def to_pandas(frame: ArFrame, *, copy: bool = False) -> pd.DataFrame:
             series[mask] = pd.NA
             data[name] = series
 
-    result = pd.DataFrame(data)
+    if not data:
+        result = pd.DataFrame(index=pd.RangeIndex(cpp_frame.num_rows()))
+    else:
+        result = pd.DataFrame(data)
     if frame._attrs:
         result.attrs = copylib.deepcopy(frame._attrs)
     return result
+
+
+def to_arrow(frame: ArFrame) -> pa.Table:
+    """Convert ArFrame to pyarrow.Table.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input ArFrame to convert.
+
+    Returns
+    -------
+    pa.Table
+        Equivalent pyarrow Table with typed columns.
+
+    Raises
+    ------
+    TypeError
+        If the input is not an ArFrame.
+    ImportError
+        If pyarrow is not installed.
+
+    Examples
+    --------
+    >>> frame = ar.read_csv("data.csv")
+    >>> table = ar.to_arrow(frame)
+    """
+    if not isinstance(frame, ArFrame):
+        raise TypeError(f"to_arrow() expects an ArFrame, got {type(frame).__name__}")
+
+    try:
+        import pyarrow as pa
+    except ImportError as e:
+        raise ImportError(
+            "to_arrow() requires pyarrow. Install it with: pip install arnio[arrow]"
+        ) from e
+
+    cpp_frame = frame._frame
+    arrays: list[pa.Array] = []
+    names: list[str] = []
+
+    for i in range(cpp_frame.num_cols()):
+        col = cpp_frame.column_by_index(i)
+        name = col.name()
+        dtype = col.dtype()
+        mask = col.get_null_mask()
+
+        if dtype == _DType.INT64:
+            arr = col.to_numpy_int()
+            pa_arr = pa.array(arr, mask=mask, type=pa.int64())
+        elif dtype == _DType.FLOAT64:
+            arr = col.to_numpy_float()
+            pa_arr = pa.array(arr, mask=mask, type=pa.float64())
+        elif dtype == _DType.BOOL:
+            arr = col.to_numpy_bool()
+            pa_arr = pa.array(arr, mask=mask, type=pa.bool_())
+        else:
+            values = col.to_python_list()
+            pa_arr = pa.array(values, type=pa.string())
+
+        arrays.append(pa_arr)
+        names.append(name)
+
+    return pa.Table.from_arrays(arrays, names=names)
 
 
 def _pandas_dtype_to_arnio(dtype: object) -> _DType | None:
@@ -216,6 +320,8 @@ def _pandas_dtype_to_arnio(dtype: object) -> _DType | None:
         return _DType.INT64
     if str(dtype) == "float64":
         return _DType.FLOAT64
+    if dtype == pd.BooleanDtype() or str(dtype) == "bool":
+        return _DType.BOOL
     return None
 
 
@@ -293,5 +399,5 @@ def from_pandas(df: pd.DataFrame) -> ArFrame:
         if dtype_hint is not None:
             dtype_hints[name] = dtype_hint
 
-    cpp_frame = _Frame.from_dict(columns, dtype_hints)
+    cpp_frame = _Frame.from_dict(columns, dtype_hints, len(df))
     return ArFrame(cpp_frame, attrs=copylib.deepcopy(df.attrs))

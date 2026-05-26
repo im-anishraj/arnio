@@ -27,6 +27,12 @@ class CsvReadError(ArnioError):
     pass
 
 
+class JsonlReadError(ArnioError):
+    """Raised when a JSON Lines file cannot be read or contains malformed data."""
+
+    pass
+
+
 class TypeCastError(ArnioError):
     """Raised when cast_types encounters an incompatible type."""
 

@@ -53,6 +53,24 @@ def csv_no_header(tmp_path):
 
 
 @pytest.fixture
+def empty_csv(tmp_path):
+    """CSV with header only, no data rows."""
+    csv_content = "name,age,score\n"
+    path = tmp_path / "empty.csv"
+    path.write_text(csv_content)
+    return str(path)
+
+
+@pytest.fixture
+def csv_with_all_nulls(tmp_path):
+    """CSV where all values are null/empty."""
+    csv_content = "a,b,c\n,,\n,,\n"
+    path = tmp_path / "allnulls.csv"
+    path.write_text(csv_content)
+    return str(path)
+
+
+@pytest.fixture
 def large_csv(tmp_path):
     """Generate a larger CSV for performance sanity checks."""
     lines = ["id,value,label"]
@@ -61,3 +79,9 @@ def large_csv(tmp_path):
     path = tmp_path / "large.csv"
     path.write_text("\n".join(lines))
     return str(path)
+
+
+@pytest.fixture
+def unicode_csv():
+    """CSV content for Unicode file path testing."""
+    return "name,value\nAlice,1\nBob,2\n"

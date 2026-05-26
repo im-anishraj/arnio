@@ -6,13 +6,22 @@ Data quality profiling and safe automatic cleaning helpers.
 from __future__ import annotations
 
 import html
+import json
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
+import numpy as np
 import pandas as pd
 
-from .cleaning import cast_types, drop_duplicates, strip_whitespace
+from .cleaning import (
+    _validate_column_sequence,
+    cast_types,
+    drop_duplicates,
+    strip_whitespace,
+    validate_columns_exist,
+)
 from .convert import to_pandas
 from .frame import ArFrame
 
@@ -75,6 +84,11 @@ class ColumnProfile:
     ``empty_string_count`` is the number of non-null values that become empty
     after stripping leading/trailing whitespace — whitespace-only strings are
     therefore counted as empty.
+
+    ``top_values_is_approximate`` indicates whether ``top_values`` were
+    estimated from a deterministic sample. When ``True``,
+    ``top_values_sample_count`` and ``top_values_sample_ratio`` describe the
+    sample used for the counts/ratios.
     """
 
     name: str
@@ -88,6 +102,8 @@ class ColumnProfile:
     empty_string_count: int = 0
     whitespace_count: int = 0
     suggested_dtype: str | None = None
+    email_validity_ratio: float | None = None
+    url_validity_ratio: float | None = None
     min: Any = None
     max: Any = None
     mean: float | None = None
@@ -99,6 +115,10 @@ class ColumnProfile:
     sample_values: list[Any] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     top_values: list[tuple[Any, int, float]] | None = None
+    top_values_is_approximate: bool = False
+    top_values_sample_count: int | None = None
+    top_values_sample_ratio: float | None = None
+    histogram: list[tuple[float, float, int, float]] | None = None
 
     def to_dict(self, *, redact_sample_values: bool = False) -> dict[str, Any]:
         """Return a JSON-friendly dictionary."""
@@ -119,6 +139,8 @@ class ColumnProfile:
             "empty_string_count": self.empty_string_count,
             "whitespace_count": self.whitespace_count,
             "suggested_dtype": self.suggested_dtype,
+            "email_validity_ratio": self.email_validity_ratio,
+            "url_validity_ratio": self.url_validity_ratio,
             "min": _clean_scalar(self.min),
             "max": _clean_scalar(self.max),
             "mean": self.mean,
@@ -143,6 +165,22 @@ class ColumnProfile:
                 if self.top_values is not None
                 else None
             ),
+            "top_values_is_approximate": self.top_values_is_approximate,
+            "top_values_sample_count": self.top_values_sample_count,
+            "top_values_sample_ratio": self.top_values_sample_ratio,
+            "histogram": (
+                [
+                    {
+                        "bucket_start": _clean_scalar(start),
+                        "bucket_end": _clean_scalar(end),
+                        "count": count,
+                        "ratio": ratio,
+                    }
+                    for start, end, count, ratio in self.histogram
+                ]
+                if self.histogram is not None
+                else None
+            ),
         }
 
 
@@ -160,8 +198,26 @@ class DataQualityReport:
     score_components: dict[str, float] = field(default_factory=dict)
     suggestions: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
 
-    def to_dict(self, *, redact_sample_values: bool = False) -> dict[str, Any]:
+    def to_dict(
+        self,
+        *,
+        redact_sample_values: bool = False,
+        exclude_columns: list[str] | set[str] | tuple[str, ...] | None = None,
+    ) -> dict[str, Any]:
         """Return a JSON-friendly dictionary representation."""
+
+        if exclude_columns is None:
+            exclude_columns = set()
+
+        elif not isinstance(exclude_columns, (list, tuple, set)):
+            raise TypeError("exclude_columns must be a list, tuple, set, or None")
+
+        else:
+            if not all(isinstance(column, str) for column in exclude_columns):
+                raise TypeError("exclude_columns must contain only string column names")
+
+            exclude_columns = set(exclude_columns)
+
         return {
             "row_count": self.row_count,
             "column_count": self.column_count,
@@ -173,11 +229,27 @@ class DataQualityReport:
             "columns": {
                 name: column.to_dict(redact_sample_values=redact_sample_values)
                 for name, column in self.columns.items()
+                if name not in exclude_columns
             },
             "suggestions": [
                 {
                     "step": s[0],
-                    "kwargs": dict(s[1]),
+                    "kwargs": {
+                        key: (
+                            [item for item in value if item not in exclude_columns]
+                            if key in {"subset", "columns"} and isinstance(value, list)
+                            else (
+                                {
+                                    k: v
+                                    for k, v in value.items()
+                                    if k not in exclude_columns
+                                }
+                                if key == "cast_types" and isinstance(value, dict)
+                                else value
+                            )
+                        )
+                        for key, value in dict(s[1]).items()
+                    },
                     "confidence_score": getattr(s, "confidence_score", None),
                     "confidence_reason": getattr(s, "confidence_reason", None),
                 }
@@ -185,8 +257,54 @@ class DataQualityReport:
             ],
         }
 
-    def to_markdown(self) -> str:
+    def to_json(
+        self,
+        *,
+        indent: int | None = None,
+        redact_sample_values: bool = False,
+        exclude_columns: list[str] | set[str] | tuple[str, ...] | None = None,
+        output: Any | None = None,
+    ) -> str | None:
+        """Return the report as a JSON string.
+
+        Example:
+        report.to_json(indent=2)
+        """
+
+        json_out = json.dumps(
+            self.to_dict(
+                redact_sample_values=redact_sample_values,
+                exclude_columns=exclude_columns,
+            ),
+            indent=indent,
+        )
+
+        if output is None:
+            return json_out
+
+        if not hasattr(output, "write"):
+            raise TypeError("output must be a writable text stream")
+
+        output.write(json_out)
+        return None
+
+    @staticmethod
+    def _validate_max_suggestions(max_suggestions: int | None) -> int | None:
+        if max_suggestions is None:
+            return None
+        if not isinstance(max_suggestions, int) or isinstance(max_suggestions, bool):
+            raise TypeError("max_suggestions must be an integer or None")
+        if max_suggestions <= 0:
+            raise ValueError("max_suggestions must be positive")
+        return max_suggestions
+
+    def to_markdown(
+        self,
+        output: Any | None = None,
+        max_suggestions: int | None = None,
+    ) -> str | None:
         """Return a GitHub-friendly Markdown report."""
+        max_suggestions = self._validate_max_suggestions(max_suggestions)
 
         lines: list[str] = []
 
@@ -220,144 +338,335 @@ class DataQualityReport:
                 warnings = ", ".join(column.warnings) if column.warnings else "-"
 
                 lines.append(
-                    f"| {column.name} "
-                    f"| {column.dtype} "
-                    f"| {column.semantic_type} "
-                    f"| {column.null_count} "
-                    f"| {column.unique_count} "
-                    f"| {column.unique_ratio:.2%} "
-                    f"| {warnings} |"
+                    f"| {_markdown_cell(column.name)} "
+                    f"| {_markdown_cell(column.dtype)} "
+                    f"| {_markdown_cell(column.semantic_type)} "
+                    f"| {_markdown_cell(column.null_count)} "
+                    f"| {_markdown_cell(column.unique_count)} "
+                    f"| {_markdown_cell(f'{column.unique_ratio:.2%}')} "
+                    f"| {_markdown_cell(warnings)} |"
                 )
 
             lines.append("")
 
         # Suggestions
         if self.suggestions:
+            import json
+
             lines.append("## Suggested Cleaning Steps")
             lines.append("")
 
-            for step in self.suggestions:
+            rendered_suggestions = self.suggestions
+            if max_suggestions is not None:
+                rendered_suggestions = self.suggestions[:max_suggestions]
+
+            for step in rendered_suggestions:
+                kwargs_str = json.dumps(step[1], sort_keys=True, default=str)
                 conf_score = getattr(step, "confidence_score", None)
                 conf_reason = getattr(step, "confidence_reason", None)
                 if conf_score is not None and conf_reason is not None:
                     lines.append(
-                        f"- `{step[0]}`: `{step[1]}` "
+                        f"- `{step[0]}`: `{kwargs_str}` "
                         f"(Confidence: {conf_score:.2f} - {conf_reason})"
                     )
                 else:
-                    lines.append(f"- `{step[0]}`: `{step[1]}`")
+                    lines.append(f"- `{step[0]}`: `{kwargs_str}`")
+
+            if max_suggestions is not None and len(self.suggestions) > len(
+                rendered_suggestions
+            ):
+                lines.append(
+                    f"Showing {len(rendered_suggestions)} of {len(self.suggestions)} suggestions."
+                )
 
             lines.append("")
 
-        return "\n".join(lines)
+        markdown = "\n".join(lines)
 
-    def to_html(self, file_path: str | None = None) -> str:
-        """Return a self-contained, dependency-free HTML data quality report."""
+        if output is None:
+            return markdown
 
-        def e(text: Any) -> str:
-            return html.escape(str(text))
+        if not hasattr(output, "write"):
+            raise TypeError("output must be a writable text stream")
 
-        styles = """
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 20px; background-color: #f8f9fa; }
-        .container { max-width: 1200px; margin: 0 auto; background: #fff; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-        h1, h2 { color: #2c3e50; border-bottom: 1px solid #eee; padding-bottom: 10px; }
-        .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 30px; }
-        .metric-card { background: #f8f9fa; padding: 15px; border-radius: 6px; border: 1px solid #e9ecef; text-align: center; }
-        .metric-value { font-size: 24px; font-weight: bold; color: #007bff; }
-        .metric-label { font-size: 14px; color: #6c757d; text-transform: uppercase; letter-spacing: 0.5px; }
-        table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
-        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #dee2e6; }
-        th { background-color: #f8f9fa; font-weight: 600; color: #495057; }
-        tr:hover { background-color: #f1f3f5; }
-        .warnings { color: #dc3545; font-size: 14px; }
-        .suggestion { background: #e8f4f8; border-left: 4px solid #17a2b8; padding: 10px 15px; margin-bottom: 10px; }
-        .suggestion code { font-family: monospace; background: #fff; padding: 2px 5px; border-radius: 3px; border: 1px solid #ced4da; }
+        output.write(markdown)
+        return None
+
+    def to_html(
+        self,
+        file_path: str | None = None,
+        output: Any | None = None,
+        max_suggestions: int | None = None,
+    ) -> str | None:
+        """Return a self-contained, dependency-free HTML data quality report.
+
+        In notebook environments, ``DataQualityReport`` will render a compact dashboard
+        automatically via ``_repr_html_``.
         """
-
-        lines: list[str] = []
-        lines.append("<!DOCTYPE html>")
-        lines.append('<html lang="en">')
-        lines.append("<head>")
-        lines.append('    <meta charset="UTF-8">')
-        lines.append(
-            '    <meta name="viewport" content="width=device-width, initial-scale=1.0">'
+        max_suggestions = self._validate_max_suggestions(max_suggestions)
+        html_out = self._to_html_dashboard(
+            full_document=True,
+            max_suggestions=max_suggestions,
         )
-        lines.append("    <title>Data Quality Report</title>")
-        lines.append(f"    <style>{styles}</style>")
-        lines.append("</head>")
-        lines.append("<body>")
-        lines.append('    <div class="container">')
-        lines.append("        <h1>Data Quality Report</h1>")
-
-        lines.append('        <div class="metrics-grid">')
-        metrics = [
-            ("Rows", self.row_count),
-            ("Columns", self.column_count),
-            ("Memory Usage", self.memory_usage),
-            ("Duplicate Rows", self.duplicate_rows),
-            ("Duplicate Ratio", f"{self.duplicate_ratio:.2%}"),
-            ("Quality Score", f"{self.quality_score:.2f}"),
-        ]
-        for label, value in metrics:
-            lines.append('            <div class="metric-card">')
-            lines.append(f'                <div class="metric-value">{e(value)}</div>')
-            lines.append(f'                <div class="metric-label">{e(label)}</div>')
-            lines.append("            </div>")
-        lines.append("        </div>")
-
-        if self.columns:
-            lines.append("        <h2>Columns Overview</h2>")
-            lines.append("        <table>")
-            lines.append("            <thead>")
-            lines.append("                <tr>")
-            lines.append("                    <th>Name</th>")
-            lines.append("                    <th>Type</th>")
-            lines.append("                    <th>Nulls</th>")
-            lines.append("                    <th>Unique</th>")
-            lines.append("                    <th>Warnings</th>")
-            lines.append("                </tr>")
-            lines.append("            </thead>")
-            lines.append("            <tbody>")
-
-            for name in sorted(self.columns):
-                col = self.columns[name]
-                warnings_str = ", ".join(col.warnings) if col.warnings else "-"
-                lines.append("                <tr>")
-                lines.append(f"                    <td>{e(col.name)}</td>")
-                lines.append(f"                    <td>{e(col.dtype)}</td>")
-                lines.append(f"                    <td>{e(col.null_count)}</td>")
-                lines.append(f"                    <td>{e(col.unique_count)}</td>")
-                lines.append(
-                    f'                    <td class="warnings">{e(warnings_str)}</td>'
-                )
-                lines.append("                </tr>")
-
-            lines.append("            </tbody>")
-            lines.append("        </table>")
-
-        if self.suggestions:
-            lines.append("        <h2>Cleaning Suggestions</h2>")
-            for step in self.suggestions:
-                conf_score = getattr(step, "confidence_score", None)
-                conf_text = (
-                    f" (Confidence: {conf_score:.2f})" if conf_score is not None else ""
-                )
-                lines.append('        <div class="suggestion">')
-                lines.append(
-                    f"            <code>{e(step[0])}</code>: <code>{e(step[1])}</code>{e(conf_text)}"
-                )
-                lines.append("        </div>")
-
-        lines.append("    </div>")
-        lines.append("</body>")
-        lines.append("</html>")
-
-        html_out = "\n".join(lines)
         if file_path:
             with open(file_path, "w", encoding="utf-8") as f:
                 f.write(html_out)
 
-        return html_out
+        if output is None:
+            return html_out
+
+        if not hasattr(output, "write"):
+            raise TypeError("output must be a writable text stream")
+
+        output.write(html_out)
+        return None
+
+    def _repr_html_(self) -> str:  # pragma: no cover - exercised via tests directly
+        """Notebook-friendly HTML representation."""
+        return self._to_html_dashboard(full_document=False)
+
+    def _to_html_dashboard(
+        self,
+        *,
+        full_document: bool,
+        max_suggestions: int | None = None,
+    ) -> str:
+        def e(text: Any) -> str:
+            return html.escape(str(text), quote=True)
+
+        def fmt_bytes(n: int) -> str:
+            units = ["B", "KB", "MB", "GB", "TB"]
+            value = float(n)
+            unit_idx = 0
+            while value >= 1024 and unit_idx < len(units) - 1:
+                value /= 1024
+                unit_idx += 1
+            if unit_idx == 0:
+                return f"{int(value)} {units[unit_idx]}"
+            return f"{value:.2f} {units[unit_idx]}"
+
+        def score_class(score: float) -> str:
+            if score >= 90:
+                return "good"
+            if score >= 70:
+                return "warn"
+            return "bad"
+
+        total_warnings = sum(len(c.warnings) for c in self.columns.values())
+        cols_with_warnings = sum(1 for c in self.columns.values() if c.warnings)
+        cols_with_nulls = sum(1 for c in self.columns.values() if c.null_count > 0)
+
+        styles = """
+        /* Scoped styles for notebook output */
+        .arnio-dqr { font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; line-height: 1.45; color: #111827; }
+        .arnio-dqr .container { max-width: 1200px; margin: 0 auto; background: #ffffff; padding: 20px; border-radius: 10px; border: 1px solid #e5e7eb; }
+        .arnio-dqr .header { display: flex; gap: 14px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-bottom: 14px; }
+        .arnio-dqr h1 { margin: 0; font-size: 20px; letter-spacing: -0.01em; }
+        .arnio-dqr .subtitle { color: #6b7280; font-size: 12px; margin-top: 2px; }
+        .arnio-dqr .pill { display:inline-flex; align-items:center; gap:8px; padding: 6px 10px; border-radius: 999px; border: 1px solid #e5e7eb; background: #f9fafb; font-size: 12px; }
+        .arnio-dqr .score { font-weight: 700; }
+        .arnio-dqr .score.good { color: #047857; }
+        .arnio-dqr .score.warn { color: #b45309; }
+        .arnio-dqr .score.bad { color: #b91c1c; }
+        .arnio-dqr .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin: 14px 0 18px 0; }
+        .arnio-dqr .card { border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px 12px; background: #ffffff; }
+        .arnio-dqr .card .label { color: #6b7280; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
+        .arnio-dqr .card .value { font-size: 18px; font-weight: 700; margin-top: 4px; }
+        .arnio-dqr .section { margin-top: 14px; }
+        .arnio-dqr h2 { margin: 0 0 8px 0; font-size: 14px; color: #111827; letter-spacing: -0.01em; }
+        .arnio-dqr table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        .arnio-dqr th, .arnio-dqr td { padding: 8px 8px; border-bottom: 1px solid #e5e7eb; vertical-align: top; }
+        .arnio-dqr th { text-align: left; color: #374151; background: #f9fafb; position: sticky; top: 0; }
+        .arnio-dqr .muted { color: #6b7280; }
+        .arnio-dqr .warn { color: #b91c1c; font-weight: 600; }
+        .arnio-dqr .chip { display:inline-block; padding: 2px 6px; border: 1px solid #e5e7eb; border-radius: 999px; background:#ffffff; margin: 0 4px 4px 0; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 11px; }
+        .arnio-dqr .bar { width: 100%; height: 6px; border-radius: 999px; background: #e5e7eb; overflow: hidden; margin-top: 4px; }
+        .arnio-dqr .bar > span { display: block; height: 100%; background: #3b82f6; }
+        .arnio-dqr details { border: 1px solid #e5e7eb; border-radius: 10px; padding: 8px 10px; background: #ffffff; }
+        .arnio-dqr details + details { margin-top: 8px; }
+        .arnio-dqr summary { cursor: pointer; font-weight: 600; }
+        .arnio-dqr code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 11px; }
+        """
+
+        lines: list[str] = []
+        if full_document:
+            lines.append("<!DOCTYPE html>")
+            lines.append('<html lang="en">')
+            lines.append("<head>")
+            lines.append('  <meta charset="UTF-8">')
+            lines.append(
+                '  <meta name="viewport" content="width=device-width, initial-scale=1.0">'
+            )
+            lines.append("  <title>Data Quality Report</title>")
+            lines.append(f"  <style>{styles}</style>")
+            lines.append("</head>")
+            lines.append('<body style="margin:0;padding:16px;background:#f3f4f6;">')
+            lines.append('<div class="arnio-dqr">')
+        else:
+            lines.append(f"<style>{styles}</style>")
+            lines.append('<div class="arnio-dqr">')
+
+        lines.append('<div class="container">')
+        lines.append('<div class="header">')
+        lines.append("<div>")
+        lines.append("<h1>Data Quality Report</h1>")
+        lines.append(
+            f'<div class="subtitle">Rows: {e(self.row_count)} · Columns: {e(self.column_count)} · Memory: {e(fmt_bytes(self.memory_usage))}</div>'
+        )
+        lines.append("</div>")
+        lines.append(
+            f"<div class=\"pill\"><span class=\"muted\">Quality score</span> <span class=\"score {score_class(self.quality_score)}\">{e(f'{self.quality_score:.2f}')}</span></div>"
+        )
+        lines.append("</div>")
+
+        lines.append('<div class="grid">')
+        cards: list[tuple[str, str]] = [
+            ("Duplicate rows", f"{self.duplicate_rows} ({self.duplicate_ratio:.2%})"),
+            ("Columns w/ nulls", str(cols_with_nulls)),
+            ("Columns w/ warnings", str(cols_with_warnings)),
+            ("Total warnings", str(total_warnings)),
+        ]
+        if self.score_components:
+            penalty_total = sum(self.score_components.values())
+            cards.append(("Score delta", f"{penalty_total:+.2f}"))
+        for label, value in cards:
+            lines.append('<div class="card">')
+            lines.append(f'<div class="label">{e(label)}</div>')
+            lines.append(f'<div class="value">{e(value)}</div>')
+            lines.append("</div>")
+        lines.append("</div>")
+
+        if self.score_components:
+            lines.append('<div class="section">')
+            lines.append("<h2>Score Components</h2>")
+            lines.append("<table>")
+            lines.append("<thead><tr><th>Component</th><th>Delta</th></tr></thead>")
+            lines.append("<tbody>")
+            for key, value in sorted(self.score_components.items()):
+                cls = "warn" if value < 0 else "muted"
+                lines.append("<tr>")
+                lines.append(f"<td><code>{e(key)}</code></td>")
+                lines.append(f"<td class=\"{cls}\">{e(f'{value:+.2f}')}</td>")
+                lines.append("</tr>")
+            lines.append("</tbody>")
+            lines.append("</table>")
+            lines.append("</div>")
+
+        if self.columns:
+            lines.append('<div class="section">')
+            lines.append("<h2>Columns</h2>")
+            lines.append("<table>")
+            lines.append(
+                "<thead><tr>"
+                "<th>Name</th><th>Dtype</th><th>Semantic</th><th>Nulls</th><th>Unique</th>"
+                "<th>Top Values / Dist</th><th>Warnings</th><th>Suggestion</th>"
+                "</tr></thead>"
+            )
+            lines.append("<tbody>")
+            for name in sorted(self.columns):
+                col = self.columns[name]
+                null_pct = (col.null_ratio * 100.0) if col.row_count else 0.0
+                unique_pct = (col.unique_ratio * 100.0) if col.row_count else 0.0
+                warnings_str = ", ".join(col.warnings) if col.warnings else "-"
+                suggested = col.suggested_dtype if col.suggested_dtype else "-"
+
+                if col.top_values:
+                    top_bits: list[str] = []
+                    for v, _c, r in col.top_values[:3]:
+                        top_bits.append(
+                            f"<span class=\"chip\">{e(v)} · {e(f'{r:.0%}')}</span>"
+                        )
+                    top_html = "".join(top_bits)
+                elif col.histogram:
+                    max_ratio = max((r for _, _, _, r in col.histogram), default=1.0)
+                    if max_ratio == 0:
+                        max_ratio = 1.0
+                    bars = []
+                    last_idx = len(col.histogram) - 1
+                    for idx, (start, end, count, r) in enumerate(col.histogram):
+                        height_pct = (r / max_ratio) * 100
+                        bucket_label = (
+                            f"[{start:.4g}, {end:.4g}]"
+                            if idx == last_idx
+                            else f"[{start:.4g}, {end:.4g})"
+                        )
+                        bars.append(
+                            f'<div style="flex:1;height:{height_pct}%;background:#3b82f6;min-height:1px;border-radius:1px;" '
+                            f'title="{bucket_label}: {count} ({r:.1%})"></div>'
+                        )
+                    top_html = (
+                        f'<div style="display:inline-flex;align-items:flex-end;gap:1.5px;'
+                        f'height:20px;width:100px;background:#f3f4f6;border-radius:3px;padding:2px;" '
+                        f'title="Numeric Distribution Histogram">'
+                        f'{"".join(bars)}'
+                        f"</div>"
+                    )
+                else:
+                    top_html = '<span class="muted">-</span>'
+
+                lines.append("<tr>")
+                lines.append(f"<td><code>{e(col.name)}</code></td>")
+                lines.append(f"<td>{e(col.dtype)}</td>")
+                lines.append(f"<td>{e(col.semantic_type)}</td>")
+                lines.append(
+                    "<td>"
+                    f"{e(col.null_count)} <span class=\"muted\">({e(f'{null_pct:.1f}%')})</span>"
+                    f'<div class="bar"><span style="width:{max(0.0, min(100.0, null_pct)):.2f}%"></span></div>'
+                    "</td>"
+                )
+                lines.append(
+                    "<td>"
+                    f"{e(col.unique_count)} <span class=\"muted\">({e(f'{unique_pct:.1f}%')})</span>"
+                    f'<div class="bar"><span style="width:{max(0.0, min(100.0, unique_pct)):.2f}%"></span></div>'
+                    "</td>"
+                )
+                lines.append(f"<td>{top_html}</td>")
+                lines.append(
+                    f"<td class=\"{'warn' if col.warnings else 'muted'}\">{e(warnings_str)}</td>"
+                )
+                lines.append(f"<td>{e(suggested)}</td>")
+                lines.append("</tr>")
+            lines.append("</tbody></table>")
+            lines.append("</div>")
+
+        if self.suggestions:
+            rendered_suggestions = self.suggestions
+            if max_suggestions is not None:
+                rendered_suggestions = self.suggestions[:max_suggestions]
+
+            lines.append('<div class="section">')
+            lines.append("<h2>Cleaning Suggestions</h2>")
+            for step in rendered_suggestions:
+                conf_score = getattr(step, "confidence_score", None)
+                conf_reason = getattr(step, "confidence_reason", None)
+                conf_bits: list[str] = []
+                if conf_score is not None:
+                    conf_bits.append(f"Confidence: {conf_score:.2f}")
+                if conf_reason:
+                    conf_bits.append(str(conf_reason))
+                conf_text = f" — {e(' · '.join(conf_bits))}" if conf_bits else ""
+                lines.append("<details>")
+                lines.append(
+                    f'<summary><code>{e(step[0])}</code> <span class="muted">{e(step[1])}</span></summary>'
+                )
+                lines.append(
+                    f'<div class="subtitle">{conf_text}</div>' if conf_text else ""
+                )
+                lines.append("</details>")
+            if max_suggestions is not None and len(self.suggestions) > len(
+                rendered_suggestions
+            ):
+                lines.append(
+                    f'<div class="muted">Showing {len(rendered_suggestions)} of {len(self.suggestions)} suggestions.</div>'
+                )
+            lines.append("</div>")
+
+        lines.append("</div>")  # container
+        lines.append("</div>")  # arnio-dqr
+        if full_document:
+            lines.append("</body></html>")
+
+        return "\n".join(lines)
 
     def summary(self) -> dict[str, Any]:
         """Return the highest-signal report fields."""
@@ -394,6 +703,8 @@ class DataQualityReport:
                     "empty_string_count": column.empty_string_count,
                     "whitespace_count": column.whitespace_count,
                     "suggested_dtype": column.suggested_dtype,
+                    "email_validity_ratio": column.email_validity_ratio,
+                    "url_validity_ratio": column.url_validity_ratio,
                     "min": _clean_scalar(column.min),
                     "max": _clean_scalar(column.max),
                     "mean": column.mean,
@@ -410,6 +721,10 @@ class DataQualityReport:
                     ),
                     "warnings": column.warnings,
                     "top_values": column.top_values,
+                    "top_values_is_approximate": column.top_values_is_approximate,
+                    "top_values_sample_count": column.top_values_sample_count,
+                    "top_values_sample_ratio": column.top_values_sample_ratio,
+                    "histogram": column.histogram,
                 }
                 for column in self.columns.values()
             ]
@@ -436,6 +751,66 @@ class ProfileComparison:
                 for name, entry in self.drift_report.items()
             },
         }
+
+    def to_json(
+        self,
+        *,
+        indent: int | None = None,
+        output: Any | None = None,
+    ) -> str | None:
+        """Return the comparison as a JSON string.
+
+        Example:
+        comparison.to_json(indent=2)
+        """
+        json_out = json.dumps(self.to_dict(), indent=indent)
+
+        if output is None:
+            return json_out
+
+        if not hasattr(output, "write"):
+            raise TypeError("output must be a writable text stream")
+
+        output.write(json_out)
+        return None
+
+    def to_markdown(self, output: Any | None = None) -> str | None:
+        """Return a GitHub-friendly Markdown drift report."""
+        lines: list[str] = ["# Profile Comparison Report", ""]
+
+        status_summary = ", ".join(
+            f"{count} {status}" for status, count in sorted(self.status_counts.items())
+        )
+        lines.append(f"**Status summary:** {status_summary}")
+        lines.append("")
+
+        if self.drift_report:
+            lines.append("## Column Drift")
+            lines.append("")
+            lines.append("| Column | Status | Changes | Reasons |")
+            lines.append("|---|---|---|---|")
+            for name, entry in sorted(self.drift_report.items()):
+                status = entry.get("status", "-")
+                changes = ", ".join(entry.get("changes", {}).keys()) or "-"
+                reasons = "; ".join(entry.get("reasons", [])) or "-"
+                lines.append(
+                    f"| {_markdown_cell(name)} "
+                    f"| {_markdown_cell(status)} "
+                    f"| {_markdown_cell(changes)} "
+                    f"| {_markdown_cell(reasons)} |"
+                )
+            lines.append("")
+
+        markdown = "\n".join(lines)
+
+        if output is None:
+            return markdown
+
+        if not hasattr(output, "write"):
+            raise TypeError("output must be a writable text stream")
+
+        output.write(markdown)
+        return None
 
 
 @dataclass(frozen=True)
@@ -544,16 +919,57 @@ class QualityGateResult:
             "Inspect result.issues or result.to_markdown() for details."
         )
 
+    def to_json(
+        self,
+        *,
+        indent: int | None = None,
+        output: Any | None = None,
+    ) -> str | None:
+        """Return the quality gate result as a JSON string.
 
-def profile(frame: ArFrame, *, sample_size: int = 5) -> DataQualityReport:
+        Example:
+        result.to_json(indent=2)
+        """
+        json_out = json.dumps(self.to_dict(), indent=indent)
+
+        if output is None:
+            return json_out
+
+        if not hasattr(output, "write"):
+            raise TypeError("output must be a writable text stream")
+
+        output.write(json_out)
+        return None
+
+
+def profile(
+    frame: ArFrame,
+    *,
+    exclude_columns: Sequence[str] | None = None,
+    sample_size: int = 5,
+    approx_top_values: bool = False,
+    approx_top_values_min_unique: int = 1000,
+    approx_top_values_min_ratio: float = 0.2,
+    approx_top_values_sample_size: int = 2000,
+) -> DataQualityReport:
     """Profile data quality for an ArFrame.
 
     Parameters
     ----------
     frame : ArFrame
         Input frame to inspect.
+    exclude_columns : Sequence[str], optional
+        Column names to exclude from profiling.
     sample_size : int, default 5
         Number of non-null sample values to keep per column.
+    approx_top_values : bool, default False
+        When True, approximate top values for high-cardinality string columns.
+    approx_top_values_min_unique : int, default 1000
+        Minimum unique count required to enable approximate top values.
+    approx_top_values_min_ratio : float, default 0.2
+        Minimum unique ratio (unique / non-null) required to enable approximation.
+    approx_top_values_sample_size : int, default 2000
+        Number of non-null values sampled to estimate top values.
 
     Returns
     -------
@@ -567,13 +983,59 @@ def profile(frame: ArFrame, *, sample_size: int = 5) -> DataQualityReport:
     >>> report = ar.profile(frame, sample_size=3)
     >>> report.summary()
     """
+    if not isinstance(frame, ArFrame):
+        raise TypeError(
+            f"profile() expects an ArFrame, got {type(frame).__name__}. Use arnio.from_pandas() first."
+        )
+
     if not isinstance(sample_size, int) or isinstance(sample_size, bool):
         raise TypeError("sample_size must be an integer")
     if sample_size < 0:
         raise ValueError("sample_size must be non-negative")
+    if not isinstance(approx_top_values, bool):
+        raise TypeError("approx_top_values must be a bool")
+    if not isinstance(approx_top_values_min_unique, int) or isinstance(
+        approx_top_values_min_unique, bool
+    ):
+        raise TypeError("approx_top_values_min_unique must be an integer")
+    if approx_top_values_min_unique < 0:
+        raise ValueError("approx_top_values_min_unique must be non-negative")
+    if not isinstance(approx_top_values_min_ratio, (int, float)) or isinstance(
+        approx_top_values_min_ratio, bool
+    ):
+        raise TypeError("approx_top_values_min_ratio must be a float")
+    if approx_top_values_min_ratio < 0 or approx_top_values_min_ratio > 1:
+        raise ValueError("approx_top_values_min_ratio must be between 0 and 1")
+    if not isinstance(approx_top_values_sample_size, int) or isinstance(
+        approx_top_values_sample_size, bool
+    ):
+        raise TypeError("approx_top_values_sample_size must be an integer")
+
+    if approx_top_values_sample_size <= 0:
+        raise ValueError("approx_top_values_sample_size must be positive")
+
+    normalized_exclude_columns: list[str] = []
+
+    if exclude_columns is not None:
+        normalized_exclude_columns = _validate_column_sequence(
+            exclude_columns,
+            argument_name="exclude_columns",
+        )
+        validate_columns_exist(
+            frame,
+            normalized_exclude_columns,
+            operation="profile",
+        )
+
+    has_exclusions = len(normalized_exclude_columns) > 0
 
     df = to_pandas(frame)
-    row_count, column_count = frame.shape
+
+    if has_exclusions:
+        df = df.drop(columns=normalized_exclude_columns)
+
+    row_count = len(df)
+    column_count = len(df.columns)
     duplicate_rows = int(df.duplicated().sum()) if row_count else 0
     duplicate_ratio = _ratio(duplicate_rows, row_count)
 
@@ -584,6 +1046,10 @@ def profile(frame: ArFrame, *, sample_size: int = 5) -> DataQualityReport:
             dtype=frame.dtypes.get(name, str(df[name].dtype)),
             row_count=row_count,
             sample_size=sample_size,
+            approx_top_values=approx_top_values,
+            approx_top_values_min_unique=approx_top_values_min_unique,
+            approx_top_values_min_ratio=approx_top_values_min_ratio,
+            approx_top_values_sample_size=approx_top_values_sample_size,
         )
         for name in df.columns
     }
@@ -591,7 +1057,11 @@ def profile(frame: ArFrame, *, sample_size: int = 5) -> DataQualityReport:
     report = DataQualityReport(
         row_count=row_count,
         column_count=column_count,
-        memory_usage=frame.memory_usage(),
+        memory_usage=(
+            int(df.memory_usage(deep=True).sum())
+            if has_exclusions
+            else frame.memory_usage()
+        ),
         duplicate_rows=duplicate_rows,
         duplicate_ratio=duplicate_ratio,
         columns=columns,
@@ -662,7 +1132,10 @@ def compare_profiles(
         raise ValueError(
             "Profiles have incompatible schemas: "
             f"missing from profile_a={missing_from_a}, "
-            f"missing from profile_b={missing_from_b}"
+            f"missing from profile_b={missing_from_b}. "
+            "This is likely caused by calling profile() with different exclude_columns "
+            "on each dataset. Profile both datasets with the same included/excluded "
+            "columns before comparing."
         )
 
     drift_report: dict[str, dict[str, Any]] = {}
@@ -878,6 +1351,7 @@ def _calculate_quality_score(
     duplicate_ratio: float,
     columns: dict[str, ColumnProfile],
 ) -> tuple[float, dict[str, float]]:
+    """Compute an overall quality score and per-penalty breakdown from profile data."""
     if row_count == 0 or not columns:
         return 100.0, {}
 
@@ -907,17 +1381,20 @@ def _calculate_quality_score(
 
 
 def _merge_status(current: str, new_status: str) -> str:
+    """Return the higher-severity status between current and new_status."""
     order = {"ok": 0, "warning": 1, "changed": 2}
     return new_status if order[new_status] > order[current] else current
 
 
 def _numeric_delta(value_a: Any, value_b: Any) -> float | None:
+    """Return the absolute numeric difference between two values, or None if non-numeric."""
     if isinstance(value_a, (int, float)) and isinstance(value_b, (int, float)):
         return abs(float(value_a) - float(value_b))
     return None
 
 
 def _clean_drift_entry(entry: dict[str, Any]) -> dict[str, Any]:
+    """Normalize a raw drift entry dict into a clean serializable structure."""
     return {
         "status": entry["status"],
         "changes": {
@@ -929,6 +1406,7 @@ def _clean_drift_entry(entry: dict[str, Any]) -> dict[str, Any]:
 
 
 def _validate_gate_threshold(value: float | None, name: str) -> float | None:
+    """Validate that a quality gate threshold is a finite non-negative number or None."""
     if value is None:
         return None
     if isinstance(value, bool) or not isinstance(value, (int, float)):
@@ -940,12 +1418,14 @@ def _validate_gate_threshold(value: float | None, name: str) -> float | None:
 
 
 def _validate_gate_bool(value: bool, name: str) -> bool:
+    """Validate that a quality gate flag is a bool and return it."""
     if not isinstance(value, bool):
         raise TypeError(f"{name} must be a bool")
     return value
 
 
 def _relative_delta(baseline: Any, current: Any) -> float | None:
+    """Return the relative change between baseline and current, or None if not computable."""
     if baseline is None or current is None:
         return None
     if not isinstance(baseline, (int, float)) or not isinstance(current, (int, float)):
@@ -958,6 +1438,7 @@ def _relative_delta(baseline: Any, current: Any) -> float | None:
 
 
 def _absolute_delta(baseline: Any, current: Any) -> float | None:
+    """Return the absolute numeric change between baseline and current, or None if not computable."""
     if baseline is None or current is None:
         return None
     if not isinstance(baseline, (int, float)) or not isinstance(current, (int, float)):
@@ -979,6 +1460,7 @@ def _add_ratio_issue(
     message: str,
     column: str | None = None,
 ) -> None:
+    """Append a QualityGateIssue if the relative delta between baseline and current exceeds threshold."""
     if threshold is None:
         return
     delta = _relative_delta(baseline, current)
@@ -1006,6 +1488,7 @@ def _add_absolute_issue(
     message: str,
     column: str | None = None,
 ) -> None:
+    """Append a QualityGateIssue if the absolute delta between baseline and current exceeds threshold."""
     if threshold is None:
         return
     delta = _absolute_delta(baseline, current)
@@ -1024,16 +1507,24 @@ def _add_absolute_issue(
 
 
 def _markdown_cell(value: Any) -> str:
+    """Escape a value for safe rendering inside a Markdown table cell."""
     if value is None:
         return "-"
     text = str(_clean_scalar(value))
-    return text.replace("\\", "\\\\").replace("|", "\\|").replace("\n", "<br>")
+    return (
+        text.replace("\\", "\\\\")
+        .replace("|", "\\|")
+        .replace("\r\n", "<br>")
+        .replace("\r", "<br>")
+        .replace("\n", "<br>")
+    )
 
 
 def _compare_column_profiles(
     column_a: ColumnProfile,
     column_b: ColumnProfile,
 ) -> dict[str, Any]:
+    """Compare two ColumnProfile objects and return a drift entry with status, changes, and reasons."""
     changes: dict[str, dict[str, Any]] = {}
     reasons: list[str] = []
     status = "ok"
@@ -1058,7 +1549,7 @@ def _compare_column_profiles(
             "delta": _clean_scalar(delta),
         }
 
-        metric_status = "warning"
+        metric_status = "ok"
         if (
             changed_threshold is not None
             and delta is not None
@@ -1122,8 +1613,8 @@ def _compare_column_profiles(
                 metric,
                 value_a,
                 value_b,
-                warning_threshold=scale,
-                changed_threshold=scale * 2.0,
+                warning_threshold=scale * 0.1,
+                changed_threshold=scale * 0.25,
                 reason=f"numeric {metric} changed",
             )
 
@@ -1231,6 +1722,60 @@ def suggest_cleaning(
     return suggestions
 
 
+@dataclass(frozen=True)
+class CleanStepRecord:
+    """Audit record for a single step applied by auto_clean."""
+
+    step: str
+    """Name of the cleaning step (e.g. ``strip_whitespace``)."""
+    kwargs: dict[str, Any]
+    """Keyword arguments passed to the step."""
+    rows_before: int
+    """Row count before this step was applied."""
+    rows_after: int
+    """Row count after this step was applied."""
+    rows_removed: int
+    """Number of rows removed by this step (0 for non-row-dropping steps)."""
+    reason: str
+    """Human-readable explanation of why this step was selected."""
+
+
+@dataclass(frozen=True)
+class CleanExplanation:
+    """Structured audit trail returned by ``auto_clean`` when ``explain=True``.
+
+    This object captures a before-and-after summary of every cleaning step
+    that was applied, making it easy to audit, log, or display what
+    ``auto_clean`` changed and why.
+    """
+
+    mode: str
+    """The cleaning mode that was used (``'safe'`` or ``'strict'``)."""
+    rows_before: int
+    """Total row count before any cleaning."""
+    rows_after: int
+    """Total row count after all cleaning steps."""
+    rows_removed: int
+    """Total rows removed across all steps."""
+    steps: list[CleanStepRecord]
+    """Ordered list of steps that were actually applied."""
+
+    def __str__(self) -> str:
+        lines: list[str] = [
+            f"CleanExplanation(mode={self.mode!r})",
+            f"  rows : {self.rows_before} -> {self.rows_after} ({self.rows_removed} removed)",
+            f"  steps applied ({len(self.steps)}):",
+        ]
+        for rec in self.steps:
+            lines.append(
+                f"    [{rec.step}] rows {rec.rows_before}->{rec.rows_after} "
+                f"(-{rec.rows_removed}) | reason: {rec.reason}"
+            )
+        if not self.steps:
+            lines.append("    (none)")
+        return "\n".join(lines)
+
+
 def auto_clean(
     frame: ArFrame,
     *,
@@ -1238,7 +1783,14 @@ def auto_clean(
     return_report: bool = False,
     dry_run: bool = False,
     allow_lossy_casts: bool = False,
-) -> ArFrame | DataQualityReport | tuple[ArFrame, DataQualityReport]:
+    explain: bool = False,
+) -> (
+    ArFrame
+    | DataQualityReport
+    | tuple[ArFrame, DataQualityReport]
+    | tuple[ArFrame, CleanExplanation]
+    | tuple[ArFrame, DataQualityReport, CleanExplanation]
+):
     """Apply built-in automatic cleaning.
 
     Parameters
@@ -1254,37 +1806,78 @@ def auto_clean(
         Return the proposed pre-cleaning report without mutating the frame.
     allow_lossy_casts : bool, default False
         Required before strict mode applies suggested type casts.
+    explain : bool, default False
+        When ``True``, return a :class:`CleanExplanation` object that records
+        which steps ran, before/after row counts for each step, and why each
+        step was selected. The cleaned frame is always the first element in the
+        returned tuple.
 
     Returns
     -------
-    ArFrame, DataQualityReport, or tuple[ArFrame, DataQualityReport]
-        Cleaned frame, the dry-run report, or a frame/report tuple.
+    ArFrame
+        Cleaned frame (when *return_report*, *dry_run*, and *explain* are all ``False``).
+    DataQualityReport
+        When *dry_run* is ``True`` and *return_report* is ``False``.
+    tuple[ArFrame, DataQualityReport]
+        When only *return_report* is ``True``.
+    tuple[ArFrame, CleanExplanation]
+        When only *explain* is ``True``.
+    tuple[ArFrame, DataQualityReport, CleanExplanation]
+        When both *return_report* and *explain* are ``True``.
 
     Examples
     --------
     >>> clean = ar.auto_clean(frame)
     >>> report = ar.auto_clean(frame, mode="strict", dry_run=True)
     >>> clean = ar.auto_clean(frame, mode="strict", allow_lossy_casts=True)
+    >>> clean, report = ar.auto_clean(frame, mode="strict", return_report=True)
+    >>> clean, explanation = ar.auto_clean(frame, explain=True)
+    >>> print(explanation)
     """
+    if not isinstance(frame, ArFrame):
+        raise TypeError(
+            f"auto_clean() expects an ArFrame, got {type(frame).__name__}. Use arnio.from_pandas() first."
+        )
+
     if mode not in {"safe", "strict"}:
         raise ValueError("mode must be 'safe' or 'strict'")
 
+    if not isinstance(return_report, bool):
+        raise TypeError("return_report must be a bool")
     if not isinstance(dry_run, bool):
         raise TypeError("dry_run must be a bool")
     if not isinstance(allow_lossy_casts, bool):
         raise TypeError("allow_lossy_casts must be a bool")
+    if not isinstance(explain, bool):
+        raise TypeError("explain must be a bool")
+
+    if dry_run and explain:
+        raise ValueError("explain=True cannot be used with dry_run=True")
+    if dry_run and return_report:
+        raise ValueError("return_report=True cannot be used with dry_run=True")
 
     report = profile(frame)
     if dry_run:
-        if return_report:
-            return frame, report
         return report
 
     result = frame
+    step_records: list[CleanStepRecord] = []
+    rows_before_all = result.shape[0]
 
-    for step, kwargs in report.suggestions:
+    for suggestion in report.suggestions:
+        if isinstance(suggestion, CleaningSuggestion):
+            step = suggestion.step
+            kwargs = suggestion.kwargs
+            reason = suggestion.confidence_reason
+        else:
+            step, kwargs = suggestion
+            reason = step
+
         if mode == "safe" and step != "strip_whitespace":
             continue
+
+        rows_before_step = result.shape[0]
+
         if step == "strip_whitespace":
             result = strip_whitespace(result, **kwargs)
         elif step == "cast_types":
@@ -1297,6 +1890,34 @@ def auto_clean(
             result = cast_types(result, kwargs)
         elif step == "drop_duplicates":
             result = drop_duplicates(result, **kwargs)
+        else:
+            continue
+
+        rows_after_step = result.shape[0]
+        step_records.append(
+            CleanStepRecord(
+                step=step,
+                kwargs=kwargs,
+                rows_before=rows_before_step,
+                rows_after=rows_after_step,
+                rows_removed=rows_before_step - rows_after_step,
+                reason=reason,
+            )
+        )
+
+    rows_after_all = result.shape[0]
+
+    if explain:
+        explanation = CleanExplanation(
+            mode=mode,
+            rows_before=rows_before_all,
+            rows_after=rows_after_all,
+            rows_removed=rows_before_all - rows_after_all,
+            steps=step_records,
+        )
+        if return_report:
+            return result, report, explanation
+        return result, explanation
 
     if return_report:
         return result, report
@@ -1310,16 +1931,29 @@ def _profile_column(
     dtype: str,
     row_count: int,
     sample_size: int,
+    approx_top_values: bool,
+    approx_top_values_min_unique: int,
+    approx_top_values_min_ratio: float,
+    approx_top_values_sample_size: int,
 ) -> ColumnProfile:
+    """Compute a full ColumnProfile for a single column series."""
     null_count = int(series.isna().sum())
     non_null = series.dropna()
     unique_count = int(non_null.nunique(dropna=True))
     unique_ratio = _ratio(unique_count, len(non_null))
+    dominant_ratio = 0.0
+
+    if len(non_null):
+        value_counts = non_null.value_counts(dropna=True)
+        dominant_ratio = _ratio(int(value_counts.iloc[0]), len(non_null))
     sample_values = non_null.head(sample_size).tolist()
 
     empty_string_count = 0
     whitespace_count = 0
     top_values = None
+    top_values_is_approximate = False
+    top_values_sample_count = None
+    top_values_sample_ratio = None
     q25 = q50 = q75 = q95 = None
     std = None
     if dtype == "string" or pd.api.types.is_string_dtype(series.dtype):
@@ -1327,9 +1961,22 @@ def _profile_column(
         stripped = as_text.str.strip()
         empty_string_count = int((stripped == "").sum())
         whitespace_count = int((as_text != stripped).sum())
-        top_values = _top_values(non_null)
+        if (
+            approx_top_values
+            and unique_count >= approx_top_values_min_unique
+            and unique_ratio >= approx_top_values_min_ratio
+        ):
+            top_values, sample_count, sample_ratio = _approx_top_values(
+                non_null,
+                sample_size=approx_top_values_sample_size,
+            )
+            top_values_is_approximate = True
+            top_values_sample_count = sample_count
+            top_values_sample_ratio = sample_ratio
+        else:
+            top_values = _top_values(non_null)
 
-    min_value = max_value = mean = None
+    min_value = max_value = mean = histogram = None
     if len(non_null) and _is_numeric_dtype(dtype):
         numeric = pd.to_numeric(series, errors="coerce")
         numeric_non_null = numeric.dropna()
@@ -1343,6 +1990,23 @@ def _profile_column(
             q50 = round(float(quantiles.loc[0.50]), 4)
             q75 = round(float(quantiles.loc[0.75]), 4)
             q95 = round(float(quantiles.loc[0.95]), 4)
+
+            # Calculate histogram
+            finite_values = numeric_non_null[np.isfinite(numeric_non_null)]
+            if len(finite_values):
+                counts, bin_edges = np.histogram(finite_values.to_numpy(), bins=10)
+                total = int(counts.sum())
+                histogram = [
+                    (
+                        float(bin_edges[i]),
+                        float(bin_edges[i + 1]),
+                        int(counts[i]),
+                        _ratio(int(counts[i]), total),
+                    )
+                    for i in range(len(counts))
+                ]
+            else:
+                histogram = None
     elif len(non_null) and (
         dtype == "string" or pd.api.types.is_string_dtype(series.dtype)
     ):
@@ -1353,12 +2017,28 @@ def _profile_column(
 
     semantic_type = _detect_semantic_type(name, series, dtype)
     suggested_dtype = _suggest_column_dtype(series, dtype)
+
+    email_validity_ratio = None
+    url_validity_ratio = None
+    if len(non_null) > 0:
+        if semantic_type == "email":
+            email_validity_ratio = _match_ratio(
+                non_null.astype("string").str.strip(), _EMAIL_PATTERN
+            )
+        elif semantic_type == "url":
+            url_validity_ratio = _match_ratio(
+                non_null.astype("string").str.strip(), _URL_PATTERN
+            )
+
     warnings = _column_warnings(
         null_count=null_count,
         row_count=row_count,
         unique_count=unique_count,
+        unique_ratio=unique_ratio,
+        semantic_type=semantic_type,
         whitespace_count=whitespace_count,
         empty_string_count=empty_string_count,
+        dominant_ratio=dominant_ratio,
     )
 
     return ColumnProfile(
@@ -1373,6 +2053,8 @@ def _profile_column(
         empty_string_count=empty_string_count,
         whitespace_count=whitespace_count,
         suggested_dtype=suggested_dtype,
+        email_validity_ratio=email_validity_ratio,
+        url_validity_ratio=url_validity_ratio,
         min=min_value,
         max=max_value,
         mean=mean,
@@ -1384,10 +2066,15 @@ def _profile_column(
         sample_values=sample_values,
         warnings=warnings,
         top_values=top_values,
+        top_values_is_approximate=top_values_is_approximate,
+        top_values_sample_count=top_values_sample_count,
+        top_values_sample_ratio=top_values_sample_ratio,
+        histogram=histogram,
     )
 
 
 def _detect_semantic_type(name: str, series: pd.Series, dtype: str) -> str:
+    """Infer the semantic type of a column from its name, dtype, and value patterns."""
     lower_name = name.lower()
     values = series.dropna().astype("string").str.strip()
     if len(values) == 0:
@@ -1419,6 +2106,7 @@ def _detect_semantic_type(name: str, series: pd.Series, dtype: str) -> str:
 
 
 def _suggest_casts(report: DataQualityReport) -> dict[str, str]:
+    """Return a mapping of column names to suggested dtype casts based on the profile report."""
     mapping: dict[str, str] = {}
     for name, column in report.columns.items():
         if column.suggested_dtype is not None:
@@ -1433,6 +2121,7 @@ def _suggest_casts(report: DataQualityReport) -> dict[str, str]:
 
 
 def _suggest_column_dtype(series: pd.Series, dtype: str) -> str | None:
+    """Return a suggested target dtype if a string column appears safely castable, else None."""
     if dtype != "string":
         return None
     values = series.dropna().astype("string").str.strip()
@@ -1445,7 +2134,9 @@ def _suggest_column_dtype(series: pd.Series, dtype: str) -> str | None:
 
     numeric = pd.to_numeric(values, errors="coerce")
     if numeric.notna().all():
-        return "int64" if (numeric % 1 == 0).all() else "float64"
+        if values.str.fullmatch(r"[+-]?\d+").all():
+            return "int64"
+        return "float64"
     return None
 
 
@@ -1454,9 +2145,13 @@ def _column_warnings(
     null_count: int,
     row_count: int,
     unique_count: int,
+    unique_ratio: float,
+    semantic_type: str,
     whitespace_count: int,
     empty_string_count: int,
+    dominant_ratio: float,
 ) -> list[str]:
+    """Build a list of warning flag strings for a column based on its profile statistics."""
     warnings: list[str] = []
     if null_count:
         warnings.append("contains_nulls")
@@ -1464,6 +2159,16 @@ def _column_warnings(
         warnings.append("all_null")
     if row_count and unique_count == 1:
         warnings.append("constant")
+    if row_count and unique_count > 1 and dominant_ratio >= _NEAR_CONSTANT_THRESHOLD:
+        warnings.append("near_constant")
+    non_null_count = row_count - null_count
+    if (
+        non_null_count > 0
+        and unique_count >= _HIGH_CARDINALITY_MIN_UNIQUE
+        and unique_ratio >= _HIGH_CARDINALITY_RATIO_THRESHOLD
+        and semantic_type in {"identifier", "text"}
+    ):
+        warnings.append("high_cardinality")
     if whitespace_count:
         warnings.append("leading_or_trailing_whitespace")
     if empty_string_count:
@@ -1472,10 +2177,12 @@ def _column_warnings(
 
 
 def _match_ratio(values: pd.Series, pattern: str) -> float:
+    """Return the fraction of values in a series that fully match a regex pattern."""
     return _ratio(int(values.str.fullmatch(pattern, na=False).sum()), len(values))
 
 
 def _looks_like_datetime(values: pd.Series) -> bool:
+    """Return True if the majority of values look like parseable date strings."""
     date_like = values.str.fullmatch(
         r"(\d{4}-\d{1,2}-\d{1,2})|(\d{1,2}/\d{1,2}/\d{2,4})",
         na=False,
@@ -1487,21 +2194,30 @@ def _looks_like_datetime(values: pd.Series) -> bool:
 
 
 def _is_numeric_dtype(dtype: str) -> bool:
+    """Return True if dtype is int64 or float64."""
     return dtype in {"int64", "float64"}
 
 
 def _ratio(part: int, total: int) -> float:
+    """Return part/total rounded to 6 decimal places, or 0.0 if total is zero."""
     if total == 0:
         return 0.0
     return round(part / total, 6)
 
 
 def _clean_scalar(value: Any) -> Any:
+    """Convert NaN and numpy scalar values to JSON-safe Python types."""
     if pd.isna(value):
         return None
     if hasattr(value, "item"):
         return value.item()
     return value
+
+
+_APPROX_TOP_VALUES_SEED = 0
+_NEAR_CONSTANT_THRESHOLD = 0.95
+_HIGH_CARDINALITY_RATIO_THRESHOLD = 0.9
+_HIGH_CARDINALITY_MIN_UNIQUE = 100
 
 
 def _top_values(
@@ -1519,6 +2235,32 @@ def _top_values(
     return [
         (val, int(cnt), _ratio(int(cnt), total)) for val, cnt in counts.head(n).items()
     ]
+
+
+def _approx_top_values(
+    series: pd.Series,
+    *,
+    n: int = 5,
+    sample_size: int = 2000,
+) -> tuple[list[tuple[Any, int, float]], int, float]:
+    """Return approximate top-N value frequencies for a non-null series.
+
+    Sampling uses a fixed seed for deterministic output.
+    """
+    if len(series) == 0:
+        return [], 0, 0.0
+    sample_n = min(len(series), sample_size)
+    sampled = series.sample(n=sample_n, random_state=_APPROX_TOP_VALUES_SEED)
+    counts = sampled.value_counts(dropna=True)
+    total = int(counts.sum())
+    return (
+        [
+            (val, int(cnt), _ratio(int(cnt), total))
+            for val, cnt in counts.head(n).items()
+        ],
+        sample_n,
+        _ratio(sample_n, len(series)),
+    )
 
 
 _EMAIL_PATTERN = r"[^@\s]+@[^@\s]+\.[^@\s]+"
