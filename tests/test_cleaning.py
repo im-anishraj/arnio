@@ -2268,6 +2268,22 @@ class TestFilterRows:
         ):
             ar.filter_rows(df, "name", ">", 1)
 
+    def test_filter_rows_rejects_list_like_values(self):
+        df = pd.DataFrame({"a": [1, 2, 3]})
+
+        list_like_values = [
+            [1, 2],
+            (1, 2),
+            {"a": 1},
+            pd.Series([1, 2]),
+            pd.Index([1, 2]),
+            np.array([1, 2]),
+        ]
+
+        for value in list_like_values:
+            with pytest.raises(TypeError, match="filter_rows value must be a scalar"):
+                ar.filter_rows(df, "a", "==", value)
+
 
 class TestMappingValidation:
     def test_rename_columns_rejects_invalid_mapping_value_type(self, sample_csv):
