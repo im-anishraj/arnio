@@ -71,6 +71,12 @@ class ArFrame:
         self._attrs: dict = attrs if attrs is not None else {}
 
     @classmethod
+    def from_dict(cls, data: dict) -> ArFrame:
+        from .convert import from_dict as _from_dict
+
+        return _from_dict(data)
+
+    @classmethod
     def from_records(
         cls,
         records: list,
