@@ -135,6 +135,46 @@ Frame Frame::select_columns(const std::vector<std::string>& columns) const {
     return Frame(row_count_, std::move(selected));
 }
 
+Frame Frame::select_rows(size_t start, size_t count) const {
+    if (start > row_count_) {
+        throw std::out_of_range("Row start index out of range");
+    }
+
+    size_t actual_count = std::min(count, row_count_ - start);
+
+    std::vector<Column> selected_columns;
+    selected_columns.reserve(columns_.size());
+
+    for (const auto& col : columns_) {
+        Column new_col(col.name(), col.dtype());
+
+        for (size_t i = start; i < start + actual_count; ++i) {
+            if (col.is_null(i)) {
+                new_col.push_null();
+                continue;
+            }
+
+            auto value = col.at(i);
+
+            if (std::holds_alternative<std::string>(value)) {
+                new_col.push_back(std::get<std::string>(value));
+            } else if (std::holds_alternative<int64_t>(value)) {
+                new_col.push_back(std::get<int64_t>(value));
+            } else if (std::holds_alternative<double>(value)) {
+                new_col.push_back(std::get<double>(value));
+            } else if (std::holds_alternative<bool>(value)) {
+                new_col.push_back(std::get<bool>(value));
+            } else {
+                new_col.push_null();
+            }
+        }
+
+        selected_columns.push_back(std::move(new_col));
+    }
+
+    return Frame(actual_count, std::move(selected_columns));
+}
+
 void Frame::rebuild_index() {
     name_index_.clear();
     for (size_t i = 0; i < columns_.size(); ++i) {

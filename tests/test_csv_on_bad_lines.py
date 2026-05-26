@@ -460,3 +460,105 @@ class TestOnBadLinesUsecols:
         assert frames[0].columns == ["a", "d"]
         joined = "\n".join(str(w.message) for w in caught)
         assert "CSV row 3 has 3 fields; expected 4" in joined
+
+
+class TestScanCsvOnBadLines:
+    def test_default_error_raises(self, tmp_path):
+        csv_path = tmp_path / "bad.csv"
+        csv_path.write_text("a,b\n1,2\nbad_row\n3,4\n")
+        with pytest.raises(ar.CsvReadError):
+            ar.scan_csv(csv_path)
+
+    def test_warn_skips_bad_rows(self, tmp_path):
+        csv_path = tmp_path / "bad.csv"
+        csv_path.write_text("a,b\n1,2\nbad_row\n3,4\n")
+        schema = ar.scan_csv(csv_path, on_bad_lines="warn")
+        assert schema == {"a": "int64", "b": "int64"}
+
+    def test_skip_skips_bad_rows(self, tmp_path):
+        csv_path = tmp_path / "bad.csv"
+        csv_path.write_text("a,b\n1,2\nbad_row\n3,4\n")
+        schema = ar.scan_csv(csv_path, on_bad_lines="skip")
+        assert schema == {"a": "int64", "b": "int64"}
+
+    def test_invalid_on_bad_lines_raises(self, tmp_path):
+        csv_path = tmp_path / "good.csv"
+        csv_path.write_text("a,b\n1,2\n")
+        with pytest.raises(ValueError):
+            ar.scan_csv(csv_path, on_bad_lines="invalid")
+
+    def test_warn_emits_user_warning(self, tmp_path):
+        csv_path = tmp_path / "bad.csv"
+        csv_path.write_text("a,b\n1,2\nbad_row\n3,4\n")
+        with pytest.warns(UserWarning, match="malformed CSV row"):
+            ar.scan_csv(csv_path, on_bad_lines="warn")
+
+    def test_skip_does_not_emit_warning(self, tmp_path):
+        csv_path = tmp_path / "bad.csv"
+        csv_path.write_text("a,b\n1,2\nbad_row\n3,4\n")
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            ar.scan_csv(csv_path, on_bad_lines="skip")
+        assert [w for w in caught if w.category is UserWarning] == []
+
+    def test_warn_quoted_delimiter_not_classified_bad(self, tmp_path):
+        """A quoted field containing the delimiter must not be reported as malformed."""
+        csv_path = tmp_path / "quoted.csv"
+        csv_path.write_text('a,b\n"x,y",2\n1,2\n')
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            schema = ar.scan_csv(csv_path, on_bad_lines="warn")
+        assert schema == {"a": "string", "b": "int64"}
+        assert [w for w in caught if w.category is UserWarning] == []
+
+    def test_warn_real_bad_row_among_quoted_still_caught(self, tmp_path):
+        """Real malformed row warns while quoted-delimiter rows pass through."""
+        csv_path = tmp_path / "mixed.csv"
+        csv_path.write_text('a,b\n"x,y",2\nbad_row\n1,2\n')
+        with pytest.warns(UserWarning, match="malformed CSV row"):
+            schema = ar.scan_csv(csv_path, on_bad_lines="warn")
+        assert schema == {"a": "string", "b": "int64"}
+
+    def test_warn_multiple_bad_rows_correct_row_numbers(self, tmp_path):
+        """Row numbers in warning must reflect physical CSV row, not accepted-row count."""
+        csv_path = tmp_path / "multi_bad.csv"
+        csv_path.write_text(
+            "a,b\n"
+            "1,2\n"  # row 2: good
+            "bad\n"  # row 3: bad
+            "3,4\n"  # row 4: good
+            "also_bad\n"  # row 5: bad
+            "5,6\n"  # row 6: good
+        )
+        with pytest.warns(UserWarning) as caught:
+            schema = ar.scan_csv(csv_path, on_bad_lines="warn")
+        msg = str(caught[0].message)
+        assert "CSV row 3 has 1 fields; expected 2" in msg
+        assert "CSV row 5 has 1 fields; expected 2" in msg
+        assert schema == {"a": "int64", "b": "int64"}
+
+    def test_warn_blank_row_before_bad_row_correct_number(self, tmp_path):
+        """Blank line before malformed row must not shift the reported row number."""
+        csv_path = tmp_path / "blank_before_bad.csv"
+        csv_path.write_text(
+            "a,b\n"
+            "1,2\n"  # row 2: good
+            "\n"  # row 3: blank
+            "bad\n"  # row 4: bad
+            "3,4\n"  # row 5: good
+        )
+        with pytest.warns(UserWarning) as caught:
+            ar.scan_csv(csv_path, on_bad_lines="warn")
+        assert "CSV row 4 has 1 fields; expected 2" in str(caught[0].message)
+
+    def test_warn_has_header_false_row_numbering(self, tmp_path):
+        """has_header=False: first record is row 1, malformed rows report correctly."""
+        csv_path = tmp_path / "no_header.csv"
+        csv_path.write_text(
+            "1,2\n"  # row 1: good (first record, used as data)
+            "bad\n"  # row 2: bad
+            "3,4\n"  # row 3: good
+        )
+        with pytest.warns(UserWarning) as caught:
+            ar.scan_csv(csv_path, on_bad_lines="warn", has_header=False)
+        assert "CSV row 2 has 1 fields; expected 2" in str(caught[0].message)
