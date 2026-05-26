@@ -833,13 +833,6 @@ class TestDropColumns:
         assert result.columns == ["a", "b"]
         assert result.shape == frame.shape
 
-    def test_drop_all_columns_returns_empty_frame(self):
-        df = pd.DataFrame({"a": [1], "b": [2]})
-        frame = ar.from_pandas(df)
-        result = frame.drop_columns(["a", "b"])
-        assert result.columns == []
-        assert result.shape == (1, 0)
-
     def test_drop_duplicate_names_in_cols(self):
         df = pd.DataFrame({"a": [1], "b": [2], "c": [3]})
         frame = ar.from_pandas(df)
