@@ -6,7 +6,7 @@ import pytest
 
 import arnio as ar
 from arnio import from_pandas, to_pandas
-from arnio.cleaning import _validate_column_sequence
+from arnio.cleaning import _validate_column_sequence, _validate_string_mapping
 
 
 class TestDropNulls:
@@ -3533,50 +3533,38 @@ class TestValidateColumnSequence:
 
 class TestValidateStringMapping:
     def test_non_mapping_raises_type_error(self):
-        from arnio.cleaning import _validate_string_mapping
+        with pytest.raises(
+            TypeError, match="must be a mapping of string keys to strings"
+        ):
 
-        with pytest.raises(TypeError, match="must be a mapping of string keys to strings"):
             _validate_string_mapping([("a", "b")], argument_name="mapping")
 
     def test_invalid_non_string_keys_raise_type_error(self):
-        from arnio.cleaning import _validate_string_mapping
-
         with pytest.raises(
             TypeError, match="keys must contain only string column names"
         ):
             _validate_string_mapping({1: "a", 2: "b"}, argument_name="mapping")
 
     def test_empty_value_raises_type_error(self):
-        from arnio.cleaning import _validate_string_mapping
-
         with pytest.raises(TypeError, match="values must be non-empty strings"):
             _validate_string_mapping({"a": "", "b": "value"}, argument_name="mapping")
 
     def test_whitespace_only_value_raises_type_error(self):
-        from arnio.cleaning import _validate_string_mapping
-
         with pytest.raises(TypeError, match="values must be non-empty strings"):
             _validate_string_mapping(
                 {"a": "   ", "b": "value"}, argument_name="mapping"
             )
 
     def test_valid_string_mapping_returns_dict(self):
-        from arnio.cleaning import _validate_string_mapping
-
         result = _validate_string_mapping(
             {"a": "value1", "b": "value2"}, argument_name="mapping"
         )
         assert result == {"a": "value1", "b": "value2"}
 
     def test_empty_mapping_allow_empty_true(self):
-        from arnio.cleaning import _validate_string_mapping
-
         result = _validate_string_mapping({}, argument_name="mapping", allow_empty=True)
         assert result == {}
 
     def test_empty_mapping_allow_empty_false_raises(self):
-        from arnio.cleaning import _validate_string_mapping
-
         with pytest.raises(ValueError, match="must not be empty"):
             _validate_string_mapping({}, argument_name="mapping", allow_empty=False)
-
