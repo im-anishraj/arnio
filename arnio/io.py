@@ -959,7 +959,7 @@ def scan_csv(
     config.trim_headers = _validate_bool_option(trim_headers, "trim_headers")
     config.decimal_separator = decimal_separator
     config.thousands_separator = thousands_separator
-    config.has_header = has_header
+    config.has_header = _validate_bool_option(has_header, "has_header")
     config.encoding_errors = encoding_errors
 
     if null_values is not None:
