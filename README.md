@@ -515,6 +515,15 @@ Custom steps run through a pandas↔ArFrame conversion bridge. Prototype in Pyth
 </details>
 
 <details>
+<summary><b>📐 Check dimensions quickly</b></summary>
+<br>
+
+Access row and column counts directly on the `ArFrame` before converting to pandas.
+
+```python
+frame = ar.read_csv("data.csv")
+print(f"Loaded {frame.row_count} rows and {frame.column_count} columns.")
+```
 <summary><b>🔄 Custom Step Overwrite Policy</b></summary>
 <br>
 

@@ -11,7 +11,12 @@ import pytest
 import arnio as ar
 from arnio._core import _Column, _DType, _Frame
 
-# ── Normal behaviour ──────────────────────────────────────────────────────────
+
+def test_frame_row_col_count():
+    df = pd.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]})
+    frame = ar.from_pandas(df)
+    assert frame.row_count == 3
+    assert frame.column_count == 2
 
 
 def test_preview_returns_string(sample_csv):
@@ -30,11 +35,10 @@ def test_preview_contains_column_names(sample_csv):
     frame = ar.read_csv(sample_csv)
     result = frame.preview()
     for col in frame.columns:
-        assert col in result  # "name", "age", "email", "active" all appear
+        assert col in result
 
 
 def test_preview_default_shows_three_rows(sample_csv):
-    # sample_csv only has 3 rows, so default n=5 clamps to 3
     frame = ar.read_csv(sample_csv)
     result = frame.preview()
     assert "showing 3 of 3" in result
@@ -52,13 +56,10 @@ def test_preview_n_equals_one(sample_csv):
     assert "showing 1 of 3" in result
 
 
-# ── Edge cases ────────────────────────────────────────────────────────────────
-
-
 def test_preview_n_exceeds_row_count(sample_csv):
     frame = ar.read_csv(sample_csv)
     result = frame.preview(n=9999)
-    assert "showing 3 of 3" in result  # clamps, doesn't crash
+    assert "showing 3 of 3" in result
 
 
 def test_preview_n_equals_exact_row_count(sample_csv):
@@ -68,20 +69,15 @@ def test_preview_n_equals_exact_row_count(sample_csv):
 
 
 def test_preview_with_nulls(csv_with_nulls):
-    # Should not crash on missing values
     frame = ar.read_csv(csv_with_nulls)
     result = frame.preview()
     assert isinstance(result, str)
 
 
 def test_preview_large_csv(large_csv):
-    # 1000 rows — default should only show 5
     frame = ar.read_csv(large_csv)
     result = frame.preview()
     assert "showing 5 of 1000" in result
-
-
-# ── Invalid inputs ────────────────────────────────────────────────────────────
 
 
 def test_preview_invalid_n_zero(sample_csv):
@@ -111,7 +107,7 @@ def test_preview_invalid_n_float(sample_csv):
 def test_preview_invalid_n_bool(sample_csv):
     frame = ar.read_csv(sample_csv)
     with pytest.raises(ValueError):
-        frame.preview(n=True)  # bool is subclass of int — must still be rejected
+        frame.preview(n=True)
 
 
 def test_preview_invalid_n_none(sample_csv):
@@ -390,25 +386,20 @@ def test_tail_invalid_n(invalid_n):
 
 
 class TestArFrame:
-    """Test ArFrame properties and methods."""
-
     def test_is_empty_true(self, tmp_path):
-        """Test is_empty returns True for frame with zero rows."""
         csv_path = tmp_path / "empty.csv"
-        csv_path.write_text("name,age\n")  # Header only, no data rows
+        csv_path.write_text("name,age\n")
 
         frame = ar.read_csv(str(csv_path))
         assert frame.is_empty is True
         assert len(frame) == 0
 
     def test_is_empty_false(self, sample_csv):
-        """Test is_empty returns False for frame with rows."""
         frame = ar.read_csv(sample_csv)
         assert frame.is_empty is False
         assert len(frame) > 0
 
     def test_is_empty_single_row(self, tmp_path):
-        """Test is_empty with exactly one row."""
         csv_path = tmp_path / "single.csv"
         csv_path.write_text("name,age\nAlice,30\n")
 
