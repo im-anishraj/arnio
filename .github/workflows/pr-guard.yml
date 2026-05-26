@@ -1,0 +1,73 @@
+name: PR Guard
+
+on:
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  guard-sensitive-paths:
+    name: Guard Sensitive Paths and Root Files
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for unauthorized file changes
+        run: |
+          python3 -c '
+          import os
+          import sys
+          import subprocess
+
+          base_ref = os.environ.get("GITHUB_BASE_REF", "main")
+          try:
+              # Get the list of all files changed in this PR compared to the base branch
+              cmd = ["git", "diff", "--name-only", "--diff-filter=ACMRT", f"origin/{base_ref}...HEAD"]
+              output = subprocess.check_output(cmd, text=True)
+          except subprocess.CalledProcessError as e:
+              print(f"Failed to run git diff: {e}")
+              sys.exit(1)
+
+          changed_files = [line.strip() for line in output.splitlines() if line.strip()]
+          
+          # Get list of added files specifically to check for new stray root files
+          try:
+              added_cmd = ["git", "diff", "--name-only", "--diff-filter=A", f"origin/{base_ref}...HEAD"]
+              added_output = subprocess.check_output(added_cmd, text=True)
+          except subprocess.CalledProcessError:
+              added_output = ""
+              
+          added_files = [line.strip() for line in added_output.splitlines() if line.strip()]
+
+          errors = []
+
+          # Rule 1: Guard .github/workflows/
+          for file in changed_files:
+              if file.startswith(".github/workflows/"):
+                  errors.append(f"❌ SECURITY RISK: Modified workflow file \"{file}\". This requires explicit maintainer review and the `area:ci-packaging` label.")
+
+          # Rule 2: Guard against stray root-level files
+          # Allowed root file extensions and exact names for new additions
+          allowed_root_exts = {".md", ".txt", ".toml", ".ini", ".yml", ".yaml", ".svg", ".png", ".jpg"}
+          allowed_root_names = {"Makefile", "LICENSE", "setup.py", ".gitignore", ".clang-format", ".pre-commit-config.yaml"}
+          
+          for file in added_files:
+              dirname = os.path.dirname(file)
+              basename = os.path.basename(file)
+              
+              if dirname == "":  # It is a root file
+                  ext = os.path.splitext(basename)[1].lower()
+                  if ext not in allowed_root_exts and basename not in allowed_root_names:
+                      errors.append(f"❌ STRAY FILE DETECTED: Added unrecognized root-level file \"{file}\". If this is intentional, a maintainer must approve. Otherwise, please remove it.")
+
+          if errors:
+              print("🚨 PR GUARD FAILED 🚨\n")
+              for err in errors:
+                  print(err)
+              print("\nIf you are a contributor, please revert these files or keep your PR strictly scoped to your issue.")
+              sys.exit(1)
+          else:
+              print("✅ PR Guard passed. No sensitive workflow modifications or stray root files detected.")
+          '
