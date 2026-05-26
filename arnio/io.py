@@ -27,6 +27,8 @@ from .frame import ArFrame
 
 def _is_utf8_encoding(encoding: str) -> bool:
     """Return whether the encoding should be treated as raw UTF-8 input."""
+    if not isinstance(encoding, str):
+        raise TypeError(f"encoding must be a string, got {type(encoding).__name__!r}")
     return encoding.lower().replace("_", "-") in {"utf-8", "utf8"}
 
 
@@ -957,7 +959,7 @@ def scan_csv(
     config.trim_headers = _validate_bool_option(trim_headers, "trim_headers")
     config.decimal_separator = decimal_separator
     config.thousands_separator = thousands_separator
-    config.has_header = has_header
+    config.has_header = _validate_bool_option(has_header, "has_header")
     config.encoding_errors = encoding_errors
 
     if null_values is not None:

@@ -1476,6 +1476,21 @@ class TestScanCsv:
 
         assert list(frame.columns) == list(schema.keys())
 
+    def test_scan_csv_has_header_validation(self, tmp_path):
+        csv_content = "1,Alice\n2,Bob\n"
+        csv_file = tmp_path / "validation.csv"
+        csv_file.write_text(csv_content)
+
+        # Assert that invalid truthy/falsy types raise a TypeError
+        with pytest.raises(TypeError, match="has_header must be True or False"):
+            ar.scan_csv(csv_file, has_header=1)
+
+        with pytest.raises(TypeError, match="has_header must be True or False"):
+            ar.scan_csv(csv_file, has_header=None)
+
+        with pytest.raises(TypeError, match="has_header must be True or False"):
+            ar.scan_csv(csv_file, has_header="false")
+
     def test_read_csv_encoding_errors_preserve_valid_utf8(
         self,
         tmp_path,
@@ -2608,3 +2623,38 @@ class TestArFrameStr:
     def test_str_returns_string(self, sample_csv):
         frame = ar.read_csv(sample_csv)
         assert isinstance(str(frame), str)
+
+
+def test_read_csv_encoding_non_string_raises_type_error(tmp_path):
+    path = tmp_path / "test.csv"
+    path.write_text("a,b\n1,2\n")
+    with pytest.raises(TypeError, match="encoding must be a string"):
+        ar.read_csv(path, encoding=123)
+
+
+def test_read_csv_encoding_none_raises_type_error(tmp_path):
+    path = tmp_path / "test.csv"
+    path.write_text("a,b\n1,2\n")
+    with pytest.raises(TypeError, match="encoding must be a string"):
+        ar.read_csv(path, encoding=None)
+
+
+def test_read_csv_encoding_list_raises_type_error(tmp_path):
+    path = tmp_path / "test.csv"
+    path.write_text("a,b\n1,2\n")
+    with pytest.raises(TypeError, match="encoding must be a string"):
+        ar.read_csv(path, encoding=["utf-8"])
+
+
+def test_scan_csv_encoding_non_string_raises_type_error(tmp_path):
+    path = tmp_path / "test.csv"
+    path.write_text("a,b\n1,2\n")
+    with pytest.raises(TypeError, match="encoding must be a string"):
+        ar.scan_csv(path, encoding=123)
+
+
+def test_scan_csv_encoding_none_raises_type_error(tmp_path):
+    path = tmp_path / "test.csv"
+    path.write_text("a,b\n1,2\n")
+    with pytest.raises(TypeError, match="encoding must be a string"):
+        ar.scan_csv(path, encoding=None)

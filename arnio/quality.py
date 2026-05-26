@@ -1044,23 +1044,25 @@ def profile(
     if approx_top_values_sample_size <= 0:
         raise ValueError("approx_top_values_sample_size must be positive")
 
-    has_exclusions = exclude_columns is not None and len(exclude_columns) > 0
+    normalized_exclude_columns: list[str] = []
 
     if exclude_columns is not None:
-        exclude_columns = _validate_column_sequence(
+        normalized_exclude_columns = _validate_column_sequence(
             exclude_columns,
             argument_name="exclude_columns",
         )
         validate_columns_exist(
             frame,
-            exclude_columns,
+            normalized_exclude_columns,
             operation="profile",
         )
+
+    has_exclusions = len(normalized_exclude_columns) > 0
 
     df = to_pandas(frame)
 
     if has_exclusions:
-        df = df.drop(columns=list(exclude_columns))
+        df = df.drop(columns=normalized_exclude_columns)
 
     row_count = len(df)
     column_count = len(df.columns)
@@ -1160,7 +1162,10 @@ def compare_profiles(
         raise ValueError(
             "Profiles have incompatible schemas: "
             f"missing from profile_a={missing_from_a}, "
-            f"missing from profile_b={missing_from_b}"
+            f"missing from profile_b={missing_from_b}. "
+            "This is likely caused by calling profile() with different exclude_columns "
+            "on each dataset. Profile both datasets with the same included/excluded "
+            "columns before comparing."
         )
 
     drift_report: dict[str, dict[str, Any]] = {}
@@ -1867,6 +1872,8 @@ def auto_clean(
     if mode not in {"safe", "strict"}:
         raise ValueError("mode must be 'safe' or 'strict'")
 
+    if not isinstance(return_report, bool):
+        raise TypeError("return_report must be a bool")
     if not isinstance(dry_run, bool):
         raise TypeError("dry_run must be a bool")
     if not isinstance(allow_lossy_casts, bool):

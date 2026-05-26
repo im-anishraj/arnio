@@ -561,6 +561,8 @@ class Schema:
                     raise TypeError(
                         f"Schema 'unique' members must be strings, got {type(item).__name__} for element {item!r}."
                     )
+        if not isinstance(self.strict, bool):
+            raise TypeError("Schema 'strict' must be a boolean")
 
     def validate(
         self,
