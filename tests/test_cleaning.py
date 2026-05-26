@@ -1839,6 +1839,22 @@ class TestParseBoolStrings:
         cleaned2 = ar.to_pandas(result2)
         assert cleaned2["active"].tolist() == ["True", "false", "True", "no"]
 
+    def test_parse_bool_strings_rejects_bare_strings(self):
+        df = pd.DataFrame({"active": ["yes", "no"]}, dtype=object)
+        frame = ar.from_pandas(df)
+
+        with pytest.raises(
+            TypeError,
+            match="true_values must be a set/list/tuple of strings, not a bare string",
+        ):
+            ar.parse_bool_strings(frame, true_values="yes")
+
+        with pytest.raises(
+            TypeError,
+            match="false_values must be a set/list/tuple of strings, not a bare string",
+        ):
+            ar.parse_bool_strings(frame, false_values="no")
+
 
 class TestRenameColumns:
     def test_rename(self, sample_csv):
