@@ -99,9 +99,9 @@ jobs:
           echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
           echo "| Version validation     | ${{ needs.validate-version.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| sdist build + twine    | ${{ needs.build_sdist.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Wheels + smoke (Linux) | ${{ needs.build_wheels.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Wheels + smoke (macOS) | ${{ needs.build_wheels.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Wheels + smoke (Win)   | ${{ needs.build_wheels.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
+          # build_wheels is a matrix job, so needs.build_wheels.result
+          # represents the aggregate status across all wheel platforms.
+          echo "| Wheels + smoke (matrix) | ${{ needs.build_wheels.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Package version:** ${{ needs.validate-version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
