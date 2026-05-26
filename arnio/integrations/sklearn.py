@@ -31,6 +31,10 @@ class ArnioCleaner(BaseEstimator, TransformerMixin):
     """
 
     def __init__(self, steps=None, copy=True, allow_row_count_change=False):
+        if not isinstance(copy, bool):
+            raise TypeError("copy must be a bool")
+        if not isinstance(allow_row_count_change, bool):
+            raise TypeError("allow_row_count_change must be a bool")
         self.steps = steps if steps is not None else []
         self.copy = copy
         self.allow_row_count_change = allow_row_count_change

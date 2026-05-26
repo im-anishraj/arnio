@@ -111,3 +111,12 @@ def test_arniocleaner_rejects_transform_with_missing_columns():
     cleaner.fit(train)
     with pytest.raises(ValueError, match="columns must match"):
         cleaner.transform(test)
+
+def test_arniocleaner_rejects_non_boolean_options():
+    """Ensure constructor explicitly blocks truthy/falsy non-boolean values."""
+    invalid_values = ["false", "True", 1, 0, None, [], {}]    
+    for value in invalid_values:
+        with pytest.raises(TypeError, match="copy must be a bool"):
+            ArnioCleaner(copy=value)
+        with pytest.raises(TypeError, match="allow_row_count_change must be a bool"):
+            ArnioCleaner(allow_row_count_change=value)
