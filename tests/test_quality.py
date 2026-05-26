@@ -1506,6 +1506,7 @@ def test_data_quality_report_to_html(tmp_path):
     assert out_path.exists()
     assert out_path.read_text(encoding="utf-8").startswith("<!DOCTYPE html>")
 
+
 def test_report_to_html_rejects_invalid_filepath_types():
     report = ar.DataQualityReport(
         row_count=0,
@@ -1518,10 +1519,11 @@ def test_report_to_html_rejects_invalid_filepath_types():
     )
 
     invalid_paths = [True, False, 123, object()]
-    
+
     for invalid_path in invalid_paths:
         with pytest.raises(TypeError, match="must be a string, bytes, or os.PathLike"):
             report.to_html(file_path=invalid_path)
+
 
 def test_report_to_html_limits_suggestions():
     report = ar.DataQualityReport(
