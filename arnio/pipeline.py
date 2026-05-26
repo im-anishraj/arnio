@@ -153,7 +153,7 @@ def register_step(name: str, fn: Callable, overwrite: bool = False):
             )
         _PYTHON_STEP_REGISTRY[name] = fn
 
-        
+
 def get_builtin_step_signatures() -> dict[str, inspect.Signature]:
     """Return normalized signatures for built-in pipeline steps.
 

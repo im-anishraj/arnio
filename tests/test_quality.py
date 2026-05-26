@@ -2600,7 +2600,6 @@ def test_data_quality_report_to_json_redact_sample_values():
     assert parsed["columns"]["name"]["sample_values"] == ["[REDACTED]"]
 
 
-
 def test_auto_clean_dry_run_with_return_report_raises_value_error():
     frame = ar.from_pandas(pd.DataFrame({"name": [" Alice "]}))
     with pytest.raises(
@@ -2671,6 +2670,8 @@ def test_profile_comparison_to_dict_empty_default():
     # Verify backward compatibility (calling to_dict without parameters doesn't fail)
     res = comparison.to_dict()
     assert "age" in res["left_profile"]["columns"]
+
+
 # --- Tests for ProfileComparison.to_json() ---
 
 
