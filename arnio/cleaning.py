@@ -1276,6 +1276,7 @@ def filter_rows(
     """
 
     import pandas as pd
+    from pandas.api.types import is_scalar
 
     from .convert import from_pandas, to_pandas
 
@@ -1297,6 +1298,9 @@ def filter_rows(
 
     if column not in df.columns:
         raise ValueError(f"Unknown column: {column}")
+
+    if not is_scalar(value):
+        raise TypeError("filter_rows value must be a scalar")
 
     try:
         mask = getattr(df[column], ops[op])(value)
