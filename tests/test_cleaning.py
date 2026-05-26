@@ -643,11 +643,22 @@ class TestDropColumns:
         with pytest.raises(TypeError, match="only string column names"):
             ar.drop_columns(frame, ["age", 1])
 
-    def test_drop_columns_rejects_removing_all_columns(self):
+    def test_drop_columns_rejects_removing_all_columns_across_entry_points(self):
         frame = ar.from_pandas(pd.DataFrame({"id": [1, 2], "name": ["a", "b"]}))
 
         with pytest.raises(ValueError, match="drop_columns cannot remove all columns"):
+            frame.drop_columns(["id", "name"])
+
+        with pytest.raises(ValueError, match="drop_columns cannot remove all columns"):
             ar.drop_columns(frame, ["id", "name"])
+
+        with pytest.raises(ValueError, match="drop_columns cannot remove all columns"):
+            ar.pipeline(
+                frame,
+                [
+                    ("drop_columns", {"columns": ["id", "name"]}),
+                ],
+            )
 
 
 class TestDropConstantColumns:
@@ -1319,6 +1330,27 @@ class TestNormalizeCase:
         df = ar.to_pandas(result)
 
         assert df["word"].tolist() == ["éclair", "ñandú", "über-Cool"]
+
+    def test_invalid_case_type_int(self):
+        import pandas as pd
+
+        frame = ar.from_pandas(pd.DataFrame({"x": ["A"]}))
+        with pytest.raises(TypeError, match="case_type must be a string"):
+            ar.normalize_case(frame, case_type=123)
+
+    def test_invalid_case_type_none(self):
+        import pandas as pd
+
+        frame = ar.from_pandas(pd.DataFrame({"x": ["A"]}))
+        with pytest.raises(TypeError, match="case_type must be a string"):
+            ar.normalize_case(frame, case_type=None)
+
+    def test_invalid_case_type_string(self):
+        import pandas as pd
+
+        frame = ar.from_pandas(pd.DataFrame({"x": ["A"]}))
+        with pytest.raises(ValueError):
+            ar.normalize_case(frame, case_type="invalid")
 
 
 class TestNormalizeUnicode:

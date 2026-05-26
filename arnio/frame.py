@@ -460,13 +460,9 @@ class ArFrame:
         drop_set = set(unique_cols)
         remaining = [col for col in self.columns if col not in drop_set]
 
-        # Dropping all columns — preserve row count
+        # Dropping all columns is not supported
         if not remaining:
-            import pandas as pd
-
-            from .convert import from_pandas
-
-            return from_pandas(pd.DataFrame(index=range(len(self))))
+            raise ValueError("drop_columns cannot remove all columns from the frame")
 
         return ArFrame(self._frame.select_columns(remaining))
 
