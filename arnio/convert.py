@@ -374,7 +374,8 @@ def from_pandas(df: pd.DataFrame) -> ArFrame:
     Raises
     ------
     TypeError
-        If DataFrame contains unsupported nested/complex types.
+        If the input is not a pandas DataFrame, or if DataFrame contains
+        unsupported nested/complex types.
 
     Examples
     --------
@@ -382,6 +383,11 @@ def from_pandas(df: pd.DataFrame) -> ArFrame:
     >>> df = pd.DataFrame({"name": ["Alice"], "age": [25]})
     >>> frame = ar.from_pandas(df)
     """
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError(
+            f"from_pandas() expects a pandas DataFrame, got {type(df).__name__}"
+        )
+
     _validate_unique_column_labels(df.columns)
 
     columns = {}
