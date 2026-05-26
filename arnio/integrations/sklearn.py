@@ -49,6 +49,7 @@ class ArnioCleaner(BaseEstimator, TransformerMixin):
         # Store column dtypes so transform() can warn when they change
         # between fit and transform (e.g. after a CSV round-trip).
         self.feature_dtypes_in_ = {col: str(X[col].dtype) for col in X.columns}
+        self.feature_names_out_ = self.feature_names_in_.copy()
 
         return self
 
@@ -85,6 +86,7 @@ class ArnioCleaner(BaseEstimator, TransformerMixin):
         ar_frame = from_pandas(X_in)
         cleaned_ar_frame = run_pipeline(ar_frame, self.steps)
         X_out = to_pandas(cleaned_ar_frame)
+        self.feature_names_out_ = np.array(X_out.columns, dtype=object)
 
         if len(X_out.index) != len(X.index):
             if not self.allow_row_count_change:
@@ -103,7 +105,7 @@ class ArnioCleaner(BaseEstimator, TransformerMixin):
         check_is_fitted(self, "n_features_in_")
 
         if input_features is None:
-            return self.feature_names_in_
+            return self.feature_names_out_
 
         if len(input_features) != self.n_features_in_:
             raise ValueError(
@@ -111,4 +113,9 @@ class ArnioCleaner(BaseEstimator, TransformerMixin):
                 f"({self.n_features_in_}), got {len(input_features)}"
             )
 
-        return np.asarray(input_features, dtype=object)
+        if list(input_features) != list(self.feature_names_in_):
+            raise ValueError(
+                "input_features must match the columns seen during fit, including order."
+            )
+
+        return self.feature_names_out_

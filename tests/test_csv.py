@@ -15,6 +15,16 @@ from arnio.io import _utf8_csv_path
 MESSY_CSV = str(Path(__file__).parent / "fixtures" / "messy_sales_data.csv")
 
 
+class ChunkTrackingTextStream:
+    def __init__(self, chunks):
+        self._chunks = iter(chunks)
+        self.read_sizes = []
+
+    def read(self, size=-1):
+        self.read_sizes.append(size)
+        return next(self._chunks, "")
+
+
 class TestReadCsv:
     def test_read_csv_dtype_override_string(self, tmp_path):
         path = tmp_path / "zip_codes.csv"
@@ -744,6 +754,19 @@ class TestReadCsv:
         assert df["revenue"].isna().sum() == 1
         assert pd.isna(df.loc[1, "revenue"])
 
+    def test_empty_csv(self, empty_csv):
+        frame = ar.read_csv(empty_csv)
+        assert frame.shape == (0, 3)
+        assert frame.columns == ["name", "age", "score"]
+
+    def test_csv_with_all_nulls(self, csv_with_all_nulls):
+        frame = ar.read_csv(csv_with_all_nulls)
+        assert frame.shape == (2, 3)
+        df = ar.to_pandas(frame)
+        assert df["a"].isna().all()
+        assert df["b"].isna().all()
+        assert df["c"].isna().all()
+
     def test_utf8_bom_handling(self, tmp_path):
         csv_path = tmp_path / "bom.csv"
         csv_path.write_bytes(b"\xef\xbb\xbfname,age\nAlice,30\nBob,25\n")
@@ -759,6 +782,32 @@ class TestReadCsv:
     def test_pathlike_input(self, sample_csv):
         frame = ar.read_csv(Path(sample_csv))
         assert frame.shape == (3, 4)
+
+    def test_read_csv_file_like_input_is_copied_in_bounded_chunks(self):
+        stream = ChunkTrackingTextStream(["name,age\n", "Alice,30\n", "Bob,25\n"])
+
+        frame = ar.read_csv(stream)
+        df = ar.to_pandas(frame)
+
+        assert df["name"].tolist() == ["Alice", "Bob"]
+        assert stream.read_sizes
+        assert -1 not in stream.read_sizes
+
+    def test_read_csv_chunked_file_like_input_is_copied_in_bounded_chunks(self):
+        stream = ChunkTrackingTextStream(["name,age\nAlice,30\n", "Bob,25\n"])
+
+        chunks = list(ar.read_csv_chunked(stream, chunksize=1))
+
+        assert [ar.to_pandas(chunk)["name"].iloc[0] for chunk in chunks] == [
+            "Alice",
+            "Bob",
+        ]
+        assert stream.read_sizes
+        assert -1 not in stream.read_sizes
+
+    def test_file_like_input_rejects_bytes(self):
+        with pytest.raises(TypeError, match="file-like objects must return text"):
+            ar.read_csv(io.BytesIO(b"name,age\nAlice,30\n"))
 
     def test_read_csv_encoding_errors_strict(self, tmp_path):
         csv_file = tmp_path / "invalid_utf8.csv"
@@ -896,12 +945,28 @@ class TestReadCsv:
         ):
             ar.read_csv(csv_path)
 
+    def test_tsv_delimiter(self, tmp_path):
+        csv_path = tmp_path / "data.tsv"
+        csv_path.write_text("name\tage\tcity\nAlice\t30\tNYC\nBob\t25\tLA\n")
+        frame = ar.read_csv(str(csv_path))
+        assert frame.shape == (2, 3)
+        assert frame.columns == ["name", "age", "city"]
+
+    def test_custom_delimiter(self, tmp_path):
+        csv_path = tmp_path / "data.csv"
+        csv_path.write_text("name|age|city\nAlice|30|NYC\nBob|25|LA\n")
+        frame = ar.read_csv(str(csv_path), delimiter="|")
+        assert frame.shape == (2, 3)
+        assert list(ar.to_pandas(frame)["name"]) == ["Alice", "Bob"]
+
     def test_duplicate_headers_rejected(self, tmp_path):
         csv_path = tmp_path / "duplicate_headers.csv"
         csv_path.write_text("a,a\n1,2\n")
 
-        with pytest.raises(ar.CsvReadError, match="Duplicate column name: a"):
+        with pytest.raises(ar.CsvReadError, match="Duplicate column name: a") as exc:
             ar.read_csv(csv_path)
+
+        assert exc.value.__cause__ is None
 
     def test_empty_file_raises(self, tmp_path):
         csv_path = tmp_path / "empty.csv"
@@ -2503,3 +2568,78 @@ class TestArFrameToDict:
         result = frame.to_dict()
         for col in frame.columns:
             assert result[col] == frame[col]
+
+
+class TestArFrameStr:
+    def test_str_contains_shape(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        result = str(frame)
+        assert "3" in result
+        assert "4" in result
+
+    def test_str_contains_column_names(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        result = str(frame)
+        assert "name" in result
+        assert "age" in result
+
+    def test_str_contains_data_values(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        result = str(frame)
+        assert "Alice" in result
+
+    def test_str_contains_dtypes(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        result = str(frame)
+        assert "string" in result or "int64" in result
+
+    def test_str_empty_frame(self, tmp_path):
+        csv_path = tmp_path / "empty_rows.csv"
+        csv_path.write_text("name,age\n")
+        frame = ar.read_csv(csv_path)
+        result = str(frame)
+        assert "empty" in result.lower() or "0" in result
+
+    def test_str_large_frame_shows_truncation(self, large_csv):
+        frame = ar.read_csv(large_csv)
+        result = str(frame)
+        assert "more rows" in result
+
+    def test_str_returns_string(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        assert isinstance(str(frame), str)
+
+
+def test_read_csv_encoding_non_string_raises_type_error(tmp_path):
+    path = tmp_path / "test.csv"
+    path.write_text("a,b\n1,2\n")
+    with pytest.raises(TypeError, match="encoding must be a string"):
+        ar.read_csv(path, encoding=123)
+
+
+def test_read_csv_encoding_none_raises_type_error(tmp_path):
+    path = tmp_path / "test.csv"
+    path.write_text("a,b\n1,2\n")
+    with pytest.raises(TypeError, match="encoding must be a string"):
+        ar.read_csv(path, encoding=None)
+
+
+def test_read_csv_encoding_list_raises_type_error(tmp_path):
+    path = tmp_path / "test.csv"
+    path.write_text("a,b\n1,2\n")
+    with pytest.raises(TypeError, match="encoding must be a string"):
+        ar.read_csv(path, encoding=["utf-8"])
+
+
+def test_scan_csv_encoding_non_string_raises_type_error(tmp_path):
+    path = tmp_path / "test.csv"
+    path.write_text("a,b\n1,2\n")
+    with pytest.raises(TypeError, match="encoding must be a string"):
+        ar.scan_csv(path, encoding=123)
+
+
+def test_scan_csv_encoding_none_raises_type_error(tmp_path):
+    path = tmp_path / "test.csv"
+    path.write_text("a,b\n1,2\n")
+    with pytest.raises(TypeError, match="encoding must be a string"):
+        ar.scan_csv(path, encoding=None)

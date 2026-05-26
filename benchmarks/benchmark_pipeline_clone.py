@@ -40,6 +40,17 @@ STEPS = [
 ]
 
 
+def _positive_int(value):
+    """Argparse type validator that requires a positive integer."""
+    try:
+        ivalue = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{value!r} is not a valid integer")
+    if ivalue < 1:
+        raise argparse.ArgumentTypeError(f"{value!r} must be >= 1")
+    return ivalue
+
+
 def _make_frame(n_rows: int) -> ar.ArFrame:
     """2 string columns + 18 int64 columns = 20 columns total."""
     rng = np.random.default_rng(42)
@@ -94,7 +105,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Benchmark pipeline clone overhead optimization"
     )
-    parser.add_argument("--rows", type=int, default=500_000, help="Number of rows")
-    parser.add_argument("--runs", type=int, default=5, help="Repetitions")
+    parser.add_argument(
+        "--rows", type=_positive_int, default=500_000, help="Number of rows"
+    )
+    parser.add_argument("--runs", type=_positive_int, default=5, help="Repetitions")
     args = parser.parse_args()
     run(n_rows=args.rows, runs=args.runs)

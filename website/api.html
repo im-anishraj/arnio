@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>API Reference — Arnio</title>
+  <meta name="description" content="Current public API reference for Arnio v1.18.0 and current main.">
+  <link rel="icon" type="image/svg+xml" href="updated-icon.svg">
+  <link rel="stylesheet" href="css/variables.css?v=20260522">
+  <link rel="stylesheet" href="css/base.css?v=20260522">
+  <link rel="stylesheet" href="css/layout.css?v=20260522">
+  <link rel="stylesheet" href="css/components.css?v=20260522">
+  <link rel="stylesheet" href="css/pages.css?v=20260522">
+  <script src="js/theme.js"></script>
+</head>
+<body>
+  <a href="#main-content" class="skip-link">Skip to content</a>
+  <nav class="top-nav" aria-label="Main navigation">
+    <div class="container container--wide">
+      <a href="index.html" class="nav-brand" aria-label="Arnio home"><img src="arnio-transparent-logo.svg" alt="Arnio" height="32"></a>
+      <ul class="nav-links"><li><a href="docs.html">Docs</a></li><li><a href="api.html">API</a></li><li><a href="benchmarks.html">Benchmarks</a></li><li><a href="contributing.html">Contributing</a></li><li><a href="architecture.html">Architecture</a></li><li><a href="roadmap.html">Roadmap</a></li><li><a href="community.html">Community</a></li><li><a href="changelog.html">Changelog</a></li></ul>
+      <div class="nav-actions"><a href="https://discord.gg/xsEw7r78M" class="nav-discord" target="_blank" rel="noopener">Discord</a><a href="https://github.com/im-anishraj/arnio" class="nav-github" target="_blank" rel="noopener">GitHub</a><button class="theme-toggle" aria-label="Toggle theme">Theme</button><button class="nav-hamburger" aria-label="Open menu" aria-expanded="false">☰</button></div>
+    </div>
+  </nav>
+  <div class="mobile-menu" aria-label="Mobile navigation"><a href="index.html">Home</a><a href="docs.html">Documentation</a><a href="api.html">API Reference</a><a href="benchmarks.html">Benchmarks</a><a href="contributing.html">Contributing</a><a href="architecture.html">Architecture</a><a href="roadmap.html">Roadmap</a><a href="community.html">Community</a><a href="https://discord.gg/xsEw7r78M" target="_blank" rel="noopener">Discord</a><a href="changelog.html">Changelog</a></div>
+
+  <header class="page-hero"><div class="container"><h1>API Reference</h1><p>Public functions and classes available in v1.18.0 plus current-main additions that have already landed after the release.</p></div></header>
+
+  <main id="main-content" class="main-content">
+    <div class="container docs-layout">
+      <aside class="docs-sidebar">
+        <div class="sidebar-nav-group"><div class="sidebar-nav-title">I/O</div><a href="#io" class="sidebar-nav-link">I/O functions</a><a href="#frame" class="sidebar-nav-link">ArFrame</a><a href="#conversion" class="sidebar-nav-link">Conversion</a></div>
+        <div class="sidebar-nav-group"><div class="sidebar-nav-title">Transform</div><a href="#cleaning" class="sidebar-nav-link">Cleaning</a><a href="#pipeline" class="sidebar-nav-link">Pipeline</a></div>
+        <div class="sidebar-nav-group"><div class="sidebar-nav-title">Quality</div><a href="#quality" class="sidebar-nav-link">Quality</a><a href="#schema" class="sidebar-nav-link">Schema</a><a href="#integrations" class="sidebar-nav-link">Integrations</a></div>
+      </aside>
+
+      <article class="docs-content">
+        <div class="notice"><strong>Scope:</strong> This page documents the public Python API exposed from <code>arnio.__all__</code> on current <code>origin/main</code>. Items marked current-main are merged after the v1.18.0 tag.</div>
+
+        <h2 id="io">I/O</h2>
+        <div class="api-func"><div class="api-func-header">read_csv(path, *, delimiter=",", has_header=True, usecols=None, nrows=None, skiprows=None, decimal_separator=".", dtype=None, encoding="utf-8", encoding_errors="strict", on_bad_lines="error")</div><div class="api-func-body"><p>Read CSV-like input into an <code>ArFrame</code>. Supports extension-flexible paths, TSV delimiter inference, explicit dtypes, decoding policy, and configurable malformed-row handling.</p><p><strong>Returns:</strong> <code>ArFrame</code>. Raises <code>CsvReadError</code> for read and parse failures.</p></div></div>
+        <div class="api-func"><div class="api-func-header">read_csv_chunked(path, *, chunksize, delimiter=",", has_header=True, decimal_separator=".", on_bad_lines="error")</div><div class="api-func-body"><p>Yield <code>ArFrame</code> chunks from large files. <code>on_bad_lines</code> may error, warn, or skip malformed row-width records.</p></div></div>
+        <div class="api-func"><div class="api-func-header">scan_csv(path, *, delimiter=",", has_header=True, trim_headers=True, decimal_separator=".", encoding="utf-8", encoding_errors="strict")</div><div class="api-func-body"><p>Infer column names and dtypes without loading the full file.</p></div></div>
+        <div class="api-func"><div class="api-func-header">read_jsonl(path, *, nrows=None)</div><div class="api-func-body"><p>Read JSON Lines or NDJSON into an <code>ArFrame</code>; mixed object columns are coerced to strings.</p></div></div>
+        <div class="api-func"><div class="api-func-header">write_csv(frame, path, *, delimiter=",", write_header=True, line_terminator="\n")</div><div class="api-func-body"><p>Write an <code>ArFrame</code> to CSV or TSV with delimiter and line terminator validation.</p></div></div>
+        <div class="api-func"><div class="api-func-header">write_parquet(frame, path, *, compression=None, row_group_size=None)</div><div class="api-func-body"><p>Write an <code>ArFrame</code> to Parquet via the optional <code>pyarrow</code> dependency. Install with <code>pip install "arnio[parquet]"</code>.</p></div></div>
+        <div class="api-func"><div class="api-func-header">sniff_delimiter(path, *, encoding="utf-8")</div><div class="api-func-body"><p>Detect a likely delimiter for CSV-like input before reading or scanning.</p></div></div>
+
+        <h2 id="frame">Frame API</h2>
+        <div class="api-func"><div class="api-func-header">class ArFrame</div><div class="api-func-body"><p>Python wrapper over the native C++ frame. Core properties include <code>shape</code>, <code>columns</code>, <code>dtypes</code>, <code>is_empty</code>, <code>memory_usage()</code>, <code>head()</code>, <code>tail()</code>, and <code>preview()</code>.</p></div></div>
+        <div class="api-func"><div class="api-func-header">ArFrame.from_records(records, *, columns=None) / ar.from_records(...)</div><div class="api-func-body"><p>Build an <code>ArFrame</code> from record dictionaries or row-like records. Added in v1.17.0.</p></div></div>
+        <div class="api-func"><div class="api-func-header">frame["column"] / frame[["a", "b"]]</div><div class="api-func-body"><p>Current-main API. Select one column as a Python list or multiple columns as an <code>ArFrame</code>.</p></div></div>
+        <div class="api-func"><div class="api-func-header">frame.to_dict()</div><div class="api-func-body"><p>Return a <code>dict[str, list]</code> representation for serialization or tests.</p></div></div>
+        <div class="api-func"><div class="api-func-header">frame.drop_columns(columns)</div><div class="api-func-body"><p>Current-main method equivalent to the top-level <code>drop_columns</code> helper.</p></div></div>
+        <div class="api-func"><div class="api-func-header">frame.describe() / frame.schema_summary</div><div class="api-func-body"><p>Summary statistics and column summaries. <code>schema_summary</code> returns <code>ColumnSummary</code> objects with name, dtype, and nullability.</p></div></div>
+
+        <h2 id="conversion">Conversion</h2>
+        <div class="api-func"><div class="api-func-header">to_pandas(frame, *, copy=False)</div><div class="api-func-body"><p>Convert to pandas, preserving the fast zero-copy path where supported. Use <code>copy=True</code> for defensive isolation.</p></div></div>
+        <div class="api-func"><div class="api-func-header">from_pandas(df)</div><div class="api-func-body"><p>Convert a pandas DataFrame to <code>ArFrame</code> with dtype validation, duplicate-column checks, attrs preservation, and zero-column row-count preservation.</p></div></div>
+        <div class="api-func"><div class="api-func-header">to_arrow(frame)</div><div class="api-func-body"><p>Export to <code>pyarrow.Table</code>. Install with <code>pip install "arnio[arrow]"</code>. Added in v1.18.0.</p></div></div>
+
+        <h2 id="cleaning">Cleaning</h2>
+        <p class="section-lede">Cleaning functions return new frames and are usable directly or from <code>pipeline()</code>.</p>
+        <table><thead><tr><th>Function</th><th>Purpose</th></tr></thead><tbody>
+          <tr><td><code>drop_nulls</code>, <code>keep_rows_with_nulls</code>, <code>fill_nulls</code></td><td>Control null-bearing rows and values.</td></tr>
+          <tr><td><code>drop_columns</code>, <code>select_columns</code>, <code>drop_empty_columns</code>, <code>drop_columns_matching</code></td><td>Manage columns explicitly or by regex.</td></tr>
+          <tr><td><code>strip_whitespace</code>, <code>normalize_case</code>, <code>normalize_unicode</code>, <code>trim_column_names</code></td><td>Normalize text and headers.</td></tr>
+          <tr><td><code>cast_types</code>, <code>parse_bool_strings</code>, <code>round_numeric_columns</code>, <code>clip_numeric</code>, <code>winsorize_outliers</code></td><td>Type and numeric cleanup.</td></tr>
+          <tr><td><code>replace_values</code>, <code>standardize_missing_tokens</code>, <code>combine_columns</code>, <code>coalesce_columns</code>, <code>safe_divide_columns</code></td><td>Common feature engineering and value repair helpers.</td></tr>
+        </tbody></table>
+
+        <h2 id="pipeline">Pipeline</h2>
+        <div class="api-func"><div class="api-func-header">pipeline(frame, steps, *, verbose=False)</div><div class="api-func-body"><p>Run named cleaning steps or registered Python callables. <code>verbose=True</code> enables lightweight diagnostics through the <code>arnio</code> logger and optional <code>PipelineContext</code>.</p></div></div>
+        <div class="api-func"><div class="api-func-header">register_step(name, fn, overwrite=False), list_steps(), reset_steps(), get_builtin_step_signatures()</div><div class="api-func-body"><p>Manage the step registry and discover available built-in signatures.</p></div></div>
+
+        <h2 id="quality">Quality</h2>
+        <div class="api-func"><div class="api-func-header">profile(frame, *, sample_size=5, exclude_columns=None, approx_top_values=False, top_n=5)</div><div class="api-func-body"><p>Return <code>DataQualityReport</code> with row/column counts, duplicate metrics, column profiles, warnings, quality score, score components, and cleaning suggestions.</p></div></div>
+        <div class="api-func"><div class="api-func-header">DataQualityReport.to_dict(redact_sample_values=False, exclude_columns=None), to_json(), to_markdown(), to_html(), summary(), to_pandas()</div><div class="api-func-body"><p>Export reports for notebooks, CI, docs, and automation. <code>exclude_columns</code> and <code>to_json()</code> are current-main updates after v1.18.0.</p></div></div>
+        <div class="api-func"><div class="api-func-header">compare_profiles(left, right), check_quality_gates(baseline, current), suggest_cleaning(frame_or_report), auto_clean(frame, *, mode="safe", dry_run=False, explain=False)</div><div class="api-func-body"><p>Compare quality over time, fail CI on drift, generate pipeline-compatible steps, or run automatic cleaning with optional audit output.</p></div></div>
+
+        <h2 id="schema">Schema</h2>
+        <div class="api-func"><div class="api-func-header">Schema(fields, strict=False).validate(frame, max_errors=None) / validate(frame, schema, max_errors=None)</div><div class="api-func-body"><p>Validate frames against field definitions. <code>max_errors</code> was added in v1.18.0.</p></div></div>
+        <div class="api-func"><div class="api-func-header">Field builders</div><div class="api-func-body"><p><code>Int64</code>, <code>Float64</code>, <code>String</code>, <code>Bool</code>, <code>Email</code>, <code>URL(allowed_schemes=...)</code>, <code>PhoneNumber</code>, <code>CountryCode</code>, <code>CurrencyCode</code>, <code>Date</code>, <code>DateTime</code>, <code>Regex</code>, and <code>Custom</code>.</p></div></div>
+        <div class="api-func"><div class="api-func-header">diff_schema, schema_to_dict, schema_to_yaml, register_validator</div><div class="api-func-body"><p>Compare schema contracts, export schema definitions, and register custom semantic validators.</p></div></div>
+
+        <h2 id="integrations">Integrations</h2>
+        <div class="api-func"><div class="api-func-header">pandas accessor: df.arnio.to_arframe(), pipeline(), clean(), profile(), suggest_cleaning(), auto_clean(), validate()</div><div class="api-func-body"><p>Run Arnio workflows directly from pandas DataFrames.</p></div></div>
+        <div class="api-func"><div class="api-func-header">register_duckdb(frame, conn, name)</div><div class="api-func-body"><p>Register an <code>ArFrame</code> as a DuckDB relation through pandas interop.</p></div></div>
+        <div class="api-func"><div class="api-func-header">ArnioCleaner</div><div class="api-func-body"><p>Optional scikit-learn transformer for pipeline-safe data preparation. Install with <code>pip install "arnio[sklearn]"</code>.</p></div></div>
+      </article>
+    </div>
+  </main>
+
+  <footer class="site-footer"><div class="container"><div class="footer-bottom"><span>© 2026 Anish Raj. MIT License.</span><span>API aligned with current main.</span></div></div></footer>
+  <script src="js/main.js"></script>
+  <script src="js/code.js"></script>
+</body>
+</html>

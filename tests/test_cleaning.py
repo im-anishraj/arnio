@@ -6,6 +6,7 @@ import pytest
 
 import arnio as ar
 from arnio import from_pandas, to_pandas
+from arnio.cleaning import _validate_column_sequence
 
 
 class TestDropNulls:
@@ -103,6 +104,18 @@ class TestKeepRowsWithNulls:
             ],
         )
         assert result.shape[0] == 1
+
+    def test_invalid_subset_string(self, csv_with_nulls):
+        """keep_rows_with_nulls raises TypeError when subset is a string."""
+        frame = ar.read_csv(csv_with_nulls)
+        with pytest.raises(TypeError, match="must be a list"):
+            ar.keep_rows_with_nulls(frame, subset="age")
+
+    def test_missing_column_raises(self, csv_with_nulls):
+        """keep_rows_with_nulls raises KeyError when subset column is missing."""
+        frame = ar.read_csv(csv_with_nulls)
+        with pytest.raises(KeyError, match="nonexistent"):
+            ar.keep_rows_with_nulls(frame, subset=["nonexistent"])
 
 
 class TestFillNulls:
@@ -809,6 +822,16 @@ class TestDropEmptyColumns:
         assert result.shape[0] in {0, 2}
         assert ar.to_pandas(result).shape[1] == 0
 
+    def test_drop_empty_columns_preserves_schema_on_empty_frame(self):
+        df = pd.DataFrame(columns=["a", "b", "c"])
+        frame = ar.from_pandas(df)
+
+        result = ar.drop_empty_columns(frame)
+
+        assert result.columns == ["a", "b", "c"]
+        assert result.shape[0] == 0
+        assert result.shape[1] == 3
+
 
 class TestClipNumeric:
     def test_clip_numeric_lower_only(self):
@@ -1012,8 +1035,15 @@ class TestStandardizeMissingTokens:
         result = ar.standardize_missing_tokens(df, tokens=[])
         assert result["value"].iloc[2] == "-"
 
+    def test_whitespace_only_values_remain_when_tokens_disabled(self):
+        df = pd.DataFrame({"value": ["  ", "\t", "\n"]})
+
+        result = ar.standardize_missing_tokens(df, tokens=[])
+
+        assert result["value"].tolist() == ["  ", "\t", "\n"]
+
     def test_standardize_missing_tokens_unknown_subset_column_raises(self):
-        frame = ar.from_pandas(pd.DataFrame({"value": [1, 2, 3]}))
+        frame = pd.DataFrame({"value": [1, 2, 3]})
         with pytest.raises(ValueError, match="Unknown columns in subset"):
             ar.standardize_missing_tokens(frame, subset=["missing"])
 
@@ -1026,6 +1056,157 @@ class TestStandardizeMissingTokens:
         assert pd.isna(result.loc[0, "name"])
         assert result.loc[1, "name"] == "Alice"
         assert result["city"].tolist() == ["-", "Paris"]
+
+    def test_standardize_missing_tokens_normalizes_whitespace_wrapped_defaults(self):
+        df = pd.DataFrame({"value": ["NULL ", " NaN", "  ", "", "Alice "]})
+
+        result = ar.standardize_missing_tokens(df)
+
+        assert pd.isna(result["value"].iloc[0])
+        assert pd.isna(result["value"].iloc[1])
+        assert pd.isna(result["value"].iloc[2])
+        assert pd.isna(result["value"].iloc[3])
+        assert result["value"].iloc[4] == "Alice "
+
+    def test_standardize_missing_tokens_normalizes_whitespace_wrapped_custom_tokens(
+        self,
+    ):
+        df = pd.DataFrame(
+            {
+                "status": [" unknown ", "pending", " custom-null "],
+                "note": [" untouched ", "unknown", "kept"],
+            }
+        )
+
+        result = ar.standardize_missing_tokens(
+            df, tokens=["unknown", "custom-null"], subset=["status"]
+        )
+
+        assert pd.isna(result["status"].iloc[0])
+        assert result["status"].iloc[1] == "pending"
+        assert pd.isna(result["status"].iloc[2])
+        assert result["note"].tolist() == [" untouched ", "unknown", "kept"]
+
+    def test_standardize_missing_tokens_normalizes_custom_token_list_entries(self):
+        df = pd.DataFrame({"value": ["unknown", " Unknown ", "kept"]})
+
+        result = ar.standardize_missing_tokens(df, tokens=["  UNKNOWN  "])
+
+        assert pd.isna(result["value"].iloc[0])
+        assert pd.isna(result["value"].iloc[1])
+        assert result["value"].iloc[2] == "kept"
+
+    def test_standardize_missing_tokens_normalizes_custom_token_list_entries_in_subset(
+        self,
+    ):
+        df = pd.DataFrame(
+            {
+                "status": [" unknown ", "kept"],
+                "note": ["UNKNOWN", "still here"],
+            }
+        )
+
+        result = ar.standardize_missing_tokens(
+            df, tokens=["  UNKNOWN  "], subset=["status"]
+        )
+
+        assert pd.isna(result["status"].iloc[0])
+        assert result["status"].iloc[1] == "kept"
+        assert result["note"].tolist() == ["UNKNOWN", "still here"]
+
+    def test_standardize_missing_tokens_normalizes_tab_and_newline_wrapped_tokens(
+        self,
+    ):
+        df = pd.DataFrame({"value": ["\tNULL\t", "\n NaN\n", "\t kept \n"]})
+
+        result = ar.standardize_missing_tokens(df)
+
+        assert pd.isna(result["value"].iloc[0])
+        assert pd.isna(result["value"].iloc[1])
+        assert result["value"].iloc[2] == "\t kept \n"
+
+    def test_standardize_missing_tokens_subset_does_not_normalize_excluded_whitespace(
+        self,
+    ):
+        df = pd.DataFrame(
+            {
+                "status": ["  ", "NULL "],
+                "note": ["  ", "NULL "],
+            }
+        )
+
+        result = ar.standardize_missing_tokens(df, subset=["status"])
+
+        assert pd.isna(result["status"].iloc[0])
+        assert pd.isna(result["status"].iloc[1])
+        assert result["note"].tolist() == ["  ", "NULL "]
+
+    def test_standardize_missing_tokens_normalizes_carriage_return_wrapped_tokens(
+        self,
+    ):
+        df = pd.DataFrame({"value": ["\r\nNULL\r", "\r\n nAn \r\n", "\r kept \r"]})
+
+        result = ar.standardize_missing_tokens(df)
+
+        assert pd.isna(result["value"].iloc[0])
+        assert pd.isna(result["value"].iloc[1])
+        assert result["value"].iloc[2] == "\r kept \r"
+
+    def test_standardize_missing_tokens_normalizes_nonbreaking_space_wrapped_tokens(
+        self,
+    ):
+        nbsp = "\u00a0"
+        df = pd.DataFrame({"value": [f"{nbsp}NULL{nbsp}", f"{nbsp} kept {nbsp}"]})
+
+        result = ar.standardize_missing_tokens(df)
+
+        assert pd.isna(result["value"].iloc[0])
+        assert result["value"].iloc[1] == f"{nbsp} kept {nbsp}"
+
+    def test_standardize_missing_tokens_custom_tokens_do_not_fall_back_to_defaults(
+        self,
+    ):
+        df = pd.DataFrame({"value": [" NULL ", " custom-null ", "kept"]})
+
+        result = ar.standardize_missing_tokens(df, tokens=["custom-null"])
+
+        assert result["value"].iloc[0] == " NULL "
+        assert pd.isna(result["value"].iloc[1])
+        assert result["value"].iloc[2] == "kept"
+
+    def test_standardize_missing_tokens_whitespace_only_custom_tokens_match_blank_values(
+        self,
+    ):
+        df = pd.DataFrame({"value": ["  ", "\t", "\n", "kept"]})
+
+        result = ar.standardize_missing_tokens(df, tokens=["   "])
+
+        assert pd.isna(result["value"].iloc[0])
+        assert pd.isna(result["value"].iloc[1])
+        assert pd.isna(result["value"].iloc[2])
+        assert result["value"].iloc[3] == "kept"
+
+    def test_standardize_missing_tokens_preserves_existing_nulls_while_normalizing_wrapped_tokens(
+        self,
+    ):
+        df = pd.DataFrame({"value": [None, pd.NA, " NULL ", "kept"]})
+
+        result = ar.standardize_missing_tokens(df)
+
+        assert pd.isna(result["value"].iloc[0])
+        assert pd.isna(result["value"].iloc[1])
+        assert pd.isna(result["value"].iloc[2])
+        assert result["value"].iloc[3] == "kept"
+
+    def test_standardize_missing_tokens_normalizes_wrapped_punctuation_defaults(self):
+        df = pd.DataFrame({"value": [" ? ", "\t-\t", "--", "kept"]})
+
+        result = ar.standardize_missing_tokens(df)
+
+        assert pd.isna(result["value"].iloc[0])
+        assert pd.isna(result["value"].iloc[1])
+        assert result["value"].iloc[2] == "--"
+        assert result["value"].iloc[3] == "kept"
 
 
 class TestStripWhitespace:
@@ -1402,6 +1583,29 @@ class TestParseBoolStrings:
 
         assert cleaned["active"].tolist() == [True, False]
         assert cleaned["other"].tolist() == ["YES", "no"]
+
+    def test_parse_bool_strings_subset_skips_existing_bool_columns(self):
+        import pandas as pd
+
+        import arnio as ar
+
+        df = pd.DataFrame(
+            {
+                "flag": [True, False, True],
+            }
+        )
+
+        frame = ar.from_pandas(df)
+
+        result = ar.parse_bool_strings(
+            frame,
+            subset=["flag"],
+        )
+
+        result_df = ar.to_pandas(result)
+
+        assert result_df["flag"].tolist() == [True, False, True]
+        assert str(result_df["flag"].dtype) == "boolean"
 
     def test_parse_bool_strings_custom_values(self):
         import pandas as pd
@@ -1984,6 +2188,35 @@ class TestCleanAPI:
         # Drop nulls
         result = ar.clean(frame, strip_whitespace=False, drop_nulls=True)
         assert len(result) < len(frame)
+
+    @pytest.mark.parametrize("invalid_val", ["yes", 1, None, []])
+    def test_clean_invalid_strip_whitespace(self, csv_with_whitespace, invalid_val):
+        frame = ar.read_csv(csv_with_whitespace)
+        with pytest.raises(TypeError, match="strip_whitespace must be a bool"):
+            ar.clean(frame, strip_whitespace=invalid_val)
+
+    @pytest.mark.parametrize("invalid_val", ["yes", 1, None, []])
+    def test_clean_invalid_drop_nulls(self, csv_with_whitespace, invalid_val):
+        frame = ar.read_csv(csv_with_whitespace)
+        with pytest.raises(TypeError, match="drop_nulls must be a bool"):
+            ar.clean(frame, drop_nulls=invalid_val)
+
+    @pytest.mark.parametrize("invalid_val", ["yes", 1, None, []])
+    def test_clean_invalid_drop_duplicates(self, csv_with_whitespace, invalid_val):
+        frame = ar.read_csv(csv_with_whitespace)
+        with pytest.raises(TypeError, match="drop_duplicates must be a bool"):
+            ar.clean(frame, drop_duplicates=invalid_val)
+
+    def test_clean_valid_booleans(self, csv_with_whitespace):
+        frame = ar.read_csv(csv_with_whitespace)
+        # Should not raise
+        result = ar.clean(
+            frame,
+            strip_whitespace=True,
+            drop_nulls=False,
+            drop_duplicates=True,
+        )
+        assert len(ar.to_pandas(result)) > 0
 
 
 class TestFilterRows:
@@ -3020,6 +3253,14 @@ def test_drop_columns_matching_normal():
     df = pd.DataFrame({"temp_a": [1], "temp_b": [2], "keep_c": [3]})
     result = ar.drop_columns_matching(df, "^temp_")
     assert list(result.columns) == ["keep_c"]
+
+
+def test_drop_columns_matching_handles_non_string_pandas_columns():
+    df = pd.DataFrame([[1, 2, 3]], columns=[1, ("sensor", "temp"), "temp_a"])
+
+    result = ar.drop_columns_matching(df, "^temp")
+
+    assert list(result.columns) == [1, ("sensor", "temp")]
 
 
 def test_drop_columns_matching_no_match():

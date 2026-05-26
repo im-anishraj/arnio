@@ -11,6 +11,7 @@ import warnings
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Callable
+from zoneinfo import available_timezones
 
 import numpy as np
 import pandas as pd
@@ -34,6 +35,7 @@ _VALID_SEVERITIES = {"error", "warning"}
 
 
 def _validate_severity(severity: str) -> None:
+    """Raise ValueError if severity is not 'error' or 'warning'."""
     if severity not in _VALID_SEVERITIES:
         raise ValueError("severity must be 'error' or 'warning'")
 
@@ -305,6 +307,195 @@ ISO_3166_1_ALPHA_2 = {
     "ZW",
 }
 
+ISO_639_1_CODES = {
+    "aa",
+    "ab",
+    "ae",
+    "af",
+    "ak",
+    "am",
+    "an",
+    "ar",
+    "as",
+    "av",
+    "ay",
+    "az",
+    "ba",
+    "be",
+    "bg",
+    "bh",
+    "bi",
+    "bm",
+    "bn",
+    "bo",
+    "br",
+    "bs",
+    "ca",
+    "ce",
+    "ch",
+    "co",
+    "cr",
+    "cs",
+    "cu",
+    "cv",
+    "cy",
+    "da",
+    "de",
+    "dv",
+    "dz",
+    "ee",
+    "el",
+    "en",
+    "eo",
+    "es",
+    "et",
+    "eu",
+    "fa",
+    "ff",
+    "fi",
+    "fj",
+    "fo",
+    "fr",
+    "fy",
+    "ga",
+    "gd",
+    "gl",
+    "gn",
+    "gu",
+    "gv",
+    "ha",
+    "he",
+    "hi",
+    "ho",
+    "hr",
+    "ht",
+    "hu",
+    "hy",
+    "hz",
+    "ia",
+    "id",
+    "ie",
+    "ig",
+    "ii",
+    "ik",
+    "io",
+    "is",
+    "it",
+    "iu",
+    "ja",
+    "jv",
+    "ka",
+    "kg",
+    "ki",
+    "kj",
+    "kk",
+    "kl",
+    "km",
+    "kn",
+    "ko",
+    "kr",
+    "ks",
+    "ku",
+    "kv",
+    "kw",
+    "ky",
+    "la",
+    "lb",
+    "lg",
+    "li",
+    "ln",
+    "lo",
+    "lt",
+    "lu",
+    "lv",
+    "mg",
+    "mh",
+    "mi",
+    "mk",
+    "ml",
+    "mn",
+    "mr",
+    "ms",
+    "mt",
+    "my",
+    "na",
+    "nb",
+    "nd",
+    "ne",
+    "ng",
+    "nl",
+    "nn",
+    "no",
+    "nr",
+    "nv",
+    "ny",
+    "oc",
+    "oj",
+    "om",
+    "or",
+    "os",
+    "pa",
+    "pi",
+    "pl",
+    "ps",
+    "pt",
+    "qu",
+    "rm",
+    "rn",
+    "ro",
+    "ru",
+    "rw",
+    "sa",
+    "sc",
+    "sd",
+    "se",
+    "sg",
+    "si",
+    "sk",
+    "sl",
+    "sm",
+    "sn",
+    "so",
+    "sq",
+    "sr",
+    "ss",
+    "st",
+    "su",
+    "sv",
+    "sw",
+    "ta",
+    "te",
+    "tg",
+    "th",
+    "ti",
+    "tk",
+    "tl",
+    "tn",
+    "to",
+    "tr",
+    "ts",
+    "tt",
+    "tw",
+    "ty",
+    "ug",
+    "uk",
+    "ur",
+    "uz",
+    "ve",
+    "vi",
+    "vo",
+    "wa",
+    "wo",
+    "xh",
+    "yi",
+    "yo",
+    "za",
+    "zh",
+    "zu",
+}
+
+IANA_TIMEZONES = available_timezones()
+
 
 @dataclass(frozen=True)
 class Field:
@@ -327,6 +518,10 @@ class Field:
     severity: str = "error"
 
     def __post_init__(self) -> None:
+        if not isinstance(self.nullable, bool):
+            raise TypeError("nullable must be a bool")
+        if not isinstance(self.unique, bool):
+            raise TypeError("unique must be a bool")
         _validate_severity(self.severity)
 
 
@@ -340,6 +535,10 @@ class Schema:
     rules: list[Callable[[pd.DataFrame], list[ValidationIssue]]] | None = None
 
     def __post_init__(self) -> None:
+        if not isinstance(self.fields, dict):
+            raise TypeError(
+                f"Schema 'fields' must be a mapping (like a dict), got {type(self.fields).__name__}"
+            )
         for name, field_def in self.fields.items():
             if not isinstance(field_def, Field):
                 raise TypeError(
@@ -1433,6 +1632,62 @@ def CountryCode(
     )
 
 
+def LanguageCode(
+    *,
+    nullable: bool = True,
+    unique: bool = False,
+    severity: str = "error",
+    required_if: tuple[str, Any] | None = None,
+) -> Field:
+    """Create a lowercase ISO 639-1 language-code schema field.
+
+    Args:
+        nullable: Whether null values are allowed.
+        unique: Whether non-null values must be unique.
+        severity: Severity level for validation issues.
+        required_if: Conditional requirement as a column/value pair.
+
+    Returns:
+        Field: Configured lowercase ISO 639-1 language-code schema field.
+    """
+    return Field(
+        dtype="string",
+        nullable=nullable,
+        semantic="language_code",
+        unique=unique,
+        required_if=required_if,
+        severity=severity,
+    )
+
+
+def TimeZone(
+    *,
+    nullable: bool = True,
+    unique: bool = False,
+    severity: str = "error",
+    required_if: tuple[str, Any] | None = None,
+) -> Field:
+    """Create an IANA timezone schema field.
+
+    Args:
+        nullable: Whether null values are allowed.
+        unique: Whether non-null values must be unique.
+        severity: Severity level for validation issues.
+        required_if: Conditional requirement as a column/value pair.
+
+    Returns:
+        Field: Configured IANA timezone schema field.
+    """
+    return Field(
+        dtype="string",
+        nullable=nullable,
+        semantic="timezone",
+        unique=unique,
+        required_if=required_if,
+        severity=severity,
+    )
+
+
 def CurrencyCode(*, nullable: bool = True, unique: bool = False) -> Field:
     """Create a currency-code schema field.
 
@@ -1557,6 +1812,7 @@ def _is_safely_convertible_to_dtype(
     expected_dtype: str,
     column_name: str,
 ) -> bool:
+    """Return True if series values can be safely cast to expected_dtype without data loss."""
     try:
         non_null = series.dropna()
 
@@ -1612,6 +1868,7 @@ def _validate_column(
     name: str,
     field_def: Field,
 ) -> list[ValidationIssue]:
+    """Validate a single column against its Field definition and return all issues found."""
     issues: list[ValidationIssue] = []
 
     if field_def.dtype is not None and actual_dtype != field_def.dtype:
@@ -1818,6 +2075,12 @@ def _validate_column(
                     )
                 elif field_def.semantic == "country_code":
                     invalid = non_null[~non_null.isin(ISO_3166_1_ALPHA_2)]
+
+                elif field_def.semantic == "language_code":
+                    invalid = non_null[~non_null.isin(ISO_639_1_CODES)]
+                elif field_def.semantic == "timezone":
+                    invalid = non_null[~non_null.isin(IANA_TIMEZONES)]
+
                 else:
                     invalid = non_null[~text.str.fullmatch(pattern, na=False)]
 
@@ -1862,6 +2125,7 @@ def _validate_datetime(
     name: str,
     field_def: Field,
 ) -> list[ValidationIssue]:
+    """Validate non-null datetime values against the format and min/max bounds in field_def."""
     issues: list[ValidationIssue] = []
     parsed = pd.to_datetime(non_null, format=field_def.format, errors="coerce")
 
@@ -1905,6 +2169,7 @@ def _validate_datetime(
 
 
 def _parse_datetime_bound(value: Any, name: str) -> pd.Timestamp | None:
+    """Parse a datetime bound value into a pd.Timestamp, raising ValueError on failure."""
     if value is None:
         return None
     try:
@@ -1927,6 +2192,7 @@ def _row_issues(
     message: str,
     severity: str = "error",
 ) -> list[ValidationIssue]:
+    """Convert a series of invalid rows into a list of ValidationIssue objects."""
     return [
         ValidationIssue(
             column=column,
@@ -1941,6 +2207,7 @@ def _row_issues(
 
 
 def _field_to_dict(field_def: Field) -> dict[str, Any]:
+    """Serialize a Field definition to a plain dict suitable for in-memory use."""
     return {
         "dtype": field_def.dtype,
         "nullable": field_def.nullable,
@@ -1960,6 +2227,7 @@ def _field_to_dict(field_def: Field) -> dict[str, Any]:
 
 
 def _field_to_json_dict(field_def: Field) -> dict[str, Any]:
+    """Serialize a Field definition to a JSON-safe dict, converting timestamps to ISO strings."""
     data = _field_to_dict(field_def)
     data["severity"] = field_def.severity
     data["datetime_min"] = (
@@ -1976,6 +2244,7 @@ def _field_to_json_dict(field_def: Field) -> dict[str, Any]:
 
 
 def _field_from_json_dict(name: str, payload: Any) -> Field:
+    """Deserialize a JSON dict payload into a Field definition for the given column name."""
     if not isinstance(payload, dict):
         raise TypeError(
             f"Schema JSON field for column {name!r} must be an object, got {type(payload).__name__}."
@@ -2023,12 +2292,14 @@ def _field_from_json_dict(name: str, payload: Any) -> Field:
 def _normalize_unique(
     value: list[str] | tuple[str, ...] | None,
 ) -> tuple[str, ...] | None:
+    """Normalize a unique-constraint value into a sorted tuple, or None if not set."""
     if value is None:
         return None
     return tuple(sorted(value))
 
 
 def _normalize_sequence(value: Any) -> Any:
+    """Convert sets and tuples to lists for JSON-serializable output."""
     if isinstance(value, set):
         return sorted(value)
     if isinstance(value, tuple):
@@ -2037,6 +2308,7 @@ def _normalize_sequence(value: Any) -> Any:
 
 
 def _clean_scalar(value: Any) -> Any:
+    """Recursively convert numpy scalars and NaN values to JSON-safe Python types."""
     if isinstance(value, dict):
         return {key: _clean_scalar(val) for key, val in value.items()}
     if isinstance(value, (list, tuple, set)):
@@ -2049,6 +2321,7 @@ def _clean_scalar(value: Any) -> Any:
 
 
 def _markdown_cell(value: Any) -> str:
+    """Escape a value for safe rendering inside a Markdown table cell."""
     if value is None:
         return ""
     text = str(value).replace("\n", "<br>").replace("|", "\\|")
@@ -2057,6 +2330,8 @@ def _markdown_cell(value: Any) -> str:
 
 _SEMANTIC_PATTERNS = {
     "email": r"[^@\s]+@[^@\s]+\.[^@\s]+",
+    "language_code": r"[a-z]{2}",
+    "timezone": r"[A-Za-z_]+(?:/[A-Za-z_\-]+)+",
     "email:strict": (
         r"[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+"
         r"@"

@@ -9,13 +9,13 @@ This document explains how Arnio maintainers triage incoming issues. It defines 
 Every issue that lands in our backlog gets categorized along key dimensions:
 
 1. **Priority** — how urgent it is
-2. **Difficulty** — how much expertise it needs
+2. **Level** — how much expertise it needs
 3. **Size** — how much effort it'll take
 4. **Status** — where it sits in the workflow
 5. **Type** — what kind of change it is
 6. **Area** — which part of the codebase it touches
 
-This makes the backlog navigable: a beginner GSSoC contributor can filter for `difficulty: beginner` + `size: s` + `status: ready` and instantly find an entry point. Maintainers can spot `priority: critical` + `status: blocked` issues that need unblocking.
+This makes the backlog navigable: a beginner GSSoC contributor can filter for `level:beginner` + `size: s` + `status: ready` and instantly find an entry point. Maintainers can spot `priority: critical` + `status: blocked` issues that need unblocking.
 
 ---
 
@@ -34,15 +34,16 @@ How urgent is this issue?
 
 ---
 
-### Difficulty
+### Level
 
 How much expertise does this need?
 
 | Label | Meaning | Who should pick it up |
 |:---|:---|:---|
-| `difficulty: beginner` | Self-contained, well-scoped, no prior repo context required. Touching one or two files. | First-time contributors, students new to open source |
-| `difficulty: intermediate` | Requires reading existing code, following established patterns, writing tests. | Contributors comfortable with Python and the codebase |
-| `difficulty: advanced` | Architecture-level work, C++ optimization, performance-critical paths. | Contributors with C++ experience or deep familiarity |
+| `level:beginner` | Self-contained, well-scoped, no prior repo context required. Touching one or two files. | First-time contributors, students new to open source |
+| `level:intermediate` | Requires reading existing code, following established patterns, writing tests. | Contributors comfortable with Python and the codebase |
+| `level:advanced` | Architecture-level work, C++ optimization, performance-critical paths. | Contributors with C++ experience or deep familiarity |
+| `level:critical` | Release-critical, security-sensitive, or high-risk architectural work. | Maintainers or deeply trusted contributors |
 
 ---
 
@@ -65,15 +66,16 @@ What kind of change is this?
 
 | Label | Use for |
 |:---|:---|
-| `type: bug` | Fixing incorrect behavior |
-| `type: feature` | Adding new capability |
-| `type: docs` | Documentation only |
-| `type: tests` | Test suite improvements |
-| `type: refactor` | Code restructuring with no behavior change |
-| `type: performance` | Speed or memory improvements |
-| `type: security` | Security fix or hardening |
-| `type: ci` | GitHub Actions, build pipeline, release tooling |
-| `type: discussion` | Needs community input before implementation |
+| `type:bug` | Fixing incorrect behavior |
+| `type:feature` | Adding new capability |
+| `type:docs` | Documentation only |
+| `type:testing` | Test suite improvements |
+| `type:refactor` | Code restructuring with no behavior change |
+| `type:performance` | Speed or memory improvements |
+| `type:security` | Security fix or hardening |
+| `type:design` | Visual, docs-layout, logo, or product design work |
+| `type:ci` | GitHub Actions, build pipeline, release tooling |
+| `type:discussion` | Needs community input before implementation |
 
 ---
 
@@ -122,10 +124,14 @@ For [GSSoC 2026](https://gssoc.girlscript.tech/) participants:
 | Label | Meaning |
 |:---|:---|
 | `gssoc` | Issue is eligible for GSSoC contribution credit |
+| `gssoc:approved` | PR has been accepted/merged for GSSoC credit |
 | `gssoc: good first issue` | Strongly recommended starting point for new GSSoC contributors |
-| `gssoc: level 1` | Beginner-tier scoring |
-| `gssoc: level 2` | Intermediate-tier scoring |
-| `gssoc: level 3` | Advanced-tier scoring |
+| `level:beginner` | Beginner-tier scoring |
+| `level:intermediate` | Intermediate-tier scoring |
+| `level:advanced` | Advanced-tier scoring |
+| `level:critical` | Critical-tier scoring |
+| `quality:clean` | Solid, accepted work |
+| `quality:exceptional` | Work that is unusually complete, careful, or high impact |
 
 See [GSSOC_GUIDE.md](../GSSOC_GUIDE.md) for full scoring details.
 
@@ -145,10 +151,10 @@ When a new issue arrives, work through these steps in order:
 Apply labels from each required category:
 
 - ✅ `priority: *` (required)
-- ✅ `difficulty: *` (required)
+- ✅ `level:*` (required for GSSoC-scored issues/PRs)
 - ✅ `size: *` (required)
 - ✅ `status: *` (required — start with `status: needs triage`)
-- ✅ `type: *` (required)
+- ✅ `type:*` (required)
 - ✅ `area: *` (one or more, required)
 - 🟡 `gssoc: *` (only if appropriate for GSSoC contributors)
 
@@ -181,12 +187,12 @@ If any of these are missing, keep the issue at `status: needs triage`.
 | Label | Value | Reasoning |
 |:---|:---|:---|
 | Priority | `priority: high` | Performance is a roadmap focus for v1.2 |
-| Difficulty | `difficulty: advanced` | Requires C++ work in the cleaning engine |
+| Level | `level:advanced` | Requires C++ work in the cleaning engine |
 | Size | `size: l` | Hash-based comparison replacement is multi-file |
 | Status | `status: ready` | Reproducible, well-scoped, fix path is clear |
-| Type | `type: performance` | Performance improvement |
+| Type | `type:performance` | Performance improvement |
 | Area | `area: cpp-core` | Lives in `cpp/src/cleaning.cpp` |
-| GSSoC | `gssoc: level 3` | Advanced-tier scoring if a GSSoC contributor picks it up |
+| GSSoC | `level:advanced` | Advanced-tier scoring if a GSSoC contributor picks it up |
 
 ---
 
@@ -195,10 +201,10 @@ If any of these are missing, keep the issue at `status: needs triage`.
 When in doubt, default to:
 
 - **Priority** → `priority: medium`
-- **Difficulty** → match the actual code complexity, not the issue description length
+- **Level** → match the actual code complexity, not the issue description length
 - **Size** → estimate as a maintainer would do it, not as a beginner would
 - **Status** → start at `status: needs triage` if anything is unclear; promote to `status: ready` once scoped
-- **Type** → `type: discussion` if direction is unclear
+- **Type** → `type:discussion` if direction is unclear
 
 For consistency, every issue should reach `status: ready` before being advertised as a good first issue or GSSoC pickup.
 

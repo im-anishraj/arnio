@@ -5,7 +5,9 @@ ArFrame — the core data container wrapping the C++ Frame.
 
 from __future__ import annotations
 
+import copy
 import json
+import math
 
 from ._core import _Frame
 
@@ -309,11 +311,9 @@ class ArFrame:
         if isinstance(n, bool) or not isinstance(n, int) or n < 0:
             raise ValueError(f"`n` must be a non-negative integer, got {n!r}")
 
-        from .convert import from_pandas, to_pandas
+        actual_n = min(n, len(self))
 
-        df = to_pandas(self)
-
-        return from_pandas(df.head(n))
+        return ArFrame(self._frame.select_rows(0, actual_n))
 
     def tail(self, n: int = 5) -> ArFrame:
         """Return the last n rows as an ArFrame.
@@ -331,11 +331,10 @@ class ArFrame:
         if isinstance(n, bool) or not isinstance(n, int) or n < 0:
             raise ValueError(f"`n` must be a non-negative integer, got {n!r}")
 
-        from .convert import from_pandas, to_pandas
+        actual_n = min(n, len(self))
+        start = max(0, len(self) - actual_n)
 
-        df = to_pandas(self)
-
-        return from_pandas(df.tail(n))
+        return ArFrame(self._frame.select_rows(start, actual_n))
 
     def to_dict(self) -> dict[str, list]:
         """Export the frame as a Python dictionary.
@@ -589,6 +588,15 @@ class ArFrame:
             for col in self.columns
         ]
 
+    @staticmethod
+    def _values_equal(a, b):
+        if a is None and b is None:
+            return True
+        if isinstance(a, float) and isinstance(b, float):
+            if math.isnan(a) and math.isnan(b):
+                return True
+        return a == b
+
     # --- Dunder methods ---
 
     def __len__(self) -> int:
@@ -601,12 +609,52 @@ class ArFrame:
         return f"ArFrame({rows} rows × {cols} cols)"
 
     def __str__(self) -> str:
-        """Return a detailed string summary of the ArFrame."""
-        lines = [f"ArFrame: {self.shape[0]} rows × {self.shape[1]} columns"]
-        lines.append(f"Columns: {self._truncate_column_names()}")
-        lines.append(f"DTypes:  {self.dtypes}")
-        lines.append(f"Memory:  {self.memory_usage()} bytes")
-        return "\n".join(lines)
+        """Return a detailed string summary of the ArFrame with data preview."""
+        rows, cols = self.shape
+        header = f"ArFrame: {rows} rows × {cols} columns"
+        truncated_names = self._truncate_column_names()
+
+        if rows == 0:
+            return f"{header}\nColumns: {truncated_names}\n(empty frame)"
+
+        actual_n = min(5, rows)
+        col_data = [
+            [self._frame.column_by_index(i).at(r) for r in range(actual_n)]
+            for i in range(cols)
+        ]
+
+        col_widths = [
+            max(
+                len(truncated_names[i]),
+                max((len(str(col_data[i][r])) for r in range(actual_n)), default=0),
+            )
+            for i in range(cols)
+        ]
+
+        col_header = "  ".join(
+            truncated_names[i].ljust(col_widths[i]) for i in range(cols)
+        )
+        separator = "  ".join("-" * col_widths[i] for i in range(cols))
+        data_rows = [
+            "  ".join(str(col_data[i][r]).ljust(col_widths[i]) for i in range(cols))
+            for r in range(actual_n)
+        ]
+
+        suffix = f"\n... ({rows - actual_n} more rows)" if rows > actual_n else ""
+        columns_line = f"Columns: {truncated_names}"
+        dtypes_line = f"DTypes: {self.dtypes}"
+        memory_line = f"Memory: {self.memory_usage()} bytes"
+
+        parts = [
+            header,
+            columns_line,
+            dtypes_line,
+            memory_line,
+            col_header,
+            separator,
+        ] + data_rows
+
+        return "\n".join(parts) + suffix
 
     def __contains__(self, item: object) -> bool:
         return isinstance(item, str) and item in self.columns
@@ -665,6 +713,38 @@ class ArFrame:
         raise TypeError(
             f"column key must be a str or list of str, got {type(key).__name__!r}"
         )
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, ArFrame):
+            return NotImplemented
+
+        if (
+            self.shape != other.shape
+            or self.columns != other.columns
+            or self.dtypes != other.dtypes
+        ):
+            return False
+
+        for i in range(self._frame.num_cols()):
+            left = self._frame.column_by_index(i).to_python_list()
+            right = other._frame.column_by_index(i).to_python_list()
+
+            for lval, rval in zip(left, right):
+                if not self._values_equal(lval, rval):
+                    return False
+
+        return True
+
+    def __copy__(self) -> ArFrame:
+        return ArFrame(self._frame, attrs=self._attrs.copy())
+
+    def __deepcopy__(self, memo: dict) -> ArFrame:
+        if id(self) in memo:
+            return memo[id(self)]
+        copied = ArFrame(self._frame.clone(), attrs={})
+        memo[id(self)] = copied
+        copied._attrs = copy.deepcopy(self._attrs, memo)
+        return copied
 
     def preview(self, n: int = 5) -> str:
         """Return a lightweight string preview of the first ``n`` rows.

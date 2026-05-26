@@ -1,16 +1,17 @@
 # Label taxonomy for maintainers.
-# Keep labels focused on type, area, priority, difficulty, size, and workflow state.
+# Keep labels focused on type, area, priority, level, quality, size, and workflow state.
 
 types:
-  - "type: bug"
-  - "type: feature"
-  - "type: docs"
-  - "type: tests"
-  - "type: refactor"
-  - "type: performance"
-  - "type: security"
-  - "type: ci"
-  - "type: discussion"
+  - "type:bug"
+  - "type:feature"
+  - "type:docs"
+  - "type:testing"
+  - "type:refactor"
+  - "type:performance"
+  - "type:security"
+  - "type:design"
+  - "type:ci"
+  - "type:discussion"
 
 areas:
   - "area: csv-parser"
@@ -35,17 +36,20 @@ priorities:
   - "priority: medium"
   - "priority: low"
 
-difficulty:
-  - "difficulty: beginner"
-  - "difficulty: intermediate"
-  - "difficulty: advanced"
+levels:
+  - "level:beginner"
+  - "level:intermediate"
+  - "level:advanced"
+  - "level:critical"
+
+quality:
+  - "quality:clean"
+  - "quality:exceptional"
 
 gssoc:
   - "gssoc"
+  - "gssoc:approved"
   - "gssoc: good first issue"
-  - "gssoc: level 1"
-  - "gssoc: level 2"
-  - "gssoc: level 3"
 
 workflow:
   - "status: needs triage"
