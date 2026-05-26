@@ -277,3 +277,24 @@ class TestReadJsonlPipelineCompat:
 
         assert report.row_count == 3
         assert report.duplicate_rows == 1
+
+
+def test_read_jsonl_encoding_non_string(tmp_path):
+    f = tmp_path / "x.jsonl"
+    f.write_text('{"a": 1}\n')
+    with pytest.raises(TypeError, match="encoding must be a string"):
+        ar.read_jsonl(f, encoding=123)
+
+
+def test_read_jsonl_encoding_none(tmp_path):
+    f = tmp_path / "x.jsonl"
+    f.write_text('{"a": 1}\n')
+    with pytest.raises(TypeError, match="encoding must be a string"):
+        ar.read_jsonl(f, encoding=None)
+
+
+def test_read_jsonl_encoding_unknown_codec(tmp_path):
+    f = tmp_path / "x.jsonl"
+    f.write_text('{"a": 1}\n')
+    with pytest.raises(ValueError, match="Unknown encoding"):
+        ar.read_jsonl(f, encoding="fake-codec")
