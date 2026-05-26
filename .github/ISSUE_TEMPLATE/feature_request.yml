@@ -1,7 +1,7 @@
 name: Feature request
 description: Propose a new API, capability, integration, or user-facing improvement.
 title: "Feature: "
-labels: ["type: feature", "status: needs triage"]
+labels: ["type:feature", "status: needs triage"]
 body:
   - type: markdown
     attributes:

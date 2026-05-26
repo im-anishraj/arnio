@@ -116,7 +116,60 @@ def generate_multiline(rows=100_000, path=DEFAULT_MULTILINE_PATH):
     print(f"Generated {rows:,} row Multiline CSV -> {path}")
 
 
+DEFAULT_SPARSE_NULLS_PATH = "benchmarks/benchmark_sparse_nulls.csv"
+
+
+def generate_sparse_nulls(
+    rows=1_000_000,
+    path=DEFAULT_SPARSE_NULLS_PATH,
+    null_density=0.01,
+    seed=42,
+):
+    """Generate a CSV with controlled null density across mixed column types."""
+    if DRY_RUN:
+        rows = min(rows, 10)
+    rng = np.random.default_rng(seed)
+    data = {
+        "id": rng.integers(1, 999999, rows).tolist(),
+        "age": np.where(
+            rng.random(rows) < null_density, None, rng.integers(18, 80, rows)
+        ).tolist(),
+        "salary": np.where(
+            rng.random(rows) < null_density,
+            None,
+            rng.uniform(30000, 150000, rows).round(2),
+        ).tolist(),
+        "name": np.where(
+            rng.random(rows) < null_density,
+            None,
+            rng.choice(["Alice", "Bob", "Charlie", "Diana"], rows),
+        ).tolist(),
+        "city": np.where(
+            rng.random(rows) < null_density,
+            None,
+            rng.choice(["New York", "London", "Paris", "Tokyo"], rows),
+        ).tolist(),
+        "active": np.where(
+            rng.random(rows) < null_density,
+            None,
+            rng.choice([True, False], rows),
+        ).tolist(),
+    }
+    df = pd.DataFrame(data)
+    df.to_csv(path, index=False, lineterminator="\n")
+    label = f"null_density={null_density:.1%}"
+    if DRY_RUN:
+        label += " (dry-run)"
+    print(f"Generated {rows:,} row sparse-null CSV ({label}) -> {path}")
+
+
 if __name__ == "__main__":
     generate()
     generate_wide()
     generate_multiline()
+    generate_sparse_nulls()
+    generate_sparse_nulls(
+        path="benchmarks/benchmark_sparse_nulls_dense.csv",
+        null_density=0.2,
+        seed=99,
+    )
