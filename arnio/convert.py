@@ -16,7 +16,7 @@ import pandas as pd
 if TYPE_CHECKING:
     import pyarrow as pa
 
-from ._core import _DType, _Frame
+from ._core import _concat, _DType, _Frame
 from .frame import ArFrame
 
 
@@ -401,3 +401,56 @@ def from_pandas(df: pd.DataFrame) -> ArFrame:
 
     cpp_frame = _Frame.from_dict(columns, dtype_hints, len(df))
     return ArFrame(cpp_frame, attrs=copylib.deepcopy(df.attrs))
+
+
+def concat(frames: list[ArFrame], *, ignore_index: bool = True) -> ArFrame:
+    """Concatenate multiple ArFrame objects.
+
+    Parameters
+    ----------
+    frames : list[ArFrame]
+        A non-empty list of ArFrame objects to concatenate.
+    ignore_index : bool, default True
+        Must be True. Since ArFrame is index-less, passing False will raise a ValueError.
+
+    Returns
+    -------
+    ArFrame
+        A new ArFrame with rows from all input frames concatenated.
+    """
+    if not isinstance(frames, list):
+        raise TypeError(f"frames must be a list, got {type(frames).__name__}")
+
+    if len(frames) == 0:
+        raise ValueError("Cannot concatenate an empty list of ArFrames")
+
+    for i, f in enumerate(frames):
+        if not isinstance(f, ArFrame):
+            raise TypeError(
+                f"All elements in frames must be ArFrame instances, got {type(f).__name__} at index {i}"
+            )
+
+    if not isinstance(ignore_index, bool):
+        raise TypeError("ignore_index must be a bool")
+
+    if not ignore_index:
+        raise ValueError(
+            "ArFrame does not support index columns; ignore_index must be True"
+        )
+
+    first_cols = frames[0].columns
+    first_dtypes = frames[0].dtypes
+    for i, frame in enumerate(frames[1:], start=1):
+        if frame.columns != first_cols:
+            raise ValueError(
+                f"Column names or order do not match: frame at index 0 has {first_cols}, frame at index {i} has {frame.columns}"
+            )
+        for col in first_cols:
+            if frame.dtypes[col] != first_dtypes[col]:
+                raise TypeError(
+                    f"Column '{col}' has mismatched dtypes: {first_dtypes[col]} vs {frame.dtypes[col]}"
+                )
+
+    merged_attrs = copylib.deepcopy(frames[0]._attrs)
+    res_cpp_frame = _concat([f._frame for f in frames])
+    return ArFrame(res_cpp_frame, attrs=merged_attrs)

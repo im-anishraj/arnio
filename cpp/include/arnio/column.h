@@ -24,6 +24,7 @@ class Column {
     // Mutators (used during construction/loading)
     void push_back(const CellValue& value);
     void push_null();
+    void append(const Column& other);
     void set_name(const std::string& name);
 
     // Data access

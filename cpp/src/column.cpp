@@ -191,6 +191,27 @@ void Column::push_null() {
     }
 }
 
+void Column::append(const Column& other) {
+    if (dtype_ != other.dtype_) {
+        throw std::invalid_argument("Column type mismatch in append");
+    }
+
+    assert_type_consistency();
+    other.assert_type_consistency();
+
+    null_mask_.insert(null_mask_.end(), other.null_mask_.begin(), other.null_mask_.end());
+
+    std::visit(
+        [this](auto& this_vec, const auto& other_vec) {
+            using T1 = std::decay_t<decltype(this_vec)>;
+            using T2 = std::decay_t<decltype(other_vec)>;
+            if constexpr (std::is_same_v<T1, T2> && !std::is_same_v<T1, std::monostate>) {
+                this_vec.insert(this_vec.end(), other_vec.begin(), other_vec.end());
+            }
+        },
+        data_, other.data_);
+}
+
 void Column::set_name(const std::string& name) { name_ = name; }
 void Column::set_dtype(DType dtype) { dtype_ = dtype; }
 

@@ -41,7 +41,7 @@ from .cleaning import (
     validate_columns_exist,
     winsorize_outliers,
 )
-from .convert import from_pandas, to_arrow, to_pandas
+from .convert import concat, from_pandas, to_arrow, to_pandas
 from .exceptions import (
     ArnioError,
     CsvReadError,
@@ -158,6 +158,7 @@ __all__ = [
     "to_arrow",
     "from_pandas",
     "from_records",
+    "concat",
     # Integrations
     "ArnioPandasAccessor",
     "register_duckdb",

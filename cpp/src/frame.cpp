@@ -256,4 +256,63 @@ std::vector<std::pair<std::string, std::vector<std::pair<std::string, double>>>>
     return summary;
 }
 
+Frame concat(const std::vector<Frame>& frames) {
+    if (frames.empty()) {
+        throw std::invalid_argument("Cannot concatenate an empty list of Frames");
+    }
+    if (frames.size() == 1) {
+        return frames[0].clone();
+    }
+
+    const Frame& first = frames[0];
+    size_t num_cols = first.num_cols();
+    std::vector<std::string> target_names = first.column_names();
+    std::vector<DType> target_dtypes;
+    target_dtypes.reserve(num_cols);
+    for (size_t c = 0; c < num_cols; ++c) {
+        target_dtypes.push_back(first.column(c).dtype());
+    }
+
+    // Validate subsequent frames
+    for (size_t i = 1; i < frames.size(); ++i) {
+        const Frame& f = frames[i];
+        if (f.num_cols() != num_cols) {
+            throw std::invalid_argument("Column count mismatch in concat");
+        }
+        for (size_t c = 0; c < num_cols; ++c) {
+            const Column& col = f.column(c);
+            if (col.name() != target_names[c]) {
+                throw std::invalid_argument("Column name or order mismatch in concat: expected '" +
+                                            target_names[c] + "', got '" + col.name() + "'");
+            }
+            if (col.dtype() != target_dtypes[c]) {
+                throw std::invalid_argument("Column dtype mismatch in concat");
+            }
+        }
+    }
+
+    // Create cloned columns from the first frame
+    std::vector<Column> concat_cols;
+    concat_cols.reserve(num_cols);
+    for (size_t c = 0; c < num_cols; ++c) {
+        concat_cols.push_back(first.column(c).clone());
+    }
+
+    // Append columns from subsequent frames
+    for (size_t i = 1; i < frames.size(); ++i) {
+        const Frame& f = frames[i];
+        for (size_t c = 0; c < num_cols; ++c) {
+            concat_cols[c].append(f.column(c));
+        }
+    }
+
+    // Calculate total rows
+    size_t total_rows = 0;
+    for (const auto& f : frames) {
+        total_rows += f.num_rows();
+    }
+
+    return Frame(total_rows, std::move(concat_cols));
+}
+
 }  // namespace arnio

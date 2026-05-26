@@ -243,6 +243,25 @@ print(selected.columns)
 - Raises `ValueError` if any requested column does not exist.
 - Raises `TypeError` if `columns` is not a sequence of strings.
 
+### Concatenating multiple frames
+
+Use `concat()` to combine multiple `ArFrame` objects into a single frame by rows.
+
+```python
+import arnio as ar
+
+f1 = ar.read_csv("part1.csv")
+f2 = ar.read_csv("part2.csv")
+
+# Concatenate frames along rows
+merged = ar.concat([f1, f2])
+```
+
+* **Schema Matching**: All frames must have the exact same column names, column order, and column dtypes. Mismatched column names or order will raise `ValueError`, and mismatched dtypes will raise `TypeError` (no implicit type promotion).
+* **Metadata Preservation**: Metadata attributes (`_attrs`) are deep-copied from the first frame. Mutation isolation is preserved; modifying attributes on the concatenated frame will not modify the source frames.
+* **Index Preservation**: Since `ArFrame` is index-less, `ignore_index` must be `True` (the default). Passing `ignore_index=False` will raise a `ValueError`.
+* **Empty Inputs**: Passing an empty list to `concat()` will raise a `ValueError`.
+
 ### Handling missing values
 
 Arnio supports configuring which strings are treated as null during CSV parsing using the `null_values` parameter in `read_csv` and `scan_csv`. By default, Arnio preserves its existing behavior and treats only empty cells as null. Custom matching is case-insensitive and applies to cell values only (not headers).
