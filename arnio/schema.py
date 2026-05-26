@@ -564,6 +564,13 @@ class Schema:
         if not isinstance(self.strict, bool):
             raise TypeError("Schema 'strict' must be a boolean")
 
+        if self.rules is not None:
+            if not isinstance(self.rules, (list, tuple)):
+                raise TypeError("Schema 'rules' must be a list of callables")
+            for rule in self.rules:
+                if not callable(rule):
+                    raise TypeError("Schema 'rules' must be a list of callables")
+
     def validate(
         self,
         frame: ArFrame,

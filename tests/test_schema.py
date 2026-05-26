@@ -720,6 +720,30 @@ def test_validation_result_to_markdown_rejects_non_integer_max_issues(sample_csv
             raise AssertionError(f"Expected max_issues={invalid!r} to raise")
 
 
+def test_schema_construction_validates_rules():
+    with pytest.raises(TypeError, match="Schema 'rules' must be a list of callables"):
+        ar.Schema({"x": ar.Int64()}, rules="abc")
+
+    with pytest.raises(TypeError, match="Schema 'rules' must be a list of callables"):
+        ar.Schema({"x": ar.Int64()}, rules=123)
+
+    with pytest.raises(TypeError, match="Schema 'rules' must be a list of callables"):
+        ar.Schema({"x": ar.Int64()}, rules=object())
+
+    with pytest.raises(TypeError, match="Schema 'rules' must be a list of callables"):
+        ar.Schema({"x": ar.Int64()}, rules=[object()])
+
+    def valid_rule(df):
+        return []
+
+    with pytest.raises(TypeError, match="Schema 'rules' must be a list of callables"):
+        ar.Schema({"x": ar.Int64()}, rules=[valid_rule, 456])
+
+    assert ar.Schema({"x": ar.Int64()}, rules=[valid_rule]).rules is not None
+    assert ar.Schema({"x": ar.Int64()}, rules=(valid_rule,)).rules is not None
+    assert ar.Schema({"x": ar.Int64()}, rules=None).rules is None
+
+
 # ---------------------------------------------------------------------------
 # Regression tests: redaction policy for ValidationResult.to_markdown
 # ---------------------------------------------------------------------------
