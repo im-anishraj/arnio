@@ -456,6 +456,38 @@ def test_auto_clean_dry_run_with_return_report_raises():
         ar.auto_clean(frame, dry_run=True, return_report=True)
 
 
+@pytest.mark.parametrize(
+    "value",
+    [
+        "yes",
+        1,
+        None,
+        [],
+        object(),
+    ],
+    ids=["string", "integer", "none", "list", "object"],
+)
+def test_auto_clean_rejects_non_boolean_return_report(value):
+    frame = ar.from_pandas(pd.DataFrame({"name": [" Alice ", " Bob "]}))
+
+    with pytest.raises(TypeError, match="return_report must be a bool"):
+        ar.auto_clean(frame, return_report=value)
+
+
+def test_auto_clean_accepts_boolean_return_report_values():
+    frame = ar.from_pandas(pd.DataFrame({"name": [" Alice ", " Bob "]}))
+
+    clean_only = ar.auto_clean(frame, return_report=False)
+    clean_with_report = ar.auto_clean(frame, return_report=True)
+
+    assert isinstance(clean_only, ar.ArFrame)
+    assert isinstance(clean_with_report, tuple)
+    assert len(clean_with_report) == 2
+    cleaned, report = clean_with_report
+    assert isinstance(cleaned, ar.ArFrame)
+    assert isinstance(report, ar.DataQualityReport)
+
+
 def test_auto_clean_rejects_unknown_mode(sample_csv):
     frame = ar.read_csv(sample_csv)
 

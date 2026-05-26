@@ -1842,6 +1842,8 @@ def auto_clean(
     if mode not in {"safe", "strict"}:
         raise ValueError("mode must be 'safe' or 'strict'")
 
+    if not isinstance(return_report, bool):
+        raise TypeError("return_report must be a bool")
     if not isinstance(dry_run, bool):
         raise TypeError("dry_run must be a bool")
     if not isinstance(allow_lossy_casts, bool):
