@@ -1532,7 +1532,181 @@ def sniff_delimiter(
     config.trim_headers = trim_headers
     reader = _CsvReader(config)
     try:
-        with _comment_filtered_csv_path(path, encoding, comment) as native_path:
-            return reader.scan_schema(native_path)
-    except RuntimeError as e:
-        raise CsvReadError(str(e)) from e
+        with open(path, encoding=encoding, errors="strict") as f:
+            sample = f.read(sample_size)
+    except LookupError as e:
+        raise ValueError(f"Unknown encoding: {encoding}") from e
+    except UnicodeDecodeError as e:
+        raise CsvReadError(
+            f"Could not decode {path!r} using encoding {encoding!r}"
+        ) from e
+
+    if not sample:
+        raise CsvReadError(f"CSV file is empty: {path!r}")
+
+    # 4. Analyze Sample with Quote-Aware Character Scanner
+    candidates = [",", ";", "\t", "|"]
+    counts = {c: [0] for c in candidates}
+
+    in_quotes = False
+    quote_char = None
+
+    i = 0
+    n = len(sample)
+    while i < n:
+        char = sample[i]
+        if in_quotes:
+            if char == quote_char:
+                # Check for escaped quote (e.g. standard CSV double-quote "")
+                if i + 1 < n and sample[i + 1] == quote_char:
+                    i += 1  # Skip the escaped quote
+                else:
+                    in_quotes = False
+                    quote_char = None
+        else:
+            if char in ('"', "'"):
+                in_quotes = True
+                quote_char = char
+            elif char in ("\n", "\r"):
+                # Line boundary outside quotes
+                if char == "\r" and i + 1 < n and sample[i + 1] == "\n":
+                    i += 1
+                for c in candidates:
+                    counts[c].append(0)
+            elif char in counts:
+                counts[char][-1] += 1
+        i += 1
+
+    # Remove the last line if it is empty (e.g., trailing newline)
+    for c in candidates:
+        if len(counts[c]) > 1 and counts[c][-1] == 0:
+            counts[c].pop()
+
+    # 5. Score Candidates and Detect Ties/Ambiguity
+    best_candidates = []
+    best_score = -1.0
+
+    from collections import Counter
+
+    for delimiter in candidates:
+        line_counts = counts[delimiter]
+        non_zero_counts = [c for c in line_counts if c > 0]
+        if not non_zero_counts:
+            continue
+
+        counter = Counter(non_zero_counts)
+        mode, mode_freq = counter.most_common(1)[0]
+
+        consistency = mode_freq / len(line_counts)
+        score = consistency * 10.0 + (mode * 0.1)
+
+        if score > best_score:
+            best_score = score
+            best_candidates = [delimiter]
+        elif abs(score - best_score) < 1e-9:
+            best_candidates.append(delimiter)
+
+    if not best_candidates or best_score <= 0.0:
+        raise ValueError(
+            f"Could not determine CSV delimiter from sample: no candidate delimiters found in {path!r}"
+        )
+
+    if len(best_candidates) > 1:
+        raise ValueError(
+            f"Could not determine CSV delimiter from sample: multiple candidate delimiters {best_candidates} have the same score"
+        )
+
+    return best_candidates[0]
+
+
+_VALID_COMPRESSIONS = {"snappy", "gzip", "brotli", "zstd", "none"}
+
+
+def write_parquet(
+    frame: ArFrame,
+    path: str | os.PathLike[str],
+    *,
+    compression: str = "snappy",
+    row_group_size: int | None = None,
+) -> None:
+    """Write an ArFrame to a Parquet file via pyarrow.
+
+    Requires the ``pyarrow`` package.  Install it with::
+
+        pip install arnio[parquet]
+
+    The implementation converts the frame to a pandas DataFrame via
+    :func:`to_pandas` and delegates encoding to
+    ``pandas.DataFrame.to_parquet(engine="pyarrow")``.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        The data frame to write.
+    path : str or path-like
+        Destination file path.  Must end with ``.parquet`` or ``.pq``.
+    compression : str, default ``"snappy"``
+        Parquet compression codec.  Accepted values: ``"snappy"``,
+        ``"gzip"``, ``"brotli"``, ``"zstd"``, ``"none"``.
+    row_group_size : int, optional
+        Number of rows per Parquet row group.  If ``None``, pyarrow
+        chooses the default (typically 128 MB per group).  Must be a
+        positive integer when provided.
+
+    Raises
+    ------
+    ImportError
+        If ``pyarrow`` is not installed.
+    ValueError
+        If the file extension is not ``.parquet`` or ``.pq``, if
+        ``compression`` is not a recognised codec, or if
+        ``row_group_size`` is not a positive integer.
+
+    Examples
+    --------
+    >>> ar.write_parquet(frame, "output.parquet")
+    >>> ar.write_parquet(frame, "output.pq", compression="zstd")
+    >>> ar.write_parquet(frame, "output.parquet", row_group_size=50_000)
+    """
+    from .convert import to_pandas
+
+    path = os.fspath(path)
+    path_lower = path.lower()
+    if not (path_lower.endswith(".parquet") or path_lower.endswith(".pq")):
+        raise ValueError(
+            f"Unsupported file format: {path}. "
+            "write_parquet only supports .parquet and .pq files."
+        )
+    if not isinstance(compression, str):
+        raise TypeError("compression must be a string")
+    if compression not in _VALID_COMPRESSIONS:
+        raise ValueError(
+            f"Unknown compression codec: {compression!r}. "
+            f"Valid options are: {sorted(_VALID_COMPRESSIONS)}"
+        )
+
+    if row_group_size is not None:
+        if isinstance(row_group_size, bool) or not isinstance(row_group_size, int):
+            raise TypeError("row_group_size must be an integer")
+        if row_group_size <= 0:
+            raise ValueError("row_group_size must be a positive integer")
+
+    try:
+        import pyarrow  # noqa: F401 — presence check only
+    except ImportError as exc:
+        raise ImportError(
+            "pyarrow is required for Parquet export. "
+            "Install it with: pip install arnio[parquet]"
+        ) from exc
+
+    df = to_pandas(frame)
+
+    kwargs: dict = {
+        "engine": "pyarrow",
+        "compression": None if compression == "none" else compression,
+        "index": False,
+    }
+    if row_group_size is not None:
+        kwargs["row_group_size"] = row_group_size
+
+    df.to_parquet(path, **kwargs)
