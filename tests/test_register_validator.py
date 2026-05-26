@@ -266,7 +266,7 @@ class TestCustomValidatorReturnNormalization:
         assert not result.passed
         failing = [i for i in result.issues if i.rule == "custom"]
         assert len(failing) == 1
-        assert failing[0].row_index == 1  # the row where v == 0
+        assert failing[0].row_index == 2  # the row where v == 0 (1-based)
 
     def test_validator_returning_non_bool_raises_type_error(self):
         """A non-bool, non-None, non-NA return value raises TypeError naming the validator."""
@@ -301,5 +301,5 @@ class TestCustomValidatorReturnNormalization:
         result = ar.validate(frame, {"x": ar.Custom("mixed")})
         assert not result.passed
         failing_rows = {i.row_index for i in result.issues if i.rule == "custom"}
-        # rows at index 1 (v=2), 2 (v=3), 3 (v=4) should fail
-        assert failing_rows == {1, 2, 3}
+        # rows at index 2 (v=2), 3 (v=3), 4 (v=4) should fail (1-based)
+        assert failing_rows == {2, 3, 4}
