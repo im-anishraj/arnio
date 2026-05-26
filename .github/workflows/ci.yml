@@ -37,6 +37,11 @@ jobs:
         run: |
           pytest tests/ -v --cov=arnio --cov-report=xml
 
+      - name: Run notebook smoke test
+        run: |
+          pip install nbconvert pandas
+          jupyter nbconvert --to notebook --execute examples/dataset_profile_comparison.ipynb
+
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
         with:
