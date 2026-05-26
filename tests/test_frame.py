@@ -816,3 +816,24 @@ def test_repr_html_escapes_html_in_column_name(tmp_path):
     out = frame._repr_html_()
     assert "<b>bad</b>" not in out
     assert "&lt;b&gt;bad&lt;/b&gt;" in out
+
+
+def test_repr_html_does_not_convert_full_frame(large_csv, monkeypatch):
+    """_repr_html_() must not call to_pandas() on the full frame."""
+    frame = ar.read_csv(large_csv)
+
+    from arnio import convert
+
+    original_to_pandas = convert.to_pandas
+    call_sizes = []
+
+    def tracking_to_pandas(f, **kwargs):
+        call_sizes.append(len(f))
+        return original_to_pandas(f, **kwargs)
+
+    monkeypatch.setattr(convert, "to_pandas", tracking_to_pandas)
+    frame._repr_html_()
+
+    assert all(
+        size <= 10 for size in call_sizes
+    ), f"to_pandas() was called with {call_sizes} rows — full frame must not be converted"

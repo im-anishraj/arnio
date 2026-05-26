@@ -866,10 +866,11 @@ class ArFrame:
         )
         header = f"<thead><tr>{header_cells}</tr></thead>"
 
-        # ── data rows via to_pandas slice ─────────────────────────────────
+        # ── data rows — only convert the bounded slice, not the full frame ──
         try:
-            df = to_pandas(self)
-            preview = df.iloc[:_REPR_HTML_MAX_ROWS]
+            bounded = self.head(_REPR_HTML_MAX_ROWS)
+            df = to_pandas(bounded)
+            preview = df
         except Exception as exc:
             return (
                 summary
