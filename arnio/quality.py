@@ -8,6 +8,7 @@ from __future__ import annotations
 import html
 import json
 import math
+import os
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
@@ -24,8 +25,6 @@ from .cleaning import (
 )
 from .convert import to_pandas
 from .frame import ArFrame
-
-import os
 
 
 class CleaningSuggestion(tuple):
