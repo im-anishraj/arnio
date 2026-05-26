@@ -395,6 +395,11 @@ def fill_nulls(
                 f"Available columns: {available}"
             ),
         )
+    if not isinstance(value, (str, int, float, bool)):
+        raise TypeError(
+            f"fill value must be a supported scalar (str, int, float, or bool), "
+            f"got {type(value).__name__!r}"
+        )
     result = _fill_nulls(frame._frame, value, subset=subset)
     return ArFrame(result)
 
