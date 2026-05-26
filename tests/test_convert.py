@@ -1032,3 +1032,20 @@ class TestToArrow:
         assert ages[1] == 25
         assert ages[2] is None
         assert ages[3] == 28
+
+    def test_from_pandas_rejects_dict(self):
+        with pytest.raises(TypeError, match="expects a pandas DataFrame"):
+            ar.from_pandas({"x": [1]})
+
+    def test_from_pandas_rejects_none(self):
+        with pytest.raises(TypeError, match="expects a pandas DataFrame"):
+            ar.from_pandas(None)
+
+    def test_from_pandas_rejects_series(self):
+        with pytest.raises(TypeError, match="expects a pandas DataFrame"):
+            ar.from_pandas(pd.Series([1, 2, 3]))
+
+    def test_from_pandas_accepts_valid_dataframe(self):
+        df = pd.DataFrame({"x": [1, 2, 3]})
+        frame = ar.from_pandas(df)
+        assert frame.shape == (3, 1)
