@@ -1,11 +1,12 @@
 """Unit tests for examples/check_env.py environment dashboard."""
 
 import sys
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from examples.check_env import print_dashboard
+from examples.check_env import EXAMPLES, print_dashboard
 
 
 def test_check_env_core_missing(capsys: pytest.CaptureFixture[str]) -> None:
@@ -17,6 +18,7 @@ def test_check_env_core_missing(capsys: pytest.CaptureFixture[str]) -> None:
             "duckdb": (True, "Installed"),
             "sklearn": (True, "Installed"),
             "pytest": (True, "Installed"),
+            "pyarrow": (True, "Installed"),
         }
 
         print_dashboard(results)
@@ -45,6 +47,7 @@ def test_check_env_core_available_some_missing(
             "duckdb": (False, "Not Installed"),
             "sklearn": (True, "Installed"),
             "pytest": (True, "Installed"),
+            "pyarrow": (True, "Installed"),
         }
 
         print_dashboard(results)
@@ -74,6 +77,7 @@ def test_check_env_all_available(capsys: pytest.CaptureFixture[str]) -> None:
             "duckdb": (True, "Installed"),
             "sklearn": (True, "Installed"),
             "pytest": (True, "Installed"),
+            "pyarrow": (True, "Installed"),
         }
 
         print_dashboard(results)
@@ -85,3 +89,19 @@ def test_check_env_all_available(capsys: pytest.CaptureFixture[str]) -> None:
             if "arnio_with_duckdb.py" in line:
                 assert "[Ready]" in line
         assert "All optional dependencies are successfully installed!" in output
+
+IGNORED = {"check_env.py"}
+
+def test_all_examples_listed() -> None:
+    example_files = {
+        p.name
+        for p in Path("examples").glob("*.py")
+    }
+
+    listed = set(EXAMPLES.keys()) | IGNORED
+
+    missing = example_files - listed
+
+    assert not missing, (
+        f"Missing examples in EXAMPLES mapping: {missing}"
+    )
