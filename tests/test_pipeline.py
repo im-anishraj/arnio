@@ -805,6 +805,31 @@ class TestPipeline:
         with pytest.raises(ValueError, match="Invalid step format"):
             ar.pipeline(frame, [123])
 
+    def test_pipeline_dry_run_metadata_preserves_original_row_counts(self):
+
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "name": ["Alice", None, "Bob"],
+                }
+            )
+        )
+
+        result, metadata = ar.pipeline(
+            frame,
+            [("drop_nulls",)],
+            dry_run=True,
+            return_metadata=True,
+        )
+
+        assert result.shape[0] == 3
+
+        row_counts = metadata["row_counts"]
+
+        assert row_counts[0]["before"] == 3
+        assert row_counts[0]["after"] == 3
+        assert row_counts[0]["dry_run"] is True
+
 
 def test_get_builtin_step_signatures_returns_normalized_signatures():
     signatures = ar.get_builtin_step_signatures()
@@ -830,9 +855,6 @@ def test_get_builtin_step_signatures_includes_builtin_python_steps_only():
 
 
 def test_filter_rows_greater_than():
-    import pandas as pd
-
-    import arnio as ar
 
     df = pd.DataFrame({"age": [20, 30, 40]})
 
@@ -1640,3 +1662,33 @@ def test_pipeline_dry_run_false_metadata_unchanged():
     assert meta["row_counts"][0]["after"] < frame.shape[0]
     assert meta["step_timings"][0]["seconds"] >= 0
     assert meta["row_counts"][0].get("dry_run") is False
+
+
+def test_pipeline_return_metadata_non_bool_raises():
+    frame = ar.from_pandas(pd.DataFrame({"a": [1, 2, 3]}))
+    with pytest.raises(TypeError, match="return_metadata"):
+        ar.pipeline(frame, [("strip_whitespace",)], return_metadata="yes")
+
+
+def test_pipeline_dry_run_non_bool_raises():
+    frame = ar.from_pandas(pd.DataFrame({"a": [1, 2, 3]}))
+    with pytest.raises(TypeError, match="dry_run"):
+        ar.pipeline(frame, [("strip_whitespace",)], dry_run=1)
+
+
+def test_pipeline_verbose_non_bool_raises():
+    frame = ar.from_pandas(pd.DataFrame({"a": [1, 2, 3]}))
+    with pytest.raises(TypeError, match="verbose"):
+        ar.pipeline(frame, [("strip_whitespace",)], verbose=None)
+
+
+def test_pipeline_bool_flags_valid():
+    frame = ar.from_pandas(pd.DataFrame({"a": [1, 2, 3]}))
+    result = ar.pipeline(
+        frame,
+        [("strip_whitespace",)],
+        return_metadata=True,
+        dry_run=False,
+        verbose=True,
+    )
+    assert isinstance(result, tuple)
