@@ -167,7 +167,7 @@ def test_nested_dict_values():
         "name": ["Alice", "Bob"],
         "info": [{"city": "NY", "age": 25}, {"city": "LA", "age": 30}],
     }
-    with pytest.raises(ValueError):
+    with pytest.raises(TypeError):
         ar.from_dict(data)
 
 
@@ -176,6 +176,20 @@ def test_nested_dict_values_ArFrame():
         "name": ["Alice", "Bob"],
         "info": [{"city": "NY", "age": 25}, {"city": "LA", "age": 30}],
     }
+    with pytest.raises(TypeError):
+        ar.ArFrame.from_dict(data)
+
+
+def test_nested_dictvalues():
+    data = {"info": {"city": "NY", "age": 25}}
+
+    with pytest.raises(ValueError):
+        ar.from_dict(data)
+
+
+def test_nested_dictvalues_ArrFrame():
+    data = {"info": {"city": "NY", "age": 25}}
+
     with pytest.raises(ValueError):
         ar.ArFrame.from_dict(data)
 

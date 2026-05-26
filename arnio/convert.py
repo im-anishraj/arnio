@@ -417,10 +417,10 @@ def from_dict(data: dict) -> ArFrame:
         raise TypeError(f"Expected dict datatype but instead got {type(data).__name__}")
     if not all(isinstance(k, str) for k in data.keys()):
         raise TypeError("All dictionary keys must be strings")
-    df = pd.DataFrame(data)
-    for col_name in df.columns:
-        if df[col_name].map(_is_nested).any():
+    for col_name, value in data.items():
+        if isinstance(value, dict):
             raise ValueError(f"Nested objects are not supported in column{col_name}")
+    df = pd.DataFrame(data)
     for col_name in df.columns:
         _check_unsupported_dtype(col_name, df[col_name])
     return from_pandas(df)
