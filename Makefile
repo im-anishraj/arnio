@@ -9,7 +9,10 @@ install: ## Install dependencies and pre-commit
 
 test: ## Run tests with coverage
 	pytest tests/ -v --cov=arnio --cov-report=term-missing
-
+	
+test-quick: ## Run tests without coverage for faster iteration
+	pytest tests/ -v
+	
 lint: ## Check linting
 	ruff check .
 	black --check .
