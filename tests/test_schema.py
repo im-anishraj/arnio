@@ -1676,6 +1676,25 @@ def test_schema_unique_accepts_valid_types():
     assert schema_tuple.unique == ("user_id", "course_id")
 
 
+@pytest.mark.parametrize("value", ["false", 1, None])
+def test_field_nullable_rejects_non_bool_values(value):
+    with pytest.raises(TypeError, match="nullable must be a bool"):
+        ar.String(nullable=value)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("value", ["yes", 1, None])
+def test_field_unique_rejects_non_bool_values(value):
+    with pytest.raises(TypeError, match="unique must be a bool"):
+        ar.Int64(unique=value)  # type: ignore[arg-type]
+
+
+def test_field_nullable_and_unique_accept_valid_bools():
+    field = ar.String(nullable=False, unique=True)
+
+    assert field.nullable is False
+    assert field.unique is True
+
+
 def test_email_default_keeps_backward_compatibility(sample_csv):
     frame = ar.read_csv(sample_csv)
 

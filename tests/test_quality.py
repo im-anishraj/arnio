@@ -456,6 +456,38 @@ def test_auto_clean_dry_run_with_return_report_raises():
         ar.auto_clean(frame, dry_run=True, return_report=True)
 
 
+@pytest.mark.parametrize(
+    "value",
+    [
+        "yes",
+        1,
+        None,
+        [],
+        object(),
+    ],
+    ids=["string", "integer", "none", "list", "object"],
+)
+def test_auto_clean_rejects_non_boolean_return_report(value):
+    frame = ar.from_pandas(pd.DataFrame({"name": [" Alice ", " Bob "]}))
+
+    with pytest.raises(TypeError, match="return_report must be a bool"):
+        ar.auto_clean(frame, return_report=value)
+
+
+def test_auto_clean_accepts_boolean_return_report_values():
+    frame = ar.from_pandas(pd.DataFrame({"name": [" Alice ", " Bob "]}))
+
+    clean_only = ar.auto_clean(frame, return_report=False)
+    clean_with_report = ar.auto_clean(frame, return_report=True)
+
+    assert isinstance(clean_only, ar.ArFrame)
+    assert isinstance(clean_with_report, tuple)
+    assert len(clean_with_report) == 2
+    cleaned, report = clean_with_report
+    assert isinstance(cleaned, ar.ArFrame)
+    assert isinstance(report, ar.DataQualityReport)
+
+
 def test_auto_clean_rejects_unknown_mode(sample_csv):
     frame = ar.read_csv(sample_csv)
 
@@ -976,6 +1008,20 @@ def test_profile_exclude_columns_rejects_missing_column(sample_csv):
         ar.profile(frame, exclude_columns=["missing"])
 
 
+@pytest.mark.parametrize(
+    "exclude_columns",
+    [
+        123,
+        (name for name in ["name"]),
+    ],
+)
+def test_profile_exclude_columns_rejects_non_sequences(sample_csv, exclude_columns):
+    frame = ar.read_csv(sample_csv)
+
+    with pytest.raises(TypeError, match="exclude_columns must be a sequence"):
+        ar.profile(frame, exclude_columns=exclude_columns)
+
+
 def test_profile_exclude_columns_rejects_bare_string(sample_csv):
     frame = ar.read_csv(sample_csv)
 
@@ -988,6 +1034,16 @@ def test_profile_exclude_columns_rejects_non_string_items(sample_csv):
 
     with pytest.raises(TypeError, match="exclude_columns must contain only string"):
         ar.profile(frame, exclude_columns=["name", 123])
+
+
+def test_profile_exclude_columns_accepts_empty_list(sample_csv):
+    frame = ar.read_csv(sample_csv)
+
+    full_report = ar.profile(frame)
+    report = ar.profile(frame, exclude_columns=[])
+
+    assert list(report.columns) == list(full_report.columns)
+    assert report.column_count == full_report.column_count
 
 
 def test_profile_exclude_columns_scopes_report_metrics_and_suggestions(tmp_path):
@@ -2542,3 +2598,124 @@ def test_data_quality_report_to_json_redact_sample_values():
     parsed = json.loads(json_output)
 
     assert parsed["columns"]["name"]["sample_values"] == ["[REDACTED]"]
+
+
+# --- Tests for ProfileComparison.to_json() ---
+
+
+def test_profile_comparison_to_json_returns_string():
+    frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+    p = ar.profile(frame)
+    comparison = ar.compare_profiles(p, p)
+    result = comparison.to_json()
+    assert isinstance(result, str)
+    parsed = json.loads(result)
+    assert "drift_report" in parsed
+    assert "status_counts" in parsed
+
+
+def test_profile_comparison_to_json_indent():
+    frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+    p = ar.profile(frame)
+    comparison = ar.compare_profiles(p, p)
+    result = comparison.to_json(indent=2)
+    assert "\n" in result
+
+
+def test_profile_comparison_to_json_output_stream():
+    frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+    p = ar.profile(frame)
+    comparison = ar.compare_profiles(p, p)
+    buf = io.StringIO()
+    ret = comparison.to_json(output=buf)
+    assert ret is None
+    assert len(buf.getvalue()) > 0
+
+
+def test_profile_comparison_to_json_invalid_output_raises():
+    frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+    p = ar.profile(frame)
+    comparison = ar.compare_profiles(p, p)
+    with pytest.raises(TypeError, match="writable text stream"):
+        comparison.to_json(output="not_a_stream")
+
+
+# --- ProfileComparison.to_markdown() ---
+
+
+def test_profile_comparison_to_markdown_returns_string():
+    frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+    p = ar.profile(frame)
+    comparison = ar.compare_profiles(p, p)
+    result = comparison.to_markdown()
+    assert isinstance(result, str)
+    assert "Profile Comparison Report" in result
+    assert "Column Drift" in result
+
+
+def test_profile_comparison_to_markdown_output_stream():
+    frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+    p = ar.profile(frame)
+    comparison = ar.compare_profiles(p, p)
+    buf = io.StringIO()
+    ret = comparison.to_markdown(output=buf)
+    assert ret is None
+    assert "Profile Comparison" in buf.getvalue()
+
+
+def test_profile_comparison_to_markdown_invalid_output_raises():
+    frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+    p = ar.profile(frame)
+    comparison = ar.compare_profiles(p, p)
+    with pytest.raises(TypeError, match="writable text stream"):
+        comparison.to_markdown(output=42)
+
+
+# --- Tests for QualityGateResult.to_json() ---
+
+
+def test_quality_gate_result_to_json_returns_string():
+    frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+    p = ar.profile(frame)
+    result = ar.check_quality_gates(p, p)
+    out = result.to_json()
+    assert isinstance(out, str)
+    parsed = json.loads(out)
+    assert "passed" in parsed
+    assert "issues" in parsed
+
+
+def test_quality_gate_result_to_json_indent():
+    frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+    p = ar.profile(frame)
+    result = ar.check_quality_gates(p, p)
+    out = result.to_json(indent=2)
+    assert "\n" in out
+
+
+def test_quality_gate_result_to_json_output_stream():
+    frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+    p = ar.profile(frame)
+    result = ar.check_quality_gates(p, p)
+    buf = io.StringIO()
+    ret = result.to_json(output=buf)
+    assert ret is None
+    assert len(buf.getvalue()) > 0
+
+
+def test_quality_gate_result_to_json_invalid_output_raises():
+    frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+    p = ar.profile(frame)
+    result = ar.check_quality_gates(p, p)
+    with pytest.raises(TypeError, match="writable text stream"):
+        result.to_json(output=123)
+
+
+def test_compare_profiles_mismatched_exclude_columns_hints_user():
+    df = pd.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6], "c": [7, 8, 9]})
+    frame = ar.from_pandas(df)
+    profile_a = ar.profile(frame, exclude_columns=["c"])
+    profile_b = ar.profile(frame)
+
+    with pytest.raises(ValueError, match="exclude_columns"):
+        ar.compare_profiles(profile_a, profile_b)
