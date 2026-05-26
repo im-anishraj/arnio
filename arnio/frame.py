@@ -831,7 +831,6 @@ class ArFrame:
         """
         import html as _html
 
-        from .convert import to_pandas
 
         _REPR_HTML_MAX_ROWS = 10
 
@@ -866,11 +865,17 @@ class ArFrame:
         )
         header = f"<thead><tr>{header_cells}</tr></thead>"
 
-        # ── data rows — only convert the bounded slice, not the full frame ──
+                # Read only the rows needed for display; do not convert the full frame.
+        preview_rows = min(num_rows, _REPR_HTML_MAX_ROWS)
+
         try:
-            bounded = self.head(_REPR_HTML_MAX_ROWS)
-            df = to_pandas(bounded)
-            preview = df
+            preview_values = [
+                [
+                    self._frame.column_by_index(col_idx).at(row_idx)
+                    for col_idx in range(num_cols)
+                ]
+                for row_idx in range(preview_rows)
+            ]
         except Exception as exc:
             return (
                 summary
@@ -884,12 +889,12 @@ class ArFrame:
             "font-family:monospace;font-size:0.9em;white-space:nowrap;'"
         )
         rows_html = ""
-        for _, row in preview.iterrows():
+        for row in preview_values:
             cells = "".join(
                 f"<td {td_style}>"
-                + _html.escape("" if row[c] is None else str(row[c]))
+                + _html.escape("" if value is None else str(value))
                 + "</td>"
-                for c in col_names
+                for value in row
             )
             rows_html += f"<tr>{cells}</tr>"
 
