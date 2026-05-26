@@ -935,6 +935,8 @@ def normalize_case(
     >>> frame = ar.read_csv("data.csv")
     >>> lower = ar.normalize_case(frame, case_type="lower")
     """
+    if not isinstance(case_type, str):
+        raise TypeError("case_type must be a string")
     if subset is not None:
         subset = _validate_existing_column_sequence(
             subset,

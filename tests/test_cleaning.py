@@ -1320,6 +1320,27 @@ class TestNormalizeCase:
 
         assert df["word"].tolist() == ["éclair", "ñandú", "über-Cool"]
 
+    def test_invalid_case_type_int(self):
+        import pandas as pd
+
+        frame = ar.from_pandas(pd.DataFrame({"x": ["A"]}))
+        with pytest.raises(TypeError, match="case_type must be a string"):
+            ar.normalize_case(frame, case_type=123)
+
+    def test_invalid_case_type_none(self):
+        import pandas as pd
+
+        frame = ar.from_pandas(pd.DataFrame({"x": ["A"]}))
+        with pytest.raises(TypeError, match="case_type must be a string"):
+            ar.normalize_case(frame, case_type=None)
+
+    def test_invalid_case_type_string(self):
+        import pandas as pd
+
+        frame = ar.from_pandas(pd.DataFrame({"x": ["A"]}))
+        with pytest.raises(ValueError):
+            ar.normalize_case(frame, case_type="invalid")
+
 
 class TestNormalizeUnicode:
     def test_normalize_unicode(self):
