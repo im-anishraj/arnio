@@ -592,9 +592,15 @@ def clip_numeric(
         return dtypes.get(col_name) in ("int64", "float64")
 
     if subset is not None:
-        unknown_columns = [col for col in subset if col not in dtypes]
-        if unknown_columns:
-            raise ValueError(f"Unknown columns in subset: {unknown_columns}")
+        subset = _validate_existing_column_sequence(
+            subset,
+            available_columns=frame.columns,
+            argument_name="subset",
+            missing_error=ValueError,
+            missing_message=lambda missing, _available: (
+                f"Unknown columns in subset: {missing}"
+            ),
+        )
 
         non_numeric_columns = [col for col in subset if not _is_supported_numeric(col)]
         if non_numeric_columns:

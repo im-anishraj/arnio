@@ -903,6 +903,44 @@ class TestClipNumeric:
         assert list(df["b"]) == [0, 5, 8]
         assert list(df["label"]) == ["x", "y", "z"]
 
+    def test_clip_numeric_string_subset_rejected_before_native_execution(self):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1, 2], "age": [1, 2]}))
+
+        with pytest.raises(
+            TypeError,
+            match="subset must be a sequence of column names, not a string",
+        ):
+            ar.clip_numeric(frame, lower=0, subset="age")
+
+    def test_clip_numeric_non_string_subset_item_rejected_before_native_execution(
+        self,
+    ):
+        frame = ar.from_pandas(pd.DataFrame({"age": [1, 2, 3]}))
+
+        with pytest.raises(
+            TypeError,
+            match="subset must contain only string column names",
+        ):
+            ar.clip_numeric(frame, lower=0, subset=[1])
+
+    def test_clip_numeric_valid_tuple_subset_preserves_supported_behavior(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "a": [-5, 0, 10],
+                    "b": [-10, 5, 20],
+                    "label": ["x", "y", "z"],
+                }
+            )
+        )
+
+        result = ar.clip_numeric(frame, lower=0, upper=8, subset=("b",))
+        df = ar.to_pandas(result)
+
+        assert list(df["a"]) == [-5, 0, 10]
+        assert list(df["b"]) == [0, 5, 8]
+        assert list(df["label"]) == ["x", "y", "z"]
+
     def test_clip_numeric_keeps_missing_values(self):
         frame = ar.from_pandas(pd.DataFrame({"value": [None, -5.0, 10.0]}))
 
