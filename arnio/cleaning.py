@@ -82,7 +82,7 @@ def _validate_column_sequence(
         raise TypeError(
             f"{argument_name} must be a sequence of column names, not a string"
         )
-    if not isinstance(columns, Sequence):
+    if not isinstance(columns, Sequence) and not isinstance(columns, pd.Index):
         raise TypeError(f"{argument_name} must be a sequence of column names")
 
     normalized = list(columns)
