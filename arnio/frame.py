@@ -311,11 +311,9 @@ class ArFrame:
         if isinstance(n, bool) or not isinstance(n, int) or n < 0:
             raise ValueError(f"`n` must be a non-negative integer, got {n!r}")
 
-        from .convert import from_pandas, to_pandas
+        actual_n = min(n, len(self))
 
-        df = to_pandas(self)
-
-        return from_pandas(df.head(n))
+        return ArFrame(self._frame.select_rows(0, actual_n))
 
     def tail(self, n: int = 5) -> ArFrame:
         """Return the last n rows as an ArFrame.
@@ -333,11 +331,10 @@ class ArFrame:
         if isinstance(n, bool) or not isinstance(n, int) or n < 0:
             raise ValueError(f"`n` must be a non-negative integer, got {n!r}")
 
-        from .convert import from_pandas, to_pandas
+        actual_n = min(n, len(self))
+        start = max(0, len(self) - actual_n)
 
-        df = to_pandas(self)
-
-        return from_pandas(df.tail(n))
+        return ArFrame(self._frame.select_rows(start, actual_n))
 
     def to_dict(self) -> dict[str, list]:
         """Export the frame as a Python dictionary.

@@ -1947,7 +1947,7 @@ arnio/
 ├── tests/                   # pytest suite — CSV, cleaning, pipeline, conversions
 ├── benchmarks/              # Reproducible arnio vs pandas benchmark
 ├── examples/                # basic_usage.py, auto_clean_tutorial.py, custom_step.py and ready to run recipes for sales, customers, survey, logs, finance
-└── website/                 # Project website — arnio.vercel.app
+└── website/                 # Project website — arniolib.vercel.app
 ```
 
 <br>
@@ -1972,7 +1972,7 @@ arnio/
 <a href="https://pypi.org/project/arnio/"><img src="https://img.shields.io/pypi/dm/arnio?style=flat-square&logo=pypi&logoColor=white&labelColor=0d1117&color=3572A5&label=installs" alt="Downloads"></a>&ensp;
 <a href="https://github.com/im-anishraj/arnio/stargazers"><img src="https://img.shields.io/github/stars/im-anishraj/arnio?style=flat-square&logo=github&labelColor=0d1117&color=e3b341&label=stars" alt="Stars"></a>&ensp;
 <a href="https://github.com/im-anishraj/arnio/network/members"><img src="https://img.shields.io/github/forks/im-anishraj/arnio?style=flat-square&logo=github&labelColor=0d1117&color=8b949e&label=forks" alt="Forks"></a>&ensp;
-<a href="https://arnio.vercel.app/"><img src="https://img.shields.io/badge/website-arnio.vercel.app-blue?style=flat-square&labelColor=0d1117" alt="Website"></a>&ensp;
+<a href="https://arniolib.vercel.app/"><img src="https://img.shields.io/badge/website-arniolib.vercel.app-blue?style=flat-square&labelColor=0d1117" alt="Website"></a>&ensp;
 <a href="https://discord.gg/xsEw7r78M"><img src="https://img.shields.io/badge/community-Discord-5865F2?style=flat-square&logo=discord&logoColor=white&labelColor=0d1117" alt="Discord"></a>
 
 <br>
