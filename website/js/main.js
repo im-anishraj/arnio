@@ -74,38 +74,83 @@
 
     // ── Sidebar active section tracking (docs pages) ─────────
     const sidebarLinks = document.querySelectorAll('.sidebar-nav-link');
+
     if (sidebarLinks.length > 0) {
       const sections = [];
+
       sidebarLinks.forEach(function (link) {
         const id = link.getAttribute('href');
+
         if (id && id.startsWith('#')) {
           const section = document.querySelector(id);
-          if (section) sections.push({ el: section, link: link });
+
+          if (section) {
+            sections.push({
+              el: section,
+              link: link
+            });
+          }
         }
       });
 
       if (sections.length > 0) {
         let rafPending = false;
+
+        function setActiveLink(activeLink) {
+          sidebarLinks.forEach(function (link) {
+            link.classList.remove('active');
+          });
+
+          if (activeLink) {
+            activeLink.classList.add('active');
+          }
+        }
+
+        function updateActiveSection() {
+          const isAtBottom =
+            window.innerHeight + window.scrollY >=
+            document.documentElement.scrollHeight - 4;
+
+          let activeSection = sections[0];
+
+          if (isAtBottom) {
+            activeSection = sections[sections.length - 1];
+          } else {
+            const scrollPos =
+              window.scrollY + window.innerHeight * 0.35;
+
+            for (let i = 0; i < sections.length; i++) {
+              if (sections[i].el.offsetTop <= scrollPos) {
+                activeSection = sections[i];
+              } else {
+                break;
+              }
+            }
+          }
+
+          setActiveLink(activeSection.link);
+        }
+
         window.addEventListener('scroll', function () {
           if (!rafPending) {
             window.requestAnimationFrame(function () {
-              const scrollPos = window.scrollY + 120;
-              let activeSection = sections[0];
-
-              for (let i = 0; i < sections.length; i++) {
-                if (sections[i].el.offsetTop <= scrollPos) {
-                  activeSection = sections[i];
-                }
-              }
-
-              sidebarLinks.forEach(function (l) { l.classList.remove('active'); });
-              if (activeSection) activeSection.link.classList.add('active');
-
+              updateActiveSection();
               rafPending = false;
             });
+
             rafPending = true;
           }
         });
+
+        window.addEventListener('hashchange', updateActiveSection);
+
+        sidebarLinks.forEach(function (link) {
+          link.addEventListener('click', function () {
+            setActiveLink(link);
+          });
+        });
+
+        updateActiveSection();
       }
     }
   });
