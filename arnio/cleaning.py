@@ -463,13 +463,12 @@ def drop_constant_columns(
     if not is_arframe and not isinstance(frame, pd.DataFrame):
         raise TypeError("frame must be an ArFrame or a pandas DataFrame")
 
-    df = to_pandas(frame) if is_arframe else frame.copy()
+    df = to_pandas(frame) if is_arframe else frame
     if len(df.index) == 0:
         return frame
 
-    constant_columns = [
-        column for column in df.columns if df[column].nunique(dropna=False) == 1
-    ]
+    nunique_counts = df.nunique(dropna=False)
+    constant_columns = nunique_counts[nunique_counts == 1].index.tolist()
     result_df = df.drop(columns=constant_columns)
     return from_pandas(result_df) if is_arframe else result_df
 

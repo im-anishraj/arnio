@@ -780,9 +780,13 @@ class TestDropConstantColumns:
         assert isinstance(result, pd.DataFrame)
         assert list(result.columns) == ["value"]
         assert list(result["value"]) == [1, 2, 3]
+        # Assert that the input DataFrame was not mutated
+        assert list(df.columns) == ["value", "constant_num", "constant_text"]
 
     def test_drop_constant_columns_invalid_type_raises(self):
-        with pytest.raises(TypeError, match="frame must be an ArFrame or a pandas DataFrame"):
+        with pytest.raises(
+            TypeError, match="frame must be an ArFrame or a pandas DataFrame"
+        ):
             ar.drop_constant_columns([1, 2, 3])
 
 
