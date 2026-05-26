@@ -631,7 +631,7 @@ pre:hover .copy-btn {
   font-weight: var(--font-weight-semibold);
   text-transform: uppercase;
   letter-spacing: var(--letter-spacing-wide);
-  color: #f97316;
+  color: var(--color-text);
   margin-bottom: var(--space-4);
 }
 
