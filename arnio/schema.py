@@ -762,7 +762,22 @@ class Field:
                 raise ValueError(
                     f"min_length ({self.min_length}) must be <= max_length ({self.max_length})"
                 )
-        _validate_severity(self.severity)
+            valid_dtypes = {
+                "int64",
+                "float64",
+                "string",
+                "bool",
+                "null",
+                "datetime",
+                None,
+            }
+
+
+if self.dtype not in valid_dtypes:
+    raise ValueError(f"Invalid dtype: {self.dtype!r}")
+
+
+_validate_severity(self.severity)
 
 
 @dataclass(frozen=True)
@@ -2628,9 +2643,24 @@ def _field_from_json_dict(name: str, payload: Any) -> Field:
                 f"Schema JSON field {name!r} 'required_if' must be a 2-item list or null."
             )
         required_if = tuple(required_if)
+        dtype = payload.get("dtype")
+
+
+valid_dtypes = {
+    "int64",
+    "float64",
+    "string",
+    "bool",
+    "null",
+    "datetime",
+    None,
+}
+
+if dtype not in valid_dtypes:
+    raise ValueError(f"Schema JSON field {name!r} has invalid dtype: {dtype!r}")
 
     return Field(
-        dtype=payload.get("dtype"),
+        dtype=dtype,
         nullable=payload.get("nullable", True),
         min=payload.get("min"),
         max=payload.get("max"),
