@@ -271,3 +271,37 @@ def test_real_schema_with_rules_raises():
     schema = ar.Schema({"col": ar.Field(dtype="STRING")}, rules=[lambda df: []])
     with pytest.raises(ValueError, match="rules"):
         schema_to_dict(schema)
+
+
+# ── Regression tests for issue #1467 ────────────────────────────────────────
+
+
+def test_raw_dict_fields_named_strict_and_unique_not_dropped():
+    """Flat scan_csv-style dict: strict/unique are real field names, not metadata."""
+    raw = {"strict": "int64", "unique": "string", "name": "string"}
+    result = schema_to_dict(raw)
+    assert "strict" in result["fields"], "field 'strict' was dropped from fields"
+    assert "unique" in result["fields"], "field 'unique' was dropped from fields"
+    assert "name" in result["fields"], "field 'name' was dropped from fields"
+    # No top-level metadata keys should appear (input was flat, not structured)
+    assert set(result.keys()) == {"fields"}
+
+
+def test_schema_object_fields_named_strict_and_unique_not_dropped():
+    """Schema object: fields named strict/unique survive alongside schema metadata."""
+    schema = ar.Schema(
+        {
+            "strict": ar.Field(dtype="INT64"),
+            "unique": ar.Field(dtype="STRING"),
+            "name": ar.Field(dtype="STRING"),
+        },
+        strict=True,
+        unique=["name"],
+    )
+    result = schema_to_dict(schema)
+    assert "strict" in result["fields"], "field 'strict' was dropped from fields"
+    assert "unique" in result["fields"], "field 'unique' was dropped from fields"
+    assert "name" in result["fields"], "field 'name' was dropped from fields"
+    # Schema-level metadata must still be top-level
+    assert result["strict"] is True, "schema metadata 'strict' missing"
+    assert result["unique"] == ["name"], "schema metadata 'unique' missing"
