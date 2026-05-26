@@ -136,12 +136,14 @@ class TestFillNulls:
 
         with pytest.raises(ValueError, match="Fill value is incompatible"):
             ar.fill_nulls(frame, "bad", subset=["x"])
-    
+
     def test_fill_nulls_rejects_unsupported_types(self):
         frame = ar.from_pandas(pd.DataFrame({"a": [1, None], "b": ["x", None]}))
 
         for bad_value in [[1, 2], {"key": "val"}, object()]:
-            with pytest.raises(TypeError, match="fill value must be a supported scalar"):
+            with pytest.raises(
+                TypeError, match="fill value must be a supported scalar"
+            ):
                 ar.fill_nulls(frame, bad_value)
 
     def test_fill_nulls_accepts_valid_scalars(self):
@@ -150,13 +152,16 @@ class TestFillNulls:
         for good_value in [0, 0.0, False]:
             result = ar.fill_nulls(frame_num, good_value)
             df = ar.to_pandas(result)
-            assert df["a"].isnull().sum() == 0, f"Nulls remain after filling with {good_value!r}"
+            assert (
+                df["a"].isnull().sum() == 0
+            ), f"Nulls remain after filling with {good_value!r}"
 
         # string column → fill with string
         frame_str = ar.from_pandas(pd.DataFrame({"b": ["x", None]}))
         result = ar.fill_nulls(frame_str, "missing")
         df = ar.to_pandas(result)
         assert df["b"].isnull().sum() == 0, "Nulls remain after filling with 'missing'"
+
 
 class TestWinsorizeOutliers:
     def test_winsorize_outliers_clips_numeric_values(self):
