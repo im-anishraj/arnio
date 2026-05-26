@@ -145,7 +145,6 @@ def test_arniocleaner_rejects_transform_with_missing_columns():
     with pytest.raises(ValueError, match="columns must match"):
         cleaner.transform(test)
 
-<<<<<<<<< Temporary merge branch 1
 
 # --- Issue: ArnioCleaner row-dropping pipeline behavior ---
 # Tests added to cover drop_nulls and filter_rows changing row count
@@ -277,7 +276,7 @@ def test_arniocleaner_warns_for_multiple_dtype_changes():
     messages = {str(w.message) for w in record}
     assert any("'a'" in m for m in messages)
     assert any("'b'" in m for m in messages)
-=========
+
 def test_arniocleaner_rejects_non_boolean_options():
     """Ensure constructor explicitly blocks truthy/falsy non-boolean values."""
     invalid_values = ["false", "True", 1, 0, None, [], {}]    
@@ -286,4 +285,4 @@ def test_arniocleaner_rejects_non_boolean_options():
             ArnioCleaner(copy=value)
         with pytest.raises(TypeError, match="allow_row_count_change must be a bool"):
             ArnioCleaner(allow_row_count_change=value)
->>>>>>>>> Temporary merge branch 2
+
