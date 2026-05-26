@@ -786,14 +786,16 @@ def normalize_whitespace(frame, columns=None):
     df = to_pandas(frame) if is_arframe else frame.copy()
 
     if columns is not None:
-        cols = list(columns)
-        missing = [c for c in cols if c not in df.columns]
-        if missing:
-            available = list(df.columns)
-            raise ValueError(
+        cols = _validate_existing_column_sequence(
+            columns,
+            available_columns=df.columns,
+            argument_name="columns",
+            missing_error=ValueError,
+            missing_message=lambda missing, available: (
                 f"Missing columns for normalize_whitespace: {missing}. "
                 f"Available columns: {available}"
-            )
+            ),
+        )
         cols = [c for c in cols if df[c].dtype in ("object", "string")]
     else:
         cols = list(df.select_dtypes(include=["object", "string"]).columns)

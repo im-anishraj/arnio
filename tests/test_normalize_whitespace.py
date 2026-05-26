@@ -4,6 +4,12 @@ import pandas as pd
 import pytest
 
 import arnio as ar
+from arnio._core import _Frame
+from arnio.frame import ArFrame
+
+
+def _make_frame(columns: dict[str, list[object]]) -> ArFrame:
+    return ArFrame(_Frame.from_dict(columns, {}))
 
 
 def test_collapses_multiple_internal_spaces():
@@ -75,6 +81,33 @@ def test_missing_column_raises_value_error():
     frame = ar.from_pandas(pd.DataFrame({"name": ["hello world"]}))
     with pytest.raises(ValueError, match="Missing columns for normalize_whitespace"):
         ar.pipeline(frame, [("normalize_whitespace", {"columns": ["nonexistent"]})])
+
+
+def test_columns_string_raises_type_error():
+    frame = _make_frame({"name": ["hello world"]})
+    with pytest.raises(
+        TypeError,
+        match="columns must be a sequence of column names, not a string",
+    ):
+        ar.normalize_whitespace(frame, columns="name")
+
+
+def test_columns_with_non_string_item_raises_type_error():
+    frame = _make_frame({"name": ["hello world"]})
+    with pytest.raises(
+        TypeError,
+        match="columns must contain only string column names",
+    ):
+        ar.normalize_whitespace(frame, columns=[123])
+
+
+def test_pipeline_columns_string_raises_type_error():
+    frame = _make_frame({"name": ["hello world"]})
+    with pytest.raises(
+        TypeError,
+        match="columns must be a sequence of column names, not a string",
+    ):
+        ar.pipeline(frame, [("normalize_whitespace", {"columns": "name"})])
 
 
 def test_explicit_non_string_column_is_skipped():
