@@ -127,6 +127,34 @@ class TestSchemaToYamlOutput:
         out = schema_to_yaml(raw)
         assert '"key: value"' in out
 
+    def test_numeric_looking_strings_quoted(self):
+        raw = {
+            "status": {
+                "type": "STRING",
+                "allowed": ["001", "123", "1.5", "-45"],
+            }
+        }
+        out = schema_to_yaml(raw)
+
+        assert '"001"' in out
+        assert '"123"' in out
+        assert '"1.5"' in out
+        assert '"-45"' in out
+
+    def test_genuine_numbers_remain_unquoted(self):
+        raw = {
+            "metrics": {
+                "count": 100,
+                "score": 4.5,
+            }
+        }
+        out = schema_to_yaml(raw)
+
+        assert "count: 100" in out
+        assert "score: 4.5" in out
+        assert '"100"' not in out
+        assert '"4.5"' not in out
+
     def test_empty_string_quoted(self):
         raw = {"col": {"type": "STRING", "default": ""}}
         out = schema_to_yaml(raw)

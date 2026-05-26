@@ -47,9 +47,17 @@ def _emit_scalar(value: Any) -> str:
             return "-.inf"
         return repr(value)
     if isinstance(value, str):
+        looks_numeric = False
+        try:
+            float(value)
+            looks_numeric = True
+        except ValueError:
+            pass
+
         # Quote strings that would be misread as YAML scalars or are empty.
         needs_quoting = (
             not value
+            or looks_numeric
             or value.lower() in {"true", "false", "null", "yes", "no", "on", "off"}
             or any(c in value for c in ("\n", "\r"))
             or value[0]
