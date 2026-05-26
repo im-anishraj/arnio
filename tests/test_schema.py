@@ -2320,7 +2320,7 @@ def test_schema_rules_none_by_default(tmp_path):
 
 def test_currency_code_valid(tmp_path):
     path = tmp_path / "currencies.csv"
-    path.write_text("currency\nUSD\nEUR\nINR\nJPY\n")
+    path.write_text("currency\nUSD\nEUR\nINR\nJPY\nXXX\n")
 
     result = ar.validate(
         ar.read_csv(path),
@@ -2334,7 +2334,9 @@ def test_currency_code_valid(tmp_path):
 def test_currency_code_invalid(tmp_path):
     path = tmp_path / "bad_currencies.csv"
     # We add a dummy column so the empty currency row isn't skipped as a blank line
-    path.write_text("currency,dummy\nUS,1\nUSDD,2\nusd,3\nUS1,4\nEur,5\n,6\n")
+    path.write_text(
+        "currency,dummy\nUS,1\nUSDD,2\nusd,3\nUS1,4\nEur,5\n,6\nZZZ,7\nABC,8\n"
+    )
 
     result = ar.validate(
         ar.read_csv(path),
@@ -2342,13 +2344,42 @@ def test_currency_code_invalid(tmp_path):
     )
 
     assert not result.passed
-    assert result.issue_count == 6
+    assert result.issue_count == 8
 
-    assert sorted([issue.row_index for issue in result.issues]) == [1, 2, 3, 4, 5, 6]
+    assert sorted([issue.row_index for issue in result.issues]) == [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+    ]
 
     rules = {issue.rule for issue in result.issues}
     assert "currency_code" in rules
     assert "nullable" in rules
+
+
+def test_currency_code_override(tmp_path):
+    path = tmp_path / "custom_currencies.csv"
+    path.write_text("currency\nUSD\nZZZ\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"currency": ar.CurrencyCode(nullable=False, allowed={"USD", "ZZZ"})},
+    )
+    assert result.passed
+    assert result.issue_count == 0
+
+    result_default = ar.validate(
+        ar.read_csv(path),
+        {"currency": ar.CurrencyCode(nullable=False)},
+    )
+    assert not result_default.passed
+    assert result_default.issue_count == 1
+    assert result_default.issues[0].value == "ZZZ"
 
 
 def test_schema_rules_issue_shape_matches_validation_issue(tmp_path):
