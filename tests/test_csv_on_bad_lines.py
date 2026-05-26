@@ -351,12 +351,7 @@ class TestOnBadLinesQuotedDelimiters:
 
     def test_empty_quoted_field_not_classified_bad(self, tmp_path):
         csv_path = tmp_path / "empty_quoted.csv"
-        csv_path.write_text(
-            'a,b,c\n'
-            '"",2,3\n'
-            '4,5\n'
-            '6,7,8\n'
-        )
+        csv_path.write_text("a,b,c\n" '"",2,3\n' "4,5\n" "6,7,8\n")
 
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
