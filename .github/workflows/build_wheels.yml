@@ -64,8 +64,7 @@ jobs:
         uses: pypa/cibuildwheel@v3.2
         env:
           CIBW_ARCHS_MACOS: "x86_64 arm64"
-          CIBW_TEST_COMMAND: >-
-            python -c "import pathlib, sys, pytest; sys.path.append(str(pathlib.Path(r'{project}'))); raise SystemExit(pytest.main([str(pathlib.Path(r'{project}') / 'tests'), '-v', '--tb=short', '[...]
+          CIBW_TEST_COMMAND: python -m pytest {project}/tests -v --tb=short
 
       - name: Set up Python for wheel smoke test
         uses: actions/setup-python@v6
