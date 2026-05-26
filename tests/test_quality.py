@@ -631,6 +631,25 @@ def test_column_profile_to_dict_redacts_sample_values_direct(tmp_path):
     assert report.columns["name"].sample_values == ["Alice", "Bob"]
 
 
+@pytest.mark.parametrize(
+    "invalid_value",
+    ["true", 1, None, ["redact"], object()],
+)
+def test_redact_sample_values_requires_bool(tmp_path, invalid_value):
+    path = tmp_path / "redact_type.csv"
+    path.write_text("name\nAlice\n")
+    report = ar.profile(ar.read_csv(path), sample_size=1)
+
+    with pytest.raises(TypeError, match="redact_sample_values must be a bool"):
+        report.to_dict(redact_sample_values=invalid_value)
+
+    with pytest.raises(TypeError, match="redact_sample_values must be a bool"):
+        report.to_json(redact_sample_values=invalid_value)
+
+    with pytest.raises(TypeError, match="redact_sample_values must be a bool"):
+        report.columns["name"].to_dict(redact_sample_values=invalid_value)
+
+
 def test_profile_sample_size_validation(tmp_path):
     path = tmp_path / "sample.csv"
     path.write_text("id\n1\n")
