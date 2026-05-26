@@ -1,10 +1,11 @@
 #pragma once
 
+#include <cstddef>
 #include <string>
 
-#include "frame.h"
-
 namespace arnio {
+
+class Frame;
 
 struct CsvWriteConfig {
     char delimiter = ',';
@@ -22,6 +23,7 @@ class CsvWriter {
     CsvWriteConfig config_;
 
     std::string quote_field(const std::string& field) const;
+
     std::string cell_to_string(const Frame& frame, size_t row, size_t col) const;
 };
 
