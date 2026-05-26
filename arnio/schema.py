@@ -539,6 +539,13 @@ class Schema:
             raise TypeError(
                 f"Schema 'fields' must be a mapping (like a dict), got {type(self.fields).__name__}"
             )
+
+        for key in self.fields:
+            if not isinstance(key, str):
+                raise TypeError(
+                    f"Schema field names must be strings, got {type(key).__name__!r}: {key!r}"
+                )
+
         for name, field_def in self.fields.items():
             if not isinstance(field_def, Field):
                 raise TypeError(

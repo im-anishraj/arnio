@@ -268,6 +268,24 @@ def test_schema_rejects_invalid_field_values_none(sample_csv):
         ar.validate(frame, {"id": None})
 
 
+def test_schema_rejects_non_string_field_name_integer(sample_csv):
+    frame = ar.read_csv(sample_csv)
+    with pytest.raises(TypeError, match="Schema field names must be strings"):
+        ar.validate(frame, {1: ar.String()})
+
+
+def test_schema_rejects_non_string_field_name_none(sample_csv):
+    frame = ar.read_csv(sample_csv)
+    with pytest.raises(TypeError, match="Schema field names must be strings"):
+        ar.validate(frame, {None: ar.String()})
+
+
+def test_schema_rejects_non_string_field_name_tuple(sample_csv):
+    frame = ar.read_csv(sample_csv)
+    with pytest.raises(TypeError, match="Schema field names must be strings"):
+        ar.validate(frame, {("a", "b"): ar.String()})
+
+
 def test_schema_validation_collects_row_level_issues(tmp_path):
     path = tmp_path / "bad.csv"
     path.write_text(
