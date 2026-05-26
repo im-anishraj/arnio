@@ -741,23 +741,23 @@ Frame combine_columns(const Frame& frame, const std::vector<std::string>& subset
 
 // The core C++ engine function
 std::vector<std::vector<double>> create_rolling_windows(const std::vector<double>& input,
-                                                        int window_size) {
-    // Error Handling: These will map to Python ValueErrors
+                                                        int window_size, int stride) {
     if (window_size <= 0) {
         throw std::invalid_argument("window_size must be greater than 0");
+    }
+    if (stride <= 0) {
+        throw std::invalid_argument("stride must be greater than 0");
     }
     if (window_size > input.size()) {
         throw std::invalid_argument("window_size cannot be larger than the input array length");
     }
 
     std::vector<std::vector<double>> result;
-    int num_windows = input.size() - window_size + 1;
+    int num_windows = (input.size() - window_size) / stride + 1;
 
-    // Pre-allocate memory to avoid reallocation overhead
     result.reserve(num_windows);
 
-    for (size_t i = 0; i < num_windows; ++i) {
-        // Construct the sub-array for this window
+    for (size_t i = 0; i <= input.size() - window_size; i += stride) {
         std::vector<double> window(input.begin() + i, input.begin() + i + window_size);
         result.push_back(window);
     }

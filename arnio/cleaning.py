@@ -1758,19 +1758,23 @@ def coalesce_columns(
     return from_pandas(df) if is_arframe else df
 
 
-def rolling_window(data: list[float], window_size: int) -> list[list[float]]:
+def rolling_window(
+    data: list[float], window_size: int, stride: int = 1
+) -> list[list[float]]:
     """
     Transforms a sequential dataset into overlapping rolling windows.
 
     Args:
         data: A 1D list of numeric values.
         window_size: The number of elements to include in each window.
+        stride: The step size between windows (default is 1).
 
     Returns:
         A list of sequential window arrays.
     """
     if not isinstance(window_size, int) or isinstance(window_size, bool):
         raise TypeError("window_size must be an integer")
+    if not isinstance(stride, int) or isinstance(stride, bool):
+        raise TypeError("stride must be an integer")
 
-    # Call the C++ function we bound earlier
-    return create_rolling_windows(data, window_size)
+    return create_rolling_windows(data, window_size, stride)

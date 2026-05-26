@@ -33,3 +33,20 @@ def test_rolling_window_reject_bool():
     """Test that boolean values are explicitly rejected for window_size."""
     with pytest.raises(TypeError, match="window_size must be an integer"):
         rolling_window([1.0, 2.0, 3.0], window_size=True)
+
+
+def test_rolling_window_stride():
+    """Test that a custom stride correctly skips elements."""
+    data = [1.0, 2.0, 3.0, 4.0, 5.0]
+    # Window of 3, step of 2 should yield [1, 2, 3] and [3, 4, 5]
+    result = rolling_window(data, window_size=3, stride=2)
+    assert result == [[1.0, 2.0, 3.0], [3.0, 4.0, 5.0]]
+
+
+def test_public_api_access():
+    """Test that the function is properly exposed in the main arnio namespace."""
+    import arnio as ar
+
+    data = [1.0, 2.0, 3.0]
+    result = ar.rolling_window(data, window_size=2)
+    assert result == [[1.0, 2.0], [2.0, 3.0]]
