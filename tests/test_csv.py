@@ -2608,3 +2608,38 @@ class TestArFrameStr:
     def test_str_returns_string(self, sample_csv):
         frame = ar.read_csv(sample_csv)
         assert isinstance(str(frame), str)
+
+
+def test_read_csv_encoding_non_string_raises_type_error(tmp_path):
+    path = tmp_path / "test.csv"
+    path.write_text("a,b\n1,2\n")
+    with pytest.raises(TypeError, match="encoding must be a string"):
+        ar.read_csv(path, encoding=123)
+
+
+def test_read_csv_encoding_none_raises_type_error(tmp_path):
+    path = tmp_path / "test.csv"
+    path.write_text("a,b\n1,2\n")
+    with pytest.raises(TypeError, match="encoding must be a string"):
+        ar.read_csv(path, encoding=None)
+
+
+def test_read_csv_encoding_list_raises_type_error(tmp_path):
+    path = tmp_path / "test.csv"
+    path.write_text("a,b\n1,2\n")
+    with pytest.raises(TypeError, match="encoding must be a string"):
+        ar.read_csv(path, encoding=["utf-8"])
+
+
+def test_scan_csv_encoding_non_string_raises_type_error(tmp_path):
+    path = tmp_path / "test.csv"
+    path.write_text("a,b\n1,2\n")
+    with pytest.raises(TypeError, match="encoding must be a string"):
+        ar.scan_csv(path, encoding=123)
+
+
+def test_scan_csv_encoding_none_raises_type_error(tmp_path):
+    path = tmp_path / "test.csv"
+    path.write_text("a,b\n1,2\n")
+    with pytest.raises(TypeError, match="encoding must be a string"):
+        ar.scan_csv(path, encoding=None)

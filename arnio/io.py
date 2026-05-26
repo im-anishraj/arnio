@@ -27,6 +27,8 @@ from .frame import ArFrame
 
 def _is_utf8_encoding(encoding: str) -> bool:
     """Return whether the encoding should be treated as raw UTF-8 input."""
+    if not isinstance(encoding, str):
+        raise TypeError(f"encoding must be a string, got {type(encoding).__name__!r}")
     return encoding.lower().replace("_", "-") in {"utf-8", "utf8"}
 
 
