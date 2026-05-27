@@ -1,5 +1,5 @@
 title: "[Show and tell] "
-labels: ["type: discussion"]
+labels: ["type:discussion"]
 body:
   - type: textarea
     id: project

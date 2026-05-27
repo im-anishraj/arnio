@@ -1,6 +1,7 @@
 """Tests for the pandas DataFrame accessor."""
 
 import pandas as pd
+import pytest
 
 import arnio as ar
 
@@ -76,15 +77,15 @@ def test_pandas_accessor_auto_clean_dry_run_returns_report():
 
 
 def test_pandas_accessor_auto_clean_dry_run_with_return_report():
-    # dry_run=True with return_report=True should return (frame, report)
+    # dry_run=True with return_report=True should raise because dry_run
+    # already returns the report directly.
     df = pd.DataFrame({"name": [" Alice ", " Bob "]})
 
-    result = df.arnio.auto_clean(dry_run=True, return_report=True)
+    with pytest.raises(
+        ValueError, match="return_report=True cannot be used with dry_run=True"
+    ):
+        df.arnio.auto_clean(dry_run=True, return_report=True)
 
-    assert isinstance(result, tuple)
-    frame, report = result
-    assert isinstance(report, ar.DataQualityReport)
-    # Original frame must not be mutated
     assert list(df["name"]) == [" Alice ", " Bob "]
 
 
@@ -114,16 +115,14 @@ def test_pandas_accessor_validates_dataframe():
 
 
 def test_auto_clean_dry_run_with_return_report():
-    # dry_run=True with return_report=True should return (frame, report)
+    # dry_run=True with return_report=True should raise because dry_run
+    # already returns the report directly.
     frame = ar.from_pandas(pd.DataFrame({"name": [" Alice ", " Bob "]}))
 
-    result = ar.auto_clean(frame, dry_run=True, return_report=True)
-
-    assert isinstance(result, tuple)
-    original_frame, report = result
-    assert isinstance(report, ar.DataQualityReport)
-    # Frame must not be mutated
-    assert frame.dtypes["name"] == "string"
+    with pytest.raises(
+        ValueError, match="return_report=True cannot be used with dry_run=True"
+    ):
+        ar.auto_clean(frame, dry_run=True, return_report=True)
 
 
 def test_auto_clean_dry_run_safe_mode_does_not_mutate():

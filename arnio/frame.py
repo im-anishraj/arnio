@@ -71,6 +71,12 @@ class ArFrame:
         self._attrs: dict = attrs if attrs is not None else {}
 
     @classmethod
+    def from_dict(cls, data: dict) -> ArFrame:
+        from .convert import from_dict as _from_dict
+
+        return _from_dict(data)
+
+    @classmethod
     def from_records(
         cls,
         records: list,
@@ -311,11 +317,9 @@ class ArFrame:
         if isinstance(n, bool) or not isinstance(n, int) or n < 0:
             raise ValueError(f"`n` must be a non-negative integer, got {n!r}")
 
-        from .convert import from_pandas, to_pandas
+        actual_n = min(n, len(self))
 
-        df = to_pandas(self)
-
-        return from_pandas(df.head(n))
+        return ArFrame(self._frame.select_rows(0, actual_n))
 
     def tail(self, n: int = 5) -> ArFrame:
         """Return the last n rows as an ArFrame.
@@ -333,11 +337,10 @@ class ArFrame:
         if isinstance(n, bool) or not isinstance(n, int) or n < 0:
             raise ValueError(f"`n` must be a non-negative integer, got {n!r}")
 
-        from .convert import from_pandas, to_pandas
+        actual_n = min(n, len(self))
+        start = max(0, len(self) - actual_n)
 
-        df = to_pandas(self)
-
-        return from_pandas(df.tail(n))
+        return ArFrame(self._frame.select_rows(start, actual_n))
 
     def to_dict(self) -> dict[str, list]:
         """Export the frame as a Python dictionary.
@@ -463,13 +466,9 @@ class ArFrame:
         drop_set = set(unique_cols)
         remaining = [col for col in self.columns if col not in drop_set]
 
-        # Dropping all columns — preserve row count
+        # Dropping all columns is not supported
         if not remaining:
-            import pandas as pd
-
-            from .convert import from_pandas
-
-            return from_pandas(pd.DataFrame(index=range(len(self))))
+            raise ValueError("drop_columns cannot remove all columns from the frame")
 
         return ArFrame(self._frame.select_columns(remaining))
 
@@ -612,12 +611,52 @@ class ArFrame:
         return f"ArFrame({rows} rows × {cols} cols)"
 
     def __str__(self) -> str:
-        """Return a detailed string summary of the ArFrame."""
-        lines = [f"ArFrame: {self.shape[0]} rows × {self.shape[1]} columns"]
-        lines.append(f"Columns: {self._truncate_column_names()}")
-        lines.append(f"DTypes:  {self.dtypes}")
-        lines.append(f"Memory:  {self.memory_usage()} bytes")
-        return "\n".join(lines)
+        """Return a detailed string summary of the ArFrame with data preview."""
+        rows, cols = self.shape
+        header = f"ArFrame: {rows} rows × {cols} columns"
+        truncated_names = self._truncate_column_names()
+
+        if rows == 0:
+            return f"{header}\nColumns: {truncated_names}\n(empty frame)"
+
+        actual_n = min(5, rows)
+        col_data = [
+            [self._frame.column_by_index(i).at(r) for r in range(actual_n)]
+            for i in range(cols)
+        ]
+
+        col_widths = [
+            max(
+                len(truncated_names[i]),
+                max((len(str(col_data[i][r])) for r in range(actual_n)), default=0),
+            )
+            for i in range(cols)
+        ]
+
+        col_header = "  ".join(
+            truncated_names[i].ljust(col_widths[i]) for i in range(cols)
+        )
+        separator = "  ".join("-" * col_widths[i] for i in range(cols))
+        data_rows = [
+            "  ".join(str(col_data[i][r]).ljust(col_widths[i]) for i in range(cols))
+            for r in range(actual_n)
+        ]
+
+        suffix = f"\n... ({rows - actual_n} more rows)" if rows > actual_n else ""
+        columns_line = f"Columns: {truncated_names}"
+        dtypes_line = f"DTypes: {self.dtypes}"
+        memory_line = f"Memory: {self.memory_usage()} bytes"
+
+        parts = [
+            header,
+            columns_line,
+            dtypes_line,
+            memory_line,
+            col_header,
+            separator,
+        ] + data_rows
+
+        return "\n".join(parts) + suffix
 
     def __contains__(self, item: object) -> bool:
         return isinstance(item, str) and item in self.columns
@@ -776,3 +815,99 @@ class ArFrame:
 
         label = f"ArFrame preview (showing {actual_n} of {num_rows} rows):"
         return "\n".join([label, header, separator] + rows)
+
+    def _repr_html_(self) -> str:
+        """Return a bounded HTML table for Jupyter/IPython display.
+
+        Jupyter calls this automatically when an ArFrame is the last
+        expression in a cell. Output is always bounded to 10 rows.
+
+        Returns
+        -------
+        str
+            HTML string with shape/dtype summary, up to 10 data rows,
+            HTML-escaped content, and a truncation notice when needed.
+        """
+        import html as _html
+
+        _REPR_HTML_MAX_ROWS = 10
+
+        num_rows, num_cols = self.shape
+        col_names = self.columns
+        dtypes = self.dtypes
+
+        # ── summary line ──────────────────────────────────────────────────
+        dtype_parts = ", ".join(
+            f"{_html.escape(c)}: {_html.escape(dtypes.get(c, '?'))}" for c in col_names
+        )
+        summary = (
+            '<p style="font-family:monospace;font-size:0.85em;'
+            'color:#555;margin:0 0 4px 0;">'
+            f"ArFrame [{num_rows} rows \u00d7 {num_cols} cols]"
+            + (f"&nbsp;&nbsp;|&nbsp;&nbsp;{dtype_parts}" if dtype_parts else "")
+            + "</p>"
+        )
+
+        # ── empty-frame fast path ─────────────────────────────────────────
+        if num_cols == 0 or num_rows == 0:
+            return summary + "<p><em>(empty)</em></p>"
+
+        # ── column header ─────────────────────────────────────────────────
+        th_style = (
+            "style='padding:4px 10px;text-align:left;"
+            "background:#f0f0f0;border:1px solid #ccc;"
+            "font-family:monospace;font-size:0.9em;'"
+        )
+        header_cells = "".join(
+            f"<th {th_style}>{_html.escape(c)}</th>" for c in col_names
+        )
+        header = f"<thead><tr>{header_cells}</tr></thead>"
+
+        # Read only the rows needed for display; do not convert the full frame.
+        preview_rows = min(num_rows, _REPR_HTML_MAX_ROWS)
+
+        try:
+            preview_values = [
+                [
+                    self._frame.column_by_index(col_idx).at(row_idx)
+                    for col_idx in range(num_cols)
+                ]
+                for row_idx in range(preview_rows)
+            ]
+        except Exception as exc:
+            return (
+                summary
+                + "<p><em>HTML preview unavailable: "
+                + _html.escape(str(exc))
+                + "</em></p>"
+            )
+
+        td_style = (
+            "style='padding:4px 10px;border:1px solid #ddd;"
+            "font-family:monospace;font-size:0.9em;white-space:nowrap;'"
+        )
+        rows_html = ""
+        for row in preview_values:
+            cells = "".join(
+                f"<td {td_style}>"
+                + _html.escape("" if value is None else str(value))
+                + "</td>"
+                for value in row
+            )
+            rows_html += f"<tr>{cells}</tr>"
+
+        tbody = f"<tbody>{rows_html}</tbody>"
+        table = (
+            "<table style='border-collapse:collapse;'>" f"{header}{tbody}" "</table>"
+        )
+
+        # ── truncation notice ─────────────────────────────────────────────
+        notice = ""
+        if num_rows > _REPR_HTML_MAX_ROWS:
+            notice = (
+                '<p style="font-size:0.82em;color:#888;margin:4px 0 0 0;">'
+                f"Showing {_REPR_HTML_MAX_ROWS} of {num_rows} rows"
+                "</p>"
+            )
+
+        return summary + table + notice
