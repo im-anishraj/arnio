@@ -775,7 +775,7 @@ class ArFrame:
             raise ValueError(f"`n` must be a positive integer, got {n!r}")
 
         num_rows, num_cols = self.shape
-        if num_cols == 0:
+        if num_rows > 0 and num_cols == 0:
             return (
                 f"ArFrame preview: {num_rows} rows x 0 columns "
                 "(no columns to display)"
