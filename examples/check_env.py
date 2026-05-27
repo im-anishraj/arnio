@@ -66,7 +66,6 @@ EXAMPLES = {
     "arnio_with_arrow.py": ["pandas", "pyarrow"],
     "arnio_chunk_reading.py": ["pandas"],
     "schema_validation.py": ["pandas"],
-    "check_env.py": [],
     "sales/recipe.py": ["pandas"],
     "customers/recipe.py": ["pandas"],
     "survey/recipe.py": ["pandas"],
