@@ -1,4 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
+#include <cmath>    // std::isnan
+#include <cstdint>  // uint64_t
+#include <cstring>  // std::memcpy
 
 #include "arnio/cleaning.h"
 
@@ -268,4 +271,76 @@ TEST_CASE("drop_duplicates null rows treated as equal", "[cleaning][dedup]") {
     REQUIRE(result.num_rows() == 2);
     REQUIRE(result.column("x").is_null(0));
     REQUIRE(result.column("x").at(1) == CellValue(int64_t(5)));
+}
+
+// ── NaN regression tests ──────────────────────────────────────────────────────
+// hash_cell() must normalize NaN before hashing so that two NaN values with
+// different bit-patterns (different payloads) produce the same hash.
+// combine_cell_to_string / serialize_cell render *all* NaN values as the string
+// "nan", so row_key() treats them as equal — hash_cell() must agree or the
+// fast hash-miss path will bypass the equality check and keep both rows.
+
+// Helper: construct a double from raw bits without UB.
+static double bits_to_double(uint64_t bits) {
+    double v;
+    std::memcpy(&v, &bits, sizeof(v));
+    return v;
+}
+
+TEST_CASE("drop_duplicates NaN payloads treated as equal (keep=first)", "[cleaning][dedup][nan]") {
+    // Two NaN values with different payloads: raw bytes differ, but %.17g
+    // serialises both as "nan", so row_key() considers them equal duplicates.
+    double nan1 = bits_to_double(0x7FF8000000000000ULL);  // canonical quiet NaN
+    double nan2 = bits_to_double(0x7FF8000000000001ULL);  // NaN with different payload
+    double nan3 = bits_to_double(0xFFF8000000000000ULL);  // negative NaN
+
+    Column c("v", DType::FLOAT64);
+    c.push_back(nan1);
+    c.push_back(nan2);  // duplicate of nan1 by row_key() semantics
+    c.push_back(double(1.0));
+    c.push_back(nan3);  // also a duplicate — different sign bit, same "nan" key
+
+    Frame f;
+    f.add_column(std::move(c));
+
+    Frame result = drop_duplicates(f, std::nullopt, "first");
+    // Only nan1 (first occurrence) and 1.0 survive.
+    REQUIRE(result.num_rows() == 2);
+    REQUIRE(std::isnan(std::get<double>(result.column("v").at(0))));
+    REQUIRE(result.column("v").at(1) == CellValue(double(1.0)));
+}
+
+TEST_CASE("drop_duplicates NaN payloads treated as equal (keep=last)", "[cleaning][dedup][nan]") {
+    double nan1 = bits_to_double(0x7FF8000000000000ULL);
+    double nan2 = bits_to_double(0x7FF8000000000002ULL);
+
+    Column c("v", DType::FLOAT64);
+    c.push_back(double(2.0));
+    c.push_back(nan1);
+    c.push_back(nan2);  // duplicate of nan1; last occurrence wins
+
+    Frame f;
+    f.add_column(std::move(c));
+
+    Frame result = drop_duplicates(f, std::nullopt, "last");
+    REQUIRE(result.num_rows() == 2);
+    REQUIRE(result.column("v").at(0) == CellValue(double(2.0)));
+    REQUIRE(std::isnan(std::get<double>(result.column("v").at(1))));
+}
+
+TEST_CASE("drop_duplicates NaN payloads treated as equal (keep=none)", "[cleaning][dedup][nan]") {
+    double nan1 = bits_to_double(0x7FF8000000000000ULL);
+    double nan2 = bits_to_double(0x7FF8000000000003ULL);
+
+    Column c("v", DType::FLOAT64);
+    c.push_back(nan1);
+    c.push_back(double(3.0));
+    c.push_back(nan2);  // duplicate of nan1 — both NaN rows must be dropped
+
+    Frame f;
+    f.add_column(std::move(c));
+
+    Frame result = drop_duplicates(f, std::nullopt, "none");
+    REQUIRE(result.num_rows() == 1);
+    REQUIRE(result.column("v").at(0) == CellValue(double(3.0)));
 }

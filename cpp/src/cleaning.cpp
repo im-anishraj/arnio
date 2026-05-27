@@ -138,6 +138,18 @@ static uint64_t hash_cell(const CellValue& cell) noexcept {
     }
     if (std::holds_alternative<double>(cell)) {
         double v = std::get<double>(cell);
+        // combine_cell_to_string() (used by serialize_cell / row_key) formats
+        // doubles with %.17g, which renders *every* NaN bit-pattern as the same
+        // string ("nan").  Hashing raw bytes would give different hashes for
+        // NaNs with different payloads, so a hash miss would skip the row_key()
+        // equality check and incorrectly keep both rows as distinct.
+        // Normalise to a single canonical quiet-NaN bit pattern so that
+        // hash(x) == hash(y) whenever row_key(x) == row_key(y) for all FLOAT64.
+        if (std::isnan(v)) {
+            const uint64_t canonical_nan_bits = 0x7FF8000000000000ULL;
+            return fnv1a(reinterpret_cast<const char*>(&canonical_nan_bits),
+                         sizeof(canonical_nan_bits), 14695981039346656037ULL ^ 0x02ULL);
+        }
         return fnv1a(reinterpret_cast<const char*>(&v), sizeof(v),
                      14695981039346656037ULL ^ 0x02ULL);
     }
