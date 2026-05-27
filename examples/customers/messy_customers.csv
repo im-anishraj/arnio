@@ -1,0 +1,9 @@
+customer_id,name,email,city,age,signup_date
+101,Alice Smith,alice@example.com,New York,29,2023-03-15
+102,RAVI KUMAR,ravi@example.com,,34,
+103,bablu srinivas,bablu@example.com,Delhi,,2023-04-01
+104, Dev Raj ,Dev@example.com, Mumbai ,45,2023-04-10
+105,,eva@example.com,Boston,27,2023-04-12
+106,Frank Green,,Miami,52,2023-05-01
+102,Dupli Kate,dupli@example.com,,34,
+107,Grace Lee,grace@example.com,SEATTLE,31,2023-05-20

@@ -18,7 +18,7 @@ jobs:
     name: Build source distribution
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: ${{ inputs.tag_name || github.ref }}
       - name: Build sdist
@@ -41,7 +41,7 @@ jobs:
                   env={**os.environ, "PYTHONPATH": ""},
               )
           PY
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: sdist
           path: dist/*.tar.gz
@@ -56,19 +56,19 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: ${{ inputs.tag_name || github.ref }}
 
       - name: Build wheels
-        uses: pypa/cibuildwheel@v2.22
+        uses: pypa/cibuildwheel@v3.2
         env:
           CIBW_ARCHS_MACOS: "x86_64 arm64"
           CIBW_TEST_COMMAND: >-
             python -c "import pathlib, sys, pytest; sys.path.append(str(pathlib.Path(r'{project}'))); raise SystemExit(pytest.main([str(pathlib.Path(r'{project}') / 'tests'), '-v', '--tb=short', '-x']))"
 
       - name: Set up Python for wheel smoke test
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
@@ -76,7 +76,7 @@ jobs:
         run: python tests/smoke_wheel_install.py --wheelhouse wheelhouse
 
       - name: Upload wheels as artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: wheels-${{ matrix.os }}
           path: ./wheelhouse/*.whl
@@ -92,7 +92,7 @@ jobs:
 
     steps:
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           pattern: '*'
           merge-multiple: true

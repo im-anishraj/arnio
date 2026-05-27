@@ -1,0 +1,32 @@
+{
+  "Tall CSV (1,000,000 rows x 12 columns)": {
+    "arnio_exec_time": 16.5,
+    "pandas_exec_time": 6.91,
+    "speedup": 0.5,
+    "environment": "Linux, Python 3.10, arnio local build"
+  },
+  "Wide CSV (5,000 rows x 256 columns)": {
+    "arnio_exec_time": 1.75,
+    "pandas_exec_time": 1.0,
+    "speedup": 0.6,
+    "environment": "Linux, Python 3.10, arnio local build"
+  },
+  "Multiline CSV (100,000 rows x 4 columns)": {
+    "arnio_exec_time": 1.4,
+    "pandas_exec_time": 0.31,
+    "speedup": 0.3,
+    "environment": "Linux, Python 3.10, arnio local build"
+  },
+  "Sparse-null CSV (1,000,000 rows x 6 columns, 1% nulls)": {
+    "arnio_exec_time": 10.8,
+    "pandas_exec_time": 3.62,
+    "speedup": 0.4,
+    "environment": "Linux, Python 3.10, arnio local build"
+  },
+  "Dense-null CSV (1,000,000 rows x 6 columns, 20% nulls)": {
+    "arnio_exec_time": 7.0,
+    "pandas_exec_time": 3.33,
+    "speedup": 0.5,
+    "environment": "Linux, Python 3.10, arnio local build"
+  }
+}
