@@ -195,25 +195,25 @@ def schema_to_dict(schema: dict | Any) -> dict:
 
     # ── List of ColumnSummary path ──────────────────────────────────────────
     if isinstance(schema, list):
-        normalised = {}
+        normalised_list = {}
         for entry in schema:
             if hasattr(entry, "name") and hasattr(entry, "dtype"):
                 name = entry.name
-                normalised[name] = {
+                normalised_list[name] = {
                     "type": str(entry.dtype).upper(),
                 }
                 if hasattr(entry, "nullable"):
-                    normalised[name]["nullable"] = entry.nullable
+                    normalised_list[name]["nullable"] = entry.nullable
             elif isinstance(entry, dict) and "name" in entry and "dtype" in entry:
                 name = entry["name"]
-                normalised[name] = {
+                normalised_list[name] = {
                     "type": str(entry["dtype"]).upper(),
                 }
                 if "nullable" in entry:
-                    normalised[name]["nullable"] = entry["nullable"]
+                    normalised_list[name]["nullable"] = entry["nullable"]
             else:
                 raise TypeError(f"Unsupported list item type: {type(entry)!r}")
-        return {"fields": normalised}
+        return {"fields": normalised_list}
 
     # ── Schema object path ──────────────────────────────────────────────────
     if hasattr(schema, "fields"):
