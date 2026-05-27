@@ -491,6 +491,15 @@ class TestPipeline:
         result = ar.pipeline(frame, [])
         assert result.shape == frame.shape
 
+    @pytest.mark.parametrize("invalid_frame", ["not-frame", None])
+    def test_pipeline_rejects_invalid_frame_with_empty_steps(self, invalid_frame):
+        with pytest.raises(TypeError, match="frame must be an ArFrame"):
+            ar.pipeline(invalid_frame, [])
+
+    def test_pipeline_rejects_invalid_frame_before_non_empty_steps(self):
+        with pytest.raises(TypeError, match="frame must be an ArFrame"):
+            ar.pipeline("not-frame", [("strip_whitespace",)])
+
     def test_pipeline_dry_run_returns_original_frame(self, sample_csv):
         frame = ar.read_csv(sample_csv)
 

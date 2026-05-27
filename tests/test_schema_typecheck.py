@@ -8,6 +8,21 @@ def test_schema_raises_type_error_for_list_of_fields():
         ar.Schema([ar.String()])
 
 
+def test_schema_raises_type_error_for_integer_key():
+    with pytest.raises(TypeError, match="Schema field names must be strings"):
+        ar.Schema({1: ar.String()})
+
+
+def test_schema_raises_type_error_for_none_key():
+    with pytest.raises(TypeError, match="Schema field names must be strings"):
+        ar.Schema({None: ar.String()})
+
+
+def test_schema_raises_type_error_for_tuple_key():
+    with pytest.raises(TypeError, match="Schema field names must be strings"):
+        ar.Schema({("a", "b"): ar.String()})
+
+
 @pytest.mark.parametrize("bad_strict", ["yes", 1, None, 0, "false", 1.0])
 def test_schema_strict_rejects_non_bool(bad_strict):
     with pytest.raises(TypeError, match="strict.*bool"):

@@ -5,6 +5,7 @@ CSV reading and writing functions.
 
 from __future__ import annotations
 
+import codecs
 import io
 import os
 import shutil
@@ -1043,6 +1044,13 @@ def read_jsonl(
 
     from .convert import from_pandas
 
+    if not isinstance(encoding, str):
+        raise TypeError(f"encoding must be a string, got {type(encoding).__name__!r}")
+    try:
+        codecs.lookup(encoding)
+    except LookupError:
+        raise ValueError(f"Unknown encoding: {encoding!r}")
+
     path = os.fspath(path)
     path_lower = path.lower()
     if not (path_lower.endswith(".jsonl") or path_lower.endswith(".ndjson")):
@@ -1050,7 +1058,6 @@ def read_jsonl(
             f"Unsupported file format: {path}. "
             "read_jsonl only supports .jsonl and .ndjson files."
         )
-
     if nrows is not None:
         if isinstance(nrows, bool) or not isinstance(nrows, int):
             raise TypeError("nrows must be an integer")
@@ -1150,20 +1157,20 @@ def sniff_delimiter(
         raise FileNotFoundError(f"File not found: {path!r}") from e
 
     try:
-        with open(path, "rb") as f:
-            if b"\0" in f.read(1024):
-                raise CsvReadError(
-                    "CSV input contains NUL bytes and appears to be binary or corrupted"
-                )
+        _reject_utf8_nul_bytes(path)
     except FileNotFoundError:
         pass
 
     # 3. Read Sample
     try:
-        with open(path, encoding=encoding, errors="replace") as f:
+        with open(path, encoding=encoding, errors="strict") as f:
             sample = f.read(sample_size)
     except LookupError as e:
         raise ValueError(f"Unknown encoding: {encoding}") from e
+    except UnicodeDecodeError as e:
+        raise CsvReadError(
+            f"Could not decode {path!r} using encoding {encoding!r}"
+        ) from e
 
     if not sample:
         raise CsvReadError(f"CSV file is empty: {path!r}")
