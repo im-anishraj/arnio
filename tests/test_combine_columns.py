@@ -1,7 +1,6 @@
 """Comprehensive tests for combine_columns in arnio.cleaning."""
 
 import pandas as pd
-import pytest
 
 import arnio as ar
 
@@ -88,4 +87,6 @@ class TestCombineColumnsComprehensive:
         assert res_df["combined"].iloc[0] == "A-B"
         assert res_df["combined"].iloc[1] == "-Y"
         assert res_df["combined"].iloc[2] == "C-"
-        assert pd.isna(res_df["combined"].iloc[3])  # All nulls in a row propagates pd.NA
+        assert pd.isna(
+            res_df["combined"].iloc[3]
+        )  # All nulls in a row propagates pd.NA
