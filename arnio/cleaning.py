@@ -1734,6 +1734,70 @@ def drop_columns_matching(frame, pattern):
     return from_pandas(result) if is_arframe else result
 
 
+def rename_columns_matching(frame, pattern, replacement):
+    """Rename columns whose names match a given regex pattern.
+
+    Parameters
+    ----------
+    frame : ArFrame or pd.DataFrame
+        Input data frame.
+    pattern : str
+        Regex pattern to match column names against.
+    replacement : str
+        Replacement string for matched portions.
+
+    Returns
+    -------
+    ArFrame or pd.DataFrame
+        Data frame with matching columns renamed.
+
+    Raises
+    ------
+    TypeError
+        If pattern or replacement is not a string.
+    re.error
+        If pattern is not a valid regex.
+    ValueError
+        If renaming would create duplicate column names.
+
+    Examples
+    --------
+    >>> frame = ar.read_csv("data.csv")
+    >>> cleaned = ar.rename_columns_matching(frame, "^temp_", "")
+    """
+    import re
+
+    import pandas as pd
+
+    from .convert import from_pandas, to_pandas
+
+    if not isinstance(pattern, str):
+        raise TypeError(f"pattern must be a string, got {type(pattern).__name__!r}")
+    if not isinstance(replacement, str):
+        raise TypeError(
+            f"replacement must be a string, got {type(replacement).__name__!r}"
+        )
+    try:
+        re.compile(pattern)
+    except re.error as e:
+        raise re.error(f"Invalid regex pattern: {pattern!r}") from e
+
+    is_arframe = not isinstance(frame, pd.DataFrame)
+    df = to_pandas(frame) if is_arframe else frame
+
+    new_columns = [re.sub(pattern, replacement, str(col)) for col in df.columns]
+
+    if len(new_columns) != len(set(new_columns)):
+        duplicates = sorted({c for c in new_columns if new_columns.count(c) > 1})
+        raise ValueError(
+            f"rename_columns_matching would create duplicate column names: {duplicates}"
+        )
+
+    df = df.copy()
+    df.columns = new_columns
+    return from_pandas(df) if is_arframe else df
+
+
 def _is_null_mapping_key(value):
     """
     Return True when a mapping key represents a scalar null value.
