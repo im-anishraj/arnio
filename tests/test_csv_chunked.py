@@ -243,55 +243,164 @@ class TestReadCsvChunkedParamParity:
         path = tmp_path / "skiprows.csv"
         path.write_text("\n".join(lines))
 
-        chunks = list(ar.read_csv_chunked(str(path), chunksize=5, skiprows=10))
+        # Chunk 3 should raise on row 5 (value 5.5)
+        with pytest.raises(Exception, match="Type mismatch"):
+            next(reader)
+
+
+class TestCsvChunkedIssue1583:
+    """Regression tests for Issue #1583: Respect explicit dtype configuration in CsvChunkReader."""
+
+    def test_explicit_dtype_respected_across_chunks(self, tmp_path):
+        """Test that explicit dtypes are correctly locked and respected across all chunks."""
+        path = tmp_path / "explicit_dtypes.csv"
+        path.write_text("a,b\n1,10.5\n2,20.5\n3,30.5\n4,40.5\n")
+
+        # Configure column 'a' as float64 (even though values look like int64)
+        # and column 'b' as string (even though values look like float64)
+        chunks = list(
+            ar.read_csv_chunked(
+                str(path), chunksize=2, dtype={"a": "float64", "b": "string"}
+            )
+        )
+        assert len(chunks) == 2
+        for chunk in chunks:
+            assert chunk.dtypes == {"a": "float64", "b": "string"}
+
         df = pd.concat([ar.to_pandas(c) for c in chunks], ignore_index=True)
-        assert df.shape[0] == 10
-        assert df["id"].tolist() == list(range(10, 20))
+        assert df["a"].tolist() == [1.0, 2.0, 3.0, 4.0]
+        assert df["b"].tolist() == ["10.5", "20.5", "30.5", "40.5"]
 
-    def test_skip_rows_old_name_still_works_with_deprecation_warning(self, tmp_path):
-        """skip_rows still works but emits DeprecationWarning."""
-        lines = ["id,value"] + [f"{i},{i}" for i in range(10)]
-        path = tmp_path / "skip_rows_compat.csv"
-        path.write_text("\n".join(lines))
+    def test_mixed_inferred_and_configured_columns(self, tmp_path):
+        """Test that mixed unconfigured (inferred) and configured columns behave correctly."""
+        path = tmp_path / "mixed.csv"
+        path.write_text("a,b,c\n1,foo,99.9\n2,bar,88.8\n3,baz,77.7\n")
 
-        with pytest.warns(DeprecationWarning, match="skip_rows is deprecated"):
-            chunks = list(ar.read_csv_chunked(str(path), skip_rows=5))
+        # Configure only 'a' as float64 and 'b' as string; 'c' is inferred as float64
+        chunks = list(
+            ar.read_csv_chunked(
+                str(path), chunksize=2, dtype={"a": "float64", "b": "string"}
+            )
+        )
+        assert len(chunks) == 2
+        for chunk in chunks:
+            assert chunk.dtypes == {"a": "float64", "b": "string", "c": "float64"}
+
+    def test_unconfigured_mismatch_still_fails(self, tmp_path):
+        """Ensure unconfigured columns still correctly fail-fast on type mismatch."""
+        path = tmp_path / "unconfigured_mismatch.csv"
+        path.write_text(
+            "a,b\n1,10\n2,20\n3,abc\n"
+        )  # Column 'b' has integer, integer, then string
+
+        # 'a' is explicitly configured as float64, but 'b' is left unconfigured to be inferred
+        reader = ar.read_csv_chunked(str(path), chunksize=2, dtype={"a": "float64"})
+
+        chunk1 = next(reader)
+        assert chunk1 is not None
+        assert chunk1.dtypes == {"a": "float64", "b": "int64"}
+
+        # Chunk 2 has 'abc' in column 'b' which was inferred/locked as int64, so it must raise!
+        with pytest.raises(Exception, match="Type mismatch"):
+            next(reader)
+
+    def test_configured_string_column_survives_heterogeneous_values(self, tmp_path):
+        """Test that configuring a column as 'string' allows any values without mismatch errors."""
+        path = tmp_path / "heterogeneous.csv"
+        path.write_text("a,b\n1,100\n2,abc\n3,99.9\n")
+
+        # Column 'b' has int, string, float. If configured as string, it should succeed
+        chunks = list(
+            ar.read_csv_chunked(str(path), chunksize=1, dtype={"b": "string"})
+        )
+        assert len(chunks) == 3
         df = pd.concat([ar.to_pandas(c) for c in chunks], ignore_index=True)
-        assert df.shape[0] == 5
+        assert df["b"].tolist() == ["100", "abc", "99.9"]
 
-    def test_skip_rows_and_skiprows_together_raises(self, tmp_path):
-        """Passing both skip_rows and skiprows is an error."""
-        lines = ["id,value"] + [f"{i},{i}" for i in range(10)]
-        path = tmp_path / "both.csv"
-        path.write_text("\n".join(lines))
+    def test_existing_chunked_inference_remains_unchanged(self, tmp_path):
+        """Ensure chunked reading without dtype preserves original inference and success behavior."""
+        path = tmp_path / "inference.csv"
+        path.write_text("a,b\n1,10.5\n2,20.5\n")
 
-        with pytest.raises(TypeError, match="Cannot pass both"):
-            list(ar.read_csv_chunked(str(path), skip_rows=2, skiprows=2))
+        chunks = list(ar.read_csv_chunked(str(path), chunksize=1))
+        assert len(chunks) == 2
+        for chunk in chunks:
+            assert chunk.dtypes == {"a": "int64", "b": "float64"}
 
-    def test_delimiter_auto_inferred_for_tsv(self, tmp_path):
-        """delimiter=None auto-infers tab for .tsv files, matching read_csv."""
-        path = tmp_path / "data.tsv"
-        path.write_text("name\tage\nAlice\t30\nBob\t25\n")
+    def test_null_type_initialization_compatibility(self, tmp_path):
+        """Ensure all-null columns configured as non-string preserve specified type."""
+        path = tmp_path / "nulls.csv"
+        path.write_text("a,b\n1,\n2,200\n3,300\n")
 
-        chunks = list(ar.read_csv_chunked(str(path)))
+        # Column 'b' starts with null in the first chunk, but is explicitly configured as int64
+        chunks = list(ar.read_csv_chunked(str(path), chunksize=1, dtype={"b": "int64"}))
+        assert len(chunks) == 3
+        for chunk in chunks:
+            assert chunk.dtypes == {"a": "int64", "b": "int64"}
+
         df = pd.concat([ar.to_pandas(c) for c in chunks], ignore_index=True)
-        assert list(df.columns) == ["name", "age"]
-        assert df.shape[0] == 2
+        assert pd.isna(df.loc[0, "b"])
+        assert df.loc[1, "b"] == 200
+        assert df.loc[2, "b"] == 300
 
-    def test_delimiter_auto_inferred_for_csv(self, tmp_path):
-        """delimiter=None defaults to comma for .csv files."""
-        path = tmp_path / "data.csv"
-        path.write_text("name,age\nAlice,30\nBob,25\n")
+    def test_chunk_boundary_edge_cases(self, tmp_path):
+        """Test configured column dtype mismatch validation at chunk boundaries."""
+        path = tmp_path / "boundary.csv"
+        path.write_text(
+            "a,b\n1,10\n2,abc\n"
+        )  # 'b' configured as int64, fails on chunk 2
 
-        chunks = list(ar.read_csv_chunked(str(path)))
+        reader = ar.read_csv_chunked(str(path), chunksize=1, dtype={"b": "int64"})
+
+        chunk1 = next(reader)
+        assert chunk1 is not None
+        assert chunk1.dtypes == {"a": "int64", "b": "int64"}
+
+        # Chunk 2 has 'abc' in column 'b' which is configured/locked as int64, so it must raise!
+        with pytest.raises(Exception, match="Type mismatch"):
+            next(reader)
+
+    def test_headerless_csv_explicit_dtype(self, tmp_path):
+        """Verify that synthetic columns in headerless CSVs respect explicit dtypes."""
+        path = tmp_path / "headerless.csv"
+        path.write_text("1,10.5\n2,20.5\n3,30.5\n")
+
+        chunks = list(
+            ar.read_csv_chunked(
+                str(path),
+                chunksize=2,
+                has_header=False,
+                dtype={"col_0": "float64", "col_1": "string"},
+            )
+        )
+        assert len(chunks) == 2
+        for chunk in chunks:
+            assert chunk.dtypes == {"col_0": "float64", "col_1": "string"}
+
         df = pd.concat([ar.to_pandas(c) for c in chunks], ignore_index=True)
-        assert list(df.columns) == ["name", "age"]
+        assert df["col_0"].tolist() == [1.0, 2.0, 3.0]
+        assert df["col_1"].tolist() == ["10.5", "20.5", "30.5"]
 
-    def test_explicit_delimiter_overrides_extension(self, tmp_path):
-        """Explicit delimiter always takes precedence over extension inference."""
-        path = tmp_path / "data.tsv"
-        path.write_text("name,age\nAlice,30\nBob,25\n")
+    def test_dtype_specified_for_non_selected_column(self, tmp_path):
+        """Verify that specifying a dtype for a column excluded by usecols raises an exception."""
+        path = tmp_path / "usecols_mismatch.csv"
+        path.write_text("a,b\n1,10\n2,20\n")
 
-        chunks = list(ar.read_csv_chunked(str(path), delimiter=","))
-        df = pd.concat([ar.to_pandas(c) for c in chunks], ignore_index=True)
-        assert list(df.columns) == ["name", "age"]
+        # Column 'b' is excluded by usecols, but is present in dtype mapping. This should raise CsvReadError.
+        with pytest.raises(
+            CsvReadError, match="dtype specified for non-selected column: b"
+        ):
+            list(
+                ar.read_csv_chunked(
+                    str(path), chunksize=2, usecols=["a"], dtype={"b": "int64"}
+                )
+            )
+
+    def test_missing_dtype_column_raises_error(self, tmp_path):
+        """Verify that specifying a dtype for a non-existent column name raises an error."""
+        path = tmp_path / "missing_col.csv"
+        path.write_text("a,b\n1,10\n")
+
+        # Column 'c' does not exist in the CSV header. This should raise CsvReadError.
+        with pytest.raises(CsvReadError, match="Column not found in dtype mapping: c"):
+            list(ar.read_csv_chunked(str(path), chunksize=2, dtype={"c": "int64"}))

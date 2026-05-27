@@ -106,6 +106,7 @@ class CsvChunkReader {
     std::unique_ptr<class RecordReader> record_reader_;
 
     void resolve_col_indices();
+    void apply_explicit_dtypes();
     bool read_one_data_row(std::vector<std::string>& fields_out,
                            const std::string& on_bad_lines = "error",
                            std::vector<BadRow>* bad_rows_out = nullptr);
