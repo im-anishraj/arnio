@@ -97,9 +97,7 @@ def test_jsonl_read_error_for_blank_lines_only_file(tmp_path):
 def test_jsonl_read_error_for_invalid_json_includes_line_number(tmp_path):
     bad_json_file = tmp_path / "bad.jsonl"
     bad_json_file.write_text(
-        '{"name": "Alice"}\n'
-        'NOT VALID JSON\n'
-        '{"name": "Bob"}\n',
+        '{"name": "Alice"}\n' "NOT VALID JSON\n" '{"name": "Bob"}\n',
         encoding="utf-8",
     )
 
@@ -114,8 +112,7 @@ def test_jsonl_read_error_for_invalid_json_includes_line_number(tmp_path):
 def test_jsonl_read_error_for_non_object_json_line(tmp_path):
     array_file = tmp_path / "array.jsonl"
     array_file.write_text(
-        '{"name": "Alice"}\n'
-        '[1, 2, 3]\n',
+        '{"name": "Alice"}\n' "[1, 2, 3]\n",
         encoding="utf-8",
     )
 
@@ -150,4 +147,3 @@ def test_jsonl_read_error_can_be_caught_as_arnio_error(tmp_path):
 def test_jsonl_read_error_message_is_non_empty_string():
     err = ar.JsonlReadError("test error message")
     assert str(err) == "test error message"
-
