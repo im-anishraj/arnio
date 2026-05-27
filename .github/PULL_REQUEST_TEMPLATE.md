@@ -38,6 +38,9 @@
 ## Performance Impact
 <!-- If this PR affects speed or memory, paste a snippet from `make benchmark` or other tools. -->
 
+## GSSoC labels
+<!-- Maintainers only: use exact scoring labels where applicable, for example `gssoc:approved`, `level:beginner`, `quality:clean`, and `type:bug`. Do not add labels only to increase points. -->
+
 ## Contributor checklist
 - [ ] I read the contributing guide.
 - [ ] I kept the PR focused on one issue or one logical change.

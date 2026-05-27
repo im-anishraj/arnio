@@ -6,6 +6,7 @@ import pytest
 
 import arnio as ar
 from arnio import from_pandas, to_pandas
+from arnio.cleaning import _validate_column_sequence, _validate_string_mapping
 
 
 class TestDropNulls:
@@ -104,6 +105,18 @@ class TestKeepRowsWithNulls:
         )
         assert result.shape[0] == 1
 
+    def test_invalid_subset_string(self, csv_with_nulls):
+        """keep_rows_with_nulls raises TypeError when subset is a string."""
+        frame = ar.read_csv(csv_with_nulls)
+        with pytest.raises(TypeError, match="must be a list"):
+            ar.keep_rows_with_nulls(frame, subset="age")
+
+    def test_missing_column_raises(self, csv_with_nulls):
+        """keep_rows_with_nulls raises KeyError when subset column is missing."""
+        frame = ar.read_csv(csv_with_nulls)
+        with pytest.raises(KeyError, match="nonexistent"):
+            ar.keep_rows_with_nulls(frame, subset=["nonexistent"])
+
 
 class TestFillNulls:
     def test_fill_with_string(self, csv_with_nulls):
@@ -123,6 +136,31 @@ class TestFillNulls:
 
         with pytest.raises(ValueError, match="Fill value is incompatible"):
             ar.fill_nulls(frame, "bad", subset=["x"])
+
+    def test_fill_nulls_rejects_unsupported_types(self):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1, None], "b": ["x", None]}))
+
+        for bad_value in [[1, 2], {"key": "val"}, object()]:
+            with pytest.raises(
+                TypeError, match="fill value must be a supported scalar"
+            ):
+                ar.fill_nulls(frame, bad_value)
+
+    def test_fill_nulls_accepts_valid_scalars(self):
+        # numeric column → fill with numeric
+        frame_num = ar.from_pandas(pd.DataFrame({"a": [1.0, None]}))
+        for good_value in [0, 0.0, False]:
+            result = ar.fill_nulls(frame_num, good_value)
+            df = ar.to_pandas(result)
+            assert (
+                df["a"].isnull().sum() == 0
+            ), f"Nulls remain after filling with {good_value!r}"
+
+        # string column → fill with string
+        frame_str = ar.from_pandas(pd.DataFrame({"b": ["x", None]}))
+        result = ar.fill_nulls(frame_str, "missing")
+        df = ar.to_pandas(result)
+        assert df["b"].isnull().sum() == 0, "Nulls remain after filling with 'missing'"
 
 
 class TestWinsorizeOutliers:
@@ -372,6 +410,25 @@ class TestSharedColumnSequenceValidation:
         with pytest.raises(ValueError, match="subset must contain at least one column"):
             ar.coalesce_columns(frame, subset=[])
 
+    def test_coalesce_columns_allows_tuple(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "nickname": [None, "Bee", None],
+                    "name": ["Alice", "Bob", "Cara"],
+                }
+            )
+        )
+
+        result = ar.coalesce_columns(
+            frame,
+            subset=("nickname", "name"),
+            output_column="display_name",
+        )
+        df = ar.to_pandas(result)
+
+        assert df["display_name"].tolist() == ["Alice", "Bee", "Cara"]
+
     @pytest.mark.parametrize(
         ("func", "kwargs", "message"),
         [
@@ -401,7 +458,7 @@ class TestSharedColumnSequenceValidation:
             (
                 "coalesce_columns",
                 {"subset": 123, "output_column": "combined"},
-                "must be a list of column names",
+                "must be a sequence of column names",
             ),
         ],
     )
@@ -630,11 +687,22 @@ class TestDropColumns:
         with pytest.raises(TypeError, match="only string column names"):
             ar.drop_columns(frame, ["age", 1])
 
-    def test_drop_columns_rejects_removing_all_columns(self):
+    def test_drop_columns_rejects_removing_all_columns_across_entry_points(self):
         frame = ar.from_pandas(pd.DataFrame({"id": [1, 2], "name": ["a", "b"]}))
 
         with pytest.raises(ValueError, match="drop_columns cannot remove all columns"):
+            frame.drop_columns(["id", "name"])
+
+        with pytest.raises(ValueError, match="drop_columns cannot remove all columns"):
             ar.drop_columns(frame, ["id", "name"])
+
+        with pytest.raises(ValueError, match="drop_columns cannot remove all columns"):
+            ar.pipeline(
+                frame,
+                [
+                    ("drop_columns", {"columns": ["id", "name"]}),
+                ],
+            )
 
 
 class TestDropConstantColumns:
@@ -755,6 +823,28 @@ class TestDropConstantColumns:
         assert cloned.num_rows() == 4
         assert cloned.num_cols() == 0
 
+    def test_drop_constant_columns_pandas_input(self):
+        df = pd.DataFrame(
+            {
+                "value": [1, 2, 3],
+                "constant_num": [7, 7, 7],
+                "constant_text": ["x", "x", "x"],
+            }
+        )
+
+        result = ar.drop_constant_columns(df)
+        assert isinstance(result, pd.DataFrame)
+        assert list(result.columns) == ["value"]
+        assert list(result["value"]) == [1, 2, 3]
+        # Assert that the input DataFrame was not mutated
+        assert list(df.columns) == ["value", "constant_num", "constant_text"]
+
+    def test_drop_constant_columns_invalid_type_raises(self):
+        with pytest.raises(
+            TypeError, match="frame must be an ArFrame or a pandas DataFrame"
+        ):
+            ar.drop_constant_columns([1, 2, 3])
+
 
 class TestDropEmptyColumns:
     def test_drop_empty_columns_removes_fully_empty_columns(self, tmp_path):
@@ -808,6 +898,16 @@ class TestDropEmptyColumns:
         assert result.shape[1] == 0
         assert result.shape[0] in {0, 2}
         assert ar.to_pandas(result).shape[1] == 0
+
+    def test_drop_empty_columns_preserves_schema_on_empty_frame(self):
+        df = pd.DataFrame(columns=["a", "b", "c"])
+        frame = ar.from_pandas(df)
+
+        result = ar.drop_empty_columns(frame)
+
+        assert result.columns == ["a", "b", "c"]
+        assert result.shape[0] == 0
+        assert result.shape[1] == 3
 
 
 class TestClipNumeric:
@@ -863,6 +963,44 @@ class TestClipNumeric:
         )
 
         result = ar.clip_numeric(frame, lower=0, upper=8, subset=["b"])
+        df = ar.to_pandas(result)
+
+        assert list(df["a"]) == [-5, 0, 10]
+        assert list(df["b"]) == [0, 5, 8]
+        assert list(df["label"]) == ["x", "y", "z"]
+
+    def test_clip_numeric_string_subset_rejected_before_native_execution(self):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1, 2], "age": [1, 2]}))
+
+        with pytest.raises(
+            TypeError,
+            match="subset must be a sequence of column names, not a string",
+        ):
+            ar.clip_numeric(frame, lower=0, subset="age")
+
+    def test_clip_numeric_non_string_subset_item_rejected_before_native_execution(
+        self,
+    ):
+        frame = ar.from_pandas(pd.DataFrame({"age": [1, 2, 3]}))
+
+        with pytest.raises(
+            TypeError,
+            match="subset must contain only string column names",
+        ):
+            ar.clip_numeric(frame, lower=0, subset=[1])
+
+    def test_clip_numeric_valid_tuple_subset_preserves_supported_behavior(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "a": [-5, 0, 10],
+                    "b": [-10, 5, 20],
+                    "label": ["x", "y", "z"],
+                }
+            )
+        )
+
+        result = ar.clip_numeric(frame, lower=0, upper=8, subset=("b",))
         df = ar.to_pandas(result)
 
         assert list(df["a"]) == [-5, 0, 10]
@@ -1012,8 +1150,15 @@ class TestStandardizeMissingTokens:
         result = ar.standardize_missing_tokens(df, tokens=[])
         assert result["value"].iloc[2] == "-"
 
+    def test_whitespace_only_values_remain_when_tokens_disabled(self):
+        df = pd.DataFrame({"value": ["  ", "\t", "\n"]})
+
+        result = ar.standardize_missing_tokens(df, tokens=[])
+
+        assert result["value"].tolist() == ["  ", "\t", "\n"]
+
     def test_standardize_missing_tokens_unknown_subset_column_raises(self):
-        frame = ar.from_pandas(pd.DataFrame({"value": [1, 2, 3]}))
+        frame = pd.DataFrame({"value": [1, 2, 3]})
         with pytest.raises(ValueError, match="Unknown columns in subset"):
             ar.standardize_missing_tokens(frame, subset=["missing"])
 
@@ -1026,6 +1171,157 @@ class TestStandardizeMissingTokens:
         assert pd.isna(result.loc[0, "name"])
         assert result.loc[1, "name"] == "Alice"
         assert result["city"].tolist() == ["-", "Paris"]
+
+    def test_standardize_missing_tokens_normalizes_whitespace_wrapped_defaults(self):
+        df = pd.DataFrame({"value": ["NULL ", " NaN", "  ", "", "Alice "]})
+
+        result = ar.standardize_missing_tokens(df)
+
+        assert pd.isna(result["value"].iloc[0])
+        assert pd.isna(result["value"].iloc[1])
+        assert pd.isna(result["value"].iloc[2])
+        assert pd.isna(result["value"].iloc[3])
+        assert result["value"].iloc[4] == "Alice "
+
+    def test_standardize_missing_tokens_normalizes_whitespace_wrapped_custom_tokens(
+        self,
+    ):
+        df = pd.DataFrame(
+            {
+                "status": [" unknown ", "pending", " custom-null "],
+                "note": [" untouched ", "unknown", "kept"],
+            }
+        )
+
+        result = ar.standardize_missing_tokens(
+            df, tokens=["unknown", "custom-null"], subset=["status"]
+        )
+
+        assert pd.isna(result["status"].iloc[0])
+        assert result["status"].iloc[1] == "pending"
+        assert pd.isna(result["status"].iloc[2])
+        assert result["note"].tolist() == [" untouched ", "unknown", "kept"]
+
+    def test_standardize_missing_tokens_normalizes_custom_token_list_entries(self):
+        df = pd.DataFrame({"value": ["unknown", " Unknown ", "kept"]})
+
+        result = ar.standardize_missing_tokens(df, tokens=["  UNKNOWN  "])
+
+        assert pd.isna(result["value"].iloc[0])
+        assert pd.isna(result["value"].iloc[1])
+        assert result["value"].iloc[2] == "kept"
+
+    def test_standardize_missing_tokens_normalizes_custom_token_list_entries_in_subset(
+        self,
+    ):
+        df = pd.DataFrame(
+            {
+                "status": [" unknown ", "kept"],
+                "note": ["UNKNOWN", "still here"],
+            }
+        )
+
+        result = ar.standardize_missing_tokens(
+            df, tokens=["  UNKNOWN  "], subset=["status"]
+        )
+
+        assert pd.isna(result["status"].iloc[0])
+        assert result["status"].iloc[1] == "kept"
+        assert result["note"].tolist() == ["UNKNOWN", "still here"]
+
+    def test_standardize_missing_tokens_normalizes_tab_and_newline_wrapped_tokens(
+        self,
+    ):
+        df = pd.DataFrame({"value": ["\tNULL\t", "\n NaN\n", "\t kept \n"]})
+
+        result = ar.standardize_missing_tokens(df)
+
+        assert pd.isna(result["value"].iloc[0])
+        assert pd.isna(result["value"].iloc[1])
+        assert result["value"].iloc[2] == "\t kept \n"
+
+    def test_standardize_missing_tokens_subset_does_not_normalize_excluded_whitespace(
+        self,
+    ):
+        df = pd.DataFrame(
+            {
+                "status": ["  ", "NULL "],
+                "note": ["  ", "NULL "],
+            }
+        )
+
+        result = ar.standardize_missing_tokens(df, subset=["status"])
+
+        assert pd.isna(result["status"].iloc[0])
+        assert pd.isna(result["status"].iloc[1])
+        assert result["note"].tolist() == ["  ", "NULL "]
+
+    def test_standardize_missing_tokens_normalizes_carriage_return_wrapped_tokens(
+        self,
+    ):
+        df = pd.DataFrame({"value": ["\r\nNULL\r", "\r\n nAn \r\n", "\r kept \r"]})
+
+        result = ar.standardize_missing_tokens(df)
+
+        assert pd.isna(result["value"].iloc[0])
+        assert pd.isna(result["value"].iloc[1])
+        assert result["value"].iloc[2] == "\r kept \r"
+
+    def test_standardize_missing_tokens_normalizes_nonbreaking_space_wrapped_tokens(
+        self,
+    ):
+        nbsp = "\u00a0"
+        df = pd.DataFrame({"value": [f"{nbsp}NULL{nbsp}", f"{nbsp} kept {nbsp}"]})
+
+        result = ar.standardize_missing_tokens(df)
+
+        assert pd.isna(result["value"].iloc[0])
+        assert result["value"].iloc[1] == f"{nbsp} kept {nbsp}"
+
+    def test_standardize_missing_tokens_custom_tokens_do_not_fall_back_to_defaults(
+        self,
+    ):
+        df = pd.DataFrame({"value": [" NULL ", " custom-null ", "kept"]})
+
+        result = ar.standardize_missing_tokens(df, tokens=["custom-null"])
+
+        assert result["value"].iloc[0] == " NULL "
+        assert pd.isna(result["value"].iloc[1])
+        assert result["value"].iloc[2] == "kept"
+
+    def test_standardize_missing_tokens_whitespace_only_custom_tokens_match_blank_values(
+        self,
+    ):
+        df = pd.DataFrame({"value": ["  ", "\t", "\n", "kept"]})
+
+        result = ar.standardize_missing_tokens(df, tokens=["   "])
+
+        assert pd.isna(result["value"].iloc[0])
+        assert pd.isna(result["value"].iloc[1])
+        assert pd.isna(result["value"].iloc[2])
+        assert result["value"].iloc[3] == "kept"
+
+    def test_standardize_missing_tokens_preserves_existing_nulls_while_normalizing_wrapped_tokens(
+        self,
+    ):
+        df = pd.DataFrame({"value": [None, pd.NA, " NULL ", "kept"]})
+
+        result = ar.standardize_missing_tokens(df)
+
+        assert pd.isna(result["value"].iloc[0])
+        assert pd.isna(result["value"].iloc[1])
+        assert pd.isna(result["value"].iloc[2])
+        assert result["value"].iloc[3] == "kept"
+
+    def test_standardize_missing_tokens_normalizes_wrapped_punctuation_defaults(self):
+        df = pd.DataFrame({"value": [" ? ", "\t-\t", "--", "kept"]})
+
+        result = ar.standardize_missing_tokens(df)
+
+        assert pd.isna(result["value"].iloc[0])
+        assert pd.isna(result["value"].iloc[1])
+        assert result["value"].iloc[2] == "--"
+        assert result["value"].iloc[3] == "kept"
 
 
 class TestStripWhitespace:
@@ -1041,6 +1337,23 @@ class TestStripWhitespace:
         result = ar.strip_whitespace(frame, subset=["name"])
         df = ar.to_pandas(result)
         assert df["name"].iloc[0] == "Alice"
+
+    def test_strip_tabs_and_newlines(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "name": ["\tAlice\n", "  Bob\t"],
+                    "city": ["\nLondon ", "\tParis\t"],
+                }
+            )
+        )
+
+        result = ar.strip_whitespace(frame)
+
+        df = ar.to_pandas(result)
+
+        assert df["name"].tolist() == ["Alice", "Bob"]
+        assert df["city"].tolist() == ["London", "Paris"]
 
 
 class TestNormalizeCase:
@@ -1138,6 +1451,27 @@ class TestNormalizeCase:
         df = ar.to_pandas(result)
 
         assert df["word"].tolist() == ["éclair", "ñandú", "über-Cool"]
+
+    def test_invalid_case_type_int(self):
+        import pandas as pd
+
+        frame = ar.from_pandas(pd.DataFrame({"x": ["A"]}))
+        with pytest.raises(TypeError, match="case_type must be a string"):
+            ar.normalize_case(frame, case_type=123)
+
+    def test_invalid_case_type_none(self):
+        import pandas as pd
+
+        frame = ar.from_pandas(pd.DataFrame({"x": ["A"]}))
+        with pytest.raises(TypeError, match="case_type must be a string"):
+            ar.normalize_case(frame, case_type=None)
+
+    def test_invalid_case_type_string(self):
+        import pandas as pd
+
+        frame = ar.from_pandas(pd.DataFrame({"x": ["A"]}))
+        with pytest.raises(ValueError):
+            ar.normalize_case(frame, case_type="invalid")
 
 
 class TestNormalizeUnicode:
@@ -1403,6 +1737,29 @@ class TestParseBoolStrings:
         assert cleaned["active"].tolist() == [True, False]
         assert cleaned["other"].tolist() == ["YES", "no"]
 
+    def test_parse_bool_strings_subset_skips_existing_bool_columns(self):
+        import pandas as pd
+
+        import arnio as ar
+
+        df = pd.DataFrame(
+            {
+                "flag": [True, False, True],
+            }
+        )
+
+        frame = ar.from_pandas(df)
+
+        result = ar.parse_bool_strings(
+            frame,
+            subset=["flag"],
+        )
+
+        result_df = ar.to_pandas(result)
+
+        assert result_df["flag"].tolist() == [True, False, True]
+        assert str(result_df["flag"].dtype) == "boolean"
+
     def test_parse_bool_strings_custom_values(self):
         import pandas as pd
 
@@ -1635,6 +1992,34 @@ class TestParseBoolStrings:
         cleaned2 = ar.to_pandas(result2)
         assert cleaned2["active"].tolist() == ["True", "false", "True", "no"]
 
+    def test_parse_bool_strings_rejects_bare_strings(self):
+        df = pd.DataFrame({"active": ["yes", "no"]}, dtype=object)
+        frame = ar.from_pandas(df)
+
+        with pytest.raises(
+            TypeError,
+            match="true_values must be a set/list/tuple of strings, not a bare string",
+        ):
+            ar.parse_bool_strings(frame, true_values="yes")
+
+        with pytest.raises(
+            TypeError,
+            match="false_values must be a set/list/tuple of strings, not a bare string",
+        ):
+            ar.parse_bool_strings(frame, false_values="no")
+
+        with pytest.raises(
+            TypeError,
+            match="true_values must be a set/list/tuple of strings, not a bare string",
+        ):
+            ar.parse_bool_strings(frame, true_values=b"yes")
+
+        with pytest.raises(
+            TypeError,
+            match="false_values must be a set/list/tuple of strings, not a bare string",
+        ):
+            ar.parse_bool_strings(frame, false_values=b"no")
+
 
 class TestRenameColumns:
     def test_rename(self, sample_csv):
@@ -1712,6 +2097,13 @@ class TestRenameColumns:
         result = ar.rename_columns(frame, {"name": "full_name"})
         assert "full_name" in result.columns
         assert "name" not in result.columns
+
+    def test_rename_rejects_non_string_key(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        with pytest.raises(
+            TypeError, match="keys must contain only string column names"
+        ):
+            ar.rename_columns(frame, {123: "new_name"})
 
 
 class TestTrimColumnNames:
@@ -1985,6 +2377,35 @@ class TestCleanAPI:
         result = ar.clean(frame, strip_whitespace=False, drop_nulls=True)
         assert len(result) < len(frame)
 
+    @pytest.mark.parametrize("invalid_val", ["yes", 1, None, []])
+    def test_clean_invalid_strip_whitespace(self, csv_with_whitespace, invalid_val):
+        frame = ar.read_csv(csv_with_whitespace)
+        with pytest.raises(TypeError, match="strip_whitespace must be a bool"):
+            ar.clean(frame, strip_whitespace=invalid_val)
+
+    @pytest.mark.parametrize("invalid_val", ["yes", 1, None, []])
+    def test_clean_invalid_drop_nulls(self, csv_with_whitespace, invalid_val):
+        frame = ar.read_csv(csv_with_whitespace)
+        with pytest.raises(TypeError, match="drop_nulls must be a bool"):
+            ar.clean(frame, drop_nulls=invalid_val)
+
+    @pytest.mark.parametrize("invalid_val", ["yes", 1, None, []])
+    def test_clean_invalid_drop_duplicates(self, csv_with_whitespace, invalid_val):
+        frame = ar.read_csv(csv_with_whitespace)
+        with pytest.raises(TypeError, match="drop_duplicates must be a bool"):
+            ar.clean(frame, drop_duplicates=invalid_val)
+
+    def test_clean_valid_booleans(self, csv_with_whitespace):
+        frame = ar.read_csv(csv_with_whitespace)
+        # Should not raise
+        result = ar.clean(
+            frame,
+            strip_whitespace=True,
+            drop_nulls=False,
+            drop_duplicates=True,
+        )
+        assert len(ar.to_pandas(result)) > 0
+
 
 class TestFilterRows:
     def test_filter_rows_missing_column_raises_clear_error(self):
@@ -2034,6 +2455,22 @@ class TestFilterRows:
             TypeError, match="filter_rows: cannot compare column 'name'"
         ):
             ar.filter_rows(df, "name", ">", 1)
+
+    def test_filter_rows_rejects_list_like_values(self):
+        df = pd.DataFrame({"a": [1, 2, 3]})
+
+        list_like_values = [
+            [1, 2],
+            (1, 2),
+            {"a": 1},
+            pd.Series([1, 2]),
+            pd.Index([1, 2]),
+            np.array([1, 2]),
+        ]
+
+        for value in list_like_values:
+            with pytest.raises(TypeError, match="filter_rows value must be a scalar"):
+                ar.filter_rows(df, "a", "==", value)
 
 
 class TestMappingValidation:
@@ -3022,6 +3459,14 @@ def test_drop_columns_matching_normal():
     assert list(result.columns) == ["keep_c"]
 
 
+def test_drop_columns_matching_handles_non_string_pandas_columns():
+    df = pd.DataFrame([[1, 2, 3]], columns=[1, ("sensor", "temp"), "temp_a"])
+
+    result = ar.drop_columns_matching(df, "^temp")
+
+    assert list(result.columns) == [1, ("sensor", "temp")]
+
+
 def test_drop_columns_matching_no_match():
     df = pd.DataFrame({"a": [1], "b": [2]})
     result = ar.drop_columns_matching(df, "^temp_")
@@ -3191,3 +3636,139 @@ class TestSelectColumns:
 
         with pytest.raises(ValueError):
             ar.select_columns(frame, ["id", "id"])
+
+
+class TestFilterReplaceTypeAnnotations:
+    """Issue #1257 — filter_rows and replace_values accept and return both ArFrame and pd.DataFrame."""
+
+    def test_filter_rows_arframe_in_arframe_out(self, tmp_path):
+        """ArFrame input returns ArFrame."""
+        path = tmp_path / "data.csv"
+        path.write_text("id,score\n1,10\n2,50\n3,90\n")
+        frame = ar.read_csv(str(path))
+        result = ar.filter_rows(frame, column="score", op=">", value=20)
+        assert isinstance(result, ar.ArFrame)
+        assert ar.to_pandas(result).shape[0] == 2
+
+    def test_filter_rows_dataframe_in_dataframe_out(self):
+        """pd.DataFrame input returns pd.DataFrame."""
+        import pandas as pd
+
+        df = pd.DataFrame({"id": [1, 2, 3], "score": [10, 50, 90]})
+        result = ar.filter_rows(df, column="score", op=">", value=20)
+        assert isinstance(result, pd.DataFrame)
+        assert result.shape[0] == 2
+
+    def test_replace_values_arframe_in_arframe_out(self, tmp_path):
+        """ArFrame input returns ArFrame."""
+        path = tmp_path / "data.csv"
+        path.write_text("status\nactive\ninactive\nactive\n")
+        frame = ar.read_csv(str(path))
+        result = ar.replace_values(
+            frame, {"active": "A", "inactive": "I"}, column="status"
+        )
+        assert isinstance(result, ar.ArFrame)
+        df = ar.to_pandas(result)
+        assert set(df["status"].tolist()) == {"A", "I"}
+
+    def test_replace_values_dataframe_in_dataframe_out(self):
+        """pd.DataFrame input returns pd.DataFrame."""
+        import pandas as pd
+
+        df = pd.DataFrame({"status": ["active", "inactive", "active"]})
+        result = ar.replace_values(
+            df, {"active": "A", "inactive": "I"}, column="status"
+        )
+        assert isinstance(result, pd.DataFrame)
+        assert set(result["status"].tolist()) == {"A", "I"}
+
+    def test_filter_rows_preserves_index_for_dataframe(self):
+        """pd.DataFrame return preserves the original index."""
+        import pandas as pd
+
+        df = pd.DataFrame({"score": [10, 50, 90]}, index=[100, 200, 300])
+        result = ar.filter_rows(df, column="score", op=">=", value=50)
+        assert list(result.index) == [200, 300]
+
+    def test_replace_values_whole_frame_dataframe(self):
+        """replace_values with no column applies across all columns for pd.DataFrame."""
+        import pandas as pd
+
+        df = pd.DataFrame({"a": ["x", "y"], "b": ["x", "z"]})
+        result = ar.replace_values(df, {"x": "X"})
+        assert isinstance(result, pd.DataFrame)
+        assert result["a"].tolist() == ["X", "y"]
+        assert result["b"].tolist() == ["X", "z"]
+
+
+class TestValidateColumnSequence:
+    def test_string_raises_type_error(self):
+        with pytest.raises(
+            TypeError, match="must be a sequence of column names, not a string"
+        ):
+            _validate_column_sequence("col1", argument_name="columns")
+
+    def test_bytes_raises_type_error(self):
+        with pytest.raises(
+            TypeError, match="must be a sequence of column names, not a string"
+        ):
+            _validate_column_sequence(b"col1", argument_name="columns")
+
+    def test_non_sequence_raises_type_error(self):
+        with pytest.raises(TypeError, match="must be a sequence of column names"):
+            _validate_column_sequence({"col1", "col2"}, argument_name="columns")
+
+    def test_non_string_elements_raise_type_error(self):
+        with pytest.raises(TypeError, match="must contain only string column names"):
+            _validate_column_sequence(["col1", 123, "col2"], argument_name="columns")
+
+    def test_valid_list_returns_normalized(self):
+        result = _validate_column_sequence(["col1", "col2"], argument_name="columns")
+        assert result == ["col1", "col2"]
+
+    def test_valid_tuple_returns_normalized(self):
+        result = _validate_column_sequence(("col1", "col2"), argument_name="columns")
+        assert result == ["col1", "col2"]
+
+    def test_empty_list_returns_empty(self):
+        result = _validate_column_sequence([], argument_name="columns")
+        assert result == []
+
+
+class TestValidateStringMapping:
+    def test_non_mapping_raises_type_error(self):
+        with pytest.raises(
+            TypeError, match="must be a mapping of string keys to strings"
+        ):
+
+            _validate_string_mapping([("a", "b")], argument_name="mapping")
+
+    def test_invalid_non_string_keys_raise_type_error(self):
+        with pytest.raises(
+            TypeError, match="keys must contain only string column names"
+        ):
+            _validate_string_mapping({1: "a", 2: "b"}, argument_name="mapping")
+
+    def test_empty_value_raises_type_error(self):
+        with pytest.raises(TypeError, match="values must be non-empty strings"):
+            _validate_string_mapping({"a": "", "b": "value"}, argument_name="mapping")
+
+    def test_whitespace_only_value_raises_type_error(self):
+        with pytest.raises(TypeError, match="values must be non-empty strings"):
+            _validate_string_mapping(
+                {"a": "   ", "b": "value"}, argument_name="mapping"
+            )
+
+    def test_valid_string_mapping_returns_dict(self):
+        result = _validate_string_mapping(
+            {"a": "value1", "b": "value2"}, argument_name="mapping"
+        )
+        assert result == {"a": "value1", "b": "value2"}
+
+    def test_empty_mapping_allow_empty_true(self):
+        result = _validate_string_mapping({}, argument_name="mapping", allow_empty=True)
+        assert result == {}
+
+    def test_empty_mapping_allow_empty_false_raises(self):
+        with pytest.raises(ValueError, match="must not be empty"):
+            _validate_string_mapping({}, argument_name="mapping", allow_empty=False)

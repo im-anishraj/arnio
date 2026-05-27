@@ -127,6 +127,34 @@ class TestSchemaToYamlOutput:
         out = schema_to_yaml(raw)
         assert '"key: value"' in out
 
+    def test_numeric_looking_strings_quoted(self):
+        raw = {
+            "status": {
+                "type": "STRING",
+                "allowed": ["001", "123", "1.5", "-45"],
+            }
+        }
+        out = schema_to_yaml(raw)
+
+        assert '"001"' in out
+        assert '"123"' in out
+        assert '"1.5"' in out
+        assert '"-45"' in out
+
+    def test_genuine_numbers_remain_unquoted(self):
+        raw = {
+            "metrics": {
+                "count": 100,
+                "score": 4.5,
+            }
+        }
+        out = schema_to_yaml(raw)
+
+        assert "count: 100" in out
+        assert "score: 4.5" in out
+        assert '"100"' not in out
+        assert '"4.5"' not in out
+
     def test_empty_string_quoted(self):
         raw = {"col": {"type": "STRING", "default": ""}}
         out = schema_to_yaml(raw)
@@ -156,6 +184,17 @@ class TestSchemaToYamlOutput:
         out = schema_to_yaml(schema)
         assert "ts:" in out
         assert "TIMESTAMP" in out
+
+    def test_emit_scalar_prevents_yaml_injection(self):
+        # test \n
+        raw1 = {"key": {"type": "STRING", "description": "safe\nmalicious_key: true"}}
+        out1 = schema_to_yaml(raw1)
+        assert '"safe\\nmalicious_key: true"' in out1
+
+        # test \r
+        raw2 = {"key": {"type": "STRING", "description": "safe\rmalicious_key: true"}}
+        out2 = schema_to_yaml(raw2)
+        assert '"safe\\rmalicious_key: true"' in out2
 
 
 class TestSchemaToYamlFileWrite:
@@ -260,3 +299,37 @@ def test_real_schema_with_rules_raises():
     schema = ar.Schema({"col": ar.Field(dtype="STRING")}, rules=[lambda df: []])
     with pytest.raises(ValueError, match="rules"):
         schema_to_dict(schema)
+
+
+# ── Regression tests for issue #1467 ────────────────────────────────────────
+
+
+def test_raw_dict_fields_named_strict_and_unique_not_dropped():
+    """Flat scan_csv-style dict: strict/unique are real field names, not metadata."""
+    raw = {"strict": "int64", "unique": "string", "name": "string"}
+    result = schema_to_dict(raw)
+    assert "strict" in result["fields"], "field 'strict' was dropped from fields"
+    assert "unique" in result["fields"], "field 'unique' was dropped from fields"
+    assert "name" in result["fields"], "field 'name' was dropped from fields"
+    # No top-level metadata keys should appear (input was flat, not structured)
+    assert set(result.keys()) == {"fields"}
+
+
+def test_schema_object_fields_named_strict_and_unique_not_dropped():
+    """Schema object: fields named strict/unique survive alongside schema metadata."""
+    schema = ar.Schema(
+        {
+            "strict": ar.Field(dtype="INT64"),
+            "unique": ar.Field(dtype="STRING"),
+            "name": ar.Field(dtype="STRING"),
+        },
+        strict=True,
+        unique=["name"],
+    )
+    result = schema_to_dict(schema)
+    assert "strict" in result["fields"], "field 'strict' was dropped from fields"
+    assert "unique" in result["fields"], "field 'unique' was dropped from fields"
+    assert "name" in result["fields"], "field 'name' was dropped from fields"
+    # Schema-level metadata must still be top-level
+    assert result["strict"] is True, "schema metadata 'strict' missing"
+    assert result["unique"] == ["name"], "schema metadata 'unique' missing"

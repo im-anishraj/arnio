@@ -201,6 +201,11 @@ def to_pandas(frame: ArFrame, *, copy: bool = False) -> pd.DataFrame:
     if not isinstance(copy, bool):
         raise TypeError("copy must be a bool")
 
+    if not isinstance(frame, ArFrame):
+        raise TypeError(
+            f"to_pandas() expects an ArFrame, got {type(frame).__name__}. Use arnio.from_pandas() first."
+        )
+
     cpp_frame = frame._frame
     data = {}
 
@@ -396,3 +401,26 @@ def from_pandas(df: pd.DataFrame) -> ArFrame:
 
     cpp_frame = _Frame.from_dict(columns, dtype_hints, len(df))
     return ArFrame(cpp_frame, attrs=copylib.deepcopy(df.attrs))
+
+
+def from_dict(data: dict) -> ArFrame:
+    """Converts a dictionary into a structured ArFrame.
+
+    Args:
+        data: A dictionary where keys are column names and values are lists of data.
+
+    Returns:
+        An ArFrame representation of the input dictionary.
+    """
+
+    if not isinstance(data, dict):
+        raise TypeError(f"Expected dict datatype but instead got {type(data).__name__}")
+    if not all(isinstance(k, str) for k in data.keys()):
+        raise TypeError("All dictionary keys must be strings")
+    for col_name, value in data.items():
+        if isinstance(value, dict):
+            raise ValueError(f"Nested objects are not supported in column{col_name}")
+    df = pd.DataFrame(data)
+    for col_name in df.columns:
+        _check_unsupported_dtype(col_name, df[col_name])
+    return from_pandas(df)

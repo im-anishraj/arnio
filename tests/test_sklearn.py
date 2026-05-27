@@ -1,3 +1,5 @@
+import warnings
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -50,6 +52,37 @@ def test_arniocleaner_in_pipeline():
     assert isinstance(result, pd.DataFrame)
     assert result.index.equals(df.index)
     assert list(result.columns) == ["A", "B"]
+
+
+def test_arniocleaner_feature_names_out_tracks_dropped_columns():
+    df = pd.DataFrame({"A": ["x", "y"], "B": [1, 2]})
+
+    cleaner = ArnioCleaner(steps=[("drop_columns", {"columns": ["B"]})])
+    cleaner.fit(df)
+    result = cleaner.transform(df)
+
+    assert list(result.columns) == ["A"]
+    assert cleaner.get_feature_names_out().tolist() == ["A"]
+
+
+def test_arniocleaner_feature_names_out_tracks_renamed_columns():
+    df = pd.DataFrame({"A": ["x", "y"], "B": [1, 2]})
+
+    cleaner = ArnioCleaner(steps=[("rename_columns", {"mapping": {"A": "name"}})])
+    cleaner.fit(df)
+    result = cleaner.transform(df)
+
+    assert list(result.columns) == ["name", "B"]
+    assert cleaner.get_feature_names_out(["A", "B"]).tolist() == ["name", "B"]
+
+
+def test_arniocleaner_feature_names_out_rejects_wrong_input_features():
+    df = pd.DataFrame({"A": ["x", "y"], "B": [1, 2]})
+
+    cleaner = ArnioCleaner().fit(df)
+
+    with pytest.raises(ValueError, match="input_features must match"):
+        cleaner.get_feature_names_out(["B", "A"])
 
 
 def test_arniocleaner_rejects_row_dropping_by_default():
@@ -157,3 +190,99 @@ def test_filter_rows_rejects_row_count_change_by_default():
     )
     with pytest.raises(ValueError, match="changed the row count"):
         cleaner.fit_transform(df)
+
+
+# --- Issue #1278: dtype drift warning in transform() ---
+
+
+def test_arniocleaner_warns_on_dtype_change_in_transform():
+    """transform() emits UserWarning when a column dtype changed since fit()."""
+    train_df = pd.DataFrame({"age": [25, 30, 35], "score": [1.0, 2.0, 3.0]})
+    # Simulate dtype drift: age is now object/string after a CSV round-trip
+    test_df = pd.DataFrame({"age": ["25", "30", "35"], "score": [1.0, 2.0, 3.0]})
+
+    cleaner = ArnioCleaner(steps=[])
+    cleaner.fit(train_df)
+
+    with pytest.warns(UserWarning, match="dtype changed"):
+        cleaner.transform(test_df)
+
+
+def test_arniocleaner_no_warning_when_dtypes_unchanged():
+    """transform() emits no warning when dtypes match what was seen in fit()."""
+    df = pd.DataFrame({"age": [25, 30, 35], "score": [1.0, 2.0, 3.0]})
+
+    cleaner = ArnioCleaner(steps=[])
+    cleaner.fit(df)
+
+    # Should complete without any warning
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", UserWarning)
+        cleaner.transform(df)
+
+
+def test_arniocleaner_dtype_warning_names_the_changed_column():
+    """The UserWarning message names the specific column that changed dtype."""
+    train_df = pd.DataFrame({"id": [1, 2], "value": [10, 20]})
+    test_df = pd.DataFrame({"id": ["1", "2"], "value": [10, 20]})
+
+    cleaner = ArnioCleaner(steps=[])
+    cleaner.fit(train_df)
+
+    with pytest.warns(UserWarning, match="'id'"):
+        cleaner.transform(test_df)
+
+
+def test_arniocleaner_dtype_warning_does_not_block_transform():
+    """transform() still returns a result even when a dtype warning is emitted."""
+    train_df = pd.DataFrame({"score": [1, 2, 3]})
+    test_df = pd.DataFrame({"score": ["1", "2", "3"]})
+
+    cleaner = ArnioCleaner(steps=[])
+    cleaner.fit(train_df)
+
+    with pytest.warns(UserWarning):
+        result = cleaner.transform(test_df)
+
+    assert isinstance(result, pd.DataFrame)
+    assert result.shape == test_df.shape
+
+
+def test_arniocleaner_fit_stores_feature_dtypes():
+    """fit() stores feature_dtypes_in_ for every column."""
+    df = pd.DataFrame({"a": [1, 2], "b": [1.0, 2.0], "c": ["x", "y"]})
+    cleaner = ArnioCleaner(steps=[])
+    cleaner.fit(df)
+
+    assert hasattr(cleaner, "feature_dtypes_in_")
+    assert cleaner.feature_dtypes_in_["a"] == str(df["a"].dtype)
+    assert cleaner.feature_dtypes_in_["b"] == str(df["b"].dtype)
+    assert cleaner.feature_dtypes_in_["c"] == str(df["c"].dtype)
+
+
+def test_arniocleaner_warns_for_multiple_dtype_changes():
+    """A warning is emitted for each column that changed dtype."""
+    train_df = pd.DataFrame({"a": [1, 2], "b": [3, 4]})
+    test_df = pd.DataFrame({"a": ["1", "2"], "b": ["3", "4"]})
+
+    cleaner = ArnioCleaner(steps=[])
+    cleaner.fit(train_df)
+
+    with pytest.warns(UserWarning) as record:
+        cleaner.transform(test_df)
+
+    # One warning per changed column
+    assert len(record) == 2
+    messages = {str(w.message) for w in record}
+    assert any("'a'" in m for m in messages)
+    assert any("'b'" in m for m in messages)
+
+
+def test_arniocleaner_rejects_non_boolean_options():
+    """Ensure constructor explicitly blocks truthy/falsy non-boolean values."""
+    invalid_values = ["false", "True", 1, 0, None, [], {}]
+    for value in invalid_values:
+        with pytest.raises(TypeError, match="copy must be a bool"):
+            ArnioCleaner(copy=value)
+        with pytest.raises(TypeError, match="allow_row_count_change must be a bool"):
+            ArnioCleaner(allow_row_count_change=value)

@@ -5,6 +5,7 @@ CSV reading and writing functions.
 
 from __future__ import annotations
 
+import codecs
 import io
 import os
 import shutil
@@ -27,6 +28,8 @@ from .frame import ArFrame
 
 def _is_utf8_encoding(encoding: str) -> bool:
     """Return whether the encoding should be treated as raw UTF-8 input."""
+    if not isinstance(encoding, str):
+        raise TypeError(f"encoding must be a string, got {type(encoding).__name__!r}")
     return encoding.lower().replace("_", "-") in {"utf-8", "utf8"}
 
 
@@ -260,6 +263,7 @@ def _validate_nrows(nrows: int) -> int:
 
 
 _PREVIEW_BAD_ROWS = 10
+_FILE_LIKE_COPY_CHUNK_SIZE = 8192
 
 
 def _warn_bad_rows(bad_rows: list) -> None:
@@ -350,11 +354,6 @@ def _materialize_csv_input(
     if isinstance(source, io.StringIO) or (
         hasattr(source, "read") and callable(source.read)
     ):
-        content = source.read()
-
-        if not isinstance(content, str):
-            raise TypeError("read_csv file-like objects must return text, not bytes")
-
         tmp = tempfile.NamedTemporaryFile(
             mode="w",
             encoding="utf-8",
@@ -363,10 +362,19 @@ def _materialize_csv_input(
         )
 
         try:
-            tmp.write(content)
+            while True:
+                chunk = source.read(_FILE_LIKE_COPY_CHUNK_SIZE)
+                if chunk == "":
+                    break
+                if not isinstance(chunk, str):
+                    raise TypeError(
+                        "read_csv file-like objects must return text, not bytes"
+                    )
+                tmp.write(chunk)
             tmp.close()
             return tmp.name, True
         except Exception:
+            tmp.close()
             os.unlink(tmp.name)
             raise
 
@@ -419,7 +427,7 @@ def _validate_encoding_errors(value: str) -> str:
 
 
 def read_csv(
-    path: str | os.PathLike[str],
+    path: str | os.PathLike[str] | io.TextIOBase,
     *,
     delimiter: str | None = None,
     has_header: bool = True,
@@ -539,46 +547,51 @@ def read_csv(
     """
     path, should_cleanup = _materialize_csv_input(path)
 
-    _validate_csv_path(path, encoding)
+    try:
+        _validate_csv_path(path, encoding)
 
-    path_lower = path.lower()
+        path_lower = path.lower()
 
-    # Resolve the sentinel: auto-detect tab for .tsv only when the caller
-    # truly omitted delimiter (None).  An explicit delimiter="," is always
-    # honoured, even for .tsv paths.
-    if delimiter is None:
-        delimiter = "\t" if path_lower.endswith(".tsv") else ","
+        # Resolve the sentinel: auto-detect tab for .tsv only when the caller
+        # truly omitted delimiter (None).  An explicit delimiter="," is always
+        # honoured, even for .tsv paths.
+        if delimiter is None:
+            delimiter = "\t" if path_lower.endswith(".tsv") else ","
 
-    decimal_separator = _validate_decimal_separator(decimal_separator)
-    _validate_thousands_separator(thousands_separator, decimal_separator)
-    delimiter = _validate_delimiter(delimiter)
-    mode = _validate_parser_mode(mode)
-    encoding_errors = _validate_encoding_errors(encoding_errors)
-    on_bad_lines = _validate_on_bad_lines(on_bad_lines)
-    config = _CsvConfig()
-    config.delimiter = delimiter
-    config.has_header = _validate_bool_option(has_header, "has_header")
-    config.encoding = encoding
-    config.trim_headers = _validate_bool_option(trim_headers, "trim_headers")
-    config.decimal_separator = decimal_separator
-    config.thousands_separator = thousands_separator
-    config.mode = mode
-    config.encoding_errors = encoding_errors
-    if null_values is not None:
-        config.null_values = _validate_null_values(null_values)
-    if dtype is not None:
-        config.dtype = _validate_dtype_mapping(dtype)
+        decimal_separator = _validate_decimal_separator(decimal_separator)
+        _validate_thousands_separator(thousands_separator, decimal_separator)
+        delimiter = _validate_delimiter(delimiter)
+        mode = _validate_parser_mode(mode)
+        encoding_errors = _validate_encoding_errors(encoding_errors)
+        on_bad_lines = _validate_on_bad_lines(on_bad_lines)
+        config = _CsvConfig()
+        config.delimiter = delimiter
+        config.has_header = _validate_bool_option(has_header, "has_header")
+        config.encoding = encoding
+        config.trim_headers = _validate_bool_option(trim_headers, "trim_headers")
+        config.decimal_separator = decimal_separator
+        config.thousands_separator = thousands_separator
+        config.mode = mode
+        config.encoding_errors = encoding_errors
+        if null_values is not None:
+            config.null_values = _validate_null_values(null_values)
+        if dtype is not None:
+            config.dtype = _validate_dtype_mapping(dtype)
 
-    if usecols is not None:
-        config.usecols = _validate_usecols(usecols)
+        if usecols is not None:
+            config.usecols = _validate_usecols(usecols)
 
-    if nrows is not None:
-        config.nrows = _validate_nrows(nrows)
+        if nrows is not None:
+            config.nrows = _validate_nrows(nrows)
 
-    if skiprows is not None:
-        config.skip_rows = _validate_skip_rows(skiprows)
+        if skiprows is not None:
+            config.skip_rows = _validate_skip_rows(skiprows)
 
-    reader = _CsvReader(config)
+        reader = _CsvReader(config)
+    except Exception:
+        if should_cleanup and os.path.exists(path):
+            os.unlink(path)
+        raise
 
     try:
         with _utf8_csv_path(
@@ -597,7 +610,7 @@ def read_csv(
     except CsvReadError:
         raise
     except RuntimeError as e:
-        raise CsvReadError(str(e)) from e
+        raise CsvReadError(str(e)) from None
 
     finally:
         if should_cleanup and os.path.exists(path):
@@ -605,7 +618,7 @@ def read_csv(
 
 
 def read_csv_chunked(
-    path: str | os.PathLike[str],
+    path: str | os.PathLike[str] | io.TextIOBase,
     *,
     chunksize: int = 10_000,
     delimiter: str = ",",
@@ -628,8 +641,10 @@ def read_csv_chunked(
 
     Parameters
     ----------
-    path : str
+    path : str or file-like object
         Path to the CSV file. Supports .csv, .txt, and .tsv extensions.
+        Text file-like objects are copied to a temporary file in bounded
+        chunks before native parsing.
     chunksize : int, default 10_000
         Maximum number of data rows per yielded chunk.
     delimiter : str, default ","
@@ -687,51 +702,55 @@ def read_csv_chunked(
     ...     df = ar.to_pandas(clean)
     ...     process(df)
     """
-    path = os.fspath(path)
-    path_lower = path.lower()
-    if not (
-        path_lower.endswith(".csv")
-        or path_lower.endswith(".txt")
-        or path_lower.endswith(".tsv")
-    ):
-        raise ValueError(
-            f"Unsupported file format: {path}. Only .csv, .txt, and .tsv are supported."
-        )
-
+    is_path_input = isinstance(path, (str, os.PathLike))
+    path, should_cleanup = _materialize_csv_input(path)
     try:
-        if os.path.getsize(path) == 0:
-            raise CsvReadError(f"CSV file is empty: {path!r}")
-    except FileNotFoundError:
-        pass
+        if is_path_input:
+            path_lower = path.lower()
+            if not (
+                path_lower.endswith(".csv")
+                or path_lower.endswith(".txt")
+                or path_lower.endswith(".tsv")
+            ):
+                raise ValueError(
+                    f"Unsupported file format: {path}. "
+                    "Only .csv, .txt, and .tsv are supported."
+                )
 
-    decimal_separator = _validate_decimal_separator(decimal_separator)
-    _validate_thousands_separator(thousands_separator, decimal_separator)
-    delimiter = _validate_delimiter(delimiter)
-    mode = _validate_parser_mode(mode)
-    chunksize = _validate_chunksize(chunksize)
-    skip_rows = _validate_skip_rows(skip_rows)
-    on_bad_lines = _validate_on_bad_lines(on_bad_lines)
+        _validate_csv_path(path, encoding)
 
-    config = _CsvConfig()
-    config.delimiter = delimiter
-    config.has_header = _validate_bool_option(has_header, "has_header")
-    config.encoding = encoding
-    config.trim_headers = _validate_bool_option(trim_headers, "trim_headers")
-    config.decimal_separator = decimal_separator
-    config.thousands_separator = thousands_separator
-    config.mode = mode
-    config.skip_rows = skip_rows
+        decimal_separator = _validate_decimal_separator(decimal_separator)
+        _validate_thousands_separator(thousands_separator, decimal_separator)
+        delimiter = _validate_delimiter(delimiter)
+        mode = _validate_parser_mode(mode)
+        chunksize = _validate_chunksize(chunksize)
+        skip_rows = _validate_skip_rows(skip_rows)
+        on_bad_lines = _validate_on_bad_lines(on_bad_lines)
 
-    if null_values is not None:
-        config.null_values = _validate_null_values(null_values)
+        config = _CsvConfig()
+        config.delimiter = delimiter
+        config.has_header = _validate_bool_option(has_header, "has_header")
+        config.encoding = encoding
+        config.trim_headers = _validate_bool_option(trim_headers, "trim_headers")
+        config.decimal_separator = decimal_separator
+        config.thousands_separator = thousands_separator
+        config.mode = mode
+        config.skip_rows = skip_rows
 
-    if usecols is not None:
-        config.usecols = _validate_usecols(usecols)
+        if null_values is not None:
+            config.null_values = _validate_null_values(null_values)
 
-    if nrows is not None:
-        config.nrows = _validate_nrows(nrows)
+        if usecols is not None:
+            config.usecols = _validate_usecols(usecols)
 
-    reader = _CsvChunkReader(config)
+        if nrows is not None:
+            config.nrows = _validate_nrows(nrows)
+
+        reader = _CsvChunkReader(config)
+    except Exception:
+        if should_cleanup and os.path.exists(path):
+            os.unlink(path)
+        raise
     try:
         with _utf8_csv_path(path, encoding, delimiter=delimiter) as native_path:
             reader.open(native_path)
@@ -750,9 +769,11 @@ def read_csv_chunked(
     except CsvReadError:
         raise
     except RuntimeError as e:
-        raise CsvReadError(str(e)) from e
+        raise CsvReadError(str(e)) from None
     finally:
         reader.close()
+        if should_cleanup and os.path.exists(path):
+            os.unlink(path)
 
 
 def write_csv(
@@ -838,6 +859,7 @@ def scan_csv(
     null_values: list[str] | None = None,
     has_header: bool = True,
     encoding_errors: str = "strict",
+    on_bad_lines: str = "error",
 ) -> dict[str, str]:
     """Return schema (column names + inferred types) without loading data.
 
@@ -875,11 +897,19 @@ def scan_csv(
         Number of rows to read for type inference. If None, defaults to 100 rows.
     has_header : bool, default True
         Whether the CSV file contains a header row.
-
         When False, synthetic column names are generated
         in the form ``col_0``, ``col_1``, etc., matching
         the behavior of ``read_csv(..., has_header=False)``.
 
+    encoding_errors : str, default "strict"
+        How encoding errors are handled. One of ``"strict"``, ``"replace"``,
+        or ``"ignore"``.
+
+    on_bad_lines : str, default "error"
+        What to do when a malformed row is encountered during schema inference.
+        ``"error"`` raises :exc:`CsvReadError` immediately (default).
+        ``"warn"`` skips the bad row and emits a :class:`UserWarning`.
+        ``"skip"`` silently skips the bad row without any warning.
     Returns
     -------
     dict[str, str]
@@ -923,13 +953,14 @@ def scan_csv(
     _validate_thousands_separator(thousands_separator, decimal_separator)
     delimiter = _validate_delimiter(delimiter)
     encoding_errors = _validate_encoding_errors(encoding_errors)
+    on_bad_lines = _validate_on_bad_lines(on_bad_lines)
     config = _CsvConfig()
     config.delimiter = delimiter
     config.encoding = encoding
     config.trim_headers = _validate_bool_option(trim_headers, "trim_headers")
     config.decimal_separator = decimal_separator
     config.thousands_separator = thousands_separator
-    config.has_header = has_header
+    config.has_header = _validate_bool_option(has_header, "has_header")
     config.encoding_errors = encoding_errors
 
     if null_values is not None:
@@ -954,9 +985,17 @@ def scan_csv(
             delimiter=delimiter,
             sample_rows=100 if sample_size is None else sample_size,
         ) as native_path:
-            return cast(dict[str, str], reader.scan_schema(native_path))
+            schema, bad_row_msgs = reader.scan_schema(native_path, on_bad_lines)
+            if on_bad_lines == "warn" and bad_row_msgs:
+                warnings.warn(
+                    f"{len(bad_row_msgs)} malformed CSV row(s) skipped during schema inference:\n"
+                    + "\n".join(f"  {m}" for m in bad_row_msgs),
+                    UserWarning,
+                    stacklevel=2,
+                )
+            return cast(dict[str, str], schema)
     except RuntimeError as e:
-        raise CsvReadError(str(e)) from e
+        raise CsvReadError(str(e)) from None
 
 
 def read_jsonl(
@@ -1005,6 +1044,13 @@ def read_jsonl(
 
     from .convert import from_pandas
 
+    if not isinstance(encoding, str):
+        raise TypeError(f"encoding must be a string, got {type(encoding).__name__!r}")
+    try:
+        codecs.lookup(encoding)
+    except LookupError:
+        raise ValueError(f"Unknown encoding: {encoding!r}")
+
     path = os.fspath(path)
     path_lower = path.lower()
     if not (path_lower.endswith(".jsonl") or path_lower.endswith(".ndjson")):
@@ -1012,7 +1058,6 @@ def read_jsonl(
             f"Unsupported file format: {path}. "
             "read_jsonl only supports .jsonl and .ndjson files."
         )
-
     if nrows is not None:
         if isinstance(nrows, bool) or not isinstance(nrows, int):
             raise TypeError("nrows must be an integer")
@@ -1112,20 +1157,20 @@ def sniff_delimiter(
         raise FileNotFoundError(f"File not found: {path!r}") from e
 
     try:
-        with open(path, "rb") as f:
-            if b"\0" in f.read(1024):
-                raise CsvReadError(
-                    "CSV input contains NUL bytes and appears to be binary or corrupted"
-                )
+        _reject_utf8_nul_bytes(path)
     except FileNotFoundError:
         pass
 
     # 3. Read Sample
     try:
-        with open(path, encoding=encoding, errors="replace") as f:
+        with open(path, encoding=encoding, errors="strict") as f:
             sample = f.read(sample_size)
     except LookupError as e:
         raise ValueError(f"Unknown encoding: {encoding}") from e
+    except UnicodeDecodeError as e:
+        raise CsvReadError(
+            f"Could not decode {path!r} using encoding {encoding!r}"
+        ) from e
 
     if not sample:
         raise CsvReadError(f"CSV file is empty: {path!r}")
