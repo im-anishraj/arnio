@@ -90,7 +90,7 @@ def _emit_scalar(value: Any) -> str:
     raise TypeError(f"Unsupported scalar type: {type(value)!r}")
 
 
-# changed this too
+# Validate nested container values recursively.
 def _validate_serializable(value: Any) -> None:
     """Validate recursively that a value can be serialized."""
 
@@ -136,7 +136,8 @@ def _normalize_serializable(value: Any) -> Any:
 
     if isinstance(value, dict):
         return {k: _normalize_serializable(v) for k, v in sorted(value.items())}
-
+    # Convert sets into deterministic sorted lists since YAML
+    # emission only supports list-like serialized output.
     if isinstance(value, set):
         return sorted(_normalize_serializable(v) for v in value)
 
@@ -261,7 +262,9 @@ def schema_to_dict(schema: dict | Any) -> dict:
         if field_name in {"strict", "unique"}:
             metadata[field_name] = value
             continue
-        # changed here also minimizing the content
+
+        # Recursively normalize nested containers so schema_to_dict()
+        # always returns serialization-ready values.
         if isinstance(value, str):
             normalised[field_name] = {"type": value}
         else:
