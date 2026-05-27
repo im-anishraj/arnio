@@ -265,6 +265,24 @@ class TestWinsorizeOutliers:
 
         assert list(df["value"]) == [10]
 
+    def test_winsorize_outliers_empty_dataframe(self):
+        frame = ar.from_pandas(pd.DataFrame({"value": pd.Series(dtype="float64")}))
+        result = ar.winsorize_outliers(frame)
+        df = ar.to_pandas(result)
+        assert df.shape == (0, 1)
+
+    def test_winsorize_outliers_all_nulls(self):
+        frame = ar.from_pandas(pd.DataFrame({"value": [None, None, None]}))
+        result = ar.winsorize_outliers(frame)
+        df = ar.to_pandas(result)
+        assert df["value"].isna().all()
+
+    def test_winsorize_outliers_two_rows(self):
+        frame = ar.from_pandas(pd.DataFrame({"value": [10.0, 20.0]}))
+        result = ar.winsorize_outliers(frame, lower=0.1, upper=0.9)
+        df = ar.to_pandas(result)
+        assert df["value"].tolist() == pytest.approx([11.0, 19.0])
+
 
 class TestValidateColumnsExist:
     def test_returns_original_frame_when_columns_exist(self, sample_csv):
