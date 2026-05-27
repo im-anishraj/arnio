@@ -318,6 +318,16 @@ def pipeline(
     ...     ("drop_duplicates", {"keep": "first"}),
     ... ])
     """
+    if not isinstance(frame, ArFrame):
+        raise TypeError("frame must be an ArFrame")
+    if not isinstance(return_metadata, bool):
+        raise TypeError(
+            f"return_metadata must be a bool, got {type(return_metadata).__name__!r}"
+        )
+    if not isinstance(dry_run, bool):
+        raise TypeError(f"dry_run must be a bool, got {type(dry_run).__name__!r}")
+    if not isinstance(verbose, bool):
+        raise TypeError(f"verbose must be a bool, got {type(verbose).__name__!r}")
     with _REGISTRY_LOCK:
         python_step_registry = dict(_PYTHON_STEP_REGISTRY)
         namespaced_builtin_steps = _get_namespaced_builtin_steps(python_step_registry)
@@ -406,7 +416,7 @@ def pipeline(
                     {
                         "step": name,
                         "before": rows_before,
-                        "after": result.shape[0] if dry_run else step_result.shape[0],
+                        "after": rows_before if dry_run else step_result.shape[0],
                         "dry_run": dry_run,
                     }
                 )
@@ -484,7 +494,7 @@ def pipeline(
                     {
                         "step": name,
                         "before": rows_before,
-                        "after": result.shape[0] if dry_run else step_result.shape[0],
+                        "after": rows_before if dry_run else step_result.shape[0],
                         "dry_run": dry_run,
                     }
                 )
