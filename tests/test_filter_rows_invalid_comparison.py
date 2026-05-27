@@ -64,9 +64,10 @@ class TestFilterRowsInvalidComparisonTypesPipeline:
             )
 
     def test_gt_int_column_with_list_value(self):
-        """Comparing an int column against a list raises ValueError (length mismatch)."""
+        """Comparing with a list raises a clear scalar-value TypeError."""
         frame = _make_frame({"score": [80, 90, 100]})
-        with pytest.raises(ValueError, match="Lengths must be equal"):
+
+        with pytest.raises(TypeError, match="filter_rows value must be a scalar"):
             ar.pipeline(
                 frame,
                 [("filter_rows", {"column": "score", "op": ">", "value": [50]})],

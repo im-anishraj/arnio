@@ -14,11 +14,25 @@
    * Fetch data from GitHub API with basic caching
    */
   async function fetchGitHubData(endpoint, cacheKey) {
-    const cached = localStorage.getItem(cacheKey);
-    if (cached) {
-      const { data, timestamp } = JSON.parse(cached);
-      if (Date.now() - timestamp < CACHE_DURATION) {
-        return data;
+    let cachedData = null;
+    let cachedTimestamp = 0;
+
+    try {
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        cachedData = parsed.data;
+        cachedTimestamp = parsed.timestamp;
+
+        if (Date.now() - cachedTimestamp < CACHE_DURATION) {
+          return cachedData;
+        }
+      }
+    } catch (error) {
+      try {
+        localStorage.removeItem(cacheKey);
+      } catch (storageError) {
+        // Ignore storage failures; the network request below can still recover.
       }
     }
 
@@ -27,15 +41,18 @@
       if (!response.ok) throw new Error(`GitHub API error: ${response.status}`);
       const data = await response.json();
 
-      localStorage.setItem(cacheKey, JSON.stringify({
-        data,
-        timestamp: Date.now()
-      }));
+      try {
+        localStorage.setItem(cacheKey, JSON.stringify({
+          data,
+          timestamp: Date.now()
+        }));
+      } catch (storageError) {
+        // Fresh API data is still usable even if browser storage is unavailable.
+      }
 
       return data;
     } catch (error) {
-      console.error(`Failed to fetch from GitHub (${endpoint}):`, error);
-      return cached ? JSON.parse(cached).data : null;
+      return cachedData;
     }
   }
 
@@ -67,7 +84,26 @@
     const contributors = await fetchGitHubData('/contributors?per_page=100', CACHE_KEY_CONTRIBUTORS);
     const container = document.getElementById('contributors-container');
 
-    if (!container || !contributors) return;
+    if (!container) return;
+
+    if (!contributors) {
+      container.innerHTML = '';
+
+      const fallback = document.createElement('p');
+      fallback.className = 'contributors-loading';
+      fallback.append('Contributor data is temporarily unavailable. View contributors on ');
+
+      const link = document.createElement('a');
+      link.href = `https://github.com/${REPO}/graphs/contributors`;
+      link.target = '_blank';
+      link.rel = 'noopener';
+      link.textContent = 'GitHub';
+
+      fallback.appendChild(link);
+      fallback.append('.');
+      container.appendChild(fallback);
+      return;
+    }
 
     // Clear loading state if any
     container.innerHTML = '';
