@@ -1692,6 +1692,11 @@ def String(
     if min_length is not None and max_length is not None and min_length > max_length:
         raise ValueError("min_length must be less than or equal to max_length")
 
+    if isinstance(allowed, (str, bytes)):
+        raise TypeError(
+            "allowed must be a sequence of allowed values, not a bare string"
+        )
+
     allowed_set = set(allowed) if allowed is not None else None
 
     return Field(

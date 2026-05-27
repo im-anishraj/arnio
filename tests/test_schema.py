@@ -1521,6 +1521,32 @@ def test_string_max_length_boundary(tmp_path):
     assert result.issues[0].row_index == 2
 
 
+def test_string_allowed_rejects_bare_string():
+    with pytest.raises(
+        TypeError,
+        match="allowed must be a sequence of allowed values, not a bare string",
+    ):
+        ar.String(allowed="active")
+
+
+def test_string_allowed_rejects_bare_bytes():
+    with pytest.raises(
+        TypeError,
+        match="allowed must be a sequence of allowed values, not a bare string",
+    ):
+        ar.String(allowed=b"active")
+
+
+def test_string_allowed_accepts_list_tuple_and_set():
+    list_field = ar.String(allowed=["active"])
+    tuple_field = ar.String(allowed=("active",))
+    set_field = ar.String(allowed={"active"})
+
+    assert list_field.allowed == {"active"}
+    assert tuple_field.allowed == {"active"}
+    assert set_field.allowed == {"active"}
+
+
 def test_null_values_skip_length_validation(tmp_path):
     path = tmp_path / "names.csv"
     path.write_text("name\n\nabcd\n")
