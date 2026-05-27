@@ -25,10 +25,47 @@ class ArnioPandasAccessor:
         """Convert the DataFrame into an Arnio frame."""
         return from_pandas(self._df)
 
-    def pipeline(self, steps: Sequence[Any]) -> pd.DataFrame:
-        """Run an Arnio pipeline and return a pandas DataFrame."""
+    def pipeline(
+        self,
+        steps: Sequence[Any],
+        *,
+        return_metadata: bool = False,
+        dry_run: bool = False,
+        verbose: bool = False,
+    ) -> pd.DataFrame | tuple[pd.DataFrame, dict[str, Any]]:
+        """Run an Arnio pipeline and return a pandas DataFrame.
+
+        Parameters
+        ----------
+        steps : Sequence[tuple]
+            List of pipeline steps to apply.
+        return_metadata : bool, default False
+            When True, also return a metadata dictionary with per-step timing
+            and row count information.
+        dry_run : bool, default False
+            Validate pipeline structure without applying transformations.
+        verbose : bool, default False
+            Enable diagnostic logging for each pipeline step.
+
+        Returns
+        -------
+        pd.DataFrame or tuple[pd.DataFrame, dict]
+            If return_metadata is False (default), returns a pandas DataFrame.
+            If return_metadata is True, returns (DataFrame, metadata_dict).
+        """
         frame = self.to_arframe()
-        return to_pandas(run_pipeline(frame, steps))
+        result = run_pipeline(
+            frame,
+            steps,
+            return_metadata=return_metadata,
+            dry_run=dry_run,
+            verbose=verbose,
+        )
+
+        if return_metadata:
+            ar_frame, metadata = result
+            return to_pandas(ar_frame), metadata
+        return to_pandas(result)
 
     def clean(
         self,
