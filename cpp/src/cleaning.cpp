@@ -10,8 +10,6 @@
 #include <sstream>
 #include <stdexcept>
 #include <system_error>
-#include <cstdint>
-#include <unordered_map>
 #include <unordered_set>
 
 namespace arnio {
@@ -102,7 +100,13 @@ static void serialize_cell(std::ostream& os, const CellValue& cell) {
     }
 }
 
-// Helper: build a row key string for deduplication (kept for any future use)
+// Serialize a row to a collision-proof string key.
+// Used as the equality fallback inside drop_duplicates: when two rows share
+// the same uint64_t hash we compare their full row_key strings to confirm
+// they are true duplicates and not hash collisions.  The tagged, length-
+// prefixed encoding in serialize_cell() guarantees that different types
+// with the same surface representation (e.g. INT64(1) vs STRING("1")) and
+// values that contain the unit separator never produce the same key.
 static std::string row_key(const Frame& frame, size_t row, const std::vector<size_t>& cols) {
     std::ostringstream oss;
     for (size_t ci : cols) {
@@ -113,8 +117,8 @@ static std::string row_key(const Frame& frame, size_t row, const std::vector<siz
     return oss.str();
 }
 
-// --- Fast numeric hashing for drop_duplicates ---
-// FNV-1a 64-bit hash over raw bytes — no heap allocation.
+// --- Fast typed hashing for drop_duplicates ---
+// FNV-1a 64-bit hash over raw bytes.  No heap allocation.
 static uint64_t fnv1a(const char* data, size_t len,
                       uint64_t h = 14695981039346656037ULL) noexcept {
     for (size_t i = 0; i < len; ++i) {
@@ -125,30 +129,32 @@ static uint64_t fnv1a(const char* data, size_t len,
 }
 
 // Hash a single CellValue directly from its typed storage — zero heap allocation.
-// Each variant uses a distinct seed offset so int(1) != string("1") != bool(true).
+// Each variant uses a distinct seed so INT64(1) != STRING("1") != BOOL(true) != NULL.
 static uint64_t hash_cell(const CellValue& cell) noexcept {
-    if (std::holds_alternative<std::monostate>(cell)) {
-        return fnv1a("N", 1);                                               // null sentinel
-    } else if (std::holds_alternative<int64_t>(cell)) {
+    if (std::holds_alternative<std::monostate>(cell))
+        return 14695981039346656037ULL ^ 0x00ULL;
+    if (std::holds_alternative<int64_t>(cell)) {
         int64_t v = std::get<int64_t>(cell);
         return fnv1a(reinterpret_cast<const char*>(&v), sizeof(v),
                      14695981039346656037ULL ^ 0x01ULL);
-    } else if (std::holds_alternative<double>(cell)) {
+    }
+    if (std::holds_alternative<double>(cell)) {
         double v = std::get<double>(cell);
         return fnv1a(reinterpret_cast<const char*>(&v), sizeof(v),
                      14695981039346656037ULL ^ 0x02ULL);
-    } else if (std::holds_alternative<bool>(cell)) {
+    }
+    if (std::holds_alternative<bool>(cell)) {
         uint8_t v = std::get<bool>(cell) ? 1u : 0u;
         return fnv1a(reinterpret_cast<const char*>(&v), sizeof(v),
                      14695981039346656037ULL ^ 0x03ULL);
-    } else {
-        const std::string& s = std::get<std::string>(cell);
-        return fnv1a(s.data(), s.size(), 14695981039346656037ULL ^ 0x04ULL);
     }
+    const std::string& s = std::get<std::string>(cell);
+    return fnv1a(s.data(), s.size(), 14695981039346656037ULL ^ 0x04ULL);
 }
 
-// Combine per-column cell hashes into a single 64-bit row hash.
-// Uses FNV multiply-xor chaining so column order is significant.
+// Combine per-column hashes into a single 64-bit row hash.
+// FNV multiply-xor chaining makes column order significant so
+// row(A,B) != row(B,A) for distinct A and B.
 static uint64_t hash_row(const Frame& frame, size_t row,
                          const std::vector<size_t>& cols) noexcept {
     uint64_t h = 14695981039346656037ULL;
@@ -314,39 +320,136 @@ Frame drop_duplicates(const Frame& frame, const std::optional<std::vector<std::s
 
     auto col_indices = resolve_subset(frame, subset);
 
+    // Design: hash_row() is a fast O(1) first-pass filter.
+    //   hash miss  → row is definitely unique; no row_key() call needed.
+    //   hash hit   → row_key() is called lazily to confirm true equality
+    //                and guard against the (astronomically rare) FNV-1a collision.
+    //
+    // Each hash bucket stores a vector of (serialized_key, metadata) pairs.
+    // The vector has exactly one entry in the normal case (no collision);
+    // a second entry is added only on a genuine hash collision.
+    // row_key() for a stored entry is computed lazily the first time a hit
+    // arrives so that truly unique rows never pay the serialization cost.
+
     if (keep == "first") {
-        std::unordered_set<uint64_t> seen;
+        // bucket: vector of (row_key, first_row_index)
+        // row_key string is empty until the bucket's first hash hit forces it.
+        std::unordered_map<uint64_t,
+                           std::vector<std::pair<std::string, size_t>>> seen;
         seen.reserve(frame.num_rows());
         std::vector<size_t> keep_rows;
+
         for (size_t r = 0; r < frame.num_rows(); ++r) {
-            if (seen.insert(hash_row(frame, r, col_indices)).second) {
+            uint64_t h = hash_row(frame, r, col_indices);
+            auto it = seen.find(h);
+            if (it == seen.end()) {
+                // Fast path: hash miss — unique row, no serialization needed yet.
+                seen.emplace(h, std::vector<std::pair<std::string, size_t>>{{"", r}});
                 keep_rows.push_back(r);
+            } else {
+                // Hash hit: verify with full key equality to rule out collision.
+                std::string cur = row_key(frame, r, col_indices);
+                auto& bucket = it->second;
+                bool is_dup = false;
+                for (auto& [stored_key, stored_idx] : bucket) {
+                    if (stored_key.empty()) {
+                        // Lazy: compute the stored entry's key on first hit.
+                        stored_key = row_key(frame, stored_idx, col_indices);
+                    }
+                    if (stored_key == cur) {
+                        is_dup = true;
+                        break;
+                    }
+                }
+                if (!is_dup) {
+                    // Hash collision (not a duplicate) — keep this row too.
+                    bucket.emplace_back(cur, r);
+                    keep_rows.push_back(r);
+                }
             }
         }
         return select_rows(frame, keep_rows);
+
     } else if (keep == "last") {
-        std::unordered_map<uint64_t, size_t> last_seen;
+        // bucket: vector of (row_key, last_row_index)
+        std::unordered_map<uint64_t,
+                           std::vector<std::pair<std::string, size_t>>> last_seen;
         last_seen.reserve(frame.num_rows());
+
         for (size_t r = 0; r < frame.num_rows(); ++r) {
-            last_seen[hash_row(frame, r, col_indices)] = r;
+            uint64_t h = hash_row(frame, r, col_indices);
+            auto it = last_seen.find(h);
+            if (it == last_seen.end()) {
+                last_seen.emplace(h, std::vector<std::pair<std::string, size_t>>{{"", r}});
+            } else {
+                std::string cur = row_key(frame, r, col_indices);
+                auto& bucket = it->second;
+                bool found = false;
+                for (auto& [stored_key, stored_idx] : bucket) {
+                    if (stored_key.empty()) {
+                        stored_key = row_key(frame, stored_idx, col_indices);
+                    }
+                    if (stored_key == cur) {
+                        stored_idx = r;  // update to last occurrence
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    // Hash collision — separate unique key in this bucket.
+                    bucket.emplace_back(cur, r);
+                }
+            }
         }
+
         std::vector<size_t> keep_rows;
-        keep_rows.reserve(last_seen.size());
-        for (auto& [_, ri] : last_seen) {
-            keep_rows.push_back(ri);
+        for (auto& [_, bucket] : last_seen) {
+            for (auto& [_, idx] : bucket) {
+                keep_rows.push_back(idx);
+            }
         }
         std::sort(keep_rows.begin(), keep_rows.end());
         return select_rows(frame, keep_rows);
+
     } else if (keep == "none") {
-        std::unordered_map<uint64_t, std::vector<size_t>> groups;
+        // bucket: vector of (row_key, vector_of_row_indices)
+        std::unordered_map<uint64_t,
+                           std::vector<std::pair<std::string, std::vector<size_t>>>> groups;
         groups.reserve(frame.num_rows());
+
         for (size_t r = 0; r < frame.num_rows(); ++r) {
-            groups[hash_row(frame, r, col_indices)].push_back(r);
+            uint64_t h = hash_row(frame, r, col_indices);
+            auto it = groups.find(h);
+            if (it == groups.end()) {
+                groups.emplace(h, std::vector<std::pair<std::string, std::vector<size_t>>>{
+                    {"", std::vector<size_t>{r}}});
+            } else {
+                std::string cur = row_key(frame, r, col_indices);
+                auto& bucket = it->second;
+                bool found = false;
+                for (auto& [stored_key, rows] : bucket) {
+                    if (stored_key.empty()) {
+                        stored_key = row_key(frame, rows[0], col_indices);
+                    }
+                    if (stored_key == cur) {
+                        rows.push_back(r);
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    // Hash collision — new distinct key in same bucket.
+                    bucket.emplace_back(cur, std::vector<size_t>{r});
+                }
+            }
         }
+
         std::vector<size_t> keep_rows;
-        for (auto& [_, rows] : groups) {
-            if (rows.size() == 1) {
-                keep_rows.push_back(rows[0]);
+        for (auto& [_, bucket] : groups) {
+            for (auto& [_, rows] : bucket) {
+                if (rows.size() == 1) {
+                    keep_rows.push_back(rows[0]);
+                }
             }
         }
         std::sort(keep_rows.begin(), keep_rows.end());
