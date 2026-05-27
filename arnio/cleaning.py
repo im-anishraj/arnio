@@ -1991,17 +1991,20 @@ def normalize_minmax(
         If the feature range is invalid (e.g. min >= max) or if subset contains unknown or non-numeric columns.
     """
     import pandas as pd
+
     from .convert import from_pandas, to_pandas
-    from .frame import ArFrame
 
     if not isinstance(feature_range, tuple) or len(feature_range) != 2:
         raise ValueError("feature_range must be a tuple of (min, max)")
 
     range_min, range_max = feature_range
     if range_min >= range_max:
-        raise ValueError(f"Invalid feature_range {feature_range}: min must be less than max")
+        raise ValueError(
+            f"Invalid feature_range {feature_range}: min must be less than max"
+        )
 
     dtypes = frame.dtypes
+
     def _is_supported_numeric(col_name: str) -> bool:
         return dtypes.get(col_name) in ("int64", "float64")
 
