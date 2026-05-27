@@ -37,6 +37,17 @@ import arnio as ar
 from arnio.convert import to_pandas
 
 
+def _positive_int(value):
+    """Argparse type validator that requires a positive integer."""
+    try:
+        ivalue = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{value!r} is not a valid integer")
+    if ivalue < 1:
+        raise argparse.ArgumentTypeError(f"{value!r} must be >= 1")
+    return ivalue
+
+
 def _make_frame(n_rows: int) -> ar.ArFrame:
     """Return an ArFrame with ~10% duplicate rows and mixed dtypes."""
     rng = np.random.default_rng(42)
@@ -91,7 +102,7 @@ def run(n_rows: int = 500_000, runs: int = 5) -> None:
     print(f"  {'hash_pandas_object     [candidate]':<35} {avg_c * 1000:>10.1f} ms")
     print(f"{'':=<65}")
     print(
-        f"  Speedup: {speedup:.2f}x  {'✓ candidate faster' if speedup > 1 else '✗ baseline faster'}"
+        f"  Speedup: {speedup:.2f}x  {'(+) candidate faster' if speedup > 1 else '(-) baseline faster'}"
     )
     print(f"{'':=<65}")
 
@@ -100,7 +111,7 @@ def run(n_rows: int = 500_000, runs: int = 5) -> None:
     candidate_count = int(
         pd.util.hash_pandas_object(df, index=False).duplicated().sum()
     )
-    match = "✓" if baseline_count == candidate_count else "✗ MISMATCH"
+    match = "(verified)" if baseline_count == candidate_count else "MISMATCH"
     print(f"\n  duplicate_rows = {baseline_count}  {match}")
 
 
@@ -108,7 +119,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Benchmark hash_pandas_object vs df.duplicated() for duplicate counting"
     )
-    parser.add_argument("--rows", type=int, default=500_000, help="Number of rows")
-    parser.add_argument("--runs", type=int, default=5, help="Repetitions per approach")
+    parser.add_argument(
+        "--rows", type=_positive_int, default=500_000, help="Number of rows"
+    )
+    parser.add_argument(
+        "--runs", type=_positive_int, default=5, help="Repetitions per approach"
+    )
     args = parser.parse_args()
     run(n_rows=args.rows, runs=args.runs)

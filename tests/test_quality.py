@@ -1,9 +1,14 @@
 """Tests for data quality profiling and smart cleaning."""
 
+import io
+import json
+import math
+
 import pandas as pd
 import pytest
 
 import arnio as ar
+from arnio.quality import _validate_gate_bool, _validate_gate_threshold
 
 
 def test_profile_reports_quality_signals(tmp_path):
@@ -434,6 +439,18 @@ def test_auto_clean_strict_casts_require_explicit_opt_in():
         ar.auto_clean(frame, mode="strict")
 
 
+def test_exclude_columns_prevents_leakage_in_json():
+    import json
+
+    frame = ar.from_pandas(pd.DataFrame({"secret_token": ["true", "false"]}))
+    report = ar.profile(frame)
+
+    report_dict = report.to_dict(exclude_columns=["secret_token"])
+    json_str = json.dumps(report_dict)
+
+    assert "secret_token" not in json_str
+
+
 def test_auto_clean_dry_run_returns_report_without_mutating():
     frame = ar.from_pandas(pd.DataFrame({"active": ["true", "false"]}))
 
@@ -442,6 +459,47 @@ def test_auto_clean_dry_run_returns_report_without_mutating():
     assert isinstance(report, ar.DataQualityReport)
     assert ("cast_types", {"active": "bool"}) in report.suggestions
     assert frame.dtypes["active"] == "string"
+
+
+def test_auto_clean_dry_run_with_return_report_raises():
+    frame = ar.from_pandas(pd.DataFrame({"name": [" Alice ", " Bob "]}))
+
+    with pytest.raises(
+        ValueError, match="return_report=True cannot be used with dry_run=True"
+    ):
+        ar.auto_clean(frame, dry_run=True, return_report=True)
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "yes",
+        1,
+        None,
+        [],
+        object(),
+    ],
+    ids=["string", "integer", "none", "list", "object"],
+)
+def test_auto_clean_rejects_non_boolean_return_report(value):
+    frame = ar.from_pandas(pd.DataFrame({"name": [" Alice ", " Bob "]}))
+
+    with pytest.raises(TypeError, match="return_report must be a bool"):
+        ar.auto_clean(frame, return_report=value)
+
+
+def test_auto_clean_accepts_boolean_return_report_values():
+    frame = ar.from_pandas(pd.DataFrame({"name": [" Alice ", " Bob "]}))
+
+    clean_only = ar.auto_clean(frame, return_report=False)
+    clean_with_report = ar.auto_clean(frame, return_report=True)
+
+    assert isinstance(clean_only, ar.ArFrame)
+    assert isinstance(clean_with_report, tuple)
+    assert len(clean_with_report) == 2
+    cleaned, report = clean_with_report
+    assert isinstance(cleaned, ar.ArFrame)
+    assert isinstance(report, ar.DataQualityReport)
 
 
 def test_auto_clean_rejects_unknown_mode(sample_csv):
@@ -628,6 +686,25 @@ def test_column_profile_to_dict_redacts_sample_values_direct(tmp_path):
     assert report.columns["name"].sample_values == ["Alice", "Bob"]
 
 
+@pytest.mark.parametrize(
+    "invalid_value",
+    ["true", 1, None, ["redact"], object()],
+)
+def test_redact_sample_values_requires_bool(tmp_path, invalid_value):
+    path = tmp_path / "redact_type.csv"
+    path.write_text("name\nAlice\n")
+    report = ar.profile(ar.read_csv(path), sample_size=1)
+
+    with pytest.raises(TypeError, match="redact_sample_values must be a bool"):
+        report.to_dict(redact_sample_values=invalid_value)
+
+    with pytest.raises(TypeError, match="redact_sample_values must be a bool"):
+        report.to_json(redact_sample_values=invalid_value)
+
+    with pytest.raises(TypeError, match="redact_sample_values must be a bool"):
+        report.columns["name"].to_dict(redact_sample_values=invalid_value)
+
+
 def test_profile_sample_size_validation(tmp_path):
     path = tmp_path / "sample.csv"
     path.write_text("id\n1\n")
@@ -807,6 +884,225 @@ def test_identifier_numeric_cast_prevention():
     assert list(result["zip_code"]) == ["01234", "02345", "03456"]
 
 
+def test_profile_detects_near_constant_column():
+    frame = ar.from_pandas(
+        pd.DataFrame({"status": (["active"] * 95 + ["inactive"] * 5)})
+    )
+
+    report = ar.profile(frame)
+
+    assert "near_constant" in report.columns["status"].warnings
+    assert "constant" not in report.columns["status"].warnings
+
+
+def test_profile_constant_column_not_marked_near_constant():
+    frame = ar.from_pandas(pd.DataFrame({"status": ["active"] * 100}))
+
+    report = ar.profile(frame)
+
+    assert "constant" in report.columns["status"].warnings
+    assert "near_constant" not in report.columns["status"].warnings
+
+
+def test_profile_balanced_column_not_marked_near_constant():
+    frame = ar.from_pandas(
+        pd.DataFrame({"status": (["active"] * 50 + ["inactive"] * 50)})
+    )
+
+    report = ar.profile(frame)
+
+    assert "near_constant" not in report.columns["status"].warnings
+
+
+def test_profile_near_constant_ignores_nulls():
+    frame = ar.from_pandas(
+        pd.DataFrame({"status": (["active"] * 95 + ["inactive"] * 5 + [None] * 20)})
+    )
+
+    report = ar.profile(frame)
+
+    assert "near_constant" in report.columns["status"].warnings
+
+
+def test_profile_near_constant_threshold_boundary():
+    frame = ar.from_pandas(
+        pd.DataFrame({"status": (["active"] * 95 + ["inactive"] * 5)})
+    )
+
+    report = ar.profile(frame)
+
+    assert "near_constant" in report.columns["status"].warnings
+
+
+def test_profile_detects_high_cardinality_identifier_column(tmp_path):
+    path = tmp_path / "ids.csv"
+    path.write_text(
+        "user_id\n" + "\n".join(f"id_{i}" for i in range(200)),
+        encoding="utf-8",
+    )
+
+    frame = ar.read_csv(path)
+    report = ar.profile(frame)
+
+    assert "high_cardinality" in report.columns["user_id"].warnings
+
+
+def test_profile_low_cardinality_column_not_marked_high_cardinality(tmp_path):
+    path = tmp_path / "status.csv"
+    values = ["active", "inactive"] * 100
+    path.write_text("status\n" + "\n".join(values), encoding="utf-8")
+
+    frame = ar.read_csv(path)
+    report = ar.profile(frame)
+
+    assert "high_cardinality" not in report.columns["status"].warnings
+
+
+def test_profile_constant_column_not_marked_high_cardinality(tmp_path):
+    path = tmp_path / "constant.csv"
+    path.write_text("user_id\n" + "\n".join(["same"] * 200), encoding="utf-8")
+
+    frame = ar.read_csv(path)
+    report = ar.profile(frame)
+
+    assert "high_cardinality" not in report.columns["user_id"].warnings
+
+
+def test_profile_null_heavy_column_not_marked_high_cardinality(tmp_path):
+    path = tmp_path / "null_heavy.csv"
+    values = [f"id_{i}" for i in range(20)] + [""] * 180
+    path.write_text("user_id\n" + "\n".join(values), encoding="utf-8")
+
+    frame = ar.read_csv(path)
+    report = ar.profile(frame)
+
+    assert "high_cardinality" not in report.columns["user_id"].warnings
+
+
+def test_profile_exclude_columns_default_behavior(sample_csv):
+    frame = ar.read_csv(sample_csv)
+
+    report = ar.profile(frame)
+
+    assert set(report.columns) == set(frame.columns)
+    assert report.column_count == len(frame.columns)
+
+
+def test_profile_exclude_columns_valid_exclusion(tmp_path):
+    path = tmp_path / "profile_exclude.csv"
+    path.write_text(
+        "id,status,raw_payload\n" "1,active,{a}\n" "2,inactive,{b}\n" "3,active,{c}\n",
+        encoding="utf-8",
+    )
+
+    frame = ar.read_csv(path)
+    report = ar.profile(frame, exclude_columns=["id", "raw_payload"])
+
+    assert list(report.columns) == ["status"]
+    assert report.column_count == 1
+    markdown = report.to_markdown()
+    html = report.to_html()
+
+    assert "| status |" in markdown
+    assert "| id |" not in markdown
+    assert "| raw_payload |" not in markdown
+    assert ">id<" not in html
+    assert ">raw_payload<" not in html
+
+
+def test_profile_exclude_columns_scopes_memory_usage(tmp_path):
+    path = tmp_path / "profile_memory_scope.csv"
+    large_values = ["x" * 1000 for _ in range(100)]
+    path.write_text(
+        "keep,drop\n" + "\n".join(f"{i},{large_values[i]}" for i in range(100)) + "\n",
+        encoding="utf-8",
+    )
+
+    frame = ar.read_csv(path)
+
+    full_report = ar.profile(frame)
+    scoped_report = ar.profile(frame, exclude_columns=["drop"])
+
+    assert scoped_report.memory_usage < full_report.memory_usage
+
+
+def test_profile_default_memory_usage_matches_frame_memory_usage(sample_csv):
+    frame = ar.read_csv(sample_csv)
+
+    report = ar.profile(frame)
+
+    assert report.memory_usage == frame.memory_usage()
+
+
+def test_profile_exclude_columns_rejects_missing_column(sample_csv):
+    frame = ar.read_csv(sample_csv)
+
+    with pytest.raises(KeyError, match="Missing columns for profile"):
+        ar.profile(frame, exclude_columns=["missing"])
+
+
+@pytest.mark.parametrize(
+    "exclude_columns",
+    [
+        123,
+        (name for name in ["name"]),
+    ],
+)
+def test_profile_exclude_columns_rejects_non_sequences(sample_csv, exclude_columns):
+    frame = ar.read_csv(sample_csv)
+
+    with pytest.raises(TypeError, match="exclude_columns must be a sequence"):
+        ar.profile(frame, exclude_columns=exclude_columns)
+
+
+def test_profile_exclude_columns_rejects_bare_string(sample_csv):
+    frame = ar.read_csv(sample_csv)
+
+    with pytest.raises(TypeError, match="exclude_columns must be a sequence"):
+        ar.profile(frame, exclude_columns="name")
+
+
+def test_profile_exclude_columns_rejects_non_string_items(sample_csv):
+    frame = ar.read_csv(sample_csv)
+
+    with pytest.raises(TypeError, match="exclude_columns must contain only string"):
+        ar.profile(frame, exclude_columns=["name", 123])
+
+
+def test_profile_exclude_columns_accepts_empty_list(sample_csv):
+    frame = ar.read_csv(sample_csv)
+
+    full_report = ar.profile(frame)
+    report = ar.profile(frame, exclude_columns=[])
+
+    assert list(report.columns) == list(full_report.columns)
+    assert report.column_count == full_report.column_count
+
+
+def test_profile_exclude_columns_scopes_report_metrics_and_suggestions(tmp_path):
+    path = tmp_path / "profile_scope.csv"
+    path.write_text(
+        "id,score\n" "1,10\n" "1,10\n" "2,20\n",
+        encoding="utf-8",
+    )
+
+    frame = ar.read_csv(path)
+    full_report = ar.profile(frame)
+    scoped_report = ar.profile(frame, exclude_columns=["id"])
+
+    assert full_report.column_count == 2
+    assert scoped_report.column_count == 1
+    assert list(scoped_report.columns) == ["score"]
+
+    assert full_report.duplicate_rows == 1
+    assert scoped_report.duplicate_rows == 1
+
+    assert all(
+        getattr(suggestion, "kwargs", {}).get("subset") != ["id"]
+        for suggestion in scoped_report.suggestions
+    )
+
+
 # ── string length statistics tests ───────────────────────────────────────────
 
 
@@ -922,10 +1218,44 @@ def test_report_to_markdown_basic(tmp_path):
     assert "| id | int64 | identifier |" in md
 
 
+def test_report_to_markdown_writes_to_stringio(sample_csv, tmp_path):
+    import io
+
+    frame = ar.read_csv(sample_csv)
+    report = ar.profile(frame)
+    buffer = io.StringIO()
+
+    result = report.to_markdown(output=buffer)
+
+    assert result is None
+    assert buffer.getvalue() == report.to_markdown()
+    assert "# Data Quality Report" in buffer.getvalue()
+
+
+def test_report_to_markdown_writes_to_text_file_handle(sample_csv, tmp_path):
+    frame = ar.read_csv(sample_csv)
+    report = ar.profile(frame)
+    out_path = tmp_path / "report.md"
+
+    with out_path.open("w", encoding="utf-8") as f:
+        result = report.to_markdown(output=f)
+
+    assert result is None
+    assert out_path.read_text(encoding="utf-8") == report.to_markdown()
+
+
+def test_report_to_markdown_rejects_invalid_output(sample_csv, tmp_path):
+    frame = ar.read_csv(sample_csv)
+    report = ar.profile(frame)
+
+    with pytest.raises(TypeError, match="output must be a writable text stream"):
+        report.to_markdown(output=object())
+
+
 def test_report_to_markdown_includes_uniqueness_metrics(tmp_path):
     path = tmp_path / "unique_metrics.csv"
 
-    path.write_text("id,name\n" "1,Alice\n" "2,Bob\n" "2,Bob\n")
+    path.write_text("id,name\n1,Alice\n2,Bob\n2,Bob\n")
 
     report = ar.profile(ar.read_csv(path))
 
@@ -991,6 +1321,48 @@ def test_report_to_markdown_escapes_pipe_characters_in_column_cells():
     assert "contains \\| pipe" in md
 
 
+def test_report_to_markdown_escapes_newlines_in_cell_values():
+    """Newlines in column names or warnings must not break Markdown table rows."""
+    from arnio.quality import ColumnProfile, DataQualityReport
+
+    report = DataQualityReport(
+        row_count=2,
+        column_count=1,
+        memory_usage=128,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={
+            "col\nname": ColumnProfile(
+                name="col\nname",
+                dtype="string\r\nwith newline",
+                semantic_type="text\rwith CR",
+                row_count=2,
+                null_count=0,
+                null_ratio=0.0,
+                unique_count=2,
+                unique_ratio=1.0,
+                warnings=["warn\nwith newline", "warn\r\nwith CRLF"],
+            )
+        },
+        suggestions=[],
+    )
+
+    md = report.to_markdown()
+
+    # Newlines must be replaced with <br>
+    assert "<br>" in md
+    assert "col\nname" not in md
+    assert "warn\nwith newline" not in md
+    assert "warn\r\nwith CRLF" not in md
+    assert "string\r\nwith newline" not in md
+    assert "text\rwith CR" not in md
+
+    # col name and warning content should still appear, escaped
+    assert "col<br>name" in md
+    assert "warn<br>with newline" in md
+    assert "warn<br>with CRLF" in md
+
+
 def test_report_to_markdown_empty_sections():
     report = ar.DataQualityReport(
         row_count=0,
@@ -1028,6 +1400,79 @@ def test_report_to_markdown_suggestions_stable_ordering():
         '`custom_clean`: `{"a_item": "test", "m_item": true, "z_item": 100}`'
     )
     assert expected_substring in md
+
+
+def test_report_to_markdown_limits_suggestions():
+    report = ar.DataQualityReport(
+        row_count=2,
+        column_count=1,
+        memory_usage=100,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+        suggestions=[
+            ("strip_whitespace", {"columns": ["name"]}),
+            ("drop_nulls", {"subset": ["age"]}),
+            ("normalize_case", {"columns": ["city"]}),
+        ],
+    )
+
+    md = report.to_markdown(max_suggestions=2)
+
+    assert "strip_whitespace" in md
+    assert "drop_nulls" in md
+    assert "normalize_case" not in md
+    assert "Showing 2 of 3 suggestions." in md
+    assert len(report.suggestions) == 3
+
+
+def test_report_to_markdown_max_suggestions_none_preserves_default():
+    report = ar.DataQualityReport(
+        row_count=2,
+        column_count=1,
+        memory_usage=100,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+        suggestions=[
+            ("strip_whitespace", {"columns": ["name"]}),
+            ("drop_nulls", {"subset": ["age"]}),
+        ],
+    )
+
+    assert report.to_markdown(max_suggestions=None) == report.to_markdown()
+
+
+@pytest.mark.parametrize("value", [0, -1])
+def test_report_to_markdown_rejects_non_positive_max_suggestions(value):
+    report = ar.DataQualityReport(
+        row_count=0,
+        column_count=0,
+        memory_usage=0,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+        suggestions=[],
+    )
+
+    with pytest.raises(ValueError, match="max_suggestions must be positive"):
+        report.to_markdown(max_suggestions=value)
+
+
+@pytest.mark.parametrize("value", [True, 1.5, "2"])
+def test_report_to_markdown_rejects_invalid_max_suggestions_type(value):
+    report = ar.DataQualityReport(
+        row_count=0,
+        column_count=0,
+        memory_usage=0,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+        suggestions=[],
+    )
+
+    with pytest.raises(TypeError, match="max_suggestions must be an integer or None"):
+        report.to_markdown(max_suggestions=value)
 
 
 def test_report_to_markdown_suggestions_normal_existing_output(tmp_path):
@@ -1149,6 +1594,142 @@ def test_data_quality_report_to_html(tmp_path):
     report.to_html(file_path=str(out_path))
     assert out_path.exists()
     assert out_path.read_text(encoding="utf-8").startswith("<!DOCTYPE html>")
+
+
+def test_report_to_html_rejects_invalid_filepath_types():
+    report = ar.DataQualityReport(
+        row_count=0,
+        column_count=0,
+        memory_usage=0,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+        suggestions=[],
+    )
+
+    invalid_paths = [True, False, 123, object()]
+
+    for invalid_path in invalid_paths:
+        with pytest.raises(TypeError, match="must be a string, bytes, or os.PathLike"):
+            report.to_html(file_path=invalid_path)
+
+
+def test_report_to_html_limits_suggestions():
+    report = ar.DataQualityReport(
+        row_count=2,
+        column_count=1,
+        memory_usage=100,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+        suggestions=[
+            ("strip_whitespace", {"columns": ["name"]}),
+            ("drop_nulls", {"subset": ["age"]}),
+            ("normalize_case", {"columns": ["city"]}),
+        ],
+    )
+
+    html = report.to_html(max_suggestions=2)
+
+    assert "strip_whitespace" in html
+    assert "drop_nulls" in html
+    assert "normalize_case" not in html
+    assert "Showing 2 of 3 suggestions." in html
+    assert len(report.suggestions) == 3
+
+
+def test_report_to_html_max_suggestions_none_preserves_default():
+    report = ar.DataQualityReport(
+        row_count=2,
+        column_count=1,
+        memory_usage=100,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+        suggestions=[
+            ("strip_whitespace", {"columns": ["name"]}),
+            ("drop_nulls", {"subset": ["age"]}),
+        ],
+    )
+
+    assert report.to_html(max_suggestions=None) == report.to_html()
+
+
+@pytest.mark.parametrize("value", [0, -1])
+def test_report_to_html_rejects_non_positive_max_suggestions(value):
+    report = ar.DataQualityReport(
+        row_count=0,
+        column_count=0,
+        memory_usage=0,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+        suggestions=[],
+    )
+
+    with pytest.raises(ValueError, match="max_suggestions must be positive"):
+        report.to_html(max_suggestions=value)
+
+
+@pytest.mark.parametrize("value", [True, 1.5, "2"])
+def test_report_to_html_rejects_invalid_max_suggestions_type(value):
+    report = ar.DataQualityReport(
+        row_count=0,
+        column_count=0,
+        memory_usage=0,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+        suggestions=[],
+    )
+
+    with pytest.raises(TypeError, match="max_suggestions must be an integer or None"):
+        report.to_html(max_suggestions=value)
+
+
+def test_report_to_html_writes_to_stringio(sample_csv, tmp_path):
+    import io
+
+    frame = ar.read_csv(sample_csv)
+    report = ar.profile(frame)
+    buffer = io.StringIO()
+
+    result = report.to_html(output=buffer)
+
+    assert result is None
+    assert buffer.getvalue() == report.to_html()
+    assert "<html" in buffer.getvalue()
+
+
+def test_report_to_html_writes_to_text_file_handle(sample_csv, tmp_path):
+    frame = ar.read_csv(sample_csv)
+    report = ar.profile(frame)
+    out_path = tmp_path / "report.html"
+
+    with out_path.open("w", encoding="utf-8") as f:
+        result = report.to_html(output=f)
+
+    assert result is None
+    assert out_path.read_text(encoding="utf-8") == report.to_html()
+
+
+def test_report_to_html_rejects_invalid_output(sample_csv, tmp_path):
+    frame = ar.read_csv(sample_csv)
+    report = ar.profile(frame)
+
+    with pytest.raises(TypeError, match="output must be a writable text stream"):
+        report.to_html(output=object())
+
+
+def test_report_to_html_preserves_file_path_behavior(sample_csv, tmp_path):
+    frame = ar.read_csv(sample_csv)
+    report = ar.profile(frame)
+    out_path = tmp_path / "report.html"
+
+    result = report.to_html(file_path=str(out_path))
+
+    assert result == report.to_html()
+    assert out_path.read_text(encoding="utf-8") == result
 
 
 def test_data_quality_report_to_html_focused(tmp_path):
@@ -1576,3 +2157,662 @@ def test_profile_duplicate_count_hash_path_matches_pandas_baseline_at_scale():
 
     assert hash_count == baseline_count
     assert ar.profile(frame).duplicate_rows == baseline_count
+
+
+# ── numeric histogram tests ──────────────────────────────────────────────────
+
+
+def test_profile_numeric_histogram_normal():
+    # Test normal distribution / sequence
+    df = pd.DataFrame({"nums": list(range(1, 101))})
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+    profile = report.columns["nums"]
+
+    assert profile.histogram is not None
+    assert len(profile.histogram) == 10
+
+    # Check that counts sum to 100
+    counts = [c for _, _, c, _ in profile.histogram]
+    ratios = [r for _, _, _, r in profile.histogram]
+    assert sum(counts) == 100
+    assert abs(sum(ratios) - 1.0) < 1e-9
+
+    # Check bounds
+    assert profile.histogram[0][0] == 1.0
+    assert profile.histogram[-1][1] == 100.0
+
+    # Serialization test
+    dct = profile.to_dict()
+    assert "histogram" in dct
+    assert len(dct["histogram"]) == 10
+    assert dct["histogram"][0]["bucket_start"] == 1.0
+    assert dct["histogram"][0]["count"] == 10
+    assert abs(dct["histogram"][0]["ratio"] - 0.1) < 1e-9
+
+
+def test_profile_numeric_histogram_constant_values():
+    # Test constant values
+    df = pd.DataFrame({"nums": [5.0] * 20})
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+    profile = report.columns["nums"]
+
+    assert profile.histogram is not None
+    assert len(profile.histogram) == 10
+
+    counts = [c for _, _, c, _ in profile.histogram]
+    assert sum(counts) == 20
+
+    # numpy.histogram handles constant values by setting bin boundaries offset by a small delta (typically +/- 0.5)
+    # let's assert the counts are correct and serialize properly
+    dct = profile.to_dict()
+    assert "histogram" in dct
+    assert len(dct["histogram"]) == 10
+
+
+def test_profile_numeric_histogram_empty_and_all_nulls():
+    # All nulls
+    df = pd.DataFrame({"nums": [None, None, None]})
+    df["nums"] = df["nums"].astype("float64")
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+    profile = report.columns["nums"]
+    assert profile.histogram is None
+
+    # Empty column (0 rows)
+    df_empty = pd.DataFrame({"nums": pd.Series(dtype="float64")})
+    frame_empty = ar.from_pandas(df_empty)
+    report_empty = ar.profile(frame_empty)
+    profile_empty = report_empty.columns["nums"]
+    assert profile_empty.histogram is None
+
+
+def test_profile_numeric_histogram_missing_values():
+    # Mix of nulls and numeric values
+    df = pd.DataFrame({"nums": [10.0, None, 20.0, None, 30.0]})
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+    profile = report.columns["nums"]
+
+    assert profile.histogram is not None
+    assert len(profile.histogram) == 10
+    counts = [c for _, _, c, _ in profile.histogram]
+    assert sum(counts) == 3  # only non-null values are counted
+
+    ratios = [r for _, _, _, r in profile.histogram]
+    assert abs(sum(ratios) - 1.0) < 1e-5
+
+
+def test_profile_numeric_histogram_small_sample():
+    # Just 1 value
+    df = pd.DataFrame({"nums": [42.0]})
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+    profile = report.columns["nums"]
+
+    assert profile.histogram is not None
+    assert len(profile.histogram) == 10
+    counts = [c for _, _, c, _ in profile.histogram]
+    assert sum(counts) == 1
+
+
+def test_profile_numeric_histogram_non_numeric():
+    # String column should have histogram = None
+    df = pd.DataFrame({"names": ["Alice", "Bob", "Charlie"]})
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+    profile = report.columns["names"]
+
+    assert profile.histogram is None
+    assert "histogram" in profile.to_dict()
+    assert profile.to_dict()["histogram"] is None
+
+
+def test_profile_numeric_histogram_to_pandas():
+    df = pd.DataFrame({"nums": [1, 2, 3]})
+    frame = ar.from_pandas(df)
+    report = ar.profile(frame)
+
+    pdf = report.to_pandas()
+    assert "histogram" in pdf.columns
+    assert pdf.loc[pdf["name"] == "nums", "histogram"].values[0] is not None
+
+
+def test_profile_numeric_histogram_non_finite_values():
+    # Test handling of infinite values in histogram calculation
+    from arnio._core import _DType, _Frame
+    from arnio.frame import ArFrame
+
+    cpp_frame = _Frame.from_dict(
+        {"nums": [1.0, 2.0, float("inf"), float("-inf"), None, 3.0]},
+        {"nums": _DType.FLOAT64},
+    )
+    frame = ArFrame(cpp_frame)
+    report = ar.profile(frame)
+    profile = report.columns["nums"]
+
+    # The histogram should filter out +/- inf and NaNs, binning only [1.0, 2.0, 3.0]
+    assert profile.histogram is not None
+    assert len(profile.histogram) == 10
+
+    counts = [c for _, _, c, _ in profile.histogram]
+    assert sum(counts) == 3
+
+    # All infinities (no finite values to bin)
+    cpp_frame_all_inf = _Frame.from_dict(
+        {"nums": [float("inf"), float("-inf")]},
+        {"nums": _DType.FLOAT64},
+    )
+    frame_all_inf = ArFrame(cpp_frame_all_inf)
+    report_all_inf = ar.profile(frame_all_inf)
+    profile_all_inf = report_all_inf.columns["nums"]
+    assert profile_all_inf.histogram is None
+
+
+def test_report_to_markdown_escapes_newlines_in_column_cells():
+    report = ar.DataQualityReport(
+        row_count=2,
+        column_count=1,
+        memory_usage=128,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={
+            "multi\nline": ar.ColumnProfile(
+                name="multi\nline",
+                dtype="string",
+                semantic_type="free\ntext",
+                row_count=2,
+                null_count=0,
+                null_ratio=0.0,
+                unique_count=2,
+                unique_ratio=1.0,
+                warnings=["contains\nnewline"],
+            )
+        },
+        suggestions=[],
+    )
+    md = report.to_markdown()
+    assert "multi<br>line" in md
+    assert "free<br>text" in md
+    assert "contains<br>newline" in md
+    assert "| multi\nline |" not in md
+
+
+def test_quality_gate_markdown_escapes_pipe_characters():
+    report = ar.DataQualityReport(
+        row_count=2,
+        column_count=1,
+        memory_usage=128,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={
+            "col|name": ar.ColumnProfile(
+                name="col|name",
+                dtype="str|ing",
+                semantic_type="cat|egory",
+                row_count=2,
+                null_count=0,
+                null_ratio=0.0,
+                unique_count=2,
+                unique_ratio=1.0,
+                warnings=["pipe|warning"],
+            )
+        },
+        suggestions=[],
+    )
+
+    md = report.to_markdown()
+
+    assert r"col\|name" in md
+    assert r"str\|ing" in md
+    assert r"cat\|egory" in md
+    assert r"pipe\|warning" in md
+    assert "| col|name |" not in md
+
+
+def test_data_quality_report_to_dict_exclude_columns():
+    frame = ar.read_csv(io.StringIO("name,age\nalice,20\nbob,30\n"))
+
+    report = ar.profile(frame)
+
+    result = report.to_dict(exclude_columns=["age"])
+
+    assert "age" not in result["columns"]
+    assert "name" in result["columns"]
+
+
+def test_data_quality_report_to_dict_default_behavior():
+    frame = ar.read_csv(io.StringIO("name\nalice\nbob\n"))
+
+    report = ar.profile(frame)
+
+    result = report.to_dict()
+
+    assert "name" in result["columns"]
+
+
+def test_data_quality_report_to_dict_unknown_column():
+    frame = ar.read_csv(io.StringIO("name\nalice\nbob\n"))
+
+    report = ar.profile(frame)
+
+    result = report.to_dict(exclude_columns=["missing_column"])
+
+    assert "name" in result["columns"]
+
+
+def test_data_quality_report_to_dict_invalid_exclude_columns_type():
+    frame = ar.read_csv(io.StringIO("name\nalice\nbob\n"))
+
+    report = ar.profile(frame)
+
+    with pytest.raises(TypeError):
+        report.to_dict(exclude_columns="name")
+
+
+def test_data_quality_report_to_dict_invalid_exclude_columns_entries():
+    frame = ar.read_csv(io.StringIO("name\nalice\nbob\n"))
+
+    report = ar.profile(frame)
+
+    with pytest.raises(TypeError):
+        report.to_dict(exclude_columns=["name", 123])
+
+
+def test_data_quality_report_to_dict_excludes_columns_from_suggestions():
+    report = ar.DataQualityReport(
+        row_count=2,
+        column_count=2,
+        memory_usage=100,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        quality_score=1.0,
+        score_components={},
+        columns={},
+        suggestions=[
+            (
+                "strip_whitespace",
+                {
+                    "subset": ["name", "age"],
+                    "cast_types": {
+                        "name": "string",
+                        "age": "int",
+                    },
+                },
+            )
+        ],
+    )
+
+    result = report.to_dict(exclude_columns=["age"])
+
+    kwargs = result["suggestions"][0]["kwargs"]
+
+    assert kwargs["subset"] == ["name"]
+    assert kwargs["cast_types"] == {"name": "string"}
+
+
+def test_data_quality_report_to_dict_preserves_non_column_suggestion_values():
+    report = ar.DataQualityReport(
+        row_count=2,
+        column_count=1,
+        memory_usage=100,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        quality_score=1.0,
+        score_components={},
+        columns={},
+        suggestions=[
+            (
+                "custom_step",
+                {
+                    "message": ["age"],
+                    "metadata": {"age": "keep"},
+                    "threshold": 5,
+                },
+            )
+        ],
+    )
+
+    result = report.to_dict(exclude_columns=["age"])
+
+    kwargs = result["suggestions"][0]["kwargs"]
+
+    assert kwargs["message"] == ["age"]
+    assert kwargs["metadata"] == {"age": "keep"}
+    assert kwargs["threshold"] == 5
+
+
+def test_data_quality_report_to_json_returns_valid_json():
+    report = ar.DataQualityReport(
+        row_count=10,
+        column_count=1,
+        memory_usage=100,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+    )
+
+    json_output = report.to_json()
+
+    parsed = json.loads(json_output)
+
+    assert parsed["row_count"] == 10
+    assert parsed["column_count"] == 1
+
+
+def test_data_quality_report_to_json_writes_to_stringio():
+    import io
+
+    report = ar.profile(
+        ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "name": ["Alice", "Bob"],
+                    "age": [30, 40],
+                }
+            )
+        )
+    )
+    buffer = io.StringIO()
+
+    result = report.to_json(output=buffer)
+
+    assert result is None
+    assert buffer.getvalue() == report.to_json()
+
+
+def test_data_quality_report_to_json_writes_to_text_file_handle(tmp_path):
+    report = ar.profile(
+        ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "name": ["Alice", "Bob"],
+                    "age": [30, 40],
+                }
+            )
+        )
+    )
+    out_path = tmp_path / "report.json"
+
+    with out_path.open("w", encoding="utf-8") as f:
+        result = report.to_json(output=f, indent=2)
+
+    assert result is None
+    assert out_path.read_text(encoding="utf-8") == report.to_json(indent=2)
+
+
+def test_data_quality_report_to_json_rejects_invalid_output():
+    report = ar.profile(
+        ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "name": ["Alice", "Bob"],
+                    "age": [30, 40],
+                }
+            )
+        )
+    )
+
+    with pytest.raises(TypeError, match="output must be a writable text stream"):
+        report.to_json(output=object())
+
+
+def test_data_quality_report_to_json_output_preserves_options():
+    import io
+
+    report = ar.profile(
+        ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "name": ["Alice", "Bob"],
+                    "age": [30, 40],
+                }
+            )
+        )
+    )
+    buffer = io.StringIO()
+
+    result = report.to_json(
+        output=buffer,
+        indent=2,
+        redact_sample_values=True,
+        exclude_columns=["age"],
+    )
+
+    assert result is None
+    assert buffer.getvalue() == report.to_json(
+        indent=2,
+        redact_sample_values=True,
+        exclude_columns=["age"],
+    )
+
+
+def test_data_quality_report_to_json_indent():
+    report = ar.DataQualityReport(
+        row_count=10,
+        column_count=1,
+        memory_usage=100,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+    )
+
+    json_output = report.to_json(indent=2)
+
+    assert "\n" in json_output
+    assert '  "row_count"' in json_output
+
+
+def test_data_quality_report_to_json_exclude_columns():
+    from arnio._core import _DType, _Frame
+    from arnio.frame import ArFrame
+
+    cpp_frame = _Frame.from_dict(
+        {
+            "name": ["John"],
+            "age": [21],
+        },
+        {
+            "name": _DType.STRING,
+            "age": _DType.INT64,
+        },
+    )
+
+    frame = ArFrame(cpp_frame)
+
+    report = ar.profile(frame)
+
+    json_output = report.to_json(exclude_columns=["age"])
+
+    parsed = json.loads(json_output)
+
+    assert "name" in parsed["columns"]
+    assert "age" not in parsed["columns"]
+
+
+def test_data_quality_report_to_json_redact_sample_values():
+    from arnio._core import _DType, _Frame
+    from arnio.frame import ArFrame
+
+    cpp_frame = _Frame.from_dict(
+        {"name": ["John"]},
+        {"name": _DType.STRING},
+    )
+
+    frame = ArFrame(cpp_frame)
+
+    report = ar.profile(frame)
+
+    json_output = report.to_json(redact_sample_values=True)
+
+    parsed = json.loads(json_output)
+
+    assert parsed["columns"]["name"]["sample_values"] == ["[REDACTED]"]
+
+
+# --- Tests for ProfileComparison.to_json() ---
+
+
+def test_profile_comparison_to_json_returns_string():
+    frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+    p = ar.profile(frame)
+    comparison = ar.compare_profiles(p, p)
+    result = comparison.to_json()
+    assert isinstance(result, str)
+    parsed = json.loads(result)
+    assert "drift_report" in parsed
+    assert "status_counts" in parsed
+
+
+def test_profile_comparison_to_json_indent():
+    frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+    p = ar.profile(frame)
+    comparison = ar.compare_profiles(p, p)
+    result = comparison.to_json(indent=2)
+    assert "\n" in result
+
+
+def test_profile_comparison_to_json_output_stream():
+    frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+    p = ar.profile(frame)
+    comparison = ar.compare_profiles(p, p)
+    buf = io.StringIO()
+    ret = comparison.to_json(output=buf)
+    assert ret is None
+    assert len(buf.getvalue()) > 0
+
+
+def test_profile_comparison_to_json_invalid_output_raises():
+    frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+    p = ar.profile(frame)
+    comparison = ar.compare_profiles(p, p)
+    with pytest.raises(TypeError, match="writable text stream"):
+        comparison.to_json(output="not_a_stream")
+
+
+# --- ProfileComparison.to_markdown() ---
+
+
+def test_profile_comparison_to_markdown_returns_string():
+    frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+    p = ar.profile(frame)
+    comparison = ar.compare_profiles(p, p)
+    result = comparison.to_markdown()
+    assert isinstance(result, str)
+    assert "Profile Comparison Report" in result
+    assert "Column Drift" in result
+
+
+def test_profile_comparison_to_markdown_output_stream():
+    frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+    p = ar.profile(frame)
+    comparison = ar.compare_profiles(p, p)
+    buf = io.StringIO()
+    ret = comparison.to_markdown(output=buf)
+    assert ret is None
+    assert "Profile Comparison" in buf.getvalue()
+
+
+def test_profile_comparison_to_markdown_invalid_output_raises():
+    frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+    p = ar.profile(frame)
+    comparison = ar.compare_profiles(p, p)
+    with pytest.raises(TypeError, match="writable text stream"):
+        comparison.to_markdown(output=42)
+
+
+# --- Tests for QualityGateResult.to_json() ---
+
+
+def test_quality_gate_result_to_json_returns_string():
+    frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+    p = ar.profile(frame)
+    result = ar.check_quality_gates(p, p)
+    out = result.to_json()
+    assert isinstance(out, str)
+    parsed = json.loads(out)
+    assert "passed" in parsed
+    assert "issues" in parsed
+
+
+def test_quality_gate_result_to_json_indent():
+    frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+    p = ar.profile(frame)
+    result = ar.check_quality_gates(p, p)
+    out = result.to_json(indent=2)
+    assert "\n" in out
+
+
+def test_quality_gate_result_to_json_output_stream():
+    frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+    p = ar.profile(frame)
+    result = ar.check_quality_gates(p, p)
+    buf = io.StringIO()
+    ret = result.to_json(output=buf)
+    assert ret is None
+    assert len(buf.getvalue()) > 0
+
+
+def test_quality_gate_result_to_json_invalid_output_raises():
+    frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+    p = ar.profile(frame)
+    result = ar.check_quality_gates(p, p)
+    with pytest.raises(TypeError, match="writable text stream"):
+        result.to_json(output=123)
+
+
+def test_compare_profiles_mismatched_exclude_columns_hints_user():
+    df = pd.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6], "c": [7, 8, 9]})
+    frame = ar.from_pandas(df)
+    profile_a = ar.profile(frame, exclude_columns=["c"])
+    profile_b = ar.profile(frame)
+
+    with pytest.raises(ValueError, match="exclude_columns"):
+        ar.compare_profiles(profile_a, profile_b)
+
+
+class TestValidateGateThreshold:
+    def test_none_returns_none(self):
+        assert _validate_gate_threshold(None, "max_row_count_delta_ratio") is None
+
+    def test_int_returns_float(self):
+        result = _validate_gate_threshold(5, "max_row_count_delta_ratio")
+        assert result == 5.0
+        assert isinstance(result, float)
+
+    def test_float_returns_float(self):
+        result = _validate_gate_threshold(0.1, "max_row_count_delta_ratio")
+        assert result == 0.1
+
+    def test_bool_raises_type_error(self):
+        with pytest.raises(TypeError, match="must be a non-negative number or None"):
+            _validate_gate_threshold(True, "max_row_count_delta_ratio")
+
+    def test_string_raises_type_error(self):
+        with pytest.raises(TypeError, match="must be a non-negative number or None"):
+            _validate_gate_threshold("0.1", "max_row_count_delta_ratio")
+
+    def test_negative_raises_value_error(self):
+        with pytest.raises(ValueError, match="must be a finite non-negative number"):
+            _validate_gate_threshold(-0.1, "max_row_count_delta_ratio")
+
+    def test_infinity_raises_value_error(self):
+        with pytest.raises(ValueError, match="must be a finite non-negative number"):
+            _validate_gate_threshold(math.inf, "max_row_count_delta_ratio")
+
+
+class TestValidateGateBool:
+    def test_true_returns_true(self):
+        assert _validate_gate_bool(True, "allow_new_columns") is True
+
+    def test_false_returns_false(self):
+        assert _validate_gate_bool(False, "allow_new_columns") is False
+
+    def test_int_raises_type_error(self):
+        with pytest.raises(TypeError, match="must be a bool"):
+            _validate_gate_bool(0, "allow_new_columns")
+
+    def test_string_raises_type_error(self):
+        with pytest.raises(TypeError, match="must be a bool"):
+            _validate_gate_bool("true", "allow_new_columns")
