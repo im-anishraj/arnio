@@ -713,12 +713,13 @@ class Field:
                 )
             if not isinstance(self.required_if[0], str):
                 raise TypeError("required_if column name must be a string")
-        if self.min is not None:
-            if isinstance(self.min, bool) or not isinstance(self.min, (int, float)):
-                raise TypeError("min must be numeric or None")
-        if self.max is not None:
-            if isinstance(self.max, bool) or not isinstance(self.max, (int, float)):
-                raise TypeError("max must be numeric or None")
+        if self.dtype in {"int64", "float64"}:
+            if self.min is not None:
+                if isinstance(self.min, bool) or not isinstance(self.min, (int, float)):
+                    raise TypeError("min must be numeric or None")
+            if self.max is not None:
+                if isinstance(self.max, bool) or not isinstance(self.max, (int, float)):
+                    raise TypeError("max must be numeric or None")
 
         _validate_severity(self.severity)
 
