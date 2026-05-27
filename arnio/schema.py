@@ -1599,6 +1599,12 @@ def Int64(
         Field: Configured int64 schema field.
     """
 
+    if min is not None:
+        if isinstance(min, bool) or not isinstance(min, (int, float)):
+            raise TypeError("min must be numeric or None")
+    if max is not None:
+        if isinstance(max, bool) or not isinstance(max, (int, float)):
+            raise TypeError("max must be numeric or None")
     if min is not None and max is not None and min > max:
         raise ValueError("min must be less than or equal to max")
 
@@ -1636,6 +1642,12 @@ def Float64(
         Field: Configured float64 schema field.
     """
 
+    if min is not None:
+        if isinstance(min, bool) or not isinstance(min, (int, float)):
+            raise TypeError("min must be numeric or None")
+    if max is not None:
+        if isinstance(max, bool) or not isinstance(max, (int, float)):
+            raise TypeError("max must be numeric or None")
     if min is not None and max is not None and min > max:
         raise ValueError("min must be less than or equal to max")
 

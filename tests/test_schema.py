@@ -3017,3 +3017,28 @@ def test_int64_accepts_float_bounds():
 
 def test_int64_accepts_none_bounds():
     assert ar.Int64(min=None, max=None) is not None
+
+
+def test_int64_rejects_string_min_with_valid_max():
+    with pytest.raises(TypeError, match="min must be numeric or None"):
+        ar.Int64(min="a", max=1)
+
+
+def test_int64_rejects_valid_min_with_string_max():
+    with pytest.raises(TypeError, match="max must be numeric or None"):
+        ar.Int64(min=1, max="z")
+
+
+def test_int64_rejects_bool_pair():
+    with pytest.raises(TypeError, match="min must be numeric or None"):
+        ar.Int64(min=True, max=False)
+
+
+def test_float64_rejects_string_min_with_valid_max():
+    with pytest.raises(TypeError, match="min must be numeric or None"):
+        ar.Float64(min="a", max=1.0)
+
+
+def test_float64_rejects_bool_pair():
+    with pytest.raises(TypeError, match="min must be numeric or None"):
+        ar.Float64(min=True, max=False)
