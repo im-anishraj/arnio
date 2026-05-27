@@ -33,6 +33,10 @@ DEPENDENCIES = {
         "scikit-learn",
         "Required for scikit-learn pipeline integration examples.",
     ),
+    "pyarrow": (
+        "pyarrow",
+        "Required for Arrow export examples (pip install arnio[arrow]).",
+    ),
     "pytest": ("pytest", "Required for running the integration and unit test suites."),
 }
 
@@ -59,6 +63,14 @@ EXAMPLES = {
     "sklearn_pipeline.py": ["sklearn", "pandas"],
     "auto_clean_tutorial.py": ["pandas"],
     "arnio_with_jsonl.py": ["pandas"],
+    "arnio_with_arrow.py": ["pandas", "pyarrow"],
+    "arnio_chunk_reading.py": ["pandas"],
+    "schema_validation.py": ["pandas"],
+    "sales/recipe.py": ["pandas"],
+    "customers/recipe.py": ["pandas"],
+    "survey/recipe.py": ["pandas"],
+    "logs/recipe.py": ["pandas"],
+    "finance/recipe.py": ["pandas"],
 }
 
 
