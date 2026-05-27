@@ -144,6 +144,8 @@ class TestSniffDelimiter:
     def test_handles_escaped_quotes_inside_fields(self, tmp_path):
         """sniff_delimiter correctly handles escaped quotes inside fields."""
         path = tmp_path / "escaped_quotes.csv"
-        path.write_text('"name","quote"\n"Alice","She said, ""hello""!"\n"Bob","He said, ""hi""!"\n')
+        path.write_text(
+            '"name","quote"\n"Alice","She said, ""hello""!"\n"Bob","He said, ""hi""!"\n'
+        )
         result = sniff_delimiter(path)
         assert result == ","
