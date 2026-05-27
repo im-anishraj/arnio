@@ -1962,3 +1962,72 @@ def coalesce_columns(
     df[output_column] = df[subset_columns].bfill(axis=1).iloc[:, 0]
 
     return from_pandas(df) if is_arframe else df
+
+
+def clean_column_names(
+    frame: ArFrame,
+    *,
+    case_type: str = "lower",
+) -> ArFrame:
+    """Clean and normalize column names.
+
+    Replaces non-alphanumeric characters with underscores, collapses consecutive
+    underscores, trims leading/trailing boundary underscores, and normalizes case.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input data frame.
+    case_type : str, default "lower"
+        Case to normalize to. Options: "lower", "upper", "none".
+
+    Returns
+    -------
+    ArFrame
+        New frame with cleaned column names.
+
+    Raises
+    ------
+    TypeError
+        If case_type is not a string.
+    ValueError
+        If case_type is invalid or if cleaning would create duplicate column names.
+    """
+    if not isinstance(case_type, str):
+        raise TypeError("case_type must be a string")
+    if case_type not in {"lower", "upper", "none"}:
+        raise ValueError("case_type must be one of 'lower', 'upper', or 'none'")
+
+    import re
+
+    cleaned = []
+    for col in frame.columns:
+        # Replace non-alphanumeric characters with underscores
+        name = re.sub(r"[^a-zA-Z0-9_]", "_", col)
+        # Trim consecutive underscores
+        name = re.sub(r"_+", "_", name)
+        # Trim boundary underscores
+        name = name.strip("_")
+        # Normalize case
+        if case_type == "lower":
+            name = name.lower()
+        elif case_type == "upper":
+            name = name.upper()
+
+        if not name:
+            name = "column"
+        cleaned.append(name)
+
+    if len(cleaned) != len(set(cleaned)):
+        raise ValueError(f"Cleaning column names would create duplicates: {cleaned}")
+
+    mapping = {
+        original: updated
+        for original, updated in zip(frame.columns, cleaned)
+        if original != updated
+    }
+    if not mapping:
+        return frame
+
+    result = _rename_columns(frame._frame, mapping)
+    return ArFrame(result)

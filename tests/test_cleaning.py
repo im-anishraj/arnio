@@ -3772,3 +3772,53 @@ class TestValidateStringMapping:
     def test_empty_mapping_allow_empty_false_raises(self):
         with pytest.raises(ValueError, match="must not be empty"):
             _validate_string_mapping({}, argument_name="mapping", allow_empty=False)
+
+
+class TestCleanColumnNames:
+    def test_clean_column_names_basic(self):
+        df = pd.DataFrame({"My-Name!!": [1], "age##": [2]})
+        frame = from_pandas(df)
+        result = ar.clean_column_names(frame)
+        assert to_pandas(result).columns.tolist() == ["my_name", "age"]
+
+    def test_clean_column_names_consecutive_and_boundary_underscores(self):
+        df = pd.DataFrame({"__col__name__": [1], "-another--col-": [2]})
+        frame = from_pandas(df)
+        result = ar.clean_column_names(frame)
+        assert to_pandas(result).columns.tolist() == ["col_name", "another_col"]
+
+    def test_clean_column_names_case_type_upper(self):
+        df = pd.DataFrame({"My-Name!!": [1]})
+        frame = from_pandas(df)
+        result = ar.clean_column_names(frame, case_type="upper")
+        assert to_pandas(result).columns.tolist() == ["MY_NAME"]
+
+    def test_clean_column_names_case_type_none(self):
+        df = pd.DataFrame({"My-Name!!": [1]})
+        frame = from_pandas(df)
+        result = ar.clean_column_names(frame, case_type="none")
+        assert to_pandas(result).columns.tolist() == ["My_Name"]
+
+    def test_clean_column_names_duplicate_raises(self):
+        df = pd.DataFrame({"col__name": [1], "col---name": [2]})
+        frame = from_pandas(df)
+        with pytest.raises(ValueError, match="duplicates"):
+            ar.clean_column_names(frame)
+
+    def test_clean_column_names_case_type_invalid(self):
+        df = pd.DataFrame({"name": [1]})
+        frame = from_pandas(df)
+        with pytest.raises(ValueError, match="case_type must be one of"):
+            ar.clean_column_names(frame, case_type="invalid")
+
+    def test_clean_column_names_case_type_type_error(self):
+        df = pd.DataFrame({"name": [1]})
+        frame = from_pandas(df)
+        with pytest.raises(TypeError, match="must be a string"):
+            ar.clean_column_names(frame, case_type=123)
+
+    def test_clean_column_names_pipeline(self):
+        df = pd.DataFrame({"My-Name!!": [1], "age##": [2]})
+        frame = from_pandas(df)
+        result = ar.pipeline(frame, [("clean_column_names", {"case_type": "upper"})])
+        assert to_pandas(result).columns.tolist() == ["MY_NAME", "AGE"]
