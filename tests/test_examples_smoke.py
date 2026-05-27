@@ -56,9 +56,7 @@ EXAMPLE_SPECS: tuple[ExampleSpec, ...] = (
 
 # Scripts intentionally excluded from subprocess smoke (with reason for maintainers).
 EXCLUDED_EXAMPLES: dict[str, str] = {
-    "check_env.py": (
-        "Dashboard utility; behavior covered by tests/test_check_env.py."
-    ),
+    "check_env.py": ("Dashboard utility; behavior covered by tests/test_check_env.py."),
 }
 
 
@@ -67,8 +65,7 @@ def _discover_example_scripts() -> set[str]:
     if not EXAMPLES_DIR.exists():
         return set()
     return {
-        path.relative_to(EXAMPLES_DIR).as_posix()
-        for path in EXAMPLES_DIR.rglob("*.py")
+        path.relative_to(EXAMPLES_DIR).as_posix() for path in EXAMPLES_DIR.rglob("*.py")
     }
 
 
