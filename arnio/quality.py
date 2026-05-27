@@ -242,19 +242,26 @@ class DataQualityReport:
                 {
                     "step": s[0],
                     "kwargs": (
-                        {k: v for k, v in dict(s[1]).items() if k not in exclude_columns}
+                        {
+                            k: v
+                            for k, v in dict(s[1]).items()
+                            if k not in exclude_columns
+                        }
                         if s[0] == "cast_types"
                         else {
                             key: (
                                 [item for item in value if item not in exclude_columns]
-                                if key in {"subset", "columns"} and isinstance(value, list)
+                                if key in {"subset", "columns"}
+                                and isinstance(value, list)
                                 else value
                             )
                             for key, value in dict(s[1]).items()
                         }
                     ),
                     "confidence_score": getattr(s, "confidence_score", None),
-                    "confidence_reason": _redact_reason(getattr(s, "confidence_reason", None)),
+                    "confidence_reason": _redact_reason(
+                        getattr(s, "confidence_reason", None)
+                    ),
                 }
                 for s in self.suggestions
             ],

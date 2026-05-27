@@ -439,12 +439,13 @@ def test_auto_clean_strict_casts_require_explicit_opt_in():
 
 def test_exclude_columns_prevents_leakage_in_json():
     import json
+
     frame = ar.from_pandas(pd.DataFrame({"secret_token": ["true", "false"]}))
     report = ar.profile(frame)
-    
+
     report_dict = report.to_dict(exclude_columns=["secret_token"])
     json_str = json.dumps(report_dict)
-    
+
     assert "secret_token" not in json_str
 
 
