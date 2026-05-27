@@ -260,7 +260,15 @@ class DataQualityReport:
                                 [item for item in value if item not in exclude_columns]
                                 if key in {"subset", "columns"}
                                 and isinstance(value, list)
-                                else value
+                                else (
+                                    {
+                                        col_name: col_type
+                                        for col_name, col_type in value.items()
+                                        if col_name not in exclude_columns
+                                    }
+                                    if key == "cast_types" and isinstance(value, dict)
+                                    else value
+                                )
                             )
                             for key, value in dict(s[1]).items()
                         }
