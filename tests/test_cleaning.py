@@ -3772,3 +3772,30 @@ class TestValidateStringMapping:
     def test_empty_mapping_allow_empty_false_raises(self):
         with pytest.raises(ValueError, match="must not be empty"):
             _validate_string_mapping({}, argument_name="mapping", allow_empty=False)
+
+   def test_winsorize_string_subset_rejected():
+    frame = ar.from_pandas(pd.DataFrame({"age": [1, 2, 3]}))
+
+    with pytest.raises(TypeError, match="subset must be a sequence"):
+        ar.winsorize_outliers(frame, subset="age")
+
+
+def test_winsorize_invalid_subset_item():
+    frame = ar.from_pandas(pd.DataFrame({"age": [1, 2, 3]}))
+
+    with pytest.raises(TypeError, match="subset must contain only string"):
+        ar.winsorize_outliers(frame, subset=["age", 1])
+
+
+def test_winsorize_non_numeric_lower():
+    frame = ar.from_pandas(pd.DataFrame({"age": [1, 2, 3]}))
+
+    with pytest.raises(TypeError, match="lower must be a numeric value"):
+        ar.winsorize_outliers(frame, lower="x")
+
+
+def test_winsorize_boolean_lower():
+    frame = ar.from_pandas(pd.DataFrame({"age": [1, 2, 3]}))
+
+    with pytest.raises(TypeError, match="lower must not be bool"):
+        ar.winsorize_outliers(frame, lower=False)
