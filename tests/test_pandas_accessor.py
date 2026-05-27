@@ -134,3 +134,29 @@ def test_auto_clean_dry_run_safe_mode_does_not_mutate():
     assert isinstance(result, ar.DataQualityReport)
     # Frame must not be mutated — score stays as string
     assert frame.dtypes["score"] == "string"
+
+
+# --- Issue #1397: expose explain= on pandas accessor auto_clean ---
+
+
+def test_pandas_accessor_auto_clean_explain_returns_dataframe_and_explanation():
+    df = pd.DataFrame({"name": [" Alice ", "Bob"]})
+
+    result, explanation = df.arnio.auto_clean(explain=True)
+
+    assert isinstance(result, pd.DataFrame)
+    assert list(result["name"]) == ["Alice", "Bob"]
+    assert isinstance(explanation, ar.CleanExplanation)
+    assert explanation.mode == "safe"
+    assert any(s.step == "strip_whitespace" for s in explanation.steps)
+
+
+def test_pandas_accessor_auto_clean_return_report_and_explain():
+    df = pd.DataFrame({"name": [" Alice ", "Bob"]})
+
+    result, report, explanation = df.arnio.auto_clean(return_report=True, explain=True)
+
+    assert isinstance(result, pd.DataFrame)
+    assert list(result["name"]) == ["Alice", "Bob"]
+    assert isinstance(report, ar.DataQualityReport)
+    assert isinstance(explanation, ar.CleanExplanation)
