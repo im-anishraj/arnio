@@ -24,16 +24,17 @@
   align-items: center;
   justify-content: space-between;
   height: 100%;
+  overflow: hidden;
 }
 
 .nav-brand {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
   text-decoration: none;
   color: var(--color-text);
   font-weight: var(--font-weight-bold);
   font-size: var(--font-size-lg);
+  flex-shrink: 0;
 }
 
 .nav-brand:hover {
@@ -42,8 +43,11 @@
 }
 
 .nav-brand img {
+  display: block;
+  width: 75px;
   height: 32px;
-  width: auto;
+  object-fit: contain;
+  flex-shrink: 0;
 }
 
 .nav-links {
@@ -64,19 +68,24 @@
   color: var(--color-text-secondary);
   text-decoration: none;
   border-radius: var(--radius-md);
-  transition: all var(--transition-fast);
+  transition:
+    color var(--transition-fast),
+    background-color var(--transition-fast);
+  box-sizing: border-box;
 }
 
 .nav-links a::after {
   content: "";
   position: absolute;
-  left: 50%;
+  left: var(--space-3);
   bottom: 4px;
-  width: 0;
+  width: calc(100% - var(--space-6));
   height: 2px;
   background: linear-gradient(to right, #ef4444, #f97316);
-  transition: width 0.3s ease, left 0.3s ease;
   border-radius: var(--radius-full);
+  transform: scaleX(0);
+  transform-origin: center;
+  transition: transform 0.3s ease;
 }
 
 .nav-links a:hover,
@@ -87,9 +96,9 @@
 }
 
 .nav-links a:hover::after,
-.nav-links a:focus-visible::after {
-  width: calc(100% - var(--space-6));
-  left: var(--space-3);
+.nav-links a:focus-visible::after,
+.nav-links a.active::after {
+  transform: scaleX(1);
 }
 
 .nav-links a.active {
@@ -637,13 +646,36 @@ pre:hover .copy-btn {
 }
 
 .footer-links a {
+  position: relative;
+  display: inline-block;
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
   text-decoration: none;
+  transition: color var(--transition-fast);
 }
 
-.footer-links a:hover {
-  color: var(--color-accent-text);
+.footer-links a::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -2px;
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(to right, #ef4444, #f97316);
+  border-radius: var(--radius-full);
+  transform: scaleX(0);
+  transform-origin: center;
+  transition: transform 0.3s ease;
+}
+
+.footer-links a:hover,
+.footer-links a:focus-visible {
+  color: var(--color-text);
+}
+
+.footer-links a:hover::after,
+.footer-links a:focus-visible::after {
+  transform: scaleX(1);
 }
 
 .footer-bottom {

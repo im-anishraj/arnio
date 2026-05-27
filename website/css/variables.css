@@ -154,3 +154,8 @@
   --shadow-lg:   0 10px 25px rgba(0, 0, 0, 0.5);
   --shadow-xl:   0 20px 50px rgba(0, 0, 0, 0.6);
 }
+/* Improve logo visibility in dark mode */
+[data-theme="dark"] .nav-brand img,
+[data-theme="dark"] .footer-brand img {
+  filter: brightness(1.5) contrast(1.2);
+}

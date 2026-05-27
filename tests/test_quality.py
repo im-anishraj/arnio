@@ -2,11 +2,13 @@
 
 import io
 import json
+import math
 
 import pandas as pd
 import pytest
 
 import arnio as ar
+from arnio.quality import _validate_gate_bool, _validate_gate_threshold
 
 
 def test_profile_reports_quality_signals(tmp_path):
@@ -456,6 +458,38 @@ def test_auto_clean_dry_run_with_return_report_raises():
         ar.auto_clean(frame, dry_run=True, return_report=True)
 
 
+@pytest.mark.parametrize(
+    "value",
+    [
+        "yes",
+        1,
+        None,
+        [],
+        object(),
+    ],
+    ids=["string", "integer", "none", "list", "object"],
+)
+def test_auto_clean_rejects_non_boolean_return_report(value):
+    frame = ar.from_pandas(pd.DataFrame({"name": [" Alice ", " Bob "]}))
+
+    with pytest.raises(TypeError, match="return_report must be a bool"):
+        ar.auto_clean(frame, return_report=value)
+
+
+def test_auto_clean_accepts_boolean_return_report_values():
+    frame = ar.from_pandas(pd.DataFrame({"name": [" Alice ", " Bob "]}))
+
+    clean_only = ar.auto_clean(frame, return_report=False)
+    clean_with_report = ar.auto_clean(frame, return_report=True)
+
+    assert isinstance(clean_only, ar.ArFrame)
+    assert isinstance(clean_with_report, tuple)
+    assert len(clean_with_report) == 2
+    cleaned, report = clean_with_report
+    assert isinstance(cleaned, ar.ArFrame)
+    assert isinstance(report, ar.DataQualityReport)
+
+
 def test_auto_clean_rejects_unknown_mode(sample_csv):
     frame = ar.read_csv(sample_csv)
 
@@ -638,6 +672,25 @@ def test_column_profile_to_dict_redacts_sample_values_direct(tmp_path):
 
     assert d["sample_values"] == ["[REDACTED]", "[REDACTED]"]
     assert report.columns["name"].sample_values == ["Alice", "Bob"]
+
+
+@pytest.mark.parametrize(
+    "invalid_value",
+    ["true", 1, None, ["redact"], object()],
+)
+def test_redact_sample_values_requires_bool(tmp_path, invalid_value):
+    path = tmp_path / "redact_type.csv"
+    path.write_text("name\nAlice\n")
+    report = ar.profile(ar.read_csv(path), sample_size=1)
+
+    with pytest.raises(TypeError, match="redact_sample_values must be a bool"):
+        report.to_dict(redact_sample_values=invalid_value)
+
+    with pytest.raises(TypeError, match="redact_sample_values must be a bool"):
+        report.to_json(redact_sample_values=invalid_value)
+
+    with pytest.raises(TypeError, match="redact_sample_values must be a bool"):
+        report.columns["name"].to_dict(redact_sample_values=invalid_value)
 
 
 def test_profile_sample_size_validation(tmp_path):
@@ -976,6 +1029,20 @@ def test_profile_exclude_columns_rejects_missing_column(sample_csv):
         ar.profile(frame, exclude_columns=["missing"])
 
 
+@pytest.mark.parametrize(
+    "exclude_columns",
+    [
+        123,
+        (name for name in ["name"]),
+    ],
+)
+def test_profile_exclude_columns_rejects_non_sequences(sample_csv, exclude_columns):
+    frame = ar.read_csv(sample_csv)
+
+    with pytest.raises(TypeError, match="exclude_columns must be a sequence"):
+        ar.profile(frame, exclude_columns=exclude_columns)
+
+
 def test_profile_exclude_columns_rejects_bare_string(sample_csv):
     frame = ar.read_csv(sample_csv)
 
@@ -988,6 +1055,16 @@ def test_profile_exclude_columns_rejects_non_string_items(sample_csv):
 
     with pytest.raises(TypeError, match="exclude_columns must contain only string"):
         ar.profile(frame, exclude_columns=["name", 123])
+
+
+def test_profile_exclude_columns_accepts_empty_list(sample_csv):
+    frame = ar.read_csv(sample_csv)
+
+    full_report = ar.profile(frame)
+    report = ar.profile(frame, exclude_columns=[])
+
+    assert list(report.columns) == list(full_report.columns)
+    assert report.column_count == full_report.column_count
 
 
 def test_profile_exclude_columns_scopes_report_metrics_and_suggestions(tmp_path):
@@ -1313,6 +1390,79 @@ def test_report_to_markdown_suggestions_stable_ordering():
     assert expected_substring in md
 
 
+def test_report_to_markdown_limits_suggestions():
+    report = ar.DataQualityReport(
+        row_count=2,
+        column_count=1,
+        memory_usage=100,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+        suggestions=[
+            ("strip_whitespace", {"columns": ["name"]}),
+            ("drop_nulls", {"subset": ["age"]}),
+            ("normalize_case", {"columns": ["city"]}),
+        ],
+    )
+
+    md = report.to_markdown(max_suggestions=2)
+
+    assert "strip_whitespace" in md
+    assert "drop_nulls" in md
+    assert "normalize_case" not in md
+    assert "Showing 2 of 3 suggestions." in md
+    assert len(report.suggestions) == 3
+
+
+def test_report_to_markdown_max_suggestions_none_preserves_default():
+    report = ar.DataQualityReport(
+        row_count=2,
+        column_count=1,
+        memory_usage=100,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+        suggestions=[
+            ("strip_whitespace", {"columns": ["name"]}),
+            ("drop_nulls", {"subset": ["age"]}),
+        ],
+    )
+
+    assert report.to_markdown(max_suggestions=None) == report.to_markdown()
+
+
+@pytest.mark.parametrize("value", [0, -1])
+def test_report_to_markdown_rejects_non_positive_max_suggestions(value):
+    report = ar.DataQualityReport(
+        row_count=0,
+        column_count=0,
+        memory_usage=0,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+        suggestions=[],
+    )
+
+    with pytest.raises(ValueError, match="max_suggestions must be positive"):
+        report.to_markdown(max_suggestions=value)
+
+
+@pytest.mark.parametrize("value", [True, 1.5, "2"])
+def test_report_to_markdown_rejects_invalid_max_suggestions_type(value):
+    report = ar.DataQualityReport(
+        row_count=0,
+        column_count=0,
+        memory_usage=0,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+        suggestions=[],
+    )
+
+    with pytest.raises(TypeError, match="max_suggestions must be an integer or None"):
+        report.to_markdown(max_suggestions=value)
+
+
 def test_report_to_markdown_suggestions_normal_existing_output(tmp_path):
     path = tmp_path / "sample_data.csv"
     path.write_text("id,name\n1,Alice\n2,Bob\n2,Bob\n")
@@ -1432,6 +1582,97 @@ def test_data_quality_report_to_html(tmp_path):
     report.to_html(file_path=str(out_path))
     assert out_path.exists()
     assert out_path.read_text(encoding="utf-8").startswith("<!DOCTYPE html>")
+
+
+def test_report_to_html_rejects_invalid_filepath_types():
+    report = ar.DataQualityReport(
+        row_count=0,
+        column_count=0,
+        memory_usage=0,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+        suggestions=[],
+    )
+
+    invalid_paths = [True, False, 123, object()]
+
+    for invalid_path in invalid_paths:
+        with pytest.raises(TypeError, match="must be a string, bytes, or os.PathLike"):
+            report.to_html(file_path=invalid_path)
+
+
+def test_report_to_html_limits_suggestions():
+    report = ar.DataQualityReport(
+        row_count=2,
+        column_count=1,
+        memory_usage=100,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+        suggestions=[
+            ("strip_whitespace", {"columns": ["name"]}),
+            ("drop_nulls", {"subset": ["age"]}),
+            ("normalize_case", {"columns": ["city"]}),
+        ],
+    )
+
+    html = report.to_html(max_suggestions=2)
+
+    assert "strip_whitespace" in html
+    assert "drop_nulls" in html
+    assert "normalize_case" not in html
+    assert "Showing 2 of 3 suggestions." in html
+    assert len(report.suggestions) == 3
+
+
+def test_report_to_html_max_suggestions_none_preserves_default():
+    report = ar.DataQualityReport(
+        row_count=2,
+        column_count=1,
+        memory_usage=100,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+        suggestions=[
+            ("strip_whitespace", {"columns": ["name"]}),
+            ("drop_nulls", {"subset": ["age"]}),
+        ],
+    )
+
+    assert report.to_html(max_suggestions=None) == report.to_html()
+
+
+@pytest.mark.parametrize("value", [0, -1])
+def test_report_to_html_rejects_non_positive_max_suggestions(value):
+    report = ar.DataQualityReport(
+        row_count=0,
+        column_count=0,
+        memory_usage=0,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+        suggestions=[],
+    )
+
+    with pytest.raises(ValueError, match="max_suggestions must be positive"):
+        report.to_html(max_suggestions=value)
+
+
+@pytest.mark.parametrize("value", [True, 1.5, "2"])
+def test_report_to_html_rejects_invalid_max_suggestions_type(value):
+    report = ar.DataQualityReport(
+        row_count=0,
+        column_count=0,
+        memory_usage=0,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+        suggestions=[],
+    )
+
+    with pytest.raises(TypeError, match="max_suggestions must be an integer or None"):
+        report.to_html(max_suggestions=value)
 
 
 def test_report_to_html_writes_to_stringio(sample_csv, tmp_path):
@@ -2396,3 +2637,170 @@ def test_data_quality_report_to_json_redact_sample_values():
     parsed = json.loads(json_output)
 
     assert parsed["columns"]["name"]["sample_values"] == ["[REDACTED]"]
+
+
+# --- Tests for ProfileComparison.to_json() ---
+
+
+def test_profile_comparison_to_json_returns_string():
+    frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+    p = ar.profile(frame)
+    comparison = ar.compare_profiles(p, p)
+    result = comparison.to_json()
+    assert isinstance(result, str)
+    parsed = json.loads(result)
+    assert "drift_report" in parsed
+    assert "status_counts" in parsed
+
+
+def test_profile_comparison_to_json_indent():
+    frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+    p = ar.profile(frame)
+    comparison = ar.compare_profiles(p, p)
+    result = comparison.to_json(indent=2)
+    assert "\n" in result
+
+
+def test_profile_comparison_to_json_output_stream():
+    frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+    p = ar.profile(frame)
+    comparison = ar.compare_profiles(p, p)
+    buf = io.StringIO()
+    ret = comparison.to_json(output=buf)
+    assert ret is None
+    assert len(buf.getvalue()) > 0
+
+
+def test_profile_comparison_to_json_invalid_output_raises():
+    frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+    p = ar.profile(frame)
+    comparison = ar.compare_profiles(p, p)
+    with pytest.raises(TypeError, match="writable text stream"):
+        comparison.to_json(output="not_a_stream")
+
+
+# --- ProfileComparison.to_markdown() ---
+
+
+def test_profile_comparison_to_markdown_returns_string():
+    frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+    p = ar.profile(frame)
+    comparison = ar.compare_profiles(p, p)
+    result = comparison.to_markdown()
+    assert isinstance(result, str)
+    assert "Profile Comparison Report" in result
+    assert "Column Drift" in result
+
+
+def test_profile_comparison_to_markdown_output_stream():
+    frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+    p = ar.profile(frame)
+    comparison = ar.compare_profiles(p, p)
+    buf = io.StringIO()
+    ret = comparison.to_markdown(output=buf)
+    assert ret is None
+    assert "Profile Comparison" in buf.getvalue()
+
+
+def test_profile_comparison_to_markdown_invalid_output_raises():
+    frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+    p = ar.profile(frame)
+    comparison = ar.compare_profiles(p, p)
+    with pytest.raises(TypeError, match="writable text stream"):
+        comparison.to_markdown(output=42)
+
+
+# --- Tests for QualityGateResult.to_json() ---
+
+
+def test_quality_gate_result_to_json_returns_string():
+    frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+    p = ar.profile(frame)
+    result = ar.check_quality_gates(p, p)
+    out = result.to_json()
+    assert isinstance(out, str)
+    parsed = json.loads(out)
+    assert "passed" in parsed
+    assert "issues" in parsed
+
+
+def test_quality_gate_result_to_json_indent():
+    frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+    p = ar.profile(frame)
+    result = ar.check_quality_gates(p, p)
+    out = result.to_json(indent=2)
+    assert "\n" in out
+
+
+def test_quality_gate_result_to_json_output_stream():
+    frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+    p = ar.profile(frame)
+    result = ar.check_quality_gates(p, p)
+    buf = io.StringIO()
+    ret = result.to_json(output=buf)
+    assert ret is None
+    assert len(buf.getvalue()) > 0
+
+
+def test_quality_gate_result_to_json_invalid_output_raises():
+    frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+    p = ar.profile(frame)
+    result = ar.check_quality_gates(p, p)
+    with pytest.raises(TypeError, match="writable text stream"):
+        result.to_json(output=123)
+
+
+def test_compare_profiles_mismatched_exclude_columns_hints_user():
+    df = pd.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6], "c": [7, 8, 9]})
+    frame = ar.from_pandas(df)
+    profile_a = ar.profile(frame, exclude_columns=["c"])
+    profile_b = ar.profile(frame)
+
+    with pytest.raises(ValueError, match="exclude_columns"):
+        ar.compare_profiles(profile_a, profile_b)
+
+
+class TestValidateGateThreshold:
+    def test_none_returns_none(self):
+        assert _validate_gate_threshold(None, "max_row_count_delta_ratio") is None
+
+    def test_int_returns_float(self):
+        result = _validate_gate_threshold(5, "max_row_count_delta_ratio")
+        assert result == 5.0
+        assert isinstance(result, float)
+
+    def test_float_returns_float(self):
+        result = _validate_gate_threshold(0.1, "max_row_count_delta_ratio")
+        assert result == 0.1
+
+    def test_bool_raises_type_error(self):
+        with pytest.raises(TypeError, match="must be a non-negative number or None"):
+            _validate_gate_threshold(True, "max_row_count_delta_ratio")
+
+    def test_string_raises_type_error(self):
+        with pytest.raises(TypeError, match="must be a non-negative number or None"):
+            _validate_gate_threshold("0.1", "max_row_count_delta_ratio")
+
+    def test_negative_raises_value_error(self):
+        with pytest.raises(ValueError, match="must be a finite non-negative number"):
+            _validate_gate_threshold(-0.1, "max_row_count_delta_ratio")
+
+    def test_infinity_raises_value_error(self):
+        with pytest.raises(ValueError, match="must be a finite non-negative number"):
+            _validate_gate_threshold(math.inf, "max_row_count_delta_ratio")
+
+
+class TestValidateGateBool:
+    def test_true_returns_true(self):
+        assert _validate_gate_bool(True, "allow_new_columns") is True
+
+    def test_false_returns_false(self):
+        assert _validate_gate_bool(False, "allow_new_columns") is False
+
+    def test_int_raises_type_error(self):
+        with pytest.raises(TypeError, match="must be a bool"):
+            _validate_gate_bool(0, "allow_new_columns")
+
+    def test_string_raises_type_error(self):
+        with pytest.raises(TypeError, match="must be a bool"):
+            _validate_gate_bool("true", "allow_new_columns")

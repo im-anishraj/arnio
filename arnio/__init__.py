@@ -41,7 +41,7 @@ from .cleaning import (
     validate_columns_exist,
     winsorize_outliers,
 )
-from .convert import from_pandas, to_arrow, to_pandas
+from .convert import from_dict, from_pandas, to_arrow, to_pandas
 from .exceptions import (
     ArnioError,
     CsvReadError,
@@ -102,6 +102,7 @@ from .schema import (
     SchemaDiff,
     SchemaDiffEntry,
     String,
+    TimeZone,
     ValidationIssue,
     ValidationResult,
     diff_schema,
@@ -157,6 +158,7 @@ __all__ = [
     "to_arrow",
     "from_pandas",
     "from_records",
+    "from_dict",
     # Integrations
     "ArnioPandasAccessor",
     "register_duckdb",
@@ -195,6 +197,7 @@ __all__ = [
     "CountryCode",
     "CurrencyCode",
     "LanguageCode",
+    "TimeZone",
     "Bool",
     "Email",
     "URL",
