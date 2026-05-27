@@ -177,6 +177,7 @@ def schema_to_dict(schema: dict | Any) -> dict:
         Either the raw ``dict`` returned by ``ar.scan_csv`` / ``ar.Schema``,
         or any object that exposes a ``fields`` attribute (mapping of field
         name → field descriptor) – whichever arnio uses internally.
+        Also supports ArFrame objects and lists of ColumnSummary.
 
     Returns
     -------
@@ -186,9 +187,34 @@ def schema_to_dict(schema: dict | Any) -> dict:
     Raises
     ------
     TypeError
-        If *schema* is neither a ``dict`` nor an object with a ``fields``
-        attribute.
+        If *schema* is not of a supported type.
     """
+    # ── ArFrame path ────────────────────────────────────────────────────────
+    if hasattr(schema, "schema_summary"):
+        schema = schema.schema_summary
+
+    # ── List of ColumnSummary path ──────────────────────────────────────────
+    if isinstance(schema, list):
+        normalised = {}
+        for entry in schema:
+            if hasattr(entry, "name") and hasattr(entry, "dtype"):
+                name = entry.name
+                normalised[name] = {
+                    "type": str(entry.dtype).upper(),
+                }
+                if hasattr(entry, "nullable"):
+                    normalised[name]["nullable"] = entry.nullable
+            elif isinstance(entry, dict) and "name" in entry and "dtype" in entry:
+                name = entry["name"]
+                normalised[name] = {
+                    "type": str(entry["dtype"]).upper(),
+                }
+                if "nullable" in entry:
+                    normalised[name]["nullable"] = entry["nullable"]
+            else:
+                raise TypeError(f"Unsupported list item type: {type(entry)!r}")
+        return {"fields": normalised}
+
     # ── Schema object path ──────────────────────────────────────────────────
     if hasattr(schema, "fields"):
         if getattr(schema, "rules", None):
@@ -261,7 +287,7 @@ def schema_to_dict(schema: dict | Any) -> dict:
         return result
 
     raise TypeError(
-        f"Expected a dict or an object with a 'fields' attribute, "
+        f"Expected a dict, an ArFrame, or an object with a 'fields' attribute, "
         f"got {type(schema)!r}."
     )
 
