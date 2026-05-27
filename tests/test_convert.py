@@ -1032,3 +1032,31 @@ class TestToArrow:
         assert ages[1] == 25
         assert ages[2] is None
         assert ages[3] == 28
+
+
+class TestNullableInt64ObjectConversion:
+    """Tests for casting object series containing None/NaN and valid integers to integer types."""
+
+    def test_object_series_with_none_and_integers(self):
+        df = pd.DataFrame({"col": [1, None, 3]}, dtype=object)
+        frame = ar.from_pandas(df)
+        assert frame.dtypes["col"] == "int64"
+        result = ar.to_pandas(frame)
+        assert str(result["col"].dtype) == "Int64"
+        assert list(result["col"]) == [1, pd.NA, 3]
+
+    def test_object_series_with_nan_and_integers(self):
+        df = pd.DataFrame({"col": [1, np.nan, 3]}, dtype=object)
+        frame = ar.from_pandas(df)
+        assert frame.dtypes["col"] == "int64"
+        result = ar.to_pandas(frame)
+        assert str(result["col"].dtype) == "Int64"
+        assert list(result["col"]) == [1, pd.NA, 3]
+
+    def test_object_series_with_pd_na_and_integers(self):
+        df = pd.DataFrame({"col": [1, pd.NA, 3]}, dtype=object)
+        frame = ar.from_pandas(df)
+        assert frame.dtypes["col"] == "int64"
+        result = ar.to_pandas(frame)
+        assert str(result["col"].dtype) == "Int64"
+        assert list(result["col"]) == [1, pd.NA, 3]
