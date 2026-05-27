@@ -2152,6 +2152,39 @@ class TestSniffDelimiter:
         ):
             ar.sniff_delimiter(csv_path)
 
+    def test_sniff_delimiter_rejects_invalid_utf8(self, tmp_path):
+        path = tmp_path / "bad_utf8.csv"
+
+        path.write_bytes(b"name,city\nAlice,\xff\xffYork\n")
+
+        with pytest.raises(
+            ar.CsvReadError,
+            match="Could not decode",
+        ):
+            ar.sniff_delimiter(path, encoding="utf-8")
+
+    def test_sniff_delimiter_rejects_late_nul_bytes(self, tmp_path):
+        path = tmp_path / "late_nul.csv"
+
+        payload = b"a,b\n" + b"1,2\n" * 300 + b"3,\x004\n"
+
+        path.write_bytes(payload)
+        with pytest.raises(
+            ar.CsvReadError,
+            match="NUL bytes",
+        ):
+            ar.sniff_delimiter(path)
+
+    def test_sniff_delimiter_valid_csv_still_works(self, tmp_path):
+        path = tmp_path / "valid.csv"
+
+        path.write_text(
+            "name;age\nAlice;30\nBob;40\n",
+            encoding="utf-8",
+        )
+
+        assert ar.sniff_delimiter(path) == ";"
+
 
 class TestArFrameGetItem:
     def test_getitem_existing_column(self, sample_csv):
@@ -2658,3 +2691,53 @@ def test_scan_csv_encoding_none_raises_type_error(tmp_path):
     path.write_text("a,b\n1,2\n")
     with pytest.raises(TypeError, match="encoding must be a string"):
         ar.scan_csv(path, encoding=None)
+
+
+# --- Tests added for CsvReader streaming memory optimization ---
+
+
+def test_streaming_nrows(tmp_path):
+    csv_path = tmp_path / "nrows.csv"
+    csv_path.write_text("a,b\n1,2\n3,4\n5,6\n")
+    frame = ar.read_csv(csv_path, nrows=2)
+    assert frame.shape == (2, 2)
+    df = ar.to_pandas(frame)
+    assert list(df["a"]) == [1, 3]
+
+
+def test_streaming_headerless(tmp_path):
+    csv_path = tmp_path / "headerless.csv"
+    csv_path.write_text("1,2\n3,4\n")
+    frame = ar.read_csv(csv_path, has_header=False)
+    assert frame.shape == (2, 2)
+    assert list(frame.columns) == ["col_0", "col_1"]
+    df = ar.to_pandas(frame)
+    assert list(df["col_0"]) == [1, 3]
+
+
+def test_streaming_trailing_empty_fields(tmp_path):
+    csv_path = tmp_path / "trailing.csv"
+    csv_path.write_text("a,b\n1,\n2,3\n")
+    frame = ar.read_csv(csv_path, mode="permissive")
+    assert frame.shape == (2, 2)
+    df = ar.to_pandas(frame)
+    assert pd.isna(df["b"].iloc[0])
+    assert df["b"].iloc[1] == 3
+
+
+def test_streaming_late_type_promotion(tmp_path):
+    csv_path = tmp_path / "late_promo.csv"
+    csv_path.write_text("a\n1\n2\n3\n4.5\nhello\n")
+    frame = ar.read_csv(csv_path)
+    assert frame.dtypes["a"] == "string"
+    df = ar.to_pandas(frame)
+    assert list(df["a"]) == ["1", "2", "3", "4.5", "hello"]
+
+
+def test_streaming_late_type_promotion_float(tmp_path):
+    csv_path = tmp_path / "late_promo_float.csv"
+    csv_path.write_text("a\n1\n2\n3\n4.5\n")
+    frame = ar.read_csv(csv_path)
+    assert frame.dtypes["a"] == "float64"
+    df = ar.to_pandas(frame)
+    assert list(df["a"]) == [1.0, 2.0, 3.0, 4.5]

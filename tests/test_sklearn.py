@@ -276,3 +276,13 @@ def test_arniocleaner_warns_for_multiple_dtype_changes():
     messages = {str(w.message) for w in record}
     assert any("'a'" in m for m in messages)
     assert any("'b'" in m for m in messages)
+
+
+def test_arniocleaner_rejects_non_boolean_options():
+    """Ensure constructor explicitly blocks truthy/falsy non-boolean values."""
+    invalid_values = ["false", "True", 1, 0, None, [], {}]
+    for value in invalid_values:
+        with pytest.raises(TypeError, match="copy must be a bool"):
+            ArnioCleaner(copy=value)
+        with pytest.raises(TypeError, match="allow_row_count_change must be a bool"):
+            ArnioCleaner(allow_row_count_change=value)

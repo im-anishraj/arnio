@@ -2,11 +2,13 @@
 
 import io
 import json
+import math
 
 import pandas as pd
 import pytest
 
 import arnio as ar
+from arnio.quality import _validate_gate_bool, _validate_gate_threshold
 
 
 def test_profile_reports_quality_signals(tmp_path):
@@ -437,6 +439,18 @@ def test_auto_clean_strict_casts_require_explicit_opt_in():
         ar.auto_clean(frame, mode="strict")
 
 
+def test_exclude_columns_prevents_leakage_in_json():
+    import json
+
+    frame = ar.from_pandas(pd.DataFrame({"secret_token": ["true", "false"]}))
+    report = ar.profile(frame)
+
+    report_dict = report.to_dict(exclude_columns=["secret_token"])
+    json_str = json.dumps(report_dict)
+
+    assert "secret_token" not in json_str
+
+
 def test_auto_clean_dry_run_returns_report_without_mutating():
     frame = ar.from_pandas(pd.DataFrame({"active": ["true", "false"]}))
 
@@ -688,6 +702,25 @@ def test_quality_to_dict_redacts_top_values_when_requested(tmp_path):
         ("alice@example.com", 2, pytest.approx(2 / 3)),
         ("bob@example.com", 1, pytest.approx(1 / 3)),
     ]
+
+
+@pytest.mark.parametrize(
+    "invalid_value",
+    ["true", 1, None, ["redact"], object()],
+)
+def test_redact_sample_values_requires_bool(tmp_path, invalid_value):
+    path = tmp_path / "redact_type.csv"
+    path.write_text("name\nAlice\n")
+    report = ar.profile(ar.read_csv(path), sample_size=1)
+
+    with pytest.raises(TypeError, match="redact_sample_values must be a bool"):
+        report.to_dict(redact_sample_values=invalid_value)
+
+    with pytest.raises(TypeError, match="redact_sample_values must be a bool"):
+        report.to_json(redact_sample_values=invalid_value)
+
+    with pytest.raises(TypeError, match="redact_sample_values must be a bool"):
+        report.columns["name"].to_dict(redact_sample_values=invalid_value)
 
 
 def test_profile_sample_size_validation(tmp_path):
@@ -1579,6 +1612,24 @@ def test_data_quality_report_to_html(tmp_path):
     report.to_html(file_path=str(out_path))
     assert out_path.exists()
     assert out_path.read_text(encoding="utf-8").startswith("<!DOCTYPE html>")
+
+
+def test_report_to_html_rejects_invalid_filepath_types():
+    report = ar.DataQualityReport(
+        row_count=0,
+        column_count=0,
+        memory_usage=0,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+        suggestions=[],
+    )
+
+    invalid_paths = [True, False, 123, object()]
+
+    for invalid_path in invalid_paths:
+        with pytest.raises(TypeError, match="must be a string, bytes, or os.PathLike"):
+            report.to_html(file_path=invalid_path)
 
 
 def test_report_to_html_limits_suggestions():
@@ -2762,3 +2813,49 @@ def test_compare_profiles_mismatched_exclude_columns_hints_user():
 
     with pytest.raises(ValueError, match="exclude_columns"):
         ar.compare_profiles(profile_a, profile_b)
+
+
+class TestValidateGateThreshold:
+    def test_none_returns_none(self):
+        assert _validate_gate_threshold(None, "max_row_count_delta_ratio") is None
+
+    def test_int_returns_float(self):
+        result = _validate_gate_threshold(5, "max_row_count_delta_ratio")
+        assert result == 5.0
+        assert isinstance(result, float)
+
+    def test_float_returns_float(self):
+        result = _validate_gate_threshold(0.1, "max_row_count_delta_ratio")
+        assert result == 0.1
+
+    def test_bool_raises_type_error(self):
+        with pytest.raises(TypeError, match="must be a non-negative number or None"):
+            _validate_gate_threshold(True, "max_row_count_delta_ratio")
+
+    def test_string_raises_type_error(self):
+        with pytest.raises(TypeError, match="must be a non-negative number or None"):
+            _validate_gate_threshold("0.1", "max_row_count_delta_ratio")
+
+    def test_negative_raises_value_error(self):
+        with pytest.raises(ValueError, match="must be a finite non-negative number"):
+            _validate_gate_threshold(-0.1, "max_row_count_delta_ratio")
+
+    def test_infinity_raises_value_error(self):
+        with pytest.raises(ValueError, match="must be a finite non-negative number"):
+            _validate_gate_threshold(math.inf, "max_row_count_delta_ratio")
+
+
+class TestValidateGateBool:
+    def test_true_returns_true(self):
+        assert _validate_gate_bool(True, "allow_new_columns") is True
+
+    def test_false_returns_false(self):
+        assert _validate_gate_bool(False, "allow_new_columns") is False
+
+    def test_int_raises_type_error(self):
+        with pytest.raises(TypeError, match="must be a bool"):
+            _validate_gate_bool(0, "allow_new_columns")
+
+    def test_string_raises_type_error(self):
+        with pytest.raises(TypeError, match="must be a bool"):
+            _validate_gate_bool("true", "allow_new_columns")

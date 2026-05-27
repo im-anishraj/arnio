@@ -318,6 +318,8 @@ def pipeline(
     ...     ("drop_duplicates", {"keep": "first"}),
     ... ])
     """
+    if not isinstance(frame, ArFrame):
+        raise TypeError("frame must be an ArFrame")
     if not isinstance(return_metadata, bool):
         raise TypeError(
             f"return_metadata must be a bool, got {type(return_metadata).__name__!r}"
