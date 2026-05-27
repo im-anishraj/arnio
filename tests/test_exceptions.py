@@ -10,6 +10,7 @@ def test_public_exception_hierarchy():
         ar.CsvReadError,
         ar.TypeCastError,
         ar.UnknownStepError,
+        ar.JsonlReadError,
     ]
 
     for exc_type in public_exceptions:
@@ -17,6 +18,44 @@ def test_public_exception_hierarchy():
 
     for exc_type in public_exceptions[1:]:
         assert issubclass(exc_type, ar.ArnioError)
+
+
+def test_jsonl_read_error_for_malformed_json_has_clear_message(tmp_path):
+    bad_jsonl = tmp_path / "bad.jsonl"
+    bad_jsonl.write_text('{"key": "value"}\n{invalid json}\n')
+
+    with pytest.raises(ar.JsonlReadError) as exc_info:
+        ar.read_jsonl(str(bad_jsonl))
+
+    message = str(exc_info.value)
+    assert message
+    assert "invalid json" in message.lower()
+    assert "line 2" in message.lower()
+
+
+def test_jsonl_read_error_for_non_dict_json_has_clear_message(tmp_path):
+    array_jsonl = tmp_path / "array.jsonl"
+    array_jsonl.write_text("[1, 2, 3]\n")
+
+    with pytest.raises(ar.JsonlReadError) as exc_info:
+        ar.read_jsonl(str(array_jsonl))
+
+    message = str(exc_info.value)
+    assert message
+    assert "expected a json object" in message.lower()
+    assert "line 1" in message.lower()
+
+
+def test_jsonl_read_error_for_empty_file_has_clear_message(tmp_path):
+    empty_jsonl = tmp_path / "empty.jsonl"
+    empty_jsonl.write_text("")
+
+    with pytest.raises(ar.JsonlReadError) as exc_info:
+        ar.read_jsonl(str(empty_jsonl))
+
+    message = str(exc_info.value)
+    assert message
+    assert "empty" in message.lower()
 
 
 def test_csv_read_error_for_missing_file_has_clear_message(tmp_path):
