@@ -593,6 +593,16 @@ def clip_numeric(
     >>> frame = ar.read_csv("data.csv")
     >>> clipped = ar.clip_numeric(frame, lower=0, upper=100)
     """
+    if lower is not None:
+        if isinstance(lower, bool) or not isinstance(lower, (int, float)):
+            raise TypeError(
+                f"clip_numeric(): 'lower' must be an int or float, got {type(lower).__name__!r}."
+            )
+    if upper is not None:
+        if isinstance(upper, bool) or not isinstance(upper, (int, float)):
+            raise TypeError(
+                f"clip_numeric(): 'upper' must be an int or float, got {type(upper).__name__!r}."
+            )
     if lower is None and upper is None:
         raise ValueError("At least one of 'lower' or 'upper' must be provided")
     if lower is not None and upper is not None and lower > upper:
