@@ -1042,12 +1042,6 @@ def read_jsonl(
     from .convert import from_pandas
 
     path = os.fspath(path)
-    path_lower = path.lower()
-    if not (path_lower.endswith(".jsonl") or path_lower.endswith(".ndjson")):
-        raise ValueError(
-            f"Unsupported file format: {path}. "
-            "read_jsonl only supports .jsonl and .ndjson files."
-        )
 
     if nrows is not None:
         if isinstance(nrows, bool) or not isinstance(nrows, int):
@@ -1060,9 +1054,14 @@ def read_jsonl(
             # must not raise when nrows=0.
             import pandas as pd
 
-            from .convert import from_pandas
-
             return from_pandas(pd.DataFrame())
+
+    path_lower = path.lower()
+    if not (path_lower.endswith(".jsonl") or path_lower.endswith(".ndjson")):
+        raise ValueError(
+            f"Unsupported file format: {path}. "
+            "read_jsonl only supports .jsonl and .ndjson files."
+        )
 
     records: list[dict] = []
     try:
