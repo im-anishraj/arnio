@@ -2273,25 +2273,11 @@ class TestFilterRows:
 
     def test_filter_rows_invalid_comparison_raises_column_aware_type_error(self):
         df = pd.DataFrame({"name": ["Alice", "Bob"]})
-
-class TestRoundNumericColumns:
-    def test_round_subset_missing_column_raises_clear_error(self):
-        import pandas as pd
-
-        df = pd.DataFrame(
-            {
-                "price": [1.234, 5.678],
-                "name": ["Alice", "Bob"],
-            }
-        )
-
-        frame = ar.from_pandas(df)
-
         with pytest.raises(
-            TypeError, match="filter_rows: cannot compare column 'name'"
+               TypeError,
+               match="filter_rows: cannot compare column 'name'",
         ):
-            ar.filter_rows(df, "name", ">", 1)
-
+               ar.filter_rows(df, "name", ">", 1)
 
 class TestMappingValidation:
     def test_rename_columns_rejects_invalid_mapping_value_type(self, sample_csv):
