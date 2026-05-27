@@ -2454,6 +2454,7 @@ def _field_to_dict(field_def: Field) -> dict[str, Any]:
         "datetime_min": _clean_scalar(field_def._datetime_min),
         "datetime_max": _clean_scalar(field_def._datetime_max),
         "required_if": _normalize_sequence(field_def.required_if),
+        "severity": field_def.severity,
     }
 
 
