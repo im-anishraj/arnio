@@ -2985,3 +2985,35 @@ class TestIsSafelyConvertibleToDtype:
     def test_all_null_series_returns_false(self):
         series = pd.Series([None, None])
         assert _is_safely_convertible_to_dtype(series, "int64", "col") is False
+
+
+def test_int64_rejects_string_min():
+    with pytest.raises(TypeError, match="min must be numeric or None"):
+        ar.Int64(min="a")
+
+
+def test_int64_rejects_string_max():
+    with pytest.raises(TypeError, match="max must be numeric or None"):
+        ar.Int64(max="z")
+
+
+def test_int64_rejects_bool_min():
+    with pytest.raises(TypeError, match="min must be numeric or None"):
+        ar.Int64(min=True)
+
+
+def test_int64_rejects_bool_max():
+    with pytest.raises(TypeError, match="max must be numeric or None"):
+        ar.Int64(max=False)
+
+
+def test_int64_accepts_valid_numeric_bounds():
+    assert ar.Int64(min=0, max=10) is not None
+
+
+def test_int64_accepts_float_bounds():
+    assert ar.Int64(min=0.5, max=9.9) is not None
+
+
+def test_int64_accepts_none_bounds():
+    assert ar.Int64(min=None, max=None) is not None
