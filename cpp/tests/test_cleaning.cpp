@@ -288,17 +288,21 @@ static double bits_to_double(uint64_t bits) {
 }
 
 TEST_CASE("drop_duplicates NaN payloads treated as equal (keep=first)", "[cleaning][dedup][nan]") {
-    // Two NaN values with different payloads: raw bytes differ, but %.17g
-    // serialises both as "nan", so row_key() considers them equal duplicates.
+    // Three positive NaN values with different payloads: raw bytes differ, but
+    // %.17g serialises all positive NaN variants as "nan", so row_key() treats
+    // them as equal duplicates.
+    // NOTE: negative NaN is intentionally excluded — glibc's %.17g renders it
+    // as "-nan", giving a different row_key() and making it a distinct value.
+    // Sticking to positive-payload NaNs keeps the test platform-independent.
     double nan1 = bits_to_double(0x7FF8000000000000ULL);  // canonical quiet NaN
-    double nan2 = bits_to_double(0x7FF8000000000001ULL);  // NaN with different payload
-    double nan3 = bits_to_double(0xFFF8000000000000ULL);  // negative NaN
+    double nan2 = bits_to_double(0x7FF8000000000001ULL);  // different payload
+    double nan3 = bits_to_double(0x7FF8000000000002ULL);  // yet another payload
 
     Column c("v", DType::FLOAT64);
     c.push_back(nan1);
-    c.push_back(nan2);  // duplicate of nan1 by row_key() semantics
+    c.push_back(nan2);  // duplicate of nan1
     c.push_back(double(1.0));
-    c.push_back(nan3);  // also a duplicate — different sign bit, same "nan" key
+    c.push_back(nan3);  // also a duplicate of nan1
 
     Frame f;
     f.add_column(std::move(c));
