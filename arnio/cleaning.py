@@ -490,7 +490,107 @@ def clip_numeric(
         upper=float(upper) if upper is not None else None,
         subset=subset,
     )
-    return _wrap(result, frame)
+    return ArFrame(result)
+
+
+def winsorize_outliers(
+    frame: ArFrame,
+    *,
+    lower: float = 0.05,
+    upper: float = 0.95,
+    subset: list[str] | None = None,
+) -> ArFrame:
+    """Winsorize numeric columns using quantile-based clipping.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input data frame.
+    lower : float, default 0.05
+        Lower quantile bound.
+    upper : float, default 0.95
+        Upper quantile bound.
+    subset : list[str], optional
+        Numeric columns to winsorize. If None, applies to all numeric columns.
+
+    Returns
+    -------
+    ArFrame
+        New frame with winsorized numeric values.
+
+    Examples
+    --------
+    >>> import arnio as ar
+    >>> frame = ar.read_csv("data.csv")
+    >>> clean = ar.winsorize_outliers(frame, lower=0.01, upper=0.99, subset=["revenue"])
+    """
+
+    if isinstance(lower, bool):
+        raise TypeError("lower must not be bool")
+
+    if isinstance(upper, bool):
+        raise TypeError("upper must not be bool")
+
+    if not isinstance(lower, (int, float)):
+        raise TypeError("lower must be a numeric value")
+
+    if not isinstance(upper, (int, float)):
+        raise TypeError("upper must be a numeric value")
+
+    frame, _ = _validate_frame(frame)
+
+    if lower < 0 or upper > 1:
+        raise ValueError("lower and upper must be between 0 and 1")
+
+    if lower >= upper:
+        raise ValueError("lower must be less than upper")
+
+    dtypes = frame.dtypes
+
+    numeric_columns = [
+        col for col, dtype in dtypes.items() if dtype in ("int64", "float64")
+    ]
+
+    if subset is not None:
+        subset = _validate_column_sequence(
+            subset,
+            argument_name="subset",
+        )
+
+        unknown_columns = [col for col in subset if col not in dtypes]
+        if unknown_columns:
+            raise ValueError(f"Unknown columns in subset: {unknown_columns}")
+
+        non_numeric_columns = [
+            col for col in subset if dtypes.get(col) not in ("int64", "float64")
+        ]
+        if non_numeric_columns:
+            raise ValueError(
+                "winsorize_outliers only supports numeric columns: "
+                f"{non_numeric_columns}"
+            )
+
+        target_columns = subset
+    else:
+        target_columns = numeric_columns
+
+    if not target_columns:
+        return frame
+
+    df = to_pandas(frame).copy()
+
+    for column in target_columns:
+        lower_bound = df[column].quantile(lower)
+        upper_bound = df[column].quantile(upper)
+
+        series = df[column].astype("float64")
+
+        df[column] = series.clip(
+            lower=lower_bound,
+            upper=upper_bound,
+        )
+
+    return from_pandas(df)
 
 
 def strip_whitespace(

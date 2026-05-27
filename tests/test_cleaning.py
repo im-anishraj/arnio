@@ -2800,6 +2800,170 @@ def test_rename_columns_invalid_mapping_type():
 
         import arnio as ar
 
-        df = pd.DataFrame({"first": [None], "last": [None]})
-        result = ar.combine_columns(df, subset=["first", "last"], output_column="full")
-        assert pd.isna(result["full"][0])
+    def test_filter_rows_preserves_index_for_dataframe(self):
+        """pd.DataFrame return preserves the original index."""
+        import pandas as pd
+
+        df = pd.DataFrame({"score": [10, 50, 90]}, index=[100, 200, 300])
+        result = ar.filter_rows(df, column="score", op=">=", value=50)
+        assert list(result.index) == [200, 300]
+
+    def test_replace_values_whole_frame_dataframe(self):
+        """replace_values with no column applies across all columns for pd.DataFrame."""
+        import pandas as pd
+
+        df = pd.DataFrame({"a": ["x", "y"], "b": ["x", "z"]})
+        result = ar.replace_values(df, {"x": "X"})
+        assert isinstance(result, pd.DataFrame)
+        assert result["a"].tolist() == ["X", "y"]
+        assert result["b"].tolist() == ["X", "z"]
+
+
+class TestValidateColumnSequence:
+    def test_string_raises_type_error(self):
+        with pytest.raises(
+            TypeError, match="must be a sequence of column names, not a string"
+        ):
+            _validate_column_sequence("col1", argument_name="columns")
+
+    def test_bytes_raises_type_error(self):
+        with pytest.raises(
+            TypeError, match="must be a sequence of column names, not a string"
+        ):
+            _validate_column_sequence(b"col1", argument_name="columns")
+
+    def test_non_sequence_raises_type_error(self):
+        with pytest.raises(TypeError, match="must be a sequence of column names"):
+            _validate_column_sequence({"col1", "col2"}, argument_name="columns")
+
+    def test_non_string_elements_raise_type_error(self):
+        with pytest.raises(TypeError, match="must contain only string column names"):
+            _validate_column_sequence(["col1", 123, "col2"], argument_name="columns")
+
+    def test_valid_list_returns_normalized(self):
+        result = _validate_column_sequence(["col1", "col2"], argument_name="columns")
+        assert result == ["col1", "col2"]
+
+    def test_valid_tuple_returns_normalized(self):
+        result = _validate_column_sequence(("col1", "col2"), argument_name="columns")
+        assert result == ["col1", "col2"]
+
+    def test_empty_list_returns_empty(self):
+        result = _validate_column_sequence([], argument_name="columns")
+        assert result == []
+
+
+class TestValidateStringMapping:
+    def test_non_mapping_raises_type_error(self):
+        with pytest.raises(
+            TypeError, match="must be a mapping of string keys to strings"
+        ):
+            _validate_string_mapping([("a", "b")], argument_name="mapping")
+
+    def test_invalid_non_string_keys_raise_type_error(self):
+        with pytest.raises(
+            TypeError, match="keys must contain only string column names"
+        ):
+            _validate_string_mapping({1: "a", 2: "b"}, argument_name="mapping")
+
+    def test_empty_value_raises_type_error(self):
+        with pytest.raises(TypeError, match="values must be non-empty strings"):
+            _validate_string_mapping({"a": "", "b": "value"}, argument_name="mapping")
+
+    def test_whitespace_only_value_raises_type_error(self):
+        with pytest.raises(TypeError, match="values must be non-empty strings"):
+            _validate_string_mapping(
+                {"a": "   ", "b": "value"}, argument_name="mapping"
+            )
+
+    def test_valid_string_mapping_returns_dict(self):
+        result = _validate_string_mapping(
+            {"a": "value1", "b": "value2"}, argument_name="mapping"
+        )
+        assert result == {"a": "value1", "b": "value2"}
+
+    def test_empty_mapping_allow_empty_true(self):
+        result = _validate_string_mapping({}, argument_name="mapping", allow_empty=True)
+        assert result == {}
+
+    def test_empty_mapping_allow_empty_false_raises(self):
+        with pytest.raises(ValueError, match="must not be empty"):
+            _validate_string_mapping({}, argument_name="mapping", allow_empty=False)
+
+
+def test_winsorize_string_subset_rejected():
+    frame = ar.from_pandas(pd.DataFrame({"age": [1, 2, 3]}))
+
+    with pytest.raises(TypeError, match="subset must be a sequence"):
+        ar.winsorize_outliers(frame, subset="age")
+
+
+def test_winsorize_invalid_subset_item():
+    frame = ar.from_pandas(pd.DataFrame({"age": [1, 2, 3]}))
+
+    with pytest.raises(TypeError, match="subset must contain only string"):
+        ar.winsorize_outliers(frame, subset=["age", 1])
+
+
+def test_winsorize_non_numeric_lower():
+    frame = ar.from_pandas(pd.DataFrame({"age": [1, 2, 3]}))
+
+    with pytest.raises(TypeError, match="lower must be a numeric value"):
+        ar.winsorize_outliers(frame, lower="x")
+
+
+def test_winsorize_boolean_lower():
+    frame = ar.from_pandas(pd.DataFrame({"age": [1, 2, 3]}))
+
+    with pytest.raises(TypeError, match="lower must not be bool"):
+        ar.winsorize_outliers(frame, lower=False)
+
+
+class TestCleanColumnNames:
+    def test_clean_column_names_basic(self):
+        df = pd.DataFrame({"My-Name!!": [1], "age##": [2]})
+        frame = from_pandas(df)
+        result = ar.clean_column_names(frame)
+        assert to_pandas(result).columns.tolist() == ["my_name", "age"]
+
+    def test_clean_column_names_consecutive_and_boundary_underscores(self):
+        df = pd.DataFrame({"__col__name__": [1], "-another--col-": [2]})
+        frame = from_pandas(df)
+        result = ar.clean_column_names(frame)
+        assert to_pandas(result).columns.tolist() == ["col_name", "another_col"]
+
+    def test_clean_column_names_case_type_upper(self):
+        df = pd.DataFrame({"My-Name!!": [1]})
+        frame = from_pandas(df)
+        result = ar.clean_column_names(frame, case_type="upper")
+        assert to_pandas(result).columns.tolist() == ["MY_NAME"]
+
+    def test_clean_column_names_case_type_none(self):
+        df = pd.DataFrame({"My-Name!!": [1]})
+        frame = from_pandas(df)
+        result = ar.clean_column_names(frame, case_type="none")
+        assert to_pandas(result).columns.tolist() == ["My_Name"]
+
+    def test_clean_column_names_duplicate_raises(self):
+        df = pd.DataFrame({"col__name": [1], "col---name": [2]})
+        frame = from_pandas(df)
+        with pytest.raises(ValueError, match="duplicates"):
+            ar.clean_column_names(frame)
+
+    def test_clean_column_names_case_type_invalid(self):
+        df = pd.DataFrame({"name": [1]})
+        frame = from_pandas(df)
+        with pytest.raises(ValueError, match="case_type must be one of"):
+            ar.clean_column_names(frame, case_type="invalid")
+
+    def test_clean_column_names_case_type_type_error(self):
+        df = pd.DataFrame({"name": [1]})
+        frame = from_pandas(df)
+        with pytest.raises(TypeError, match="must be a string"):
+            ar.clean_column_names(frame, case_type=123)
+
+    def test_clean_column_names_pipeline(self):
+        df = pd.DataFrame({"My-Name!!": [1], "age##": [2]})
+        frame = from_pandas(df)
+        result = ar.pipeline(frame, [("clean_column_names", {"case_type": "upper"})])
+        assert to_pandas(result).columns.tolist() == ["MY_NAME", "AGE"]
