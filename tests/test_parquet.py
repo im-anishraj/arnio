@@ -146,7 +146,7 @@ class TestWriteParquetCompression:
         frame = ar.from_pandas(pd.DataFrame({"v": [1]}))
         with pytest.raises(ValueError, match="Unknown compression codec"):
             ar.write_parquet(frame, tmp_path / "out.parquet", compression="lz4")
-    
+
     def test_non_string_compression_raises_type_error(self, tmp_path):
         frame = ar.from_pandas(pd.DataFrame({"v": [1]}))
         with pytest.raises(TypeError, match="compression must be a string"):
