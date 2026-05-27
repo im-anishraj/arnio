@@ -51,3 +51,18 @@ def test_unknown_step_error_has_clear_message():
     assert message
     assert "unknown pipeline step" in message.lower()
     assert "available steps" in message.lower()
+
+
+def test_pipeline_step_error_properties_and_message():
+    orig_err = ValueError("Invalid input value")
+    step_err = ar.PipelineStepError("normalize_age", orig_err)
+
+    assert step_err.step_name == "normalize_age"
+    assert step_err.orig_err is orig_err
+    assert "normalize_age" in str(step_err)
+    assert "Invalid input value" in str(step_err)
+
+
+def test_jsonl_read_error_inheritance():
+    assert issubclass(ar.JsonlReadError, ar.ArnioError)
+
