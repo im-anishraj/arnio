@@ -90,13 +90,11 @@ def _emit_scalar(value: Any) -> str:
     raise TypeError(f"Unsupported scalar type: {type(value)!r}")
 
 
+# changed this too
 def _validate_serializable(value: Any) -> None:
-    if isinstance(value, _SCALAR_TYPES):
-        return
+    """Validate recursively that a value can be serialized."""
 
-    if isinstance(value, set):
-        for item in value:
-            _validate_serializable(item)
+    if isinstance(value, _SCALAR_TYPES):
         return
 
     if isinstance(value, list):
@@ -104,12 +102,48 @@ def _validate_serializable(value: Any) -> None:
             _validate_serializable(item)
         return
 
-    if isinstance(value, dict):
-        for item in value.values():
+    if isinstance(value, set):
+        for item in value:
             _validate_serializable(item)
         return
 
-    raise TypeError(f"schema_to_yaml does not support values of type {type(value)!r}.")
+    if isinstance(value, dict):
+        for k, v in value.items():
+            if not isinstance(k, str):
+                raise TypeError("schema dict keys must be strings")
+
+            _validate_serializable(v)
+
+        return
+
+    raise TypeError(
+        f"schema_to_yaml does not support values of type "
+        f"{type(value)!r}. Only str, int, float, bool, "
+        "None, list, and dict are allowed."
+    )
+
+
+# added normalize_serializable function
+def _normalize_serializable(value: Any) -> Any:
+    """Recursively normalize serialization-safe values.
+
+    - dict keys are sorted deterministically
+    - sets are converted into sorted lists
+    - lists are normalized recursively
+    - unsupported values raise TypeError
+    """
+    _validate_serializable(value)
+
+    if isinstance(value, dict):
+        return {k: _normalize_serializable(v) for k, v in sorted(value.items())}
+
+    if isinstance(value, set):
+        return sorted(_normalize_serializable(v) for v in value)
+
+    if isinstance(value, list):
+        return [_normalize_serializable(v) for v in value]
+
+    return value
 
 
 def _emit_value(value: Any, depth: int) -> str:
@@ -227,25 +261,11 @@ def schema_to_dict(schema: dict | Any) -> dict:
         if field_name in {"strict", "unique"}:
             metadata[field_name] = value
             continue
-
+        # changed here also minimizing the content
         if isinstance(value, str):
             normalised[field_name] = {"type": value}
-
-        elif isinstance(value, dict):
-            cleaned = {}
-
-            for k, v in sorted(value.items()):
-                if isinstance(v, set):
-                    cleaned[k] = sorted(v)
-                else:
-                    cleaned[k] = v
-
-            _validate_serializable(cleaned)
-
-            normalised[field_name] = cleaned
-
         else:
-            normalised[field_name] = value
+            normalised[field_name] = _normalize_serializable(value)
 
     result = {"fields": normalised}
     result.update(metadata)

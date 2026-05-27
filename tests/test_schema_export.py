@@ -271,3 +271,28 @@ def test_real_schema_with_rules_raises():
     schema = ar.Schema({"col": ar.Field(dtype="STRING")}, rules=[lambda df: []])
     with pytest.raises(ValueError, match="rules"):
         schema_to_dict(schema)
+
+
+# test unsupported raw field value
+def test_raw_field_object_raises():
+    with pytest.raises(TypeError):
+        schema_to_dict({"x": object()})
+
+
+# test for nested set normalization
+def test_nested_set_normalized():
+    result = schema_to_dict({"x": {"meta": {"tags": {"b", "a"}}}})
+
+    assert result == {"fields": {"x": {"meta": {"tags": ["a", "b"]}}}}
+
+
+# test for nested unsupported object inside dict
+def test_nested_unsupported_object_raises():
+    with pytest.raises(TypeError):
+        schema_to_dict({"x": {"meta": {"bad": object()}}})
+
+
+# test for nested unsupported object inside list
+def test_list_with_unsupported_object_raises():
+    with pytest.raises(TypeError):
+        schema_to_dict({"x": {"values": [1, object()]}})
