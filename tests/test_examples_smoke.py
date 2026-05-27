@@ -101,6 +101,9 @@ def has_dependencies(deps: tuple[str, ...]) -> bool:
 
 def test_all_example_scripts_are_accounted_for() -> None:
     """Fail when a new examples/**/*.py is not allowlisted or explicitly excluded."""
+    if not EXAMPLES_DIR.exists():
+        pytest.skip("examples/ directory is not present in this test environment.")
+
     discovered = _discover_example_scripts()
     allowlisted = {spec.path for spec in EXAMPLE_SPECS}
     excluded = set(EXCLUDED_EXAMPLES)
