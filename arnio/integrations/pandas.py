@@ -7,6 +7,12 @@ from typing import Any
 
 import pandas as pd
 
+from arnio.cleaning import (
+    clip_numeric as clip_numeric_values,
+    drop_nulls as drop_null_rows,
+    fill_nulls as fill_null_values,
+    strip_whitespace as strip_whitespace_values,
+)
 from arnio.convert import from_pandas, to_pandas
 from arnio.frame import ArFrame
 from arnio.pipeline import pipeline as run_pipeline
@@ -59,6 +65,37 @@ class ArnioPandasAccessor:
             strip_whitespace=strip_whitespace,
             drop_nulls=drop_nulls,
             drop_duplicates=drop_duplicates,
+        )
+        return to_pandas(frame)
+
+    def strip_whitespace(self, *, subset: list[str] | None = None) -> pd.DataFrame:
+        """Trim leading/trailing whitespace and return pandas output."""
+        frame = strip_whitespace_values(self.to_arframe(), subset=subset)
+        return to_pandas(frame)
+
+    def drop_nulls(self, *, subset: list[str] | None = None) -> pd.DataFrame:
+        """Drop rows with nulls in the selected columns."""
+        frame = drop_null_rows(self.to_arframe(), subset=subset)
+        return to_pandas(frame)
+
+    def fill_nulls(self, value: Any, *, subset: list[str] | None = None) -> pd.DataFrame:
+        """Fill nulls in the selected columns and return pandas output."""
+        frame = fill_null_values(self.to_arframe(), value, subset=subset)
+        return to_pandas(frame)
+
+    def clip_numeric(
+        self,
+        *,
+        lower: int | float | None = None,
+        upper: int | float | None = None,
+        subset: list[str] | None = None,
+    ) -> pd.DataFrame:
+        """Clip numeric values in the selected columns and return pandas output."""
+        frame = clip_numeric_values(
+            self.to_arframe(),
+            lower=lower,
+            upper=upper,
+            subset=subset,
         )
         return to_pandas(frame)
 

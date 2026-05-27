@@ -186,6 +186,12 @@ clean_df = df.arnio.clean([
 ])
 
 report = clean_df.arnio.profile()
+
+trimmed_df = (
+    df.arnio.strip_whitespace(subset=["customer_name"])
+      .arnio.clip_numeric(upper=100, subset=["loyalty_score"])
+      .arnio.drop_nulls(subset=["customer_name"])
+)
 ```
 ## Cross-field validation rules
 
