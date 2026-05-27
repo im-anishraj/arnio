@@ -40,6 +40,7 @@ _STEP_REGISTRY: dict[str, Callable] = {
     "strip_whitespace": cleaning.strip_whitespace,
     "parse_bool_strings": cleaning.parse_bool_strings,
     "normalize_case": cleaning.normalize_case,
+    "normalize_minmax": cleaning.normalize_minmax,
     "normalize_unicode": cleaning.normalize_unicode,
     "rename_columns": cleaning.rename_columns,
     "cast_types": cleaning.cast_types,

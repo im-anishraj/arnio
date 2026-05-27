@@ -3772,3 +3772,44 @@ class TestValidateStringMapping:
     def test_empty_mapping_allow_empty_false_raises(self):
         with pytest.raises(ValueError, match="must not be empty"):
             _validate_string_mapping({}, argument_name="mapping", allow_empty=False)
+
+
+class TestNormalizeMinMax:
+    def test_normalize_minmax_basic(self):
+        frame = ar.from_pandas(pd.DataFrame({"value": [10.0, 20.0, 30.0]}))
+        result = ar.normalize_minmax(frame)
+        df = ar.to_pandas(result)
+        assert df["value"].tolist() == pytest.approx([0.0, 0.5, 1.0])
+
+    def test_normalize_minmax_custom_range(self):
+        frame = ar.from_pandas(pd.DataFrame({"value": [10.0, 20.0, 30.0]}))
+        result = ar.normalize_minmax(frame, feature_range=(-1.0, 1.0))
+        df = ar.to_pandas(result)
+        assert df["value"].tolist() == pytest.approx([-1.0, 0.0, 1.0])
+
+    def test_normalize_minmax_constant_column(self):
+        frame = ar.from_pandas(pd.DataFrame({"value": [5.0, 5.0, 5.0]}))
+        result = ar.normalize_minmax(frame, feature_range=(0.0, 1.0))
+        df = ar.to_pandas(result)
+        assert df["value"].tolist() == [0.0, 0.0, 0.0]
+
+    def test_normalize_minmax_invalid_range_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"value": [1.0, 2.0]}))
+        with pytest.raises(ValueError, match="min must be less than max"):
+            ar.normalize_minmax(frame, feature_range=(1.0, 0.5))
+
+    def test_normalize_minmax_non_numeric_subset_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"value": [1.0, 2.0], "label": ["a", "b"]}))
+        with pytest.raises(ValueError, match="only supports numeric columns"):
+            ar.normalize_minmax(frame, subset=["label"])
+
+    def test_normalize_minmax_pipeline_integration(self):
+        frame = ar.from_pandas(pd.DataFrame({"value": [10.0, 20.0, 30.0]}))
+        result = ar.pipeline(
+            frame,
+            [
+                ("normalize_minmax", {"feature_range": (0.0, 2.0)}),
+            ],
+        )
+        df = ar.to_pandas(result)
+        assert df["value"].tolist() == pytest.approx([0.0, 1.0, 2.0])

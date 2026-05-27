@@ -1962,3 +1962,87 @@ def coalesce_columns(
     df[output_column] = df[subset_columns].bfill(axis=1).iloc[:, 0]
 
     return from_pandas(df) if is_arframe else df
+
+
+def normalize_minmax(
+    frame: ArFrame,
+    subset: Sequence[str] | None = None,
+    feature_range: tuple[float, float] = (0.0, 1.0),
+) -> ArFrame:
+    """Normalize numeric columns using min-max scaling to feature_range.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        The input ArFrame.
+    subset : Sequence[str] or None, optional
+        A subset of columns to normalize. If None, all numeric columns are normalized.
+    feature_range : tuple[float, float], default (0.0, 1.0)
+        The target range for the scaled features.
+
+    Returns
+    -------
+    ArFrame
+        A new ArFrame with normalized values.
+
+    Raises
+    ------
+    ValueError
+        If the feature range is invalid (e.g. min >= max) or if subset contains unknown or non-numeric columns.
+    """
+    import pandas as pd
+    from .convert import from_pandas, to_pandas
+    from .frame import ArFrame
+
+    if not isinstance(feature_range, tuple) or len(feature_range) != 2:
+        raise ValueError("feature_range must be a tuple of (min, max)")
+
+    range_min, range_max = feature_range
+    if range_min >= range_max:
+        raise ValueError(f"Invalid feature_range {feature_range}: min must be less than max")
+
+    dtypes = frame.dtypes
+    def _is_supported_numeric(col_name: str) -> bool:
+        return dtypes.get(col_name) in ("int64", "float64")
+
+    if subset is not None:
+        subset = _validate_existing_column_sequence(
+            subset,
+            available_columns=frame.columns,
+            argument_name="subset",
+            missing_error=ValueError,
+            missing_message=lambda missing, _available: (
+                f"Unknown columns in subset: {missing}"
+            ),
+        )
+
+        non_numeric_columns = [col for col in subset if not _is_supported_numeric(col)]
+        if non_numeric_columns:
+            raise ValueError(
+                f"normalize_minmax only supports numeric columns: {non_numeric_columns}"
+            )
+        target_cols = subset
+    else:
+        target_cols = [col for col in frame.columns if _is_supported_numeric(col)]
+
+    if not target_cols:
+        return frame
+
+    df = to_pandas(frame)
+    for col in target_cols:
+        col_min = df[col].min()
+        col_max = df[col].max()
+        if pd.isna(col_min) or pd.isna(col_max):
+            continue
+
+        if col_min == col_max:
+            df[col] = range_min
+        else:
+            scaled = (df[col] - col_min) / (col_max - col_min)
+            df[col] = range_min + scaled * (range_max - range_min)
+
+    # Cast scaled columns to float64
+    for col in target_cols:
+        df[col] = df[col].astype("float64")
+
+    return from_pandas(df)
