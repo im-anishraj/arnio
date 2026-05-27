@@ -700,6 +700,16 @@ def winsorize_outliers(
     >>> clean = ar.winsorize_outliers(frame, lower=0.01, upper=0.99, subset=["revenue"])
     """
 
+    for name, value in [("lower", lower), ("upper", upper)]:
+        if value is None:
+            raise TypeError(f"{name} must be a numeric value")
+
+        if isinstance(value, bool):
+            raise TypeError(f"{name} must not be bool")
+
+        if not isinstance(value, (int, float)):
+            raise TypeError(f"{name} must be a numeric value")
+
     if lower < 0 or upper > 1:
         raise ValueError("lower and upper must be between 0 and 1")
 
@@ -713,13 +723,20 @@ def winsorize_outliers(
     ]
 
     if subset is not None:
-        unknown_columns = [col for col in subset if col not in dtypes]
-        if unknown_columns:
-            raise ValueError(f"Unknown columns in subset: {unknown_columns}")
+        subset = _validate_existing_column_sequence(
+            subset,
+            available_columns=frame.columns,
+            argument_name="subset",
+            missing_error=ValueError,
+            missing_message=lambda missing, _available: (
+                f"Unknown columns in subset: {missing}"
+            ),
+        )
 
         non_numeric_columns = [
             col for col in subset if dtypes.get(col) not in ("int64", "float64")
         ]
+
         if non_numeric_columns:
             raise ValueError(
                 "winsorize_outliers only supports numeric columns: "
