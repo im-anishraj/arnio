@@ -537,40 +537,59 @@ pre:hover .copy-btn {
   margin-bottom: var(--space-2);
 }
 
-/* ── Comparison Table ────────────────────────────────────── */
+/* Comparison section */
 .comparison-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: var(--space-6);
-  margin: var(--space-8) 0;
+  gap: 1.5rem;
+  margin-top: 2rem;
 }
 
-.comparison-col {
-  padding: var(--space-6);
-  border-radius: var(--radius-lg);
+.comparison-card {
+  border-radius: 12px;
+  padding: 1.75rem;
 }
 
-.comparison-col--old {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border-subtle);
+.comparison-label {
+  font-weight: 700;
+  font-size: 1.05rem;
+  margin-bottom: 1rem;
 }
 
-.comparison-col--new {
-  background: var(--color-accent-subtle);
-  border: 1px solid var(--color-accent);
+.comparison-card ul {
+  padding-left: 1.2rem;
+  line-height: 2;
 }
 
-.comparison-col h3 {
-  margin-top: 0;
-  font-size: var(--font-size-md);
+/* Old Way — red tint */
+.comparison-old {
+  border: 1.5px solid rgba(239, 68, 68, 0.4);
+  background-color: rgba(239, 68, 68, 0.05);
 }
 
-@media (max-width: 767px) {
+/* Arnio Way — blue/green tint */
+.comparison-new {
+  border: 1.5px solid rgba(59, 130, 246, 0.5);
+  background-color: rgba(59, 130, 246, 0.05);
+}
+
+/* Dark mode */
+.dark .comparison-old {
+  border-color: rgba(239, 68, 68, 0.35);
+  background-color: rgba(239, 68, 68, 0.08);
+}
+
+.dark .comparison-new {
+  border-color: rgba(59, 130, 246, 0.45);
+  background-color: rgba(59, 130, 246, 0.08);
+}
+
+/* Mobile */
+@media (max-width: 640px) {
   .comparison-grid {
     grid-template-columns: 1fr;
   }
 }
-
 /* ── API Function Block ──────────────────────────────────── */
 .api-func {
   border: 1px solid var(--color-border-subtle);
