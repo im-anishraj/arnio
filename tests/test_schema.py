@@ -8,6 +8,7 @@ import pandas as pd
 import pytest
 
 import arnio as ar
+from arnio.schema import _is_safely_convertible_to_dtype
 
 
 def test_dtype_validation_reports_safe_int_conversion_for_numeric_strings():
@@ -266,6 +267,24 @@ def test_schema_rejects_invalid_field_values_none(sample_csv):
     frame = ar.read_csv(sample_csv)
     with pytest.raises(TypeError, match="must be a Field instance"):
         ar.validate(frame, {"id": None})
+
+
+def test_schema_rejects_non_string_field_name_integer(sample_csv):
+    frame = ar.read_csv(sample_csv)
+    with pytest.raises(TypeError, match="Schema field names must be strings"):
+        ar.validate(frame, {1: ar.String()})
+
+
+def test_schema_rejects_non_string_field_name_none(sample_csv):
+    frame = ar.read_csv(sample_csv)
+    with pytest.raises(TypeError, match="Schema field names must be strings"):
+        ar.validate(frame, {None: ar.String()})
+
+
+def test_schema_rejects_non_string_field_name_tuple(sample_csv):
+    frame = ar.read_csv(sample_csv)
+    with pytest.raises(TypeError, match="Schema field names must be strings"):
+        ar.validate(frame, {("a", "b"): ar.String()})
 
 
 def test_schema_validation_collects_row_level_issues(tmp_path):
@@ -718,6 +737,30 @@ def test_validation_result_to_markdown_rejects_non_integer_max_issues(sample_csv
             assert "max_issues must be an integer or None" in str(exc)
         else:
             raise AssertionError(f"Expected max_issues={invalid!r} to raise")
+
+
+def test_schema_construction_validates_rules():
+    with pytest.raises(TypeError, match="Schema 'rules' must be a list of callables"):
+        ar.Schema({"x": ar.Int64()}, rules="abc")
+
+    with pytest.raises(TypeError, match="Schema 'rules' must be a list of callables"):
+        ar.Schema({"x": ar.Int64()}, rules=123)
+
+    with pytest.raises(TypeError, match="Schema 'rules' must be a list of callables"):
+        ar.Schema({"x": ar.Int64()}, rules=object())
+
+    with pytest.raises(TypeError, match="Schema 'rules' must be a list of callables"):
+        ar.Schema({"x": ar.Int64()}, rules=[object()])
+
+    def valid_rule(df):
+        return []
+
+    with pytest.raises(TypeError, match="Schema 'rules' must be a list of callables"):
+        ar.Schema({"x": ar.Int64()}, rules=[valid_rule, 456])
+
+    assert ar.Schema({"x": ar.Int64()}, rules=[valid_rule]).rules is not None
+    assert ar.Schema({"x": ar.Int64()}, rules=(valid_rule,)).rules is not None
+    assert ar.Schema({"x": ar.Int64()}, rules=None).rules is None
 
 
 # ---------------------------------------------------------------------------
@@ -1695,6 +1738,42 @@ def test_field_nullable_and_unique_accept_valid_bools():
     assert field.unique is True
 
 
+@pytest.mark.parametrize("value", ["status", 123])
+def test_required_if_rejects_non_tuple_shapes(value):
+    with pytest.raises(TypeError, match="required_if must be a tuple or None"):
+        ar.String(required_if=value)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("value", [("status",), ("status", "active", "extra")])
+def test_required_if_rejects_wrong_tuple_lengths(value):
+    with pytest.raises(
+        TypeError, match=r"required_if must be a \(column_name, expected_value\) tuple"
+    ):
+        ar.String(required_if=value)  # type: ignore[arg-type]
+
+
+def test_required_if_rejects_non_string_column_name():
+    with pytest.raises(TypeError, match="required_if column name must be a string"):
+        ar.String(required_if=(123, "active"))  # type: ignore[arg-type]
+
+
+def test_required_if_valid_conditional_validation(tmp_path):
+    path = tmp_path / "conditional_req.csv"
+    path.write_text("status,notes\n" "active,has notes\n" "inactive,\n" "active,\n")
+    frame = ar.read_csv(path)
+    schema = ar.Schema(
+        {"notes": ar.String(required_if=("status", "active"), nullable=True)}
+    )
+
+    result = ar.validate(frame, schema)
+    rules = [issue.rule for issue in result.issues]
+
+    assert not result.passed
+    assert result.issue_count == 1
+    assert "required_if" in rules
+    assert result.bad_rows == [3]
+
+
 def test_email_default_keeps_backward_compatibility(sample_csv):
     frame = ar.read_csv(sample_csv)
 
@@ -2320,7 +2399,7 @@ def test_schema_rules_none_by_default(tmp_path):
 
 def test_currency_code_valid(tmp_path):
     path = tmp_path / "currencies.csv"
-    path.write_text("currency\nUSD\nEUR\nINR\nJPY\n")
+    path.write_text("currency\nUSD\nEUR\nINR\nJPY\nXXX\n")
 
     result = ar.validate(
         ar.read_csv(path),
@@ -2334,7 +2413,9 @@ def test_currency_code_valid(tmp_path):
 def test_currency_code_invalid(tmp_path):
     path = tmp_path / "bad_currencies.csv"
     # We add a dummy column so the empty currency row isn't skipped as a blank line
-    path.write_text("currency,dummy\nUS,1\nUSDD,2\nusd,3\nUS1,4\nEur,5\n,6\n")
+    path.write_text(
+        "currency,dummy\nUS,1\nUSDD,2\nusd,3\nUS1,4\nEur,5\n,6\nZZZ,7\nABC,8\n"
+    )
 
     result = ar.validate(
         ar.read_csv(path),
@@ -2342,13 +2423,42 @@ def test_currency_code_invalid(tmp_path):
     )
 
     assert not result.passed
-    assert result.issue_count == 6
+    assert result.issue_count == 8
 
-    assert sorted([issue.row_index for issue in result.issues]) == [1, 2, 3, 4, 5, 6]
+    assert sorted([issue.row_index for issue in result.issues]) == [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+    ]
 
     rules = {issue.rule for issue in result.issues}
     assert "currency_code" in rules
     assert "nullable" in rules
+
+
+def test_currency_code_override(tmp_path):
+    path = tmp_path / "custom_currencies.csv"
+    path.write_text("currency\nUSD\nZZZ\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"currency": ar.CurrencyCode(nullable=False, allowed={"USD", "ZZZ"})},
+    )
+    assert result.passed
+    assert result.issue_count == 0
+
+    result_default = ar.validate(
+        ar.read_csv(path),
+        {"currency": ar.CurrencyCode(nullable=False)},
+    )
+    assert not result_default.passed
+    assert result_default.issue_count == 1
+    assert result_default.issues[0].value == "ZZZ"
 
 
 def test_schema_rules_issue_shape_matches_validation_issue(tmp_path):
@@ -2833,3 +2943,102 @@ def test_schema_field_only_roundtrip_with_rules_present():
     assert restored.strict is True
     assert list(restored.unique) == ["id"]
     assert not restored.rules
+
+
+class TestIsSafelyConvertibleToDtype:
+    def test_id_column_rejects_leading_zeros(self):
+        series = pd.Series(["001", "002", "003"])
+        assert _is_safely_convertible_to_dtype(series, "int64", "id") is False
+
+    def test_user_id_column_rejects_leading_zeros(self):
+        series = pd.Series(["0001", "0002"])
+        assert _is_safely_convertible_to_dtype(series, "int64", "user_id") is False
+
+    def test_uuid_column_rejects_leading_zeros(self):
+        series = pd.Series(["0123", "0456"])
+        assert _is_safely_convertible_to_dtype(series, "int64", "uuid") is False
+
+    def test_zip_column_rejects_leading_zeros(self):
+        series = pd.Series(["01234", "02345"])
+        assert _is_safely_convertible_to_dtype(series, "int64", "zip") is False
+
+    def test_valid_int64_conversion(self):
+        series = pd.Series(["1", "2", "3"])
+        assert _is_safely_convertible_to_dtype(series, "int64", "count") is True
+
+    def test_negative_int64_conversion(self):
+        series = pd.Series(["-1", "2", "3"])
+        assert _is_safely_convertible_to_dtype(series, "int64", "delta") is True
+
+    def test_float64_conversion(self):
+        series = pd.Series(["1.5", "2.5", "3.0"])
+        assert _is_safely_convertible_to_dtype(series, "float64", "price") is True
+
+    def test_invalid_string_for_int64(self):
+        series = pd.Series(["abc", "def"])
+        assert _is_safely_convertible_to_dtype(series, "int64", "data") is False
+
+    def test_empty_series_returns_false(self):
+        series = pd.Series([], dtype="string")
+        assert _is_safely_convertible_to_dtype(series, "int64", "col") is False
+
+    def test_all_null_series_returns_false(self):
+        series = pd.Series([None, None])
+        assert _is_safely_convertible_to_dtype(series, "int64", "col") is False
+
+
+def test_int64_rejects_string_min():
+    with pytest.raises(TypeError, match="min must be numeric or None"):
+        ar.Int64(min="a")
+
+
+def test_int64_rejects_string_max():
+    with pytest.raises(TypeError, match="max must be numeric or None"):
+        ar.Int64(max="z")
+
+
+def test_int64_rejects_bool_min():
+    with pytest.raises(TypeError, match="min must be numeric or None"):
+        ar.Int64(min=True)
+
+
+def test_int64_rejects_bool_max():
+    with pytest.raises(TypeError, match="max must be numeric or None"):
+        ar.Int64(max=False)
+
+
+def test_int64_accepts_valid_numeric_bounds():
+    assert ar.Int64(min=0, max=10) is not None
+
+
+def test_int64_accepts_float_bounds():
+    assert ar.Int64(min=0.5, max=9.9) is not None
+
+
+def test_int64_accepts_none_bounds():
+    assert ar.Int64(min=None, max=None) is not None
+
+
+def test_int64_rejects_string_min_with_valid_max():
+    with pytest.raises(TypeError, match="min must be numeric or None"):
+        ar.Int64(min="a", max=1)
+
+
+def test_int64_rejects_valid_min_with_string_max():
+    with pytest.raises(TypeError, match="max must be numeric or None"):
+        ar.Int64(min=1, max="z")
+
+
+def test_int64_rejects_bool_pair():
+    with pytest.raises(TypeError, match="min must be numeric or None"):
+        ar.Int64(min=True, max=False)
+
+
+def test_float64_rejects_string_min_with_valid_max():
+    with pytest.raises(TypeError, match="min must be numeric or None"):
+        ar.Float64(min="a", max=1.0)
+
+
+def test_float64_rejects_bool_pair():
+    with pytest.raises(TypeError, match="min must be numeric or None"):
+        ar.Float64(min=True, max=False)

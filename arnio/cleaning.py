@@ -82,7 +82,7 @@ def _validate_column_sequence(
         raise TypeError(
             f"{argument_name} must be a sequence of column names, not a string"
         )
-    if not isinstance(columns, Sequence):
+    if not isinstance(columns, Sequence) and not isinstance(columns, pd.Index):
         raise TypeError(f"{argument_name} must be a sequence of column names")
 
     normalized = list(columns)
@@ -395,6 +395,11 @@ def fill_nulls(
                 f"Available columns: {available}"
             ),
         )
+    if not isinstance(value, (str, int, float, bool)):
+        raise TypeError(
+            f"fill value must be a supported scalar (str, int, float, or bool), "
+            f"got {type(value).__name__!r}"
+        )
     result = _fill_nulls(frame._frame, value, subset=subset)
     return ArFrame(result)
 
@@ -451,7 +456,9 @@ def drop_duplicates(
     return ArFrame(result)
 
 
-def drop_constant_columns(frame: ArFrame) -> ArFrame:
+def drop_constant_columns(
+    frame: ArFrame | pd.DataFrame,
+) -> ArFrame | pd.DataFrame:
     """Remove columns with exactly one unique value.
 
     Nulls are counted as values when determining whether a column is constant.
@@ -464,12 +471,12 @@ def drop_constant_columns(frame: ArFrame) -> ArFrame:
 
     Parameters
     ----------
-    frame : ArFrame
+    frame : ArFrame or pd.DataFrame
         Input data frame.
 
     Returns
     -------
-    ArFrame
+    ArFrame or pd.DataFrame
         New frame without constant columns.
 
     Examples
@@ -477,16 +484,23 @@ def drop_constant_columns(frame: ArFrame) -> ArFrame:
     >>> frame = ar.read_csv("data.csv")
     >>> reduced = ar.drop_constant_columns(frame)
     """
-    from .convert import from_pandas, to_pandas
+    import pandas as pd
 
-    df = to_pandas(frame)
+    from .convert import from_pandas, to_pandas
+    from .frame import ArFrame
+
+    is_arframe = isinstance(frame, ArFrame)
+    if not is_arframe and not isinstance(frame, pd.DataFrame):
+        raise TypeError("frame must be an ArFrame or a pandas DataFrame")
+
+    df = to_pandas(frame) if is_arframe else frame
     if len(df.index) == 0:
         return frame
 
-    constant_columns = [
-        column for column in df.columns if df[column].nunique(dropna=False) == 1
-    ]
-    return from_pandas(df.drop(columns=constant_columns))
+    nunique_counts = df.nunique(dropna=False)
+    constant_columns = nunique_counts[nunique_counts == 1].index.tolist()
+    result_df = df.drop(columns=constant_columns)
+    return from_pandas(result_df) if is_arframe else result_df
 
 
 def drop_empty_columns(frame: ArFrame) -> ArFrame:
@@ -592,9 +606,15 @@ def clip_numeric(
         return dtypes.get(col_name) in ("int64", "float64")
 
     if subset is not None:
-        unknown_columns = [col for col in subset if col not in dtypes]
-        if unknown_columns:
-            raise ValueError(f"Unknown columns in subset: {unknown_columns}")
+        subset = _validate_existing_column_sequence(
+            subset,
+            available_columns=frame.columns,
+            argument_name="subset",
+            missing_error=ValueError,
+            missing_message=lambda missing, _available: (
+                f"Unknown columns in subset: {missing}"
+            ),
+        )
 
         non_numeric_columns = [col for col in subset if not _is_supported_numeric(col)]
         if non_numeric_columns:
@@ -672,6 +692,12 @@ def winsorize_outliers(
     -------
     ArFrame
         New frame with winsorized numeric values.
+
+    Examples
+    --------
+    >>> import arnio as ar
+    >>> frame = ar.read_csv("data.csv")
+    >>> clean = ar.winsorize_outliers(frame, lower=0.01, upper=0.99, subset=["revenue"])
     """
 
     if lower < 0 or upper > 1:
@@ -840,6 +866,15 @@ def parse_bool_strings(
     """
     from .convert import from_pandas, to_pandas
 
+    if true_values is not None and isinstance(true_values, (str, bytes)):
+        raise TypeError(
+            "true_values must be a set/list/tuple of strings, not a bare string"
+        )
+    if false_values is not None and isinstance(false_values, (str, bytes)):
+        raise TypeError(
+            "false_values must be a set/list/tuple of strings, not a bare string"
+        )
+
     df = to_pandas(frame).copy()
     if true_values is None:
         true_values = {"true", "yes", "y", "1"}
@@ -935,6 +970,8 @@ def normalize_case(
     >>> frame = ar.read_csv("data.csv")
     >>> lower = ar.normalize_case(frame, case_type="lower")
     """
+    if not isinstance(case_type, str):
+        raise TypeError("case_type must be a string")
     if subset is not None:
         subset = _validate_existing_column_sequence(
             subset,
@@ -1262,6 +1299,7 @@ def filter_rows(
     """
 
     import pandas as pd
+    from pandas.api.types import is_scalar
 
     from .convert import from_pandas, to_pandas
 
@@ -1283,6 +1321,9 @@ def filter_rows(
 
     if column not in df.columns:
         raise ValueError(f"Unknown column: {column}")
+
+    if not is_scalar(value):
+        raise TypeError("filter_rows value must be a scalar")
 
     try:
         mask = getattr(df[column], ops[op])(value)
@@ -1847,7 +1888,7 @@ def standardize_missing_tokens(frame, tokens=None, subset=None):
 def coalesce_columns(
     frame,
     *,
-    subset: list[str],
+    subset: Sequence[str],
     output_column: str = "coalesced",
 ):
     """Select the first non-null value from a list of columns.
@@ -1856,8 +1897,8 @@ def coalesce_columns(
     ----------
     frame : ArFrame or pd.DataFrame
         Input data frame.
-    subset : list[str]
-        List of columns to check in order.
+    subset : sequence of str
+        Sequence of columns to check in order.
     output_column : str, default "coalesced"
         Name of the new column to store coalesced values.
 
@@ -1887,16 +1928,12 @@ def coalesce_columns(
     from .convert import from_pandas, to_pandas
     from .frame import ArFrame
 
-    if not isinstance(subset, list):
-        raise TypeError("subset must be a list of column names")
-    if not subset:
-        raise ValueError("subset must contain at least one column")
-    if not isinstance(output_column, str) or not output_column.strip():
-        raise ValueError("output_column must be a non-empty string")
-
     is_arframe = isinstance(frame, ArFrame)
     if not is_arframe and not isinstance(frame, pd.DataFrame):
         raise TypeError("frame must be an ArFrame or a pandas DataFrame")
+
+    if not isinstance(output_column, str) or not output_column.strip():
+        raise ValueError("output_column must be a non-empty string")
 
     column_names = list(frame.columns)
     subset_columns = _validate_existing_column_sequence(
@@ -1908,6 +1945,9 @@ def coalesce_columns(
             f"Available columns: {available}"
         ),
     )
+
+    if not subset_columns:
+        raise ValueError("subset must contain at least one column")
 
     if output_column in column_names:
         raise ValueError(f"Output column '{output_column}' already exists.")
