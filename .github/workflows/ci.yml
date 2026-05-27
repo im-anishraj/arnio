@@ -33,9 +33,9 @@ jobs:
         run: |
           pip install -e .[dev]
 
-- name: Run pytest
+      - name: Run pytest
         run: |
-          pytest tests/ examples/dataset_profile_comparison.ipynb -v --cov=arnio --cov-report=xml
+          pytest tests/
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
@@ -43,3 +43,26 @@ jobs:
           file: ./coverage.xml
           fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}
+  notebook_smoke:
+    runs-on: ubuntu-latest
+    name: Notebook Smoke Test
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          pip install -e .[dev]
+          pip install nbmake
+
+      - name: Run notebook smoke test via pytest
+        run: |
+          pytest --nbmake examples/dataset_profile_comparison.ipynb
+
