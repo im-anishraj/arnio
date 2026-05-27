@@ -1091,6 +1091,36 @@ class TestClipNumeric:
 
         assert list(df["v"]) == [1.5, 2.5, 8.3]
 
+    def test_clip_numeric_rejects_bool_and_non_numeric_bounds(self):
+        frame = ar.from_pandas(pd.DataFrame({"values": [1.0, 5.0, 10.0, 20.0]}))
+
+        # Boolean bounds must be rejected (bool is subclass of int in Python,
+        # so explicit rejection is required)
+        with pytest.raises(TypeError, match="'lower' must be an int or float"):
+            ar.clip_numeric(frame, lower=True)
+
+        with pytest.raises(TypeError, match="'upper' must be an int or float"):
+            ar.clip_numeric(frame, upper=False)
+
+        with pytest.raises(TypeError, match="'lower' must be an int or float"):
+            ar.clip_numeric(frame, lower="a")
+
+        with pytest.raises(TypeError, match="'upper' must be an int or float"):
+            ar.clip_numeric(frame, upper="10")
+
+        # Valid int and float bounds must still work fine
+        ar.clip_numeric(frame, lower=0, upper=15)
+        ar.clip_numeric(frame, lower=0.5, upper=9.5)
+
+    def test_clip_numeric_pipeline_rejects_invalid_bounds(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+
+        with pytest.raises(TypeError, match="'lower' must be an int or float"):
+            ar.pipeline(
+                frame,
+                [("clip_numeric", {"lower": True})],
+            )
+
 
 class TestStandardizeMissingTokens:
     def test_normal_case(self):
