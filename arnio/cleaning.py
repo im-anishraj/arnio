@@ -1513,14 +1513,14 @@ def safe_divide_columns(
             stacklevel=2,
         )
 
+    if not isinstance(fill_value, (int, float)) or isinstance(fill_value, bool):
+            raise TypeError("fill_value must be an int or float")
+
     if is_arframe:
         numerator_dtype = frame.dtypes.get(numerator)
         denominator_dtype = frame.dtypes.get(denominator)
 
         numeric_types = {"int64", "float64"}
-
-        if not isinstance(fill_value, (int, float)) or isinstance(fill_value, bool):
-            raise TypeError("fill_value must be an int or float")
 
         if numerator_dtype in numeric_types and denominator_dtype in numeric_types:
             return ArFrame(
