@@ -1,0 +1,57 @@
+/* ============================================================
+   Arnio Theme — Dark/Light toggle with persistence
+   ============================================================ */
+
+(function () {
+  'use strict';
+
+  const STORAGE_KEY = 'arnio-theme';
+  const DARK = 'dark';
+  const LIGHT = 'light';
+
+  function getPreferred() {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored === DARK || stored === LIGHT) return stored;
+    // Default to light — only use dark if user explicitly toggles
+    return LIGHT;
+  }
+
+  function apply(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem(STORAGE_KEY, theme);
+    updateToggleIcon(theme);
+  }
+
+  function updateToggleIcon(theme) {
+    const btn = document.querySelector('.theme-toggle');
+    if (!btn) return;
+    btn.setAttribute('aria-label', theme === DARK ? 'Switch to light mode' : 'Switch to dark mode');
+    btn.innerHTML = theme === DARK ? '☀️' : '🌙';
+  }
+
+  function toggle() {
+    const current = document.documentElement.getAttribute('data-theme') || getPreferred();
+    apply(current === DARK ? LIGHT : DARK);
+  }
+
+  // Apply immediately to prevent flash
+  apply(getPreferred());
+
+  // Listen for system preference changes
+  if (window.matchMedia) {
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function (e) {
+      if (!localStorage.getItem(STORAGE_KEY)) {
+        apply(e.matches ? DARK : LIGHT);
+      }
+    });
+  }
+
+  // Bind toggle button after DOM ready
+  document.addEventListener('DOMContentLoaded', function () {
+    const btn = document.querySelector('.theme-toggle');
+    if (btn) {
+      btn.addEventListener('click', toggle);
+      updateToggleIcon(getPreferred());
+    }
+  });
+})();

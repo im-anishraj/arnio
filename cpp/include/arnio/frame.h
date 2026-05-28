@@ -44,6 +44,7 @@ class Frame {
     // Clone
     Frame clone() const;
     Frame select_columns(const std::vector<std::string>& columns) const;
+    Frame select_rows(size_t start, size_t count) const;
 
    private:
     std::vector<Column> columns_;

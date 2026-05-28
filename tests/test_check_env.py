@@ -26,6 +26,7 @@ def test_check_env_core_missing(capsys: pytest.CaptureFixture[str]) -> None:
             "pandas": (True, "Installed"),
             "duckdb": (True, "Installed"),
             "sklearn": (True, "Installed"),
+            "pyarrow": (True, "Installed"),
             "pytest": (True, "Installed"),
         }
 
@@ -56,6 +57,7 @@ def test_check_env_core_available_some_missing(
             "pandas": (True, "Installed"),
             "duckdb": (False, "Not Installed"),
             "sklearn": (True, "Installed"),
+            "pyarrow": (True, "Installed"),
             "pytest": (True, "Installed"),
         }
 
@@ -86,6 +88,7 @@ def test_check_env_all_available(capsys: pytest.CaptureFixture[str]) -> None:
             "pandas": (True, "Installed"),
             "duckdb": (True, "Installed"),
             "sklearn": (True, "Installed"),
+            "pyarrow": (True, "Installed"),
             "pytest": (True, "Installed"),
         }
 
