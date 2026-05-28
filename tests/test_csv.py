@@ -1534,6 +1534,75 @@ class TestScanCsv:
         with pytest.raises(ar.CsvReadError):
             ar.read_csv(csv_file, encoding="utf-8", encoding_errors="strict")
 
+    def test_scan_csv_returns_metadata(self, tmp_path):
+        csv_path = tmp_path / "metadata.csv"
+        csv_path.write_text("id,name\n1,Alice\n2,Bob\n")
+
+        result = ar.scan_csv(csv_path, return_metadata=True)
+
+        assert "schema" in result
+        assert "metadata" in result
+
+        assert result["schema"] == {
+            "id": "int64",
+            "name": "string",
+        }
+
+        metadata = result["metadata"]
+
+        assert metadata["delimiter"] == ","
+        assert metadata["encoding"] == "utf-8"
+        assert metadata["sampled_rows"] == 2
+
+    def test_scan_csv_sample_metadata_counts_requested_rows_with_header(self, tmp_path):
+        csv_path = tmp_path / "sample_metadata_header.csv"
+        rows = ["id,name"] + [f"{i},row{i}" for i in range(700)]
+        csv_path.write_text("\n".join(rows) + "\n")
+
+        result = ar.scan_csv(
+            csv_path,
+            sample_size=500,
+            return_metadata=True,
+        )
+
+        assert result["metadata"]["sampled_rows"] == 500
+        assert result["schema"] == {
+            "id": "int64",
+            "name": "string",
+        }
+
+    def test_scan_csv_returns_custom_metadata_values(self, tmp_path):
+        csv_path = tmp_path / "custom_metadata.csv"
+        csv_path.write_text("id;value\n1;100\n2;200\n")
+
+        result = ar.scan_csv(
+            csv_path,
+            delimiter=";",
+            encoding="utf-8",
+            sample_size=50,
+            return_metadata=True,
+        )
+
+        metadata = result["metadata"]
+
+        assert metadata["delimiter"] == ";"
+        assert metadata["encoding"] == "utf-8"
+        assert metadata["sampled_rows"] == 2
+
+    def test_scan_csv_metadata_reports_actual_sampled_rows(self, tmp_path):
+        csv_path = tmp_path / "actual_rows.csv"
+        csv_path.write_text("id,name\n1,Alice\n2,Bob\n")
+
+        result = ar.scan_csv(
+            csv_path,
+            sample_size=100,
+            return_metadata=True,
+        )
+
+        metadata = result["metadata"]
+
+        assert metadata["sampled_rows"] == 2
+
 
 # --- Issue #115: quoted multiline round-trip across line endings ---
 

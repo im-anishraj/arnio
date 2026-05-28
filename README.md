@@ -378,6 +378,32 @@ schema = ar.scan_csv("100GB_file.csv", sample_size=500)
 # {'id': 'int64', 'name': 'string', 'is_active': 'bool', 'revenue': 'float64'}
 ```
 
+```python
+schema_info = ar.scan_csv(
+    "100GB_file.csv",
+    sample_size=500,
+    return_metadata=True,
+)
+
+print(schema_info)
+
+# {
+#     "schema": {
+#         "id": "int64",
+#         "name": "string",
+#         "is_active": "bool",
+#         "revenue": "float64",
+#     },
+#     "metadata": {
+#         "delimiter": ",",
+#         "encoding": "utf-8",
+#         "sampled_rows": 500,
+#     },
+# }
+```
+`sampled_rows` reports the actual number of data rows sampled during schema
+inference, which may be smaller than `sample_size` for short files.
+
 Useful for exploring datasets before committing memory.
 </details>
 

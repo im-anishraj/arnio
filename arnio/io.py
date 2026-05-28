@@ -11,9 +11,9 @@ import os
 import shutil
 import tempfile
 import warnings
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
-from typing import cast
+from typing import Protocol, cast
 
 from ._core import (
     _CsvChunkReader,
@@ -160,6 +160,116 @@ def _utf8_csv_path(
                 pass
 
 
+@contextmanager
+def _utf8_csv_path_sampled(
+    path: str,
+    encoding: str,
+    delimiter: str = ",",
+    sample_rows: int | None = None,
+    has_header: bool = True,
+    encoding_errors: str = "strict",
+) -> Iterator[tuple[str, int]]:
+    """Return a UTF-8 sampled CSV path and the actual sampled row count.
+
+    The native reader only consumes UTF-8 bytes. When sampling is requested,
+    this helper writes a temporary UTF-8 file containing at most
+    ``sample_rows`` complete logical records and tracks the number of records
+    written.
+    """
+    if sample_rows is None:
+        raise ValueError("sample_rows must not be None")
+
+    tmp_name: str | None = None
+    row_count = 0
+    effective_limit = sample_rows + 1 if has_header else sample_rows
+    try:
+        with open(path, encoding=encoding, errors=encoding_errors, newline="") as src:
+            with tempfile.NamedTemporaryFile(
+                "w", encoding="utf-8", newline="", suffix=".csv", delete=False
+            ) as tmp:
+                in_quotes = False
+                pending_quote = False
+                pending_cr = False
+                last_char_was_terminator = False
+                sample_complete = False
+
+                while chunk := src.read(8192):
+                    chunk_len = len(chunk)
+                    index = 0
+                    while index < chunk_len:
+                        char = chunk[index]
+
+                        if sample_complete:
+                            if pending_cr and char == "\n":
+                                tmp.write(char)
+                            pending_cr = False
+                            break
+
+                        tmp.write(char)
+
+                        if pending_cr:
+                            pending_cr = False
+                            if char == "\n":
+                                last_char_was_terminator = True
+                                index += 1
+                                continue
+
+                        if char == '"':
+                            if pending_quote:
+                                pending_quote = False
+                            elif in_quotes:
+                                pending_quote = True
+                            else:
+                                in_quotes = True
+                            last_char_was_terminator = False
+                        else:
+                            if pending_quote:
+                                in_quotes = False
+                                pending_quote = False
+
+                            if not in_quotes and char in {"\n", "\r"}:
+                                row_count += 1
+                                last_char_was_terminator = True
+                                if char == "\r":
+                                    if (
+                                        index + 1 < chunk_len
+                                        and chunk[index + 1] == "\n"
+                                    ):
+                                        tmp.write("\n")
+                                        index += 1
+                                    else:
+                                        pending_cr = True
+                                if row_count >= effective_limit:
+                                    sample_complete = True
+                                    break
+                            else:
+                                last_char_was_terminator = False
+
+                        index += 1
+
+                    if sample_complete and not pending_cr:
+                        break
+
+                if sample_rows > 0 and not last_char_was_terminator and tmp.tell() > 0:
+                    row_count += 1
+                tmp_name = tmp.name
+        yield tmp_name, row_count
+    except LookupError as e:
+        raise ValueError(f"Unknown encoding: {encoding}") from e
+    except UnicodeDecodeError as e:
+        raise CsvReadError(
+            f"Could not decode {path!r} using encoding {encoding!r}"
+        ) from e
+    except OSError as e:
+        raise CsvReadError(str(e)) from e
+    finally:
+        if tmp_name is not None:
+            try:
+                os.unlink(tmp_name)
+            except OSError:
+                pass
+
+
 def _validate_thousands_separator(
     thousands_separator: str | None,
     decimal_separator: str = ".",
@@ -266,12 +376,24 @@ _PREVIEW_BAD_ROWS = 10
 _FILE_LIKE_COPY_CHUNK_SIZE = 8192
 
 
-def _warn_bad_rows(bad_rows: list) -> None:
+class _BadRow(Protocol):
+    row: int
+    actual: int
+    expected: int
+
+
+def _warn_bad_rows(bad_rows: Sequence[object]) -> None:
     """Emit a UserWarning summarizing rows dropped by on_bad_lines='warn'."""
-    lines = [
-        f"  CSV row {br.row} has {br.actual} fields; expected {br.expected}"
-        for br in bad_rows[:_PREVIEW_BAD_ROWS]
-    ]
+    if not bad_rows:
+        return
+
+    def format_bad_row(br: object) -> str:
+        if isinstance(br, str):
+            return f"  {br}"
+        row_bad = cast(_BadRow, br)
+        return f"  CSV row {row_bad.row} has {row_bad.actual} fields; expected {row_bad.expected}"
+
+    lines = [format_bad_row(br) for br in bad_rows[:_PREVIEW_BAD_ROWS]]
     extra = len(bad_rows) - _PREVIEW_BAD_ROWS
     if extra > 0:
         lines.append(f"  (+{extra} more)")
@@ -594,6 +716,7 @@ def read_csv(
         raise
 
     try:
+        native_path: str
         with _utf8_csv_path(
             path, encoding, encoding_errors=encoding_errors, delimiter=delimiter
         ) as native_path:
@@ -752,6 +875,7 @@ def read_csv_chunked(
             os.unlink(path)
         raise
     try:
+        native_path: str
         with _utf8_csv_path(path, encoding, delimiter=delimiter) as native_path:
             reader.open(native_path)
             while True:
@@ -860,7 +984,8 @@ def scan_csv(
     has_header: bool = True,
     encoding_errors: str = "strict",
     on_bad_lines: str = "error",
-) -> dict[str, str]:
+    return_metadata: bool = False,
+) -> dict[str, str] | dict[str, object]:
     """Return schema (column names + inferred types) without loading data.
 
     Parameters
@@ -910,10 +1035,17 @@ def scan_csv(
         ``"error"`` raises :exc:`CsvReadError` immediately (default).
         ``"warn"`` skips the bad row and emits a :class:`UserWarning`.
         ``"skip"`` silently skips the bad row without any warning.
+    return_metadata : bool, default False
+        Whether to return lightweight scan metadata along with
+        inferred schema information.
     Returns
     -------
-    dict[str, str]
-        Dictionary mapping column names to inferred type strings.
+    dict[str, str] | dict[str, object]
+        By default, returns a dictionary mapping column names
+        to inferred type strings.
+
+        When ``return_metadata=True``, returns a dictionary
+        containing both inferred schema and lightweight scan metadata.
 
     Raises
     ------
@@ -978,22 +1110,51 @@ def scan_csv(
         # Schema inference only needs a sample, avoiding full-file transcode.
         # sample_rows is passed so _utf8_csv_path uses record-aware sampling
         # without rewriting decoded CSV text before native parsing.
-        with _utf8_csv_path(
+        with _utf8_csv_path_sampled(
             path,
             encoding,
             encoding_errors=encoding_errors,
             delimiter=delimiter,
             sample_rows=100 if sample_size is None else sample_size,
-        ) as native_path:
-            schema, bad_row_msgs = reader.scan_schema(native_path, on_bad_lines)
+            has_header=has_header,
+        ) as (native_path, sampled_rows):
+            # reader.scan_schema returns schema and optionally a list of
+            # bad-row messages when on_bad_lines is in effect.
+            schema: dict[str, str]
+            bad_row_msgs: Sequence[object]
+            try:
+                schema_result = reader.scan_schema(native_path, on_bad_lines)
+            except TypeError:
+                # Older C++ extension exposes a single-argument scan_schema
+                # returning only the schema dict. Normalize to a two-tuple.
+                schema = dict(cast(Mapping[str, str], reader.scan_schema(native_path)))
+                bad_row_msgs = []
+            else:
+                if isinstance(schema_result, tuple):
+                    typed_result = cast(
+                        tuple[Mapping[str, str], Sequence[object]], schema_result
+                    )
+                    schema = dict(typed_result[0])
+                    bad_row_msgs = typed_result[1]
+                else:
+                    schema = dict(cast(Mapping[str, str], schema_result))
+                    bad_row_msgs = []
+
             if on_bad_lines == "warn" and bad_row_msgs:
-                warnings.warn(
-                    f"{len(bad_row_msgs)} malformed CSV row(s) skipped during schema inference:\n"
-                    + "\n".join(f"  {m}" for m in bad_row_msgs),
-                    UserWarning,
-                    stacklevel=2,
-                )
-            return cast(dict[str, str], schema)
+                _warn_bad_rows(bad_row_msgs)
+
+            if has_header and sampled_rows > 0:
+                sampled_rows -= 1
+
+            if return_metadata:
+                metadata: dict[str, object] = {
+                    "delimiter": delimiter,
+                    "encoding": encoding,
+                    "sampled_rows": sampled_rows,
+                }
+                return {"schema": schema, "metadata": metadata}
+
+            return schema
     except RuntimeError as e:
         raise CsvReadError(str(e)) from None
 
