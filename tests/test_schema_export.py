@@ -363,3 +363,128 @@ def test_schema_object_fields_named_strict_and_unique_not_dropped():
     # Schema-level metadata must still be top-level
     assert result["strict"] is True
     assert result["unique"] == ["name"]
+
+
+# ── Regression tests for issue #1730 ────────────────────────────────────────
+# schema_to_yaml() must quote date/datetime-looking strings so YAML 1.1
+# parsers cannot silently convert them to timestamp objects.
+
+
+class TestDateLikeStringQuoting:
+    """Date and datetime strings in schema values must be emitted quoted."""
+
+    # ── bare date YYYY-MM-DD ─────────────────────────────────────────────────
+
+    def test_bare_date_in_allowed_is_quoted(self):
+        raw = {"expires": {"type": "STRING", "allowed": ["2026-05-28"]}}
+        out = schema_to_yaml(raw)
+        assert (
+            '"2026-05-28"' in out
+        ), f"Expected quoted date in YAML output, got:\n{out}"
+
+    def test_bare_date_as_default_is_quoted(self):
+        raw = {"created_at": {"type": "STRING", "default": "2026-05-28"}}
+        out = schema_to_yaml(raw)
+        assert '"2026-05-28"' in out
+
+    def test_multiple_date_allowed_values_all_quoted(self):
+        raw = {
+            "date": {
+                "type": "STRING",
+                "allowed": ["2024-01-01", "2025-06-15", "2026-12-31"],
+            }
+        }
+        out = schema_to_yaml(raw)
+        assert '"2024-01-01"' in out
+        assert '"2025-06-15"' in out
+        assert '"2026-12-31"' in out
+
+    # ── ISO datetime with T separator ────────────────────────────────────────
+
+    def test_iso_datetime_T_in_allowed_is_quoted(self):
+        raw = {"ts": {"type": "STRING", "allowed": ["2026-05-28T10:30:00"]}}
+        out = schema_to_yaml(raw)
+        assert '"2026-05-28T10:30:00"' in out
+
+    def test_bare_date_with_z_suffix_is_quoted(self):
+        """2026-05-28Z is a valid YAML 1.1 timestamp and must be quoted."""
+        raw = {"ts": {"type": "STRING", "default": "2026-05-28Z"}}
+        out = schema_to_yaml(raw)
+        assert '"2026-05-28Z"' in out
+
+    def test_iso_datetime_T_no_seconds_is_quoted(self):
+        raw = {"ts": {"type": "STRING", "default": "2026-05-28T10:30"}}
+        out = schema_to_yaml(raw)
+        assert '"2026-05-28T10:30"' in out
+
+    # ── space-separated datetime (also a YAML 1.1 timestamp) ─────────────────
+
+    def test_space_separated_datetime_is_quoted(self):
+        raw = {"ts": {"type": "STRING", "default": "2026-05-28 10:30:00"}}
+        out = schema_to_yaml(raw)
+        assert '"2026-05-28 10:30:00"' in out
+
+    # ── round-trip: value must still be a string after parsing ───────────────
+
+    def test_round_trip_date_stays_string(self):
+        """YAML loaded back must give a string, not a date object."""
+        try:
+            import yaml
+        except ImportError:
+            pytest.skip("PyYAML not installed")
+
+        raw = {"cutoff": {"type": "STRING", "default": "2026-05-28"}}
+        out = schema_to_yaml(raw)
+        loaded = yaml.safe_load(out)
+        value = loaded["fields"]["cutoff"]["default"]
+        assert isinstance(
+            value, str
+        ), f"Expected str after YAML round-trip, got {type(value).__name__!r}: {value!r}"
+        assert value == "2026-05-28"
+
+    def test_round_trip_datetime_stays_string(self):
+        try:
+            import yaml
+        except ImportError:
+            pytest.skip("PyYAML not installed")
+
+        raw = {"ts": {"type": "STRING", "allowed": ["2026-05-28T10:30:00"]}}
+        out = schema_to_yaml(raw)
+        loaded = yaml.safe_load(out)
+        value = loaded["fields"]["ts"]["allowed"][0]
+        assert isinstance(value, str)
+        assert value == "2026-05-28T10:30:00"
+
+    # ── non-date strings must be unaffected ──────────────────────────────────
+
+    def test_year_only_string_not_quoted_as_date(self):
+        """'2026' is a plain integer-looking string, not a date — handled by
+        the existing numeric check, not the date check."""
+        raw = {"year": {"type": "STRING", "allowed": ["2026"]}}
+        out = schema_to_yaml(raw)
+        # Should still be quoted (numeric check), but for numeric reason not date.
+        assert "2026" in out
+
+    def test_partial_date_mm_dd_not_treated_as_date(self):
+        """'05-28' does not match YYYY-MM-DD and must not gain extra quoting
+        from the date check (the leading-hyphen check handles '-' prefix)."""
+        raw = {"col": {"type": "STRING", "default": "05-28"}}
+        out = schema_to_yaml(raw)
+        assert "05-28" in out
+
+    def test_normal_string_unaffected(self):
+        raw = {"status": {"type": "STRING", "allowed": ["active", "inactive"]}}
+        out = schema_to_yaml(raw)
+        assert "active" in out
+        assert "inactive" in out
+        # plain words must NOT be quoted
+        assert '"active"' not in out
+        assert '"inactive"' not in out
+
+    def test_existing_numeric_quoting_still_works(self):
+        """Date fix must not break the pre-existing numeric quoting."""
+        raw = {"col": {"type": "STRING", "allowed": ["001", "123", "1.5"]}}
+        out = schema_to_yaml(raw)
+        assert '"001"' in out
+        assert '"123"' in out
+        assert '"1.5"' in out
