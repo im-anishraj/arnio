@@ -998,11 +998,12 @@ def test_email_validation_rejects_invalid_validation_mode():
 
 
 def test_email_validation_requires_string():
-    with pytest.raises(TypeError):
-        ar.Email(validation=["light"])
-
-    with pytest.raises(TypeError):
-        ar.Email(validation=None)
+    for value in (["light"], {"light"}, None):
+        with pytest.raises(
+            TypeError,
+            match="Email validation must be a string",
+        ):
+            ar.Email(validation=value)
 
 
 def test_email_default_validation_mode_is_backward_compatible(tmp_path):

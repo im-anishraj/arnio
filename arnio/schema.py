@@ -1748,7 +1748,18 @@ def Email(
     validation: str = "light",
     required_if: tuple[str, Any] | None = None,
 ) -> Field:
-    """Create an email-address schema field."""
+    """Create an email-address schema field.
+
+    Args:
+        nullable: Whether null values are allowed.
+        unique: Whether non-null values must be unique.
+        severity: Severity level for validation issues.
+        validation: Email validation mode, either "light" or "strict".
+        required_if: Conditional requirement as a column/value pair.
+
+    Returns:
+        Field: Configured email-address schema field.
+    """
 
     if not isinstance(validation, str):
         raise TypeError("Email validation must be a string: 'light' or 'strict'")
