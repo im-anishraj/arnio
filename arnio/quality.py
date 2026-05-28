@@ -1337,10 +1337,10 @@ def check_quality_gates(
         "max_row_count_delta_ratio": _validate_gate_threshold(
             max_row_count_delta_ratio, "max_row_count_delta_ratio"
         ),
-        "max_duplicate_ratio_delta": _validate_gate_threshold(
+        "max_duplicate_ratio_delta": _validate_gate_ratio_threshold(
             max_duplicate_ratio_delta, "max_duplicate_ratio_delta"
         ),
-        "max_null_ratio_delta": _validate_gate_threshold(
+        "max_null_ratio_delta": _validate_gate_ratio_threshold(
             max_null_ratio_delta, "max_null_ratio_delta"
         ),
         "max_numeric_mean_delta_ratio": _validate_gate_threshold(
@@ -1538,6 +1538,16 @@ def _validate_gate_threshold(value: float | None, name: str) -> float | None:
     value = float(value)
     if not math.isfinite(value) or value < 0:
         raise ValueError(f"{name} must be a finite non-negative number")
+    return value
+
+
+def _validate_gate_ratio_threshold(value: float | None, name: str) -> float | None:
+    """Validate that a quality gate ratio threshold is between 0.0 and 1.0 inclusive."""
+    if value is None:
+        return None
+    value = _validate_gate_threshold(value, name)
+    if value > 1.0:
+        raise ValueError(f"{name} must be a ratio between 0.0 and 1.0")
     return value
 
 
