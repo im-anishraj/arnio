@@ -690,6 +690,7 @@ class Field:
     pattern: str | None = None
     semantic: str | None = None
     allowed: set[Any] | None = None
+    case_sensitive: bool = True
     unique: bool = False
     min_length: int | None = None
     max_length: int | None = None
@@ -704,6 +705,8 @@ class Field:
             raise TypeError("nullable must be a bool")
         if not isinstance(self.unique, bool):
             raise TypeError("unique must be a bool")
+        if not isinstance(self.case_sensitive, bool):
+            raise TypeError("case_sensitive must be a bool")
 
         if self.required_if is not None:
             if not isinstance(self.required_if, tuple):
@@ -1713,6 +1716,7 @@ def String(
     nullable: bool = True,
     pattern: str | None = None,
     allowed: set[Any] | list[Any] | tuple[Any, ...] | None = None,
+    case_sensitive: bool = True,
     unique: bool = False,
     severity: str = "error",
     min_length: int | None = None,
@@ -1725,6 +1729,7 @@ def String(
         nullable: Whether null values are allowed.
         pattern: Regular expression pattern that non-null values must match.
         allowed: Allowed values for the field.
+        case_sensitive: Whether allowed string matching is case-sensitive.
         unique: Whether non-null values must be unique.
         severity: Severity level for validation issues.
         min_length: Minimum allowed string length.
@@ -1770,6 +1775,7 @@ def String(
         nullable=nullable,
         pattern=pattern,
         allowed=allowed_set,
+        case_sensitive=case_sensitive,
         unique=unique,
         min_length=min_length,
         max_length=max_length,
@@ -2300,7 +2306,18 @@ def _validate_column(
         )
 
     if field_def.allowed is not None:
-        invalid = non_null[~non_null.isin(field_def.allowed)]
+        if field_def.dtype == "string" and not field_def.case_sensitive:
+            allowed_values = {
+                value.casefold() if isinstance(value, str) else value
+                for value in field_def.allowed
+            }
+            comparable = non_null.map(
+                lambda value: value.casefold() if isinstance(value, str) else value
+            )
+            invalid = non_null[~comparable.isin(allowed_values)]
+        else:
+            invalid = non_null[~non_null.isin(field_def.allowed)]
+
         issues.extend(
             _row_issues(
                 invalid,
@@ -2310,7 +2327,6 @@ def _validate_column(
                 severity=field_def.severity,
             )
         )
-
     if field_def.dtype == "datetime":
         issues.extend(_validate_datetime(non_null, name, field_def))
 
@@ -2567,6 +2583,7 @@ def _field_to_dict(field_def: Field) -> dict[str, Any]:
         "pattern": field_def.pattern,
         "semantic": field_def.semantic,
         "allowed": _normalize_sequence(field_def.allowed),
+        "case_sensitive": field_def.case_sensitive,
         "unique": field_def.unique,
         "min_length": field_def.min_length,
         "max_length": field_def.max_length,
@@ -2625,6 +2642,7 @@ def _field_from_json_dict(name: str, payload: Any) -> Field:
         pattern=payload.get("pattern"),
         semantic=payload.get("semantic"),
         allowed=allowed,
+        case_sensitive=payload.get("case_sensitive", True),
         unique=payload.get("unique", False),
         min_length=payload.get("min_length"),
         max_length=payload.get("max_length"),
