@@ -2205,7 +2205,7 @@ def _validate_column(
             )
         else:
             trigger_mask = df[condition_column] == expected_value
-            invalid = series[trigger_mask & series.isna()]
+            invalid = series[trigger_mask & is_null_mask]
 
             issues.extend(
                 _row_issues(
