@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Benchmarks — Arnio</title>
+  <meta name="description" content="Arnio benchmark suite, reproducible commands, and current benchmark regression checks.">
+  <link rel="icon" type="image/svg+xml" href="updated-icon.svg">
+  <link rel="stylesheet" href="css/variables.css?v=20260522">
+  <link rel="stylesheet" href="css/base.css?v=20260522">
+  <link rel="stylesheet" href="css/layout.css?v=20260522">
+  <link rel="stylesheet" href="css/components.css?v=20260522">
+  <link rel="stylesheet" href="css/pages.css?v=20260522">
+  <script src="js/theme.js"></script>
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://arnio.vercel.app/">
+  <meta property="og:title" content="Arnio — Production Data Preparation for Python">
+  <meta property="og:description" content="Arnio combines a native C++ CSV engine with Python APIs for cleaning, quality profiling, and schema validation.">
+  <meta property="og:image" content="https://arnio.vercel.app/arnio-transparent-logo.svg">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Arnio — Production Data Preparation for Python">
+  <meta name="twitter:description" content="Arnio combines a native C++ CSV engine with Python APIs for cleaning, quality profiling, and schema validation.">
+  <meta name="twitter:image" content="https://arnio.vercel.app/arnio-transparent-logo.svg">
+</head>
+<body>
+  <a href="#main-content" class="skip-link">Skip to content</a>
+  <nav class="top-nav" aria-label="Main navigation"><div class="container container--wide"><a href="index.html" class="nav-brand"><img src="arnio-transparent-logo.svg" alt="Arnio" height="32"></a><ul class="nav-links"><li><a href="docs.html">Docs</a></li><li><a href="api.html">API</a></li><li><a href="benchmarks.html">Benchmarks</a></li><li><a href="contributing.html">Contributing</a></li><li><a href="architecture.html">Architecture</a></li><li><a href="roadmap.html">Roadmap</a></li><li><a href="community.html">Community</a></li><li><a href="changelog.html">Changelog</a></li></ul><div class="nav-actions"><a href="https://discord.gg/xsEw7r78M" class="nav-discord" target="_blank" rel="noopener">Discord</a><a href="https://github.com/im-anishraj/arnio" class="nav-github" target="_blank" rel="noopener">GitHub</a><button class="theme-toggle" aria-label="Toggle theme">Theme</button><button class="nav-hamburger" aria-label="Open menu" aria-expanded="false">☰</button></div></div></nav>
+  <div class="mobile-menu" aria-label="Mobile navigation"><a href="index.html">Home</a><a href="docs.html">Documentation</a><a href="api.html">API Reference</a><a href="benchmarks.html">Benchmarks</a><a href="contributing.html">Contributing</a><a href="architecture.html">Architecture</a><a href="roadmap.html">Roadmap</a><a href="community.html">Community</a><a href="https://discord.gg/xsEw7r78M" target="_blank" rel="noopener">Discord</a><a href="changelog.html">Changelog</a></div>
+
+  <header class="page-hero"><div class="container"><h1>Benchmarks</h1><p>The site now avoids stale one-off timing claims. Arnio publishes reproducible benchmark scripts, dry-run smoke tests, and current-main regression checks.</p></div></header>
+
+  <main id="main-content" class="main-content">
+    <div class="container">
+      <div class="notice"><strong>Important:</strong> benchmark numbers vary by CPU, compiler, operating system, Python, pandas, NumPy, and build flags. Treat local results as comparable only when run on the same environment and commit.</div>
+
+      <h2>Current benchmark coverage</h2>
+      <div class="feature-list">
+        <article class="card"><h3>End-to-end CSV pipeline</h3><p><code>benchmark_vs_pandas.py</code> compares deterministic tall and wide datasets across pandas and Arnio.</p></article>
+        <article class="card"><h3>Memory-focused paths</h3><p>Dedicated scripts cover <code>from_pandas</code>, auto-clean memory, sparse nulls, and to-pandas overhead.</p></article>
+        <article class="card"><h3>Native operations</h3><p>Benchmarks cover numeric parsing, strip-whitespace, combine-columns, clip-numeric, duplicate profiling, and GIL/threading behavior.</p></article>
+        <article class="card"><h3>Current-main CI checks</h3><p>Post-v1.18.0 main adds lightweight benchmark regression checks and dry-run smoke coverage so benchmark scripts keep running in automation.</p></article>
+      </div>
+
+      <h2>Run locally</h2>
+      <p class="section-lede">The full suite can generate large deterministic data files. Use dry-run mode first when checking a branch or CI environment.</p>
+      <div class="code-grid">
+        <div class="code-block"><div class="code-block-header">Smoke check</div><pre><code class="language-bash">python -m pip install -e ".[dev]"
+python benchmarks/benchmark_vs_pandas.py --dry-run
+pytest tests/test_benchmarks_smoke.py</code></pre></div>
+        <div class="code-block"><div class="code-block-header">Full reference run</div><pre><code class="language-bash">python benchmarks/generate_data.py
+python benchmarks/benchmark_vs_pandas.py
+python benchmarks/benchmark_auto_clean_memory.py --rows 100000</code></pre></div>
+      </div>
+
+      <h2>How to read results</h2>
+      <table class="status-table">
+        <thead><tr><th>Signal</th><th>Interpretation</th></tr></thead>
+        <tbody>
+          <tr><td>Wall-clock time</td><td>Useful for same-machine comparisons. Small differences are normal between runs.</td></tr>
+          <tr><td>Peak memory</td><td>Use for broad regressions and compare the same Python, pandas, NumPy, and compiler stack.</td></tr>
+          <tr><td>Dry-run success</td><td>Confirms benchmark scripts import, generate tiny data, and complete without exercising full-scale performance.</td></tr>
+          <tr><td>Regression checks</td><td>Current-main CI guardrails catch accidental script breakage and large benchmark drift when baselines are configured.</td></tr>
+        </tbody>
+      </table>
+
+      <h2>Benchmark scripts</h2>
+      <ul class="link-list">
+        <li><code>benchmarks/benchmark_vs_pandas.py</code> — reference pandas vs Arnio workflow.</li>
+        <li><code>benchmarks/benchmark_csv.py</code> — parser-focused CSV work.</li>
+        <li><code>benchmarks/benchmark_strip_whitespace.py</code> — native whitespace cleaning.</li>
+        <li><code>benchmarks/benchmark_sparse_nulls.py</code> — sparse null workloads.</li>
+        <li><code>benchmarks/benchmark_from_pandas_memory.py</code> — conversion memory behavior.</li>
+        <li><code>benchmarks/benchmark_auto_clean_memory.py</code> — automatic cleaning memory behavior.</li>
+      </ul>
+
+      <h2>Reporting a benchmark</h2>
+      <p>Include OS, CPU, Python version, pandas and NumPy versions, compiler/build mode, Arnio commit, command, and full output. Without that context, raw seconds are not actionable.</p>
+    </div>
+  </main>
+
+  <footer class="site-footer"><div class="container"><div class="footer-bottom"><span>© 2026 Anish Raj. MIT License.</span><span>Benchmarks documented without stale fixed claims.</span></div></div></footer>
+  <script src="js/main.js"></script>
+  <script src="js/code.js"></script>
+</body>
+</html>

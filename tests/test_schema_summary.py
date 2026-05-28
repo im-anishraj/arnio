@@ -226,3 +226,21 @@ class TestSchemaSummaryEdgeCases:
         frame = ar.from_pandas(df)
         for entry in frame.schema_summary:
             assert isinstance(entry, CS)
+
+    def test_schema_to_dict_empty_dataframe(self):
+        df = pd.DataFrame()
+        frame = ar.from_pandas(df)
+        res = ar.schema_export.schema_to_dict(frame)
+        assert res == {"fields": {}}
+
+    def test_schema_to_yaml_empty_dataframe(self):
+        df = pd.DataFrame()
+        frame = ar.from_pandas(df)
+        res = ar.schema_export.schema_to_yaml(frame)
+        assert res == "fields: {}\n"
+
+    def test_schema_to_dict_with_column_summary_list(self):
+        df = pd.DataFrame({"age": [20]})
+        frame = ar.from_pandas(df)
+        res = ar.schema_export.schema_to_dict(frame.schema_summary)
+        assert res == {"fields": {"age": {"type": "INT64", "nullable": False}}}

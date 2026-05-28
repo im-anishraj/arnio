@@ -36,6 +36,17 @@ import arnio as ar
 DRY_RUN = os.getenv("ARNIO_BENCHMARK_DRY_RUN") == "1"
 
 
+def _positive_int(value):
+    """Argparse type validator that requires a positive integer."""
+    try:
+        ivalue = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{value!r} is not a valid integer")
+    if ivalue < 1:
+        raise argparse.ArgumentTypeError(f"{value!r} must be >= 1")
+    return ivalue
+
+
 def _write_csv(path: Path, n_rows: int) -> None:
     """Write a CSV with int and float columns (no nulls for simplicity)."""
     rng = np.random.default_rng(42)
@@ -126,7 +137,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Benchmark arnio numeric CSV parse vs pandas"
     )
-    parser.add_argument("--rows", type=int, default=500_000, help="Number of rows")
-    parser.add_argument("--runs", type=int, default=5, help="Repetitions per engine")
+    parser.add_argument(
+        "--rows", type=_positive_int, default=500_000, help="Number of rows"
+    )
+    parser.add_argument(
+        "--runs", type=_positive_int, default=5, help="Repetitions per engine"
+    )
     args = parser.parse_args()
     run(n_rows=args.rows, runs=args.runs)

@@ -643,7 +643,7 @@ class TestFromPandas:
         result = ar.to_pandas(ar.from_pandas(df))
         assert len(result) == 3
         assert result["active"].isna().all()
-        assert str(result["active"].dtype) == "string"
+        assert str(result["active"].dtype) == "boolean"
 
     def test_from_pandas_all_null_string_extension(self):
         df = pd.DataFrame({"name": pd.Series([pd.NA, pd.NA, pd.NA], dtype="string")})
@@ -669,6 +669,36 @@ class TestFromPandas:
         roundtripped = ar.from_pandas(ar.to_pandas(frame))
 
         assert roundtripped.shape == (2, 0)
+
+    def test_from_dict_mismatched_column_lengths(self):
+        with pytest.raises(
+            ValueError,
+            match="from_dict\\(\\) column lengths differ",
+        ) as exc_info:
+            ar.from_dict(
+                {
+                    "id": [1, 2, 3],
+                    "name": ["a", "b"],
+                }
+            )
+
+        message = str(exc_info.value)
+
+        assert "id=3" in message
+        assert "name=2" in message
+
+    def test_from_dict_equal_length_columns(self):
+        frame = ar.from_dict(
+            {
+                "id": [1, 2],
+                "name": ["a", "b"],
+            }
+        )
+
+        result = ar.to_pandas(frame)
+
+        assert result.shape == (2, 2)
+        assert list(result.columns) == ["id", "name"]
 
 
 class TestAttrsPreservation:
@@ -894,3 +924,221 @@ class TestUInt64BoundaryConversion:
             match="out of bounds for signed 64-bit integer",
         ):
             ar.from_pandas(df)
+
+
+class TestToArrow:
+    """Tests for Arrow export."""
+
+    def setup_method(self):
+        pytest.importorskip("pyarrow")
+
+    def test_int64_columns(self):
+        import pyarrow
+
+        df = pd.DataFrame({"x": pd.Series([1, 2, 3], dtype=pd.Int64Dtype())})
+        frame = ar.from_pandas(df)
+        table = ar.to_arrow(frame)
+        assert table.num_columns == 1
+        assert table.column_names == ["x"]
+        assert table.column(0).type == pyarrow.int64()
+        assert table.column(0).to_pylist() == [1, 2, 3]
+
+    def test_float64_columns(self):
+        import pyarrow
+
+        df = pd.DataFrame({"y": pd.Series([1.5, 2.5, 3.5], dtype="float64")})
+        frame = ar.from_pandas(df)
+        table = ar.to_arrow(frame)
+        assert table.column(0).type == pyarrow.float64()
+        assert table.column(0).to_pylist() == [1.5, 2.5, 3.5]
+
+    def test_bool_columns(self):
+        import pyarrow
+
+        df = pd.DataFrame({"z": pd.Series([True, False, True], dtype="bool")})
+        frame = ar.from_pandas(df)
+        table = ar.to_arrow(frame)
+        assert table.column(0).type == pyarrow.bool_()
+        assert table.column(0).to_pylist() == [True, False, True]
+
+    def test_nullable_bool_columns(self):
+        import pyarrow
+
+        df = pd.DataFrame({"a": pd.Series([True, False, pd.NA], dtype="boolean")})
+        frame = ar.from_pandas(df)
+        table = ar.to_arrow(frame)
+        assert table.column(0).type == pyarrow.bool_()
+        assert table.column(0).to_pylist() == [True, False, None]
+
+    def test_string_columns(self):
+        import pyarrow
+
+        df = pd.DataFrame({"s": pd.Series(["a", "b", "c"], dtype="string")})
+        frame = ar.from_pandas(df)
+        table = ar.to_arrow(frame)
+        assert table.column(0).type == pyarrow.string()
+        assert table.column(0).to_pylist() == ["a", "b", "c"]
+
+    def test_mixed_column_types(self):
+        import pyarrow
+
+        df = pd.DataFrame(
+            {
+                "int_col": pd.Series([1, 2, 3], dtype=pd.Int64Dtype()),
+                "float_col": pd.Series([1.5, 2.5, 3.5], dtype="float64"),
+                "bool_col": pd.Series([True, False, True], dtype="bool"),
+                "str_col": pd.Series(["a", "b", "c"], dtype="string"),
+            }
+        )
+        frame = ar.from_pandas(df)
+        table = ar.to_arrow(frame)
+        assert table.num_columns == 4
+        assert table.column_names == ["int_col", "float_col", "bool_col", "str_col"]
+        assert table.column(0).type == pyarrow.int64()
+        assert table.column(1).type == pyarrow.float64()
+        assert table.column(2).type == pyarrow.bool_()
+        assert table.column(3).type == pyarrow.string()
+
+    def test_roundtrip_to_pandas(self):
+        df = pd.DataFrame(
+            {
+                "x": pd.Series([1, 2, 3], dtype=pd.Int64Dtype()),
+                "y": pd.Series([1.5, 2.5, 3.5], dtype="float64"),
+                "z": pd.Series([True, False, True], dtype="bool"),
+            }
+        )
+        frame = ar.from_pandas(df)
+        table = ar.to_arrow(frame)
+        result = table.to_pandas()
+        for col in df.columns:
+            assert list(result[col]) == list(df[col])
+
+    def test_null_handling(self):
+        df = pd.DataFrame(
+            {
+                "int_col": pd.Series([1, pd.NA, 3], dtype=pd.Int64Dtype()),
+                "bool_col": pd.Series([True, pd.NA, False], dtype="boolean"),
+                "str_col": pd.Series(["a", None, "c"], dtype="string"),
+            }
+        )
+        frame = ar.from_pandas(df)
+        table = ar.to_arrow(frame)
+        assert table.column(0).to_pylist() == [1, None, 3]
+        assert table.column(1).to_pylist() == [True, None, False]
+        assert table.column(2).to_pylist() == ["a", None, "c"]
+
+    def test_empty_frame(self):
+        df = pd.DataFrame({"x": pd.Series([], dtype=pd.Int64Dtype())})
+        frame = ar.from_pandas(df)
+        table = ar.to_arrow(frame)
+        assert table.num_rows == 0
+        assert table.num_columns == 1
+
+    def test_invalid_frame_type(self):
+        with pytest.raises(TypeError, match="to_arrow.*expects an ArFrame"):
+            ar.to_arrow("not_a_frame")
+
+    def test_from_csv_roundtrip(self, sample_csv):
+        import pyarrow
+
+        frame = ar.read_csv(sample_csv)
+        table = ar.to_arrow(frame)
+        assert table.num_columns == 4
+        assert table.column_names == ["name", "age", "email", "active"]
+        assert table.column(0).type == pyarrow.string()
+        assert table.column(1).type == pyarrow.int64()
+        assert table.column(2).type == pyarrow.string()
+        assert table.column(3).type == pyarrow.bool_()
+        assert table.num_rows == 3
+
+    def test_csv_nulls_roundtrip(self, csv_with_nulls):
+        frame = ar.read_csv(csv_with_nulls)
+        table = ar.to_arrow(frame)
+        assert table.num_rows == 4
+        names = table.column("name").to_pylist()
+        assert names == ["Alice", None, "Charlie", "Diana"]
+        ages = table.column("age").to_pylist()
+        assert ages[0] == 30
+        assert ages[1] == 25
+        assert ages[2] is None
+        assert ages[3] == 28
+
+
+class TestNullableInt64ObjectConversion:
+    """Tests for casting object series containing None/NaN and valid integers to integer types."""
+
+    def test_object_series_with_none_and_integers(self):
+        df = pd.DataFrame({"col": [1, None, 3]}, dtype=object)
+        frame = ar.from_pandas(df)
+        assert frame.dtypes["col"] == "int64"
+        result = ar.to_pandas(frame)
+        assert str(result["col"].dtype) == "Int64"
+        assert list(result["col"]) == [1, pd.NA, 3]
+
+    def test_object_series_with_nan_and_integers(self):
+        df = pd.DataFrame({"col": [1, np.nan, 3]}, dtype=object)
+        frame = ar.from_pandas(df)
+        assert frame.dtypes["col"] == "int64"
+        result = ar.to_pandas(frame)
+        assert str(result["col"].dtype) == "Int64"
+        assert list(result["col"]) == [1, pd.NA, 3]
+
+    def test_object_series_with_pd_na_and_integers(self):
+        df = pd.DataFrame({"col": [1, pd.NA, 3]}, dtype=object)
+        frame = ar.from_pandas(df)
+        assert frame.dtypes["col"] == "int64"
+        result = ar.to_pandas(frame)
+        assert str(result["col"].dtype) == "Int64"
+        assert list(result["col"]) == [1, pd.NA, 3]
+
+
+def test_from_records_rejects_string_columns():
+    import pytest
+
+    import arnio as ar
+
+    with pytest.raises(
+        TypeError,
+        match="columns must be a list or tuple of strings",
+    ):
+        ar.ArFrame.from_records([[1]], columns="a")
+
+
+def test_from_records_rejects_bytes_columns():
+    import pytest
+
+    import arnio as ar
+
+    with pytest.raises(
+        TypeError,
+        match="columns must be a list or tuple of strings",
+    ):
+        ar.ArFrame.from_records([[1]], columns=b"a")
+
+
+def test_from_records_rejects_non_string_column_entries():
+    import pytest
+
+    import arnio as ar
+
+    with pytest.raises(
+        TypeError,
+        match="columns must contain only strings",
+    ):
+        ar.ArFrame.from_records([[1]], columns=[1])
+
+
+def test_from_records_accepts_valid_string_columns_list():
+    import arnio as ar
+
+    frame = ar.ArFrame.from_records([[1, 2]], columns=["a", "b"])
+
+    assert frame.columns == ["a", "b"]
+
+
+def test_from_records_accepts_valid_string_columns_tuple():
+    import arnio as ar
+
+    frame = ar.ArFrame.from_records([[1, 2]], columns=("a", "b"))
+
+    assert frame.columns == ["a", "b"]
