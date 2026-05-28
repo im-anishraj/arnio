@@ -639,7 +639,7 @@ def read_csv_chunked(
     path: str | os.PathLike[str] | io.TextIOBase,
     *,
     chunksize: int = 10_000,
-    delimiter: str = ",",
+    delimiter: str | None = None,
     has_header: bool = True,
     usecols: list[str] | None = None,
     nrows: int | None = None,
@@ -663,11 +663,17 @@ def read_csv_chunked(
     path : str or file-like object
         Path to the CSV file. Supports .csv, .txt, and .tsv extensions.
         Text file-like objects are copied to a temporary file in bounded
-        chunks before native parsing.
+        chunks before native parsing.  For ``.tsv`` paths the delimiter is
+        automatically set to ``'\\t'`` when ``delimiter`` is omitted.
     chunksize : int, default 10_000
         Maximum number of data rows per yielded chunk.
-    delimiter : str, default ","
-        Field delimiter character.
+    delimiter : str or None, default None
+        Field delimiter character.  When ``None`` (the default) the
+        delimiter is inferred from the file extension: ``'\\t'`` for
+        ``.tsv`` files and ``','`` for everything else.  Passing an
+        explicit value always takes precedence — for example,
+        ``delimiter=','`` reads a comma-delimited ``.tsv`` file without
+        any auto-detection.
     has_header : bool, default True
         Whether the file has a header row.
     usecols : list[str], optional
@@ -726,12 +732,22 @@ def read_csv_chunked(
     ...     clean = ar.pipeline(chunk, [("drop_nulls",)])
     ...     df = ar.to_pandas(clean)
     ...     process(df)
+
+    Read a TSV file — tab delimiter is inferred automatically:
+
+    >>> for chunk in ar.read_csv_chunked("data.tsv", chunksize=10_000):
+    ...     process(chunk)
+
+    Override auto-detection (e.g. a comma-delimited file with a .tsv extension):
+
+    >>> for chunk in ar.read_csv_chunked("data.tsv", delimiter=",", chunksize=10_000):
+    ...     process(chunk)
     """
     is_path_input = isinstance(path, (str, os.PathLike))
     path, should_cleanup, is_materialized_text = _materialize_csv_input(path)
     try:
+        path_lower = path.lower()
         if is_path_input:
-            path_lower = path.lower()
             if not (
                 path_lower.endswith(".csv")
                 or path_lower.endswith(".txt")
@@ -743,6 +759,14 @@ def read_csv_chunked(
                 )
 
         _validate_csv_path(path, encoding)
+
+        # Resolve the sentinel: auto-detect tab for .tsv only when the caller
+        # truly omitted delimiter (None).  An explicit delimiter="," is always
+        # honoured, even for .tsv paths.  File-like objects are materialised
+        # to a temporary .csv path, so auto-detection safely falls back to ","
+        # for those inputs — consistent with read_csv behaviour.
+        if delimiter is None:
+            delimiter = "\t" if path_lower.endswith(".tsv") else ","
 
         decimal_separator = _validate_decimal_separator(decimal_separator)
         _validate_thousands_separator(thousands_separator, decimal_separator)
