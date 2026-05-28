@@ -1369,6 +1369,7 @@ def write_parquet(
     >>> ar.write_parquet(frame, "output.parquet", row_group_size=50_000)
     """
     from .convert import to_pandas
+
     if not isinstance(path, (str, bytes, os.PathLike)):
         raise TypeError(
             f"path must be a string, bytes, or os.PathLike object, got {type(path).__name__!r}"

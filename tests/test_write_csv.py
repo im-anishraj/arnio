@@ -328,14 +328,3 @@ def test_write_csv_rejects_int_path(tmp_path):
     frame = ar.from_pandas(pd.DataFrame({"a": [1, 2, 3]}))
     with pytest.raises(TypeError, match="path must be a string"):
         ar.write_csv(frame, 42)
-
-def test_write_csv_rejects_bool_path(tmp_path):
-    frame = ar.from_pandas(pd.DataFrame({"a": [1, 2, 3]}))
-    with pytest.raises(TypeError, match="path must be a string"):
-        ar.write_csv(frame, True)
-
-
-def test_write_csv_rejects_int_path(tmp_path):
-    frame = ar.from_pandas(pd.DataFrame({"a": [1, 2, 3]}))
-    with pytest.raises(TypeError, match="path must be a string"):
-        ar.write_csv(frame, 42)
