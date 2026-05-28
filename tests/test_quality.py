@@ -3147,6 +3147,12 @@ def test_column_profile_invariant_invalid_counts():
     with pytest.raises(TypeError, match="null_count must be an integer"):
         ColumnProfile("x", "int64", "numeric", 10, "0", 0.0, 0, 0.0)
 
+    with pytest.raises(ValueError, match="unique_count cannot be negative"):
+        ColumnProfile("x", "int64", "numeric", 10, 0, 0.0, -1, 0.0)
+
+    with pytest.raises(TypeError, match="unique_count must be an integer"):
+        ColumnProfile("x", "int64", "numeric", 10, 0, 0.0, True, 0.0)
+
 
 def test_column_profile_invariant_invalid_ratios():
     from arnio.quality import ColumnProfile

@@ -126,6 +126,7 @@ class ColumnProfile:
         counts = {
             "row_count": self.row_count,
             "null_count": self.null_count,
+            "unique_count": self.unique_count,
             "empty_string_count": self.empty_string_count,
             "whitespace_count": self.whitespace_count,
         }
