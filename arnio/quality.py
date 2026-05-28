@@ -268,11 +268,12 @@ class DataQualityReport:
                                     for col_name, col_type in value.items()
                                     if col_name not in exclude_columns
                                 }
-                                if isinstance(value, dict)
+                                if key == "cast_types" and isinstance(value, dict)
                                 else value
                             )
                         )
                         for key, value in sorted(dict(s[1]).items())
+                        if key not in exclude_columns
                     },
                     "confidence_score": getattr(s, "confidence_score", None),
                     "confidence_reason": _redact_reason(
