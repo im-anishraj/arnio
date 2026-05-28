@@ -14,7 +14,10 @@ def _find_stub_file(stub_name):
     return None
 
 
-@pytest.mark.parametrize("module_name, stub_name", [("arnio._arnio_cpp", "_arnio_cpp.pyi")])
+@pytest.mark.parametrize(
+    "module_name, stub_name",
+    [("arnio._arnio_cpp", "_arnio_cpp.pyi")],
+)
 def test_stub_runtime_symbol_parity(module_name, stub_name):
     stub_path = _find_stub_file(stub_name)
     if stub_path is None:
@@ -29,7 +32,11 @@ def test_stub_runtime_symbol_parity(module_name, stub_name):
 
     # collect top-level defs and classes (avoid indented methods)
     names = set()
-    for m in re.finditer(r"^(?:class|def)\s+([A-Za-z_][A-Za-z0-9_]*)", text, flags=re.MULTILINE):
+    for m in re.finditer(
+        r"^(?:class|def)\s+([A-Za-z_][A-Za-z0-9_]*)",
+        text,
+        flags=re.MULTILINE,
+    ):
         names.add(m.group(1))
 
     assert names, f"No top-level symbols parsed from {stub_path}"
@@ -50,6 +57,7 @@ def test_stub_runtime_symbol_parity(module_name, stub_name):
 
     if missing:
         pytest.fail(
-            f"Runtime module {module_name} is missing symbols or shape for: {', '.join(missing)}\n"
+            f"Runtime module {module_name} is missing symbols or shape for: "
+            f"{', '.join(missing)}\n"
             f"Stub file: {stub_path}"
         )
