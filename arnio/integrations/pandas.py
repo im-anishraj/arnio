@@ -10,7 +10,13 @@ import pandas as pd
 from arnio.convert import from_pandas, to_pandas
 from arnio.frame import ArFrame
 from arnio.pipeline import pipeline as run_pipeline
-from arnio.quality import DataQualityReport, auto_clean, profile, suggest_cleaning
+from arnio.quality import (
+    CleanExplanation,
+    DataQualityReport,
+    auto_clean,
+    profile,
+    suggest_cleaning,
+)
 from arnio.schema import Schema, ValidationResult, validate
 
 
@@ -56,9 +62,24 @@ class ArnioPandasAccessor:
         )
         return to_pandas(frame)
 
-    def profile(self, *, sample_size: int = 5) -> DataQualityReport:
+    def profile(
+        self,
+        *,
+        sample_size: int = 5,
+        approx_top_values: bool = False,
+        approx_top_values_min_unique: int = 1000,
+        approx_top_values_min_ratio: float = 0.2,
+        approx_top_values_sample_size: int = 2000,
+    ) -> DataQualityReport:
         """Profile DataFrame quality with Arnio."""
-        return profile(self.to_arframe(), sample_size=sample_size)
+        return profile(
+            self.to_arframe(),
+            sample_size=sample_size,
+            approx_top_values=approx_top_values,
+            approx_top_values_min_unique=approx_top_values_min_unique,
+            approx_top_values_min_ratio=approx_top_values_min_ratio,
+            approx_top_values_sample_size=approx_top_values_sample_size,
+        )
 
     def suggest_cleaning(self) -> list[tuple[str, dict[str, Any]]]:
         """Return Arnio pipeline-compatible cleaning suggestions."""
@@ -69,17 +90,47 @@ class ArnioPandasAccessor:
         *,
         mode: str = "safe",
         return_report: bool = False,
-    ) -> pd.DataFrame | tuple[pd.DataFrame, DataQualityReport]:
-        """Run Arnio's automatic cleaning and return pandas output."""
+        dry_run: bool = False,
+        allow_lossy_casts: bool = False,
+        explain: bool = False,
+    ) -> (
+        pd.DataFrame
+        | DataQualityReport
+        | tuple[pd.DataFrame, DataQualityReport]
+        | tuple[pd.DataFrame, CleanExplanation]
+        | tuple[pd.DataFrame, DataQualityReport, CleanExplanation]
+    ):
+        """Run Arnio's automatic cleaning and return pandas output.
+
+        Parameters
+        ----------
+        explain : bool, default False
+            When ``True``, also return a :class:`~arnio.quality.CleanExplanation`
+            audit trail describing which steps ran and why.
+        """
         result = auto_clean(
             self.to_arframe(),
             mode=mode,
             return_report=return_report,
+            dry_run=dry_run,
+            allow_lossy_casts=allow_lossy_casts,
+            explain=explain,
         )
+
+        if dry_run:
+            return result
+
+        if return_report and explain:
+            frame, report, explanation = result
+            return to_pandas(frame), report, explanation
 
         if return_report:
             frame, report = result
             return to_pandas(frame), report
+
+        if explain:
+            frame, explanation = result
+            return to_pandas(frame), explanation
 
         return to_pandas(result)
 
