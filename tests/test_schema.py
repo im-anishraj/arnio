@@ -3106,3 +3106,35 @@ def test_float64_rejects_string_min_with_valid_max():
 def test_float64_rejects_bool_pair():
     with pytest.raises(TypeError, match="min must be numeric or None"):
         ar.Float64(min=True, max=False)
+
+
+def test_validation_issue_accepts_valid_severities():
+    error_issue = ar.ValidationIssue(
+        column="age", rule="min", message="Too small", severity="error"
+    )
+    warning_issue = ar.ValidationIssue(
+        column="age", rule="min", message="Too small", severity="warning"
+    )
+
+    assert error_issue.severity == "error"
+    assert warning_issue.severity == "warning"
+
+
+def test_validation_issue_rejects_invalid_severity_typo():
+    with pytest.raises(ValueError, match="severity must be 'error' or 'warning'"):
+        ar.ValidationIssue(
+            column="score", rule="custom", message="bad", severity="erorr"
+        )
+
+
+def test_custom_rule_with_invalid_severity_fails_validation_execution():
+    def bad_custom_rule(df):
+        return [
+            ar.ValidationIssue(column="x", rule="demo", message="bad", severity="erorr")
+        ]
+
+    frame = ar.from_pandas(pd.DataFrame({"x": [1]}))
+    schema = ar.Schema({"x": ar.Field()}, rules=[bad_custom_rule])
+
+    with pytest.raises(ValueError, match="severity must be 'error' or 'warning'"):
+        schema.validate(frame)
