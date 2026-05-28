@@ -876,6 +876,10 @@ def write_csv(
         raise ValueError("delimiter must not be a newline character")
     if delimiter == '"':
         raise ValueError("delimiter must not be the CSV quote character")
+    if (ord(delimiter) < 32 or ord(delimiter) == 127) and delimiter != "\t":
+        raise ValueError(
+            f"delimiter must not be a control character, got {delimiter!r}"
+        )
     if not isinstance(line_terminator, str):
         raise TypeError("line_terminator must be a string")
     if line_terminator == "":
