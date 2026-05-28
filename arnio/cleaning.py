@@ -247,7 +247,7 @@ def drop_columns(frame: ArFrame, columns: Sequence[str]) -> ArFrame:
         ),
     )
     if len(requested_columns) == 0:
-        return frame
+        return frame.drop_columns([])
     if len(requested_columns) == len(frame.columns):
         raise ValueError("drop_columns cannot remove all columns from the frame")
 

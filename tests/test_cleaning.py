@@ -683,9 +683,12 @@ class TestDropColumns:
     def test_drop_columns_allows_empty_input_as_no_op(self, sample_csv):
         frame = ar.read_csv(sample_csv)
 
-        result = ar.drop_columns(frame, [])
+        result_helper = ar.drop_columns(frame, [])
+        result_method = frame.drop_columns([])
 
-        assert result is frame
+        assert result_helper is not frame
+        assert result_helper == frame
+        assert result_helper == result_method
 
     def test_drop_columns_rejects_missing_columns(self, sample_csv):
         frame = ar.read_csv(sample_csv)
