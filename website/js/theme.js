@@ -12,8 +12,12 @@
   function getPreferred() {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored === DARK || stored === LIGHT) return stored;
-    // Default to light — only use dark if user explicitly toggles
-    return LIGHT;
+    // Fall back to system preference
+    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? DARK : LIGHT;
+  }
+  function applyWithoutSaving(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    updateToggleIcon(theme);
   }
 
   function apply(theme) {
@@ -35,7 +39,7 @@
   }
 
   // Apply immediately to prevent flash
-  apply(getPreferred());
+  applyWithoutSaving(getPreferred());
 
   // Listen for system preference changes
   if (window.matchMedia) {
