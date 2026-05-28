@@ -2773,6 +2773,8 @@ def test_report_suggestions_are_deterministic_with_nested_kwargs():
 
     assert result["suggestions"][0]["step"] == "same_step"
     assert result["suggestions"][1]["step"] == "same_step"
+
+
 def test_data_quality_report_to_json_redacts_top_values():
     frame = ar.from_pandas(
         pd.DataFrame(
@@ -2910,6 +2912,7 @@ def test_quality_gate_result_to_json_invalid_output_raises():
 
 
 # --- Tests for ProfileComparison.to_json() ---
+
 
 def test_compare_profiles_mismatched_exclude_columns_hints_user():
     df = pd.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6], "c": [7, 8, 9]})
