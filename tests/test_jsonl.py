@@ -306,3 +306,41 @@ def test_read_jsonl_encoding_unknown_codec(tmp_path):
     f.write_text('{"a": 1}\n')
     with pytest.raises(ValueError, match="Unknown encoding"):
         ar.read_jsonl(f, encoding="fake-codec")
+
+
+class TestReadJsonlDuplicateKeys:
+    def test_duplicate_key_raises(self, tmp_path):
+        p = tmp_path / "dupes.jsonl"
+        p.write_text('{"id": 1, "id": 2}\n', encoding="utf-8")
+
+        with pytest.raises(ar.JsonlReadError, match="line 1"):
+            ar.read_jsonl(p)
+
+    def test_duplicate_key_names_the_key(self, tmp_path):
+        p = tmp_path / "dupes.jsonl"
+        p.write_text('{"id": 1, "id": 2}\n', encoding="utf-8")
+
+        with pytest.raises(ar.JsonlReadError, match="id"):
+            ar.read_jsonl(p)
+
+    def test_duplicate_key_reports_correct_line_number(self, tmp_path):
+        p = tmp_path / "mixed.jsonl"
+        p.write_text('{"id": 1}\n{"id": 2, "id": 3}\n', encoding="utf-8")
+
+        with pytest.raises(ar.JsonlReadError, match="line 2"):
+            ar.read_jsonl(p)
+
+    def test_unique_keys_not_affected(self, tmp_path):
+        p = tmp_path / "clean.jsonl"
+        p.write_text('{"id": 1, "val": "a"}\n{"id": 2, "val": "b"}\n', encoding="utf-8")
+
+        frame = ar.read_jsonl(p)
+        df = ar.to_pandas(frame)
+        assert df["id"].tolist() == [1, 2]
+
+    def test_duplicate_key_error_is_jsonl_read_error(self, tmp_path):
+        p = tmp_path / "dupes.jsonl"
+        p.write_text('{"x": 1, "x": 2}\n', encoding="utf-8")
+
+        with pytest.raises(ar.JsonlReadError):
+            ar.read_jsonl(p)
