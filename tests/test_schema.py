@@ -2882,6 +2882,43 @@ def test_url_allowed_schemes_whitespace_string_raises():
 # --- Issue #1279: Schema.to_json() rules_omitted contract ---
 
 
+def test_url_allowed_schemes_trims_whitespace():
+    ar.URL(allowed_schemes=[" https ", " ftp "])
+
+def test_url_allowed_schemes_accepts_tuple():
+    ar.URL(allowed_schemes=("https", "ftp"))
+
+
+def test_url_allowed_schemes_accepts_set():
+    ar.URL(allowed_schemes={"https", "ftp"})
+
+
+def test_url_allowed_schemes_rejects_bare_string():
+    with pytest.raises(TypeError, match="allowed_schemes must be a sequence"):
+        ar.URL(allowed_schemes="https")
+
+
+def test_url_allowed_schemes_rejects_bare_bytes():
+    with pytest.raises(TypeError, match="allowed_schemes must be a sequence"):
+        ar.URL(allowed_schemes=b"https")
+
+
+@pytest.mark.parametrize(
+    "scheme",
+    ["https://", "https ftp", "1http"],
+)
+def test_url_allowed_schemes_reject_invalid_scheme_names(scheme):
+    with pytest.raises(
+        ValueError,
+        match="allowed_schemes must contain URL scheme names",
+    ):
+        ar.URL(allowed_schemes=[scheme])
+
+
+def test_url_allowed_schemes_accept_valid_scheme_characters():
+    ar.URL(allowed_schemes=["git+ssh", "custom.scheme"])
+
+
 def test_schema_to_json_with_rules_emits_warning():
     """to_json() emits UserWarning when rules are present."""
     schema = ar.Schema(
