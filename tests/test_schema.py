@@ -1521,6 +1521,32 @@ def test_string_max_length_boundary(tmp_path):
     assert result.issues[0].row_index == 2
 
 
+def test_string_allowed_rejects_bare_string():
+    with pytest.raises(
+        TypeError,
+        match="allowed must be a sequence of allowed values, not a bare string",
+    ):
+        ar.String(allowed="active")
+
+
+def test_string_allowed_rejects_bare_bytes():
+    with pytest.raises(
+        TypeError,
+        match="allowed must be a sequence of allowed values, not a bare string",
+    ):
+        ar.String(allowed=b"active")
+
+
+def test_string_allowed_accepts_list_tuple_and_set():
+    list_field = ar.String(allowed=["active"])
+    tuple_field = ar.String(allowed=("active",))
+    set_field = ar.String(allowed={"active"})
+
+    assert list_field.allowed == {"active"}
+    assert tuple_field.allowed == {"active"}
+    assert set_field.allowed == {"active"}
+
+
 def test_null_values_skip_length_validation(tmp_path):
     path = tmp_path / "names.csv"
     path.write_text("name\n\nabcd\n")
@@ -2985,3 +3011,60 @@ class TestIsSafelyConvertibleToDtype:
     def test_all_null_series_returns_false(self):
         series = pd.Series([None, None])
         assert _is_safely_convertible_to_dtype(series, "int64", "col") is False
+
+
+def test_int64_rejects_string_min():
+    with pytest.raises(TypeError, match="min must be numeric or None"):
+        ar.Int64(min="a")
+
+
+def test_int64_rejects_string_max():
+    with pytest.raises(TypeError, match="max must be numeric or None"):
+        ar.Int64(max="z")
+
+
+def test_int64_rejects_bool_min():
+    with pytest.raises(TypeError, match="min must be numeric or None"):
+        ar.Int64(min=True)
+
+
+def test_int64_rejects_bool_max():
+    with pytest.raises(TypeError, match="max must be numeric or None"):
+        ar.Int64(max=False)
+
+
+def test_int64_accepts_valid_numeric_bounds():
+    assert ar.Int64(min=0, max=10) is not None
+
+
+def test_int64_accepts_float_bounds():
+    assert ar.Int64(min=0.5, max=9.9) is not None
+
+
+def test_int64_accepts_none_bounds():
+    assert ar.Int64(min=None, max=None) is not None
+
+
+def test_int64_rejects_string_min_with_valid_max():
+    with pytest.raises(TypeError, match="min must be numeric or None"):
+        ar.Int64(min="a", max=1)
+
+
+def test_int64_rejects_valid_min_with_string_max():
+    with pytest.raises(TypeError, match="max must be numeric or None"):
+        ar.Int64(min=1, max="z")
+
+
+def test_int64_rejects_bool_pair():
+    with pytest.raises(TypeError, match="min must be numeric or None"):
+        ar.Int64(min=True, max=False)
+
+
+def test_float64_rejects_string_min_with_valid_max():
+    with pytest.raises(TypeError, match="min must be numeric or None"):
+        ar.Float64(min="a", max=1.0)
+
+
+def test_float64_rejects_bool_pair():
+    with pytest.raises(TypeError, match="min must be numeric or None"):
+        ar.Float64(min=True, max=False)

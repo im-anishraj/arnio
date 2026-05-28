@@ -14,6 +14,7 @@ except Exception:
 from .cleaning import (
     cast_types,
     clean,
+    clean_column_names,
     clip_numeric,
     coalesce_columns,
     combine_columns,
@@ -138,6 +139,7 @@ __all__ = [
     "drop_duplicates",
     "drop_constant_columns",
     "drop_empty_columns",
+    "clean_column_names",
     "clip_numeric",
     "winsorize_outliers",
     "coalesce_columns",

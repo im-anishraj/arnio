@@ -7,8 +7,9 @@
 
   const REPO = 'im-anishraj/arnio';
   const CACHE_KEY_STATS = 'arnio_github_stats';
-  const CACHE_KEY_CONTRIBUTORS = 'arnio_github_contributors';
+  const CACHE_KEY_CONTRIBUTORS = 'arnio_github_contributors_v2';
   const CACHE_DURATION = 1000 * 60 * 60; // 1 hour
+  const CONTRIBUTORS_PAGE_SIZE = 100;
 
   /**
    * Fetch data from GitHub API with basic caching
@@ -57,6 +58,63 @@
   }
 
   /**
+   * Fetch all pages from a paginated GitHub API endpoint with basic caching.
+   */
+  async function fetchGitHubPages(endpoint, cacheKey, perPage = CONTRIBUTORS_PAGE_SIZE) {
+    let cachedData = null;
+    let cachedTimestamp = 0;
+
+    try {
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        cachedData = parsed.data;
+        cachedTimestamp = parsed.timestamp;
+
+        if (Date.now() - cachedTimestamp < CACHE_DURATION) {
+          return cachedData;
+        }
+      }
+    } catch (error) {
+      try {
+        localStorage.removeItem(cacheKey);
+      } catch (storageError) {
+        // Ignore storage failures; the network request below can still recover.
+      }
+    }
+
+    try {
+      const results = [];
+      let nextUrl = `https://api.github.com/repos/${REPO}${endpoint}?per_page=${perPage}`;
+
+      while (nextUrl) {
+        const response = await fetch(nextUrl);
+        if (!response.ok) throw new Error(`GitHub API error: ${response.status}`);
+
+        const data = await response.json();
+        results.push(...data);
+
+        const linkHeader = response.headers.get('Link');
+        const nextMatch = linkHeader && linkHeader.match(/<([^>]+)>;\s*rel="next"/);
+        nextUrl = nextMatch ? nextMatch[1] : null;
+      }
+
+      try {
+        localStorage.setItem(cacheKey, JSON.stringify({
+          data: results,
+          timestamp: Date.now()
+        }));
+      } catch (storageError) {
+        // Fresh API data is still usable even if browser storage is unavailable.
+      }
+
+      return results;
+    } catch (error) {
+      return cachedData;
+    }
+  }
+
+  /**
    * Update repository stats (stars, forks)
    */
   async function updateRepoStats() {
@@ -81,7 +139,7 @@
    * Update contributors grid
    */
   async function updateContributors() {
-    const contributors = await fetchGitHubData('/contributors?per_page=100', CACHE_KEY_CONTRIBUTORS);
+    const contributors = await fetchGitHubPages('/contributors', CACHE_KEY_CONTRIBUTORS);
     const container = document.getElementById('contributors-container');
 
     if (!container) return;

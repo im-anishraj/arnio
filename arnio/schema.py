@@ -713,6 +713,13 @@ class Field:
                 )
             if not isinstance(self.required_if[0], str):
                 raise TypeError("required_if column name must be a string")
+        if self.dtype in {"int64", "float64"}:
+            if self.min is not None:
+                if isinstance(self.min, bool) or not isinstance(self.min, (int, float)):
+                    raise TypeError("min must be numeric or None")
+            if self.max is not None:
+                if isinstance(self.max, bool) or not isinstance(self.max, (int, float)):
+                    raise TypeError("max must be numeric or None")
 
         _validate_severity(self.severity)
 
@@ -1592,6 +1599,12 @@ def Int64(
         Field: Configured int64 schema field.
     """
 
+    if min is not None:
+        if isinstance(min, bool) or not isinstance(min, (int, float)):
+            raise TypeError("min must be numeric or None")
+    if max is not None:
+        if isinstance(max, bool) or not isinstance(max, (int, float)):
+            raise TypeError("max must be numeric or None")
     if min is not None and max is not None and min > max:
         raise ValueError("min must be less than or equal to max")
 
@@ -1629,6 +1642,12 @@ def Float64(
         Field: Configured float64 schema field.
     """
 
+    if min is not None:
+        if isinstance(min, bool) or not isinstance(min, (int, float)):
+            raise TypeError("min must be numeric or None")
+    if max is not None:
+        if isinstance(max, bool) or not isinstance(max, (int, float)):
+            raise TypeError("max must be numeric or None")
     if min is not None and max is not None and min > max:
         raise ValueError("min must be less than or equal to max")
 
@@ -1672,6 +1691,11 @@ def String(
 
     if min_length is not None and max_length is not None and min_length > max_length:
         raise ValueError("min_length must be less than or equal to max_length")
+
+    if isinstance(allowed, (str, bytes)):
+        raise TypeError(
+            "allowed must be a sequence of allowed values, not a bare string"
+        )
 
     allowed_set = set(allowed) if allowed is not None else None
 

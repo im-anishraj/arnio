@@ -150,6 +150,14 @@ class TestReadJsonlNrows:
         frame = ar.read_jsonl(path, nrows=0)
         assert frame.shape[0] == 0
 
+    def test_nrows_zero_skips_extension_validation(self, tmp_path):
+        # nrows=0 short-circuits before extension validation — an unsupported
+        # extension must not raise when the caller requests zero rows.
+        path = tmp_path / "probe.txt"
+        path.write_text("not json\n", encoding="utf-8")
+        frame = ar.read_jsonl(path, nrows=0)
+        assert frame.shape[0] == 0
+
     def test_nrows_larger_than_file_reads_all(self, tmp_path):
         path = _write(tmp_path, "data.jsonl", [{"x": i} for i in range(5)])
         frame = ar.read_jsonl(path, nrows=100)
