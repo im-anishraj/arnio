@@ -198,6 +198,18 @@ class TestWriteParquetErrors:
         with pytest.raises(ValueError, match="Unknown compression codec"):
             ar.write_parquet(frame, tmp_path / "out.parquet", compression="lz4")
 
+    @pytest.mark.parametrize("compression", [None, 123, True, ["snappy"]])
+    def test_non_string_compression_raises_type_error(self, tmp_path, compression):
+        # Compression type validation happens before codec validation and pyarrow import.
+        frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
+
+        with pytest.raises(TypeError, match="compression must be a string"):
+            ar.write_parquet(
+                frame,
+                tmp_path / "out.parquet",
+                compression=compression,
+            )
+
     def test_missing_pyarrow_raises_import_error(self, tmp_path):
         # This test mocks pyarrow away and must run even without pyarrow.
         frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
