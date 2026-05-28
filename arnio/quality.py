@@ -721,6 +721,11 @@ class DataQualityReport:
             "columns_with_nulls": [
                 name for name, profile in self.columns.items() if profile.null_count > 0
             ],
+            "columns_with_empty_strings": [
+                name
+                for name, profile in self.columns.items()
+                if profile.empty_string_count > 0
+            ],
             "columns_with_whitespace": [
                 name
                 for name, profile in self.columns.items()
