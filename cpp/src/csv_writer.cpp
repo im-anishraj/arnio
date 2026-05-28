@@ -7,6 +7,8 @@
 #include <stdexcept>
 #include <variant>
 
+#include "arnio/frame.h"
+
 namespace arnio {
 
 CsvWriter::CsvWriter(const CsvWriteConfig& config) : config_(config) {}
@@ -57,9 +59,10 @@ std::string CsvWriter::cell_to_string(const Frame& frame, size_t row, size_t col
 
 void CsvWriter::write(const Frame& frame, const std::string& path) const {
     // Open in binary mode so the configured line_terminator is written
-    // byte-for-byte without platform newline translation.  On Windows, text
-    // mode would silently expand every '\n' to '\r\n', corrupting any
-    // line_terminator that already contains '\r' (e.g. "\r\n" → "\r\r\n").
+    // byte-for-byte without platform newline translation. On Windows,
+    // text mode would silently expand every '\n' to '\r\n',
+    // corrupting any line_terminator that already contains '\r'
+    // (e.g. "\r\n" → "\r\r\n").
     std::ofstream out(path, std::ios::binary);
     if (!out.is_open()) {
         throw std::runtime_error("Could not open file for writing: " + path);

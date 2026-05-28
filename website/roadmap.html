@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Roadmap — Arnio</title>
+  <meta name="description" content="Arnio roadmap after v1.18.0: shipped work, current main, and future production-readiness priorities.">
+  <link rel="icon" type="image/svg+xml" href="updated-icon.svg">
+  <link rel="stylesheet" href="css/variables.css?v=20260522">
+  <link rel="stylesheet" href="css/base.css?v=20260522">
+  <link rel="stylesheet" href="css/layout.css?v=20260522">
+  <link rel="stylesheet" href="css/components.css?v=20260522">
+  <link rel="stylesheet" href="css/pages.css?v=20260522">
+  <script src="js/theme.js"></script>
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://arnio.vercel.app/">
+  <meta property="og:title" content="Arnio — Production Data Preparation for Python">
+  <meta property="og:description" content="Arnio combines a native C++ CSV engine with Python APIs for cleaning, quality profiling, and schema validation.">
+  <meta property="og:image" content="https://arnio.vercel.app/arnio-transparent-logo.svg">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Arnio — Production Data Preparation for Python">
+  <meta name="twitter:description" content="Arnio combines a native C++ CSV engine with Python APIs for cleaning, quality profiling, and schema validation.">
+  <meta name="twitter:image" content="https://arnio.vercel.app/arnio-transparent-logo.svg">
+</head>
+<body>
+  <a href="#main-content" class="skip-link">Skip to content</a>
+  <nav class="top-nav" aria-label="Main navigation"><div class="container container--wide"><a href="index.html" class="nav-brand"><img src="arnio-transparent-logo.svg" alt="Arnio" height="32"></a><ul class="nav-links"><li><a href="docs.html">Docs</a></li><li><a href="api.html">API</a></li><li><a href="benchmarks.html">Benchmarks</a></li><li><a href="contributing.html">Contributing</a></li><li><a href="architecture.html">Architecture</a></li><li><a href="roadmap.html">Roadmap</a></li><li><a href="community.html">Community</a></li><li><a href="changelog.html">Changelog</a></li></ul><div class="nav-actions"><a href="https://discord.gg/xsEw7r78M" class="nav-discord" target="_blank" rel="noopener">Discord</a><a href="https://github.com/im-anishraj/arnio" class="nav-github" target="_blank" rel="noopener">GitHub</a><button class="theme-toggle" aria-label="Toggle theme">Theme</button><button class="nav-hamburger" aria-label="Open menu" aria-expanded="false">☰</button></div></div></nav>
+  <div class="mobile-menu" aria-label="Mobile navigation"><a href="index.html">Home</a><a href="docs.html">Documentation</a><a href="api.html">API Reference</a><a href="benchmarks.html">Benchmarks</a><a href="contributing.html">Contributing</a><a href="architecture.html">Architecture</a><a href="roadmap.html">Roadmap</a><a href="community.html">Community</a><a href="https://discord.gg/xsEw7r78M" target="_blank" rel="noopener">Discord</a><a href="changelog.html">Changelog</a></div>
+
+  <header class="page-hero"><div class="container"><h1>Roadmap</h1><p>Several items that used to be future work are now shipped: chunked CSV, bad-line handling, Arrow export, Parquet writing, schema YAML export, and quality report improvements.</p></div></header>
+
+  <main id="main-content" class="main-content">
+    <div class="container">
+      <section class="roadmap-item">
+        <div class="roadmap-header"><span class="roadmap-version">v1.18.0</span><span class="badge badge-success">Released</span></div>
+        <h2>Arrow export and bounded schema validation</h2>
+        <p>Latest public release. It adds <code>to_arrow</code>, bool dtype detection, and <code>max_errors</code> for schema validation.</p>
+      </section>
+
+      <section class="roadmap-item">
+        <div class="roadmap-header"><span class="roadmap-version">v1.17.x</span><span class="badge badge-success">Released</span></div>
+        <h2>Large production feature wave</h2>
+        <ul>
+          <li>CSV hardening: <code>on_bad_lines</code>, dtype overrides, skip rows, decimal separators, encoding errors, Unicode paths, duplicate headers, and clearer row diagnostics.</li>
+          <li>Frame ergonomics: <code>from_records</code>, <code>schema_summary</code>, <code>describe</code>, <code>to_dict</code>, and stronger column guards.</li>
+          <li>Interop: DuckDB registration, Parquet writing, Arrow-facing work, pandas accessor improvements, and scikit-learn safety checks.</li>
+          <li>Quality and schema: near-constant warnings, high-cardinality warnings, schema YAML export, custom validators, and validation Markdown/Pandas output.</li>
+        </ul>
+      </section>
+
+      <section class="roadmap-item">
+        <div class="roadmap-header"><span class="roadmap-version">Current main</span><span class="badge badge-warning">Unreleased</span></div>
+        <h2>Polish before the next release</h2>
+        <ul>
+          <li>Frame selection and dropping methods are now more ergonomic.</li>
+          <li>Quality reports can exclude sensitive columns and export JSON.</li>
+          <li>Benchmark regression checks and dry-run tests improve maintenance confidence.</li>
+          <li>Whitespace-only duplicate headers and tuple mapping keys are handled more safely.</li>
+        </ul>
+      </section>
+
+      <section class="roadmap-item">
+        <div class="roadmap-header"><span class="roadmap-version">Next</span><span class="badge badge-accent">Planned</span></div>
+        <h2>Performance parity and streaming depth</h2>
+        <ul>
+          <li>Continue optimizing parser and cleaning paths using benchmark-driven changes.</li>
+          <li>Expand chunked processing beyond reading into more streaming-friendly transformation and validation workflows.</li>
+          <li>Add clearer benchmark baselines for release comparisons across supported platforms.</li>
+        </ul>
+      </section>
+
+      <section class="roadmap-item">
+        <div class="roadmap-header"><span class="roadmap-version">Maintenance</span><span class="badge badge-accent">Ongoing</span></div>
+        <h2>Docs, release, and contributor experience</h2>
+        <ul>
+          <li>Keep website docs aligned with public releases and current main.</li>
+          <li>Preserve release automation through Release Please, GitHub Actions, wheels, and PyPI Trusted Publishing.</li>
+          <li>Maintain label quality, issue scope, GSSoC review flow, and test expectations for merged contributions.</li>
+        </ul>
+      </section>
+    </div>
+  </main>
+
+  <footer class="site-footer"><div class="container"><div class="footer-bottom"><span>© 2026 Anish Raj. MIT License.</span><span>Roadmap updated after v1.18.0.</span></div></div></footer>
+  <script src="js/main.js"></script>
+</body>
+</html>

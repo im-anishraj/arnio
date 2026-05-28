@@ -28,6 +28,7 @@ cd arnio
 pip install -e ".[dev]"
 pre-commit install
 ```
+> `pip install -e ".[dev]"` builds Arnio's native C++ extension. If you see `nmake` or `CMAKE_CXX_COMPILER` errors on Windows, install the "Desktop development with C++" workload in Visual Studio Build Tools or use WSL, then retry the install.
 Alternatively, use WSL for a faster setup experience.
 
 If the editable install or wheel build fails, see the Windows build troubleshooting section in the [README](../README.md#windows-build-troubleshooting).
@@ -103,6 +104,12 @@ def test_remove_special_chars(sample_csv):
 7. Ensure your code passes linting (`make lint`). This is a required pre-PR step.
 8. Open the pull request and link the issue with `Fixes #issue-number` when complete.
 9. Ensure your PR title follows **Conventional Commits**.
+
+## C++ extension stubs
+
+If you change the C++ pybind11 API, update the stub file at
+[arnio/_arnio_cpp.pyi](../arnio/_arnio_cpp.pyi) and keep the Python call sites
+aligned. See [STUBS_UPDATE.md](../STUBS_UPDATE.md) for the short checklist.
 
 ### Review expectations
 

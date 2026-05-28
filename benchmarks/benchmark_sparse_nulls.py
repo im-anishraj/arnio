@@ -47,6 +47,17 @@ import arnio as ar
 # ---------------------------------------------------------------------------
 
 
+def _positive_int(value):
+    """Argparse type validator that requires a positive integer."""
+    try:
+        ivalue = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{value!r} is not a valid integer")
+    if ivalue < 1:
+        raise argparse.ArgumentTypeError(f"{value!r} must be >= 1")
+    return ivalue
+
+
 def _generate_csv(rows, path, null_density, seed=42):
     """Generate a deterministic CSV with controlled null density."""
     if DRY_RUN:
@@ -288,7 +299,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Benchmark sparse-null workloads: arnio vs pandas"
     )
-    parser.add_argument("--rows", type=int, default=1_000_000, help="Number of rows")
-    parser.add_argument("--runs", type=int, default=5, help="Repetitions per density")
+    parser.add_argument(
+        "--rows", type=_positive_int, default=1_000_000, help="Number of rows"
+    )
+    parser.add_argument(
+        "--runs", type=_positive_int, default=5, help="Repetitions per density"
+    )
     args = parser.parse_args()
     run(rows=args.rows, runs=args.runs)
