@@ -417,9 +417,22 @@ def from_dict(data: dict) -> ArFrame:
         raise TypeError(f"Expected dict datatype but instead got {type(data).__name__}")
     if not all(isinstance(k, str) for k in data.keys()):
         raise TypeError("All dictionary keys must be strings")
+    lengths = {}
+
     for col_name, value in data.items():
         if isinstance(value, dict):
-            raise ValueError(f"Nested objects are not supported in column '{col_name}'")
+            raise ValueError(f"Nested objects are not supported in column {col_name}")
+
+        if hasattr(value, "__len__") and not isinstance(value, (str, bytes)):
+            lengths[col_name] = len(value)
+
+    if lengths:
+        unique_lengths = set(lengths.values())
+
+        if len(unique_lengths) > 1:
+            details = ", ".join(f"{name}={length}" for name, length in lengths.items())
+
+            raise ValueError(f"from_dict() column lengths differ: {details}")
     df = pd.DataFrame(data)
     for col_name in df.columns:
         _check_unsupported_dtype(col_name, df[col_name])

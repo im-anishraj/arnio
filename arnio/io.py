@@ -194,6 +194,9 @@ def _validate_decimal_separator(decimal_separator: str) -> str:
     return decimal_separator
 
 
+_INVALID_DELIMITERS: frozenset[str] = frozenset({"\n", "\r", "\0", '"'})
+
+
 def _validate_delimiter(delimiter: str) -> str:
     """Validate CSV delimiter."""
     if not isinstance(delimiter, str):
@@ -202,6 +205,12 @@ def _validate_delimiter(delimiter: str) -> str:
     if len(delimiter) != 1:
         raise ValueError("delimiter must be exactly one character")
 
+    if delimiter in _INVALID_DELIMITERS:
+        raise ValueError(
+            f"delimiter {delimiter!r} is not allowed; the following characters "
+            f"cannot be used as field delimiters: newline (\\n), "
+            f'carriage-return (\\r), NUL (\\0), double-quote (").'
+        )
     return delimiter
 
 
@@ -212,6 +221,9 @@ def _validate_usecols(usecols: Sequence[str]) -> list[str]:
 
     if not isinstance(usecols, Sequence):
         raise TypeError("usecols must be a sequence of strings")
+
+    if len(usecols) == 0:
+        raise ValueError("usecols must not be empty")
 
     for col in usecols:
         if not isinstance(col, str):
@@ -540,10 +552,21 @@ def read_csv(
 
     Examples
     --------
-    >>> frame = ar.read_csv("data.csv")           # comma delimiter
-    >>> frame = ar.read_csv("data.tsv")           # tab auto-detected
-    >>> frame = ar.read_csv("data.tsv", delimiter=",")  # explicit comma honoured
-    >>> frame = ar.read_csv("data.dat")           # non-standard extension accepted
+    >>> import arnio as ar
+
+    Read a basic CSV file:
+
+    >>> df = ar.read_csv("data.csv")              # comma delimiter
+
+    Read a CSV with specific columns and row limit:
+
+    >>> df = ar.read_csv("large_data.csv", usecols=["id", "name"], nrows=1000)
+
+    Other important behaviors:
+
+    >>> df = ar.read_csv("data.tsv")              # tab auto-detected
+    >>> df = ar.read_csv("data.tsv", delimiter=",")  # explicit comma honoured
+    >>> df = ar.read_csv("data.dat")              # non-standard extension accepted
     """
     path, should_cleanup, is_materialized_text = _materialize_csv_input(path)
 
@@ -596,7 +619,10 @@ def read_csv(
     try:
         effective_encoding = "utf-8" if is_materialized_text else encoding
         with _utf8_csv_path(
-            path, effective_encoding, encoding_errors=encoding_errors, delimiter=delimiter
+            path,
+            effective_encoding,
+            encoding_errors=encoding_errors,
+            delimiter=delimiter,
         ) as native_path:
             cpp_frame, bad_rows = reader.read(native_path, on_bad_lines)
 
@@ -627,6 +653,7 @@ def read_csv_chunked(
     usecols: list[str] | None = None,
     nrows: int | None = None,
     skip_rows: int = 0,
+    skiprows: int | None = None,
     encoding: str = "utf-8",
     trim_headers: bool = True,
     decimal_separator: str = ".",
@@ -658,6 +685,12 @@ def read_csv_chunked(
         Maximum total number of data rows to read across all chunks.
     skip_rows : int, default 0
         Number of data rows to skip after the header row.
+    skiprows : int, optional
+        Alias for ``skip_rows`` for API consistency with ``read_csv``.
+        Note: in chunked mode both ``skip_rows`` and ``skiprows`` skip
+        data rows *after* the header, not lines before it.
+        If both are supplied they must agree; conflicting values raise
+        ``ValueError``.
     encoding : str, default "utf-8"
         File encoding.
     trim_headers : bool, default True
@@ -725,6 +758,24 @@ def read_csv_chunked(
         delimiter = _validate_delimiter(delimiter)
         mode = _validate_parser_mode(mode)
         chunksize = _validate_chunksize(chunksize)
+
+        # Resolve skiprows / skip_rows alias.
+        # Both skip data rows after the header in chunked mode.
+        # skip_rows is kept for backward compatibility; skiprows matches
+        # the read_csv parameter name. Both may be passed as long as they
+        # agree; conflicting values raise ValueError.
+        if skiprows is not None:
+            if isinstance(skiprows, bool) or not isinstance(skiprows, int):
+                raise TypeError("skiprows must be an integer")
+            if skiprows < 0:
+                raise ValueError("skiprows must be non-negative")
+            if skip_rows != 0 and skip_rows != skiprows:
+                raise ValueError(
+                    f"Conflicting values: skiprows={skiprows!r} and "
+                    f"skip_rows={skip_rows!r}. Pass only one of them."
+                )
+            skip_rows = skiprows
+
         skip_rows = _validate_skip_rows(skip_rows)
         on_bad_lines = _validate_on_bad_lines(on_bad_lines)
 
@@ -754,7 +805,9 @@ def read_csv_chunked(
         raise
     try:
         effective_encoding = "utf-8" if is_materialized_text else encoding
-        with _utf8_csv_path(path, effective_encoding, delimiter=delimiter) as native_path:
+        with _utf8_csv_path(
+            path, effective_encoding, delimiter=delimiter
+        ) as native_path:
             reader.open(native_path)
             while True:
                 chunk = reader.next_chunk(chunksize, on_bad_lines)
@@ -832,6 +885,10 @@ def write_csv(
         raise ValueError("delimiter must not be a newline character")
     if delimiter == '"':
         raise ValueError("delimiter must not be the CSV quote character")
+    if (ord(delimiter) < 32 or ord(delimiter) == 127) and delimiter != "\t":
+        raise ValueError(
+            f"delimiter must not be a control character, got {delimiter!r}"
+        )
     if not isinstance(line_terminator, str):
         raise TypeError("line_terminator must be a string")
     if line_terminator == "":
@@ -1076,6 +1133,17 @@ def read_jsonl(
         )
 
     records: list[dict] = []
+
+    def _reject_duplicate_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
+        seen = set()
+        result = {}
+        for k, v in pairs:
+            if k in seen:
+                raise ValueError(f"duplicate key {k!r}")
+            seen.add(k)
+            result[k] = v
+        return result
+
     try:
         with open(path, encoding=encoding) as fh:
             for lineno, raw_line in enumerate(fh, start=1):
@@ -1085,10 +1153,14 @@ def read_jsonl(
                 if nrows is not None and len(records) >= nrows:
                     break
                 try:
-                    obj = json.loads(line)
+                    obj = json.loads(line, object_pairs_hook=_reject_duplicate_keys)
                 except json.JSONDecodeError as exc:
                     raise JsonlReadError(
                         f"Invalid JSON on line {lineno} of {path!r}: {exc}"
+                    ) from exc
+                except ValueError as exc:
+                    raise JsonlReadError(
+                        f"Duplicate key on line {lineno} of {path!r}: {exc}"
                     ) from exc
                 if not isinstance(obj, dict):
                     raise JsonlReadError(

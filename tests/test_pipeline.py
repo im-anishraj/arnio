@@ -402,7 +402,9 @@ class TestPipeline:
         frame = ar.read_csv(sample_csv)
         result = ar.pipeline(frame, [("drop_columns", {"columns": []})])
 
-        assert result is frame
+        assert result is not frame
+        assert result.columns == frame.columns
+        assert len(result) == len(frame)
 
     def test_pipeline_drop_columns_rejects_missing_columns(self, sample_csv):
         import pytest
@@ -624,6 +626,28 @@ class TestPipeline:
         df = ar.to_pandas(result)
         assert "marker" in df.columns
         assert set(df["marker"]) == {"done"}
+
+    def test_unregister_missing_step(self):
+        with pytest.raises(ar.UnknownStepError):
+            ar.unregister_step("missing_step")
+
+    def test_unregister_builtin_python_step(self):
+        with pytest.raises(ar.UnknownStepError):
+            ar.unregister_step("standardize_missing_tokens")
+
+    def test_unregister_custom_step(self):
+        def custom_step(df):
+            return df
+
+        ar.register_step("temporary_step", custom_step)
+
+        ar.unregister_step("temporary_step")
+
+        with pytest.raises(ar.UnknownStepError):
+            ar.pipeline(
+                ar.from_pandas(pd.DataFrame({"a": [1]})),
+                [("temporary_step",)],
+            )
 
     def test_pipeline_passes_context_to_opt_in_python_steps(self, sample_csv):
         frame = ar.read_csv(sample_csv)

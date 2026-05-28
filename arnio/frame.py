@@ -114,6 +114,20 @@ class ArFrame:
         if len(records) == 0:
             raise ValueError("records must be non-empty")
 
+        if columns is not None:
+            if isinstance(columns, (str, bytes)):
+                raise TypeError(
+                    "columns must be a list or tuple of strings, not a string or bytes"
+                )
+
+            if not isinstance(columns, (list, tuple)):
+                raise TypeError("columns must be a list or tuple of strings")
+
+            non_strings = [col for col in columns if not isinstance(col, str)]
+
+            if non_strings:
+                raise TypeError("columns must contain only strings")
+
         first = records[0]
 
         if isinstance(first, dict):

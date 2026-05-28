@@ -160,3 +160,18 @@ def test_pandas_accessor_auto_clean_return_report_and_explain():
     assert list(result["name"]) == ["Alice", "Bob"]
     assert isinstance(report, ar.DataQualityReport)
     assert isinstance(explanation, ar.CleanExplanation)
+
+
+def test_pandas_accessor_validate_respects_max_errors():
+    # max_errors=1 should cap the result at one issue even when multiple rows fail.
+    df = pd.DataFrame({"age": [-1, -2, -3]})
+    schema = ar.Schema({"age": ar.Int64(min=0)})
+
+    result_capped = df.arnio.validate(schema, max_errors=1)
+    result_full = df.arnio.validate(schema)
+
+    assert isinstance(result_capped, ar.ValidationResult)
+    assert not result_capped.passed
+    assert result_capped.issue_count == 1
+    # Full run should report all three failures
+    assert result_full.issue_count == 3

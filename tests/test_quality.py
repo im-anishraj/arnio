@@ -8,7 +8,11 @@ import pandas as pd
 import pytest
 
 import arnio as ar
-from arnio.quality import _validate_gate_bool, _validate_gate_threshold
+from arnio.quality import (
+    _validate_gate_bool,
+    _validate_gate_ratio_threshold,
+    _validate_gate_threshold,
+)
 
 
 def test_profile_reports_quality_signals(tmp_path):
@@ -301,6 +305,15 @@ def test_check_quality_gates_validates_thresholds_and_flags():
 
     with pytest.raises(ValueError, match="finite non-negative"):
         ar.check_quality_gates(report, report, max_null_ratio_delta=-0.1)
+
+    with pytest.raises(ValueError, match="must be a ratio between 0.0 and 1.0"):
+        ar.check_quality_gates(report, report, max_null_ratio_delta=1.5)
+
+    with pytest.raises(ValueError, match="must be a ratio between 0.0 and 1.0"):
+        ar.check_quality_gates(report, report, max_duplicate_ratio_delta=1.0001)
+
+    result = ar.check_quality_gates(report, report, max_row_count_delta_ratio=2.5)
+    assert result.passed is True
 
     with pytest.raises(TypeError, match="allow_new_columns must be a bool"):
         ar.check_quality_gates(report, report, allow_new_columns="yes")
@@ -766,6 +779,24 @@ def test_profile_approx_top_values_validation(tmp_path):
         ValueError, match="approx_top_values_min_ratio must be between 0 and 1"
     ):
         ar.profile(frame, approx_top_values_min_ratio=1.5)
+
+    with pytest.raises(
+        ValueError,
+        match="approx_top_values_min_ratio must be a finite number between 0 and 1",
+    ):
+        ar.profile(frame, approx_top_values_min_ratio=float("nan"))
+
+    with pytest.raises(
+        ValueError,
+        match="approx_top_values_min_ratio must be a finite number between 0 and 1",
+    ):
+        ar.profile(frame, approx_top_values_min_ratio=float("inf"))
+
+    with pytest.raises(
+        ValueError,
+        match="approx_top_values_min_ratio must be a finite number between 0 and 1",
+    ):
+        ar.profile(frame, approx_top_values_min_ratio=float("-inf"))
 
     with pytest.raises(
         TypeError, match="approx_top_values_sample_size must be an integer"
@@ -2400,6 +2431,20 @@ def test_data_quality_report_to_dict_exclude_columns():
     assert "name" in result["columns"]
 
 
+def test_data_quality_report_to_dict_exclude_columns_accepts_set_and_tuple():
+    frame = ar.read_csv(io.StringIO("name,age,secret_token\nalice,20,a\nbob,30,b\n"))
+
+    report = ar.profile(frame)
+
+    set_result = report.to_dict(exclude_columns={"secret_token"})
+    tuple_result = report.to_dict(exclude_columns=("age",))
+
+    assert "secret_token" not in set_result["columns"]
+    assert "name" in set_result["columns"]
+    assert "age" not in tuple_result["columns"]
+    assert "name" in tuple_result["columns"]
+
+
 def test_data_quality_report_to_dict_default_behavior():
     frame = ar.read_csv(io.StringIO("name\nalice\nbob\n"))
 
@@ -2415,9 +2460,22 @@ def test_data_quality_report_to_dict_unknown_column():
 
     report = ar.profile(frame)
 
-    result = report.to_dict(exclude_columns=["missing_column"])
+    with pytest.raises(
+        KeyError, match="Unknown exclude_columns: \\['missing_column'\\]"
+    ):
+        report.to_dict(exclude_columns=["missing_column"])
 
-    assert "name" in result["columns"]
+
+def test_data_quality_report_to_dict_multiple_unknown_columns():
+    frame = ar.read_csv(io.StringIO("name\nalice\nbob\n"))
+
+    report = ar.profile(frame)
+
+    with pytest.raises(
+        KeyError,
+        match="Unknown exclude_columns: \\['missing_column', 'secret_tokn'\\]",
+    ):
+        report.to_dict(exclude_columns=["secret_tokn", "missing_column"])
 
 
 def test_data_quality_report_to_dict_invalid_exclude_columns_type():
@@ -2439,6 +2497,16 @@ def test_data_quality_report_to_dict_invalid_exclude_columns_entries():
 
 
 def test_data_quality_report_to_dict_excludes_columns_from_suggestions():
+    columns = ar.profile(
+        ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "name": [" Alice ", "Bob"],
+                    "age": [30, 40],
+                }
+            )
+        )
+    ).columns
     report = ar.DataQualityReport(
         row_count=2,
         column_count=2,
@@ -2447,7 +2515,7 @@ def test_data_quality_report_to_dict_excludes_columns_from_suggestions():
         duplicate_ratio=0.0,
         quality_score=1.0,
         score_components={},
-        columns={},
+        columns=columns,
         suggestions=[
             (
                 "strip_whitespace",
@@ -2471,6 +2539,7 @@ def test_data_quality_report_to_dict_excludes_columns_from_suggestions():
 
 
 def test_data_quality_report_to_dict_preserves_non_column_suggestion_values():
+    columns = ar.profile(ar.from_pandas(pd.DataFrame({"age": [30, 40]}))).columns
     report = ar.DataQualityReport(
         row_count=2,
         column_count=1,
@@ -2479,7 +2548,7 @@ def test_data_quality_report_to_dict_preserves_non_column_suggestion_values():
         duplicate_ratio=0.0,
         quality_score=1.0,
         score_components={},
-        columns={},
+        columns=columns,
         suggestions=[
             (
                 "custom_step",
@@ -2647,6 +2716,22 @@ def test_data_quality_report_to_json_exclude_columns():
 
     assert "name" in parsed["columns"]
     assert "age" not in parsed["columns"]
+
+
+def test_data_quality_report_to_json_unknown_exclude_column():
+    report = ar.profile(
+        ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "name": ["Alice", "Bob"],
+                    "secret_token": ["abc", "def"],
+                }
+            )
+        )
+    )
+
+    with pytest.raises(KeyError, match="Unknown exclude_columns: \\['secret_tokn'\\]"):
+        report.to_json(exclude_columns=["secret_tokn"])
 
 
 def test_data_quality_report_to_json_redact_sample_values():
@@ -2859,3 +2944,150 @@ class TestValidateGateBool:
     def test_string_raises_type_error(self):
         with pytest.raises(TypeError, match="must be a bool"):
             _validate_gate_bool("true", "allow_new_columns")
+
+
+class TestValidateGateRatioThreshold:
+    def test_none_returns_none(self):
+        assert _validate_gate_ratio_threshold(None, "max_null_ratio_delta") is None
+
+    def test_valid_ratio_returns_float(self):
+        result = _validate_gate_ratio_threshold(0.5, "max_null_ratio_delta")
+        assert result == 0.5
+        assert isinstance(result, float)
+
+    def test_boundary_values(self):
+        assert _validate_gate_ratio_threshold(0.0, "max_null_ratio_delta") == 0.0
+        assert _validate_gate_ratio_threshold(1.0, "max_null_ratio_delta") == 1.0
+
+    def test_value_above_one_raises_value_error(self):
+        with pytest.raises(ValueError, match="must be a ratio between 0.0 and 1.0"):
+            _validate_gate_ratio_threshold(1.01, "max_null_ratio_delta")
+
+    def test_negative_raises_value_error(self):
+        with pytest.raises(ValueError, match="must be a finite non-negative number"):
+            _validate_gate_ratio_threshold(-0.05, "max_null_ratio_delta")
+
+    def test_string_raises_type_error(self):
+        with pytest.raises(TypeError, match="must be a non-negative number or None"):
+            _validate_gate_ratio_threshold("0.5", "max_null_ratio_delta")
+
+
+# ── ProfileComparison redaction tests ────────────────────────────────────────
+
+
+def test_profile_comparison_to_dict_redacts_sample_values():
+    """redact_sample_values=True must replace sample values in both nested profiles."""
+    frame = ar.from_pandas(
+        pd.DataFrame({"email": ["alice@example.com", "bob@example.com"]})
+    )
+    left = ar.profile(frame)
+    right = ar.profile(frame)
+    comparison = ar.compare_profiles(left, right)
+
+    redacted = comparison.to_dict(redact_sample_values=True)
+    plain = comparison.to_dict()
+
+    # Sensitive values must not appear in the redacted export
+    assert "alice@example.com" not in str(redacted)
+    assert "bob@example.com" not in str(redacted)
+
+    # Sample values are replaced with the redaction sentinel
+    left_samples = redacted["left_profile"]["columns"]["email"]["sample_values"]
+    right_samples = redacted["right_profile"]["columns"]["email"]["sample_values"]
+    assert all(v == "[REDACTED]" for v in left_samples)
+    assert all(v == "[REDACTED]" for v in right_samples)
+
+    # Plain export still contains the real values
+    assert "alice@example.com" in str(plain)
+
+
+def test_profile_comparison_to_dict_exclude_columns():
+    """exclude_columns must omit the named column from both nested profiles."""
+    frame = ar.from_pandas(pd.DataFrame({"name": ["Alice", "Bob"], "score": [10, 20]}))
+    left = ar.profile(frame)
+    right = ar.profile(frame)
+    comparison = ar.compare_profiles(left, right)
+
+    result = comparison.to_dict(exclude_columns=["name"])
+
+    assert "name" not in result["left_profile"]["columns"]
+    assert "name" not in result["right_profile"]["columns"]
+    # Non-excluded column is still present
+    assert "score" in result["left_profile"]["columns"]
+    assert "score" in result["right_profile"]["columns"]
+
+
+def test_profile_comparison_to_json_redacts_sample_values():
+    """to_json(redact_sample_values=True) must not contain sensitive values."""
+    frame = ar.from_pandas(pd.DataFrame({"token": ["secret-abc", "secret-xyz"]}))
+    left = ar.profile(frame)
+    right = ar.profile(frame)
+    comparison = ar.compare_profiles(left, right)
+
+    json_redacted = comparison.to_json(redact_sample_values=True)
+    json_plain = comparison.to_json()
+
+    assert "secret-abc" not in json_redacted
+    assert "secret-xyz" not in json_redacted
+    assert "[REDACTED]" in json_redacted
+
+    # Plain export contains the real values
+    assert "secret-abc" in json_plain
+
+
+def test_profile_comparison_constructor_validation():
+    import pandas as pd
+
+    frame = ar.from_pandas(pd.DataFrame({"col1": [1, 2, 3]}))
+    valid_report = ar.profile(frame)
+
+    # 1. Test that valid types construct perfectly fine without errors
+    comparison = ar.quality.ProfileComparison(
+        left_profile=valid_report,
+        right_profile=valid_report,
+        drift_report={},
+        status_counts={},
+    )
+    assert comparison.drift_report == {}
+
+    # 2. Test invalid left_profile type throws TypeError
+    with pytest.raises(
+        TypeError, match="left_profile must be an instance of DataQualityReport"
+    ):
+        ar.quality.ProfileComparison(
+            left_profile="not_a_report_object",
+            right_profile=valid_report,
+            drift_report={},
+            status_counts={},
+        )
+
+    # 3. Test invalid right_profile type throws TypeError
+    with pytest.raises(
+        TypeError, match="right_profile must be an instance of DataQualityReport"
+    ):
+        ar.quality.ProfileComparison(
+            left_profile=valid_report,
+            right_profile="not_a_report_object",
+            drift_report={},
+            status_counts={},
+        )
+
+    # 4. Test malformed nested drift_report dictionary throws TypeError
+    with pytest.raises(
+        TypeError, match="drift_report must be a nested dictionary of dict"
+    ):
+        ar.quality.ProfileComparison(
+            left_profile=valid_report,
+            right_profile=valid_report,
+            drift_report={"col1": "should_be_a_dict_but_is_a_string"},
+            status_counts={},
+        )
+
+    # 5. Test non-int status_counts values throw TypeError
+    with pytest.raises(TypeError, match="status_counts values must be integers"):
+        ar.quality.ProfileComparison(
+            left_profile=valid_report,
+            right_profile=valid_report,
+            drift_report={},
+            status_counts={"missing_values": "should_be_an_int"},
+        )
