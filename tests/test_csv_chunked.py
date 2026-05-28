@@ -374,3 +374,74 @@ class TestCsvChunkedIssue924:
         # Chunk 3 should raise on row 5 (value 5.5)
         with pytest.raises(Exception, match="Type mismatch"):
             next(reader)
+
+
+class TestReadCsvChunkedTsvDelimiter:
+    """Regression tests for Issue #1811: auto-detect TSV delimiter in read_csv_chunked.
+
+    read_csv_chunked() must infer delimiter='\\t' for .tsv paths when the
+    caller does not supply an explicit delimiter, matching the behaviour of
+    read_csv() and scan_csv().
+    """
+
+    def test_tsv_columns_auto_detected(self, tmp_path):
+        """Omitting delimiter on a .tsv path must yield the correct column names."""
+        path = tmp_path / "sample.tsv"
+        path.write_text("a\tb\n1\t2\n3\t4\n")
+
+        chunks = list(ar.read_csv_chunked(str(path), chunksize=2))
+        assert len(chunks) == 1
+        assert list(chunks[0].columns) == ["a", "b"], (
+            f"Expected columns ['a', 'b'] but got {list(chunks[0].columns)!r}. "
+            "read_csv_chunked is not auto-detecting the tab delimiter for .tsv files."
+        )
+
+    def test_tsv_chunked_matches_read_csv(self, tmp_path):
+        """Chunked TSV read must produce the same data as read_csv on the same file."""
+        lines = ["name\tage\tscore"]
+        for i in range(10):
+            lines.append(f"user_{i}\t{20 + i}\t{95.0 - i}")
+        path = tmp_path / "data.tsv"
+        path.write_text("\n".join(lines))
+
+        chunks = list(ar.read_csv_chunked(str(path), chunksize=3))
+        chunked_df = pd.concat([ar.to_pandas(c) for c in chunks], ignore_index=True)
+        full_df = ar.to_pandas(ar.read_csv(str(path)))
+        pd.testing.assert_frame_equal(chunked_df, full_df)
+
+    def test_tsv_explicit_comma_delimiter_overrides_auto_detect(self, tmp_path):
+        """An explicit delimiter=',' must be honoured even for a .tsv path."""
+        # File is actually comma-delimited despite the .tsv extension.
+        path = tmp_path / "comma_disguised.tsv"
+        path.write_text("x,y\n1,2\n3,4\n")
+
+        chunks = list(ar.read_csv_chunked(str(path), chunksize=2, delimiter=","))
+        assert len(chunks) == 1
+        assert list(chunks[0].columns) == [
+            "x",
+            "y",
+        ], "Explicit delimiter=',' on a .tsv path must override auto-detection."
+
+    def test_csv_extension_still_defaults_to_comma(self, tmp_path):
+        """A .csv path must still default to comma when delimiter is omitted."""
+        path = tmp_path / "regular.csv"
+        path.write_text("p,q\n10,20\n30,40\n")
+
+        chunks = list(ar.read_csv_chunked(str(path), chunksize=2))
+        assert list(chunks[0].columns) == ["p", "q"]
+
+    def test_tsv_multi_chunk_row_integrity(self, tmp_path):
+        """Tab-delimited data must survive chunk boundaries correctly."""
+        lines = ["id\tvalue"]
+        for i in range(9):
+            lines.append(f"{i}\t{i * 10}")
+        path = tmp_path / "multi.tsv"
+        path.write_text("\n".join(lines))
+
+        chunks = list(ar.read_csv_chunked(str(path), chunksize=4))
+        assert len(chunks) == 3  # 4 + 4 + 1
+
+        chunked_df = pd.concat([ar.to_pandas(c) for c in chunks], ignore_index=True)
+        assert chunked_df.shape == (9, 2)
+        assert chunked_df["id"].tolist() == list(range(9))
+        assert chunked_df["value"].tolist() == [i * 10 for i in range(9)]
