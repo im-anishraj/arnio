@@ -303,3 +303,39 @@ class TestCustomValidatorReturnNormalization:
         failing_rows = {i.row_index for i in result.issues if i.rule == "custom"}
         # rows at index 2 (v=2), 3 (v=3), 4 (v=4) should fail (1-based)
         assert failing_rows == {2, 3, 4}
+
+
+class TestCustomValidatorNameValidation:
+    """Input-validation tests for Custom() name parameter."""
+
+    def setup_method(self):
+        self._original_validators = dict(schema._CUSTOM_VALIDATORS)
+
+    def teardown_method(self):
+        schema._CUSTOM_VALIDATORS.clear()
+        schema._CUSTOM_VALIDATORS.update(self._original_validators)
+
+    def test_raises_value_error_when_name_is_empty_string(self):
+        """Custom raises ValueError when name is an empty string."""
+        with pytest.raises(ValueError, match="non-empty string"):
+            Custom("")
+
+    def test_raises_value_error_when_name_is_integer(self):
+        """Custom raises ValueError when name is an integer."""
+        with pytest.raises(ValueError, match="non-empty string"):
+            Custom(123)
+
+    def test_raises_value_error_when_name_is_none(self):
+        """Custom raises ValueError when name is None."""
+        with pytest.raises(ValueError, match="non-empty string"):
+            Custom(None)
+
+    def test_raises_value_error_when_name_is_list(self):
+        """Custom raises ValueError when name is a list."""
+        with pytest.raises(ValueError, match="non-empty string"):
+            Custom(["my_validator"])
+
+    def test_valid_name_still_raises_when_unregistered(self):
+        """A valid string name that isn't registered raises the registry error, not the name error."""
+        with pytest.raises(ValueError, match="No validator registered"):
+            Custom("unregistered_name_xyz")
