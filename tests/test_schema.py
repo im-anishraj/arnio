@@ -3409,3 +3409,109 @@ def test_field_allowed_rejects_generator():
 def test_field_allowed_rejects_bytes():
     with pytest.raises(TypeError, match="allowed must be a list, tuple, or set"):
         ar.Field(allowed=b"abc")
+
+
+def test_custom_field_required_if_validation_passes_when_condition_matches(tmp_path):
+    ar.register_validator("positive_req", lambda v: v > 0)
+
+    path = tmp_path / "custom_conditional_pass.csv"
+    path.write_text("status,score\n" "active,10\n" "inactive,\n")
+    frame = ar.read_csv(path)
+
+    schema = ar.Schema(
+        {
+            "status": ar.String(nullable=False),
+            "score": ar.Custom(
+                "positive_req", nullable=True, required_if=("status", "active")
+            ),
+        }
+    )
+
+    result = schema.validate(frame)
+    assert result.passed
+    assert result.issue_count == 0
+
+
+def test_custom_field_required_if_validation_fails_when_condition_matches(tmp_path):
+    ar.register_validator("positive_req", lambda v: v > 0)
+
+    path = tmp_path / "custom_conditional_fail.csv"
+    path.write_text("status,score\n" "active,\n" "inactive,5\n")
+    frame = ar.read_csv(path)
+
+    schema = ar.Schema(
+        {
+            "status": ar.String(nullable=False),
+            "score": ar.Custom(
+                "positive_req", nullable=True, required_if=("status", "active")
+            ),
+        }
+    )
+
+    result = schema.validate(frame)
+    assert not result.passed
+    assert result.issue_count == 1
+    assert result.issues[0].rule == "required_if"
+    assert result.issues[0].column == "score"
+    assert result.issues[0].row_index == 1
+
+
+def test_custom_field_required_if_validation_ignores_non_matching_conditions(tmp_path):
+    ar.register_validator("positive_req", lambda v: v > 0)
+
+    path = tmp_path / "custom_conditional_ignore.csv"
+    path.write_text("status,score\n" "pending,\n" "inactive,\n")
+    frame = ar.read_csv(path)
+
+    schema = ar.Schema(
+        {
+            "status": ar.String(nullable=False),
+            "score": ar.Custom(
+                "positive_req", nullable=True, required_if=("status", "active")
+            ),
+        }
+    )
+
+    result = schema.validate(frame)
+    assert result.passed
+    assert result.issue_count == 0
+
+
+def test_custom_field_required_if_enforces_rule_logic_when_matched(tmp_path):
+    ar.register_validator("positive_req", lambda v: v > 0)
+
+    path = tmp_path / "custom_conditional_rule_fail.csv"
+    path.write_text("status,score\n" "active,-5\n")
+    frame = ar.read_csv(path)
+
+    schema = ar.Schema(
+        {
+            "status": ar.String(nullable=False),
+            "score": ar.Custom(
+                "positive_req", nullable=True, required_if=("status", "active")
+            ),
+        }
+    )
+
+    result = schema.validate(frame)
+    assert not result.passed
+    assert result.issue_count == 1
+    assert result.issues[0].rule == "custom"
+    assert result.issues[0].column == "score"
+    assert result.issues[0].row_index == 1
+
+
+def test_custom_field_json_roundtrip_preserves_required_if():
+    ar.register_validator("positive_req_json", lambda v: v > 0)
+
+    schema = ar.Schema(
+        fields={
+            "id": ar.String(nullable=False),
+            "score": ar.Custom(
+                "positive_req_json", nullable=True, required_if=("id", "A1")
+            ),
+        }
+    )
+
+    restored = ar.Schema.from_json(schema.to_json())
+    assert restored == schema

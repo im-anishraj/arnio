@@ -2784,6 +2784,7 @@ def Custom(
     nullable: bool = True,
     unique: bool = False,
     severity: str = "error",
+    required_if: tuple[str, Any] | None = None,
 ) -> Field:
     """Create a field validated by a registered custom validator.
 
@@ -2816,4 +2817,5 @@ def Custom(
         unique=unique,
         semantic=f"custom:{name}",
         severity=severity,
+        required_if=required_if,
     )
