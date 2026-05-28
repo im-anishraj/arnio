@@ -6,6 +6,7 @@ Data cleaning functions.
 from __future__ import annotations
 
 import copy
+import math
 import unicodedata
 from collections.abc import Mapping, Sequence
 from typing import Any
@@ -416,8 +417,9 @@ def clip_numeric(
     Raises
     ------
     ValueError
-        If no bounds are provided, bounds are inverted, subset contains unknown
-        columns, or subset contains non-numeric columns.
+        If no bounds are provided, bounds are non-finite (NaN or Inf), bounds are
+        inverted, subset contains unknown columns, or subset contains non-numeric
+        columns.
 
     Examples
     --------
@@ -428,6 +430,14 @@ def clip_numeric(
         raise ValueError("At least one of 'lower' or 'upper' must be provided")
     if lower is not None and upper is not None and lower > upper:
         raise ValueError("lower cannot be greater than upper")
+    if lower is not None and not math.isfinite(lower):
+        raise ValueError(
+            f"clip_numeric bounds must be finite numbers; got lower={lower!r}"
+        )
+    if upper is not None and not math.isfinite(upper):
+        raise ValueError(
+            f"clip_numeric bounds must be finite numbers; got upper={upper!r}"
+        )
 
     # Validate subset columns and their types against the frame's own dtype map,
     # avoiding any pandas conversion for the validation step.

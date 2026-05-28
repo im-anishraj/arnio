@@ -679,6 +679,65 @@ class TestClipNumeric:
 
         assert list(df["v"]) == [1.5, 2.5, 8.3]
 
+    @pytest.mark.parametrize("bad_value", [float("nan"), float("inf"), float("-inf")])
+    @pytest.mark.parametrize(
+        "col_data,dtype_label",
+        [
+            ([1, 2, 3], "int64"),
+            ([1.0, 2.0, 3.0], "float64"),
+        ],
+    )
+    def test_clip_numeric_non_finite_lower_rejected(
+        self, bad_value, col_data, dtype_label
+    ):
+        frame = ar.from_dict({"x": col_data})
+        with pytest.raises(ValueError, match="clip_numeric bounds must be finite"):
+            ar.clip_numeric(frame, lower=bad_value)
+
+    @pytest.mark.parametrize("bad_value", [float("nan"), float("inf"), float("-inf")])
+    @pytest.mark.parametrize(
+        "col_data,dtype_label",
+        [
+            ([1, 2, 3], "int64"),
+            ([1.0, 2.0, 3.0], "float64"),
+        ],
+    )
+    def test_clip_numeric_non_finite_upper_rejected(
+        self, bad_value, col_data, dtype_label
+    ):
+        frame = ar.from_dict({"x": col_data})
+        with pytest.raises(ValueError, match="clip_numeric bounds must be finite"):
+            ar.clip_numeric(frame, upper=bad_value)
+    def test_clip_numeric_rejects_bool_and_non_numeric_bounds(self):
+        frame = ar.from_pandas(pd.DataFrame({"values": [1.0, 5.0, 10.0, 20.0]}))
+
+        # Boolean bounds must be rejected (bool is subclass of int in Python,
+        # so explicit rejection is required)
+        with pytest.raises(TypeError, match="'lower' must be an int or float"):
+            ar.clip_numeric(frame, lower=True)
+
+        with pytest.raises(TypeError, match="'upper' must be an int or float"):
+            ar.clip_numeric(frame, upper=False)
+
+        with pytest.raises(TypeError, match="'lower' must be an int or float"):
+            ar.clip_numeric(frame, lower="a")
+
+        with pytest.raises(TypeError, match="'upper' must be an int or float"):
+            ar.clip_numeric(frame, upper="10")
+
+        # Valid int and float bounds must still work fine
+        ar.clip_numeric(frame, lower=0, upper=15)
+        ar.clip_numeric(frame, lower=0.5, upper=9.5)
+
+    def test_clip_numeric_pipeline_rejects_invalid_bounds(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+
+        with pytest.raises(TypeError, match="'lower' must be an int or float"):
+            ar.pipeline(
+                frame,
+                [("clip_numeric", {"lower": True})],
+            )
+
 
 class TestStandardizeMissingTokens:
     def test_normal_case(self):
