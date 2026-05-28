@@ -859,6 +859,8 @@ def test_validation_result_to_markdown_none_value_redacted():
     markdown_raw = result.to_markdown()  # default redaction is False
     # None -> empty cell in raw mode
     assert "[REDACTED]" not in markdown_raw
+
+
 def _make_failing_result() -> ar.ValidationResult:
     """Helper: a ValidationResult with one issue, for redact_values type tests."""
     return ar.ValidationResult(
@@ -885,9 +887,9 @@ def test_to_markdown_rejects_non_bool_redact_values():
         try:
             result.to_markdown(redact_values=invalid)  # type: ignore[arg-type]
         except TypeError as exc:
-            assert "redact_values must be a bool" in str(exc), (
-                f"Wrong error message for {invalid!r}: {exc}"
-            )
+            assert "redact_values must be a bool" in str(
+                exc
+            ), f"Wrong error message for {invalid!r}: {exc}"
         else:
             raise AssertionError(
                 f"Expected TypeError for redact_values={invalid!r}, but no exception was raised"
@@ -904,6 +906,7 @@ def test_to_markdown_accepts_bool_redact_values():
     assert "0" in md_false, "Raw value should appear when redact_values=False"
     assert "[REDACTED]" in md_true, "[REDACTED] should appear when redact_values=True"
     assert "0" not in md_true.split("| Value |")[-1] or "[REDACTED]" in md_true
+
 
 def test_unique_constraint_detects_duplicates(tmp_path):
     path = tmp_path / "unique.csv"
