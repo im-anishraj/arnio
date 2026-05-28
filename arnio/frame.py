@@ -77,6 +77,13 @@ class ArFrame:
         return _from_dict(data)
 
     @classmethod
+    def from_pandas(cls, df) -> ArFrame:
+        """Build an ArFrame from a pandas DataFrame."""
+        from .convert import from_pandas as _from_pandas
+
+        return _from_pandas(df)
+
+    @classmethod
     def from_records(
         cls,
         records: list,
