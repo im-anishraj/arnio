@@ -861,7 +861,7 @@ def write_csv(
         raise TypeError(
             f"path must be a string, bytes, or os.PathLike object, got {type(path).__name__!r}"
         )
-    path = os.fspath(path)
+    path = os.fsdecode(os.fspath(path))
     path_lower = path.lower()
     if not (
         path_lower.endswith(".csv")
@@ -1375,7 +1375,7 @@ def write_parquet(
             f"path must be a string, bytes, or os.PathLike object, got {type(path).__name__!r}"
         )
 
-    path = os.fspath(path)
+    path = os.fsdecode(os.fspath(path))
     path_lower = path.lower()
     if not (path_lower.endswith(".parquet") or path_lower.endswith(".pq")):
         raise ValueError(

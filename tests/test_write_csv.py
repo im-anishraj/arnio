@@ -1,5 +1,6 @@
 """Tests for write_csv functionality."""
 
+import os
 from pathlib import Path
 
 import pandas as pd
@@ -328,3 +329,25 @@ def test_write_csv_rejects_int_path(tmp_path):
     frame = ar.from_pandas(pd.DataFrame({"a": [1, 2, 3]}))
     with pytest.raises(TypeError, match="path must be a string"):
         ar.write_csv(frame, 42)
+
+
+class _BytesPathLike:
+    def __init__(self, path: bytes) -> None:
+        self._path = path
+
+    def __fspath__(self) -> bytes:
+        return self._path
+
+
+def test_write_csv_accepts_bytes_path(tmp_path):
+    frame = ar.from_pandas(pd.DataFrame({"a": [1, 2, 3]}))
+    out = tmp_path / "out.csv"
+    ar.write_csv(frame, os.fsencode(out))
+    assert out.exists()
+
+
+def test_write_csv_accepts_pathlike_bytes_path(tmp_path):
+    frame = ar.from_pandas(pd.DataFrame({"a": [1, 2, 3]}))
+    out = tmp_path / "out.csv"
+    ar.write_csv(frame, _BytesPathLike(os.fsencode(out)))
+    assert out.exists()

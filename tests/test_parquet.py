@@ -8,6 +8,7 @@ validation tests always run regardless of whether pyarrow is present.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from unittest.mock import patch
 
@@ -216,3 +217,27 @@ def test_write_parquet_rejects_int_path(tmp_path):
     frame = ar.from_pandas(pd.DataFrame({"a": [1, 2, 3]}))
     with pytest.raises(TypeError, match="path must be a string"):
         ar.write_parquet(frame, 42)
+
+
+class _BytesPathLike:
+    def __init__(self, path: bytes) -> None:
+        self._path = path
+
+    def __fspath__(self) -> bytes:
+        return self._path
+
+
+@skip_without_pyarrow
+def test_write_parquet_accepts_bytes_path(tmp_path):
+    frame = ar.from_pandas(pd.DataFrame({"a": [1, 2, 3]}))
+    out = tmp_path / "out.parquet"
+    ar.write_parquet(frame, os.fsencode(out))
+    assert out.exists()
+
+
+@skip_without_pyarrow
+def test_write_parquet_accepts_pathlike_bytes_path(tmp_path):
+    frame = ar.from_pandas(pd.DataFrame({"a": [1, 2, 3]}))
+    out = tmp_path / "out.parquet"
+    ar.write_parquet(frame, _BytesPathLike(os.fsencode(out)))
+    assert out.exists()
