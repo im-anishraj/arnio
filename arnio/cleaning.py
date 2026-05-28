@@ -1956,6 +1956,7 @@ def coalesce_columns(
     ...                              output_column="first_non_null")
     """
     from .convert import from_pandas, to_pandas
+
     frame, is_arframe = _validate_frame(frame, allow_pandas=True)
 
     if not isinstance(output_column, str) or not output_column.strip():

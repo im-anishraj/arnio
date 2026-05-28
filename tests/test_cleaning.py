@@ -2234,7 +2234,10 @@ class TestMixedFrameValidation:
     @pytest.mark.parametrize(
         ("func", "kwargs"),
         [
-            ("combine_columns", {"subset": ["a"], "separator": "-", "output_column": "combined"}),
+            (
+                "combine_columns",
+                {"subset": ["a"], "separator": "-", "output_column": "combined"},
+            ),
             ("drop_constant_columns", {}),
         ],
     )
