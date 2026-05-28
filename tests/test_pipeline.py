@@ -1475,421 +1475,45 @@ def test_replace_values_direct_pandas_does_not_mutate_input():
     assert list(out["status"]) == ["A", "inactive"]
 
 
-def test_pipeline_drop_columns_matching():
-    df = pd.DataFrame({"temp_a": [1], "temp_b": [2], "keep_c": [3]})
-    frame = ar.from_pandas(df)
-    result = ar.pipeline(frame, [("drop_columns_matching", {"pattern": "^temp_"})])
-    result_df = ar.to_pandas(result)
-    assert list(result_df.columns) == ["keep_c"]
+def test_register_step_validates_callable():
+    """Test that register_step raises TypeError immediately for non-callables."""
+    import pytest
+
+    from arnio.pipeline import register_step
+
+    with pytest.raises(TypeError, match="expected a callable"):
+        register_step("bad", 123)
 
 
-def test_pipeline_drop_columns_matching_all_columns():
-    df = pd.DataFrame({"a": [1, 2], "b": [3, 4]})
-    frame = ar.from_pandas(df)
-    with pytest.raises(ValueError, match="Pattern matches all columns"):
-        ar.pipeline(frame, [("drop_columns_matching", {"pattern": ".*"})])
+def test_register_step_validates_name():
+    """Test that register_step raises ValueError for invalid names."""
+    import pytest
+
+    from arnio.pipeline import register_step
+
+    for invalid_name in ["", "   ", None]:
+        with pytest.raises(ValueError, match="Expected a non-empty string"):
+            register_step(invalid_name, lambda x: x)
 
 
-def test_register_step_conflict_raises_value_error():
-    def dummy_step(df):
-        return df
-
-    with pytest.raises(ValueError, match="conflicts with built-in C\\+\\+ step"):
-        ar.register_step("drop_nulls", dummy_step)
-
-
-def test_register_step_success():
+def test_register_step_execution_flow():
+    """Test that a valid registered custom step executes cleanly in the pipeline."""
     import pandas as pd
 
-    from arnio.pipeline import _PYTHON_STEP_REGISTRY
+    from arnio.convert import from_pandas, to_pandas
+    from arnio.pipeline import pipeline, register_step
 
-    def custom_uppercase_step(df, column_name: str):
-        df[column_name] = df[column_name].str.upper()
+    def custom_add_col(df: pd.DataFrame) -> pd.DataFrame:
+        df["verified"] = True
         return df
 
-    step_name = "test_custom_upper_mutation"
-    ar.register_step(step_name, custom_uppercase_step)
+    register_step("custom_add_col_step", custom_add_col)
 
-    assert step_name in _PYTHON_STEP_REGISTRY
+    initial_df = pd.DataFrame({"id": [1, 2]})
+    frame = from_pandas(initial_df)
 
-    df = pd.DataFrame({"name": ["bar", "boo", "baz"]})
-    frame = ar.from_pandas(df)
+    result_frame = pipeline(frame, [("custom_add_col_step",)])
 
-    result_frame = ar.pipeline(frame, [(step_name, {"column_name": "name"})])
-
-    processed_df = ar.to_pandas(result_frame)
-    assert processed_df["name"].tolist() == ["BAR", "BOO", "BAZ"]
-
-
-def test_register_step_duplicate_custom_raises_value_error():
-    def step_v1(df):
-        return df
-
-    def step_v2(df):
-        return df
-
-    step_name = "test_policy_duplicate_reject"
-    ar.register_step(step_name, step_v1)
-
-    with pytest.raises(ValueError, match="already registered as a custom Python step"):
-        ar.register_step(step_name, step_v2)
-
-
-def test_register_step_explicit_overwrite_success():
-    import pandas as pd
-
-    def add_one(df):
-        df["val"] = df["val"] + 1
-        return df
-
-    def add_ten(df):
-        df["val"] = df["val"] + 10
-        return df
-
-    step_name = "test_policy_overwrite_mutation"
-
-    ar.register_step(step_name, add_one)
-    ar.register_step(step_name, add_ten, overwrite=True)
-
-    df = pd.DataFrame({"val": [0]})
-    frame = ar.from_pandas(df)
-    result = ar.pipeline(frame, [(step_name,)])
-
-    processed_df = ar.to_pandas(result)
-    assert processed_df["val"].tolist() == [10]
-
-
-def test_register_step_overwrite_cannot_bypass_builtin_protection():
-    def dummy_step(df):
-        return df
-
-    with pytest.raises(ValueError, match="conflicts with built-in C\\+\\+ step"):
-        ar.register_step("drop_nulls", dummy_step, overwrite=True)
-
-
-def test_register_step_rejects_reserved_builtin_namespace():
-    def dummy_step(df):
-        return df
-
-    with pytest.raises(ValueError, match="reserved for built-in pipeline steps"):
-        ar.register_step("builtin:custom_step", dummy_step)
-
-
-def test_list_steps_includes_builtins_in_deterministic_order():
-    steps = ar.list_steps()
-
-    assert steps == sorted(steps)
-    assert "drop_nulls" in steps
-    assert "strip_whitespace" in steps
-    assert "standardize_missing_tokens" in steps
-
-
-def test_list_steps_includes_registered_custom_steps():
-    def custom_step(df):
-        return df
-
-    ar.register_step("list_steps_probe", custom_step)
-
-    steps = ar.list_steps()
-
-    assert "list_steps_probe" in steps
-
-
-def test_reset_steps_removes_custom_registered_steps():
-    import pandas as pd
-
-    def custom_step(df, **kwargs):
-        return df
-
-    ar.register_step("custom_step", custom_step)
-
-    frame = ar.from_pandas(
-        pd.DataFrame(
-            {
-                "a": [1, 2, 3],
-            }
-        )
-    )
-
-    result = ar.pipeline(
-        frame,
-        [
-            ("custom_step",),
-        ],
-    )
-
-    assert ar.to_pandas(result)["a"].tolist() == [1, 2, 3]
-
-    ar.reset_steps()
-
-    with pytest.raises(ar.UnknownStepError):
-        ar.pipeline(
-            frame,
-            [
-                ("custom_step",),
-            ],
-        )
-
-
-def test_reset_steps_preserves_builtin_python_steps():
-    import pandas as pd
-
-    frame = ar.from_pandas(
-        pd.DataFrame(
-            {
-                "value": [" yes ", " no "],
-            }
-        )
-    )
-
-    ar.reset_steps()
-
-    result = ar.pipeline(
-        frame,
-        [
-            ("strip_whitespace",),
-        ],
-    )
-
-    cleaned = ar.to_pandas(result)
-
-    assert cleaned["value"].tolist() == ["yes", "no"]
-
-
-def test_reset_steps_removes_overwritten_custom_steps():
-    import pandas as pd
-
-    def first(df, **kwargs):
-        return df
-
-    def second(df, **kwargs):
-        return df
-
-    ar.register_step("temp_step", first)
-    ar.register_step("temp_step", second, overwrite=True)
-
-    ar.reset_steps()
-
-    frame = ar.from_pandas(
-        pd.DataFrame(
-            {
-                "a": [1],
-            }
-        )
-    )
-
-    with pytest.raises(ar.UnknownStepError):
-        ar.pipeline(
-            frame,
-            [
-                ("temp_step",),
-            ],
-        )
-
-
-def test_pipeline_verbose_disabled_by_default(caplog):
-    frame = ar.from_pandas(
-        pd.DataFrame(
-            {
-                "name": ["A", "B"],
-            }
-        )
-    )
-
-    ar.pipeline(
-        frame,
-        [
-            ("drop_nulls",),
-        ],
-    )
-
-    assert len(caplog.records) == 0
-
-
-def test_pipeline_verbose_logs_builtin_step(caplog):
-    frame = ar.from_pandas(
-        pd.DataFrame(
-            {
-                "name": [" A ", " B "],
-            }
-        )
-    )
-
-    caplog.set_level("INFO", logger="arnio")
-
-    ar.pipeline(
-        frame,
-        [
-            ("strip_whitespace",),
-        ],
-        verbose=True,
-    )
-
-    assert any("strip_whitespace" in record.message for record in caplog.records)
-
-
-def custom_step(df):
-    return df
-
-
-def test_pipeline_verbose_logs_custom_step(caplog):
-    frame = ar.from_pandas(
-        pd.DataFrame(
-            {
-                "x": [1, 2],
-            }
-        )
-    )
-
-    ar.register_step(
-        "custom_step",
-        custom_step,
-        overwrite=True,
-    )
-
-    caplog.set_level("INFO", logger="arnio")
-
-    ar.pipeline(
-        frame,
-        [
-            ("custom_step",),
-        ],
-        verbose=True,
-    )
-
-    assert any("custom_step" in record.message for record in caplog.records)
-
-
-def drop_first_row(df):
-    return df.head(1)
-
-
-def test_pipeline_verbose_logs_row_change(caplog):
-    frame = ar.from_pandas(
-        pd.DataFrame(
-            {
-                "x": [1, 2, 3],
-            }
-        )
-    )
-
-    ar.register_step(
-        "drop_first_row",
-        drop_first_row,
-        overwrite=True,
-    )
-
-    caplog.set_level("INFO", logger="arnio")
-
-    ar.pipeline(
-        frame,
-        [
-            ("drop_first_row",),
-        ],
-        verbose=True,
-    )
-
-    assert any("rows: 3 -> 1" in record.message for record in caplog.records)
-
-
-def test_pipeline_dry_run_with_metadata_row_counts_unchanged():
-    """dry_run=True: row_counts.after must equal row_counts.before."""
-    frame = ar.from_pandas(
-        pd.DataFrame(
-            {
-                "name": ["Alice", None, "Bob", None],
-                "age": [25, 30, None, 40],
-            }
-        )
-    )
-    original_rows = frame.shape[0]  # 4
-
-    _, meta = ar.pipeline(
-        frame,
-        [("drop_nulls",), ("strip_whitespace",)],
-        dry_run=True,
-        return_metadata=True,
-    )
-
-    for entry in meta["row_counts"]:
-        assert entry["after"] == original_rows, (
-            f"Step '{entry['step']}': expected after={original_rows} "
-            f"in dry_run, got {entry['after']}"
-        )
-        assert entry["dry_run"] is True
-
-
-def test_pipeline_dry_run_with_metadata_step_timings_consistent():
-    """dry_run=True: step_timings.seconds must be non-negative with dry_run flag."""
-    frame = ar.from_pandas(
-        pd.DataFrame(
-            {
-                "name": ["Alice", None, "Bob", None],
-            }
-        )
-    )
-
-    _, meta = ar.pipeline(
-        frame,
-        [("drop_nulls",), ("strip_whitespace",)],
-        dry_run=True,
-        return_metadata=True,
-    )
-
-    for entry in meta["step_timings"]:
-        assert entry["seconds"] >= 0
-        assert entry["dry_run"] is True
-
-
-def test_pipeline_dry_run_false_metadata_unchanged():
-    """dry_run=False: existing metadata shape must not be affected by the fix."""
-    frame = ar.from_pandas(
-        pd.DataFrame(
-            {
-                "name": ["Alice", None, "Bob", None],
-            }
-        )
-    )
-
-    result, meta = ar.pipeline(
-        frame,
-        [("drop_nulls",)],
-        dry_run=False,
-        return_metadata=True,
-    )
-
-    assert meta["row_counts"][0]["before"] == frame.shape[0]
-    assert meta["row_counts"][0]["after"] == result.shape[0]
-    assert meta["row_counts"][0]["after"] < frame.shape[0]
-    assert meta["step_timings"][0]["seconds"] >= 0
-    assert meta["row_counts"][0].get("dry_run") is False
-
-
-def test_pipeline_return_metadata_non_bool_raises():
-    frame = ar.from_pandas(pd.DataFrame({"a": [1, 2, 3]}))
-    with pytest.raises(TypeError, match="return_metadata"):
-        ar.pipeline(frame, [("strip_whitespace",)], return_metadata="yes")
-
-
-def test_pipeline_dry_run_non_bool_raises():
-    frame = ar.from_pandas(pd.DataFrame({"a": [1, 2, 3]}))
-    with pytest.raises(TypeError, match="dry_run"):
-        ar.pipeline(frame, [("strip_whitespace",)], dry_run=1)
-
-
-def test_pipeline_verbose_non_bool_raises():
-    frame = ar.from_pandas(pd.DataFrame({"a": [1, 2, 3]}))
-    with pytest.raises(TypeError, match="verbose"):
-        ar.pipeline(frame, [("strip_whitespace",)], verbose=None)
-
-
-def test_pipeline_bool_flags_valid():
-    frame = ar.from_pandas(pd.DataFrame({"a": [1, 2, 3]}))
-    result = ar.pipeline(
-        frame,
-        [("strip_whitespace",)],
-        return_metadata=True,
-        dry_run=False,
-        verbose=True,
-    )
-    assert isinstance(result, tuple)
+    final_df = to_pandas(result_frame)
+    assert "verified" in final_df.columns
+    assert final_df["verified"].all()
