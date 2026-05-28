@@ -9,8 +9,14 @@ import pandas as pd
 
 from arnio.cleaning import (
     clip_numeric as clip_numeric_values,
+)
+from arnio.cleaning import (
     drop_nulls as drop_null_rows,
+)
+from arnio.cleaning import (
     fill_nulls as fill_null_values,
+)
+from arnio.cleaning import (
     strip_whitespace as strip_whitespace_values,
 )
 from arnio.convert import from_pandas, to_pandas
@@ -78,7 +84,9 @@ class ArnioPandasAccessor:
         frame = drop_null_rows(self.to_arframe(), subset=subset)
         return to_pandas(frame)
 
-    def fill_nulls(self, value: Any, *, subset: list[str] | None = None) -> pd.DataFrame:
+    def fill_nulls(
+        self, value: Any, *, subset: list[str] | None = None
+    ) -> pd.DataFrame:
         """Fill nulls in the selected columns and return pandas output."""
         frame = fill_null_values(self.to_arframe(), value, subset=subset)
         return to_pandas(frame)
