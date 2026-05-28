@@ -3068,3 +3068,13 @@ def test_float64_rejects_string_min_with_valid_max():
 def test_float64_rejects_bool_pair():
     with pytest.raises(TypeError, match="min must be numeric or None"):
         ar.Float64(min=True, max=False)
+
+def test_schema_unique_duplicate_columns():
+    # 1. Test direct construction coverage
+    with pytest.raises(ValueError, match="Schema 'unique' must not contain duplicate column names."):
+        ar.Schema({"id": ar.Int64()}, unique=["id", "id"])
+
+    # 2. Test JSON deserialization coverage
+    invalid_json_str = '{"fields": {"id": {"dtype": "int64"}}, "unique": ["id", "id"]}'
+    with pytest.raises(ValueError, match="Schema 'unique' must not contain duplicate column names."):
+        ar.Schema.from_json(invalid_json_str)        
