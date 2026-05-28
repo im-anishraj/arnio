@@ -109,7 +109,7 @@ def test_benchmark_script_runs_successfully(script_path):
 
 
 @pytest.mark.skipif(not HAS_CORE, reason="Arnio C++ extension is not compiled.")
-def test_benchmark_sparse_nulls_dry_run_cleans_up_temp_files():
+def test_benchmark_sparse_nulls_dry_run_cleans_up_temp_files(tmp_path):
     """Verify benchmark_sparse_nulls.py runs in dry-run mode and removes temp files."""
     script_path = BENCHMARKS_DIR / "benchmark_sparse_nulls.py"
     if not script_path.exists():
@@ -117,34 +117,37 @@ def test_benchmark_sparse_nulls_dry_run_cleans_up_temp_files():
 
     env = os.environ.copy()
     env["ARNIO_BENCHMARK_DRY_RUN"] = "1"
-
-    # Check for any existing temp files before the run
-    pre_files = list(BENCHMARKS_DIR.glob("benchmark_sparse_nulls_*.csv"))
-    for f in pre_files:
-        if f.name != "benchmark_sparse_nulls.csv":
-            f.unlink(missing_ok=True)
-
-    cmd = [sys.executable, str(script_path), "--rows", "10", "--runs", "1"]
-    result = subprocess.run(
-        cmd,
-        env=env,
-        capture_output=True,
-        text=True,
-        cwd=str(BENCHMARKS_DIR.parent),
-        timeout=30,
-    )
-
-    assert (
-        result.returncode == 0
-    ), f"Dry-run failed.\nStdout:\n{result.stdout}\nStderr:\n{result.stderr}"
-
-    # Verify all density-specific temp CSV files were removed
-    post_files = [
-        f
-        for f in BENCHMARKS_DIR.glob("benchmark_sparse_nulls_*.csv")
-        if f.name != "benchmark_sparse_nulls.csv"
+    
+    # Isolate benchmark artifacts in pytest temp directory
+    temp_benchmark_dir = tmp_path / "benchmarks"
+    temp_benchmark_dir.mkdir()
+    cmd = [
+    sys.executable,
+    str(script_path),
+    "--rows",
+    "10",
+    "--runs",
+    "1",
     ]
-    assert len(post_files) == 0, f"Temp files not cleaned up: {post_files}"
+
+    result = subprocess.run(
+    cmd,
+    env=env,
+    capture_output=True,
+    text=True,
+    cwd=str(temp_benchmark_dir),
+    timeout=30,
+    )
+    
+    assert (
+    result.returncode == 0), f"Dry-run failed.\nStdout:\n{result.stdout}\nStderr:\n{result.stderr}"
+
+    # Ensure no temporary sparse-null benchmark files remain
+    post_files = list(
+    temp_benchmark_dir.glob("benchmark_sparse_nulls_*.csv"))
+    
+    assert len(post_files) == 0, (
+    f"Temp benchmark files were not cleaned up: {post_files}")
 
 
 def test_check_regression_detects_slowdown():
