@@ -730,6 +730,150 @@ def test_validation_result_summary_counts_no_issue_result():
     assert summary["issues_by_column_and_rule"] == {}
 
 
+def test_validation_result_summary_severity_counts_error():
+    """severity_counts must be populated for issues with default 'error' severity."""
+    result = ar.ValidationResult(
+        row_count=3,
+        issue_count=2,
+        issues=[
+            ar.ValidationIssue(
+                column="age", rule="min", message="too small", row_index=0
+            ),
+            ar.ValidationIssue(
+                column="name", rule="max", message="too long", row_index=1
+            ),
+        ],
+        bad_rows=[0, 1],
+    )
+    summary = result.summary()
+    assert summary["severity_counts"] == {"error": 2}
+
+
+def test_validation_result_summary_severity_counts_mixed():
+    """severity_counts must track different severity levels."""
+    result = ar.ValidationResult(
+        row_count=5,
+        issue_count=4,
+        issues=[
+            ar.ValidationIssue(
+                column="x", rule="min", message="small", row_index=0, severity="error"
+            ),
+            ar.ValidationIssue(
+                column="x", rule="max", message="large", row_index=1, severity="warning"
+            ),
+            ar.ValidationIssue(
+                column="x",
+                rule="required",
+                message="missing",
+                row_index=2,
+                severity="error",
+            ),
+            ar.ValidationIssue(
+                column="x",
+                rule="nullable",
+                message="null",
+                row_index=3,
+                severity="warning",
+            ),
+        ],
+        bad_rows=[0, 1, 2, 3],
+    )
+    summary = result.summary()
+    assert summary["severity_counts"] == {"error": 2, "warning": 2}
+
+
+def test_validation_result_summary_issue_count_field():
+    """summary issue_count must match the result's issue_count field."""
+    result = ar.ValidationResult(
+        row_count=10,
+        issue_count=5,
+        issues=[
+            ar.ValidationIssue(column="a", rule="min", message="bad", row_index=i)
+            for i in range(5)
+        ],
+        bad_rows=list(range(5)),
+    )
+    summary = result.summary()
+    assert summary["issue_count"] == 5
+    assert summary["passed"] is False
+
+
+def test_validation_result_summary_bad_row_count():
+    """summary bad_row_count must equal len(bad_rows)."""
+    result = ar.ValidationResult(
+        row_count=7,
+        issue_count=3,
+        issues=[
+            ar.ValidationIssue(column="a", rule="min", message="bad", row_index=i)
+            for i in [1, 3, 5]
+        ],
+        bad_rows=[1, 3, 5],
+    )
+    summary = result.summary()
+    assert summary["bad_row_count"] == 3
+
+
+def test_validation_result_summary_no_issues_severity_counts_empty():
+    """When there are no issues, severity_counts must be an empty dict."""
+    result = ar.ValidationResult(row_count=3, issue_count=0, issues=[], bad_rows=[])
+    summary = result.summary()
+    assert summary["severity_counts"] == {}
+
+
+def test_schema_diff_summary_differences_by_change():
+    """SchemaDiff.summary() differences_by_change must aggregate by change kind."""
+    diff = ar.SchemaDiff(
+        [
+            ar.SchemaDiffEntry(
+                change="added_column",
+                column="new_col",
+            ),
+            ar.SchemaDiffEntry(
+                change="changed_field",
+                column="id",
+            ),
+            ar.SchemaDiffEntry(
+                change="added_column",
+                column="another_col",
+            ),
+        ],
+    )
+    summary = diff.summary()
+    assert summary["differences_by_change"] == {"added_column": 2, "changed_field": 1}
+
+
+def test_schema_diff_summary_differences_by_column():
+    """SchemaDiff.summary() differences_by_column must aggregate by column name."""
+    diff = ar.SchemaDiff(
+        [
+            ar.SchemaDiffEntry(
+                change="removed_column",
+                column="x",
+            ),
+            ar.SchemaDiffEntry(
+                change="changed_type",
+                column="x",
+            ),
+            ar.SchemaDiffEntry(
+                change="added_column",
+                column="y",
+            ),
+        ],
+    )
+    summary = diff.summary()
+    assert summary["differences_by_column"] == {"x": 2, "y": 1}
+
+
+def test_schema_diff_summary_no_differences():
+    """SchemaDiff.summary() with no differences must return empty aggregations."""
+    diff = ar.SchemaDiff([])
+    summary = diff.summary()
+    assert summary["changed"] is False
+    assert summary["difference_count"] == 0
+    assert summary["differences_by_change"] == {}
+    assert summary["differences_by_column"] == {}
+
+
 def test_validation_result_to_pandas(sample_csv):
     result = ar.validate(
         ar.read_csv(sample_csv),
