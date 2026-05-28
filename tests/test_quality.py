@@ -2400,6 +2400,20 @@ def test_data_quality_report_to_dict_exclude_columns():
     assert "name" in result["columns"]
 
 
+def test_data_quality_report_to_dict_exclude_columns_accepts_set_and_tuple():
+    frame = ar.read_csv(io.StringIO("name,age,secret_token\nalice,20,a\nbob,30,b\n"))
+
+    report = ar.profile(frame)
+
+    set_result = report.to_dict(exclude_columns={"secret_token"})
+    tuple_result = report.to_dict(exclude_columns=("age",))
+
+    assert "secret_token" not in set_result["columns"]
+    assert "name" in set_result["columns"]
+    assert "age" not in tuple_result["columns"]
+    assert "name" in tuple_result["columns"]
+
+
 def test_data_quality_report_to_dict_default_behavior():
     frame = ar.read_csv(io.StringIO("name\nalice\nbob\n"))
 
@@ -2415,9 +2429,20 @@ def test_data_quality_report_to_dict_unknown_column():
 
     report = ar.profile(frame)
 
-    result = report.to_dict(exclude_columns=["missing_column"])
+    with pytest.raises(KeyError, match="Unknown exclude_columns: \\['missing_column'\\]"):
+        report.to_dict(exclude_columns=["missing_column"])
 
-    assert "name" in result["columns"]
+
+def test_data_quality_report_to_dict_multiple_unknown_columns():
+    frame = ar.read_csv(io.StringIO("name\nalice\nbob\n"))
+
+    report = ar.profile(frame)
+
+    with pytest.raises(
+        KeyError,
+        match="Unknown exclude_columns: \\['missing_column', 'secret_tokn'\\]",
+    ):
+        report.to_dict(exclude_columns=["secret_tokn", "missing_column"])
 
 
 def test_data_quality_report_to_dict_invalid_exclude_columns_type():
@@ -2439,6 +2464,16 @@ def test_data_quality_report_to_dict_invalid_exclude_columns_entries():
 
 
 def test_data_quality_report_to_dict_excludes_columns_from_suggestions():
+    columns = ar.profile(
+        ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "name": [" Alice ", "Bob"],
+                    "age": [30, 40],
+                }
+            )
+        )
+    ).columns
     report = ar.DataQualityReport(
         row_count=2,
         column_count=2,
@@ -2447,7 +2482,7 @@ def test_data_quality_report_to_dict_excludes_columns_from_suggestions():
         duplicate_ratio=0.0,
         quality_score=1.0,
         score_components={},
-        columns={},
+        columns=columns,
         suggestions=[
             (
                 "strip_whitespace",
@@ -2471,6 +2506,7 @@ def test_data_quality_report_to_dict_excludes_columns_from_suggestions():
 
 
 def test_data_quality_report_to_dict_preserves_non_column_suggestion_values():
+    columns = ar.profile(ar.from_pandas(pd.DataFrame({"age": [30, 40]}))).columns
     report = ar.DataQualityReport(
         row_count=2,
         column_count=1,
@@ -2479,7 +2515,7 @@ def test_data_quality_report_to_dict_preserves_non_column_suggestion_values():
         duplicate_ratio=0.0,
         quality_score=1.0,
         score_components={},
-        columns={},
+        columns=columns,
         suggestions=[
             (
                 "custom_step",
@@ -2647,6 +2683,22 @@ def test_data_quality_report_to_json_exclude_columns():
 
     assert "name" in parsed["columns"]
     assert "age" not in parsed["columns"]
+
+
+def test_data_quality_report_to_json_unknown_exclude_column():
+    report = ar.profile(
+        ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "name": ["Alice", "Bob"],
+                    "secret_token": ["abc", "def"],
+                }
+            )
+        )
+    )
+
+    with pytest.raises(KeyError, match="Unknown exclude_columns: \\['secret_tokn'\\]"):
+        report.to_json(exclude_columns=["secret_tokn"])
 
 
 def test_data_quality_report_to_json_redact_sample_values():

@@ -233,6 +233,14 @@ class DataQualityReport:
 
             exclude_columns = set(exclude_columns)
 
+        unknown_exclude_columns = sorted(exclude_columns - set(self.columns))
+        if unknown_exclude_columns:
+            available_columns = ", ".join(self.columns) or "<none>"
+            raise KeyError(
+                "Unknown exclude_columns: "
+                f"{unknown_exclude_columns}. Available columns: {available_columns}"
+            )
+
         def _redact_reason(reason: str | None) -> str | None:
             if not reason or not exclude_columns:
                 return reason
