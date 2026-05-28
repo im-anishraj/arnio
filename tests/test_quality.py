@@ -2779,6 +2779,23 @@ def test_data_quality_report_to_json_redacts_top_values():
     ]
 
 
+def test_profile_empty_dataframe():
+    frame = ar.from_pandas(
+        pd.DataFrame({"a": pd.Series(dtype="int64"), "b": pd.Series(dtype="float64")})
+    )
+    report = ar.profile(frame)
+    assert report.row_count == 0
+    assert report.column_count == 2
+    assert report.duplicate_rows == 0
+    assert report.memory_usage >= 0
+    assert "a" in report.columns
+    assert "b" in report.columns
+    assert report.columns["a"].row_count == 0
+    assert report.columns["a"].null_count == 0
+    assert report.columns["b"].row_count == 0
+    assert report.columns["b"].null_count == 0
+
+
 # --- Tests for ProfileComparison.to_json() ---
 
 
