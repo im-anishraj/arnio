@@ -117,37 +117,33 @@ def test_benchmark_sparse_nulls_dry_run_cleans_up_temp_files(tmp_path):
 
     env = os.environ.copy()
     env["ARNIO_BENCHMARK_DRY_RUN"] = "1"
-    
-    # Isolate benchmark artifacts in pytest temp directory
+
+    # Create isolated temporary benchmark directory
     temp_benchmark_dir = tmp_path / "benchmarks"
     temp_benchmark_dir.mkdir()
-    cmd = [
-    sys.executable,
-    str(script_path),
-    "--rows",
-    "10",
-    "--runs",
-    "1",
-    ]
+
+    # Preserve original working directory structure expected by the script
+    cmd = [sys.executable, str(script_path), "--rows", "10", "--runs", "1"]
 
     result = subprocess.run(
     cmd,
-    env=env,
+    env={
+        **env,
+        "ARNIO_BENCHMARK_OUTPUT_DIR": str(temp_benchmark_dir),
+    },
     capture_output=True,
     text=True,
-    cwd=str(temp_benchmark_dir),
+    cwd=str(BENCHMARKS_DIR.parent),
     timeout=30,
     )
-    
+
     assert (
     result.returncode == 0), f"Dry-run failed.\nStdout:\n{result.stdout}\nStderr:\n{result.stderr}"
 
-    # Ensure no temporary sparse-null benchmark files remain
-    post_files = list(
-    temp_benchmark_dir.glob("benchmark_sparse_nulls_*.csv"))
-    
-    assert len(post_files) == 0, (
-    f"Temp benchmark files were not cleaned up: {post_files}")
+    # Ensure temporary benchmark artifacts are cleaned up
+    post_files = list(temp_benchmark_dir.glob("benchmark_sparse_nulls_*.csv"))
+
+    assert len(post_files) == 0, (f"Temp benchmark files were not cleaned up: {post_files}")
 
 
 def test_check_regression_detects_slowdown():
