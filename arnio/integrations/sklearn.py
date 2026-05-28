@@ -44,20 +44,8 @@ class ArnioCleaner(BaseEstimator, TransformerMixin):
     def _validate_steps_contract(self):
         for step in self.steps:
             name = step[0] if isinstance(step, tuple) else step
-<<<<<<< HEAD
             if name in _ROW_COUNT_CHANGING_STEPS:
                 raise ValueError(f"Row-count-changing step '{name}' not allowed in sklearn transformer.")
-=======
-
-            if name in _ROW_COUNT_CHANGING_STEPS and not self.allow_row_count_change:
-                raise ValueError(
-                    f"ArnioCleaner does not allow row-count-changing steps in a "
-                    f"scikit-learn transformer. Step '{name}' may drop rows, which "
-                    f"would break downstream estimators. Remove '{name}' from the "
-                    f"pipeline or pre-filter your data before passing it to ArnioCleaner."
-                )
-
->>>>>>> 0943bc0 (fix: preserve allow_row_count_change opt-in behavior)
             if not self.allow_schema_changes and name in _SCHEMA_CHANGING_STEPS:
                 raise ValueError(f"Schema-changing step '{name}' not allowed. Use allow_schema_changes=True.")
 
