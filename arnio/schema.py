@@ -739,13 +739,9 @@ class Field:
                 ) from exc
 
         if self.allowed is not None:
-            if isinstance(self.allowed, str):
+            if not isinstance(self.allowed, (list, tuple, set)):
                 raise TypeError(
-                    "allowed must be a list, set, or tuple — not a bare string"
-                )
-            if not hasattr(self.allowed, "__iter__"):
-                raise TypeError(
-                    f"allowed must be an iterable collection, got {type(self.allowed).__name__}"
+                    f"allowed must be a list, tuple, or set, got {type(self.allowed).__name__}"
                 )
         for _name, _val in [
             ("min_length", self.min_length),

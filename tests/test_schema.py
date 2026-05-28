@@ -3248,7 +3248,7 @@ def test_field_pattern_rejects_invalid_regex():
 
 
 def test_field_allowed_rejects_bare_string():
-    with pytest.raises(TypeError, match="not a bare string"):
+    with pytest.raises(TypeError, match="allowed must be a list, tuple, or set"):
         ar.Field(allowed="abc")
 
 
@@ -3282,3 +3282,18 @@ def test_field_valid_direct_construction():
         dtype="string", pattern=r"\d+", allowed=["a", "b"], min_length=1, max_length=5
     )
     assert f.pattern == r"\d+"
+
+
+def test_field_allowed_rejects_dict():
+    with pytest.raises(TypeError, match="allowed must be a list, tuple, or set"):
+        ar.Field(allowed={"a": 1})
+
+
+def test_field_allowed_rejects_generator():
+    with pytest.raises(TypeError, match="allowed must be a list, tuple, or set"):
+        ar.Field(allowed=(x for x in ["a"]))
+
+
+def test_field_allowed_rejects_bytes():
+    with pytest.raises(TypeError, match="allowed must be a list, tuple, or set"):
+        ar.Field(allowed=b"abc")
