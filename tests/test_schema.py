@@ -313,6 +313,62 @@ def test_schema_validation_collects_row_level_issues(tmp_path):
     assert {"nullable", "max", "min", "email", "allowed"} <= rules
     assert result.summary()["issues_by_column"]["age"] == 2
 
+    def test_string_allowed_is_case_sensitive_by_default(tmp_path):
+        path = tmp_path / "status.csv"
+        path.write_text("status\nactive\nACTIVE\nActive\n")
+
+        result = ar.validate(
+            ar.read_csv(path),
+            {"status": ar.String(allowed=["active"])},
+        )
+
+        assert not result.passed
+        assert result.issue_count == 2
+        assert [issue.row_index for issue in result.issues] == [2, 3]
+
+
+def test_string_allowed_supports_case_insensitive_matching(tmp_path):
+    path = tmp_path / "status.csv"
+    path.write_text("status\nactive\nACTIVE\nActive\ninactive\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {
+            "status": ar.String(
+                allowed=["active", "inactive"],
+                case_sensitive=False,
+            )
+        },
+    )
+
+    assert result.passed
+    assert result.issue_count == 0
+
+
+def test_string_allowed_case_insensitive_rejects_invalid_values(tmp_path):
+    path = tmp_path / "status.csv"
+    path.write_text("status\nactive\nACTIVE\npending\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {
+            "status": ar.String(
+                allowed=["active"],
+                case_sensitive=False,
+            )
+        },
+    )
+
+    assert not result.passed
+    assert result.issue_count == 1
+    assert result.issues[0].row_index == 3
+    assert result.issues[0].rule == "allowed"
+
+
+def test_string_case_sensitive_must_be_bool():
+    with pytest.raises(TypeError, match="case_sensitive must be a bool"):
+        ar.String(allowed=["active"], case_sensitive="false")
+
 
 def test_schema_reports_missing_and_unexpected_columns(sample_csv):
     frame = ar.read_csv(sample_csv)
