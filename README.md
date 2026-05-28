@@ -147,6 +147,23 @@ ar.pipeline(
 
 This prevents partial pipeline execution when later pipeline steps are invalid.
 
+### from_dict support
+
+This adds support for creating an ArFrame from a Python dictionary.
+
+You can build an `ArFrame` directly from a dictionary of equal-length columns, which is useful for small inline datasets that you want to pass into a pipeline.
+
+```python
+import arnio as ar
+
+data = {"name": ["Alice", "Bob"], "age": [25, 30]}
+
+frame = ar.from_dict(data)
+# or
+frame = ar.ArFrame.from_dict(data)
+```
+
+
 Already have a pandas `DataFrame`? Use Arnio in-place in your existing pandas
 workflow:
 
@@ -1175,6 +1192,9 @@ schema = ar.Schema({
     # LanguageCode validates lowercase ISO 639-1 language codes (e.g., en, hi, fr).
     "language": ar.LanguageCode(),
 
+    # TimeZone validates IANA timezone identifiers (e.g., Asia/Kolkata).
+    "timezone": ar.TimeZone(),
+
     "username": ar.String(min_length=3, max_length=20),
     "user_code": ar.Regex(r"^USR-\d{4}$", nullable=False),
     "revenue": ar.Custom("positive", nullable=True),
@@ -1437,7 +1457,7 @@ sharing **aggregate statistics only** or **raw/sample cell values**.
 | `ColumnProfile.sample_values` (in-memory) | No | **Yes** — first *N* non-null values (`sample_size` on `ar.profile()`) |
 | `ColumnProfile.top_values` | Includes counts / ratios | **Yes** — frequent **actual** values (exact or approximate; see below) |
 | `report.to_dict()` | Mixed | **Yes** — includes `sample_values` and `top_values` unless you redact samples |
-| `report.to_dict(redact_sample_values=True)` | Mixed | `sample_values` → `"[REDACTED]"` (same list length); **`top_values` unchanged** |
+| `report.to_dict(redact_sample_values=True)` | Mixed | `sample_values` → `"[REDACTED]"` (same list length); `top_values[*].value` → `"[REDACTED]"` while counts and ratios remain |
 | `report.to_markdown()`, `report.summary()` | Yes | No raw cell values in output |
 | `report.to_html()` / notebook display of `report` | Partial | **Shows `top_values`** chips; does not list `sample_values` |
 | `report.to_pandas()` | Partial | Includes **`top_values`**, not `sample_values` |
@@ -1449,7 +1469,7 @@ controls below for safer sharing.
 **Safe sharing practices**
 
 - **JSON logs and artifacts:** `report.to_dict(redact_sample_values=True)` before writing or uploading.
-- **Collect fewer samples:** `ar.profile(frame, sample_size=0)` skips `sample_values` (defaults still apply to `top_values` on string columns).
+- **Collect fewer samples:** `ar.profile(frame, sample_size=0)` skips `sample_values` (defaults still apply to `top_values` counts on string columns).
 - **Text summaries for CI or comments:** prefer `report.to_markdown()` or `report.summary()` when you do not need per-value examples.
 - **Notebooks and HTML exports:** avoid evaluating `report` or saving `report.to_html()` for sensitive data; HTML still shows `top_values`.
 - **GitHub bug reports and examples:** use synthetic data (`user@example.com`, `ID-001`), a minimal CSV, and redacted `to_dict()` output — not production dumps.
@@ -1466,7 +1486,7 @@ df = ar.from_pandas(pd.DataFrame({
 }))
 report = ar.profile(df, sample_size=2)
 
-# Safer JSON for sharing (sample_values only; top_values still present)
+# Safer JSON for sharing (sample_values and top_values values redacted)
 safe_json = report.to_dict(redact_sample_values=True)
 
 # Safer text summary (no sample_values or top_values in output)
@@ -1737,6 +1757,7 @@ Discord is for fast conversation and support. GitHub remains the source of truth
 - [Core Stability Sprint](CORE_STABILITY_SPRINT.md)
 - [Roadmap](ROADMAP.md)
 - [Troubleshooting Guide](docs/TROUBLESHOOTING.md)
+- [Nullable dtype compatibility](docs/nullable_dtype_compat.md)
 
 ## 🤝 Contribute
 
@@ -1944,7 +1965,7 @@ arnio/
 ├── tests/                   # pytest suite — CSV, cleaning, pipeline, conversions
 ├── benchmarks/              # Reproducible arnio vs pandas benchmark
 ├── examples/                # basic_usage.py, auto_clean_tutorial.py, custom_step.py and ready to run recipes for sales, customers, survey, logs, finance
-└── website/                 # Project website — arnio.vercel.app
+└── website/                 # Project website — arniolib.vercel.app
 ```
 
 <br>
@@ -1969,7 +1990,7 @@ arnio/
 <a href="https://pypi.org/project/arnio/"><img src="https://img.shields.io/pypi/dm/arnio?style=flat-square&logo=pypi&logoColor=white&labelColor=0d1117&color=3572A5&label=installs" alt="Downloads"></a>&ensp;
 <a href="https://github.com/im-anishraj/arnio/stargazers"><img src="https://img.shields.io/github/stars/im-anishraj/arnio?style=flat-square&logo=github&labelColor=0d1117&color=e3b341&label=stars" alt="Stars"></a>&ensp;
 <a href="https://github.com/im-anishraj/arnio/network/members"><img src="https://img.shields.io/github/forks/im-anishraj/arnio?style=flat-square&logo=github&labelColor=0d1117&color=8b949e&label=forks" alt="Forks"></a>&ensp;
-<a href="https://arnio.vercel.app/"><img src="https://img.shields.io/badge/website-arnio.vercel.app-blue?style=flat-square&labelColor=0d1117" alt="Website"></a>&ensp;
+<a href="https://arniolib.vercel.app/"><img src="https://img.shields.io/badge/website-arniolib.vercel.app-blue?style=flat-square&labelColor=0d1117" alt="Website"></a>&ensp;
 <a href="https://discord.gg/xsEw7r78M"><img src="https://img.shields.io/badge/community-Discord-5865F2?style=flat-square&logo=discord&logoColor=white&labelColor=0d1117" alt="Discord"></a>
 
 <br>

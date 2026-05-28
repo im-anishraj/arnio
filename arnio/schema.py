@@ -11,6 +11,7 @@ import warnings
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Callable
+from zoneinfo import available_timezones
 
 import numpy as np
 import pandas as pd
@@ -29,11 +30,13 @@ ISSUE_COLUMNS = [
 ]
 
 DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+URL_SCHEME_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*$")
 
 _VALID_SEVERITIES = {"error", "warning"}
 
 
 def _validate_severity(severity: str) -> None:
+    """Raise ValueError if severity is not 'error' or 'warning'."""
     if severity not in _VALID_SEVERITIES:
         raise ValueError("severity must be 'error' or 'warning'")
 
@@ -492,6 +495,189 @@ ISO_639_1_CODES = {
     "zu",
 }
 
+ISO_4217_CURRENCY_CODES = {
+    "AED",
+    "AFN",
+    "ALL",
+    "AMD",
+    "ANG",
+    "AOA",
+    "ARS",
+    "AUD",
+    "AWG",
+    "AZN",
+    "BAM",
+    "BBD",
+    "BDT",
+    "BGN",
+    "BHD",
+    "BIF",
+    "BMD",
+    "BND",
+    "BOB",
+    "BOV",
+    "BRL",
+    "BSD",
+    "BTN",
+    "BWP",
+    "BYN",
+    "BZD",
+    "CAD",
+    "CDF",
+    "CHE",
+    "CHF",
+    "CHW",
+    "CLF",
+    "CLP",
+    "CNY",
+    "COP",
+    "COU",
+    "CRC",
+    "CUP",
+    "CVE",
+    "CZK",
+    "DJF",
+    "DKK",
+    "DOP",
+    "DZD",
+    "EGP",
+    "ERN",
+    "ETB",
+    "EUR",
+    "FJD",
+    "FKP",
+    "GBP",
+    "GEL",
+    "GHS",
+    "GIP",
+    "GMD",
+    "GNF",
+    "GTQ",
+    "GYD",
+    "HKD",
+    "HNL",
+    "HRK",
+    "HTG",
+    "HUF",
+    "IDR",
+    "ILS",
+    "INR",
+    "IQD",
+    "IRR",
+    "ISK",
+    "JMD",
+    "JOD",
+    "JPY",
+    "KES",
+    "KGS",
+    "KHR",
+    "KMF",
+    "KPW",
+    "KRW",
+    "KWD",
+    "KYD",
+    "KZT",
+    "LAK",
+    "LBP",
+    "LKR",
+    "LRD",
+    "LSL",
+    "LYD",
+    "MAD",
+    "MDL",
+    "MGA",
+    "MKD",
+    "MMK",
+    "MNT",
+    "MOP",
+    "MRU",
+    "MUR",
+    "MVR",
+    "MWK",
+    "MXN",
+    "MXV",
+    "MYR",
+    "MZN",
+    "NAD",
+    "NGN",
+    "NIO",
+    "NOK",
+    "NPR",
+    "NZD",
+    "OMR",
+    "PAB",
+    "PEN",
+    "PGK",
+    "PHP",
+    "PKR",
+    "PLN",
+    "PYG",
+    "QAR",
+    "RON",
+    "RSD",
+    "RUB",
+    "RWF",
+    "SAR",
+    "SBD",
+    "SCR",
+    "SDG",
+    "SEK",
+    "SGD",
+    "SHP",
+    "SLE",
+    "SLL",
+    "SOS",
+    "SRD",
+    "SSP",
+    "STN",
+    "SVC",
+    "SYP",
+    "SZL",
+    "THB",
+    "TJS",
+    "TMT",
+    "TND",
+    "TOP",
+    "TRY",
+    "TTD",
+    "TWD",
+    "TZS",
+    "UAH",
+    "UGX",
+    "USD",
+    "USN",
+    "UYI",
+    "UYU",
+    "UYW",
+    "UZS",
+    "VES",
+    "VND",
+    "VUV",
+    "WST",
+    "XAF",
+    "XAG",
+    "XBA",
+    "XBB",
+    "XBC",
+    "XBD",
+    "XCD",
+    "XDR",
+    "XOF",
+    "XPD",
+    "XPF",
+    "XPT",
+    "XSU",
+    "XTS",
+    "XUA",
+    "XXX",
+    "YER",
+    "ZAR",
+    "ZMW",
+    "ZWL",
+}
+
+IANA_TIMEZONES = available_timezones()
+
 
 @dataclass(frozen=True)
 class Field:
@@ -514,6 +700,28 @@ class Field:
     severity: str = "error"
 
     def __post_init__(self) -> None:
+        if not isinstance(self.nullable, bool):
+            raise TypeError("nullable must be a bool")
+        if not isinstance(self.unique, bool):
+            raise TypeError("unique must be a bool")
+
+        if self.required_if is not None:
+            if not isinstance(self.required_if, tuple):
+                raise TypeError("required_if must be a tuple or None")
+            if len(self.required_if) != 2:
+                raise TypeError(
+                    "required_if must be a (column_name, expected_value) tuple"
+                )
+            if not isinstance(self.required_if[0], str):
+                raise TypeError("required_if column name must be a string")
+        if self.dtype in {"int64", "float64"}:
+            if self.min is not None:
+                if isinstance(self.min, bool) or not isinstance(self.min, (int, float)):
+                    raise TypeError("min must be numeric or None")
+            if self.max is not None:
+                if isinstance(self.max, bool) or not isinstance(self.max, (int, float)):
+                    raise TypeError("max must be numeric or None")
+
         _validate_severity(self.severity)
 
 
@@ -531,6 +739,13 @@ class Schema:
             raise TypeError(
                 f"Schema 'fields' must be a mapping (like a dict), got {type(self.fields).__name__}"
             )
+
+        for key in self.fields:
+            if not isinstance(key, str):
+                raise TypeError(
+                    f"Schema field names must be strings, got {type(key).__name__!r}: {key!r}"
+                )
+
         for name, field_def in self.fields.items():
             if not isinstance(field_def, Field):
                 raise TypeError(
@@ -553,6 +768,20 @@ class Schema:
                     raise TypeError(
                         f"Schema 'unique' members must be strings, got {type(item).__name__} for element {item!r}."
                     )
+
+            if len(set(self.unique)) != len(self.unique):
+                raise ValueError(
+                    "Schema 'unique' must not contain duplicate column names"
+                )
+        if not isinstance(self.strict, bool):
+            raise TypeError("Schema 'strict' must be a boolean")
+
+        if self.rules is not None:
+            if not isinstance(self.rules, (list, tuple)):
+                raise TypeError("Schema 'rules' must be a list of callables")
+            for rule in self.rules:
+                if not callable(rule):
+                    raise TypeError("Schema 'rules' must be a list of callables")
 
     def validate(
         self,
@@ -695,6 +924,9 @@ class ValidationIssue:
     row_index: int | None = None
     value: Any = None
     severity: str = "error"
+
+    def __post_init__(self) -> None:
+        _validate_severity(self.severity)
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-friendly dictionary."""
@@ -1376,6 +1608,12 @@ def Int64(
         Field: Configured int64 schema field.
     """
 
+    if min is not None:
+        if isinstance(min, bool) or not isinstance(min, (int, float)):
+            raise TypeError("min must be numeric or None")
+    if max is not None:
+        if isinstance(max, bool) or not isinstance(max, (int, float)):
+            raise TypeError("max must be numeric or None")
     if min is not None and max is not None and min > max:
         raise ValueError("min must be less than or equal to max")
 
@@ -1413,6 +1651,12 @@ def Float64(
         Field: Configured float64 schema field.
     """
 
+    if min is not None:
+        if isinstance(min, bool) or not isinstance(min, (int, float)):
+            raise TypeError("min must be numeric or None")
+    if max is not None:
+        if isinstance(max, bool) or not isinstance(max, (int, float)):
+            raise TypeError("max must be numeric or None")
     if min is not None and max is not None and min > max:
         raise ValueError("min must be less than or equal to max")
 
@@ -1456,6 +1700,31 @@ def String(
 
     if min_length is not None and max_length is not None and min_length > max_length:
         raise ValueError("min_length must be less than or equal to max_length")
+
+    if isinstance(allowed, (str, bytes)):
+        raise TypeError(
+            "allowed must be a sequence of allowed values, not a bare string"
+        )
+
+    if pattern is not None:
+        if not isinstance(pattern, str):
+            raise TypeError("pattern must be a string or None")
+
+        try:
+            re.compile(pattern)
+        except re.error as exc:
+            raise ValueError(f"Invalid regex pattern: {pattern!r}") from exc
+
+    for name, value in (
+        ("min_length", min_length),
+        ("max_length", max_length),
+    ):
+        if value is not None:
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise TypeError(f"{name} must be an integer")
+
+            if value < 0:
+                raise ValueError(f"{name} must be greater than or equal to 0")
 
     allowed_set = set(allowed) if allowed is not None else None
 
@@ -1516,8 +1785,13 @@ def Email(
     Returns:
         Field: Configured email-address schema field.
     """
+
+    if not isinstance(validation, str):
+        raise TypeError("Email validation must be a string: 'light' or 'strict'")
+
     if validation not in {"light", "strict"}:
         raise ValueError("Email validation must be 'light' or 'strict'")
+
     return Field(
         dtype="string",
         nullable=nullable,
@@ -1548,12 +1822,37 @@ def URL(
         Field: Configured URL schema field.
     """
     if allowed_schemes is not None:
-        if not isinstance(allowed_schemes, list) or len(allowed_schemes) == 0:
-            raise ValueError("allowed_schemes must be a non-empty list")
+        if isinstance(allowed_schemes, (str, bytes)):
+            raise TypeError(
+                "allowed_schemes must be a sequence of scheme names, not a bare string"
+            )
+
+        if not isinstance(allowed_schemes, (list, tuple, set)):
+            raise TypeError("allowed_schemes must be a sequence of scheme names")
+
+        normalized_schemes = set()
+
         for scheme in allowed_schemes:
-            if not isinstance(scheme, str) or scheme.strip() == "":
+            if not isinstance(scheme, str):
                 raise ValueError("allowed_schemes must contain non-empty strings")
-        schemes = "|".join(re.escape(s) for s in allowed_schemes)
+
+            scheme = scheme.strip()
+
+            if scheme == "":
+                raise ValueError("allowed_schemes must contain non-empty strings")
+
+            if URL_SCHEME_PATTERN.fullmatch(scheme) is None:
+                raise ValueError(
+                    "allowed_schemes must contain URL scheme names such as 'http' or 'https'"
+                )
+
+            normalized_schemes.add(scheme)
+
+        if len(normalized_schemes) == 0:
+            raise ValueError("allowed_schemes must be a non-empty sequence")
+
+        schemes = "|".join(re.escape(scheme) for scheme in sorted(normalized_schemes))
+
         semantic = f"url:{schemes}"
 
     else:
@@ -1652,21 +1951,63 @@ def LanguageCode(
     )
 
 
-def CurrencyCode(*, nullable: bool = True, unique: bool = False) -> Field:
+def TimeZone(
+    *,
+    nullable: bool = True,
+    unique: bool = False,
+    severity: str = "error",
+    required_if: tuple[str, Any] | None = None,
+) -> Field:
+    """Create an IANA timezone schema field.
+
+    Args:
+        nullable: Whether null values are allowed.
+        unique: Whether non-null values must be unique.
+        severity: Severity level for validation issues.
+        required_if: Conditional requirement as a column/value pair.
+
+    Returns:
+        Field: Configured IANA timezone schema field.
+    """
+    return Field(
+        dtype="string",
+        nullable=nullable,
+        semantic="timezone",
+        unique=unique,
+        required_if=required_if,
+        severity=severity,
+    )
+
+
+def CurrencyCode(
+    *,
+    nullable: bool = True,
+    unique: bool = False,
+    severity: str = "error",
+    required_if: tuple[str, Any] | None = None,
+    allowed: set[Any] | list[Any] | tuple[Any, ...] | None = None,
+) -> Field:
     """Create a currency-code schema field.
 
     Args:
         nullable: Whether null values are allowed.
         unique: Whether non-null values must be unique.
+        severity: Severity level for validation issues.
+        required_if: Conditional requirement as a column/value pair.
+        allowed: Allowed currency codes, overriding the default active ISO 4217 set.
 
     Returns:
         Field: Configured 3-letter uppercase currency-code schema field.
     """
+    allowed_set = set(allowed) if allowed is not None else None
     return Field(
         dtype="string",
         nullable=nullable,
         semantic="currency_code",
         unique=unique,
+        severity=severity,
+        required_if=required_if,
+        allowed=allowed_set,
     )
 
 
@@ -1776,6 +2117,7 @@ def _is_safely_convertible_to_dtype(
     expected_dtype: str,
     column_name: str,
 ) -> bool:
+    """Return True if series values can be safely cast to expected_dtype without data loss."""
     try:
         non_null = series.dropna()
 
@@ -1831,6 +2173,7 @@ def _validate_column(
     name: str,
     field_def: Field,
 ) -> list[ValidationIssue]:
+    """Validate a single column against its Field definition and return all issues found."""
     issues: list[ValidationIssue] = []
 
     if field_def.dtype is not None and actual_dtype != field_def.dtype:
@@ -1994,7 +2337,11 @@ def _validate_column(
                     )
                 )
             else:
-                invalid = non_null[~non_null.map(fn).astype(bool)]
+                invalid = non_null[
+                    ~non_null.map(
+                        lambda v: _normalize_validator_result(fn(v), validator_name)
+                    )
+                ]
                 issues.extend(
                     _row_issues(
                         invalid,
@@ -2040,6 +2387,13 @@ def _validate_column(
 
                 elif field_def.semantic == "language_code":
                     invalid = non_null[~non_null.isin(ISO_639_1_CODES)]
+                elif field_def.semantic == "timezone":
+                    invalid = non_null[~non_null.isin(IANA_TIMEZONES)]
+                elif field_def.semantic == "currency_code":
+                    if field_def.allowed is not None:
+                        invalid = pd.Series(dtype=object)
+                    else:
+                        invalid = non_null[~non_null.isin(ISO_4217_CURRENCY_CODES)]
 
                 else:
                     invalid = non_null[~text.str.fullmatch(pattern, na=False)]
@@ -2085,6 +2439,7 @@ def _validate_datetime(
     name: str,
     field_def: Field,
 ) -> list[ValidationIssue]:
+    """Validate non-null datetime values against the format and min/max bounds in field_def."""
     issues: list[ValidationIssue] = []
     parsed = pd.to_datetime(non_null, format=field_def.format, errors="coerce")
 
@@ -2128,6 +2483,7 @@ def _validate_datetime(
 
 
 def _parse_datetime_bound(value: Any, name: str) -> pd.Timestamp | None:
+    """Parse a datetime bound value into a pd.Timestamp, raising ValueError on failure."""
     if value is None:
         return None
     try:
@@ -2150,6 +2506,7 @@ def _row_issues(
     message: str,
     severity: str = "error",
 ) -> list[ValidationIssue]:
+    """Convert a series of invalid rows into a list of ValidationIssue objects."""
     return [
         ValidationIssue(
             column=column,
@@ -2164,6 +2521,7 @@ def _row_issues(
 
 
 def _field_to_dict(field_def: Field) -> dict[str, Any]:
+    """Serialize a Field definition to a plain dict suitable for in-memory use."""
     return {
         "dtype": field_def.dtype,
         "nullable": field_def.nullable,
@@ -2183,6 +2541,7 @@ def _field_to_dict(field_def: Field) -> dict[str, Any]:
 
 
 def _field_to_json_dict(field_def: Field) -> dict[str, Any]:
+    """Serialize a Field definition to a JSON-safe dict, converting timestamps to ISO strings."""
     data = _field_to_dict(field_def)
     data["severity"] = field_def.severity
     data["datetime_min"] = (
@@ -2199,6 +2558,7 @@ def _field_to_json_dict(field_def: Field) -> dict[str, Any]:
 
 
 def _field_from_json_dict(name: str, payload: Any) -> Field:
+    """Deserialize a JSON dict payload into a Field definition for the given column name."""
     if not isinstance(payload, dict):
         raise TypeError(
             f"Schema JSON field for column {name!r} must be an object, got {type(payload).__name__}."
@@ -2246,12 +2606,14 @@ def _field_from_json_dict(name: str, payload: Any) -> Field:
 def _normalize_unique(
     value: list[str] | tuple[str, ...] | None,
 ) -> tuple[str, ...] | None:
+    """Normalize a unique-constraint value into a sorted tuple, or None if not set."""
     if value is None:
         return None
     return tuple(sorted(value))
 
 
 def _normalize_sequence(value: Any) -> Any:
+    """Convert sets and tuples to lists for JSON-serializable output."""
     if isinstance(value, set):
         return sorted(value)
     if isinstance(value, tuple):
@@ -2260,6 +2622,7 @@ def _normalize_sequence(value: Any) -> Any:
 
 
 def _clean_scalar(value: Any) -> Any:
+    """Recursively convert numpy scalars and NaN values to JSON-safe Python types."""
     if isinstance(value, dict):
         return {key: _clean_scalar(val) for key, val in value.items()}
     if isinstance(value, (list, tuple, set)):
@@ -2272,6 +2635,7 @@ def _clean_scalar(value: Any) -> Any:
 
 
 def _markdown_cell(value: Any) -> str:
+    """Escape a value for safe rendering inside a Markdown table cell."""
     if value is None:
         return ""
     text = str(value).replace("\n", "<br>").replace("|", "\\|")
@@ -2281,6 +2645,7 @@ def _markdown_cell(value: Any) -> str:
 _SEMANTIC_PATTERNS = {
     "email": r"[^@\s]+@[^@\s]+\.[^@\s]+",
     "language_code": r"[a-z]{2}",
+    "timezone": r"[A-Za-z_]+(?:/[A-Za-z_\-]+)+",
     "email:strict": (
         r"[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+"
         r"@"
@@ -2320,6 +2685,39 @@ def register_validator(name: str, fn: callable) -> None:
     if not isinstance(name, str) or not name:
         raise ValueError("name must be a non-empty string")
     _CUSTOM_VALIDATORS[name] = fn
+
+
+def _normalize_validator_result(result: object, validator_name: str) -> bool:
+    """Normalize a custom validator return value to a strict bool.
+
+    Contract:
+    - ``True``  → passes validation
+    - ``False`` → fails validation
+    - ``None``  → fails validation
+    - ``pd.NA`` → fails validation
+    - anything else → raises TypeError naming the validator
+
+    This avoids calling bool() on pd.NA (which raises
+    "TypeError: boolean value of NA is ambiguous") and enforces a clear
+    return-value contract for custom validators.
+    """
+    if result is True:
+        return True
+    if result is False or result is None:
+        return False
+    # Check for pd.NA without importing pandas at module level
+    try:
+        import pandas as _pd
+
+        if result is _pd.NA:
+            return False
+    except ImportError:
+        pass
+    raise TypeError(
+        f"Custom validator {validator_name!r} returned "
+        f"{type(result).__name__!r} ({result!r}); "
+        "validators must return True (pass) or False (fail)."
+    )
 
 
 def Custom(

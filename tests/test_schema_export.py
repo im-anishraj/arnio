@@ -127,6 +127,34 @@ class TestSchemaToYamlOutput:
         out = schema_to_yaml(raw)
         assert '"key: value"' in out
 
+    def test_numeric_looking_strings_quoted(self):
+        raw = {
+            "status": {
+                "type": "STRING",
+                "allowed": ["001", "123", "1.5", "-45"],
+            }
+        }
+        out = schema_to_yaml(raw)
+
+        assert '"001"' in out
+        assert '"123"' in out
+        assert '"1.5"' in out
+        assert '"-45"' in out
+
+    def test_genuine_numbers_remain_unquoted(self):
+        raw = {
+            "metrics": {
+                "count": 100,
+                "score": 4.5,
+            }
+        }
+        out = schema_to_yaml(raw)
+
+        assert "count: 100" in out
+        assert "score: 4.5" in out
+        assert '"100"' not in out
+        assert '"4.5"' not in out
+
     def test_empty_string_quoted(self):
         raw = {"col": {"type": "STRING", "default": ""}}
         out = schema_to_yaml(raw)
@@ -271,3 +299,67 @@ def test_real_schema_with_rules_raises():
     schema = ar.Schema({"col": ar.Field(dtype="STRING")}, rules=[lambda df: []])
     with pytest.raises(ValueError, match="rules"):
         schema_to_dict(schema)
+
+
+# test unsupported raw field value
+def test_raw_field_object_raises():
+    with pytest.raises(TypeError):
+        schema_to_dict({"x": object()})
+
+
+# test for nested set normalization
+def test_nested_set_normalized():
+    result = schema_to_dict({"x": {"meta": {"tags": {"b", "a"}}}})
+
+    assert result == {"fields": {"x": {"meta": {"tags": ["a", "b"]}}}}
+
+
+# test for nested unsupported object inside dict
+def test_nested_unsupported_object_raises():
+    with pytest.raises(TypeError):
+        schema_to_dict({"x": {"meta": {"bad": object()}}})
+
+
+# test for nested unsupported object inside list
+def test_list_with_unsupported_object_raises():
+    with pytest.raises(TypeError):
+        schema_to_dict({"x": {"values": [1, object()]}})
+
+
+# ── Regression tests for issue #1467 ────────────────────────────────────────
+
+
+def test_raw_dict_fields_named_strict_and_unique_not_dropped():
+    """Flat scan_csv-style dict: strict/unique are real field names, not metadata."""
+    raw = {"strict": "int64", "unique": "string", "name": "string"}
+    result = schema_to_dict(raw)
+
+    assert "strict" in result["fields"]
+    assert "unique" in result["fields"]
+    assert "name" in result["fields"]
+
+    # No top-level metadata keys should appear
+    assert set(result.keys()) == {"fields"}
+
+
+def test_schema_object_fields_named_strict_and_unique_not_dropped():
+    """Schema object: fields named strict/unique survive alongside schema metadata."""
+    schema = ar.Schema(
+        {
+            "strict": ar.Field(dtype="INT64"),
+            "unique": ar.Field(dtype="STRING"),
+            "name": ar.Field(dtype="STRING"),
+        },
+        strict=True,
+        unique=["name"],
+    )
+
+    result = schema_to_dict(schema)
+
+    assert "strict" in result["fields"]
+    assert "unique" in result["fields"]
+    assert "name" in result["fields"]
+
+    # Schema-level metadata must still be top-level
+    assert result["strict"] is True
+    assert result["unique"] == ["name"]
