@@ -1857,6 +1857,21 @@ def standardize_missing_tokens(frame, tokens=None, subset=None):
             f"subset must be a list of column names, not a string. "
             f"Did you mean subset=['{subset}']?"
         )
+    if tokens is not None:
+        if isinstance(tokens, str):
+            raise TypeError(
+                f"tokens must be a list of strings, not a bare string. "
+                f"Did you mean tokens=['{tokens}']?"
+            )
+        if not isinstance(tokens, list):
+            raise TypeError(
+                f"tokens must be a list of strings, got {type(tokens).__name__!r}"
+            )
+        for item in tokens:
+            if not isinstance(item, str):
+                raise TypeError(
+                    f"tokens must be a list of strings, got {type(item).__name__!r} item"
+                )
 
     default_tokens = [
         "N/A",
