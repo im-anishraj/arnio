@@ -1118,24 +1118,25 @@ def cast_types(
         raise TypeCastError(str(e)) from e
     return ArFrame(result)
 
+
 def _append_clean_step(
-        steps: list[tuple],
-        name: str,
-        option: bool | dict,
-    ) -> None:
-        if option is False:
-            return
+    steps: list[tuple],
+    name: str,
+    option: bool | dict,
+) -> None:
+    if option is False:
+        return
 
-        if option is True:
-            steps.append((name,))
-            return
+    if option is True:
+        steps.append((name,))
+        return
 
-        if isinstance(option, Mapping):
-            steps.append((name, dict(option)))
-            return
-        raise TypeError(
-            f"{name} must be bool or dict, got {type(option).__name__}"
-        )j
+    if isinstance(option, Mapping):
+        steps.append((name, dict(option)))
+        return
+
+    raise TypeError(f"{name} must be bool or dict, got {type(option).__name__}")
+
 
 def clean(
     frame: ArFrame,
@@ -1172,8 +1173,8 @@ def clean(
     >>> frame = ar.read_csv("data.csv")
     >>> cleaned = ar.clean(frame, strip_whitespace=True, drop_nulls=True)
     """
-    from collections.abc import Mapping
     from .pipeline import pipeline
+
     steps = []
 
     _append_clean_step(steps, "strip_whitespace", strip_whitespace)
@@ -1181,6 +1182,7 @@ def clean(
     _append_clean_step(steps, "drop_duplicates", drop_duplicates)
 
     return pipeline(frame, steps)
+
 
 def filter_rows(
     frame: ArFrame | pd.DataFrame,

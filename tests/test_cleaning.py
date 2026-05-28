@@ -2015,26 +2015,37 @@ class TestCastTypes:
 class TestCleanAPI:
     def test_clean_defaults(self, csv_with_whitespace):
         frame = ar.read_csv(csv_with_whitespace)
+
         result = ar.clean(frame)
+
         df = ar.to_pandas(result)
+
         # strip_whitespace is True by default
         assert df["name"].iloc[0] == "Alice"
         assert df["city"].iloc[1] == "London"
+
         # drop_nulls and drop_duplicates are False by default
         assert len(frame) == len(result)
 
     def test_clean_all(self, csv_with_nulls):
-        # reuse csv_with_nulls as it has a null row (Bob missing name)
         frame = ar.read_csv(csv_with_nulls)
-        # Drop nulls
-        result = ar.clean(frame, strip_whitespace=False, drop_nulls=True)
+
+        result = ar.clean(
+            frame,
+            strip_whitespace=False,
+            drop_nulls=True,
+        )
+
         assert len(result) < len(frame)
 
-    def test_clean_drop_nulls_with_subset():
-        frame = ar.from_dict({
-            "name": ["Alice", None, "Charlie"],
-            "age": [25, 30, None],
-            }
+    def test_clean_drop_nulls_with_subset(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "name": ["Alice", None, "Charlie"],
+                    "age": [25, 30, None],
+                }
+            )
         )
 
         result = ar.clean(
@@ -2047,16 +2058,22 @@ class TestCleanAPI:
         assert data["name"] == ["Alice", "Charlie"]
         assert data["age"] == [25, None]
 
-
-    def test_clean_drop_duplicates_keep_last():
-        frame = ar.from_dict({
-            "id": [1, 1, 2],
-            "value": ["first", "last", "unique"],
-            })
+    def test_clean_drop_duplicates_keep_last(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "id": [1, 1, 2],
+                    "value": ["first", "last", "unique"],
+                }
+            )
+        )
 
         result = ar.clean(
             frame,
-            drop_duplicates={"keep": "last"},
+            drop_duplicates={
+                "subset": ["id"],
+                "keep": "last",
+            },
         )
 
         data = result.to_dict()
@@ -2064,12 +2081,15 @@ class TestCleanAPI:
         assert data["id"] == [1, 2]
         assert data["value"] == ["last", "unique"]
 
-
-    def test_clean_strip_whitespace_subset():
-        frame = ar.from_dict({
-            "name": ["  Alice  ", "  Bob  "],
-            "city": ["  NYC  ", "  LA  "],
-        })
+    def test_clean_strip_whitespace_subset(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "name": ["  Alice  ", "  Bob  "],
+                    "city": ["  NYC  ", "  LA  "],
+                }
+            )
+        )
 
         result = ar.clean(
             frame,
@@ -2083,11 +2103,14 @@ class TestCleanAPI:
         # city should remain untouched
         assert data["city"] == ["  NYC  ", "  LA  "]
 
-
-    def test_clean_backward_compatibility_boolean_usage():
-        frame = ar.from_dict({
-            "name": ["  Alice  ", " Bob "],
-        })
+    def test_clean_backward_compatibility_boolean_usage(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "name": ["  Alice  ", " Bob "],
+                }
+            )
+        )
 
         result = ar.clean(
             frame,
@@ -2098,17 +2121,21 @@ class TestCleanAPI:
 
         assert data["name"] == ["Alice", "Bob"]
 
-
-    def test_clean_invalid_option_type():
-        frame = ar.from_dict({
-            "name": ["Alice"],
-        })
+    def test_clean_invalid_option_type(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "name": ["Alice"],
+                }
+            )
+        )
 
         with pytest.raises(TypeError):
             ar.clean(
                 frame,
                 drop_nulls="invalid",
             )
+
 
 class TestFilterRows:
     def test_filter_rows_missing_column_raises_clear_error(self):
