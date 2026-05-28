@@ -1366,7 +1366,8 @@ def write_parquet(
             f"Unsupported file format: {path}. "
             "write_parquet only supports .parquet and .pq files."
         )
-
+    if not isinstance(compression, str):
+        raise TypeError("compression must be a string")
     if compression not in _VALID_COMPRESSIONS:
         raise ValueError(
             f"Unknown compression codec: {compression!r}. "
