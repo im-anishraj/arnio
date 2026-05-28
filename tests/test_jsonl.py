@@ -306,3 +306,26 @@ def test_read_jsonl_encoding_unknown_codec(tmp_path):
     f.write_text('{"a": 1}\n')
     with pytest.raises(ValueError, match="Unknown encoding"):
         ar.read_jsonl(f, encoding="fake-codec")
+
+
+def test_read_jsonl_nested_list_raises(tmp_path):
+    f = tmp_path / "nested_list.jsonl"
+    f.write_text('{"id": 1, "tags": ["a"]}\n')
+    with pytest.raises(ar.JsonlReadError) as exc_info:
+        ar.read_jsonl(f)
+    assert "tags" in str(exc_info.value)
+    assert "list" in str(exc_info.value)
+    assert "line 1" in str(exc_info.value)
+    assert str(f.name) in str(exc_info.value)
+
+
+def test_read_jsonl_nested_dict_raises(tmp_path):
+    f = tmp_path / "nested_dict.jsonl"
+    # Row 1 is normal, Row 2 has nested dict
+    f.write_text('{"id": 1, "metadata": null}\n{"id": 2, "metadata": {"foo": "bar"}}\n')
+    with pytest.raises(ar.JsonlReadError) as exc_info:
+        ar.read_jsonl(f)
+    assert "metadata" in str(exc_info.value)
+    assert "dict" in str(exc_info.value)
+    assert "line 2" in str(exc_info.value)
+    assert str(f.name) in str(exc_info.value)

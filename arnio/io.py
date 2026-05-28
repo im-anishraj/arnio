@@ -1040,7 +1040,8 @@ def read_jsonl(
         ``nrows`` is not a non-negative integer.
     JsonlReadError
         If the file is empty (no data rows), or if a line contains invalid
-        JSON.  The error message includes the 1-based line number.
+        JSON or unsupported nested values. The error message includes the
+        1-based line number.
 
     Examples
     --------
@@ -1049,7 +1050,7 @@ def read_jsonl(
     """
     import json
 
-    from .convert import from_pandas
+    from .convert import _is_nested, from_pandas
 
     if not isinstance(encoding, str):
         raise TypeError(f"encoding must be a string, got {type(encoding).__name__!r}")
@@ -1100,6 +1101,13 @@ def read_jsonl(
                         f"Expected a JSON object on line {lineno} of {path!r}, "
                         f"got {type(obj).__name__}"
                     )
+                for key, val in obj.items():
+                    if _is_nested(val):
+                        raise JsonlReadError(
+                            f"Column {key!r} contains unsupported nested value "
+                            f"of type {type(val).__name__!r} on line {lineno} of {path!r}. "
+                            "Convert nested objects to strings or flatten them first."
+                        )
                 records.append(obj)
     except OSError as exc:
         raise JsonlReadError(str(exc)) from exc
