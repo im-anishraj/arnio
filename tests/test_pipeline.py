@@ -863,6 +863,36 @@ class TestPipeline:
         assert row_counts[0]["after"] == 3
         assert row_counts[0]["dry_run"] is True
 
+    def test_register_step_invalid_name_type(self):
+        """Raise TypeError when name is not a string."""
+        with pytest.raises(TypeError, match="parameter 'name' must be a string"):
+            ar.register_step(123, lambda df: df)
+
+    def test_register_step_empty_name(self):
+        """Raise ValueError when name is empty string."""
+        with pytest.raises(ValueError, match="parameter 'name' must be a non-empty string"):
+            ar.register_step("", lambda df: df)
+
+    def test_register_step_non_callable_fn(self):
+        """Raise TypeError when fn is not callable."""
+        with pytest.raises(TypeError, match="parameter 'fn' must be callable"):
+            ar.register_step("bad_step", 123)
+
+    def test_register_step_non_bool_overwrite(self):
+        """Raise TypeError when overwrite is not a bool."""
+        with pytest.raises(TypeError, match="parameter 'overwrite' must be a bool"):
+            ar.register_step("some_step", lambda df: df, overwrite="yes")
+
+    def test_unregister_step_invalid_name_type(self):
+        """Raise TypeError when name is not a string."""
+        with pytest.raises(TypeError, match="parameter 'name' must be a string"):
+            ar.unregister_step(["bad_step"])
+
+    def test_unregister_step_empty_name(self):
+        """Raise ValueError when name is empty string."""
+        with pytest.raises(ValueError, match="parameter 'name' must be a non-empty string"):
+            ar.unregister_step("")
+
 
 class TestPipelineDryRunIntermediateFrame:
     """Regression tests for dry_run validating against intermediate frame."""
@@ -1895,3 +1925,4 @@ def test_pipeline_bool_flags_valid():
         verbose=True,
     )
     assert isinstance(result, tuple)
+

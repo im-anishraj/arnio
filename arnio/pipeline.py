@@ -130,6 +130,16 @@ def register_step(name: str, fn: Callable, overwrite: bool = False):
     >>> ar.register_step("custom_clean", new_custom_clean, overwrite=True)
     """
     with _REGISTRY_LOCK:
+
+        if not isinstance(name, str):
+            raise TypeError(f"parameter 'name' must be a string, not {type(name).__name__}")
+        if not name:
+            raise ValueError("parameter 'name' must be a non-empty string")
+        if not callable(fn):
+            raise TypeError(f"parameter 'fn' must be callable, not {type(fn).__name__}")
+        if not isinstance(overwrite, bool):
+            raise TypeError(f"parameter 'overwrite' must be a bool, not {type(overwrite).__name__}")
+    
         if name.startswith(f"{_BUILTIN_STEP_NAMESPACE}{_STEP_NAMESPACE_SEPARATOR}"):
             raise ValueError(
                 f"Cannot register '{name}': "
@@ -157,6 +167,12 @@ def register_step(name: str, fn: Callable, overwrite: bool = False):
 def unregister_step(name: str) -> None:
     """Unregister a custom Python pipeline step."""
     with _REGISTRY_LOCK:
+
+        if not isinstance(name, str):
+            raise TypeError(f"parameter 'name' must be a string, not {type(name).__name__}")
+        if not name:
+            raise ValueError("parameter 'name' must be a non-empty string")
+        
         if name not in _PYTHON_STEP_REGISTRY:
             available_steps = sorted(set(_STEP_REGISTRY) | set(_PYTHON_STEP_REGISTRY))
             raise UnknownStepError(name, available_steps)
