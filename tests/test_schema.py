@@ -1595,6 +1595,56 @@ def test_string_rejects_impossible_length_bounds():
         raise AssertionError("Expected invalid String bounds to raise")
 
 
+def test_string_rejects_non_string_pattern():
+    with pytest.raises(
+        TypeError,
+        match="pattern must be a string or None",
+    ):
+        ar.String(pattern=123)
+
+
+def test_string_rejects_invalid_regex_pattern():
+    with pytest.raises(
+        ValueError,
+        match="Invalid regex pattern",
+    ):
+        ar.String(pattern=r"[invalid")
+
+
+@pytest.mark.parametrize("value", [True, False])
+def test_string_rejects_boolean_min_length(value):
+    with pytest.raises(
+        TypeError,
+        match="min_length must be an integer",
+    ):
+        ar.String(min_length=value)
+
+
+@pytest.mark.parametrize("value", [True, False])
+def test_string_rejects_boolean_max_length(value):
+    with pytest.raises(
+        TypeError,
+        match="max_length must be an integer",
+    ):
+        ar.String(max_length=value)
+
+
+def test_string_rejects_negative_min_length():
+    with pytest.raises(
+        ValueError,
+        match="min_length must be greater than or equal to 0",
+    ):
+        ar.String(min_length=-1)
+
+
+def test_string_rejects_negative_max_length():
+    with pytest.raises(
+        ValueError,
+        match="max_length must be greater than or equal to 0",
+    ):
+        ar.String(max_length=-1)
+
+
 def test_equal_numeric_bounds_are_valid():
     field = ar.Int64(min=5, max=5)
 
