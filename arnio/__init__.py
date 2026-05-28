@@ -38,6 +38,7 @@ from .cleaning import (
     select_columns,
     standardize_missing_tokens,
     strip_whitespace,
+    slugify_column_names,
     trim_column_names,
     validate_columns_exist,
     winsorize_outliers,
@@ -153,6 +154,7 @@ __all__ = [
     "cast_types",
     "clean",
     "safe_divide_columns",
+    "slugify_column_names",
     "trim_column_names",
     "standardize_missing_tokens",
     # Conversion
