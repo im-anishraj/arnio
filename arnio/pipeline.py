@@ -208,12 +208,7 @@ def list_steps() -> list[str]:
 def list_registered_steps() -> dict[str, list[str]]:
     """Return pipeline step names grouped by 'native' and 'custom'."""
     with _REGISTRY_LOCK:
-        builtin_python = {
-            name
-            for name, fn in _PYTHON_STEP_REGISTRY.items()
-            if getattr(fn, "__module__", "").startswith("arnio.cleaning")
-            or name == "standardize_missing_tokens"
-        }
+        builtin_python = set(_BUILTIN_PYTHON_STEP_REGISTRY)
         all_python = set(_PYTHON_STEP_REGISTRY)
 
     native = set(_STEP_REGISTRY) | builtin_python

@@ -1927,3 +1927,13 @@ def test_pipeline_bool_flags_valid():
         verbose=True,
     )
     assert isinstance(result, tuple)
+
+
+def test_list_registered_steps_custom_step_reusing_cleaning_function():
+    from arnio import cleaning
+
+    ar.register_step("custom_cleaning_function", cleaning.normalize_whitespace)
+    steps = ar.list_registered_steps()
+
+    assert "custom_cleaning_function" in steps["custom"]
+    assert "custom_cleaning_function" not in steps["native"]
