@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Documentation — Arnio</title>
+  <meta name="description" content="Current Arnio documentation for CSV I/O, chunked reads, cleaning, profiling, schema validation, Arrow, DuckDB, Parquet, and pandas workflows.">
+  <link rel="icon" type="image/svg+xml" href="updated-icon.svg">
+  <link rel="stylesheet" href="css/variables.css?v=20260522">
+  <link rel="stylesheet" href="css/base.css?v=20260522">
+  <link rel="stylesheet" href="css/layout.css?v=20260522">
+  <link rel="stylesheet" href="css/components.css?v=20260522">
+  <link rel="stylesheet" href="css/pages.css?v=20260522">
+  <script src="js/theme.js"></script>
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://arnio.vercel.app/">
+  <meta property="og:title" content="Arnio — Production Data Preparation for Python">
+  <meta property="og:description" content="Arnio combines a native C++ CSV engine with Python APIs for cleaning, quality profiling, and schema validation.">
+  <meta property="og:image" content="https://arnio.vercel.app/arnio-transparent-logo.svg">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Arnio — Production Data Preparation for Python">
+  <meta name="twitter:description" content="Arnio combines a native C++ CSV engine with Python APIs for cleaning, quality profiling, and schema validation.">
+  <meta name="twitter:image" content="https://arnio.vercel.app/arnio-transparent-logo.svg">
+</head>
+<body>
+  <a href="#main-content" class="skip-link">Skip to content</a>
+  <nav class="top-nav" aria-label="Main navigation">
+    <div class="container container--wide">
+      <a href="index.html" class="nav-brand" aria-label="Arnio home"><img src="arnio-transparent-logo.svg" alt="Arnio" height="32"></a>
+      <ul class="nav-links"><li><a href="docs.html">Docs</a></li><li><a href="api.html">API</a></li><li><a href="benchmarks.html">Benchmarks</a></li><li><a href="contributing.html">Contributing</a></li><li><a href="architecture.html">Architecture</a></li><li><a href="roadmap.html">Roadmap</a></li><li><a href="community.html">Community</a></li><li><a href="changelog.html">Changelog</a></li></ul>
+      <div class="nav-actions"><a href="https://discord.gg/xsEw7r78M" class="nav-discord" target="_blank" rel="noopener">Discord</a><a href="https://github.com/im-anishraj/arnio" class="nav-github" target="_blank" rel="noopener">GitHub</a><button class="theme-toggle" aria-label="Toggle theme">Theme</button><button class="nav-hamburger" aria-label="Open menu" aria-expanded="false">☰</button></div>
+    </div>
+  </nav>
+  <div class="mobile-menu" aria-label="Mobile navigation"><a href="index.html">Home</a><a href="docs.html">Documentation</a><a href="api.html">API Reference</a><a href="benchmarks.html">Benchmarks</a><a href="contributing.html">Contributing</a><a href="architecture.html">Architecture</a><a href="roadmap.html">Roadmap</a><a href="community.html">Community</a><a href="https://discord.gg/xsEw7r78M" target="_blank" rel="noopener">Discord</a><a href="changelog.html">Changelog</a></div>
+
+  <header class="page-hero">
+    <div class="container">
+      <h1>Documentation</h1>
+      <p>Install Arnio, read messy data safely, clean it with reusable primitives, profile quality, validate contracts, and export to the Python data stack.</p>
+    </div>
+  </header>
+
+  <main id="main-content" class="main-content">
+    <div class="container docs-layout">
+      <aside class="docs-sidebar">
+        <div class="sidebar-nav-group">
+          <div class="sidebar-nav-title">Start</div>
+          <a href="#install" class="sidebar-nav-link">Install</a>
+          <a href="#quickstart" class="sidebar-nav-link">Quickstart</a>
+        </div>
+        <div class="sidebar-nav-group">
+          <div class="sidebar-nav-title">Data I/O</div>
+          <a href="#csv" class="sidebar-nav-link">CSV</a>
+          <a href="#chunked" class="sidebar-nav-link">Chunked CSV</a>
+          <a href="#jsonl-parquet" class="sidebar-nav-link">JSONL and Parquet</a>
+        </div>
+        <div class="sidebar-nav-group">
+          <div class="sidebar-nav-title">Core Workflows</div>
+          <a href="#frames" class="sidebar-nav-link">ArFrame</a>
+          <a href="#cleaning" class="sidebar-nav-link">Cleaning</a>
+          <a href="#quality" class="sidebar-nav-link">Quality</a>
+          <a href="#schema" class="sidebar-nav-link">Schema</a>
+          <a href="#integrations" class="sidebar-nav-link">Integrations</a>
+        </div>
+      </aside>
+
+      <article class="docs-content">
+        <h2 id="install">Installation</h2>
+        <p>Arnio is published on PyPI. The base install includes pandas and NumPy. Optional extras enable Arrow, Parquet, and scikit-learn workflows.</p>
+        <div class="code-block"><div class="code-block-header">Shell</div><pre><code class="language-bash">pip install arnio
+pip install "arnio[arrow]"
+pip install "arnio[parquet]"
+pip install "arnio[sklearn]"</code></pre></div>
+
+        <h2 id="quickstart">Quickstart</h2>
+        <p>Use Arnio at the boundary where raw files enter analysis or automation. It keeps parsing, cleaning, profiling, and validation explicit.</p>
+        <div class="code-block"><div class="code-block-header">Python</div><pre><code class="language-python">import arnio as ar
+
+frame = ar.read_csv("customers.csv", on_bad_lines="warn")
+report = ar.profile(frame)
+suggestions = ar.suggest_cleaning(report)
+clean = ar.pipeline(frame, suggestions)
+
+schema = ar.Schema({
+    "customer_id": ar.String(nullable=False, unique=True),
+    "email": ar.Email(nullable=True),
+})
+result = ar.validate(clean, schema, max_errors=50)</code></pre></div>
+
+        <h2 id="csv">CSV Reading</h2>
+        <p>Current CSV reading covers the production edge cases that were added across v1.17.0, v1.18.0, and current main.</p>
+        <table class="status-table">
+          <thead><tr><th>Option</th><th>Use</th></tr></thead>
+          <tbody>
+            <tr><td><code>skiprows</code></td><td>Skip leading rows before header or data parsing.</td></tr>
+            <tr><td><code>decimal_separator</code></td><td>Parse locale-specific decimal characters such as comma decimals.</td></tr>
+            <tr><td><code>dtype</code></td><td>Force selected columns to supported Arnio dtypes.</td></tr>
+            <tr><td><code>encoding_errors</code></td><td>Choose <code>strict</code>, <code>replace</code>, or <code>ignore</code> for decode failures.</td></tr>
+            <tr><td><code>on_bad_lines</code></td><td>Use <code>error</code>, <code>warn</code>, or <code>skip</code> for malformed row widths.</td></tr>
+          </tbody>
+        </table>
+        <div class="code-block"><div class="code-block-header">Python</div><pre><code class="language-python">frame = ar.read_csv(
+    "orders.csv",
+    delimiter=",",
+    skiprows=2,
+    decimal_separator=".",
+    dtype={"order_id": "string"},
+    encoding_errors="replace",
+    on_bad_lines="warn",
+)</code></pre></div>
+
+        <h2 id="chunked">Chunked CSV</h2>
+        <p><code>read_csv_chunked</code> streams a CSV into ArFrame chunks. Chunked reads support malformed-row handling, but schema validation itself remains a whole-frame operation after you materialize the data you want to validate.</p>
+        <div class="code-block"><div class="code-block-header">Python</div><pre><code class="language-python">for chunk in ar.read_csv_chunked("huge.csv", chunksize=100_000, on_bad_lines="skip"):
+    clean = ar.strip_whitespace(chunk)
+    process(clean)</code></pre></div>
+
+        <h2 id="jsonl-parquet">JSONL, CSV, and Parquet Exports</h2>
+        <p>Arnio can read JSON Lines, write CSV, and write Parquet through the optional pyarrow extra. Use <code>sniff_delimiter</code> and <code>scan_csv</code> when you need a cheap look at unknown files.</p>
+        <div class="code-grid">
+          <div class="code-block"><div class="code-block-header">Python</div><pre><code class="language-python">events = ar.read_jsonl("events.ndjson", nrows=10_000)
+ar.write_csv(events, "events.csv")
+ar.write_parquet(events, "events.parquet", compression="zstd")</code></pre></div>
+          <div class="code-block"><div class="code-block-header">Python</div><pre><code class="language-python">delimiter = ar.sniff_delimiter("raw_file.txt")
+schema_preview = ar.scan_csv("raw_file.txt", delimiter=delimiter)</code></pre></div>
+        </div>
+
+        <h2 id="frames">ArFrame</h2>
+        <p><code>ArFrame</code> is the public Python wrapper around the native columnar frame. Current main adds more ergonomic frame operations after v1.18.0.</p>
+        <div class="pill-row"><span class="pill">from_records</span><span class="pill">__getitem__</span><span class="pill">to_dict</span><span class="pill">drop_columns</span><span class="pill">describe</span><span class="pill">schema_summary</span></div>
+        <div class="code-block"><div class="code-block-header">Python</div><pre><code class="language-python">frame = ar.from_records([
+    {"id": "a1", "amount": 10.5},
+    {"id": "a2", "amount": 18.0},
+])
+
+ids = frame["id"]
+numeric = frame.describe()
+summary = frame.schema_summary
+payload = frame.to_dict()</code></pre></div>
+
+        <h2 id="cleaning">Cleaning</h2>
+        <p>Cleaning functions are available directly and through <code>pipeline</code>. Recent releases added column removal helpers, winsorization, missing-token standardization, coalescing, safer division, unicode normalization, and stricter validation errors.</p>
+        <div class="feature-list">
+          <div class="card"><h3>Column operations</h3><p><code>select_columns</code>, <code>drop_columns</code>, <code>drop_empty_columns</code>, <code>drop_columns_matching</code>, <code>rename_columns</code>.</p></div>
+          <div class="card"><h3>Value operations</h3><p><code>replace_values</code>, <code>standardize_missing_tokens</code>, <code>coalesce_columns</code>, <code>parse_bool_strings</code>, <code>normalize_unicode</code>.</p></div>
+          <div class="card"><h3>Numeric operations</h3><p><code>clip_numeric</code>, <code>round_numeric_columns</code>, <code>winsorize_outliers</code>, <code>safe_divide_columns</code>.</p></div>
+          <div class="card"><h3>Rows and nulls</h3><p><code>drop_nulls</code>, <code>keep_rows_with_nulls</code>, <code>fill_nulls</code>, <code>drop_duplicates</code>, <code>filter_rows</code>.</p></div>
+        </div>
+
+        <h2 id="quality">Quality Reports</h2>
+        <p>The quality engine is now more than a summary. It supports privacy-aware exports, HTML/Markdown/Pandas output, near-constant and high-cardinality warnings, drift comparison, and CI gates.</p>
+        <div class="code-block"><div class="code-block-header">Python</div><pre><code class="language-python">report = ar.profile(frame, exclude_columns=["private_notes"])
+report.to_markdown()
+report.to_html("quality.html")
+report.to_dict(exclude_columns=["private_notes"])
+report.to_json()
+
+baseline = ar.profile(old_frame)
+current = ar.profile(new_frame)
+gate = ar.check_quality_gates(baseline, current)</code></pre></div>
+
+        <h2 id="schema">Schema Validation</h2>
+        <p>Schemas validate the shape and semantics of a dataset. v1.18.0 added <code>max_errors</code>; v1.17.0 added URL scheme restrictions and YAML export helpers.</p>
+        <div class="code-block"><div class="code-block-header">Python</div><pre><code class="language-python">ar.register_validator("positive", lambda value: value > 0)
+
+schema = ar.Schema({
+    "email": ar.Email(nullable=False),
+    "homepage": ar.URL(allowed_schemes=["https"]),
+    "created_at": ar.DateTime(format="%Y-%m-%dT%H:%M:%S"),
+    "country": ar.CountryCode(),
+    "amount": ar.Custom("positive"),
+})
+
+result = schema.validate(frame, max_errors=100)
+yaml_text = ar.schema_to_yaml(schema)</code></pre></div>
+
+        <h2 id="integrations">Integrations</h2>
+        <p>Arnio is designed to sit beside pandas, not replace it. Use the pandas accessor, Arrow export, DuckDB registration, Parquet output, and scikit-learn transformer where they fit your workflow.</p>
+        <div class="code-block"><div class="code-block-header">Python</div><pre><code class="language-python">df = ar.to_pandas(frame, copy=True)
+frame = df.arnio.to_arframe()
+profile = df.arnio.profile()
+
+arrow_table = ar.to_arrow(frame)
+ar.register_duckdb(frame, conn, "clean_sales")</code></pre></div>
+      </article>
+    </div>
+  </main>
+
+  <footer class="site-footer"><div class="container"><div class="footer-bottom"><span>© 2026 Anish Raj. MIT License.</span><span>Docs aligned with v1.18.0 and current main.</span></div></div></footer>
+  <script src="js/main.js"></script>
+  <script src="js/code.js"></script>
+</body>
+</html>

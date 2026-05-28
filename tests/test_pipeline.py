@@ -150,6 +150,25 @@ class TestPipeline:
         assert list(df.columns) == ["value"]
         assert list(df["value"]) == [1, 2, 1]
 
+    def test_pipeline_drop_empty_columns(self, tmp_path):
+        csv_path = tmp_path / "pipeline_drop_empty_columns.csv"
+        csv_path.write_text(
+            'all_null,all_blank,value\n,"",1\n,"   ",2\n',
+            encoding="utf-8",
+        )
+        frame = ar.read_csv(csv_path)
+
+        result = ar.pipeline(
+            frame,
+            [
+                ("drop_empty_columns",),
+            ],
+        )
+        df = ar.to_pandas(result)
+
+        assert list(df.columns) == ["value"]
+        assert list(df["value"]) == [1, 2]
+
     def test_pipeline_trim_column_names(self):
         import pandas as pd
 
@@ -317,6 +336,39 @@ class TestPipeline:
         assert result.dtypes["years"] == "float64"
         assert "age" not in result.columns
 
+    def test_pipeline_shorthand_with_column_named_mapping_cast_types(self):
+        import pandas as pd
+
+        import arnio as ar
+
+        frame = ar.from_pandas(pd.DataFrame({"mapping": ["1", "2"]}))
+
+        result = ar.pipeline(
+            frame,
+            [
+                ("cast_types", {"mapping": "int64"}),
+            ],
+        )
+
+        assert result.dtypes["mapping"] == "int64"
+
+    def test_pipeline_shorthand_with_column_named_mapping_rename_columns(self):
+        import pandas as pd
+
+        import arnio as ar
+
+        frame = ar.from_pandas(pd.DataFrame({"mapping": [1, 2]}))
+
+        result = ar.pipeline(
+            frame,
+            [
+                ("rename_columns", {"mapping": "new_mapping_col"}),
+            ],
+        )
+
+        assert "new_mapping_col" in result.columns
+        assert "mapping" not in result.columns
+
     def test_pipeline_validate_columns_exist(self, sample_csv):
         frame = ar.read_csv(sample_csv)
         result = ar.pipeline(
@@ -439,6 +491,15 @@ class TestPipeline:
         result = ar.pipeline(frame, [])
         assert result.shape == frame.shape
 
+    @pytest.mark.parametrize("invalid_frame", ["not-frame", None])
+    def test_pipeline_rejects_invalid_frame_with_empty_steps(self, invalid_frame):
+        with pytest.raises(TypeError, match="frame must be an ArFrame"):
+            ar.pipeline(invalid_frame, [])
+
+    def test_pipeline_rejects_invalid_frame_before_non_empty_steps(self):
+        with pytest.raises(TypeError, match="frame must be an ArFrame"):
+            ar.pipeline("not-frame", [("strip_whitespace",)])
+
     def test_pipeline_dry_run_returns_original_frame(self, sample_csv):
         frame = ar.read_csv(sample_csv)
 
@@ -537,6 +598,7 @@ class TestPipeline:
                 "step": "timed_python_step",
                 "before": frame.shape[0],
                 "after": result.shape[0],
+                "dry_run": False,
             }
         ]
         assert len(metadata["step_timings"]) == 1
@@ -562,6 +624,28 @@ class TestPipeline:
         df = ar.to_pandas(result)
         assert "marker" in df.columns
         assert set(df["marker"]) == {"done"}
+
+    def test_unregister_missing_step(self):
+        with pytest.raises(ar.UnknownStepError):
+            ar.unregister_step("missing_step")
+
+    def test_unregister_builtin_python_step(self):
+        with pytest.raises(ar.UnknownStepError):
+            ar.unregister_step("standardize_missing_tokens")
+
+    def test_unregister_custom_step(self):
+        def custom_step(df):
+            return df
+
+        ar.register_step("temporary_step", custom_step)
+
+        ar.unregister_step("temporary_step")
+
+        with pytest.raises(ar.UnknownStepError):
+            ar.pipeline(
+                ar.from_pandas(pd.DataFrame({"a": [1]})),
+                [("temporary_step",)],
+            )
 
     def test_pipeline_passes_context_to_opt_in_python_steps(self, sample_csv):
         frame = ar.read_csv(sample_csv)
@@ -752,6 +836,201 @@ class TestPipeline:
         with pytest.raises(ValueError, match="Invalid step format"):
             ar.pipeline(frame, [123])
 
+    def test_pipeline_dry_run_metadata_preserves_original_row_counts(self):
+
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "name": ["Alice", None, "Bob"],
+                }
+            )
+        )
+
+        result, metadata = ar.pipeline(
+            frame,
+            [("drop_nulls",)],
+            dry_run=True,
+            return_metadata=True,
+        )
+
+        assert result.shape[0] == 3
+
+        row_counts = metadata["row_counts"]
+
+        assert row_counts[0]["before"] == 3
+        assert row_counts[0]["after"] == 3
+        assert row_counts[0]["dry_run"] is True
+
+
+class TestPipelineDryRunIntermediateFrame:
+    """Regression tests for dry_run validating against intermediate frame."""
+
+    def test_dry_run_rename_then_validate(self):
+        frame = ar.from_pandas(pd.DataFrame({"old_name": [" Alice "]}))
+        result = ar.pipeline(
+            frame,
+            [
+                ("rename_columns", {"old_name": "name"}),
+                ("validate_columns_exist", {"columns": ["name"]}),
+            ],
+            dry_run=True,
+        )
+        assert result is frame
+        assert "old_name" in ar.to_pandas(result).columns
+
+    def test_dry_run_drop_then_validate_column_gone(self):
+        frame = ar.from_pandas(pd.DataFrame({"keep_me": [1], "drop_me": [2]}))
+        result = ar.pipeline(
+            frame,
+            [
+                ("drop_columns", {"columns": ["drop_me"]}),
+                ("validate_columns_exist", {"columns": ["keep_me"]}),
+            ],
+            dry_run=True,
+        )
+        assert result is frame
+
+    def test_dry_run_drop_then_validate_missing_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"keep_me": [1], "drop_me": [2]}))
+        with pytest.raises(KeyError, match="Missing columns"):
+            ar.pipeline(
+                frame,
+                [
+                    ("drop_columns", {"columns": ["keep_me"]}),
+                    ("validate_columns_exist", {"columns": ["keep_me"]}),
+                ],
+                dry_run=True,
+            )
+
+    def test_dry_run_rename_then_validate_missing_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"old_name": [" Alice "]}))
+        with pytest.raises(KeyError, match="Missing columns"):
+            ar.pipeline(
+                frame,
+                [
+                    ("rename_columns", {"old_name": "name"}),
+                    ("validate_columns_exist", {"columns": ["old_name"]}),
+                ],
+                dry_run=True,
+            )
+
+    def test_dry_run_select_then_validate(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [1], "y": [2], "z": [3]}))
+        result = ar.pipeline(
+            frame,
+            [
+                ("select_columns", {"columns": ["x", "y"]}),
+                ("validate_columns_exist", {"columns": ["x", "y"]}),
+            ],
+            dry_run=True,
+        )
+        assert result is frame
+
+    def test_dry_run_select_then_validate_dropped_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [1], "y": [2], "z": [3]}))
+        with pytest.raises(KeyError, match="Missing columns"):
+            ar.pipeline(
+                frame,
+                [
+                    ("select_columns", {"columns": ["x", "y"]}),
+                    ("validate_columns_exist", {"columns": ["z"]}),
+                ],
+                dry_run=True,
+            )
+
+    def test_dry_run_and_real_consistency(self):
+        frame = ar.from_pandas(
+            pd.DataFrame({"old_name": [" Alice "], "extra": [" Bob "]})
+        )
+        dry_result = ar.pipeline(
+            frame,
+            [
+                ("rename_columns", {"old_name": "name"}),
+                ("drop_columns", {"columns": ["extra"]}),
+                ("strip_whitespace",),
+            ],
+            dry_run=True,
+        )
+        real_result = ar.pipeline(
+            frame,
+            [
+                ("rename_columns", {"old_name": "name"}),
+                ("drop_columns", {"columns": ["extra"]}),
+                ("strip_whitespace",),
+            ],
+            dry_run=False,
+        )
+        assert dry_result is frame
+        assert "name" in ar.to_pandas(real_result).columns
+        assert "old_name" not in ar.to_pandas(real_result).columns
+        assert "extra" not in ar.to_pandas(real_result).columns
+
+    def test_dry_run_does_not_mutate_original(self):
+        original = pd.DataFrame({"delete_me": [1, 2], "keep": [3, 4]})
+        frame = ar.from_pandas(original.copy())
+        ar.pipeline(
+            frame,
+            [
+                ("drop_columns", {"columns": ["delete_me"]}),
+                ("validate_columns_exist", {"columns": ["keep"]}),
+            ],
+            dry_run=True,
+        )
+        pd.testing.assert_frame_equal(ar.to_pandas(frame), original, check_dtype=False)
+
+    def test_dry_run_python_step_advances_intermediate_frame(self):
+        def add_column_step(df):
+            df["added"] = "present"
+            return df
+
+        ar.register_step("test_dry_add_column", add_column_step)
+        frame = ar.from_pandas(pd.DataFrame({"x": [1]}))
+        ar.pipeline(
+            frame,
+            [
+                ("test_dry_add_column",),
+                ("validate_columns_exist", {"columns": ["added"]}),
+            ],
+            dry_run=True,
+        )
+
+    def test_dry_run_transform_then_validate_column_content_type(self):
+        frame = ar.from_pandas(pd.DataFrame({"age_str": ["10", "20", "30"]}))
+        result = ar.pipeline(
+            frame,
+            [
+                ("cast_types", {"age_str": "int64"}),
+                ("validate_columns_exist", {"columns": ["age_str"]}),
+            ],
+            dry_run=True,
+        )
+        assert result is frame
+
+    def test_dry_run_rename_with_mapping_shorthand_then_validate(self):
+        frame = ar.from_pandas(pd.DataFrame({"old": [1], "other": [2]}))
+        result = ar.pipeline(
+            frame,
+            [
+                ("rename_columns", {"old": "new"}),
+                ("validate_columns_exist", {"columns": ["new"]}),
+            ],
+            dry_run=True,
+        )
+        assert result is frame
+
+    def test_dry_run_metadata_still_uses_original_rows(self):
+        frame = ar.from_pandas(pd.DataFrame({"name": ["Alice", None, "Bob", None]}))
+        original_rows = frame.shape[0]
+        _, meta = ar.pipeline(
+            frame,
+            [("drop_nulls",), ("validate_columns_exist", {"columns": ["name"]})],
+            dry_run=True,
+            return_metadata=True,
+        )
+        for entry in meta["row_counts"]:
+            assert entry["after"] == original_rows
+            assert entry["dry_run"] is True
+
 
 def test_get_builtin_step_signatures_returns_normalized_signatures():
     signatures = ar.get_builtin_step_signatures()
@@ -777,9 +1056,6 @@ def test_get_builtin_step_signatures_includes_builtin_python_steps_only():
 
 
 def test_filter_rows_greater_than():
-    import pandas as pd
-
-    import arnio as ar
 
     df = pd.DataFrame({"age": [20, 30, 40]})
 
@@ -1409,3 +1685,211 @@ def test_reset_steps_removes_overwritten_custom_steps():
                 ("temp_step",),
             ],
         )
+
+
+def test_pipeline_verbose_disabled_by_default(caplog):
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "name": ["A", "B"],
+            }
+        )
+    )
+
+    ar.pipeline(
+        frame,
+        [
+            ("drop_nulls",),
+        ],
+    )
+
+    assert len(caplog.records) == 0
+
+
+def test_pipeline_verbose_logs_builtin_step(caplog):
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "name": [" A ", " B "],
+            }
+        )
+    )
+
+    caplog.set_level("INFO", logger="arnio")
+
+    ar.pipeline(
+        frame,
+        [
+            ("strip_whitespace",),
+        ],
+        verbose=True,
+    )
+
+    assert any("strip_whitespace" in record.message for record in caplog.records)
+
+
+def custom_step(df):
+    return df
+
+
+def test_pipeline_verbose_logs_custom_step(caplog):
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "x": [1, 2],
+            }
+        )
+    )
+
+    ar.register_step(
+        "custom_step",
+        custom_step,
+        overwrite=True,
+    )
+
+    caplog.set_level("INFO", logger="arnio")
+
+    ar.pipeline(
+        frame,
+        [
+            ("custom_step",),
+        ],
+        verbose=True,
+    )
+
+    assert any("custom_step" in record.message for record in caplog.records)
+
+
+def drop_first_row(df):
+    return df.head(1)
+
+
+def test_pipeline_verbose_logs_row_change(caplog):
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "x": [1, 2, 3],
+            }
+        )
+    )
+
+    ar.register_step(
+        "drop_first_row",
+        drop_first_row,
+        overwrite=True,
+    )
+
+    caplog.set_level("INFO", logger="arnio")
+
+    ar.pipeline(
+        frame,
+        [
+            ("drop_first_row",),
+        ],
+        verbose=True,
+    )
+
+    assert any("rows: 3 -> 1" in record.message for record in caplog.records)
+
+
+def test_pipeline_dry_run_with_metadata_row_counts_unchanged():
+    """dry_run=True: row_counts.after must equal row_counts.before."""
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "name": ["Alice", None, "Bob", None],
+                "age": [25, 30, None, 40],
+            }
+        )
+    )
+    original_rows = frame.shape[0]  # 4
+
+    _, meta = ar.pipeline(
+        frame,
+        [("drop_nulls",), ("strip_whitespace",)],
+        dry_run=True,
+        return_metadata=True,
+    )
+
+    for entry in meta["row_counts"]:
+        assert entry["after"] == original_rows, (
+            f"Step '{entry['step']}': expected after={original_rows} "
+            f"in dry_run, got {entry['after']}"
+        )
+        assert entry["dry_run"] is True
+
+
+def test_pipeline_dry_run_with_metadata_step_timings_consistent():
+    """dry_run=True: step_timings.seconds must be non-negative with dry_run flag."""
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "name": ["Alice", None, "Bob", None],
+            }
+        )
+    )
+
+    _, meta = ar.pipeline(
+        frame,
+        [("drop_nulls",), ("strip_whitespace",)],
+        dry_run=True,
+        return_metadata=True,
+    )
+
+    for entry in meta["step_timings"]:
+        assert entry["seconds"] >= 0
+        assert entry["dry_run"] is True
+
+
+def test_pipeline_dry_run_false_metadata_unchanged():
+    """dry_run=False: existing metadata shape must not be affected by the fix."""
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "name": ["Alice", None, "Bob", None],
+            }
+        )
+    )
+
+    result, meta = ar.pipeline(
+        frame,
+        [("drop_nulls",)],
+        dry_run=False,
+        return_metadata=True,
+    )
+
+    assert meta["row_counts"][0]["before"] == frame.shape[0]
+    assert meta["row_counts"][0]["after"] == result.shape[0]
+    assert meta["row_counts"][0]["after"] < frame.shape[0]
+    assert meta["step_timings"][0]["seconds"] >= 0
+    assert meta["row_counts"][0].get("dry_run") is False
+
+
+def test_pipeline_return_metadata_non_bool_raises():
+    frame = ar.from_pandas(pd.DataFrame({"a": [1, 2, 3]}))
+    with pytest.raises(TypeError, match="return_metadata"):
+        ar.pipeline(frame, [("strip_whitespace",)], return_metadata="yes")
+
+
+def test_pipeline_dry_run_non_bool_raises():
+    frame = ar.from_pandas(pd.DataFrame({"a": [1, 2, 3]}))
+    with pytest.raises(TypeError, match="dry_run"):
+        ar.pipeline(frame, [("strip_whitespace",)], dry_run=1)
+
+
+def test_pipeline_verbose_non_bool_raises():
+    frame = ar.from_pandas(pd.DataFrame({"a": [1, 2, 3]}))
+    with pytest.raises(TypeError, match="verbose"):
+        ar.pipeline(frame, [("strip_whitespace",)], verbose=None)
+
+
+def test_pipeline_bool_flags_valid():
+    frame = ar.from_pandas(pd.DataFrame({"a": [1, 2, 3]}))
+    result = ar.pipeline(
+        frame,
+        [("strip_whitespace",)],
+        return_metadata=True,
+        dry_run=False,
+        verbose=True,
+    )
+    assert isinstance(result, tuple)
