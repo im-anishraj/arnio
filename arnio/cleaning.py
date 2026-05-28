@@ -247,7 +247,7 @@ def drop_columns(frame: ArFrame, columns: Sequence[str]) -> ArFrame:
         ),
     )
     if len(requested_columns) == 0:
-        return frame
+        return frame.drop_columns([])
     if len(requested_columns) == len(frame.columns):
         raise ValueError("drop_columns cannot remove all columns from the frame")
 
@@ -593,6 +593,16 @@ def clip_numeric(
     >>> frame = ar.read_csv("data.csv")
     >>> clipped = ar.clip_numeric(frame, lower=0, upper=100)
     """
+    if lower is not None:
+        if isinstance(lower, bool) or not isinstance(lower, (int, float)):
+            raise TypeError(
+                f"clip_numeric(): 'lower' must be an int or float, got {type(lower).__name__!r}."
+            )
+    if upper is not None:
+        if isinstance(upper, bool) or not isinstance(upper, (int, float)):
+            raise TypeError(
+                f"clip_numeric(): 'upper' must be an int or float, got {type(upper).__name__!r}."
+            )
     if lower is None and upper is None:
         raise ValueError("At least one of 'lower' or 'upper' must be provided")
     if lower is not None and upper is not None and lower > upper:
@@ -1856,6 +1866,21 @@ def standardize_missing_tokens(frame, tokens=None, subset=None):
             f"subset must be a list of column names, not a string. "
             f"Did you mean subset=['{subset}']?"
         )
+    if tokens is not None:
+        if isinstance(tokens, str):
+            raise TypeError(
+                f"tokens must be a list of strings, not a bare string. "
+                f"Did you mean tokens=['{tokens}']?"
+            )
+        if not isinstance(tokens, list):
+            raise TypeError(
+                f"tokens must be a list of strings, got {type(tokens).__name__!r}"
+            )
+        for item in tokens:
+            if not isinstance(item, str):
+                raise TypeError(
+                    f"tokens must be a list of strings, got {type(item).__name__!r} item"
+                )
 
     default_tokens = [
         "N/A",
@@ -1978,3 +2003,72 @@ def coalesce_columns(
     df[output_column] = df[subset_columns].bfill(axis=1).iloc[:, 0]
 
     return from_pandas(df) if is_arframe else df
+
+
+def clean_column_names(
+    frame: ArFrame,
+    *,
+    case_type: str = "lower",
+) -> ArFrame:
+    """Clean and normalize column names.
+
+    Replaces non-alphanumeric characters with underscores, collapses consecutive
+    underscores, trims leading/trailing boundary underscores, and normalizes case.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input data frame.
+    case_type : str, default "lower"
+        Case to normalize to. Options: "lower", "upper", "none".
+
+    Returns
+    -------
+    ArFrame
+        New frame with cleaned column names.
+
+    Raises
+    ------
+    TypeError
+        If case_type is not a string.
+    ValueError
+        If case_type is invalid or if cleaning would create duplicate column names.
+    """
+    if not isinstance(case_type, str):
+        raise TypeError("case_type must be a string")
+    if case_type not in {"lower", "upper", "none"}:
+        raise ValueError("case_type must be one of 'lower', 'upper', or 'none'")
+
+    import re
+
+    cleaned = []
+    for col in frame.columns:
+        # Replace non-alphanumeric characters with underscores
+        name = re.sub(r"[^a-zA-Z0-9_]", "_", col)
+        # Trim consecutive underscores
+        name = re.sub(r"_+", "_", name)
+        # Trim boundary underscores
+        name = name.strip("_")
+        # Normalize case
+        if case_type == "lower":
+            name = name.lower()
+        elif case_type == "upper":
+            name = name.upper()
+
+        if not name:
+            name = "column"
+        cleaned.append(name)
+
+    if len(cleaned) != len(set(cleaned)):
+        raise ValueError(f"Cleaning column names would create duplicates: {cleaned}")
+
+    mapping = {
+        original: updated
+        for original, updated in zip(frame.columns, cleaned)
+        if original != updated
+    }
+    if not mapping:
+        return frame
+
+    result = _rename_columns(frame._frame, mapping)
+    return ArFrame(result)

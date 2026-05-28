@@ -813,7 +813,7 @@ flowchart LR
 | **Boolean null masks** | Nulls are tracked in a separate `vector<bool>`, keeping data vectors dense. No sentinel values, no NaN tricks. |
 | **Two-pass CSV read** | Pass 1 infers types across all rows. Pass 2 parses values directly into the correct typed column. No string→object→cast overhead. |
 | **Zero-copy bridge** | `to_pandas()` exposes C++ memory directly via NumPy's buffer protocol where supported. Numeric columns preserve the fast zero-copy path by default, while `copy=True` requests defensive pandas-owned buffers. |
-| **Step registry** | Pipeline steps map to C++ function pointers. Adding a new cleaning primitive is a single function + one registry entry. |
+| **Step registry** | Built-in and native steps use the C++ core via `_STEP_REGISTRY`; Python-backed built-ins dispatch through `_PYTHON_STEP_REGISTRY`; custom user-defined steps follow the same Python registry path. Adding a new cleaning primitive is a single function + one registry entry. |
 
 > Full architecture documentation: **[ARCHITECTURE.md](ARCHITECTURE.md)**
 > API reference guide: **[Arnio API Reference](./API_REFERENCE.md)**
@@ -1457,7 +1457,7 @@ sharing **aggregate statistics only** or **raw/sample cell values**.
 | `ColumnProfile.sample_values` (in-memory) | No | **Yes** — first *N* non-null values (`sample_size` on `ar.profile()`) |
 | `ColumnProfile.top_values` | Includes counts / ratios | **Yes** — frequent **actual** values (exact or approximate; see below) |
 | `report.to_dict()` | Mixed | **Yes** — includes `sample_values` and `top_values` unless you redact samples |
-| `report.to_dict(redact_sample_values=True)` | Mixed | `sample_values` → `"[REDACTED]"` (same list length); **`top_values` unchanged** |
+| `report.to_dict(redact_sample_values=True)` | Mixed | `sample_values` → `"[REDACTED]"` (same list length); `top_values[*].value` → `"[REDACTED]"` while counts and ratios remain |
 | `report.to_markdown()`, `report.summary()` | Yes | No raw cell values in output |
 | `report.to_html()` / notebook display of `report` | Partial | **Shows `top_values`** chips; does not list `sample_values` |
 | `report.to_pandas()` | Partial | Includes **`top_values`**, not `sample_values` |
@@ -1469,7 +1469,7 @@ controls below for safer sharing.
 **Safe sharing practices**
 
 - **JSON logs and artifacts:** `report.to_dict(redact_sample_values=True)` before writing or uploading.
-- **Collect fewer samples:** `ar.profile(frame, sample_size=0)` skips `sample_values` (defaults still apply to `top_values` on string columns).
+- **Collect fewer samples:** `ar.profile(frame, sample_size=0)` skips `sample_values` (defaults still apply to `top_values` counts on string columns).
 - **Text summaries for CI or comments:** prefer `report.to_markdown()` or `report.summary()` when you do not need per-value examples.
 - **Notebooks and HTML exports:** avoid evaluating `report` or saving `report.to_html()` for sensitive data; HTML still shows `top_values`.
 - **GitHub bug reports and examples:** use synthetic data (`user@example.com`, `ID-001`), a minimal CSV, and redacted `to_dict()` output — not production dumps.
@@ -1486,7 +1486,7 @@ df = ar.from_pandas(pd.DataFrame({
 }))
 report = ar.profile(df, sample_size=2)
 
-# Safer JSON for sharing (sample_values only; top_values still present)
+# Safer JSON for sharing (sample_values and top_values values redacted)
 safe_json = report.to_dict(redact_sample_values=True)
 
 # Safer text summary (no sample_values or top_values in output)
@@ -1757,6 +1757,7 @@ Discord is for fast conversation and support. GitHub remains the source of truth
 - [Core Stability Sprint](CORE_STABILITY_SPRINT.md)
 - [Roadmap](ROADMAP.md)
 - [Troubleshooting Guide](docs/TROUBLESHOOTING.md)
+- [Nullable dtype compatibility](docs/nullable_dtype_compat.md)
 
 ## 🤝 Contribute
 
@@ -1891,6 +1892,8 @@ If you prefer a Linux-like toolchain on Windows, WSL is also supported.
 
 For GSSoC contributors, please read **[GSSOC_GUIDE.md](GSSOC_GUIDE.md)** before asking to be assigned. It explains issue claiming, contribution levels, review expectations, and what maintainers look for in a strong PR. If you want a quick onboarding refresher, see the [GSSoC FAQ](GSSOC_GUIDE.md#gssoc-faq).
 If you are new to Arnio terms, see the [contributor glossary](.github/CONTRIBUTING.md#contributor-glossary).
+
+- [Custom Pipeline Step Cookbook](docs/custom_pipeline_steps.md)
 
 <p align="center">
 <a href=".github/CONTRIBUTING.md"><b>📖 Full Contributing Guide</b></a>&ensp;·&ensp;

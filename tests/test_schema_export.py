@@ -301,6 +301,31 @@ def test_real_schema_with_rules_raises():
         schema_to_dict(schema)
 
 
+# test unsupported raw field value
+def test_raw_field_object_raises():
+    with pytest.raises(TypeError):
+        schema_to_dict({"x": object()})
+
+
+# test for nested set normalization
+def test_nested_set_normalized():
+    result = schema_to_dict({"x": {"meta": {"tags": {"b", "a"}}}})
+
+    assert result == {"fields": {"x": {"meta": {"tags": ["a", "b"]}}}}
+
+
+# test for nested unsupported object inside dict
+def test_nested_unsupported_object_raises():
+    with pytest.raises(TypeError):
+        schema_to_dict({"x": {"meta": {"bad": object()}}})
+
+
+# test for nested unsupported object inside list
+def test_list_with_unsupported_object_raises():
+    with pytest.raises(TypeError):
+        schema_to_dict({"x": {"values": [1, object()]}})
+
+
 # ── Regression tests for issue #1467 ────────────────────────────────────────
 
 
@@ -308,10 +333,12 @@ def test_raw_dict_fields_named_strict_and_unique_not_dropped():
     """Flat scan_csv-style dict: strict/unique are real field names, not metadata."""
     raw = {"strict": "int64", "unique": "string", "name": "string"}
     result = schema_to_dict(raw)
-    assert "strict" in result["fields"], "field 'strict' was dropped from fields"
-    assert "unique" in result["fields"], "field 'unique' was dropped from fields"
-    assert "name" in result["fields"], "field 'name' was dropped from fields"
-    # No top-level metadata keys should appear (input was flat, not structured)
+
+    assert "strict" in result["fields"]
+    assert "unique" in result["fields"]
+    assert "name" in result["fields"]
+
+    # No top-level metadata keys should appear
     assert set(result.keys()) == {"fields"}
 
 
@@ -326,10 +353,63 @@ def test_schema_object_fields_named_strict_and_unique_not_dropped():
         strict=True,
         unique=["name"],
     )
+
     result = schema_to_dict(schema)
-    assert "strict" in result["fields"], "field 'strict' was dropped from fields"
-    assert "unique" in result["fields"], "field 'unique' was dropped from fields"
-    assert "name" in result["fields"], "field 'name' was dropped from fields"
+
+    assert "strict" in result["fields"]
+    assert "unique" in result["fields"]
+    assert "name" in result["fields"]
+
     # Schema-level metadata must still be top-level
-    assert result["strict"] is True, "schema metadata 'strict' missing"
-    assert result["unique"] == ["name"], "schema metadata 'unique' missing"
+    assert result["strict"] is True
+    assert result["unique"] == ["name"]
+
+
+# ── Regression tests for issue #1730 ────────────────────────────────────────
+
+
+class TestDateLikeStringQuoting:
+    """Date-like string values must be quoted to prevent YAML timestamp resolution."""
+
+    def test_bare_date_in_allowed_is_quoted(self):
+        raw = {"field": {"type": "string", "allowed": ["2026-05-28"]}}
+        out = schema_to_yaml(raw)
+        assert '"2026-05-28"' in out
+
+    def test_iso_datetime_in_default_is_quoted(self):
+        raw = {"field": {"type": "string", "default": "2026-05-28T10:30:00"}}
+        out = schema_to_yaml(raw)
+        assert '"2026-05-28T10:30:00"' in out
+
+    def test_space_separated_datetime_is_quoted(self):
+        raw = {"field": {"type": "string", "default": "2026-05-28 10:30:00"}}
+        out = schema_to_yaml(raw)
+        assert '"2026-05-28 10:30:00"' in out
+
+    def test_yaml_roundtrip_preserves_date_string(self):
+        """Date values survive a YAML round-trip as strings, not date objects."""
+        import yaml  # soft dep – skip if not installed
+
+        raw = {"field": {"type": "string", "allowed": ["2026-05-28"]}}
+        yaml_text = schema_to_yaml(raw)
+        loaded = yaml.safe_load(yaml_text)
+        value = loaded["fields"]["field"]["allowed"][0]
+        assert isinstance(value, str)
+        assert value == "2026-05-28"
+
+    def test_non_date_strings_unaffected(self):
+        """Partial date-like strings must NOT be quoted."""
+        raw = {
+            "field": {
+                "type": "string",
+                "allowed": ["05-28", "hello"],
+            }
+        }
+        out = schema_to_yaml(raw)
+        assert "- 05-28" in out  # MM-DD fragment, not a full date
+        assert "- hello" in out  # regular string
+
+    def test_date_with_time_zone_suffix_is_quoted(self):
+        raw = {"field": {"type": "string", "default": "2026-05-28T10:30:00+05:30"}}
+        out = schema_to_yaml(raw)
+        assert '"2026-05-28T10:30:00+05:30"' in out

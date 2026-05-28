@@ -30,6 +30,7 @@ ISSUE_COLUMNS = [
 ]
 
 DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+URL_SCHEME_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*$")
 
 _VALID_SEVERITIES = {"error", "warning"}
 
@@ -713,6 +714,13 @@ class Field:
                 )
             if not isinstance(self.required_if[0], str):
                 raise TypeError("required_if column name must be a string")
+        if self.dtype in {"int64", "float64"}:
+            if self.min is not None:
+                if isinstance(self.min, bool) or not isinstance(self.min, (int, float)):
+                    raise TypeError("min must be numeric or None")
+            if self.max is not None:
+                if isinstance(self.max, bool) or not isinstance(self.max, (int, float)):
+                    raise TypeError("max must be numeric or None")
 
         _validate_severity(self.severity)
 
@@ -760,6 +768,11 @@ class Schema:
                     raise TypeError(
                         f"Schema 'unique' members must be strings, got {type(item).__name__} for element {item!r}."
                     )
+
+            if len(set(self.unique)) != len(self.unique):
+                raise ValueError(
+                    "Schema 'unique' must not contain duplicate column names"
+                )
         if not isinstance(self.strict, bool):
             raise TypeError("Schema 'strict' must be a boolean")
 
@@ -911,6 +924,9 @@ class ValidationIssue:
     row_index: int | None = None
     value: Any = None
     severity: str = "error"
+
+    def __post_init__(self) -> None:
+        _validate_severity(self.severity)
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-friendly dictionary."""
@@ -1592,6 +1608,12 @@ def Int64(
         Field: Configured int64 schema field.
     """
 
+    if min is not None:
+        if isinstance(min, bool) or not isinstance(min, (int, float)):
+            raise TypeError("min must be numeric or None")
+    if max is not None:
+        if isinstance(max, bool) or not isinstance(max, (int, float)):
+            raise TypeError("max must be numeric or None")
     if min is not None and max is not None and min > max:
         raise ValueError("min must be less than or equal to max")
 
@@ -1629,6 +1651,12 @@ def Float64(
         Field: Configured float64 schema field.
     """
 
+    if min is not None:
+        if isinstance(min, bool) or not isinstance(min, (int, float)):
+            raise TypeError("min must be numeric or None")
+    if max is not None:
+        if isinstance(max, bool) or not isinstance(max, (int, float)):
+            raise TypeError("max must be numeric or None")
     if min is not None and max is not None and min > max:
         raise ValueError("min must be less than or equal to max")
 
@@ -1672,6 +1700,31 @@ def String(
 
     if min_length is not None and max_length is not None and min_length > max_length:
         raise ValueError("min_length must be less than or equal to max_length")
+
+    if isinstance(allowed, (str, bytes)):
+        raise TypeError(
+            "allowed must be a sequence of allowed values, not a bare string"
+        )
+
+    if pattern is not None:
+        if not isinstance(pattern, str):
+            raise TypeError("pattern must be a string or None")
+
+        try:
+            re.compile(pattern)
+        except re.error as exc:
+            raise ValueError(f"Invalid regex pattern: {pattern!r}") from exc
+
+    for name, value in (
+        ("min_length", min_length),
+        ("max_length", max_length),
+    ):
+        if value is not None:
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise TypeError(f"{name} must be an integer")
+
+            if value < 0:
+                raise ValueError(f"{name} must be greater than or equal to 0")
 
     allowed_set = set(allowed) if allowed is not None else None
 
@@ -1732,8 +1785,13 @@ def Email(
     Returns:
         Field: Configured email-address schema field.
     """
+
+    if not isinstance(validation, str):
+        raise TypeError("Email validation must be a string: 'light' or 'strict'")
+
     if validation not in {"light", "strict"}:
         raise ValueError("Email validation must be 'light' or 'strict'")
+
     return Field(
         dtype="string",
         nullable=nullable,
@@ -1764,12 +1822,37 @@ def URL(
         Field: Configured URL schema field.
     """
     if allowed_schemes is not None:
-        if not isinstance(allowed_schemes, list) or len(allowed_schemes) == 0:
-            raise ValueError("allowed_schemes must be a non-empty list")
+        if isinstance(allowed_schemes, (str, bytes)):
+            raise TypeError(
+                "allowed_schemes must be a sequence of scheme names, not a bare string"
+            )
+
+        if not isinstance(allowed_schemes, (list, tuple, set)):
+            raise TypeError("allowed_schemes must be a sequence of scheme names")
+
+        normalized_schemes = set()
+
         for scheme in allowed_schemes:
-            if not isinstance(scheme, str) or scheme.strip() == "":
+            if not isinstance(scheme, str):
                 raise ValueError("allowed_schemes must contain non-empty strings")
-        schemes = "|".join(re.escape(s) for s in allowed_schemes)
+
+            scheme = scheme.strip()
+
+            if scheme == "":
+                raise ValueError("allowed_schemes must contain non-empty strings")
+
+            if URL_SCHEME_PATTERN.fullmatch(scheme) is None:
+                raise ValueError(
+                    "allowed_schemes must contain URL scheme names such as 'http' or 'https'"
+                )
+
+            normalized_schemes.add(scheme)
+
+        if len(normalized_schemes) == 0:
+            raise ValueError("allowed_schemes must be a non-empty sequence")
+
+        schemes = "|".join(re.escape(scheme) for scheme in sorted(normalized_schemes))
+
         semantic = f"url:{schemes}"
 
     else:
@@ -2152,7 +2235,7 @@ def _validate_column(
             )
         else:
             trigger_mask = df[condition_column] == expected_value
-            invalid = series[trigger_mask & series.isna()]
+            invalid = series[trigger_mask & is_null_mask]
 
             issues.extend(
                 _row_issues(
@@ -2660,6 +2743,10 @@ def Custom(
     >>> ar.register_validator("positive", lambda v: v > 0)
     >>> schema = ar.Schema({"score": ar.Custom("positive", nullable=False)})
     """
+
+    if not isinstance(name, str) or not name:
+        raise ValueError("name must be a non-empty string")
+
     if name not in _CUSTOM_VALIDATORS:
         raise ValueError(
             f"No validator registered under {name!r}. "

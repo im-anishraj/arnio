@@ -46,6 +46,7 @@ _STEP_REGISTRY: dict[str, Callable] = {
     "round_numeric_columns": cleaning.round_numeric_columns,
     "combine_columns": cleaning.combine_columns,
     "trim_column_names": cleaning.trim_column_names,
+    "clean_column_names": cleaning.clean_column_names,
 }
 
 _REGISTRY_LOCK = Lock()
@@ -151,6 +152,20 @@ def register_step(name: str, fn: Callable, overwrite: bool = False):
                 "To intentionally overwrite it, set 'overwrite=True'."
             )
         _PYTHON_STEP_REGISTRY[name] = fn
+
+
+def unregister_step(name: str) -> None:
+    """Unregister a custom Python pipeline step."""
+    with _REGISTRY_LOCK:
+        if name not in _PYTHON_STEP_REGISTRY:
+            available_steps = sorted(set(_STEP_REGISTRY) | set(_PYTHON_STEP_REGISTRY))
+            raise UnknownStepError(name, available_steps)
+        fn = _PYTHON_STEP_REGISTRY[name]
+
+        if _is_builtin_python_step(name, fn):
+            available_steps = sorted(set(_STEP_REGISTRY) | set(_PYTHON_STEP_REGISTRY))
+            raise UnknownStepError(name, available_steps)
+        del _PYTHON_STEP_REGISTRY[name]
 
 
 def get_builtin_step_signatures() -> dict[str, inspect.Signature]:
@@ -340,6 +355,7 @@ def pipeline(
     )
 
     result = frame
+    working_frame = frame
 
     step_timings: list[dict[str, Any]] = []
     applied_steps: list[str] = []
@@ -372,26 +388,29 @@ def pipeline(
             if name == "rename_columns" and (
                 "mapping" not in kwargs or not isinstance(kwargs["mapping"], dict)
             ):
-                step_result = fn(result, mapping=kwargs)
+                step_result = fn(working_frame, mapping=kwargs)
 
                 if not dry_run:
                     result = step_result
+                working_frame = step_result
 
             elif name == "cast_types" and (
                 "mapping" not in kwargs or not isinstance(kwargs["mapping"], dict)
             ):
-                step_result = fn(result, kwargs)
+                step_result = fn(working_frame, kwargs)
 
                 if not dry_run:
                     result = step_result
+                working_frame = step_result
 
             else:
-                target_frame = result
+                target_frame = working_frame
 
                 step_result = fn(target_frame, **kwargs)
 
                 if not dry_run:
                     result = step_result
+                working_frame = step_result
 
             elapsed_sec = perf_counter() - started_at
             elapsed_ms = elapsed_sec * 1000
@@ -434,7 +453,7 @@ def pipeline(
 
             fn = python_step_registry[name]
 
-            df = to_pandas(result)
+            df = to_pandas(working_frame)
 
             # Isolate genuine custom steps from internal core library functions
             is_builtin = _is_builtin_python_step(name, fn)
@@ -469,6 +488,7 @@ def pipeline(
             step_result = from_pandas(returned)
             if not dry_run:
                 result = step_result
+            working_frame = step_result
 
             elapsed_sec = perf_counter() - started_at
             elapsed_ms = elapsed_sec * 1000

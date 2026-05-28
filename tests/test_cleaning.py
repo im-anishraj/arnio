@@ -265,6 +265,24 @@ class TestWinsorizeOutliers:
 
         assert list(df["value"]) == [10]
 
+    def test_winsorize_outliers_empty_dataframe(self):
+        frame = ar.from_pandas(pd.DataFrame({"value": pd.Series(dtype="float64")}))
+        result = ar.winsorize_outliers(frame)
+        df = ar.to_pandas(result)
+        assert df.shape == (0, 1)
+
+    def test_winsorize_outliers_all_nulls(self):
+        frame = ar.from_pandas(pd.DataFrame({"value": [None, None, None]}))
+        result = ar.winsorize_outliers(frame)
+        df = ar.to_pandas(result)
+        assert df["value"].isna().all()
+
+    def test_winsorize_outliers_two_rows(self):
+        frame = ar.from_pandas(pd.DataFrame({"value": [10.0, 20.0]}))
+        result = ar.winsorize_outliers(frame, lower=0.1, upper=0.9)
+        df = ar.to_pandas(result)
+        assert df["value"].tolist() == pytest.approx([11.0, 19.0])
+
 
 class TestValidateColumnsExist:
     def test_returns_original_frame_when_columns_exist(self, sample_csv):
@@ -665,9 +683,12 @@ class TestDropColumns:
     def test_drop_columns_allows_empty_input_as_no_op(self, sample_csv):
         frame = ar.read_csv(sample_csv)
 
-        result = ar.drop_columns(frame, [])
+        result_helper = ar.drop_columns(frame, [])
+        result_method = frame.drop_columns([])
 
-        assert result is frame
+        assert result_helper is not frame
+        assert result_helper == frame
+        assert result_helper == result_method
 
     def test_drop_columns_rejects_missing_columns(self, sample_csv):
         frame = ar.read_csv(sample_csv)
@@ -1091,6 +1112,36 @@ class TestClipNumeric:
 
         assert list(df["v"]) == [1.5, 2.5, 8.3]
 
+    def test_clip_numeric_rejects_bool_and_non_numeric_bounds(self):
+        frame = ar.from_pandas(pd.DataFrame({"values": [1.0, 5.0, 10.0, 20.0]}))
+
+        # Boolean bounds must be rejected (bool is subclass of int in Python,
+        # so explicit rejection is required)
+        with pytest.raises(TypeError, match="'lower' must be an int or float"):
+            ar.clip_numeric(frame, lower=True)
+
+        with pytest.raises(TypeError, match="'upper' must be an int or float"):
+            ar.clip_numeric(frame, upper=False)
+
+        with pytest.raises(TypeError, match="'lower' must be an int or float"):
+            ar.clip_numeric(frame, lower="a")
+
+        with pytest.raises(TypeError, match="'upper' must be an int or float"):
+            ar.clip_numeric(frame, upper="10")
+
+        # Valid int and float bounds must still work fine
+        ar.clip_numeric(frame, lower=0, upper=15)
+        ar.clip_numeric(frame, lower=0.5, upper=9.5)
+
+    def test_clip_numeric_pipeline_rejects_invalid_bounds(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+
+        with pytest.raises(TypeError, match="'lower' must be an int or float"):
+            ar.pipeline(
+                frame,
+                [("clip_numeric", {"lower": True})],
+            )
+
 
 class TestStandardizeMissingTokens:
     def test_normal_case(self):
@@ -1322,6 +1373,26 @@ class TestStandardizeMissingTokens:
         assert pd.isna(result["value"].iloc[1])
         assert result["value"].iloc[2] == "--"
         assert result["value"].iloc[3] == "kept"
+
+    def test_standardize_missing_tokens_scalar_int_raises(self):
+        frame = pd.DataFrame({"x": ["NA", "N", "ok"]})
+        with pytest.raises(TypeError, match="tokens must be a list of strings"):
+            ar.standardize_missing_tokens(frame, tokens=1)
+
+    def test_standardize_missing_tokens_dict_raises(self):
+        frame = pd.DataFrame({"x": ["NA", "N", "ok"]})
+        with pytest.raises(TypeError, match="tokens must be a list of strings"):
+            ar.standardize_missing_tokens(frame, tokens={"NA": "bad"})
+
+    def test_standardize_missing_tokens_bare_string_raises(self):
+        frame = pd.DataFrame({"x": ["NA", "N", "ok"]})
+        with pytest.raises(TypeError, match="tokens must be a list of strings"):
+            ar.standardize_missing_tokens(frame, tokens="NA")
+
+    def test_standardize_missing_tokens_list_with_non_string_item_raises(self):
+        frame = pd.DataFrame({"x": ["NA", "N", "ok"]})
+        with pytest.raises(TypeError, match="tokens must be a list of strings"):
+            ar.standardize_missing_tokens(frame, tokens=["NA", 1])
 
 
 class TestStripWhitespace:
@@ -3772,6 +3843,7 @@ class TestValidateStringMapping:
 
     def test_empty_mapping_allow_empty_false_raises(self):
         with pytest.raises(ValueError, match="must not be empty"):
+        fix-winsorize-validation-1426
             _validate_string_mapping(
                 {}, argument_name="mapping", allow_empty=False
             )
@@ -3803,3 +3875,56 @@ def test_winsorize_boolean_lower():
 
     with pytest.raises(TypeError, match="lower must not be bool"):
         ar.winsorize_outliers(frame, lower=False)
+
+            _validate_string_mapping({}, argument_name="mapping", allow_empty=False)
+
+
+class TestCleanColumnNames:
+    def test_clean_column_names_basic(self):
+        df = pd.DataFrame({"My-Name!!": [1], "age##": [2]})
+        frame = from_pandas(df)
+        result = ar.clean_column_names(frame)
+        assert to_pandas(result).columns.tolist() == ["my_name", "age"]
+
+    def test_clean_column_names_consecutive_and_boundary_underscores(self):
+        df = pd.DataFrame({"__col__name__": [1], "-another--col-": [2]})
+        frame = from_pandas(df)
+        result = ar.clean_column_names(frame)
+        assert to_pandas(result).columns.tolist() == ["col_name", "another_col"]
+
+    def test_clean_column_names_case_type_upper(self):
+        df = pd.DataFrame({"My-Name!!": [1]})
+        frame = from_pandas(df)
+        result = ar.clean_column_names(frame, case_type="upper")
+        assert to_pandas(result).columns.tolist() == ["MY_NAME"]
+
+    def test_clean_column_names_case_type_none(self):
+        df = pd.DataFrame({"My-Name!!": [1]})
+        frame = from_pandas(df)
+        result = ar.clean_column_names(frame, case_type="none")
+        assert to_pandas(result).columns.tolist() == ["My_Name"]
+
+    def test_clean_column_names_duplicate_raises(self):
+        df = pd.DataFrame({"col__name": [1], "col---name": [2]})
+        frame = from_pandas(df)
+        with pytest.raises(ValueError, match="duplicates"):
+            ar.clean_column_names(frame)
+
+    def test_clean_column_names_case_type_invalid(self):
+        df = pd.DataFrame({"name": [1]})
+        frame = from_pandas(df)
+        with pytest.raises(ValueError, match="case_type must be one of"):
+            ar.clean_column_names(frame, case_type="invalid")
+
+    def test_clean_column_names_case_type_type_error(self):
+        df = pd.DataFrame({"name": [1]})
+        frame = from_pandas(df)
+        with pytest.raises(TypeError, match="must be a string"):
+            ar.clean_column_names(frame, case_type=123)
+
+    def test_clean_column_names_pipeline(self):
+        df = pd.DataFrame({"My-Name!!": [1], "age##": [2]})
+        frame = from_pandas(df)
+        result = ar.pipeline(frame, [("clean_column_names", {"case_type": "upper"})])
+        assert to_pandas(result).columns.tolist() == ["MY_NAME", "AGE"]
+
