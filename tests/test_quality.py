@@ -173,18 +173,6 @@ def test_profile_non_numeric_no_quantiles():
     assert "outlier_ratio" not in profile
 
 
-def test_profile_empty_numeric_column_iqr_outliers_none():
-    frame = ar.from_pandas(pd.DataFrame({"score": pd.Series(dtype="float64")}))
-    report = ar.profile(frame)
-    profile = report.columns["score"].to_dict()
-
-    assert profile["iqr"] is None
-    assert profile["outlier_lower_bound"] is None
-    assert profile["outlier_upper_bound"] is None
-    assert profile["outlier_count"] is None
-    assert profile["outlier_ratio"] is None
-
-
 def test_profile_email_and_url_validity_ratios():
     df = pd.DataFrame(
         {
@@ -1257,6 +1245,7 @@ def test_profile_string_metrics():
     assert profile.empty_string_count == 2
     assert profile.whitespace_count == 1
     assert "empty_strings" in profile.warnings
+
 
 def test_profile_empty_numeric_column_iqr_outliers_none():
     frame = ar.from_pandas(pd.DataFrame({"score": pd.Series(dtype="float64")}))
