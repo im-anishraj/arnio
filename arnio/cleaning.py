@@ -975,6 +975,15 @@ def normalize_case(
     ArFrame
         New frame with string columns normalized to specified case.
 
+    Raises
+    ------
+    TypeError
+        If case_type is not a string.
+    ValueError
+        If case_type is not one of the supported options.
+    KeyError
+        If any column in subset does not exist in the frame.
+
     Examples
     --------
     >>> frame = ar.read_csv("data.csv")
@@ -982,6 +991,9 @@ def normalize_case(
     """
     if not isinstance(case_type, str):
         raise TypeError("case_type must be a string")
+    valid_cases = {"lower", "upper", "title"}
+    if case_type not in valid_cases:
+        raise ValueError(f"case_type must be one of {valid_cases}, got {case_type!r}")
     if subset is not None:
         subset = _validate_existing_column_sequence(
             subset,

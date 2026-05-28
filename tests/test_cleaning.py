@@ -1541,7 +1541,7 @@ class TestNormalizeCase:
         import pandas as pd
 
         frame = ar.from_pandas(pd.DataFrame({"x": ["A"]}))
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="case_type must be one of"):
             ar.normalize_case(frame, case_type="invalid")
 
 
