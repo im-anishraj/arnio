@@ -138,7 +138,6 @@ class TestPipeline:
                 }
             )
         )
-
         result = ar.pipeline(
             frame,
             [
@@ -171,7 +170,6 @@ class TestPipeline:
 
     def test_pipeline_trim_column_names(self):
         import pandas as pd
-
         frame = ar.from_pandas(
             pd.DataFrame(
                 {
