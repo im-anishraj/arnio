@@ -363,3 +363,53 @@ def test_schema_object_fields_named_strict_and_unique_not_dropped():
     # Schema-level metadata must still be top-level
     assert result["strict"] is True
     assert result["unique"] == ["name"]
+
+
+# ── Regression tests for issue #1730 ────────────────────────────────────────
+
+
+class TestDateLikeStringQuoting:
+    """Date-like string values must be quoted to prevent YAML timestamp resolution."""
+
+    def test_bare_date_in_allowed_is_quoted(self):
+        raw = {"field": {"type": "string", "allowed": ["2026-05-28"]}}
+        out = schema_to_yaml(raw)
+        assert '"2026-05-28"' in out
+
+    def test_iso_datetime_in_default_is_quoted(self):
+        raw = {"field": {"type": "string", "default": "2026-05-28T10:30:00"}}
+        out = schema_to_yaml(raw)
+        assert '"2026-05-28T10:30:00"' in out
+
+    def test_space_separated_datetime_is_quoted(self):
+        raw = {"field": {"type": "string", "default": "2026-05-28 10:30:00"}}
+        out = schema_to_yaml(raw)
+        assert '"2026-05-28 10:30:00"' in out
+
+    def test_yaml_roundtrip_preserves_date_string(self):
+        """Date values survive a YAML round-trip as strings, not date objects."""
+        import yaml  # soft dep – skip if not installed
+
+        raw = {"field": {"type": "string", "allowed": ["2026-05-28"]}}
+        yaml_text = schema_to_yaml(raw)
+        loaded = yaml.safe_load(yaml_text)
+        value = loaded["fields"]["field"]["allowed"][0]
+        assert isinstance(value, str)
+        assert value == "2026-05-28"
+
+    def test_non_date_strings_unaffected(self):
+        """Partial date-like strings must NOT be quoted."""
+        raw = {
+            "field": {
+                "type": "string",
+                "allowed": ["05-28", "hello"],
+            }
+        }
+        out = schema_to_yaml(raw)
+        assert "- 05-28" in out  # MM-DD fragment, not a full date
+        assert "- hello" in out  # regular string
+
+    def test_date_with_time_zone_suffix_is_quoted(self):
+        raw = {"field": {"type": "string", "default": "2026-05-28T10:30:00+05:30"}}
+        out = schema_to_yaml(raw)
+        assert '"2026-05-28T10:30:00+05:30"' in out

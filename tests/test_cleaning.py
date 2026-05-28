@@ -683,9 +683,12 @@ class TestDropColumns:
     def test_drop_columns_allows_empty_input_as_no_op(self, sample_csv):
         frame = ar.read_csv(sample_csv)
 
-        result = ar.drop_columns(frame, [])
+        result_helper = ar.drop_columns(frame, [])
+        result_method = frame.drop_columns([])
 
-        assert result is frame
+        assert result_helper is not frame
+        assert result_helper == frame
+        assert result_helper == result_method
 
     def test_drop_columns_rejects_missing_columns(self, sample_csv):
         frame = ar.read_csv(sample_csv)
@@ -1371,6 +1374,26 @@ class TestStandardizeMissingTokens:
         assert result["value"].iloc[2] == "--"
         assert result["value"].iloc[3] == "kept"
 
+    def test_standardize_missing_tokens_scalar_int_raises(self):
+        frame = pd.DataFrame({"x": ["NA", "N", "ok"]})
+        with pytest.raises(TypeError, match="tokens must be a list of strings"):
+            ar.standardize_missing_tokens(frame, tokens=1)
+
+    def test_standardize_missing_tokens_dict_raises(self):
+        frame = pd.DataFrame({"x": ["NA", "N", "ok"]})
+        with pytest.raises(TypeError, match="tokens must be a list of strings"):
+            ar.standardize_missing_tokens(frame, tokens={"NA": "bad"})
+
+    def test_standardize_missing_tokens_bare_string_raises(self):
+        frame = pd.DataFrame({"x": ["NA", "N", "ok"]})
+        with pytest.raises(TypeError, match="tokens must be a list of strings"):
+            ar.standardize_missing_tokens(frame, tokens="NA")
+
+    def test_standardize_missing_tokens_list_with_non_string_item_raises(self):
+        frame = pd.DataFrame({"x": ["NA", "N", "ok"]})
+        with pytest.raises(TypeError, match="tokens must be a list of strings"):
+            ar.standardize_missing_tokens(frame, tokens=["NA", 1])
+
 
 class TestStripWhitespace:
     def test_strip(self, csv_with_whitespace):
@@ -1518,7 +1541,7 @@ class TestNormalizeCase:
         import pandas as pd
 
         frame = ar.from_pandas(pd.DataFrame({"x": ["A"]}))
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="case_type must be one of"):
             ar.normalize_case(frame, case_type="invalid")
 
 

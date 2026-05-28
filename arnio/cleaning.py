@@ -247,7 +247,7 @@ def drop_columns(frame: ArFrame, columns: Sequence[str]) -> ArFrame:
         ),
     )
     if len(requested_columns) == 0:
-        return frame
+        return frame.drop_columns([])
     if len(requested_columns) == len(frame.columns):
         raise ValueError("drop_columns cannot remove all columns from the frame")
 
@@ -975,6 +975,15 @@ def normalize_case(
     ArFrame
         New frame with string columns normalized to specified case.
 
+    Raises
+    ------
+    TypeError
+        If case_type is not a string.
+    ValueError
+        If case_type is not one of the supported options.
+    KeyError
+        If any column in subset does not exist in the frame.
+
     Examples
     --------
     >>> frame = ar.read_csv("data.csv")
@@ -982,6 +991,9 @@ def normalize_case(
     """
     if not isinstance(case_type, str):
         raise TypeError("case_type must be a string")
+    valid_cases = {"lower", "upper", "title"}
+    if case_type not in valid_cases:
+        raise ValueError(f"case_type must be one of {valid_cases}, got {case_type!r}")
     if subset is not None:
         subset = _validate_existing_column_sequence(
             subset,
@@ -1850,6 +1862,21 @@ def standardize_missing_tokens(frame, tokens=None, subset=None):
             f"subset must be a list of column names, not a string. "
             f"Did you mean subset=['{subset}']?"
         )
+    if tokens is not None:
+        if isinstance(tokens, str):
+            raise TypeError(
+                f"tokens must be a list of strings, not a bare string. "
+                f"Did you mean tokens=['{tokens}']?"
+            )
+        if not isinstance(tokens, list):
+            raise TypeError(
+                f"tokens must be a list of strings, got {type(tokens).__name__!r}"
+            )
+        for item in tokens:
+            if not isinstance(item, str):
+                raise TypeError(
+                    f"tokens must be a list of strings, got {type(item).__name__!r} item"
+                )
 
     default_tokens = [
         "N/A",
