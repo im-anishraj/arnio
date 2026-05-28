@@ -1745,6 +1745,39 @@ def test_schema_unique_accepts_valid_types():
     assert schema_tuple.unique == ("user_id", "course_id")
 
 
+def test_schema_unique_rejects_duplicate_columns():
+    with pytest.raises(
+        ValueError,
+        match="Schema 'unique' must not contain duplicate column names",
+    ):
+        ar.Schema(
+            {
+                "user_id": ar.Int64(),
+            },
+            unique=["user_id", "user_id"],
+        )
+
+
+def test_schema_from_json_rejects_duplicate_unique_columns():
+    payload = {
+        "fields": {
+            "user_id": {
+                "dtype": "int64",
+                "nullable": True,
+                "unique": False,
+            }
+        },
+        "strict": False,
+        "unique": ["user_id", "user_id"],
+    }
+
+    with pytest.raises(
+        ValueError,
+        match="Schema 'unique' must not contain duplicate column names",
+    ):
+        ar.Schema.from_json(json.dumps(payload))
+
+
 @pytest.mark.parametrize("value", ["false", 1, None])
 def test_field_nullable_rejects_non_bool_values(value):
     with pytest.raises(TypeError, match="nullable must be a bool"):
