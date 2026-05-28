@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
+import numpy as np
 import pandas as pd
 
 from arnio.convert import from_pandas, to_pandas
@@ -93,8 +94,11 @@ class ArnioPandasAccessor:
         *,
         null_value: float = float("nan"),
         allow_non_numeric: bool = False,
-    ) -> "np.ndarray":
+    ) -> np.ndarray:
         """Extract numeric columns as a 2-D NumPy ``float64`` array.
+
+        This is ideal for preparing clean arrays from messy DataFrames
+        for use in scikit-learn models or other numerical workflows.
 
         Converts the DataFrame to an ArFrame internally, then delegates
         to :func:`arnio.to_numpy`.  See that function for full parameter

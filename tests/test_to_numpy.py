@@ -6,10 +6,10 @@ import pytest
 
 import arnio as ar
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_frame(**kwargs) -> ar.ArFrame:
     """Shorthand: build an ArFrame from keyword column data."""
@@ -19,6 +19,7 @@ def _make_frame(**kwargs) -> ar.ArFrame:
 # ---------------------------------------------------------------------------
 # Selected numeric columns
 # ---------------------------------------------------------------------------
+
 
 class TestSelectedNumericColumns:
     def test_explicit_int_and_float(self):
@@ -50,6 +51,7 @@ class TestSelectedNumericColumns:
 # Missing columns
 # ---------------------------------------------------------------------------
 
+
 class TestMissingColumns:
     def test_single_missing_column(self):
         frame = _make_frame(x=[1, 2])
@@ -66,10 +68,27 @@ class TestMissingColumns:
         with pytest.raises(ValueError, match="Unknown columns.*missing"):
             ar.to_numpy(frame, columns=["x", "missing"])
 
+    def test_plain_string_rejected(self):
+        """A bare string should not iterate over characters."""
+        frame = _make_frame(x=[1, 2])
+        with pytest.raises(TypeError, match="not a string"):
+            ar.to_numpy(frame, columns="x")
+
+    def test_bytes_rejected(self):
+        frame = _make_frame(x=[1, 2])
+        with pytest.raises(TypeError, match="not a string"):
+            ar.to_numpy(frame, columns=b"x")
+
+    def test_non_sequence_rejected(self):
+        frame = _make_frame(x=[1, 2])
+        with pytest.raises(TypeError, match="not.*int"):
+            ar.to_numpy(frame, columns=42)
+
 
 # ---------------------------------------------------------------------------
 # Mixed / non-numeric columns
 # ---------------------------------------------------------------------------
+
 
 class TestNonNumericColumns:
     def test_string_column_raises_by_default(self):
@@ -77,20 +96,15 @@ class TestNonNumericColumns:
         with pytest.raises(TypeError, match="Non-numeric columns.*name"):
             ar.to_numpy(frame, columns=["name", "age"])
 
-    def test_allow_non_numeric_skips_strings(self):
+    def test_explicit_non_numeric_raises_even_with_allow(self):
+        """Explicitly requested non-numeric columns always raise TypeError."""
         frame = _make_frame(name=["Alice", "Bob"], age=[30, 25], score=[1.0, 2.0])
-        result = ar.to_numpy(
-            frame, columns=["name", "age", "score"], allow_non_numeric=True
-        )
+        with pytest.raises(TypeError, match="Non-numeric columns.*name"):
+            ar.to_numpy(frame, columns=["name", "age", "score"], allow_non_numeric=True)
 
-        # name should be filtered out, leaving age and score
-        assert result.shape == (2, 2)
-        np.testing.assert_array_equal(result[:, 0], [30.0, 25.0])
-        np.testing.assert_array_equal(result[:, 1], [1.0, 2.0])
-
-    def test_all_non_numeric_with_allow_raises(self):
+    def test_all_non_numeric_explicit_raises_type_error(self):
         frame = _make_frame(a=["x", "y"], b=["p", "q"])
-        with pytest.raises(ValueError, match="All selected columns are non-numeric"):
+        with pytest.raises(TypeError, match="Non-numeric columns"):
             ar.to_numpy(frame, columns=["a", "b"], allow_non_numeric=True)
 
     def test_auto_select_only_strings_raises(self):
@@ -110,6 +124,7 @@ class TestNonNumericColumns:
 # ---------------------------------------------------------------------------
 # Null handling
 # ---------------------------------------------------------------------------
+
 
 class TestNullHandling:
     def test_default_nan_for_nulls(self):
@@ -138,9 +153,7 @@ class TestNullHandling:
         assert result[2, 0] == 3.5
 
     def test_bool_column_null_uses_sentinel(self):
-        df = pd.DataFrame(
-            {"flag": pd.Series([True, pd.NA, False], dtype="boolean")}
-        )
+        df = pd.DataFrame({"flag": pd.Series([True, pd.NA, False], dtype="boolean")})
         frame = ar.from_pandas(df)
         result = ar.to_numpy(frame, columns=["flag"], null_value=-99.0)
 
@@ -159,6 +172,7 @@ class TestNullHandling:
 # ---------------------------------------------------------------------------
 # Empty inputs
 # ---------------------------------------------------------------------------
+
 
 class TestEmptyInputs:
     def test_zero_row_frame_auto_select_raises(self):
@@ -183,10 +197,10 @@ class TestEmptyInputs:
         assert result.dtype == np.float64
 
 
-
 # ---------------------------------------------------------------------------
 # Row-order preservation
 # ---------------------------------------------------------------------------
+
 
 class TestRowOrderPreservation:
     def test_values_match_insertion_order(self):
@@ -219,6 +233,7 @@ class TestRowOrderPreservation:
 # ---------------------------------------------------------------------------
 # Pandas accessor integration
 # ---------------------------------------------------------------------------
+
 
 class TestAccessor:
     def test_accessor_to_numpy(self):

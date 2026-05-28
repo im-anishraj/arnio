@@ -199,6 +199,10 @@ def to_numpy(
 ) -> np.ndarray:
     """Extract columns from an ArFrame as a 2-D NumPy ``float64`` array.
 
+    This helper is designed to prepare clean numeric arrays from messy
+    tabular data, making it ideal for feeding data directly into
+    scikit-learn models, statistical functions, and other numerical workflows.
+
     Parameters
     ----------
     frame : ArFrame
@@ -212,8 +216,8 @@ def to_numpy(
     allow_non_numeric : bool, optional
         If *False* (default), selecting a non-numeric column raises
         ``TypeError``.  If *True*, non-numeric columns are silently
-        skipped when *columns* is ``None``, or raise ``TypeError`` when
-        explicitly requested.
+        skipped when *columns* is ``None``; explicitly requested
+        non-numeric columns still raise ``TypeError``.
 
     Returns
     -------
@@ -227,8 +231,9 @@ def to_numpy(
         If any requested column name does not exist in the frame, or if
         no numeric columns are available when *columns* is ``None``.
     TypeError
-        If a selected column has a non-numeric dtype and
-        *allow_non_numeric* is ``False``.
+        If a selected column has a non-numeric dtype and either
+        *allow_non_numeric* is ``False`` or the column was explicitly
+        requested via *columns*.
 
     Examples
     --------
@@ -244,13 +249,25 @@ def to_numpy(
     dtypes = frame.dtypes
     all_columns = frame.columns
 
+    # --- validate columns input ---
+    if columns is not None:
+        if isinstance(columns, (str, bytes)):
+            raise TypeError(
+                "columns must be a list of column names, not a string. "
+                "Use columns=['" + str(columns) + "'] instead."
+            )
+        if not isinstance(columns, (list, tuple)):
+            raise TypeError(
+                "columns must be a list of column names, not "
+                f"{type(columns).__name__}"
+            )
+
     # --- resolve column list ---
     if columns is not None:
         missing = [c for c in columns if c not in all_columns]
         if missing:
             raise ValueError(
-                f"Unknown columns: {missing}. "
-                f"Available columns: {all_columns}"
+                f"Unknown columns: {missing}. Available columns: {all_columns}"
             )
         selected = list(columns)
     else:
@@ -263,16 +280,22 @@ def to_numpy(
 
     # --- validate dtypes ---
     non_numeric = [c for c in selected if dtypes[c] not in _NUMERIC_DTYPES]
-    if non_numeric and not allow_non_numeric:
-        raise TypeError(
-            f"Non-numeric columns selected: {non_numeric}. "
-            "Set allow_non_numeric=True to skip them, or remove them "
-            "from the 'columns' list."
-        )
-
-    # When allow_non_numeric is True and columns were explicit, drop the
-    # non-numeric ones silently.
-    if non_numeric and allow_non_numeric:
+    if non_numeric:
+        if columns is not None:
+            # Explicitly requested non-numeric columns always raise,
+            # regardless of allow_non_numeric.
+            raise TypeError(
+                f"Non-numeric columns selected: {non_numeric}. "
+                "Remove them from the 'columns' list."
+            )
+        if not allow_non_numeric:
+            raise TypeError(
+                f"Non-numeric columns selected: {non_numeric}. "
+                "Set allow_non_numeric=True to skip them, or remove them "
+                "from the 'columns' list."
+            )
+        # allow_non_numeric=True with auto-selected columns: silently
+        # drop non-numeric columns.
         selected = [c for c in selected if dtypes[c] in _NUMERIC_DTYPES]
         if not selected:
             raise ValueError(
@@ -301,9 +324,7 @@ def to_numpy(
             arr = col.to_numpy_bool().astype(np.float64, copy=True)
         else:
             # Should not be reached after the dtype filter above.
-            raise TypeError(
-                f"Column '{col_name}' has unsupported dtype '{dtype}'."
-            )
+            raise TypeError(f"Column '{col_name}' has unsupported dtype '{dtype}'.")
 
         # Apply null mask — replace masked positions with null_value.
         if any(mask):
@@ -316,4 +337,3 @@ def to_numpy(
         return np.empty((0, len(selected)), dtype=np.float64)
 
     return np.column_stack(arrays)
-
