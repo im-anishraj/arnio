@@ -30,7 +30,7 @@ from typing import Any
 
 import numpy as np
 
-from ._core import _DType, _Frame
+from ._core import _Frame
 
 #: Dtype strings recognised by ArFrame.select_dtypes().
 _VALID_DTYPES: frozenset[str] = frozenset(
@@ -101,6 +101,225 @@ class ArFrame:
     def __init__(self, cpp_frame: _Frame, attrs: dict | None = None) -> None:
         self._frame = cpp_frame
         self._attrs: dict = attrs if attrs is not None else {}
+
+    @classmethod
+    def from_dict(cls, data: dict) -> ArFrame:
+        from .convert import from_dict as _from_dict
+
+        return _from_dict(data)
+
+    @classmethod
+    def from_pandas(cls, df) -> ArFrame:
+        """Build an ArFrame from a pandas DataFrame."""
+        from .convert import from_pandas as _from_pandas
+
+        return _from_pandas(df)
+
+    @classmethod
+    def from_records(
+        cls,
+        records: list,
+        columns: list[str] | None = None,
+    ) -> ArFrame:
+        """Build an ArFrame from a list of records.
+
+        Parameters
+        ----------
+        records : list
+            A non-empty list of dicts, lists, or tuples.
+        columns : list[str] or None
+            Column names. Required when records are lists or tuples.
+            Optional for dicts — inferred from keys if not given.
+        Returns
+        -------
+        ArFrame
+
+        Raises
+        ------
+        TypeError
+            If records is not a list, elements are mixed types, or a
+            cell value is a list or dict.
+        ValueError
+            If records is empty, columns is missing for sequence records,
+            or a row's length doesn't match columns.
+        """
+        import pandas as pd
+
+        from .convert import from_pandas
+
+        if not isinstance(records, list):
+            raise TypeError(f"records must be a list, got {type(records).__name__!r}")
+
+        if len(records) == 0:
+            raise ValueError("records must be non-empty")
+
+        if columns is not None:
+            if isinstance(columns, (str, bytes)):
+                raise TypeError(
+                    "columns must be a list or tuple of strings, not a string or bytes"
+                )
+
+            if not isinstance(columns, (list, tuple)):
+                raise TypeError("columns must be a list or tuple of strings")
+
+            non_strings = [col for col in columns if not isinstance(col, str)]
+
+            if non_strings:
+                raise TypeError("columns must contain only strings")
+
+        first = records[0]
+
+        if isinstance(first, dict):
+            for i, row in enumerate(records):
+                if not isinstance(row, dict):
+                    raise TypeError(
+                        f"all records must be dicts, but row {i} is {type(row).__name__!r}"
+                    )
+                for col, val in row.items():
+                    if isinstance(val, (list, dict)):
+                        raise TypeError(
+                            f"nested values are not supported; "
+                            f"column {col!r} at row {i} contains a {type(val).__name__!r}"
+                        )
+            df = pd.DataFrame.from_records(records, columns=columns)
+
+        elif isinstance(first, (list, tuple)):
+            if columns is None:
+                raise ValueError(
+                    "columns must be provided when records are lists or tuples"
+                )
+            for i, row in enumerate(records):
+                if not isinstance(row, (list, tuple)):
+                    raise TypeError(
+                        f"all records must be the same type, but row {i} is {type(row).__name__!r}"
+                    )
+                if len(row) != len(columns):
+                    raise ValueError(
+                        f"row {i} has {len(row)} value(s) but {len(columns)} column(s) were provided"
+                    )
+                for j, val in enumerate(row):
+                    if isinstance(val, (list, dict)):
+                        raise TypeError(
+                            f"nested values are not supported; "
+                            f"column {columns[j]!r} at row {i} contains a {type(val).__name__!r}"
+                        )
+            df = pd.DataFrame.from_records(records, columns=columns)
+
+        else:
+            raise TypeError(
+                f"records must contain dicts, lists, or tuples, got {type(first).__name__!r}"
+            )
+
+        return from_pandas(df)
+
+    def astype(self, dtype):
+        """Cast ArFrame columns to a specified type.
+
+        Parameters
+        ----------
+        dtype : Any
+            The data type to cast to (e.g., str, int, float, or a dict of column names to types).
+
+        Returns
+        -------
+        ArFrame
+            A new ArFrame with the applied type changes.
+
+        Raises
+        ------
+        TypeError
+            If the input dtype is invalid or if conversion fails due to type mismatch.
+        ValueError
+            If invalid values are passed or column conversion fails.
+        """
+        import numpy as np
+        import pandas as pd
+
+        from .convert import from_pandas, to_pandas
+
+        def _validate_dtype_value(value):
+            if isinstance(value, (list, tuple, set, dict)):
+                raise TypeError(
+                    "dtype must be a string, Python type, "
+                    "NumPy/pandas dtype, or mapping "
+                    "of column names to dtypes"
+                )
+
+            if value in (object, "object"):
+                raise TypeError(
+                    "dtype must be a string, Python type, "
+                    "NumPy/pandas dtype, or mapping "
+                    "of column names to dtypes"
+                )
+
+            try:
+                resolved = pd.api.types.pandas_dtype(value)
+
+                if resolved == np.dtype("O"):
+                    raise TypeError(
+                        "dtype must be a string, Python type, "
+                        "NumPy/pandas dtype, or mapping "
+                        "of column names to dtypes"
+                    )
+
+            except (TypeError, ValueError):
+                raise TypeError(
+                    "dtype must be a string, Python type, "
+                    "NumPy/pandas dtype, or mapping "
+                    "of column names to dtypes"
+                )
+
+        if dtype is None:
+            raise TypeError("dtype cannot be None")
+
+        if isinstance(dtype, dict):
+            missing = [col for col in dtype if col not in self.columns]
+
+            if missing:
+                raise ValueError(f"Unknown column(s) in dtype mapping: {missing}")
+
+            for value in dtype.values():
+                _validate_dtype_value(value)
+
+        elif isinstance(dtype, (list, tuple, set)):
+            raise TypeError(
+                "dtype must be a string, Python type, "
+                "NumPy/pandas dtype, or mapping "
+                "of column names to dtypes"
+            )
+
+        else:
+            _validate_dtype_value(dtype)
+
+        try:
+            df = to_pandas(self)
+        except Exception as e:
+            raise RuntimeError(f"Failed to convert ArFrame to pandas for casting: {e}")
+
+        def _is_object_dtype(value):
+            try:
+                return np.dtype(value) == np.dtype("O")
+            except Exception:
+                return False
+
+        if _is_object_dtype(dtype):
+            raise TypeError("Arnio does not support casting columns to object dtype")
+
+        if isinstance(dtype, dict):
+            for col, target_dtype in dtype.items():
+                if _is_object_dtype(target_dtype):
+                    raise TypeError(f"Column '{col}' cannot be cast to object dtype")
+
+        try:
+            df_casted = df.astype(dtype)
+        except TypeError as te:
+            raise TypeError(f"Invalid type conversion requested: {te}")
+        except ValueError as ve:
+            raise ValueError(f"Value conversion error during astype: {ve}")
+        except Exception as e:
+            raise ValueError(f"An error occurred during casting: {e}")
+
+        return from_pandas(df_casted)
 
     # --- Properties ---
 
