@@ -213,6 +213,9 @@ def _validate_usecols(usecols: Sequence[str]) -> list[str]:
     if not isinstance(usecols, Sequence):
         raise TypeError("usecols must be a sequence of strings")
 
+    if len(usecols) == 0:
+        raise ValueError("usecols must not be empty")
+
     for col in usecols:
         if not isinstance(col, str):
             raise TypeError("usecols must contain only strings")
