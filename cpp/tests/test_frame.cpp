@@ -1,4 +1,5 @@
 #include <catch2/catch_test_macros.hpp>
+#include <stdexcept>
 
 #include "arnio/frame.h"
 
@@ -63,4 +64,32 @@ TEST_CASE("Frame with 0 columns has 0 rows", "[frame]") {
     REQUIRE(f.num_rows() == 0);
     REQUIRE(f.num_cols() == 0);
     REQUIRE(f.column_names().empty());
+}
+
+TEST_CASE("Frame::add_column throws on duplicate column name", "[frame]") {
+    Frame f;
+    Column first("price", DType::INT64);
+    first.push_back(int64_t(10));
+    Column second("price", DType::INT64);
+    second.push_back(int64_t(20));
+
+    f.add_column(std::move(first));
+
+    REQUIRE_THROWS_AS(f.add_column(std::move(second)), std::invalid_argument);
+    REQUIRE(f.num_cols() == 1);
+    REQUIRE(f.column("price").at(0) == CellValue(int64_t(10)));
+}
+
+TEST_CASE("Frame::add_column succeeds for distinct column names", "[frame]") {
+    Frame f;
+    Column price("price", DType::INT64);
+    price.push_back(int64_t(10));
+    Column quantity("quantity", DType::INT64);
+    quantity.push_back(int64_t(2));
+
+    REQUIRE_NOTHROW(f.add_column(std::move(price)));
+    REQUIRE_NOTHROW(f.add_column(std::move(quantity)));
+    REQUIRE(f.num_cols() == 2);
+    REQUIRE(f.has_column("price") == true);
+    REQUIRE(f.has_column("quantity") == true);
 }

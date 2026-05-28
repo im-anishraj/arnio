@@ -11,6 +11,23 @@ This roadmap is a maintainer-level guide for contributors. It is intentionally p
 - Increase unit, integration, packaging, and benchmark coverage.
 - Keep PyPI releases reliable and easy to verify.
 
+## Immediate: Core Stability Sprint
+
+Before creating another large feature backlog, Arnio should complete the
+[Core Stability Sprint](CORE_STABILITY_SPRINT.md):
+
+- Make `pip install -e ".[dev]"` and native extension builds reliable on
+  supported platforms.
+- Keep CSV ingestion, type inference, null handling, and cleaning behavior
+  strict enough to avoid silent data corruption.
+- Treat `read_csv`, `write_csv`, `scan_csv`, `from_pandas`, `to_pandas`,
+  `profile`, `suggest_cleaning`, `auto_clean`, `Schema`, and `pipeline` as the
+  first public API stability candidates.
+- Populate reproducible benchmark baselines before making stronger performance
+  claims.
+- Reduce duplicate PR work and require every contributor PR to be linked,
+  scoped, labeled, and tested.
+
 ## Near Term
 
 - Harden CSV edge cases: row width validation, comments, encodings, malformed quotes, delimiter detection, and better diagnostics.

@@ -128,6 +128,14 @@ class TestReadJsonlNrows:
         frame = ar.read_jsonl(path, nrows=3)
         assert frame.shape[0] == 3
 
+    def test_nrows_stops_before_malformed_record_beyond_limit(self, tmp_path):
+        path = tmp_path / "limited.jsonl"
+        path.write_text('{"a": 1}\n{"a": 2}\nnot json\n', encoding="utf-8")
+
+        frame = ar.read_jsonl(path, nrows=2)
+
+        assert frame.shape == (2, 1)
+
     def test_nrows_zero_returns_empty_frame(self, tmp_path):
         path = _write(tmp_path, "data.jsonl", [{"x": 1}, {"x": 2}])
         # nrows=0 is valid — reads 0 rows, returns empty frame
@@ -139,6 +147,14 @@ class TestReadJsonlNrows:
         # content must never raise even when the first line is invalid JSON.
         path = tmp_path / "bad.jsonl"
         path.write_text("not valid json at all\n{also bad}\n", encoding="utf-8")
+        frame = ar.read_jsonl(path, nrows=0)
+        assert frame.shape[0] == 0
+
+    def test_nrows_zero_skips_extension_validation(self, tmp_path):
+        # nrows=0 short-circuits before extension validation — an unsupported
+        # extension must not raise when the caller requests zero rows.
+        path = tmp_path / "probe.txt"
+        path.write_text("not json\n", encoding="utf-8")
         frame = ar.read_jsonl(path, nrows=0)
         assert frame.shape[0] == 0
 
@@ -269,3 +285,24 @@ class TestReadJsonlPipelineCompat:
 
         assert report.row_count == 3
         assert report.duplicate_rows == 1
+
+
+def test_read_jsonl_encoding_non_string(tmp_path):
+    f = tmp_path / "x.jsonl"
+    f.write_text('{"a": 1}\n')
+    with pytest.raises(TypeError, match="encoding must be a string"):
+        ar.read_jsonl(f, encoding=123)
+
+
+def test_read_jsonl_encoding_none(tmp_path):
+    f = tmp_path / "x.jsonl"
+    f.write_text('{"a": 1}\n')
+    with pytest.raises(TypeError, match="encoding must be a string"):
+        ar.read_jsonl(f, encoding=None)
+
+
+def test_read_jsonl_encoding_unknown_codec(tmp_path):
+    f = tmp_path / "x.jsonl"
+    f.write_text('{"a": 1}\n')
+    with pytest.raises(ValueError, match="Unknown encoding"):
+        ar.read_jsonl(f, encoding="fake-codec")

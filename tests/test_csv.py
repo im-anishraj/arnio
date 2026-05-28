@@ -1,5 +1,6 @@
 """Tests for CSV reading functionality."""
 
+import builtins
 import io
 import re
 from pathlib import Path
@@ -14,7 +15,149 @@ from arnio.io import _utf8_csv_path
 MESSY_CSV = str(Path(__file__).parent / "fixtures" / "messy_sales_data.csv")
 
 
+class ChunkTrackingTextStream:
+    def __init__(self, chunks):
+        self._chunks = iter(chunks)
+        self.read_sizes = []
+
+    def read(self, size=-1):
+        self.read_sizes.append(size)
+        return next(self._chunks, "")
+
+
 class TestReadCsv:
+    def test_read_csv_dtype_override_string(self, tmp_path):
+        path = tmp_path / "zip_codes.csv"
+        path.write_text("zip,quantity\n07001,5\n08002,10\n")
+
+        frame = ar.read_csv(
+            path,
+            dtype={"zip": "string"},
+        )
+
+        pdf = ar.to_pandas(frame)
+
+        assert frame.dtypes["zip"] == "string"
+        assert pdf["zip"].tolist() == ["07001", "08002"]
+
+    def test_read_csv_dtype_mixed_inference(self, tmp_path):
+        path = tmp_path / "mixed_types.csv"
+        path.write_text("zip,price\n07001,12.5\n08002,20.0\n")
+
+        frame = ar.read_csv(
+            path,
+            dtype={"zip": "string"},
+        )
+
+        assert frame.dtypes["zip"] == "string"
+        assert frame.dtypes["price"] == "float64"
+
+    def test_read_csv_dtype_rejects_non_string_mapping_entries(self, tmp_path):
+        path = tmp_path / "bad_dtype_mapping.csv"
+        path.write_text("age\n25\n")
+
+        with pytest.raises(TypeError, match="dtype column names must be strings"):
+            ar.read_csv(path, dtype={1: "int64"})
+
+        with pytest.raises(TypeError, match="dtype values must be strings"):
+            ar.read_csv(path, dtype={"age": int})
+
+    def test_read_csv_dtype_with_generated_column_names(self, tmp_path):
+        path = tmp_path / "no_header.csv"
+        path.write_text("07001,5\n08002,10\n")
+
+        frame = ar.read_csv(
+            path,
+            has_header=False,
+            dtype={"col_0": "string", "col_1": "int64"},
+        )
+
+        pdf = ar.to_pandas(frame)
+
+        assert frame.dtypes["col_0"] == "string"
+        assert frame.dtypes["col_1"] == "int64"
+        assert pdf["col_0"].tolist() == ["07001", "08002"]
+        assert pdf["col_1"].tolist() == [5, 10]
+
+    def test_read_csv_dtype_with_usecols(self, tmp_path):
+        path = tmp_path / "usecols_dtype.csv"
+        path.write_text("zip,quantity,price\n07001,5,12.5\n08002,10,20.0\n")
+
+        frame = ar.read_csv(
+            path,
+            usecols=["zip", "price"],
+            dtype={"zip": "string"},
+        )
+
+        pdf = ar.to_pandas(frame)
+
+        assert list(pdf.columns) == ["zip", "price"]
+        assert frame.dtypes["zip"] == "string"
+        assert frame.dtypes["price"] == "float64"
+        assert pdf["zip"].tolist() == ["07001", "08002"]
+
+    def test_read_csv_dtype_parse_failure_becomes_null(self, tmp_path):
+        path = tmp_path / "parse_failure.csv"
+        path.write_text("quantity\nabc\n")
+
+        frame = ar.read_csv(
+            path,
+            dtype={"quantity": "int64"},
+        )
+
+        pdf = ar.to_pandas(frame)
+
+        assert frame.dtypes["quantity"] == "int64"
+        assert pdf["quantity"].isna().tolist() == [True]
+
+    def test_read_csv_dtype_non_selected_usecols_column(self, tmp_path):
+        path = tmp_path / "dtype_usecols_error.csv"
+        path.write_text("zip,price\n07001,12.5\n")
+
+        with pytest.raises(
+            ar.CsvReadError,
+            match="dtype specified for non-selected column",
+        ):
+            ar.read_csv(
+                path,
+                usecols=["zip"],
+                dtype={"price": "float64"},
+            )
+
+    def test_read_csv_dtype_override_string_to_int64(self, tmp_path):
+        path = tmp_path / "quantities.csv"
+        path.write_text("quantity,label\n5,small\n10,large\n")
+
+        frame = ar.read_csv(
+            path,
+            dtype={"quantity": "int64"},
+        )
+
+        pdf = ar.to_pandas(frame)
+
+        assert frame.dtypes["quantity"] == "int64"
+        assert pdf["quantity"].tolist() == [5, 10]
+
+    def test_read_csv_invalid_dtype_name(self, tmp_path):
+        path = tmp_path / "invalid_dtype.csv"
+        path.write_text("age\n25\n")
+
+        with pytest.raises(ValueError, match="Unsupported dtype"):
+            ar.read_csv(
+                path,
+                dtype={"age": "datetime"},
+            )
+
+    def test_read_csv_dtype_unknown_column(self, tmp_path):
+        path = tmp_path / "unknown_column.csv"
+        path.write_text("age,name\n25,Alice\n")
+
+        with pytest.raises(ar.CsvReadError, match="Column not found in dtype mapping"):
+            ar.read_csv(
+                path,
+                dtype={"salary": "float64"},
+            )
+
     def test_basic_read(self, sample_csv):
         frame = ar.read_csv(sample_csv)
         assert isinstance(frame, ar.ArFrame)
@@ -121,6 +264,96 @@ class TestReadCsv:
         frame = ar.read_csv(csv_path)
         df = ar.to_pandas(frame)
         assert df["value"].iloc[0] == "1,234"
+
+    def test_decimal_separator_comma_with_semicolon_delimiter(self, tmp_path):
+        csv_path = tmp_path / "comma_decimal_semicolon.csv"
+        csv_path.write_text("value;label\n12,45;gross\n0,5;half\n")
+        frame = ar.read_csv(csv_path, delimiter=";", decimal_separator=",")
+        df = ar.to_pandas(frame)
+        assert frame.dtypes["value"] == "float64"
+        assert df["value"].tolist() == pytest.approx([12.45, 0.5])
+
+    def test_decimal_separator_comma_with_quoted_comma_delimiter(self, tmp_path):
+        csv_path = tmp_path / "quoted_comma_decimal.csv"
+        csv_path.write_text('value\n"12,45"\n"-0,5"\n')
+        frame = ar.read_csv(csv_path, decimal_separator=",")
+        df = ar.to_pandas(frame)
+        assert df["value"].tolist() == pytest.approx([12.45, -0.5])
+
+    def test_decimal_separator_default_preserves_comma_values(self, tmp_path):
+        csv_path = tmp_path / "default_comma_decimal.csv"
+        csv_path.write_text('value\n"12,45"\n')
+        frame = ar.read_csv(csv_path)
+        df = ar.to_pandas(frame)
+        assert frame.dtypes["value"] == "string"
+        assert df["value"].iloc[0] == "12,45"
+
+    def test_decimal_separator_with_dot_thousands_separator(self, tmp_path):
+        csv_path = tmp_path / "european_number.csv"
+        csv_path.write_text('value\n"1.234,56"\n')
+        frame = ar.read_csv(
+            csv_path,
+            decimal_separator=",",
+            thousands_separator=".",
+        )
+        df = ar.to_pandas(frame)
+        assert df["value"].iloc[0] == pytest.approx(1234.56)
+
+    def test_mixed_decimal_formats_become_null(self, tmp_path):
+        csv_path = tmp_path / "mixed_decimal_formats.csv"
+        csv_path.write_text('value\n"12,45"\n"12.45"\n')
+        frame = ar.read_csv(csv_path, decimal_separator=",")
+        df = ar.to_pandas(frame)
+        assert frame.dtypes["value"] == "float64"
+        assert df["value"].iloc[0] == pytest.approx(12.45)
+        assert pd.isna(df["value"].iloc[1])
+
+    def test_scan_csv_decimal_separator_matches_read_csv(self, tmp_path):
+        csv_path = tmp_path / "scan_comma_decimal.csv"
+        csv_path.write_text('value\n"12,45"\n')
+        assert ar.scan_csv(csv_path, decimal_separator=",")["value"] == "float64"
+        assert ar.read_csv(csv_path, decimal_separator=",").dtypes["value"] == "float64"
+
+    def test_read_csv_chunked_decimal_separator(self, tmp_path):
+        csv_path = tmp_path / "chunked_comma_decimal.csv"
+        csv_path.write_text("value;label\n12,45;a\n67,89;b\n")
+        chunks = list(
+            ar.read_csv_chunked(
+                csv_path,
+                chunksize=1,
+                delimiter=";",
+                decimal_separator=",",
+            )
+        )
+        assert [
+            ar.to_pandas(chunk)["value"].iloc[0] for chunk in chunks
+        ] == pytest.approx([12.45, 67.89])
+
+    @pytest.mark.parametrize("separator", ["", "a", "3", "ab", "\n", '"', "+", "-"])
+    def test_invalid_decimal_separator(self, tmp_path, separator):
+        csv_path = tmp_path / "decimal_separator.csv"
+        csv_path.write_text("value\n1234\n")
+        with pytest.raises(ValueError):
+            ar.read_csv(csv_path, decimal_separator=separator)
+        with pytest.raises(ValueError):
+            ar.scan_csv(csv_path, decimal_separator=separator)
+
+    @pytest.mark.parametrize("separator", [1, 1.5, True, [], {}])
+    def test_invalid_non_string_decimal_separator(self, tmp_path, separator):
+        csv_path = tmp_path / "decimal_separator_type.csv"
+        csv_path.write_text("value\n1234\n")
+        with pytest.raises(TypeError):
+            ar.read_csv(csv_path, decimal_separator=separator)
+        with pytest.raises(TypeError):
+            ar.scan_csv(csv_path, decimal_separator=separator)
+
+    def test_thousands_separator_must_differ_from_decimal_separator(self, tmp_path):
+        csv_path = tmp_path / "same_separators.csv"
+        csv_path.write_text("value\n1234\n")
+        with pytest.raises(ValueError, match="must differ"):
+            ar.read_csv(csv_path, decimal_separator=",", thousands_separator=",")
+        with pytest.raises(ValueError, match="must differ"):
+            ar.scan_csv(csv_path, decimal_separator=",", thousands_separator=",")
 
     @pytest.mark.parametrize(
         "separator", ["", "a", "3", "ab", "\n", '"', ".", "+", "-"]
@@ -328,6 +561,102 @@ class TestReadCsv:
         assert " score " in schema
         assert " active " in schema
 
+    # ------------------------------------------------------------------
+    # Whitespace-duplicate header tests (issue #117)
+    # ------------------------------------------------------------------
+
+    def test_exact_duplicate_headers_rejected(self, tmp_path):
+        """Exact duplicate column names are always rejected."""
+        csv_path = tmp_path / "dup.csv"
+        csv_path.write_text("a,a\n1,2\n")
+        with pytest.raises(ar.CsvReadError, match="[Dd]uplicate"):
+            ar.read_csv(csv_path)
+
+    def test_whitespace_duplicate_headers_rejected_default_trim(self, tmp_path):
+        """Headers differing only by whitespace are rejected (trim_headers=True)."""
+        csv_path = tmp_path / "ws_dup.csv"
+        csv_path.write_text("a , a\n1,2\n")
+        with pytest.raises(
+            ar.CsvReadError,
+            match="[Dd]uplicate column name",
+        ):
+            ar.read_csv(csv_path)
+
+    def test_whitespace_duplicate_headers_rejected_no_trim(self, tmp_path):
+        """Headers differing only by whitespace are rejected even with trim_headers=False."""
+        csv_path = tmp_path / "ws_dup_notrim.csv"
+        csv_path.write_text("a , a\n1,2\n")
+        with pytest.raises(
+            ar.CsvReadError,
+            match="[Dd]uplicate column name",
+        ):
+            ar.read_csv(csv_path, trim_headers=False)
+
+    def test_tab_whitespace_duplicate_headers_rejected(self, tmp_path):
+        """Tab-padded headers that collapse to the same name are rejected."""
+        csv_path = tmp_path / "tab_dup.csv"
+        csv_path.write_bytes(b"a\t,a\n1,2\n")  # "a\t" vs "a" after trim
+        with pytest.raises(
+            ar.CsvReadError,
+            match="[Dd]uplicate column name",
+        ):
+            ar.read_csv(csv_path)
+
+    def test_mixed_whitespace_duplicate_headers_rejected(self, tmp_path):
+        """Mixed leading/trailing spaces and tabs are caught."""
+        csv_path = tmp_path / "mixed_ws_dup.csv"
+        # " a " and "\ta\t" both trim to "a"
+        csv_path.write_bytes(b" a , \ta\t\n1,2\n")
+        with pytest.raises(
+            ar.CsvReadError,
+            match="[Dd]uplicate column name",
+        ):
+            ar.read_csv(csv_path)
+
+    def test_unique_headers_with_whitespace_accepted(self, tmp_path):
+        """Headers that are unique after trimming are accepted normally."""
+        csv_path = tmp_path / "unique_ws.csv"
+        csv_path.write_text(" name , age \n1,2\n")
+        frame = ar.read_csv(csv_path)
+        assert frame.columns == ["name", "age"]
+
+    def test_whitespace_duplicate_scan_csv_rejected(self, tmp_path):
+        """scan_csv also rejects whitespace-duplicate headers."""
+        csv_path = tmp_path / "scan_ws_dup.csv"
+        csv_path.write_text("a , a\n1,2\n")
+        with pytest.raises(
+            ar.CsvReadError,
+            match="[Dd]uplicate column name",
+        ):
+            ar.scan_csv(csv_path)
+
+    def test_whitespace_duplicate_scan_csv_no_trim_rejected(self, tmp_path):
+        """scan_csv with trim_headers=False still rejects whitespace-duplicate headers."""
+        csv_path = tmp_path / "scan_ws_dup_notrim.csv"
+        csv_path.write_text("a , a\n1,2\n")
+        with pytest.raises(
+            ar.CsvReadError,
+            match="[Dd]uplicate column name",
+        ):
+            ar.scan_csv(csv_path, trim_headers=False)
+
+    def test_whitespace_duplicate_chunked_rejected(self, tmp_path):
+        """read_csv_chunked also rejects whitespace-duplicate headers."""
+        csv_path = tmp_path / "chunked_ws_dup.csv"
+        csv_path.write_text("a , a\n1,2\n")
+        with pytest.raises(
+            ar.CsvReadError,
+            match="[Dd]uplicate column name",
+        ):
+            list(ar.read_csv_chunked(str(csv_path)))
+
+    def test_whitespace_duplicate_error_message_names_column(self, tmp_path):
+        """The error message includes the colliding column name."""
+        csv_path = tmp_path / "named_dup.csv"
+        csv_path.write_text("score , score\n1,2\n")
+        with pytest.raises(ar.CsvReadError, match="score"):
+            ar.read_csv(csv_path)
+
     def test_non_standard_extension_accepted(self, tmp_path):
         """Non-standard extensions no longer raise ValueError (fixes #34)."""
         for ext in (".dat", ".log", ".data", ".pipe"):
@@ -425,6 +754,19 @@ class TestReadCsv:
         assert df["revenue"].isna().sum() == 1
         assert pd.isna(df.loc[1, "revenue"])
 
+    def test_empty_csv(self, empty_csv):
+        frame = ar.read_csv(empty_csv)
+        assert frame.shape == (0, 3)
+        assert frame.columns == ["name", "age", "score"]
+
+    def test_csv_with_all_nulls(self, csv_with_all_nulls):
+        frame = ar.read_csv(csv_with_all_nulls)
+        assert frame.shape == (2, 3)
+        df = ar.to_pandas(frame)
+        assert df["a"].isna().all()
+        assert df["b"].isna().all()
+        assert df["c"].isna().all()
+
     def test_utf8_bom_handling(self, tmp_path):
         csv_path = tmp_path / "bom.csv"
         csv_path.write_bytes(b"\xef\xbb\xbfname,age\nAlice,30\nBob,25\n")
@@ -440,6 +782,127 @@ class TestReadCsv:
     def test_pathlike_input(self, sample_csv):
         frame = ar.read_csv(Path(sample_csv))
         assert frame.shape == (3, 4)
+
+    def test_read_csv_file_like_input_is_copied_in_bounded_chunks(self):
+        stream = ChunkTrackingTextStream(["name,age\n", "Alice,30\n", "Bob,25\n"])
+
+        frame = ar.read_csv(stream)
+        df = ar.to_pandas(frame)
+
+        assert df["name"].tolist() == ["Alice", "Bob"]
+        assert stream.read_sizes
+        assert -1 not in stream.read_sizes
+
+    def test_read_csv_chunked_file_like_input_is_copied_in_bounded_chunks(self):
+        stream = ChunkTrackingTextStream(["name,age\nAlice,30\n", "Bob,25\n"])
+
+        chunks = list(ar.read_csv_chunked(stream, chunksize=1))
+
+        assert [ar.to_pandas(chunk)["name"].iloc[0] for chunk in chunks] == [
+            "Alice",
+            "Bob",
+        ]
+        assert stream.read_sizes
+        assert -1 not in stream.read_sizes
+
+    def test_file_like_input_rejects_bytes(self):
+        with pytest.raises(TypeError, match="file-like objects must return text"):
+            ar.read_csv(io.BytesIO(b"name,age\nAlice,30\n"))
+
+    def test_read_csv_encoding_errors_strict(self, tmp_path):
+        csv_file = tmp_path / "invalid_utf8.csv"
+
+        csv_file.write_bytes(b"name\nabc\xffdef\n")
+
+        with pytest.raises(ar.CsvReadError):
+            ar.read_csv(
+                csv_file,
+                encoding="utf-8",
+                encoding_errors="strict",
+            )
+
+    def test_read_csv_encoding_errors_replace(self, tmp_path):
+        csv_file = tmp_path / "invalid_utf8.csv"
+
+        csv_file.write_bytes(b"name\nabc\xffdef\n")
+
+        frame = ar.read_csv(
+            csv_file,
+            encoding="utf-8",
+            encoding_errors="replace",
+        )
+
+        value = frame["name"][0]
+
+        assert value == "abc�def"
+        assert "def" in value
+
+    def test_read_csv_encoding_errors_ignore(self, tmp_path):
+        csv_file = tmp_path / "invalid_utf8.csv"
+
+        csv_file.write_bytes(b"name\nabc\xffdef\n")
+
+        frame = ar.read_csv(
+            csv_file,
+            encoding="utf-8",
+            encoding_errors="ignore",
+        )
+
+        value = frame["name"][0]
+
+        assert value == "abcdef"
+
+    def test_read_csv_invalid_encoding_errors_mode(self, tmp_path):
+        csv_file = tmp_path / "data.csv"
+
+        csv_file.write_text(
+            "name\nalice\n",
+            encoding="utf-8",
+        )
+
+        with pytest.raises(ValueError):
+            ar.read_csv(
+                csv_file,
+                encoding_errors="bad-mode",
+            )
+
+    def test_scan_csv_encoding_errors_strict(self, tmp_path):
+        csv_file = tmp_path / "invalid_utf8.csv"
+
+        csv_file.write_bytes(b"name\nabc\xffdef\n")
+
+        with pytest.raises(ar.CsvReadError):
+            ar.scan_csv(
+                csv_file,
+                encoding="utf-8",
+                encoding_errors="strict",
+            )
+
+    def test_scan_csv_encoding_errors_replace(self, tmp_path):
+        csv_file = tmp_path / "invalid_utf8.csv"
+
+        csv_file.write_bytes(b"name\nabc\xffdef\n")
+
+        schema = ar.scan_csv(
+            csv_file,
+            encoding="utf-8",
+            encoding_errors="replace",
+        )
+
+        assert schema["name"] == "string"
+
+    def test_scan_csv_encoding_errors_ignore(self, tmp_path):
+        csv_file = tmp_path / "invalid_utf8.csv"
+
+        csv_file.write_bytes(b"name\nabc\xffdef\n")
+
+        schema = ar.scan_csv(
+            csv_file,
+            encoding="utf-8",
+            encoding_errors="ignore",
+        )
+
+        assert schema["name"] == "string"
 
     def test_non_utf8_encoding(self, tmp_path):
         csv_path = tmp_path / "latin.csv"
@@ -477,15 +940,33 @@ class TestReadCsv:
         csv_path = tmp_path / "unterminated.csv"
         csv_path.write_text('id,text\n1,"hello\n')
 
-        with pytest.raises(ar.CsvReadError, match="Unterminated quoted CSV record"):
+        with pytest.raises(
+            ar.CsvReadError, match="Unterminated quoted field starting at line 2"
+        ):
             ar.read_csv(csv_path)
+
+    def test_tsv_delimiter(self, tmp_path):
+        csv_path = tmp_path / "data.tsv"
+        csv_path.write_text("name\tage\tcity\nAlice\t30\tNYC\nBob\t25\tLA\n")
+        frame = ar.read_csv(str(csv_path))
+        assert frame.shape == (2, 3)
+        assert frame.columns == ["name", "age", "city"]
+
+    def test_custom_delimiter(self, tmp_path):
+        csv_path = tmp_path / "data.csv"
+        csv_path.write_text("name|age|city\nAlice|30|NYC\nBob|25|LA\n")
+        frame = ar.read_csv(str(csv_path), delimiter="|")
+        assert frame.shape == (2, 3)
+        assert list(ar.to_pandas(frame)["name"]) == ["Alice", "Bob"]
 
     def test_duplicate_headers_rejected(self, tmp_path):
         csv_path = tmp_path / "duplicate_headers.csv"
         csv_path.write_text("a,a\n1,2\n")
 
-        with pytest.raises(ar.CsvReadError, match="Duplicate column name: a"):
+        with pytest.raises(ar.CsvReadError, match="Duplicate column name: a") as exc:
             ar.read_csv(csv_path)
+
+        assert exc.value.__cause__ is None
 
     def test_empty_file_raises(self, tmp_path):
         csv_path = tmp_path / "empty.csv"
@@ -496,6 +977,50 @@ class TestReadCsv:
     def test_missing_file_passthrough(self, tmp_path):
         with pytest.raises(ar.CsvReadError):
             ar.read_csv(str(tmp_path / "nonexistent.csv"))
+
+    def test_read_csv_permission_error_includes_path_and_os_reason(
+        self, tmp_path, monkeypatch
+    ):
+        csv_path = tmp_path / "permission.csv"
+        csv_path.write_text("a,b\n1,2\n")
+        csv_path_str = str(csv_path)
+        real_open = builtins.open
+
+        def blocked_open(*args, **kwargs):
+            if args[0] == csv_path_str and args[1] == "rb":
+                raise PermissionError(13, "Access is denied")
+            return real_open(*args, **kwargs)
+
+        monkeypatch.setattr(builtins, "open", blocked_open)
+
+        with pytest.raises(
+            CsvReadError,
+            match="Could not access CSV file .+: Access is denied",
+        ) as exc_info:
+            ar.read_csv(csv_path)
+        assert repr(str(csv_path)) in str(exc_info.value)
+
+    def test_read_csv_non_utf8_permission_error_includes_path_and_os_reason(
+        self, tmp_path, monkeypatch
+    ):
+        csv_path = tmp_path / "permission-latin1.csv"
+        csv_path.write_bytes("name\nAndr\xe9\n".encode("latin-1"))
+        csv_path_str = str(csv_path)
+        real_open = builtins.open
+
+        def blocked_open(*args, **kwargs):
+            if args[0] == csv_path_str and kwargs.get("encoding") == "latin-1":
+                raise PermissionError(13, "Access is denied")
+            return real_open(*args, **kwargs)
+
+        monkeypatch.setattr(builtins, "open", blocked_open)
+
+        with pytest.raises(
+            CsvReadError,
+            match="Could not access CSV file .+: Access is denied",
+        ) as exc_info:
+            ar.read_csv(csv_path, encoding="latin-1")
+        assert repr(str(csv_path)) in str(exc_info.value)
 
     def test_null_values_default_preserves_empty_only_behavior(self, tmp_path):
         csv_path = tmp_path / "default_nulls.csv"
@@ -595,6 +1120,48 @@ class TestReadCsv:
         assert df["text"].iloc[0] == "hello"
         assert df["text"].iloc[1] == long_text
         assert df["text"].iloc[2] == "world"
+
+    def test_read_csv_encoding_errors_replace_header(self, tmp_path):
+        csv_file = tmp_path / "invalid_header.csv"
+
+        csv_file.write_bytes(b"na\xffme\nalice\n")
+
+        frame = ar.read_csv(
+            csv_file,
+            encoding="utf-8",
+            encoding_errors="replace",
+        )
+
+        columns = frame.columns
+
+        assert columns == ["na�me"]
+
+    def test_read_csv_encoding_errors_ignore_header(self, tmp_path):
+        csv_file = tmp_path / "invalid_header.csv"
+
+        csv_file.write_bytes(b"na\xffme\nalice\n")
+
+        frame = ar.read_csv(
+            csv_file,
+            encoding="utf-8",
+            encoding_errors="ignore",
+        )
+
+        columns = frame.columns
+
+        assert columns == ["name"]
+
+    def test_read_csv_encoding_errors_strict_header(self, tmp_path):
+        csv_file = tmp_path / "invalid_header.csv"
+
+        csv_file.write_bytes(b"na\xffme\nalice\n")
+
+        with pytest.raises(ar.CsvReadError):
+            ar.read_csv(
+                csv_file,
+                encoding="utf-8",
+                encoding_errors="strict",
+            )
 
 
 class TestScanCsv:
@@ -738,7 +1305,7 @@ class TestScanCsv:
     def test_scan_non_utf8_crlf_split_across_chunk_boundary(self, tmp_path):
         csv_path = tmp_path / "latin1_crlf_boundary.csv"
         header = "pad,value\r\n"
-        row1 = f'{"x" * 8176},100\r\n'
+        row1 = f"{'x' * 8176},100\r\n"
         row2 = "y,hello\r\n"
         row3 = "z,200\r\n"
         csv_path.write_bytes((header + row1 + row2 + row3).encode("latin-1"))
@@ -781,6 +1348,28 @@ class TestScanCsv:
     def test_scan_missing_file_passthrough(self, tmp_path):
         with pytest.raises(ar.CsvReadError):
             ar.scan_csv(str(tmp_path / "nonexistent.csv"))
+
+    def test_scan_csv_permission_error_includes_path_and_os_reason(
+        self, tmp_path, monkeypatch
+    ):
+        csv_path = tmp_path / "scan-permission.csv"
+        csv_path.write_text("a,b\n1,2\n")
+        csv_path_str = str(csv_path)
+        real_open = builtins.open
+
+        def blocked_open(*args, **kwargs):
+            if args[0] == csv_path_str and args[1] == "rb":
+                raise PermissionError(13, "Access is denied")
+            return real_open(*args, **kwargs)
+
+        monkeypatch.setattr(builtins, "open", blocked_open)
+
+        with pytest.raises(
+            CsvReadError,
+            match="Could not access CSV file .+: Access is denied",
+        ) as exc_info:
+            ar.scan_csv(csv_path)
+        assert repr(str(csv_path)) in str(exc_info.value)
 
     def test_scan_non_standard_extension_accepted(self, tmp_path):
         """Non-standard extensions no longer raise ValueError in scan_csv (fixes #34)."""
@@ -886,6 +1475,64 @@ class TestScanCsv:
         schema = ar.scan_csv(csv_file, has_header=False)
 
         assert list(frame.columns) == list(schema.keys())
+
+    def test_scan_csv_has_header_validation(self, tmp_path):
+        csv_content = "1,Alice\n2,Bob\n"
+        csv_file = tmp_path / "validation.csv"
+        csv_file.write_text(csv_content)
+
+        # Assert that invalid truthy/falsy types raise a TypeError
+        with pytest.raises(TypeError, match="has_header must be True or False"):
+            ar.scan_csv(csv_file, has_header=1)
+
+        with pytest.raises(TypeError, match="has_header must be True or False"):
+            ar.scan_csv(csv_file, has_header=None)
+
+        with pytest.raises(TypeError, match="has_header must be True or False"):
+            ar.scan_csv(csv_file, has_header="false")
+
+    def test_read_csv_encoding_errors_preserve_valid_utf8(
+        self,
+        tmp_path,
+    ):
+        csv_file = tmp_path / "mixed_utf8.csv"
+
+        csv_file.write_bytes(b"name\ncaf\xc3\xa9\xff\n")
+
+        frame = ar.read_csv(
+            csv_file,
+            encoding="utf-8",
+            encoding_errors="replace",
+        )
+
+        value = frame["name"][0]
+
+        assert value == "café�"
+
+    def test_read_csv_encoding_errors_ignore_preserves_numeric_inference(
+        self, tmp_path
+    ):
+        csv_file = tmp_path / "numeric_ignore.csv"
+
+        csv_file.write_bytes(b"value\n1\xff\n2\n")
+
+        frame = ar.read_csv(
+            csv_file,
+            encoding="utf-8",
+            encoding_errors="ignore",
+        )
+
+        values = frame["value"]
+
+        assert values == [1, 2]
+
+    def test_read_csv_encoding_errors_rejects_overlong_utf8(self, tmp_path):
+        csv_file = tmp_path / "overlong.csv"
+
+        csv_file.write_bytes(b"name\n\xc0\xaf\n")
+
+        with pytest.raises(ar.CsvReadError):
+            ar.read_csv(csv_file, encoding="utf-8", encoding_errors="strict")
 
 
 # --- Issue #115: quoted multiline round-trip across line endings ---
@@ -1505,6 +2152,39 @@ class TestSniffDelimiter:
         ):
             ar.sniff_delimiter(csv_path)
 
+    def test_sniff_delimiter_rejects_invalid_utf8(self, tmp_path):
+        path = tmp_path / "bad_utf8.csv"
+
+        path.write_bytes(b"name,city\nAlice,\xff\xffYork\n")
+
+        with pytest.raises(
+            ar.CsvReadError,
+            match="Could not decode",
+        ):
+            ar.sniff_delimiter(path, encoding="utf-8")
+
+    def test_sniff_delimiter_rejects_late_nul_bytes(self, tmp_path):
+        path = tmp_path / "late_nul.csv"
+
+        payload = b"a,b\n" + b"1,2\n" * 300 + b"3,\x004\n"
+
+        path.write_bytes(payload)
+        with pytest.raises(
+            ar.CsvReadError,
+            match="NUL bytes",
+        ):
+            ar.sniff_delimiter(path)
+
+    def test_sniff_delimiter_valid_csv_still_works(self, tmp_path):
+        path = tmp_path / "valid.csv"
+
+        path.write_text(
+            "name;age\nAlice;30\nBob;40\n",
+            encoding="utf-8",
+        )
+
+        assert ar.sniff_delimiter(path) == ";"
+
 
 class TestArFrameGetItem:
     def test_getitem_existing_column(self, sample_csv):
@@ -1534,8 +2214,6 @@ class TestArFrameGetItem:
         frame = ar.read_csv(sample_csv)
         with pytest.raises(TypeError):
             frame[0]
-        with pytest.raises(TypeError):
-            frame[["name"]]
 
     def test_getitem_empty_frame(self, tmp_path):
         csv_path = tmp_path / "empty_rows.csv"
@@ -1618,6 +2296,69 @@ class TestReadCsvSkipRows:
             ar.read_csv(csv_path, skiprows=1.5)
 
 
+class TestReadCsvChunkedSkiprowsAlias:
+    """Tests for the skiprows alias in read_csv_chunked (issue #1293).
+
+    skip_rows / skiprows in chunked mode skip data rows *after* the header.
+    skiprows is a naming alias only — semantics are unchanged.
+    """
+
+    def test_skiprows_alias_skips_rows(self, tmp_path):
+        # skiprows=2 skips the first 2 data rows after the header.
+        csv_path = tmp_path / "data.csv"
+        csv_path.write_text("name,age\nAlice,30\nBob,25\nCharlie,35\n")
+        chunks = list(ar.read_csv_chunked(csv_path, skiprows=2))
+        assert len(chunks) == 1
+        df = ar.to_pandas(chunks[0])
+        assert df["name"].tolist() == ["Charlie"]
+
+    def test_skiprows_alias_zero_is_noop(self, tmp_path):
+        csv_path = tmp_path / "data.csv"
+        csv_path.write_text("name,age\nAlice,30\n")
+        chunks = list(ar.read_csv_chunked(csv_path, skiprows=0))
+        assert sum(c.shape[0] for c in chunks) == 1
+
+    def test_skip_rows_still_works(self, tmp_path):
+        # Existing skip_rows parameter must remain backward-compatible.
+        csv_path = tmp_path / "data.csv"
+        csv_path.write_text("name,age\nAlice,30\nBob,25\n")
+        chunks = list(ar.read_csv_chunked(csv_path, skip_rows=1))
+        df = ar.to_pandas(chunks[0])
+        assert df["name"].tolist() == ["Bob"]
+
+    def test_skiprows_and_skip_rows_agree_no_error(self, tmp_path):
+        # Both may be passed if they have the same value.
+        csv_path = tmp_path / "data.csv"
+        csv_path.write_text("name,age\nAlice,30\nBob,25\n")
+        chunks = list(ar.read_csv_chunked(csv_path, skiprows=1, skip_rows=1))
+        df = ar.to_pandas(chunks[0])
+        assert df["name"].tolist() == ["Bob"]
+
+    def test_skiprows_and_skip_rows_conflict_raises(self, tmp_path):
+        csv_path = tmp_path / "data.csv"
+        csv_path.write_text("name,age\nAlice,30\n")
+        with pytest.raises(ValueError, match="Conflicting values"):
+            list(ar.read_csv_chunked(csv_path, skiprows=1, skip_rows=2))
+
+    def test_skiprows_invalid_negative_raises(self, tmp_path):
+        csv_path = tmp_path / "data.csv"
+        csv_path.write_text("a,b\n1,2\n")
+        with pytest.raises(ValueError, match="non-negative"):
+            list(ar.read_csv_chunked(csv_path, skiprows=-1))
+
+    def test_skiprows_invalid_bool_raises(self, tmp_path):
+        csv_path = tmp_path / "data.csv"
+        csv_path.write_text("a,b\n1,2\n")
+        with pytest.raises(TypeError, match="integer"):
+            list(ar.read_csv_chunked(csv_path, skiprows=True))
+
+    def test_skiprows_invalid_float_raises(self, tmp_path):
+        csv_path = tmp_path / "data.csv"
+        csv_path.write_text("a,b\n1,2\n")
+        with pytest.raises(TypeError, match="integer"):
+            list(ar.read_csv_chunked(csv_path, skiprows=1.5))
+
+
 class TestInferTypeLocaleAndNumericEdgeCases:
     def test_float_decimal_dot(self, tmp_path):
         path = tmp_path / "decimal.csv"
@@ -1671,6 +2412,74 @@ class TestInferTypeLocaleAndNumericEdgeCases:
         assert list(df["v"]) == ["1", "9223372036854775808"]
 
 
+class TestCastTypes:
+    def test_cast_valid_string_to_int(self, tmp_path):
+        csv_path = tmp_path / "data.csv"
+        csv_path.write_text("value\n1\n2\n3\n")
+        frame = ar.read_csv(csv_path)
+        result = ar.cast_types(frame, {"value": "int64"})
+        assert result.dtypes["value"] == "int64"
+
+    def test_cast_invalid_string_to_int_raises(self, tmp_path):
+        csv_path = tmp_path / "data.csv"
+        csv_path.write_text("value\nhello\nworld\n")
+        frame = ar.read_csv(csv_path)
+        with pytest.raises(ar.TypeCastError):
+            ar.cast_types(frame, {"value": "int64"})
+
+    def test_cast_invalid_string_to_int_coerce(self, tmp_path):
+        csv_path = tmp_path / "data.csv"
+        csv_path.write_text("value\n1\nhello\n3\n")
+        frame = ar.read_csv(csv_path)
+        result = ar.cast_types(frame, {"value": "int64"}, errors="coerce")
+        df = ar.to_pandas(result)
+        assert result.dtypes["value"] == "int64"
+        assert pd.isna(df["value"].iloc[1])
+
+    def test_cast_mixed_valid_invalid_raises_by_default(self, tmp_path):
+        csv_path = tmp_path / "data.csv"
+        csv_path.write_text("value\n1\nabc\n3\n")
+        frame = ar.read_csv(csv_path)
+        with pytest.raises(ar.TypeCastError):
+            ar.cast_types(frame, {"value": "int64"})
+
+    def test_cast_float_string_to_int_raises(self, tmp_path):
+        csv_path = tmp_path / "data.csv"
+        csv_path.write_text("value\n1.5\n2.7\n")
+        frame = ar.read_csv(csv_path)
+        with pytest.raises(ar.TypeCastError):
+            ar.cast_types(frame, {"value": "int64"})
+
+
+class TestFromPandas:
+    def test_nullable_int_column(self):
+        df = pd.DataFrame({"value": pd.array([1, 2, None], dtype="Int64")})
+        frame = ar.from_pandas(df)
+        assert frame.dtypes["value"] == "int64"
+
+    def test_nullable_float_column(self):
+        df = pd.DataFrame({"value": pd.array([1.1, 2.2, None], dtype="Float64")})
+        frame = ar.from_pandas(df)
+        assert frame.dtypes["value"] == "float64"
+
+    def test_nullable_boolean_column(self):
+        df = pd.DataFrame({"flag": pd.array([True, False, None], dtype="boolean")})
+        frame = ar.from_pandas(df)
+        assert frame.dtypes["flag"] == "bool"
+
+    def test_nullable_int_null_preserved(self):
+        df = pd.DataFrame({"value": pd.array([1, None, 3], dtype="Int64")})
+        frame = ar.from_pandas(df)
+        result = ar.to_pandas(frame)
+        assert pd.isna(result["value"].iloc[1])
+
+    def test_nullable_bool_null_preserved(self):
+        df = pd.DataFrame({"flag": pd.array([True, None, False], dtype="boolean")})
+        frame = ar.from_pandas(df)
+        result = ar.to_pandas(frame)
+        assert pd.isna(result["flag"].iloc[1])
+
+
 class TestEdgeCaseCsvShapes:
     def test_single_row_csv(self, tmp_path):
         csv_path = tmp_path / "single_row.csv"
@@ -1705,3 +2514,314 @@ class TestEdgeCaseCsvShapes:
         schema = ar.scan_csv(csv_path)
         assert "score" in schema
         assert len(schema) == 1
+
+
+class TestUnicodeFilePath:
+    """read_csv and scan_csv must work with non-ASCII characters in the path."""
+
+    def test_read_csv_unicode_filename(self, tmp_path, unicode_csv):
+        csv_path = tmp_path / "用户数据.csv"
+        csv_path.write_text(unicode_csv, encoding="utf-8")
+        frame = ar.read_csv(str(csv_path))
+        assert frame.columns == ["name", "value"]
+        assert frame.shape == (2, 2)
+
+    def test_scan_csv_unicode_filename(self, tmp_path, unicode_csv):
+        csv_path = tmp_path / "用户数据.csv"
+        csv_path.write_text(unicode_csv, encoding="utf-8")
+        schema = ar.scan_csv(str(csv_path))
+        assert schema == {"name": "string", "value": "int64"}
+
+    def test_read_csv_unicode_directory(self, tmp_path, unicode_csv):
+        folder = tmp_path / "données"
+        folder.mkdir()
+        csv_path = folder / "data.csv"
+        csv_path.write_text(unicode_csv, encoding="utf-8")
+        frame = ar.read_csv(str(csv_path))
+        assert frame.shape == (2, 2)
+
+    def test_scan_csv_unicode_directory(self, tmp_path, unicode_csv):
+        folder = tmp_path / "données"
+        folder.mkdir()
+        csv_path = folder / "data.csv"
+        csv_path.write_text(unicode_csv, encoding="utf-8")
+        schema = ar.scan_csv(str(csv_path))
+        assert schema == {"name": "string", "value": "int64"}
+
+    def test_chunked_read_unicode_path(self, tmp_path, unicode_csv):
+        folder = tmp_path / "用户"
+        folder.mkdir()
+
+        csv_path = folder / "数据.csv"
+        csv_path.write_text(unicode_csv, encoding="utf-8")
+
+        chunks = ar.read_csv_chunked(str(csv_path), chunksize=1)
+        chunks = list(chunks)
+
+        assert len(chunks) > 0
+
+        assert chunks[0].shape[1] == 2
+
+        total_rows = sum(chunk.shape[0] for chunk in chunks)
+        assert total_rows == 2
+
+
+# --- Issue #113: unterminated quoted field errors must include line number ---
+
+
+class TestUnterminatedQuoteLocation:
+    """Regression tests for #113 — CsvReadError must include the line number
+    where an unterminated quoted field begins so users can locate the problem
+    in their input file quickly."""
+
+    def test_error_message_includes_line_number(self, tmp_path):
+        # Unterminated quote starts on line 2 (after the header).
+        csv_path = tmp_path / "bad.csv"
+        csv_path.write_text('name,note\nAlice,"unterminated\n')
+        with pytest.raises(ar.CsvReadError, match="line 2"):
+            ar.read_csv(csv_path)
+
+    def test_error_message_includes_correct_line_for_later_row(self, tmp_path):
+        # Two valid rows, then an unterminated quote on line 4.
+        csv_path = tmp_path / "bad.csv"
+        csv_path.write_text('a,b\n1,ok\n2,fine\n3,"oops\n')
+        with pytest.raises(ar.CsvReadError, match="line 4"):
+            ar.read_csv(csv_path)
+
+    def test_error_message_includes_line_for_multiline_field_start(self, tmp_path):
+        # A valid multiline field followed by an unterminated one.
+        # Valid: rows 1-3 (header + "hello\nworld" spanning lines 2-3).
+        # Invalid: unterminated quote starts on line 4.
+        csv_path = tmp_path / "bad.csv"
+        csv_path.write_bytes(b'id,text\n1,"hello\nworld"\n2,"oops\n')
+        with pytest.raises(ar.CsvReadError, match="line 4"):
+            ar.read_csv(csv_path)
+
+    def test_error_message_says_unterminated_quoted_field(self, tmp_path):
+        # The error message must mention "Unterminated quoted field".
+        csv_path = tmp_path / "bad.csv"
+        csv_path.write_text('x\n"no close\n')
+        with pytest.raises(ar.CsvReadError, match="Unterminated quoted field"):
+            ar.read_csv(csv_path)
+
+    def test_valid_multiline_field_still_parses(self, tmp_path):
+        # A properly closed multiline field must NOT raise.
+        csv_path = tmp_path / "ok.csv"
+        csv_path.write_bytes(b'id,text\n1,"hello\nworld"\n')
+        frame = ar.read_csv(csv_path)
+        assert frame.shape == (1, 2)
+        df = ar.to_pandas(frame)
+        assert df["text"].iloc[0] == "hello\nworld"
+
+    def test_no_header_unterminated_quote_line_number(self, tmp_path):
+        # Without a header, the unterminated quote is on line 1.
+        csv_path = tmp_path / "bad.csv"
+        csv_path.write_text('"oops\n')
+        with pytest.raises(ar.CsvReadError, match="line 1"):
+            ar.read_csv(csv_path, has_header=False)
+
+
+class TestArFrameToDict:
+    def test_to_dict_basic(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        result = frame.to_dict()
+        assert isinstance(result, dict)
+        assert list(result.keys()) == ["name", "age", "email", "active"]
+
+    def test_to_dict_values_are_lists(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        result = frame.to_dict()
+        for val in result.values():
+            assert isinstance(val, list)
+
+    def test_to_dict_string_column(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        result = frame.to_dict()
+        assert result["name"] == ["Alice", "Bob", "Charlie"]
+
+    def test_to_dict_integer_column(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        result = frame.to_dict()
+        assert result["age"] == [30, 25, 35]
+
+    def test_to_dict_bool_column(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        result = frame.to_dict()
+        assert result["active"] == [True, False, True]
+
+    def test_to_dict_preserves_column_order(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        result = frame.to_dict()
+        assert list(result.keys()) == frame.columns
+
+    def test_to_dict_empty_frame(self, tmp_path):
+        csv_path = tmp_path / "empty_rows.csv"
+        csv_path.write_text("name,age\n")
+        frame = ar.read_csv(csv_path)
+        result = frame.to_dict()
+        assert result == {"name": [], "age": []}
+
+    def test_to_dict_with_nulls(self, csv_with_nulls):
+        frame = ar.read_csv(csv_with_nulls)
+        result = frame.to_dict()
+        assert isinstance(result, dict)
+        assert result["name"][0] == "Alice"
+
+    def test_to_dict_single_column(self, tmp_path):
+        csv_path = tmp_path / "single.csv"
+        csv_path.write_text("value\n1\n2\n3\n")
+        frame = ar.read_csv(csv_path)
+        result = frame.to_dict()
+        assert result == {"value": [1, 2, 3]}
+
+    def test_to_dict_consistent_with_getitem(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        result = frame.to_dict()
+        for col in frame.columns:
+            assert result[col] == frame[col]
+
+
+class TestArFrameStr:
+    def test_str_contains_shape(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        result = str(frame)
+        assert "3" in result
+        assert "4" in result
+
+    def test_str_contains_column_names(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        result = str(frame)
+        assert "name" in result
+        assert "age" in result
+
+    def test_str_contains_data_values(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        result = str(frame)
+        assert "Alice" in result
+
+    def test_str_contains_dtypes(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        result = str(frame)
+        assert "string" in result or "int64" in result
+
+    def test_str_empty_frame(self, tmp_path):
+        csv_path = tmp_path / "empty_rows.csv"
+        csv_path.write_text("name,age\n")
+        frame = ar.read_csv(csv_path)
+        result = str(frame)
+        assert "empty" in result.lower() or "0" in result
+
+    def test_str_large_frame_shows_truncation(self, large_csv):
+        frame = ar.read_csv(large_csv)
+        result = str(frame)
+        assert "more rows" in result
+
+    def test_str_returns_string(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        assert isinstance(str(frame), str)
+
+
+def test_read_csv_encoding_non_string_raises_type_error(tmp_path):
+    path = tmp_path / "test.csv"
+    path.write_text("a,b\n1,2\n")
+    with pytest.raises(TypeError, match="encoding must be a string"):
+        ar.read_csv(path, encoding=123)
+
+
+def test_read_csv_encoding_none_raises_type_error(tmp_path):
+    path = tmp_path / "test.csv"
+    path.write_text("a,b\n1,2\n")
+    with pytest.raises(TypeError, match="encoding must be a string"):
+        ar.read_csv(path, encoding=None)
+
+
+def test_read_csv_encoding_list_raises_type_error(tmp_path):
+    path = tmp_path / "test.csv"
+    path.write_text("a,b\n1,2\n")
+    with pytest.raises(TypeError, match="encoding must be a string"):
+        ar.read_csv(path, encoding=["utf-8"])
+
+
+def test_scan_csv_encoding_non_string_raises_type_error(tmp_path):
+    path = tmp_path / "test.csv"
+    path.write_text("a,b\n1,2\n")
+    with pytest.raises(TypeError, match="encoding must be a string"):
+        ar.scan_csv(path, encoding=123)
+
+
+def test_scan_csv_encoding_none_raises_type_error(tmp_path):
+    path = tmp_path / "test.csv"
+    path.write_text("a,b\n1,2\n")
+    with pytest.raises(TypeError, match="encoding must be a string"):
+        ar.scan_csv(path, encoding=None)
+
+
+# --- Tests added for CsvReader streaming memory optimization ---
+
+
+def test_streaming_nrows(tmp_path):
+    csv_path = tmp_path / "nrows.csv"
+    csv_path.write_text("a,b\n1,2\n3,4\n5,6\n")
+    frame = ar.read_csv(csv_path, nrows=2)
+    assert frame.shape == (2, 2)
+    df = ar.to_pandas(frame)
+    assert list(df["a"]) == [1, 3]
+
+
+def test_streaming_headerless(tmp_path):
+    csv_path = tmp_path / "headerless.csv"
+    csv_path.write_text("1,2\n3,4\n")
+    frame = ar.read_csv(csv_path, has_header=False)
+    assert frame.shape == (2, 2)
+    assert list(frame.columns) == ["col_0", "col_1"]
+    df = ar.to_pandas(frame)
+    assert list(df["col_0"]) == [1, 3]
+
+
+def test_streaming_trailing_empty_fields(tmp_path):
+    csv_path = tmp_path / "trailing.csv"
+    csv_path.write_text("a,b\n1,\n2,3\n")
+    frame = ar.read_csv(csv_path, mode="permissive")
+    assert frame.shape == (2, 2)
+    df = ar.to_pandas(frame)
+    assert pd.isna(df["b"].iloc[0])
+    assert df["b"].iloc[1] == 3
+
+
+def test_streaming_late_type_promotion(tmp_path):
+    csv_path = tmp_path / "late_promo.csv"
+    csv_path.write_text("a\n1\n2\n3\n4.5\nhello\n")
+    frame = ar.read_csv(csv_path)
+    assert frame.dtypes["a"] == "string"
+    df = ar.to_pandas(frame)
+    assert list(df["a"]) == ["1", "2", "3", "4.5", "hello"]
+
+
+def test_streaming_late_type_promotion_float(tmp_path):
+    csv_path = tmp_path / "late_promo_float.csv"
+    csv_path.write_text("a\n1\n2\n3\n4.5\n")
+    frame = ar.read_csv(csv_path)
+    assert frame.dtypes["a"] == "float64"
+    df = ar.to_pandas(frame)
+    assert list(df["a"]) == [1.0, 2.0, 3.0, 4.5]
+
+
+def test_read_csv_text_stream_encoding_override():
+    import io
+
+    csv_text = "col1,col2\nhello,café\n"
+    # Even if caller passes a different encoding, text streams are handled as UTF-8
+    stream = io.StringIO(csv_text)
+    df = ar.read_csv(stream, encoding="utf-16")
+    pandas_df = ar.to_pandas(df)
+    assert pandas_df["col2"][0] == "café"
+
+
+def test_read_csv_chunked_text_stream_encoding_override():
+    import io
+
+    csv_text = "col1,col2\nhello,café\n"
+    stream = io.StringIO(csv_text)
+    chunks = list(ar.read_csv_chunked(stream, encoding="utf-16"))
+    pandas_df = ar.to_pandas(chunks[0])
+    assert pandas_df["col2"][0] == "café"
