@@ -208,6 +208,22 @@ class TestReadCsv:
         ):
             ar.read_csv(csv_path, usecols=["id", "id"])
 
+        with pytest.raises(
+            ValueError,
+            match="usecols must not be empty",
+        ):
+            ar.read_csv(csv_path, usecols=[])
+
+    def test_invalid_empty_usecols_chunked(self, tmp_path):
+        csv_path = tmp_path / "chunked.csv"
+        csv_path.write_text("id,name\n1,Alice\n2,Bob\n")
+
+        with pytest.raises(
+            ValueError,
+            match="usecols must not be empty",
+        ):
+            list(ar.read_csv_chunked(csv_path, chunksize=1, usecols=[]))
+
     def test_invalid_nrows(self, tmp_path):
         csv_path = tmp_path / "test.csv"
         csv_path.write_text("a,b\n1,2\n")
