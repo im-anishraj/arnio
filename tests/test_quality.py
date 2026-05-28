@@ -3108,3 +3108,97 @@ def test_profile_comparison_constructor_validation():
             drift_report={},
             status_counts={"missing_values": "should_be_an_int"},
         )
+
+
+def test_column_profile_invariant_valid_initialization():
+    from arnio.quality import ColumnProfile
+
+    cp = ColumnProfile(
+        name="score",
+        dtype="float64",
+        semantic_type="numeric",
+        row_count=100,
+        null_count=5,
+        null_ratio=0.05,
+        unique_count=90,
+        unique_ratio=0.9,
+    )
+    assert cp.name == "score"
+    assert cp.row_count == 100
+
+
+def test_column_profile_invariant_invalid_counts():
+    from arnio.quality import ColumnProfile
+
+    with pytest.raises(ValueError, match="row_count cannot be negative"):
+        ColumnProfile("x", "int64", "numeric", -1, 0, 0.0, 0, 0.0)
+
+    with pytest.raises(ValueError, match="null_count cannot be negative"):
+        ColumnProfile("x", "int64", "numeric", 10, -5, 0.0, 0, 0.0)
+
+    with pytest.raises(ValueError, match="top_values_sample_count cannot be negative"):
+        ColumnProfile(
+            "x", "int64", "numeric", 10, 0, 0.0, 0, 0.0, top_values_sample_count=-10
+        )
+
+    with pytest.raises(TypeError, match="row_count must be an integer"):
+        ColumnProfile("x", "int64", "numeric", True, 0, 0.0, 0, 0.0)
+
+    with pytest.raises(TypeError, match="null_count must be an integer"):
+        ColumnProfile("x", "int64", "numeric", 10, "0", 0.0, 0, 0.0)
+
+
+def test_column_profile_invariant_invalid_ratios():
+    from arnio.quality import ColumnProfile
+
+    with pytest.raises(ValueError, match="null_ratio must be a finite ratio"):
+        ColumnProfile("x", "int64", "numeric", 10, 0, 1.05, 0, 0.0)
+
+    with pytest.raises(ValueError, match="unique_ratio must be a finite ratio"):
+        ColumnProfile("x", "int64", "numeric", 10, 0, 0.1, 0, -0.01)
+
+    with pytest.raises(ValueError, match="email_validity_ratio must be a finite ratio"):
+        ColumnProfile(
+            "x", "string", "email", 10, 0, 0.0, 0, 0.0, email_validity_ratio=2.0
+        )
+
+    with pytest.raises(ValueError, match="null_ratio must be a finite ratio"):
+        ColumnProfile("x", "int64", "numeric", 10, 0, float("nan"), 0, 0.0)
+
+    with pytest.raises(ValueError, match="unique_ratio must be a finite ratio"):
+        ColumnProfile("x", "int64", "numeric", 10, 0, 0.0, 0, float("inf"))
+
+
+def test_data_quality_report_invariant_valid_initialization():
+    from arnio.quality import DataQualityReport
+
+    report = DataQualityReport(
+        row_count=200,
+        column_count=5,
+        memory_usage=4096,
+        duplicate_rows=10,
+        duplicate_ratio=0.05,
+        columns={},
+        quality_score=95.5,
+    )
+    assert report.row_count == 200
+    assert report.quality_score == 95.5
+
+
+def test_data_quality_report_invariant_invalid_metrics():
+    from arnio.quality import DataQualityReport
+
+    with pytest.raises(ValueError, match="memory_usage cannot be negative"):
+        DataQualityReport(10, 2, -1024, 0, 0.0, {})
+
+    with pytest.raises(ValueError, match="quality_score must be a finite value"):
+        DataQualityReport(10, 2, 512, 0, 0.0, {}, quality_score=100.5)
+
+    with pytest.raises(ValueError, match="quality_score must be a finite value"):
+        DataQualityReport(10, 2, 512, 0, 0.0, {}, quality_score=-1.0)
+
+    with pytest.raises(TypeError, match="quality_score must be a number"):
+        DataQualityReport(10, 2, 512, 0, 0.0, {}, quality_score=False)
+
+    with pytest.raises(ValueError, match="quality_score must be a finite value"):
+        DataQualityReport(10, 2, 512, 0, 0.0, {}, quality_score=float("nan"))
