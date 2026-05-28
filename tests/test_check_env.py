@@ -80,10 +80,7 @@ def test_check_env_core_available_some_missing(
         # Verify ready / missing optional dependencies reported correctly
         for line in output.splitlines():
             if "arnio_with_numpy.py" in line:
-                assert (
-                    "[Ready]" in line
-                    or "[Missing arnio core]" in line
-                )
+                assert "[Ready]" in line or "[Missing arnio core]" in line
             if "arnio_with_duckdb.py" in line:
                 assert "[Missing duckdb]" in line
 
@@ -114,10 +111,7 @@ def test_check_env_all_available(capsys: pytest.CaptureFixture[str]) -> None:
         )
         for line in output.splitlines():
             if "arnio_with_duckdb.py" in line:
-                assert (
-                    "[Ready]" in line
-                    or "[Missing arnio core]" in line
-                )
+                assert "[Ready]" in line or "[Missing arnio core]" in line
         assert "All optional dependencies are successfully installed!" in output
 
 
