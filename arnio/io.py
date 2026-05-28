@@ -213,6 +213,9 @@ def _validate_usecols(usecols: Sequence[str]) -> list[str]:
     if not isinstance(usecols, Sequence):
         raise TypeError("usecols must be a sequence of strings")
 
+    if len(usecols) == 0:
+        raise ValueError("usecols must not be empty")
+
     for col in usecols:
         if not isinstance(col, str):
             raise TypeError("usecols must contain only strings")
@@ -1117,6 +1120,17 @@ def read_jsonl(
         )
 
     records: list[dict] = []
+
+    def _reject_duplicate_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
+        seen = set()
+        result = {}
+        for k, v in pairs:
+            if k in seen:
+                raise ValueError(f"duplicate key {k!r}")
+            seen.add(k)
+            result[k] = v
+        return result
+
     try:
         with open(path, encoding=encoding) as fh:
             for lineno, raw_line in enumerate(fh, start=1):
@@ -1126,10 +1140,14 @@ def read_jsonl(
                 if nrows is not None and len(records) >= nrows:
                     break
                 try:
-                    obj = json.loads(line)
+                    obj = json.loads(line, object_pairs_hook=_reject_duplicate_keys)
                 except json.JSONDecodeError as exc:
                     raise JsonlReadError(
                         f"Invalid JSON on line {lineno} of {path!r}: {exc}"
+                    ) from exc
+                except ValueError as exc:
+                    raise JsonlReadError(
+                        f"Duplicate key on line {lineno} of {path!r}: {exc}"
                     ) from exc
                 if not isinstance(obj, dict):
                     raise JsonlReadError(

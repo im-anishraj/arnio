@@ -1706,6 +1706,26 @@ def String(
             "allowed must be a sequence of allowed values, not a bare string"
         )
 
+    if pattern is not None:
+        if not isinstance(pattern, str):
+            raise TypeError("pattern must be a string or None")
+
+        try:
+            re.compile(pattern)
+        except re.error as exc:
+            raise ValueError(f"Invalid regex pattern: {pattern!r}") from exc
+
+    for name, value in (
+        ("min_length", min_length),
+        ("max_length", max_length),
+    ):
+        if value is not None:
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise TypeError(f"{name} must be an integer")
+
+            if value < 0:
+                raise ValueError(f"{name} must be greater than or equal to 0")
+
     allowed_set = set(allowed) if allowed is not None else None
 
     return Field(
@@ -1765,8 +1785,13 @@ def Email(
     Returns:
         Field: Configured email-address schema field.
     """
+
+    if not isinstance(validation, str):
+        raise TypeError("Email validation must be a string: 'light' or 'strict'")
+
     if validation not in {"light", "strict"}:
         raise ValueError("Email validation must be 'light' or 'strict'")
+
     return Field(
         dtype="string",
         nullable=nullable,

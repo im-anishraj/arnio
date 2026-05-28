@@ -997,6 +997,15 @@ def test_email_validation_rejects_invalid_validation_mode():
         ar.Email(validation="banana")
 
 
+def test_email_validation_requires_string():
+    for value in (["light"], {"light"}, None):
+        with pytest.raises(
+            TypeError,
+            match="Email validation must be a string",
+        ):
+            ar.Email(validation=value)
+
+
 def test_email_default_validation_mode_is_backward_compatible(tmp_path):
     path = tmp_path / "emails.csv"
     path.write_text("email\n" "simple@test.com\n")
@@ -1593,6 +1602,56 @@ def test_string_rejects_impossible_length_bounds():
         assert "min_length must be less than or equal to max_length" in str(exc)
     else:
         raise AssertionError("Expected invalid String bounds to raise")
+
+
+def test_string_rejects_non_string_pattern():
+    with pytest.raises(
+        TypeError,
+        match="pattern must be a string or None",
+    ):
+        ar.String(pattern=123)
+
+
+def test_string_rejects_invalid_regex_pattern():
+    with pytest.raises(
+        ValueError,
+        match="Invalid regex pattern",
+    ):
+        ar.String(pattern=r"[invalid")
+
+
+@pytest.mark.parametrize("value", [True, False])
+def test_string_rejects_boolean_min_length(value):
+    with pytest.raises(
+        TypeError,
+        match="min_length must be an integer",
+    ):
+        ar.String(min_length=value)
+
+
+@pytest.mark.parametrize("value", [True, False])
+def test_string_rejects_boolean_max_length(value):
+    with pytest.raises(
+        TypeError,
+        match="max_length must be an integer",
+    ):
+        ar.String(max_length=value)
+
+
+def test_string_rejects_negative_min_length():
+    with pytest.raises(
+        ValueError,
+        match="min_length must be greater than or equal to 0",
+    ):
+        ar.String(min_length=-1)
+
+
+def test_string_rejects_negative_max_length():
+    with pytest.raises(
+        ValueError,
+        match="max_length must be greater than or equal to 0",
+    ):
+        ar.String(max_length=-1)
 
 
 def test_equal_numeric_bounds_are_valid():
