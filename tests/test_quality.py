@@ -2859,3 +2859,33 @@ class TestValidateGateBool:
     def test_string_raises_type_error(self):
         with pytest.raises(TypeError, match="must be a bool"):
             _validate_gate_bool("true", "allow_new_columns")
+def test_profile_comparison_constructor_validation():
+    # Setup baseline dummy objects to test instantiation safely
+    valid_report = ar.quality.DataQualityReport("", {}, {}, {})
+    
+    # 1. Test that valid types without errors
+    comparison = ar.quality.ProfileComparison(
+        left_profile=valid_report,
+        right_profile=valid_report,
+        drift_report={},
+        status_counts={}
+    )
+    assert comparison.drift_report == {}
+
+    # 2. Test invalid left_profile type throws TypeError
+    with pytest.raises(TypeError, match="left_profile must be an instance of DataQualityReport"):
+        ar.quality.ProfileComparison(
+            left_profile="not_a_report_object",
+            right_profile=valid_report,
+            drift_report={},
+            status_counts={}
+        )
+
+    # 3. Test invalid drift_report type throws TypeError
+    with pytest.raises(TypeError, match="drift_report must be a dictionary"):
+        ar.quality.ProfileComparison(
+            left_profile=valid_report,
+            right_profile=valid_report,
+            drift_report="should_be_a_dict_but_is_a_string",
+            status_counts={}
+        )
