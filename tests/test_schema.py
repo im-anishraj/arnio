@@ -2882,6 +2882,44 @@ def test_url_allowed_schemes_whitespace_string_raises():
 # --- Issue #1279: Schema.to_json() rules_omitted contract ---
 
 
+def test_url_allowed_schemes_trims_whitespace():
+    ar.URL(allowed_schemes=[" https ", " ftp "])
+
+
+def test_url_allowed_schemes_accepts_tuple():
+    ar.URL(allowed_schemes=("https", "ftp"))
+
+
+def test_url_allowed_schemes_accepts_set():
+    ar.URL(allowed_schemes={"https", "ftp"})
+
+
+def test_url_allowed_schemes_rejects_bare_string():
+    with pytest.raises(TypeError, match="allowed_schemes must be a sequence"):
+        ar.URL(allowed_schemes="https")
+
+
+def test_url_allowed_schemes_rejects_bare_bytes():
+    with pytest.raises(TypeError, match="allowed_schemes must be a sequence"):
+        ar.URL(allowed_schemes=b"https")
+
+
+@pytest.mark.parametrize(
+    "scheme",
+    ["https://", "https ftp", "1http"],
+)
+def test_url_allowed_schemes_reject_invalid_scheme_names(scheme):
+    with pytest.raises(
+        ValueError,
+        match="allowed_schemes must contain URL scheme names",
+    ):
+        ar.URL(allowed_schemes=[scheme])
+
+
+def test_url_allowed_schemes_accept_valid_scheme_characters():
+    ar.URL(allowed_schemes=["git+ssh", "custom.scheme"])
+
+
 def test_schema_to_json_with_rules_emits_warning():
     """to_json() emits UserWarning when rules are present."""
     schema = ar.Schema(
@@ -3068,6 +3106,38 @@ def test_float64_rejects_string_min_with_valid_max():
 def test_float64_rejects_bool_pair():
     with pytest.raises(TypeError, match="min must be numeric or None"):
         ar.Float64(min=True, max=False)
+
+
+def test_validation_issue_accepts_valid_severities():
+    error_issue = ar.ValidationIssue(
+        column="age", rule="min", message="Too small", severity="error"
+    )
+    warning_issue = ar.ValidationIssue(
+        column="age", rule="min", message="Too small", severity="warning"
+    )
+
+    assert error_issue.severity == "error"
+    assert warning_issue.severity == "warning"
+
+
+def test_validation_issue_rejects_invalid_severity_typo():
+    with pytest.raises(ValueError, match="severity must be 'error' or 'warning'"):
+        ar.ValidationIssue(
+            column="score", rule="custom", message="bad", severity="erorr"
+        )
+
+
+def test_custom_rule_with_invalid_severity_fails_validation_execution():
+    def bad_custom_rule(df):
+        return [
+            ar.ValidationIssue(column="x", rule="demo", message="bad", severity="erorr")
+        ]
+
+    frame = ar.from_pandas(pd.DataFrame({"x": [1]}))
+    schema = ar.Schema({"x": ar.Field()}, rules=[bad_custom_rule])
+
+    with pytest.raises(ValueError, match="severity must be 'error' or 'warning'"):
+        schema.validate(frame)
 
 def test_schema_unique_duplicate_columns():
     # 1. Test direct construction coverage

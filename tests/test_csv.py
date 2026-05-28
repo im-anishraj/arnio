@@ -2741,3 +2741,24 @@ def test_streaming_late_type_promotion_float(tmp_path):
     assert frame.dtypes["a"] == "float64"
     df = ar.to_pandas(frame)
     assert list(df["a"]) == [1.0, 2.0, 3.0, 4.5]
+
+
+def test_read_csv_text_stream_encoding_override():
+    import io
+
+    csv_text = "col1,col2\nhello,café\n"
+    # Even if caller passes a different encoding, text streams are handled as UTF-8
+    stream = io.StringIO(csv_text)
+    df = ar.read_csv(stream, encoding="utf-16")
+    pandas_df = ar.to_pandas(df)
+    assert pandas_df["col2"][0] == "café"
+
+
+def test_read_csv_chunked_text_stream_encoding_override():
+    import io
+
+    csv_text = "col1,col2\nhello,café\n"
+    stream = io.StringIO(csv_text)
+    chunks = list(ar.read_csv_chunked(stream, encoding="utf-16"))
+    pandas_df = ar.to_pandas(chunks[0])
+    assert pandas_df["col2"][0] == "café"

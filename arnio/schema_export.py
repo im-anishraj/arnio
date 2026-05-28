@@ -275,11 +275,7 @@ def schema_to_dict(schema: dict | Any) -> dict:
             if isinstance(raw_field, str):
                 normalised[name] = {"type": raw_field}
             elif isinstance(raw_field, dict):
-                cleaned = {}
-                for k, v in sorted(raw_field.items()):
-                    cleaned[k] = sorted(v) if isinstance(v, set) else v
-                _validate_serializable(cleaned)
-                normalised[name] = cleaned
+                normalised[name] = _normalize_serializable(raw_field)
             else:
                 normalised[name] = raw_field
 

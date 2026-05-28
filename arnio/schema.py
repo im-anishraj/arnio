@@ -30,6 +30,7 @@ ISSUE_COLUMNS = [
 ]
 
 DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+URL_SCHEME_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*$")
 
 _VALID_SEVERITIES = {"error", "warning"}
 
@@ -921,6 +922,9 @@ class ValidationIssue:
     value: Any = None
     severity: str = "error"
 
+    def __post_init__(self) -> None:
+        _validate_severity(self.severity)
+
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-friendly dictionary."""
         return {
@@ -1790,12 +1794,37 @@ def URL(
         Field: Configured URL schema field.
     """
     if allowed_schemes is not None:
-        if not isinstance(allowed_schemes, list) or len(allowed_schemes) == 0:
-            raise ValueError("allowed_schemes must be a non-empty list")
+        if isinstance(allowed_schemes, (str, bytes)):
+            raise TypeError(
+                "allowed_schemes must be a sequence of scheme names, not a bare string"
+            )
+
+        if not isinstance(allowed_schemes, (list, tuple, set)):
+            raise TypeError("allowed_schemes must be a sequence of scheme names")
+
+        normalized_schemes = set()
+
         for scheme in allowed_schemes:
-            if not isinstance(scheme, str) or scheme.strip() == "":
+            if not isinstance(scheme, str):
                 raise ValueError("allowed_schemes must contain non-empty strings")
-        schemes = "|".join(re.escape(s) for s in allowed_schemes)
+
+            scheme = scheme.strip()
+
+            if scheme == "":
+                raise ValueError("allowed_schemes must contain non-empty strings")
+
+            if URL_SCHEME_PATTERN.fullmatch(scheme) is None:
+                raise ValueError(
+                    "allowed_schemes must contain URL scheme names such as 'http' or 'https'"
+                )
+
+            normalized_schemes.add(scheme)
+
+        if len(normalized_schemes) == 0:
+            raise ValueError("allowed_schemes must be a non-empty sequence")
+
+        schemes = "|".join(re.escape(scheme) for scheme in sorted(normalized_schemes))
+
         semantic = f"url:{schemes}"
 
     else:
