@@ -2538,7 +2538,10 @@ class TestCleanAPI:
 
         result = ar.clean(
             frame,
-            drop_duplicates={"subset": ["id"], "keep": "last"},
+            drop_duplicates={
+                "subset": ["id"],
+                "keep": "last",
+            },
         )
 
         data = result.to_dict()
