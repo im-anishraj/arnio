@@ -5,6 +5,7 @@ CSV reading and writing functions.
 
 from __future__ import annotations
 
+import codecs
 import io
 import os
 import shutil
@@ -27,6 +28,8 @@ from .frame import ArFrame
 
 def _is_utf8_encoding(encoding: str) -> bool:
     """Return whether the encoding should be treated as raw UTF-8 input."""
+    if not isinstance(encoding, str):
+        raise TypeError(f"encoding must be a string, got {type(encoding).__name__!r}")
     return encoding.lower().replace("_", "-") in {"utf-8", "utf8"}
 
 
@@ -607,7 +610,7 @@ def read_csv(
     except CsvReadError:
         raise
     except RuntimeError as e:
-        raise CsvReadError(str(e)) from e
+        raise CsvReadError(str(e)) from None
 
     finally:
         if should_cleanup and os.path.exists(path):
@@ -766,7 +769,7 @@ def read_csv_chunked(
     except CsvReadError:
         raise
     except RuntimeError as e:
-        raise CsvReadError(str(e)) from e
+        raise CsvReadError(str(e)) from None
     finally:
         reader.close()
         if should_cleanup and os.path.exists(path):
@@ -957,7 +960,7 @@ def scan_csv(
     config.trim_headers = _validate_bool_option(trim_headers, "trim_headers")
     config.decimal_separator = decimal_separator
     config.thousands_separator = thousands_separator
-    config.has_header = has_header
+    config.has_header = _validate_bool_option(has_header, "has_header")
     config.encoding_errors = encoding_errors
 
     if null_values is not None:
@@ -992,7 +995,7 @@ def scan_csv(
                 )
             return cast(dict[str, str], schema)
     except RuntimeError as e:
-        raise CsvReadError(str(e)) from e
+        raise CsvReadError(str(e)) from None
 
 
 def read_jsonl(
@@ -1041,13 +1044,14 @@ def read_jsonl(
 
     from .convert import from_pandas
 
+    if not isinstance(encoding, str):
+        raise TypeError(f"encoding must be a string, got {type(encoding).__name__!r}")
+    try:
+        codecs.lookup(encoding)
+    except LookupError:
+        raise ValueError(f"Unknown encoding: {encoding!r}")
+
     path = os.fspath(path)
-    path_lower = path.lower()
-    if not (path_lower.endswith(".jsonl") or path_lower.endswith(".ndjson")):
-        raise ValueError(
-            f"Unsupported file format: {path}. "
-            "read_jsonl only supports .jsonl and .ndjson files."
-        )
 
     if nrows is not None:
         if isinstance(nrows, bool) or not isinstance(nrows, int):
@@ -1060,9 +1064,14 @@ def read_jsonl(
             # must not raise when nrows=0.
             import pandas as pd
 
-            from .convert import from_pandas
-
             return from_pandas(pd.DataFrame())
+
+    path_lower = path.lower()
+    if not (path_lower.endswith(".jsonl") or path_lower.endswith(".ndjson")):
+        raise ValueError(
+            f"Unsupported file format: {path}. "
+            "read_jsonl only supports .jsonl and .ndjson files."
+        )
 
     records: list[dict] = []
     try:
@@ -1148,20 +1157,20 @@ def sniff_delimiter(
         raise FileNotFoundError(f"File not found: {path!r}") from e
 
     try:
-        with open(path, "rb") as f:
-            if b"\0" in f.read(1024):
-                raise CsvReadError(
-                    "CSV input contains NUL bytes and appears to be binary or corrupted"
-                )
+        _reject_utf8_nul_bytes(path)
     except FileNotFoundError:
         pass
 
     # 3. Read Sample
     try:
-        with open(path, encoding=encoding, errors="replace") as f:
+        with open(path, encoding=encoding, errors="strict") as f:
             sample = f.read(sample_size)
     except LookupError as e:
         raise ValueError(f"Unknown encoding: {encoding}") from e
+    except UnicodeDecodeError as e:
+        raise CsvReadError(
+            f"Could not decode {path!r} using encoding {encoding!r}"
+        ) from e
 
     if not sample:
         raise CsvReadError(f"CSV file is empty: {path!r}")
