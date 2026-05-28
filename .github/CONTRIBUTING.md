@@ -73,6 +73,36 @@ def remove_special_chars(df, columns=None):
 ar.register_step("remove_special_chars", remove_special_chars)
 ```
 
+### Calling a step with custom parameters
+
+If your step accepts parameters, pass them as a tuple `("step_name", {"param": value})`
+when calling `pipeline()`. The no-params form must also use a tuple `("step_name",)` —
+a plain string is not valid pipeline syntax.
+
+```python
+import arnio as ar
+
+def remove_special_chars(df, columns=None):
+    cols = columns or df.select_dtypes("object").columns
+    for col in cols:
+        df[col] = df[col].str.replace(r"[^a-zA-Z0-9\s]", "", regex=True)
+    return df
+
+ar.register_step("remove_special_chars", remove_special_chars)
+
+frame = ar.read_csv("data.csv")
+
+# Without parameters — use a single-element tuple
+result = ar.pipeline(frame, [
+    ("remove_special_chars",)
+])
+
+# With custom parameters — pass a dict as the second tuple element
+result = ar.pipeline(frame, [
+    ("remove_special_chars", {"columns": ["name", "city"]})
+])
+```
+
 ### Contribution Testing Standard
 When adding new pipeline steps (like the Python registry example above), you must write tests that mirror the round-trip verification pattern.
 
@@ -129,4 +159,3 @@ We use an automated release system that relies on [Conventional Commits](https:/
 This allows our CI to automatically generate changelogs and bump version numbers.
 
 We use `black`, `ruff`, and `clang-format` to format our code. `pre-commit` will run these automatically before each commit if installed.
-
