@@ -1,7 +1,5 @@
 """Unit tests for pipeline step overwrite protection and custom step registration."""
 
-
-
 import pytest  # noqa: E402
 
 from arnio.pipeline import (  # noqa: E402
