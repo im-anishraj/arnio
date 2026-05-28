@@ -347,10 +347,10 @@ def _validate_on_bad_lines(on_bad_lines: str) -> str:
 
 def _materialize_csv_input(
     source: str | os.PathLike[str] | io.TextIOBase,
-) -> tuple[str, bool]:
+) -> tuple[str, bool, bool]:
     """Convert supported CSV inputs into a filesystem path."""
     if isinstance(source, (str, os.PathLike)):
-        return os.fspath(source), False
+        return os.fspath(source), False, False
     if isinstance(source, io.StringIO) or (
         hasattr(source, "read") and callable(source.read)
     ):
@@ -372,7 +372,7 @@ def _materialize_csv_input(
                     )
                 tmp.write(chunk)
             tmp.close()
-            return tmp.name, True
+            return tmp.name, True, True
         except Exception:
             tmp.close()
             os.unlink(tmp.name)
@@ -545,7 +545,7 @@ def read_csv(
     >>> frame = ar.read_csv("data.tsv", delimiter=",")  # explicit comma honoured
     >>> frame = ar.read_csv("data.dat")           # non-standard extension accepted
     """
-    path, should_cleanup = _materialize_csv_input(path)
+    path, should_cleanup, is_materialized_text = _materialize_csv_input(path)
 
     try:
         _validate_csv_path(path, encoding)
@@ -594,8 +594,9 @@ def read_csv(
         raise
 
     try:
+        effective_encoding = "utf-8" if is_materialized_text else encoding
         with _utf8_csv_path(
-            path, encoding, encoding_errors=encoding_errors, delimiter=delimiter
+            path, effective_encoding, encoding_errors=encoding_errors, delimiter=delimiter
         ) as native_path:
             cpp_frame, bad_rows = reader.read(native_path, on_bad_lines)
 
@@ -703,7 +704,7 @@ def read_csv_chunked(
     ...     process(df)
     """
     is_path_input = isinstance(path, (str, os.PathLike))
-    path, should_cleanup = _materialize_csv_input(path)
+    path, should_cleanup, is_materialized_text = _materialize_csv_input(path)
     try:
         if is_path_input:
             path_lower = path.lower()
@@ -752,7 +753,8 @@ def read_csv_chunked(
             os.unlink(path)
         raise
     try:
-        with _utf8_csv_path(path, encoding, delimiter=delimiter) as native_path:
+        effective_encoding = "utf-8" if is_materialized_text else encoding
+        with _utf8_csv_path(path, effective_encoding, delimiter=delimiter) as native_path:
             reader.open(native_path)
             while True:
                 chunk = reader.next_chunk(chunksize, on_bad_lines)
