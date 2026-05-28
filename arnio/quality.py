@@ -8,6 +8,7 @@ from __future__ import annotations
 import html
 import json
 import math
+import os
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
@@ -122,10 +123,28 @@ class ColumnProfile:
 
     def to_dict(self, *, redact_sample_values: bool = False) -> dict[str, Any]:
         """Return a JSON-friendly dictionary."""
+        redact_sample_values = _validate_bool_option(
+            redact_sample_values, "redact_sample_values"
+        )
         sample_values = (
             ["[REDACTED]" for _ in self.sample_values]
             if redact_sample_values
             else [_clean_scalar(value) for value in self.sample_values]
+        )
+        top_values = (
+            [
+                {"value": "[REDACTED]", "count": c, "ratio": r}
+                for _value, c, r in self.top_values
+            ]
+            if redact_sample_values and self.top_values is not None
+            else (
+                [
+                    {"value": _clean_scalar(v), "count": c, "ratio": r}
+                    for v, c, r in self.top_values
+                ]
+                if self.top_values is not None
+                else None
+            )
         )
         return {
             "name": self.name,
@@ -157,14 +176,7 @@ class ColumnProfile:
             ),
             "sample_values": sample_values,
             "warnings": list(self.warnings),
-            "top_values": (
-                [
-                    {"value": _clean_scalar(v), "count": c, "ratio": r}
-                    for v, c, r in self.top_values
-                ]
-                if self.top_values is not None
-                else None
-            ),
+            "top_values": top_values,
             "top_values_is_approximate": self.top_values_is_approximate,
             "top_values_sample_count": self.top_values_sample_count,
             "top_values_sample_ratio": self.top_values_sample_ratio,
@@ -205,6 +217,9 @@ class DataQualityReport:
         exclude_columns: list[str] | set[str] | tuple[str, ...] | None = None,
     ) -> dict[str, Any]:
         """Return a JSON-friendly dictionary representation."""
+        redact_sample_values = _validate_bool_option(
+            redact_sample_values, "redact_sample_values"
+        )
 
         if exclude_columns is None:
             exclude_columns = set()
@@ -217,6 +232,13 @@ class DataQualityReport:
                 raise TypeError("exclude_columns must contain only string column names")
 
             exclude_columns = set(exclude_columns)
+
+        def _redact_reason(reason: str | None) -> str | None:
+            if not reason or not exclude_columns:
+                return reason
+            for col in exclude_columns:
+                reason = reason.replace(f"'{col}'", "'[REDACTED]'")
+            return reason
 
         return {
             "row_count": self.row_count,
@@ -234,24 +256,35 @@ class DataQualityReport:
             "suggestions": [
                 {
                     "step": s[0],
-                    "kwargs": {
-                        key: (
-                            [item for item in value if item not in exclude_columns]
-                            if key in {"subset", "columns"} and isinstance(value, list)
-                            else (
-                                {
-                                    k: v
-                                    for k, v in value.items()
-                                    if k not in exclude_columns
-                                }
-                                if key == "cast_types" and isinstance(value, dict)
-                                else value
+                    "kwargs": (
+                        {
+                            k: v
+                            for k, v in dict(s[1]).items()
+                            if k not in exclude_columns
+                        }
+                        if s[0] == "cast_types"
+                        else {
+                            key: (
+                                [item for item in value if item not in exclude_columns]
+                                if key in {"subset", "columns"}
+                                and isinstance(value, list)
+                                else (
+                                    {
+                                        col_name: col_type
+                                        for col_name, col_type in value.items()
+                                        if col_name not in exclude_columns
+                                    }
+                                    if key == "cast_types" and isinstance(value, dict)
+                                    else value
+                                )
                             )
-                        )
-                        for key, value in dict(s[1]).items()
-                    },
+                            for key, value in dict(s[1]).items()
+                        }
+                    ),
                     "confidence_score": getattr(s, "confidence_score", None),
-                    "confidence_reason": getattr(s, "confidence_reason", None),
+                    "confidence_reason": _redact_reason(
+                        getattr(s, "confidence_reason", None)
+                    ),
                 }
                 for s in self.suggestions
             ],
@@ -403,6 +436,14 @@ class DataQualityReport:
         In notebook environments, ``DataQualityReport`` will render a compact dashboard
         automatically via ``_repr_html_``.
         """
+        if file_path is not None:
+            if isinstance(file_path, bool) or not isinstance(
+                file_path, (str, bytes, os.PathLike)
+            ):
+                raise TypeError(
+                    f"file_path must be a string, bytes, or os.PathLike object, got {type(file_path).__name__}"
+                )
+
         max_suggestions = self._validate_max_suggestions(max_suggestions)
         html_out = self._to_html_dashboard(
             full_document=True,
@@ -1435,7 +1476,10 @@ def _validate_gate_threshold(value: float | None, name: str) -> float | None:
 
 
 def _validate_gate_bool(value: bool, name: str) -> bool:
-    """Validate that a quality gate flag is a bool and return it."""
+    return _validate_bool_option(value, name)
+
+
+def _validate_bool_option(value: bool, name: str) -> bool:
     if not isinstance(value, bool):
         raise TypeError(f"{name} must be a bool")
     return value

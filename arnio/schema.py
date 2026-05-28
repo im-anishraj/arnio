@@ -494,6 +494,187 @@ ISO_639_1_CODES = {
     "zu",
 }
 
+ISO_4217_CURRENCY_CODES = {
+    "AED",
+    "AFN",
+    "ALL",
+    "AMD",
+    "ANG",
+    "AOA",
+    "ARS",
+    "AUD",
+    "AWG",
+    "AZN",
+    "BAM",
+    "BBD",
+    "BDT",
+    "BGN",
+    "BHD",
+    "BIF",
+    "BMD",
+    "BND",
+    "BOB",
+    "BOV",
+    "BRL",
+    "BSD",
+    "BTN",
+    "BWP",
+    "BYN",
+    "BZD",
+    "CAD",
+    "CDF",
+    "CHE",
+    "CHF",
+    "CHW",
+    "CLF",
+    "CLP",
+    "CNY",
+    "COP",
+    "COU",
+    "CRC",
+    "CUP",
+    "CVE",
+    "CZK",
+    "DJF",
+    "DKK",
+    "DOP",
+    "DZD",
+    "EGP",
+    "ERN",
+    "ETB",
+    "EUR",
+    "FJD",
+    "FKP",
+    "GBP",
+    "GEL",
+    "GHS",
+    "GIP",
+    "GMD",
+    "GNF",
+    "GTQ",
+    "GYD",
+    "HKD",
+    "HNL",
+    "HRK",
+    "HTG",
+    "HUF",
+    "IDR",
+    "ILS",
+    "INR",
+    "IQD",
+    "IRR",
+    "ISK",
+    "JMD",
+    "JOD",
+    "JPY",
+    "KES",
+    "KGS",
+    "KHR",
+    "KMF",
+    "KPW",
+    "KRW",
+    "KWD",
+    "KYD",
+    "KZT",
+    "LAK",
+    "LBP",
+    "LKR",
+    "LRD",
+    "LSL",
+    "LYD",
+    "MAD",
+    "MDL",
+    "MGA",
+    "MKD",
+    "MMK",
+    "MNT",
+    "MOP",
+    "MRU",
+    "MUR",
+    "MVR",
+    "MWK",
+    "MXN",
+    "MXV",
+    "MYR",
+    "MZN",
+    "NAD",
+    "NGN",
+    "NIO",
+    "NOK",
+    "NPR",
+    "NZD",
+    "OMR",
+    "PAB",
+    "PEN",
+    "PGK",
+    "PHP",
+    "PKR",
+    "PLN",
+    "PYG",
+    "QAR",
+    "RON",
+    "RSD",
+    "RUB",
+    "RWF",
+    "SAR",
+    "SBD",
+    "SCR",
+    "SDG",
+    "SEK",
+    "SGD",
+    "SHP",
+    "SLE",
+    "SLL",
+    "SOS",
+    "SRD",
+    "SSP",
+    "STN",
+    "SVC",
+    "SYP",
+    "SZL",
+    "THB",
+    "TJS",
+    "TMT",
+    "TND",
+    "TOP",
+    "TRY",
+    "TTD",
+    "TWD",
+    "TZS",
+    "UAH",
+    "UGX",
+    "USD",
+    "USN",
+    "UYI",
+    "UYU",
+    "UYW",
+    "UZS",
+    "VES",
+    "VND",
+    "VUV",
+    "WST",
+    "XAF",
+    "XAG",
+    "XBA",
+    "XBB",
+    "XBC",
+    "XBD",
+    "XCD",
+    "XDR",
+    "XOF",
+    "XPD",
+    "XPF",
+    "XPT",
+    "XSU",
+    "XTS",
+    "XUA",
+    "XXX",
+    "YER",
+    "ZAR",
+    "ZMW",
+    "ZWL",
+}
+
 IANA_TIMEZONES = available_timezones()
 
 
@@ -522,6 +703,24 @@ class Field:
             raise TypeError("nullable must be a bool")
         if not isinstance(self.unique, bool):
             raise TypeError("unique must be a bool")
+
+        if self.required_if is not None:
+            if not isinstance(self.required_if, tuple):
+                raise TypeError("required_if must be a tuple or None")
+            if len(self.required_if) != 2:
+                raise TypeError(
+                    "required_if must be a (column_name, expected_value) tuple"
+                )
+            if not isinstance(self.required_if[0], str):
+                raise TypeError("required_if column name must be a string")
+        if self.dtype in {"int64", "float64"}:
+            if self.min is not None:
+                if isinstance(self.min, bool) or not isinstance(self.min, (int, float)):
+                    raise TypeError("min must be numeric or None")
+            if self.max is not None:
+                if isinstance(self.max, bool) or not isinstance(self.max, (int, float)):
+                    raise TypeError("max must be numeric or None")
+
         _validate_severity(self.severity)
 
 
@@ -539,6 +738,13 @@ class Schema:
             raise TypeError(
                 f"Schema 'fields' must be a mapping (like a dict), got {type(self.fields).__name__}"
             )
+
+        for key in self.fields:
+            if not isinstance(key, str):
+                raise TypeError(
+                    f"Schema field names must be strings, got {type(key).__name__!r}: {key!r}"
+                )
+
         for name, field_def in self.fields.items():
             if not isinstance(field_def, Field):
                 raise TypeError(
@@ -561,6 +767,15 @@ class Schema:
                     raise TypeError(
                         f"Schema 'unique' members must be strings, got {type(item).__name__} for element {item!r}."
                     )
+        if not isinstance(self.strict, bool):
+            raise TypeError("Schema 'strict' must be a boolean")
+
+        if self.rules is not None:
+            if not isinstance(self.rules, (list, tuple)):
+                raise TypeError("Schema 'rules' must be a list of callables")
+            for rule in self.rules:
+                if not callable(rule):
+                    raise TypeError("Schema 'rules' must be a list of callables")
 
     def validate(
         self,
@@ -1384,6 +1599,12 @@ def Int64(
         Field: Configured int64 schema field.
     """
 
+    if min is not None:
+        if isinstance(min, bool) or not isinstance(min, (int, float)):
+            raise TypeError("min must be numeric or None")
+    if max is not None:
+        if isinstance(max, bool) or not isinstance(max, (int, float)):
+            raise TypeError("max must be numeric or None")
     if min is not None and max is not None and min > max:
         raise ValueError("min must be less than or equal to max")
 
@@ -1421,6 +1642,12 @@ def Float64(
         Field: Configured float64 schema field.
     """
 
+    if min is not None:
+        if isinstance(min, bool) or not isinstance(min, (int, float)):
+            raise TypeError("min must be numeric or None")
+    if max is not None:
+        if isinstance(max, bool) or not isinstance(max, (int, float)):
+            raise TypeError("max must be numeric or None")
     if min is not None and max is not None and min > max:
         raise ValueError("min must be less than or equal to max")
 
@@ -1464,6 +1691,11 @@ def String(
 
     if min_length is not None and max_length is not None and min_length > max_length:
         raise ValueError("min_length must be less than or equal to max_length")
+
+    if isinstance(allowed, (str, bytes)):
+        raise TypeError(
+            "allowed must be a sequence of allowed values, not a bare string"
+        )
 
     allowed_set = set(allowed) if allowed is not None else None
 
@@ -1688,21 +1920,35 @@ def TimeZone(
     )
 
 
-def CurrencyCode(*, nullable: bool = True, unique: bool = False) -> Field:
+def CurrencyCode(
+    *,
+    nullable: bool = True,
+    unique: bool = False,
+    severity: str = "error",
+    required_if: tuple[str, Any] | None = None,
+    allowed: set[Any] | list[Any] | tuple[Any, ...] | None = None,
+) -> Field:
     """Create a currency-code schema field.
 
     Args:
         nullable: Whether null values are allowed.
         unique: Whether non-null values must be unique.
+        severity: Severity level for validation issues.
+        required_if: Conditional requirement as a column/value pair.
+        allowed: Allowed currency codes, overriding the default active ISO 4217 set.
 
     Returns:
         Field: Configured 3-letter uppercase currency-code schema field.
     """
+    allowed_set = set(allowed) if allowed is not None else None
     return Field(
         dtype="string",
         nullable=nullable,
         semantic="currency_code",
         unique=unique,
+        severity=severity,
+        required_if=required_if,
+        allowed=allowed_set,
     )
 
 
@@ -2032,7 +2278,11 @@ def _validate_column(
                     )
                 )
             else:
-                invalid = non_null[~non_null.map(fn).astype(bool)]
+                invalid = non_null[
+                    ~non_null.map(
+                        lambda v: _normalize_validator_result(fn(v), validator_name)
+                    )
+                ]
                 issues.extend(
                     _row_issues(
                         invalid,
@@ -2080,6 +2330,11 @@ def _validate_column(
                     invalid = non_null[~non_null.isin(ISO_639_1_CODES)]
                 elif field_def.semantic == "timezone":
                     invalid = non_null[~non_null.isin(IANA_TIMEZONES)]
+                elif field_def.semantic == "currency_code":
+                    if field_def.allowed is not None:
+                        invalid = pd.Series(dtype=object)
+                    else:
+                        invalid = non_null[~non_null.isin(ISO_4217_CURRENCY_CODES)]
 
                 else:
                     invalid = non_null[~text.str.fullmatch(pattern, na=False)]
@@ -2371,6 +2626,39 @@ def register_validator(name: str, fn: callable) -> None:
     if not isinstance(name, str) or not name:
         raise ValueError("name must be a non-empty string")
     _CUSTOM_VALIDATORS[name] = fn
+
+
+def _normalize_validator_result(result: object, validator_name: str) -> bool:
+    """Normalize a custom validator return value to a strict bool.
+
+    Contract:
+    - ``True``  → passes validation
+    - ``False`` → fails validation
+    - ``None``  → fails validation
+    - ``pd.NA`` → fails validation
+    - anything else → raises TypeError naming the validator
+
+    This avoids calling bool() on pd.NA (which raises
+    "TypeError: boolean value of NA is ambiguous") and enforces a clear
+    return-value contract for custom validators.
+    """
+    if result is True:
+        return True
+    if result is False or result is None:
+        return False
+    # Check for pd.NA without importing pandas at module level
+    try:
+        import pandas as _pd
+
+        if result is _pd.NA:
+            return False
+    except ImportError:
+        pass
+    raise TypeError(
+        f"Custom validator {validator_name!r} returned "
+        f"{type(result).__name__!r} ({result!r}); "
+        "validators must return True (pass) or False (fail)."
+    )
 
 
 def Custom(

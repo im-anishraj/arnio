@@ -126,3 +126,26 @@ class TestSniffDelimiter:
         path.write_text("a,b\nc,d\n\n")
         result = sniff_delimiter(path)
         assert result == ","
+
+    def test_raises_value_error_for_single_column_no_delimiter(self, tmp_path):
+        """sniff_delimiter raises ValueError when a single column file has no candidate delimiters."""
+        path = tmp_path / "single_column.csv"
+        path.write_text("onlycolumn\n123\n456\n")
+        with pytest.raises(ValueError, match="no candidate delimiters found"):
+            sniff_delimiter(path)
+
+    def test_handles_complex_quoting_with_delimiters(self, tmp_path):
+        """sniff_delimiter correctly detects comma for complex quoted fields."""
+        path = tmp_path / "complex_quotes.csv"
+        path.write_text('"col1,col2","col3,col4"\n"val1,val2","val3,val4"\n')
+        result = sniff_delimiter(path)
+        assert result == ","
+
+    def test_handles_escaped_quotes_inside_fields(self, tmp_path):
+        """sniff_delimiter correctly handles escaped quotes inside fields."""
+        path = tmp_path / "escaped_quotes.csv"
+        path.write_text(
+            '"name","quote"\n"Alice","She said, ""hello""!"\n"Bob","He said, ""hi""!"\n'
+        )
+        result = sniff_delimiter(path)
+        assert result == ","
