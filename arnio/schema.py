@@ -721,7 +721,48 @@ class Field:
             if self.max is not None:
                 if isinstance(self.max, bool) or not isinstance(self.max, (int, float)):
                     raise TypeError("max must be numeric or None")
+        if self.dtype is not None and not isinstance(self.dtype, str):
+            raise TypeError(
+                f"dtype must be a str or None, got {type(self.dtype).__name__}"
+            )
 
+        if self.pattern is not None:
+            if not isinstance(self.pattern, str):
+                raise TypeError(
+                    f"pattern must be a str or None, got {type(self.pattern).__name__}"
+                )
+            try:
+                re.compile(self.pattern)
+            except re.error as exc:
+                raise ValueError(
+                    f"pattern is not a valid regular expression: {exc}"
+                ) from exc
+
+        if self.allowed is not None:
+            if isinstance(self.allowed, str):
+                raise TypeError(
+                    "allowed must be a list, set, or tuple — not a bare string"
+                )
+            if not hasattr(self.allowed, "__iter__"):
+                raise TypeError(
+                    f"allowed must be an iterable collection, got {type(self.allowed).__name__}"
+                )
+        for _name, _val in [
+            ("min_length", self.min_length),
+            ("max_length", self.max_length),
+        ]:
+            if _val is not None:
+                if isinstance(_val, bool) or not isinstance(_val, int):
+                    raise TypeError(
+                        f"{_name} must be an int or None, got {type(_val).__name__}"
+                    )
+                if _val < 0:
+                    raise ValueError(f"{_name} must be >= 0, got {_val}")
+        if self.min_length is not None and self.max_length is not None:
+            if self.min_length > self.max_length:
+                raise ValueError(
+                    f"min_length ({self.min_length}) must be <= max_length ({self.max_length})"
+                )
         _validate_severity(self.severity)
 
 

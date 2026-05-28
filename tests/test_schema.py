@@ -3230,3 +3230,55 @@ def test_custom_rule_with_invalid_severity_fails_validation_execution():
 
     with pytest.raises(ValueError, match="severity must be 'error' or 'warning'"):
         schema.validate(frame)
+
+
+def test_field_dtype_rejects_non_string():
+    with pytest.raises(TypeError, match="dtype must be a str or None"):
+        ar.Field(dtype=123)
+
+
+def test_field_pattern_rejects_non_string():
+    with pytest.raises(TypeError, match="pattern must be a str or None"):
+        ar.Field(pattern=123)
+
+
+def test_field_pattern_rejects_invalid_regex():
+    with pytest.raises(ValueError, match="not a valid regular expression"):
+        ar.Field(pattern="[unclosed")
+
+
+def test_field_allowed_rejects_bare_string():
+    with pytest.raises(TypeError, match="not a bare string"):
+        ar.Field(allowed="abc")
+
+
+def test_field_max_length_rejects_non_int():
+    with pytest.raises(TypeError, match="max_length must be an int or None"):
+        ar.Field(max_length="x")
+
+
+def test_field_min_length_rejects_non_int():
+    with pytest.raises(TypeError, match="min_length must be an int or None"):
+        ar.Field(min_length="x")
+
+
+def test_field_min_length_rejects_negative():
+    with pytest.raises(ValueError, match="min_length must be >= 0"):
+        ar.Field(min_length=-1)
+
+
+def test_field_max_length_rejects_negative():
+    with pytest.raises(ValueError, match="max_length must be >= 0"):
+        ar.Field(max_length=-1)
+
+
+def test_field_min_length_exceeds_max_length():
+    with pytest.raises(ValueError, match="min_length.*must be <= max_length"):
+        ar.Field(min_length=10, max_length=3)
+
+
+def test_field_valid_direct_construction():
+    f = ar.Field(
+        dtype="string", pattern=r"\d+", allowed=["a", "b"], min_length=1, max_length=5
+    )
+    assert f.pattern == r"\d+"
