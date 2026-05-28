@@ -997,6 +997,14 @@ def test_email_validation_rejects_invalid_validation_mode():
         ar.Email(validation="banana")
 
 
+def test_email_validation_requires_string():
+    with pytest.raises(TypeError):
+        ar.Email(validation=["light"])
+
+    with pytest.raises(TypeError):
+        ar.Email(validation=None)
+
+
 def test_email_default_validation_mode_is_backward_compatible(tmp_path):
     path = tmp_path / "emails.csv"
     path.write_text("email\n" "simple@test.com\n")
