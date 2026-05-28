@@ -200,10 +200,64 @@ class ArFrame:
         ValueError
             If invalid values are passed or column conversion fails.
         """
+        import numpy as np
+        import pandas as pd
+
         from .convert import from_pandas, to_pandas
+
+        def _validate_dtype_value(value):
+            if isinstance(value, (list, tuple, set, dict)):
+                raise TypeError(
+                    "dtype must be a string, Python type, "
+                    "NumPy/pandas dtype, or mapping "
+                    "of column names to dtypes"
+                )
+
+            if value in (object, "object"):
+                raise TypeError(
+                    "dtype must be a string, Python type, "
+                    "NumPy/pandas dtype, or mapping "
+                    "of column names to dtypes"
+                )
+
+            try:
+                resolved = pd.api.types.pandas_dtype(value)
+
+                if resolved == np.dtype("O"):
+                    raise TypeError(
+                        "dtype must be a string, Python type, "
+                        "NumPy/pandas dtype, or mapping "
+                        "of column names to dtypes"
+                    )
+
+            except (TypeError, ValueError):
+                raise TypeError(
+                    "dtype must be a string, Python type, "
+                    "NumPy/pandas dtype, or mapping "
+                    "of column names to dtypes"
+                )
 
         if dtype is None:
             raise TypeError("dtype cannot be None")
+
+        if isinstance(dtype, dict):
+            missing = [col for col in dtype if col not in self.columns]
+
+            if missing:
+                raise ValueError(f"Unknown column(s) in dtype mapping: {missing}")
+
+            for value in dtype.values():
+                _validate_dtype_value(value)
+
+        elif isinstance(dtype, (list, tuple, set)):
+            raise TypeError(
+                "dtype must be a string, Python type, "
+                "NumPy/pandas dtype, or mapping "
+                "of column names to dtypes"
+            )
+
+        else:
+            _validate_dtype_value(dtype)
 
         try:
             df = to_pandas(self)
