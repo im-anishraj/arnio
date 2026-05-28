@@ -650,6 +650,7 @@ def read_csv_chunked(
     decimal_separator: str = ".",
     thousands_separator: str | None = None,
     null_values: list[str] | None = None,
+    dtype: dict[str, str] | None = None,
     mode: str = "strict",
     on_bad_lines: str = "error",
 ) -> Iterator[ArFrame]:
@@ -782,6 +783,9 @@ def read_csv_chunked(
 
         if null_values is not None:
             config.null_values = _validate_null_values(null_values)
+
+        if dtype is not None:
+            config.dtype = _validate_dtype_mapping(dtype)
 
         if usecols is not None:
             config.usecols = _validate_usecols(usecols)
