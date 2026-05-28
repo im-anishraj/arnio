@@ -26,6 +26,6 @@ repos:
     hooks:
       - id: check-docs-utf8
         name: Check docs are valid UTF-8
-        entry: python3 scripts/check_docs_utf8.py
-        language: system
+        entry: python scripts/check_docs_utf8.py
+        language: python
         files: (?i)(^docs/.*\.(md|rst|txt)$|^[^/]+\.(md|rst)$)
