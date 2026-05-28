@@ -2859,6 +2859,70 @@ class TestValidateGateBool:
     def test_string_raises_type_error(self):
         with pytest.raises(TypeError, match="must be a bool"):
             _validate_gate_bool("true", "allow_new_columns")
+
+
+# ── ProfileComparison redaction tests ────────────────────────────────────────
+
+
+def test_profile_comparison_to_dict_redacts_sample_values():
+    """redact_sample_values=True must replace sample values in both nested profiles."""
+    frame = ar.from_pandas(
+        pd.DataFrame({"email": ["alice@example.com", "bob@example.com"]})
+    )
+    left = ar.profile(frame)
+    right = ar.profile(frame)
+    comparison = ar.compare_profiles(left, right)
+
+    redacted = comparison.to_dict(redact_sample_values=True)
+    plain = comparison.to_dict()
+
+    # Sensitive values must not appear in the redacted export
+    assert "alice@example.com" not in str(redacted)
+    assert "bob@example.com" not in str(redacted)
+
+    # Sample values are replaced with the redaction sentinel
+    left_samples = redacted["left_profile"]["columns"]["email"]["sample_values"]
+    right_samples = redacted["right_profile"]["columns"]["email"]["sample_values"]
+    assert all(v == "[REDACTED]" for v in left_samples)
+    assert all(v == "[REDACTED]" for v in right_samples)
+
+    # Plain export still contains the real values
+    assert "alice@example.com" in str(plain)
+
+
+def test_profile_comparison_to_dict_exclude_columns():
+    """exclude_columns must omit the named column from both nested profiles."""
+    frame = ar.from_pandas(pd.DataFrame({"name": ["Alice", "Bob"], "score": [10, 20]}))
+    left = ar.profile(frame)
+    right = ar.profile(frame)
+    comparison = ar.compare_profiles(left, right)
+
+    result = comparison.to_dict(exclude_columns=["name"])
+
+    assert "name" not in result["left_profile"]["columns"]
+    assert "name" not in result["right_profile"]["columns"]
+    # Non-excluded column is still present
+    assert "score" in result["left_profile"]["columns"]
+    assert "score" in result["right_profile"]["columns"]
+
+
+def test_profile_comparison_to_json_redacts_sample_values():
+    """to_json(redact_sample_values=True) must not contain sensitive values."""
+    frame = ar.from_pandas(pd.DataFrame({"token": ["secret-abc", "secret-xyz"]}))
+    left = ar.profile(frame)
+    right = ar.profile(frame)
+    comparison = ar.compare_profiles(left, right)
+
+    json_redacted = comparison.to_json(redact_sample_values=True)
+    json_plain = comparison.to_json()
+
+    assert "secret-abc" not in json_redacted
+    assert "secret-xyz" not in json_redacted
+    assert "[REDACTED]" in json_redacted
+
+    # Plain export contains the real values
+    assert "secret-abc" in json_plain
+
 def test_profile_comparison_constructor_validation():
     # Setup baseline dummy objects to test instantiation safely
     valid_report = ar.quality.DataQualityReport("", {}, {}, {})

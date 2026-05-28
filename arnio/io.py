@@ -347,10 +347,10 @@ def _validate_on_bad_lines(on_bad_lines: str) -> str:
 
 def _materialize_csv_input(
     source: str | os.PathLike[str] | io.TextIOBase,
-) -> tuple[str, bool]:
+) -> tuple[str, bool, bool]:
     """Convert supported CSV inputs into a filesystem path."""
     if isinstance(source, (str, os.PathLike)):
-        return os.fspath(source), False
+        return os.fspath(source), False, False
     if isinstance(source, io.StringIO) or (
         hasattr(source, "read") and callable(source.read)
     ):
@@ -372,7 +372,7 @@ def _materialize_csv_input(
                     )
                 tmp.write(chunk)
             tmp.close()
-            return tmp.name, True
+            return tmp.name, True, True
         except Exception:
             tmp.close()
             os.unlink(tmp.name)
@@ -540,12 +540,23 @@ def read_csv(
 
     Examples
     --------
-    >>> frame = ar.read_csv("data.csv")           # comma delimiter
-    >>> frame = ar.read_csv("data.tsv")           # tab auto-detected
-    >>> frame = ar.read_csv("data.tsv", delimiter=",")  # explicit comma honoured
-    >>> frame = ar.read_csv("data.dat")           # non-standard extension accepted
+    >>> import arnio as ar
+
+    Read a basic CSV file:
+
+    >>> df = ar.read_csv("data.csv")              # comma delimiter
+
+    Read a CSV with specific columns and row limit:
+
+    >>> df = ar.read_csv("large_data.csv", usecols=["id", "name"], nrows=1000)
+
+    Other important behaviors:
+
+    >>> df = ar.read_csv("data.tsv")              # tab auto-detected
+    >>> df = ar.read_csv("data.tsv", delimiter=",")  # explicit comma honoured
+    >>> df = ar.read_csv("data.dat")              # non-standard extension accepted
     """
-    path, should_cleanup = _materialize_csv_input(path)
+    path, should_cleanup, is_materialized_text = _materialize_csv_input(path)
 
     try:
         _validate_csv_path(path, encoding)
@@ -594,8 +605,12 @@ def read_csv(
         raise
 
     try:
+        effective_encoding = "utf-8" if is_materialized_text else encoding
         with _utf8_csv_path(
-            path, encoding, encoding_errors=encoding_errors, delimiter=delimiter
+            path,
+            effective_encoding,
+            encoding_errors=encoding_errors,
+            delimiter=delimiter,
         ) as native_path:
             cpp_frame, bad_rows = reader.read(native_path, on_bad_lines)
 
@@ -626,6 +641,7 @@ def read_csv_chunked(
     usecols: list[str] | None = None,
     nrows: int | None = None,
     skip_rows: int = 0,
+    skiprows: int | None = None,
     encoding: str = "utf-8",
     trim_headers: bool = True,
     decimal_separator: str = ".",
@@ -657,6 +673,12 @@ def read_csv_chunked(
         Maximum total number of data rows to read across all chunks.
     skip_rows : int, default 0
         Number of data rows to skip after the header row.
+    skiprows : int, optional
+        Alias for ``skip_rows`` for API consistency with ``read_csv``.
+        Note: in chunked mode both ``skip_rows`` and ``skiprows`` skip
+        data rows *after* the header, not lines before it.
+        If both are supplied they must agree; conflicting values raise
+        ``ValueError``.
     encoding : str, default "utf-8"
         File encoding.
     trim_headers : bool, default True
@@ -703,7 +725,7 @@ def read_csv_chunked(
     ...     process(df)
     """
     is_path_input = isinstance(path, (str, os.PathLike))
-    path, should_cleanup = _materialize_csv_input(path)
+    path, should_cleanup, is_materialized_text = _materialize_csv_input(path)
     try:
         if is_path_input:
             path_lower = path.lower()
@@ -724,6 +746,24 @@ def read_csv_chunked(
         delimiter = _validate_delimiter(delimiter)
         mode = _validate_parser_mode(mode)
         chunksize = _validate_chunksize(chunksize)
+
+        # Resolve skiprows / skip_rows alias.
+        # Both skip data rows after the header in chunked mode.
+        # skip_rows is kept for backward compatibility; skiprows matches
+        # the read_csv parameter name. Both may be passed as long as they
+        # agree; conflicting values raise ValueError.
+        if skiprows is not None:
+            if isinstance(skiprows, bool) or not isinstance(skiprows, int):
+                raise TypeError("skiprows must be an integer")
+            if skiprows < 0:
+                raise ValueError("skiprows must be non-negative")
+            if skip_rows != 0 and skip_rows != skiprows:
+                raise ValueError(
+                    f"Conflicting values: skiprows={skiprows!r} and "
+                    f"skip_rows={skip_rows!r}. Pass only one of them."
+                )
+            skip_rows = skiprows
+
         skip_rows = _validate_skip_rows(skip_rows)
         on_bad_lines = _validate_on_bad_lines(on_bad_lines)
 
@@ -752,7 +792,10 @@ def read_csv_chunked(
             os.unlink(path)
         raise
     try:
-        with _utf8_csv_path(path, encoding, delimiter=delimiter) as native_path:
+        effective_encoding = "utf-8" if is_materialized_text else encoding
+        with _utf8_csv_path(
+            path, effective_encoding, delimiter=delimiter
+        ) as native_path:
             reader.open(native_path)
             while True:
                 chunk = reader.next_chunk(chunksize, on_bad_lines)

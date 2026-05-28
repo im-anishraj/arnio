@@ -154,6 +154,20 @@ def register_step(name: str, fn: Callable, overwrite: bool = False):
         _PYTHON_STEP_REGISTRY[name] = fn
 
 
+def unregister_step(name: str) -> None:
+    """Unregister a custom Python pipeline step."""
+    with _REGISTRY_LOCK:
+        if name not in _PYTHON_STEP_REGISTRY:
+            available_steps = sorted(set(_STEP_REGISTRY) | set(_PYTHON_STEP_REGISTRY))
+            raise UnknownStepError(name, available_steps)
+        fn = _PYTHON_STEP_REGISTRY[name]
+
+        if _is_builtin_python_step(name, fn):
+            available_steps = sorted(set(_STEP_REGISTRY) | set(_PYTHON_STEP_REGISTRY))
+            raise UnknownStepError(name, available_steps)
+        del _PYTHON_STEP_REGISTRY[name]
+
+
 def get_builtin_step_signatures() -> dict[str, inspect.Signature]:
     """Return normalized signatures for built-in pipeline steps.
 

@@ -1757,6 +1757,7 @@ Discord is for fast conversation and support. GitHub remains the source of truth
 - [Core Stability Sprint](CORE_STABILITY_SPRINT.md)
 - [Roadmap](ROADMAP.md)
 - [Troubleshooting Guide](docs/TROUBLESHOOTING.md)
+- [Nullable dtype compatibility](docs/nullable_dtype_compat.md)
 
 ## 🤝 Contribute
 
