@@ -12,8 +12,12 @@ Frame::Frame(std::vector<Column> columns) : columns_(std::move(columns)) {
         for (const auto& col : columns_) {
             validate_column_size(col);
         }
+        row_count_known_ = true;
+    } else {
+        // For empty column vector, leave row_count_known_ = false
+        // so that add_column() can properly set the row count from the first added column
+        row_count_known_ = false;
     }
-    row_count_known_ = true;
     rebuild_index();
 }
 

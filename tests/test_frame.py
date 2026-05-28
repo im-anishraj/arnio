@@ -881,7 +881,6 @@ def test_arframe_zero_columns_shape_persists():
     df_roundtrip = ar.to_pandas(result)
     assert df_roundtrip.shape == (3, 0)
 
-main
     # Convert back to ArFrame
     frame_roundtrip = ar.from_pandas(df_roundtrip)
     assert frame_roundtrip.shape == (3, 0)
