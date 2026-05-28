@@ -919,6 +919,9 @@ class ValidationIssue:
     value: Any = None
     severity: str = "error"
 
+    def __post_init__(self) -> None:
+        _validate_severity(self.severity)
+
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-friendly dictionary."""
         return {
