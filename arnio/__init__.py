@@ -14,6 +14,7 @@ except Exception:
 from .cleaning import (
     cast_types,
     clean,
+    clean_column_names,
     clip_numeric,
     coalesce_columns,
     combine_columns,
@@ -68,6 +69,7 @@ from .pipeline import (
     pipeline,
     register_step,
     reset_steps,
+    unregister_step,
 )
 from .quality import (
     CleanExplanation,
@@ -138,6 +140,7 @@ __all__ = [
     "drop_duplicates",
     "drop_constant_columns",
     "drop_empty_columns",
+    "clean_column_names",
     "clip_numeric",
     "winsorize_outliers",
     "coalesce_columns",
@@ -165,6 +168,7 @@ __all__ = [
     # Pipeline
     "pipeline",
     "register_step",
+    "unregister_step",
     "get_builtin_step_signatures",
     "list_steps",
     "PipelineContext",

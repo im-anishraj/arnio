@@ -686,6 +686,24 @@ def test_column_profile_to_dict_redacts_sample_values_direct(tmp_path):
     assert report.columns["name"].sample_values == ["Alice", "Bob"]
 
 
+def test_quality_to_dict_redacts_top_values_when_requested(tmp_path):
+    path = tmp_path / "dict_redacted_top_values.csv"
+    path.write_text("email\nalice@example.com\nalice@example.com\nbob@example.com\n")
+    report = ar.profile(ar.read_csv(path), sample_size=2)
+
+    d = report.to_dict(redact_sample_values=True)
+
+    assert d["columns"]["email"]["sample_values"] == ["[REDACTED]", "[REDACTED]"]
+    assert d["columns"]["email"]["top_values"] == [
+        {"value": "[REDACTED]", "count": 2, "ratio": pytest.approx(2 / 3)},
+        {"value": "[REDACTED]", "count": 1, "ratio": pytest.approx(1 / 3)},
+    ]
+    assert report.columns["email"].top_values == [
+        ("alice@example.com", 2, pytest.approx(2 / 3)),
+        ("bob@example.com", 1, pytest.approx(1 / 3)),
+    ]
+
+
 @pytest.mark.parametrize(
     "invalid_value",
     ["true", 1, None, ["redact"], object()],
@@ -2651,6 +2669,31 @@ def test_data_quality_report_to_json_redact_sample_values():
     assert parsed["columns"]["name"]["sample_values"] == ["[REDACTED]"]
 
 
+def test_data_quality_report_to_json_redacts_top_values():
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "email": [
+                    "alice@example.com",
+                    "alice@example.com",
+                    "bob@example.com",
+                ]
+            }
+        )
+    )
+    report = ar.profile(frame, sample_size=2)
+
+    json_output = report.to_json(redact_sample_values=True)
+
+    parsed = json.loads(json_output)
+
+    assert parsed["columns"]["email"]["sample_values"] == ["[REDACTED]", "[REDACTED]"]
+    assert parsed["columns"]["email"]["top_values"] == [
+        {"value": "[REDACTED]", "count": 2, "ratio": pytest.approx(2 / 3)},
+        {"value": "[REDACTED]", "count": 1, "ratio": pytest.approx(1 / 3)},
+    ]
+
+
 # --- Tests for ProfileComparison.to_json() ---
 
 
@@ -2816,3 +2859,124 @@ class TestValidateGateBool:
     def test_string_raises_type_error(self):
         with pytest.raises(TypeError, match="must be a bool"):
             _validate_gate_bool("true", "allow_new_columns")
+
+
+# ── ProfileComparison redaction tests ────────────────────────────────────────
+
+
+def test_profile_comparison_to_dict_redacts_sample_values():
+    """redact_sample_values=True must replace sample values in both nested profiles."""
+    frame = ar.from_pandas(
+        pd.DataFrame({"email": ["alice@example.com", "bob@example.com"]})
+    )
+    left = ar.profile(frame)
+    right = ar.profile(frame)
+    comparison = ar.compare_profiles(left, right)
+
+    redacted = comparison.to_dict(redact_sample_values=True)
+    plain = comparison.to_dict()
+
+    # Sensitive values must not appear in the redacted export
+    assert "alice@example.com" not in str(redacted)
+    assert "bob@example.com" not in str(redacted)
+
+    # Sample values are replaced with the redaction sentinel
+    left_samples = redacted["left_profile"]["columns"]["email"]["sample_values"]
+    right_samples = redacted["right_profile"]["columns"]["email"]["sample_values"]
+    assert all(v == "[REDACTED]" for v in left_samples)
+    assert all(v == "[REDACTED]" for v in right_samples)
+
+    # Plain export still contains the real values
+    assert "alice@example.com" in str(plain)
+
+
+def test_profile_comparison_to_dict_exclude_columns():
+    """exclude_columns must omit the named column from both nested profiles."""
+    frame = ar.from_pandas(pd.DataFrame({"name": ["Alice", "Bob"], "score": [10, 20]}))
+    left = ar.profile(frame)
+    right = ar.profile(frame)
+    comparison = ar.compare_profiles(left, right)
+
+    result = comparison.to_dict(exclude_columns=["name"])
+
+    assert "name" not in result["left_profile"]["columns"]
+    assert "name" not in result["right_profile"]["columns"]
+    # Non-excluded column is still present
+    assert "score" in result["left_profile"]["columns"]
+    assert "score" in result["right_profile"]["columns"]
+
+
+def test_profile_comparison_to_json_redacts_sample_values():
+    """to_json(redact_sample_values=True) must not contain sensitive values."""
+    frame = ar.from_pandas(pd.DataFrame({"token": ["secret-abc", "secret-xyz"]}))
+    left = ar.profile(frame)
+    right = ar.profile(frame)
+    comparison = ar.compare_profiles(left, right)
+
+    json_redacted = comparison.to_json(redact_sample_values=True)
+    json_plain = comparison.to_json()
+
+    assert "secret-abc" not in json_redacted
+    assert "secret-xyz" not in json_redacted
+    assert "[REDACTED]" in json_redacted
+
+    # Plain export contains the real values
+    assert "secret-abc" in json_plain
+
+
+def test_profile_comparison_constructor_validation():
+    import pandas as pd
+
+    frame = ar.from_pandas(pd.DataFrame({"col1": [1, 2, 3]}))
+    valid_report = ar.profile(frame)
+
+    # 1. Test that valid types construct perfectly fine without errors
+    comparison = ar.quality.ProfileComparison(
+        left_profile=valid_report,
+        right_profile=valid_report,
+        drift_report={},
+        status_counts={},
+    )
+    assert comparison.drift_report == {}
+
+    # 2. Test invalid left_profile type throws TypeError
+    with pytest.raises(
+        TypeError, match="left_profile must be an instance of DataQualityReport"
+    ):
+        ar.quality.ProfileComparison(
+            left_profile="not_a_report_object",
+            right_profile=valid_report,
+            drift_report={},
+            status_counts={},
+        )
+
+    # 3. Test invalid right_profile type throws TypeError
+    with pytest.raises(
+        TypeError, match="right_profile must be an instance of DataQualityReport"
+    ):
+        ar.quality.ProfileComparison(
+            left_profile=valid_report,
+            right_profile="not_a_report_object",
+            drift_report={},
+            status_counts={},
+        )
+
+    # 4. Test malformed nested drift_report dictionary throws TypeError
+    with pytest.raises(
+        TypeError, match="drift_report must be a nested dictionary of dict"
+    ):
+        ar.quality.ProfileComparison(
+            left_profile=valid_report,
+            right_profile=valid_report,
+            drift_report={"col1": "should_be_a_dict_but_is_a_string"},
+            status_counts={},
+        )
+
+    # 5. Test non-int status_counts values throw TypeError
+    with pytest.raises(TypeError, match="status_counts values must be integers"):
+        ar.quality.ProfileComparison(
+            left_profile=valid_report,
+            right_profile=valid_report,
+            drift_report={},
+            status_counts={"missing_values": "should_be_an_int"},
+        )

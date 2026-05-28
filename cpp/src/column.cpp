@@ -171,6 +171,16 @@ struct PushbackVisitor {
 void Column::push_back(const CellValue& value) {
     assert_type_consistency();
     bool is_null_val = std::holds_alternative<std::monostate>(value);
+
+    // Guard: reject non-null insertions into NULL_TYPE columns before
+    // mutating any internal state.  NULL_TYPE storage is std::monostate
+    // and has no backing vector, so allowing a non-null value would grow
+    // null_mask_ without a corresponding data element, leaving the
+    // variant storage and null tracking permanently out of sync.
+    if (dtype_ == DType::NULL_TYPE && !is_null_val) {
+        throw std::invalid_argument("Cannot push non-null value into a NULL_TYPE column");
+    }
+
     null_mask_.push_back(is_null_val);
 
     PushbackVisitor pv{data_};

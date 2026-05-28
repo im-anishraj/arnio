@@ -131,6 +131,21 @@ class ColumnProfile:
             if redact_sample_values
             else [_clean_scalar(value) for value in self.sample_values]
         )
+        top_values = (
+            [
+                {"value": "[REDACTED]", "count": c, "ratio": r}
+                for _value, c, r in self.top_values
+            ]
+            if redact_sample_values and self.top_values is not None
+            else (
+                [
+                    {"value": _clean_scalar(v), "count": c, "ratio": r}
+                    for v, c, r in self.top_values
+                ]
+                if self.top_values is not None
+                else None
+            )
+        )
         return {
             "name": self.name,
             "dtype": self.dtype,
@@ -161,14 +176,7 @@ class ColumnProfile:
             ),
             "sample_values": sample_values,
             "warnings": list(self.warnings),
-            "top_values": (
-                [
-                    {"value": _clean_scalar(v), "count": c, "ratio": r}
-                    for v, c, r in self.top_values
-                ]
-                if self.top_values is not None
-                else None
-            ),
+            "top_values": top_values,
             "top_values_is_approximate": self.top_values_is_approximate,
             "top_values_sample_count": self.top_values_sample_count,
             "top_values_sample_ratio": self.top_values_sample_ratio,
@@ -713,6 +721,11 @@ class DataQualityReport:
             "columns_with_nulls": [
                 name for name, profile in self.columns.items() if profile.null_count > 0
             ],
+            "columns_with_empty_strings": [
+                name
+                for name, profile in self.columns.items()
+                if profile.empty_string_count > 0
+            ],
             "columns_with_whitespace": [
                 name
                 for name, profile in self.columns.items()
@@ -773,11 +786,53 @@ class ProfileComparison:
     drift_report: dict[str, dict[str, Any]]
     status_counts: dict[str, int] = field(default_factory=dict)
 
-    def to_dict(self) -> dict[str, Any]:
-        """Return a JSON-friendly dictionary representation."""
+    def __post_init__(self) -> None:
+        if not isinstance(self.left_profile, DataQualityReport):
+            raise TypeError("left_profile must be an instance of DataQualityReport")
+        if not isinstance(self.right_profile, DataQualityReport):
+            raise TypeError("right_profile must be an instance of DataQualityReport")
+
+        if not isinstance(self.drift_report, dict):
+            raise TypeError("drift_report must be a dictionary")
+        for key, val in self.drift_report.items():
+            if not isinstance(key, str):
+                raise TypeError("drift_report keys must be strings")
+            if not isinstance(val, dict):
+                raise TypeError("drift_report must be a nested dictionary of dict")
+
+        if not isinstance(self.status_counts, dict):
+            raise TypeError("status_counts must be a dictionary")
+        for key, val in self.status_counts.items():
+            if not isinstance(key, str):
+                raise TypeError("status_counts keys must be strings")
+            if not isinstance(val, int):
+                raise TypeError("status_counts values must be integers")
+
+    def to_dict(
+        self,
+        *,
+        redact_sample_values: bool = False,
+        exclude_columns: list[str] | set[str] | tuple[str, ...] | None = None,
+    ) -> dict[str, Any]:
+        """Return a JSON-friendly dictionary representation.
+
+        Parameters
+        ----------
+        redact_sample_values : bool, default False
+            When True, sample values are replaced with ``[REDACTED]`` in
+            both nested profile exports.
+        exclude_columns : list, set, or tuple of str, optional
+            Column names to omit from both nested profile exports.
+        """
         return {
-            "left_profile": self.left_profile.to_dict(),
-            "right_profile": self.right_profile.to_dict(),
+            "left_profile": self.left_profile.to_dict(
+                redact_sample_values=redact_sample_values,
+                exclude_columns=exclude_columns,
+            ),
+            "right_profile": self.right_profile.to_dict(
+                redact_sample_values=redact_sample_values,
+                exclude_columns=exclude_columns,
+            ),
             "status_counts": dict(self.status_counts),
             "drift_report": {
                 name: _clean_drift_entry(entry)
@@ -789,14 +844,35 @@ class ProfileComparison:
         self,
         *,
         indent: int | None = None,
+        redact_sample_values: bool = False,
+        exclude_columns: list[str] | set[str] | tuple[str, ...] | None = None,
         output: Any | None = None,
     ) -> str | None:
         """Return the comparison as a JSON string.
 
+        Parameters
+        ----------
+        indent : int or None, default None
+            JSON indentation level.
+        redact_sample_values : bool, default False
+            When True, sample values are replaced with ``[REDACTED]`` in
+            both nested profile exports.
+        exclude_columns : list, set, or tuple of str, optional
+            Column names to omit from both nested profile exports.
+        output : writable text stream, optional
+            If provided, the JSON is written to this stream and None is
+            returned instead of a string.
+
         Example:
         comparison.to_json(indent=2)
         """
-        json_out = json.dumps(self.to_dict(), indent=indent)
+        json_out = json.dumps(
+            self.to_dict(
+                redact_sample_values=redact_sample_values,
+                exclude_columns=exclude_columns,
+            ),
+            indent=indent,
+        )
 
         if output is None:
             return json_out

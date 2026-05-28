@@ -1,3 +1,4 @@
+import re
 import sys
 from pathlib import Path
 
@@ -55,3 +56,22 @@ def test_pyproject_metadata_is_valid():
     assert project.get("name"), "Project name must be specified"
     assert project.get("version"), "Project version must be specified"
     assert project.get("description"), "Project description must be specified"
+
+
+def test_release_workflow_version_regex():
+    version_pattern = r"^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?$"
+
+    with PYPROJECT_PATH.open("rb") as f:
+        pyproject = tomllib.load(f)
+    current_version = pyproject.get("project", {}).get("version", "")
+    assert (
+        bool(re.match(version_pattern, current_version)) is True
+    ), f"Current version '{current_version}' fails validation pattern"
+
+    assert bool(re.match(version_pattern, "1.18.0")) is True
+    assert bool(re.match(version_pattern, "0.1.0")) is True
+    assert bool(re.match(version_pattern, "1.18.0-rc.1")) is True
+
+    assert bool(re.match(version_pattern, "1.18.0oops")) is False
+    assert bool(re.match(version_pattern, "1.2.3valid-until-here")) is False
+    assert bool(re.match(version_pattern, "v1.0.0")) is False
