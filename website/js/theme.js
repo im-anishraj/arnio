@@ -45,7 +45,7 @@
   if (window.matchMedia) {
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function (e) {
       if (!localStorage.getItem(STORAGE_KEY)) {
-        apply(e.matches ? DARK : LIGHT);
+        applyWithoutSaving(e.matches ? DARK : LIGHT);
       }
     });
   }
