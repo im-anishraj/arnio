@@ -182,4 +182,3 @@ class TestDiffSchema:
         assert diff.changed is True
         assert diff.difference_count == 1
         assert diff.differences[0].attribute == "severity"
-        
