@@ -1,30 +1,6 @@
 """Unit tests for pipeline step overwrite protection and custom step registration."""
 
-import sys
-from unittest.mock import MagicMock
 
-# Mock the C++ binding extension so we can run Python-only unit tests
-# without compiling the C++ code.
-mock_cpp = MagicMock()
-mock_cpp.Column = MagicMock()
-mock_cpp.CsvChunkReader = MagicMock()
-mock_cpp.CsvConfig = MagicMock()
-mock_cpp.CsvReader = MagicMock()
-mock_cpp.CsvWriteConfig = MagicMock()
-mock_cpp.CsvWriter = MagicMock()
-mock_cpp.DType = MagicMock()
-mock_cpp.Frame = MagicMock()
-mock_cpp.cast_types = MagicMock()
-mock_cpp.clip_numeric = MagicMock()
-mock_cpp.drop_duplicates = MagicMock()
-mock_cpp.drop_nulls = MagicMock()
-mock_cpp.fill_nulls = MagicMock()
-mock_cpp.normalize_case = MagicMock()
-mock_cpp.rename_columns = MagicMock()
-mock_cpp.safe_divide_columns = MagicMock()
-mock_cpp.strip_whitespace = MagicMock()
-
-sys.modules["arnio._arnio_cpp"] = mock_cpp
 
 import pytest  # noqa: E402
 
