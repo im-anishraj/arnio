@@ -768,6 +768,24 @@ def test_profile_approx_top_values_validation(tmp_path):
         ar.profile(frame, approx_top_values_min_ratio=1.5)
 
     with pytest.raises(
+        ValueError,
+        match="approx_top_values_min_ratio must be a finite number between 0 and 1",
+    ):
+        ar.profile(frame, approx_top_values_min_ratio=float("nan"))
+
+    with pytest.raises(
+        ValueError,
+        match="approx_top_values_min_ratio must be a finite number between 0 and 1",
+    ):
+        ar.profile(frame, approx_top_values_min_ratio=float("inf"))
+
+    with pytest.raises(
+        ValueError,
+        match="approx_top_values_min_ratio must be a finite number between 0 and 1",
+    ):
+        ar.profile(frame, approx_top_values_min_ratio=float("-inf"))
+
+    with pytest.raises(
         TypeError, match="approx_top_values_sample_size must be an integer"
     ):
         ar.profile(frame, approx_top_values_sample_size="10")
