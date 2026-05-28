@@ -20,7 +20,6 @@ def test_read_csv_rejects_invalid_delimiter(delim, tmp_path):
     csv_file = tmp_path / "sample.csv"
     csv_file.write_bytes(_CSV_CONTENT.encode())
 
-
     with pytest.raises(ValueError, match="delimiter"):
         ar.read_csv(str(csv_file), delimiter=delim)
 
@@ -32,7 +31,6 @@ def test_read_csv_rejects_invalid_delimiter(delim, tmp_path):
 def test_read_csv_chunked_rejects_invalid_delimiter(delim, tmp_path):
     csv_file = tmp_path / "sample.csv"
     csv_file.write_bytes(_CSV_CONTENT.encode())
-
 
     with pytest.raises(ValueError, match="delimiter"):
         # Consume the generator so validation actually runs.
@@ -46,7 +44,6 @@ def test_read_csv_chunked_rejects_invalid_delimiter(delim, tmp_path):
 def test_scan_csv_rejects_invalid_delimiter(delim, tmp_path):
     csv_file = tmp_path / "sample.csv"
     csv_file.write_bytes(_CSV_CONTENT.encode())
-
 
     with pytest.raises(ValueError, match="delimiter"):
         ar.scan_csv(str(csv_file), delimiter=delim)
