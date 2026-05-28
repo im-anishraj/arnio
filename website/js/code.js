@@ -52,23 +52,38 @@
     });
 
     // ── Install command click-to-copy ─────────────────────────
-    document.querySelectorAll('.install-cmd, .hero-install').forEach(function (el) {
-      el.addEventListener('click', function () {
-        const cmd = el.getAttribute('data-cmd') || el.textContent.replace(/^\$\s*/, '').replace(/click to copy/i, '').trim();
+    // Handler function for copy action (triggered by click or keyboard)
+    function handleInstallCommandCopy(el) {
+      const cmd = el.getAttribute('data-cmd') || el.textContent.replace(/^\$\s*/, '').replace(/click to copy/i, '').trim();
 
-        navigator.clipboard.writeText(cmd).then(function () {
-          showCopyFeedback(el);
-        }).catch(function () {
-          const textarea = document.createElement('textarea');
-          textarea.value = cmd;
-          textarea.style.position = 'fixed';
-          textarea.style.opacity = '0';
-          document.body.appendChild(textarea);
-          textarea.select();
-          document.execCommand('copy');
-          document.body.removeChild(textarea);
-          showCopyFeedback(el);
-        });
+      navigator.clipboard.writeText(cmd).then(function () {
+        showCopyFeedback(el);
+      }).catch(function () {
+        const textarea = document.createElement('textarea');
+        textarea.value = cmd;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        showCopyFeedback(el);
+      });
+    }
+
+    document.querySelectorAll('.install-cmd, .hero-install').forEach(function (el) {
+      // Click handler
+      el.addEventListener('click', function () {
+        handleInstallCommandCopy(el);
+      });
+
+      // Keyboard handler for Enter and Space keys (WCAG 2.1 Level A)
+      el.addEventListener('keydown', function (event) {
+        // Enter (key code 13) or Space (key code 32)
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault(); // Prevent default Space scroll behavior
+          handleInstallCommandCopy(el);
+        }
       });
     });
 

@@ -233,6 +233,14 @@ class DataQualityReport:
 
             exclude_columns = set(exclude_columns)
 
+        unknown_exclude_columns = sorted(exclude_columns - set(self.columns))
+        if unknown_exclude_columns:
+            available_columns = ", ".join(self.columns) or "<none>"
+            raise KeyError(
+                "Unknown exclude_columns: "
+                f"{unknown_exclude_columns}. Available columns: {available_columns}"
+            )
+
         def _redact_reason(reason: str | None) -> str | None:
             if not reason or not exclude_columns:
                 return reason
@@ -721,6 +729,11 @@ class DataQualityReport:
             "columns_with_nulls": [
                 name for name, profile in self.columns.items() if profile.null_count > 0
             ],
+            "columns_with_empty_strings": [
+                name
+                for name, profile in self.columns.items()
+                if profile.empty_string_count > 0
+            ],
             "columns_with_whitespace": [
                 name
                 for name, profile in self.columns.items()
@@ -781,11 +794,53 @@ class ProfileComparison:
     drift_report: dict[str, dict[str, Any]]
     status_counts: dict[str, int] = field(default_factory=dict)
 
-    def to_dict(self) -> dict[str, Any]:
-        """Return a JSON-friendly dictionary representation."""
+    def __post_init__(self) -> None:
+        if not isinstance(self.left_profile, DataQualityReport):
+            raise TypeError("left_profile must be an instance of DataQualityReport")
+        if not isinstance(self.right_profile, DataQualityReport):
+            raise TypeError("right_profile must be an instance of DataQualityReport")
+
+        if not isinstance(self.drift_report, dict):
+            raise TypeError("drift_report must be a dictionary")
+        for key, val in self.drift_report.items():
+            if not isinstance(key, str):
+                raise TypeError("drift_report keys must be strings")
+            if not isinstance(val, dict):
+                raise TypeError("drift_report must be a nested dictionary of dict")
+
+        if not isinstance(self.status_counts, dict):
+            raise TypeError("status_counts must be a dictionary")
+        for key, val in self.status_counts.items():
+            if not isinstance(key, str):
+                raise TypeError("status_counts keys must be strings")
+            if not isinstance(val, int):
+                raise TypeError("status_counts values must be integers")
+
+    def to_dict(
+        self,
+        *,
+        redact_sample_values: bool = False,
+        exclude_columns: list[str] | set[str] | tuple[str, ...] | None = None,
+    ) -> dict[str, Any]:
+        """Return a JSON-friendly dictionary representation.
+
+        Parameters
+        ----------
+        redact_sample_values : bool, default False
+            When True, sample values are replaced with ``[REDACTED]`` in
+            both nested profile exports.
+        exclude_columns : list, set, or tuple of str, optional
+            Column names to omit from both nested profile exports.
+        """
         return {
-            "left_profile": self.left_profile.to_dict(),
-            "right_profile": self.right_profile.to_dict(),
+            "left_profile": self.left_profile.to_dict(
+                redact_sample_values=redact_sample_values,
+                exclude_columns=exclude_columns,
+            ),
+            "right_profile": self.right_profile.to_dict(
+                redact_sample_values=redact_sample_values,
+                exclude_columns=exclude_columns,
+            ),
             "status_counts": dict(self.status_counts),
             "drift_report": {
                 name: _clean_drift_entry(entry)
@@ -797,14 +852,35 @@ class ProfileComparison:
         self,
         *,
         indent: int | None = None,
+        redact_sample_values: bool = False,
+        exclude_columns: list[str] | set[str] | tuple[str, ...] | None = None,
         output: Any | None = None,
     ) -> str | None:
         """Return the comparison as a JSON string.
 
+        Parameters
+        ----------
+        indent : int or None, default None
+            JSON indentation level.
+        redact_sample_values : bool, default False
+            When True, sample values are replaced with ``[REDACTED]`` in
+            both nested profile exports.
+        exclude_columns : list, set, or tuple of str, optional
+            Column names to omit from both nested profile exports.
+        output : writable text stream, optional
+            If provided, the JSON is written to this stream and None is
+            returned instead of a string.
+
         Example:
         comparison.to_json(indent=2)
         """
-        json_out = json.dumps(self.to_dict(), indent=indent)
+        json_out = json.dumps(
+            self.to_dict(
+                redact_sample_values=redact_sample_values,
+                exclude_columns=exclude_columns,
+            ),
+            indent=indent,
+        )
 
         if output is None:
             return json_out
@@ -1045,8 +1121,15 @@ def profile(
         approx_top_values_min_ratio, bool
     ):
         raise TypeError("approx_top_values_min_ratio must be a float")
+
+    if not math.isfinite(approx_top_values_min_ratio):
+        raise ValueError(
+            "approx_top_values_min_ratio must be a finite number between 0 and 1"
+        )
+
     if approx_top_values_min_ratio < 0 or approx_top_values_min_ratio > 1:
         raise ValueError("approx_top_values_min_ratio must be between 0 and 1")
+
     if not isinstance(approx_top_values_sample_size, int) or isinstance(
         approx_top_values_sample_size, bool
     ):
@@ -1254,10 +1337,10 @@ def check_quality_gates(
         "max_row_count_delta_ratio": _validate_gate_threshold(
             max_row_count_delta_ratio, "max_row_count_delta_ratio"
         ),
-        "max_duplicate_ratio_delta": _validate_gate_threshold(
+        "max_duplicate_ratio_delta": _validate_gate_ratio_threshold(
             max_duplicate_ratio_delta, "max_duplicate_ratio_delta"
         ),
-        "max_null_ratio_delta": _validate_gate_threshold(
+        "max_null_ratio_delta": _validate_gate_ratio_threshold(
             max_null_ratio_delta, "max_null_ratio_delta"
         ),
         "max_numeric_mean_delta_ratio": _validate_gate_threshold(
@@ -1455,6 +1538,16 @@ def _validate_gate_threshold(value: float | None, name: str) -> float | None:
     value = float(value)
     if not math.isfinite(value) or value < 0:
         raise ValueError(f"{name} must be a finite non-negative number")
+    return value
+
+
+def _validate_gate_ratio_threshold(value: float | None, name: str) -> float | None:
+    """Validate that a quality gate ratio threshold is between 0.0 and 1.0 inclusive."""
+    if value is None:
+        return None
+    value = _validate_gate_threshold(value, name)
+    if value > 1.0:
+        raise ValueError(f"{name} must be a ratio between 0.0 and 1.0")
     return value
 
 

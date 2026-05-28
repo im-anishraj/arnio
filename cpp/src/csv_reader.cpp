@@ -1122,11 +1122,17 @@ Frame CsvChunkReader::build_frame(const std::vector<std::vector<std::string>>& r
     std::vector<Column> columns;
     columns.reserve(col_indices_.size());
     for (size_t ci : col_indices_) {
-        Column col(header_[ci], col_types_[ci]);
+        // A column whose type is still NULL_TYPE has been all-null in every chunk
+        // seen so far.  Fall back to STRING so the Python layer always receives a
+        // concrete type.  col_types_[ci] is intentionally left as NULL_TYPE so
+        // subsequent chunks can still promote it to the correct type.
+        DType effective_type =
+            (col_types_[ci] == DType::NULL_TYPE) ? DType::STRING : col_types_[ci];
+        Column col(header_[ci], effective_type);
         for (const auto& row : raw_data) {
             if (ci < row.size()) {
                 const std::string& raw_value = row[ci];
-                CellValue parsed = parser_.parse_value(raw_value, col_types_[ci]);
+                CellValue parsed = parser_.parse_value(raw_value, effective_type);
 
                 // Fail-fast validation for locked schema in subsequent chunks
                 if (validate_locked_schema && std::holds_alternative<std::monostate>(parsed)) {
@@ -1282,15 +1288,23 @@ std::optional<CsvParseResult> CsvChunkReader::next_chunk(size_t chunksize,
                 }
             }
         }
-        for (size_t ci = 0; ci < col_types_.size(); ++ci) {
-            if (config.dtype.has_value() && config.dtype.value().count(header_[ci]) > 0) {
-                continue;
-            }
+        // Only lock the schema once every selected column has been resolved to a
+        // concrete type.  Columns that are still NULL_TYPE were all-null in this
+        // chunk; leaving them unlocked allows the next chunk to infer the real
+        // type instead of permanently (and silently) casting them to STRING.
+        // If we reach the end of the file with a column still NULL_TYPE it will
+        // be emitted as STRING by build_frame, which is the correct fallback for
+        // a genuinely all-null column.
+        bool all_resolved = true;
+        for (size_t ci : col_indices_) {
             if (col_types_[ci] == DType::NULL_TYPE) {
-                col_types_[ci] = DType::STRING;
+                all_resolved = false;
+                break;
             }
         }
-        schema_locked_ = true;
+        if (all_resolved) {
+            schema_locked_ = true;
+        }
     }
 
     rows_read_total_ += raw_data.size() + bad_rows.size();

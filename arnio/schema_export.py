@@ -19,11 +19,15 @@ for anything else so the contract stays explicit.
 from __future__ import annotations
 
 import pathlib
+import re
 from typing import Any
 
 from arnio.schema import _field_to_dict
 
 _INDENT = "  "
+
+# Matches ISO date and datetime strings that YAML 1.1 resolves as timestamps.
+_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}([ T]\d{2}:\d{2}(:\d{2})?.*)?$")
 
 # Types that arnio's Schema / scan_csv can legitimately produce.
 _SCALAR_TYPES = (str, int, float, bool, type(None))
@@ -59,6 +63,7 @@ def _emit_scalar(value: Any) -> str:
             not value
             or looks_numeric
             or value.lower() in {"true", "false", "null", "yes", "no", "on", "off"}
+            or bool(_DATE_RE.match(value))
             or any(c in value for c in ("\n", "\r"))
             or value[0]
             in (
@@ -275,11 +280,7 @@ def schema_to_dict(schema: dict | Any) -> dict:
             if isinstance(raw_field, str):
                 normalised[name] = {"type": raw_field}
             elif isinstance(raw_field, dict):
-                cleaned = {}
-                for k, v in sorted(raw_field.items()):
-                    cleaned[k] = sorted(v) if isinstance(v, set) else v
-                _validate_serializable(cleaned)
-                normalised[name] = cleaned
+                normalised[name] = _normalize_serializable(raw_field)
             else:
                 normalised[name] = raw_field
 

@@ -304,3 +304,15 @@ class TestWriteCsvQuoteCharValidation:
             ValueError, match="delimiter must not be the CSV quote character"
         ):
             ar.write_csv(frame, str(tmp_path / "out.csv"), delimiter='"')
+
+
+class TestWriteCsvControlCharValidation:
+    """Control character validation: unsafe control characters must be rejected."""
+
+    @pytest.mark.parametrize("delimiter", ["\0", "\x1f", "\x7f"])
+    def test_control_character_delimiter_rejected(self, tmp_path, delimiter):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
+        with pytest.raises(
+            ValueError, match="delimiter must not be a control character"
+        ):
+            ar.write_csv(frame, str(tmp_path / "out.csv"), delimiter=delimiter)

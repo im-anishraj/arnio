@@ -670,6 +670,36 @@ class TestFromPandas:
 
         assert roundtripped.shape == (2, 0)
 
+    def test_from_dict_mismatched_column_lengths(self):
+        with pytest.raises(
+            ValueError,
+            match="from_dict\\(\\) column lengths differ",
+        ) as exc_info:
+            ar.from_dict(
+                {
+                    "id": [1, 2, 3],
+                    "name": ["a", "b"],
+                }
+            )
+
+        message = str(exc_info.value)
+
+        assert "id=3" in message
+        assert "name=2" in message
+
+    def test_from_dict_equal_length_columns(self):
+        frame = ar.from_dict(
+            {
+                "id": [1, 2],
+                "name": ["a", "b"],
+            }
+        )
+
+        result = ar.to_pandas(frame)
+
+        assert result.shape == (2, 2)
+        assert list(result.columns) == ["id", "name"]
+
 
 class TestAttrsPreservation:
     def test_attrs_roundtrip(self):
@@ -1060,3 +1090,55 @@ class TestNullableInt64ObjectConversion:
         result = ar.to_pandas(frame)
         assert str(result["col"].dtype) == "Int64"
         assert list(result["col"]) == [1, pd.NA, 3]
+
+
+def test_from_records_rejects_string_columns():
+    import pytest
+
+    import arnio as ar
+
+    with pytest.raises(
+        TypeError,
+        match="columns must be a list or tuple of strings",
+    ):
+        ar.ArFrame.from_records([[1]], columns="a")
+
+
+def test_from_records_rejects_bytes_columns():
+    import pytest
+
+    import arnio as ar
+
+    with pytest.raises(
+        TypeError,
+        match="columns must be a list or tuple of strings",
+    ):
+        ar.ArFrame.from_records([[1]], columns=b"a")
+
+
+def test_from_records_rejects_non_string_column_entries():
+    import pytest
+
+    import arnio as ar
+
+    with pytest.raises(
+        TypeError,
+        match="columns must contain only strings",
+    ):
+        ar.ArFrame.from_records([[1]], columns=[1])
+
+
+def test_from_records_accepts_valid_string_columns_list():
+    import arnio as ar
+
+    frame = ar.ArFrame.from_records([[1, 2]], columns=["a", "b"])
+
+    assert frame.columns == ["a", "b"]
+
+
+def test_from_records_accepts_valid_string_columns_tuple():
+    import arnio as ar
+
+    frame = ar.ArFrame.from_records([[1, 2]], columns=("a", "b"))
+
+    assert frame.columns == ["a", "b"]
