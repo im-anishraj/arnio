@@ -65,4 +65,3 @@ def test_pipeline_step_error_properties_and_message():
 
 def test_jsonl_read_error_inheritance():
     assert issubclass(ar.JsonlReadError, ar.ArnioError)
-
