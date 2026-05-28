@@ -4,6 +4,7 @@ Tests for ArFrame.preview()
 
 import copy
 import math
+from pathlib import Path
 
 import pandas as pd
 import pytest
@@ -38,39 +39,39 @@ def test_dict_ArFrame():
     assert frame["age"][1] == 30
 
 
-def test_preview_returns_string(sample_csv):
+def test_preview_returns_string(sample_csv: str):
     frame = ar.read_csv(sample_csv)
     result = frame.preview()
     assert isinstance(result, str)
 
 
-def test_preview_contains_word_preview(sample_csv):
+def test_preview_contains_word_preview(sample_csv: str):
     frame = ar.read_csv(sample_csv)
     result = frame.preview()
     assert "preview" in result.lower()
 
 
-def test_preview_contains_column_names(sample_csv):
+def test_preview_contains_column_names(sample_csv: str):
     frame = ar.read_csv(sample_csv)
     result = frame.preview()
     for col in frame.columns:
         assert col in result  # "name", "age", "email", "active" all appear
 
 
-def test_preview_default_shows_three_rows(sample_csv):
+def test_preview_default_shows_three_rows(sample_csv: str):
     # sample_csv only has 3 rows, so default n=5 clamps to 3
     frame = ar.read_csv(sample_csv)
     result = frame.preview()
     assert "showing 3 of 3" in result
 
 
-def test_preview_custom_n(sample_csv):
+def test_preview_custom_n(sample_csv: str):
     frame = ar.read_csv(sample_csv)
     result = frame.preview(n=2)
     assert "showing 2 of 3" in result
 
 
-def test_preview_n_equals_one(sample_csv):
+def test_preview_n_equals_one(sample_csv: str):
     frame = ar.read_csv(sample_csv)
     result = frame.preview(n=1)
     assert "showing 1 of 3" in result
@@ -121,26 +122,26 @@ def test_none_value_ArFrame():
     assert frame["age"][1] is None
 
 
-def test_preview_n_exceeds_row_count(sample_csv):
+def test_preview_n_exceeds_row_count(sample_csv: str):
     frame = ar.read_csv(sample_csv)
     result = frame.preview(n=9999)
     assert "showing 3 of 3" in result  # clamps, doesn't crash
 
 
-def test_preview_n_equals_exact_row_count(sample_csv):
+def test_preview_n_equals_exact_row_count(sample_csv: str):
     frame = ar.read_csv(sample_csv)
     result = frame.preview(n=3)
     assert "showing 3 of 3" in result
 
 
-def test_preview_with_nulls(csv_with_nulls):
+def test_preview_with_nulls(csv_with_nulls: str):
     # Should not crash on missing values
     frame = ar.read_csv(csv_with_nulls)
     result = frame.preview()
     assert isinstance(result, str)
 
 
-def test_preview_large_csv(large_csv):
+def test_preview_large_csv(large_csv: str):
     # 1000 rows — default should only show 5
     frame = ar.read_csv(large_csv)
     result = frame.preview()
@@ -220,37 +221,37 @@ def test_scalar_dict_ArFrame():
         ar.ArFrame.from_dict(data)
 
 
-def test_preview_invalid_n_zero(sample_csv):
+def test_preview_invalid_n_zero(sample_csv: str):
     frame = ar.read_csv(sample_csv)
     with pytest.raises(ValueError):
         frame.preview(n=0)
 
 
-def test_preview_invalid_n_negative(sample_csv):
+def test_preview_invalid_n_negative(sample_csv: str):
     frame = ar.read_csv(sample_csv)
     with pytest.raises(ValueError):
         frame.preview(n=-1)
 
 
-def test_preview_invalid_n_string(sample_csv):
+def test_preview_invalid_n_string(sample_csv: str):
     frame = ar.read_csv(sample_csv)
     with pytest.raises(ValueError):
         frame.preview(n="five")
 
 
-def test_preview_invalid_n_float(sample_csv):
+def test_preview_invalid_n_float(sample_csv: str):
     frame = ar.read_csv(sample_csv)
     with pytest.raises(ValueError):
         frame.preview(n=2.5)
 
 
-def test_preview_invalid_n_bool(sample_csv):
+def test_preview_invalid_n_bool(sample_csv: str):
     frame = ar.read_csv(sample_csv)
     with pytest.raises(ValueError):
         frame.preview(n=True)  # bool is subclass of int — must still be rejected
 
 
-def test_preview_invalid_n_none(sample_csv):
+def test_preview_invalid_n_none(sample_csv: str):
     frame = ar.read_csv(sample_csv)
     with pytest.raises(ValueError):
         frame.preview(n=None)
@@ -347,7 +348,9 @@ def test_select_columns_empty_frame():
     assert selected.shape == (0, 1)
 
 
-def test_select_columns_native_path_avoids_pandas_roundtrip(monkeypatch):
+def test_select_columns_native_path_avoids_pandas_roundtrip(
+    monkeypatch: pytest.MonkeyPatch,
+):
     frame = ar.from_pandas(
         pd.DataFrame(
             {
@@ -373,7 +376,7 @@ def test_select_columns_native_path_avoids_pandas_roundtrip(monkeypatch):
     assert list(df.columns) == ["salary", "name"]
 
 
-def test_head_native_path_avoids_pandas_roundtrip(monkeypatch):
+def test_head_native_path_avoids_pandas_roundtrip(monkeypatch: pytest.MonkeyPatch):
     frame = ar.from_pandas(
         pd.DataFrame(
             {
@@ -396,7 +399,7 @@ def test_head_native_path_avoids_pandas_roundtrip(monkeypatch):
     assert result.columns == ["name", "salary"]
 
 
-def test_tail_native_path_avoids_pandas_roundtrip(monkeypatch):
+def test_tail_native_path_avoids_pandas_roundtrip(monkeypatch: pytest.MonkeyPatch):
     frame = ar.from_pandas(
         pd.DataFrame(
             {
@@ -528,7 +531,7 @@ def test_tail_invalid_n(invalid_n):
 class TestArFrame:
     """Test ArFrame properties and methods."""
 
-    def test_is_empty_true(self, tmp_path):
+    def test_is_empty_true(self, tmp_path: Path):
         """Test is_empty returns True for frame with zero rows."""
         csv_path = tmp_path / "empty.csv"
         csv_path.write_text("name,age\n")  # Header only, no data rows
@@ -537,13 +540,13 @@ class TestArFrame:
         assert frame.is_empty is True
         assert len(frame) == 0
 
-    def test_is_empty_false(self, sample_csv):
+    def test_is_empty_false(self, sample_csv: str):
         """Test is_empty returns False for frame with rows."""
         frame = ar.read_csv(sample_csv)
         assert frame.is_empty is False
         assert len(frame) > 0
 
-    def test_is_empty_single_row(self, tmp_path):
+    def test_is_empty_single_row(self, tmp_path: Path):
         """Test is_empty with exactly one row."""
         csv_path = tmp_path / "single.csv"
         csv_path.write_text("name,age\nAlice,30\n")
@@ -804,7 +807,7 @@ def test_add_column_rejects_duplicate_name():
 # ArFrame.describe() Tests
 
 
-def test_describe_sample_metrics(sample_csv):
+def test_describe_sample_metrics(sample_csv: str):
     frame = ar.read_csv(sample_csv)
     stats = frame.describe()
 
@@ -820,7 +823,7 @@ def test_describe_sample_metrics(sample_csv):
     assert "mean" not in stats["name"]
 
 
-def test_describe_excludes_null_values(csv_with_nulls):
+def test_describe_excludes_null_values(csv_with_nulls: str):
     frame = ar.read_csv(csv_with_nulls)
     stats = frame.describe()
 
@@ -835,7 +838,7 @@ def test_describe_excludes_null_values(csv_with_nulls):
     assert stats["name"]["unique"] == 3.0
 
 
-def test_describe_empty_frame_edge_case(tmp_path):
+def test_describe_empty_frame_edge_case(tmp_path: Path):
     csv_path = tmp_path / "empty_input.csv"
     csv_path.write_text("name,age\n")
 
@@ -857,7 +860,7 @@ def test_describe_empty_frame_edge_case(tmp_path):
             assert stats[col]["unique"] == 0.0
 
 
-def test_describe_dictionary_subclass_repr(sample_csv):
+def test_describe_dictionary_subclass_repr(sample_csv: str):
     frame = ar.read_csv(sample_csv)
     stats = frame.describe()
 
@@ -865,7 +868,7 @@ def test_describe_dictionary_subclass_repr(sample_csv):
     assert "{\n" in repr(stats)
 
 
-def test_describe_all_numeric_columns(large_csv):
+def test_describe_all_numeric_columns(large_csv: str):
     frame = ar.read_csv(large_csv)
 
     numeric_frame = frame.select_dtypes(include=["int64", "float64"])
@@ -878,7 +881,7 @@ def test_describe_all_numeric_columns(large_csv):
         assert metric_keys == ["count", "nulls", "mean", "min", "max"]
 
 
-def test_describe_all_string_columns(csv_with_whitespace):
+def test_describe_all_string_columns(csv_with_whitespace: str):
     frame = ar.read_csv(csv_with_whitespace)
     stats = frame.describe()
 
@@ -935,6 +938,34 @@ def test_astype_invalid_raises_error():
     # Trying to pass None should raise a TypeError
     with pytest.raises(TypeError, match="dtype cannot be None"):
         frame.astype(None)
+
+
+def test_astype_object_dtype_rejected():
+    import pytest
+
+    from arnio.frame import ArFrame
+
+    frame = ArFrame.from_records([{"a": 1, "b": True}])
+
+    with pytest.raises(
+        TypeError,
+        match="Arnio does not support casting columns to object dtype",
+    ):
+        frame.astype(object)
+
+
+def test_astype_dict_object_dtype_rejected():
+    import pytest
+
+    from arnio.frame import ArFrame
+
+    frame = ArFrame.from_records([{"a": 1, "b": True}])
+
+    with pytest.raises(
+        TypeError,
+        match="Column 'a' cannot be cast to object dtype",
+    ):
+        frame.astype({"a": object})
 
 
 # ── drop_columns ──────────────────────────────────────────────────────────────
@@ -1003,36 +1034,36 @@ class TestDropColumns:
 # ── _repr_html_() ─────────────────────────────────────────────────────────────
 
 
-def test_repr_html_returns_str(sample_csv):
+def test_repr_html_returns_str(sample_csv: str):
     frame = ar.read_csv(sample_csv)
     assert isinstance(frame._repr_html_(), str)
 
 
-def test_repr_html_has_table_tag(sample_csv):
+def test_repr_html_has_table_tag(sample_csv: str):
     assert "<table" in ar.read_csv(sample_csv)._repr_html_()
 
 
-def test_repr_html_has_thead_and_tbody(sample_csv):
+def test_repr_html_has_thead_and_tbody(sample_csv: str):
     out = ar.read_csv(sample_csv)._repr_html_()
     assert "<thead>" in out
     assert "<tbody>" in out
 
 
-def test_repr_html_contains_column_names(sample_csv):
+def test_repr_html_contains_column_names(sample_csv: str):
     frame = ar.read_csv(sample_csv)
     out = frame._repr_html_()
     for col in frame.columns:
         assert col in out
 
 
-def test_repr_html_contains_cell_values(sample_csv):
+def test_repr_html_contains_cell_values(sample_csv: str):
     frame = ar.read_csv(sample_csv)
     out = frame._repr_html_()
     assert "Alice" in out
     assert "Bob" in out
 
 
-def test_repr_html_summary_shows_shape(sample_csv):
+def test_repr_html_summary_shows_shape(sample_csv: str):
     frame = ar.read_csv(sample_csv)
     out = frame._repr_html_()
     rows, cols = frame.shape
@@ -1040,32 +1071,32 @@ def test_repr_html_summary_shows_shape(sample_csv):
     assert str(cols) in out
 
 
-def test_repr_html_summary_shows_dtypes(sample_csv):
+def test_repr_html_summary_shows_dtypes(sample_csv: str):
     frame = ar.read_csv(sample_csv)
     out = frame._repr_html_()
     for dtype in frame.dtypes.values():
         assert dtype in out
 
 
-def test_repr_html_truncation_notice_present(large_csv):
+def test_repr_html_truncation_notice_present(large_csv: str):
     frame = ar.read_csv(large_csv)
     out = frame._repr_html_()
     assert "Showing 10 of 1000 rows" in out
 
 
-def test_repr_html_no_truncation_for_small_frame(sample_csv):
+def test_repr_html_no_truncation_for_small_frame(sample_csv: str):
     frame = ar.read_csv(sample_csv)
     assert "Showing" not in frame._repr_html_()
 
 
-def test_repr_html_body_capped_at_ten_rows(large_csv):
+def test_repr_html_body_capped_at_ten_rows(large_csv: str):
     frame = ar.read_csv(large_csv)
     out = frame._repr_html_()
     tbody = out[out.index("<tbody>") : out.index("</tbody>") + len("</tbody>")]
     assert tbody.count("<tr>") == 10
 
 
-def test_repr_html_empty_frame_no_crash(tmp_path):
+def test_repr_html_empty_frame_no_crash(tmp_path: Path):
     csv_path = tmp_path / "empty.csv"
     csv_path.write_text("name,age\n")
     frame = ar.read_csv(str(csv_path))
@@ -1074,14 +1105,14 @@ def test_repr_html_empty_frame_no_crash(tmp_path):
     assert len(out) > 0
 
 
-def test_repr_html_with_nulls_no_crash(csv_with_nulls):
+def test_repr_html_with_nulls_no_crash(csv_with_nulls: str):
     frame = ar.read_csv(csv_with_nulls)
     out = frame._repr_html_()
     assert isinstance(out, str)
     assert "<table" in out
 
 
-def test_repr_html_escapes_html_in_cell_value(tmp_path):
+def test_repr_html_escapes_html_in_cell_value(tmp_path: Path):
     csv_path = tmp_path / "xss.csv"
     csv_path.write_text('payload\n"<script>alert(1)</script>"\n')
     frame = ar.read_csv(str(csv_path))
@@ -1090,7 +1121,7 @@ def test_repr_html_escapes_html_in_cell_value(tmp_path):
     assert "&lt;script&gt;" in out
 
 
-def test_repr_html_escapes_html_in_column_name(tmp_path):
+def test_repr_html_escapes_html_in_column_name(tmp_path: Path):
     csv_path = tmp_path / "col_xss.csv"
     csv_path.write_text("<b>bad</b>\n1\n")
     frame = ar.read_csv(str(csv_path))
@@ -1099,7 +1130,9 @@ def test_repr_html_escapes_html_in_column_name(tmp_path):
     assert "&lt;b&gt;bad&lt;/b&gt;" in out
 
 
-def test_repr_html_does_not_convert_full_frame(large_csv, monkeypatch):
+def test_repr_html_does_not_convert_full_frame(
+    large_csv: str, monkeypatch: pytest.MonkeyPatch
+):
     """_repr_html_() must not call to_pandas() for automatic display."""
     frame = ar.read_csv(large_csv)
 

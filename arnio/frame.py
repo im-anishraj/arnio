@@ -203,6 +203,14 @@ class ArFrame:
         except Exception as e:
             raise RuntimeError(f"Failed to convert ArFrame to pandas for casting: {e}")
 
+        if dtype is object:
+            raise TypeError("Arnio does not support casting columns to object dtype")
+
+        if isinstance(dtype, dict):
+            for col, target_dtype in dtype.items():
+                if target_dtype is object:
+                    raise TypeError(f"Column '{col}' cannot be cast to object dtype")
+
         try:
             df_casted = df.astype(dtype)
         except TypeError as te:
