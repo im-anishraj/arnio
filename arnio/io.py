@@ -194,6 +194,9 @@ def _validate_decimal_separator(decimal_separator: str) -> str:
     return decimal_separator
 
 
+_INVALID_DELIMITERS: frozenset[str] = frozenset({"\n", "\r", "\0", '"'})
+
+
 def _validate_delimiter(delimiter: str) -> str:
     """Validate CSV delimiter."""
     if not isinstance(delimiter, str):
@@ -202,6 +205,12 @@ def _validate_delimiter(delimiter: str) -> str:
     if len(delimiter) != 1:
         raise ValueError("delimiter must be exactly one character")
 
+    if delimiter in _INVALID_DELIMITERS:
+        raise ValueError(
+            f"delimiter {delimiter!r} is not allowed; the following characters "
+            f"cannot be used as field delimiters: newline (\\n), "
+            f'carriage-return (\\r), NUL (\\0), double-quote (").'
+        )
     return delimiter
 
 
