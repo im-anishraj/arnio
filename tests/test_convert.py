@@ -670,6 +670,36 @@ class TestFromPandas:
 
         assert roundtripped.shape == (2, 0)
 
+    def test_from_dict_mismatched_column_lengths(self):
+        with pytest.raises(
+            ValueError,
+            match="from_dict\\(\\) column lengths differ",
+        ) as exc_info:
+            ar.from_dict(
+                {
+                    "id": [1, 2, 3],
+                    "name": ["a", "b"],
+                }
+            )
+
+        message = str(exc_info.value)
+
+        assert "id=3" in message
+        assert "name=2" in message
+
+    def test_from_dict_equal_length_columns(self):
+        frame = ar.from_dict(
+            {
+                "id": [1, 2],
+                "name": ["a", "b"],
+            }
+        )
+
+        result = ar.to_pandas(frame)
+
+        assert result.shape == (2, 2)
+        assert list(result.columns) == ["id", "name"]
+
 
 class TestAttrsPreservation:
     def test_attrs_roundtrip(self):
