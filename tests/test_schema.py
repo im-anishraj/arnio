@@ -2885,6 +2885,7 @@ def test_url_allowed_schemes_whitespace_string_raises():
 def test_url_allowed_schemes_trims_whitespace():
     ar.URL(allowed_schemes=[" https ", " ftp "])
 
+
 def test_url_allowed_schemes_accepts_tuple():
     ar.URL(allowed_schemes=("https", "ftp"))
 
