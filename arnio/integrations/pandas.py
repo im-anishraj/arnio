@@ -134,6 +134,21 @@ class ArnioPandasAccessor:
 
         return to_pandas(result)
 
-    def validate(self, schema: Schema | dict[str, Any]) -> ValidationResult:
-        """Validate the DataFrame against an Arnio schema."""
-        return validate(self.to_arframe(), schema)
+    def validate(
+        self,
+        schema: Schema | dict[str, Any],
+        *,
+        max_errors: int | None = None,
+    ) -> ValidationResult:
+        """Validate the DataFrame against an Arnio schema.
+
+        Parameters
+        ----------
+        schema : Schema or dict[str, Field]
+            Schema to validate against.
+        max_errors : int or None, default None
+            Maximum number of validation issues to collect. Mirrors the
+            ``max_errors`` parameter of ``ar.validate()``. When None all
+            issues are collected.
+        """
+        return validate(self.to_arframe(), schema, max_errors=max_errors)
