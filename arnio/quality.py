@@ -268,7 +268,7 @@ class DataQualityReport:
                                     for col_name, col_type in value.items()
                                     if col_name not in exclude_columns
                                 }
-                                if key == "cast_types" and isinstance(value, dict)
+                                if isinstance(value, dict)
                                 else value
                             )
                         )
