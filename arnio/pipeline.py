@@ -56,6 +56,7 @@ _PYTHON_STEP_REGISTRY: dict[str, Callable] = {
     "coalesce_columns": cleaning.coalesce_columns,
     "normalize_whitespace": cleaning.normalize_whitespace,
 }
+_BUILTIN_PYTHON_STEP_REGISTRY: dict[str, Callable] = {}
 
 
 @dataclass(frozen=True)
@@ -139,6 +140,11 @@ def register_step(name: str, fn: Callable, overwrite: bool = False):
         if name in _STEP_REGISTRY:
             raise ValueError(
                 f"Cannot register '{name}': conflicts with built-in C++ step. "
+                f"Use a different name."
+            )
+        if name in _BUILTIN_PYTHON_STEP_REGISTRY:
+            raise ValueError(
+                f"Cannot register '{name}': conflicts with built-in Python step. "
                 f"Use a different name."
             )
         if name in _DEPRECATED_STEP_ALIASES:
@@ -542,7 +548,7 @@ register_step("filter_rows", cleaning.filter_rows)
 register_step("drop_columns_matching", cleaning.drop_columns_matching)
 register_step("safe_divide_columns", cleaning.safe_divide_columns)
 register_step("replace_values", cleaning.replace_values)
-_BUILTIN_PYTHON_STEP_REGISTRY = dict(_PYTHON_STEP_REGISTRY)
+_BUILTIN_PYTHON_STEP_REGISTRY.update(_PYTHON_STEP_REGISTRY)
 
 
 def reset_steps() -> None:
