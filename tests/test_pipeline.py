@@ -170,6 +170,7 @@ class TestPipeline:
 
     def test_pipeline_trim_column_names(self):
         import pandas as pd
+
         frame = ar.from_pandas(
             pd.DataFrame(
                 {
@@ -868,7 +869,9 @@ class TestPipeline:
 
     def test_register_step_empty_name(self):
         """Raise ValueError when name is empty string."""
-        with pytest.raises(ValueError, match="parameter 'name' must be a non-empty string"):
+        with pytest.raises(
+            ValueError, match="parameter 'name' must be a non-empty string"
+        ):
             ar.register_step("", lambda df: df)
 
     def test_register_step_non_callable_fn(self):
@@ -888,7 +891,9 @@ class TestPipeline:
 
     def test_unregister_step_empty_name(self):
         """Raise ValueError when name is empty string."""
-        with pytest.raises(ValueError, match="parameter 'name' must be a non-empty string"):
+        with pytest.raises(
+            ValueError, match="parameter 'name' must be a non-empty string"
+        ):
             ar.unregister_step("")
 
 

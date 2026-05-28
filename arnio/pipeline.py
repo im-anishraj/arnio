@@ -132,13 +132,17 @@ def register_step(name: str, fn: Callable, overwrite: bool = False):
     with _REGISTRY_LOCK:
 
         if not isinstance(name, str):
-            raise TypeError(f"parameter 'name' must be a string, not {type(name).__name__}")
+            raise TypeError(
+                f"parameter 'name' must be a string, not {type(name).__name__}"
+            )
         if not name:
             raise ValueError("parameter 'name' must be a non-empty string")
         if not callable(fn):
             raise TypeError(f"parameter 'fn' must be callable, not {type(fn).__name__}")
         if not isinstance(overwrite, bool):
-            raise TypeError(f"parameter 'overwrite' must be a bool, not {type(overwrite).__name__}")
+            raise TypeError(
+                f"parameter 'overwrite' must be a bool, not {type(overwrite).__name__}"
+            )
 
         if name.startswith(f"{_BUILTIN_STEP_NAMESPACE}{_STEP_NAMESPACE_SEPARATOR}"):
             raise ValueError(
@@ -169,7 +173,9 @@ def unregister_step(name: str) -> None:
     with _REGISTRY_LOCK:
 
         if not isinstance(name, str):
-            raise TypeError(f"parameter 'name' must be a string, not {type(name).__name__}")
+            raise TypeError(
+                f"parameter 'name' must be a string, not {type(name).__name__}"
+            )
         if not name:
             raise ValueError("parameter 'name' must be a non-empty string")
 
