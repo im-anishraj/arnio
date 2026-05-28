@@ -596,7 +596,10 @@ def read_csv(
     try:
         effective_encoding = "utf-8" if is_materialized_text else encoding
         with _utf8_csv_path(
-            path, effective_encoding, encoding_errors=encoding_errors, delimiter=delimiter
+            path,
+            effective_encoding,
+            encoding_errors=encoding_errors,
+            delimiter=delimiter,
         ) as native_path:
             cpp_frame, bad_rows = reader.read(native_path, on_bad_lines)
 
@@ -627,6 +630,7 @@ def read_csv_chunked(
     usecols: list[str] | None = None,
     nrows: int | None = None,
     skip_rows: int = 0,
+    skiprows: int | None = None,
     encoding: str = "utf-8",
     trim_headers: bool = True,
     decimal_separator: str = ".",
@@ -658,6 +662,12 @@ def read_csv_chunked(
         Maximum total number of data rows to read across all chunks.
     skip_rows : int, default 0
         Number of data rows to skip after the header row.
+    skiprows : int, optional
+        Alias for ``skip_rows`` for API consistency with ``read_csv``.
+        Note: in chunked mode both ``skip_rows`` and ``skiprows`` skip
+        data rows *after* the header, not lines before it.
+        If both are supplied they must agree; conflicting values raise
+        ``ValueError``.
     encoding : str, default "utf-8"
         File encoding.
     trim_headers : bool, default True
@@ -725,6 +735,24 @@ def read_csv_chunked(
         delimiter = _validate_delimiter(delimiter)
         mode = _validate_parser_mode(mode)
         chunksize = _validate_chunksize(chunksize)
+
+        # Resolve skiprows / skip_rows alias.
+        # Both skip data rows after the header in chunked mode.
+        # skip_rows is kept for backward compatibility; skiprows matches
+        # the read_csv parameter name. Both may be passed as long as they
+        # agree; conflicting values raise ValueError.
+        if skiprows is not None:
+            if isinstance(skiprows, bool) or not isinstance(skiprows, int):
+                raise TypeError("skiprows must be an integer")
+            if skiprows < 0:
+                raise ValueError("skiprows must be non-negative")
+            if skip_rows != 0 and skip_rows != skiprows:
+                raise ValueError(
+                    f"Conflicting values: skiprows={skiprows!r} and "
+                    f"skip_rows={skip_rows!r}. Pass only one of them."
+                )
+            skip_rows = skiprows
+
         skip_rows = _validate_skip_rows(skip_rows)
         on_bad_lines = _validate_on_bad_lines(on_bad_lines)
 
@@ -754,7 +782,9 @@ def read_csv_chunked(
         raise
     try:
         effective_encoding = "utf-8" if is_materialized_text else encoding
-        with _utf8_csv_path(path, effective_encoding, delimiter=delimiter) as native_path:
+        with _utf8_csv_path(
+            path, effective_encoding, delimiter=delimiter
+        ) as native_path:
             reader.open(native_path)
             while True:
                 chunk = reader.next_chunk(chunksize, on_bad_lines)
