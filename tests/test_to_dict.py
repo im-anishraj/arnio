@@ -114,5 +114,7 @@ class TestArFrameToDictExtended:
 
     def test_to_dict_duplicate_column_names_blocked(self):
         """from_pandas raises error for duplicate column names."""
-        with pytest.raises(ValueError, match="does not support duplicate column labels"):
-            frame = ar.from_pandas(pd.DataFrame([[1, 2, 3]], columns=["a", "b", "a"]))
+        with pytest.raises(
+            ValueError, match="does not support duplicate column labels"
+        ):
+            ar.from_pandas(pd.DataFrame([[1, 2, 3]], columns=["a", "b", "a"]))
