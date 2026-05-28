@@ -6,23 +6,19 @@ from pathlib import Path
 import pytest
 
 
-def _find_stub_file():
+def _find_stub_file(stub_name):
     repo_root = Path(__file__).resolve().parent.parent
-    candidates = [repo_root / "arnio" / "_arnio_cpp.pyi", repo_root / "arnio" / "_core.pyi"]
-    for p in candidates:
-        if p.exists():
-            return p
-    # fallback: first .pyi under arnio/
-    for p in (repo_root / "arnio").glob("*.pyi"):
-        return p
+    stub_path = repo_root / "arnio" / stub_name
+    if stub_path.exists():
+        return stub_path
     return None
 
 
 @pytest.mark.parametrize("module_name, stub_name", [("arnio._arnio_cpp", "_arnio_cpp.pyi")])
 def test_stub_runtime_symbol_parity(module_name, stub_name):
-    stub_path = _find_stub_file()
+    stub_path = _find_stub_file(stub_name)
     if stub_path is None:
-        pytest.skip("No .pyi stub found in arnio/; skipping parity test")
+        pytest.skip(f"Stub file arnio/{stub_name} not found; skipping parity test")
 
     try:
         mod = importlib.import_module(module_name)
