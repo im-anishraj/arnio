@@ -126,24 +126,27 @@ def test_benchmark_sparse_nulls_dry_run_cleans_up_temp_files(tmp_path):
     cmd = [sys.executable, str(script_path), "--rows", "10", "--runs", "1"]
 
     result = subprocess.run(
-    cmd,
-    env={
-        **env,
-        "ARNIO_BENCHMARK_OUTPUT_DIR": str(temp_benchmark_dir),
-    },
-    capture_output=True,
-    text=True,
-    cwd=str(BENCHMARKS_DIR.parent),
-    timeout=30,
+        cmd,
+        env={
+            **env,
+            "ARNIO_BENCHMARK_OUTPUT_DIR": str(temp_benchmark_dir),
+        },
+        capture_output=True,
+        text=True,
+        cwd=str(BENCHMARKS_DIR.parent),
+        timeout=30,
     )
 
     assert (
-    result.returncode == 0), f"Dry-run failed.\nStdout:\n{result.stdout}\nStderr:\n{result.stderr}"
+        result.returncode == 0
+    ), f"Dry-run failed.\nStdout:\n{result.stdout}\nStderr:\n{result.stderr}"
 
     # Ensure temporary benchmark artifacts are cleaned up
     post_files = list(temp_benchmark_dir.glob("benchmark_sparse_nulls_*.csv"))
 
-    assert len(post_files) == 0, (f"Temp benchmark files were not cleaned up: {post_files}")
+    assert (
+        len(post_files) == 0
+    ), f"Temp benchmark files were not cleaned up: {post_files}"
 
 
 def test_check_regression_detects_slowdown():
