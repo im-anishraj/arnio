@@ -1090,3 +1090,55 @@ class TestNullableInt64ObjectConversion:
         result = ar.to_pandas(frame)
         assert str(result["col"].dtype) == "Int64"
         assert list(result["col"]) == [1, pd.NA, 3]
+
+
+def test_from_records_rejects_string_columns():
+    import pytest
+
+    import arnio as ar
+
+    with pytest.raises(
+        TypeError,
+        match="columns must be a list or tuple of strings",
+    ):
+        ar.ArFrame.from_records([[1]], columns="a")
+
+
+def test_from_records_rejects_bytes_columns():
+    import pytest
+
+    import arnio as ar
+
+    with pytest.raises(
+        TypeError,
+        match="columns must be a list or tuple of strings",
+    ):
+        ar.ArFrame.from_records([[1]], columns=b"a")
+
+
+def test_from_records_rejects_non_string_column_entries():
+    import pytest
+
+    import arnio as ar
+
+    with pytest.raises(
+        TypeError,
+        match="columns must contain only strings",
+    ):
+        ar.ArFrame.from_records([[1]], columns=[1])
+
+
+def test_from_records_accepts_valid_string_columns_list():
+    import arnio as ar
+
+    frame = ar.ArFrame.from_records([[1, 2]], columns=["a", "b"])
+
+    assert frame.columns == ["a", "b"]
+
+
+def test_from_records_accepts_valid_string_columns_tuple():
+    import arnio as ar
+
+    frame = ar.ArFrame.from_records([[1, 2]], columns=("a", "b"))
+
+    assert frame.columns == ["a", "b"]
