@@ -1058,6 +1058,8 @@ class ValidationResult:
             raise TypeError("max_issues must be an integer or None")
         if max_issues is not None and max_issues < 0:
             raise ValueError("max_issues must be non-negative")
+        if not isinstance(redact_values, bool):
+            raise TypeError("redact_values must be a bool")
 
         status = "passed" if self.passed else "failed"
         lines = [

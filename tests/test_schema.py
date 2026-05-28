@@ -926,6 +926,53 @@ def test_validation_result_to_markdown_none_value_redacted():
     assert "[REDACTED]" not in markdown_raw
 
 
+def _make_failing_result() -> ar.ValidationResult:
+    """Helper: a ValidationResult with one issue, for redact_values type tests."""
+    return ar.ValidationResult(
+        row_count=1,
+        issue_count=1,
+        issues=[
+            ar.ValidationIssue(
+                column="col",
+                rule="min",
+                row_index=1,
+                value=0,
+                message="below minimum",
+            )
+        ],
+        bad_rows=[1],
+    )
+
+
+def test_to_markdown_rejects_non_bool_redact_values():
+    """to_markdown() must raise TypeError for any non-bool redact_values argument."""
+    result = _make_failing_result()
+
+    for invalid in ("false", "true", "", 0, 1, None, [], {}):
+        try:
+            result.to_markdown(redact_values=invalid)  # type: ignore[arg-type]
+        except TypeError as exc:
+            assert "redact_values must be a bool" in str(
+                exc
+            ), f"Wrong error message for {invalid!r}: {exc}"
+        else:
+            raise AssertionError(
+                f"Expected TypeError for redact_values={invalid!r}, but no exception was raised"
+            )
+
+
+def test_to_markdown_accepts_bool_redact_values():
+    """to_markdown() must not raise for redact_values=True or redact_values=False."""
+    result = _make_failing_result()
+
+    md_false = result.to_markdown(redact_values=False)
+    md_true = result.to_markdown(redact_values=True)
+
+    assert "0" in md_false, "Raw value should appear when redact_values=False"
+    assert "[REDACTED]" in md_true, "[REDACTED] should appear when redact_values=True"
+    assert "0" not in md_true.split("| Value |")[-1] or "[REDACTED]" in md_true
+
+
 def test_unique_constraint_detects_duplicates(tmp_path):
     path = tmp_path / "unique.csv"
     path.write_text("id,value\n1,100\n2,200\n1,300\n3,400\n")
