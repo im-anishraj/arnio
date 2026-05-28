@@ -37,3 +37,42 @@ def test_register_duckdb_empty_name():
 
     with pytest.raises(ValueError):
         ar.register_duckdb(frame, conn, "")
+
+
+def test_register_duckdb_invalid_connection_object():
+    import pandas as pd
+
+    frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
+
+    with pytest.raises(
+        TypeError,
+        match="conn must be a DuckDB connection with a callable register\\(\\) method",
+    ):
+        ar.register_duckdb(frame, object(), "tbl")
+
+
+def test_register_duckdb_none_connection():
+    import pandas as pd
+
+    frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
+
+    with pytest.raises(
+        TypeError,
+        match="conn must be a DuckDB connection with a callable register\\(\\) method",
+    ):
+        ar.register_duckdb(frame, None, "tbl")
+
+
+def test_register_duckdb_noncallable_register_attribute():
+    import pandas as pd
+
+    class FakeConnection:
+        register = 123
+
+    frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
+
+    with pytest.raises(
+        TypeError,
+        match="conn must be a DuckDB connection with a callable register\\(\\) method",
+    ):
+        ar.register_duckdb(frame, FakeConnection(), "tbl")

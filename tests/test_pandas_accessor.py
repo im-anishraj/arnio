@@ -1,6 +1,7 @@
 """Tests for the pandas DataFrame accessor."""
 
 import pandas as pd
+import pytest
 
 import arnio as ar
 
@@ -76,15 +77,15 @@ def test_pandas_accessor_auto_clean_dry_run_returns_report():
 
 
 def test_pandas_accessor_auto_clean_dry_run_with_return_report():
-    # dry_run=True with return_report=True should return (frame, report)
+    # dry_run=True with return_report=True should raise because dry_run
+    # already returns the report directly.
     df = pd.DataFrame({"name": [" Alice ", " Bob "]})
 
-    result = df.arnio.auto_clean(dry_run=True, return_report=True)
+    with pytest.raises(
+        ValueError, match="return_report=True cannot be used with dry_run=True"
+    ):
+        df.arnio.auto_clean(dry_run=True, return_report=True)
 
-    assert isinstance(result, tuple)
-    frame, report = result
-    assert isinstance(report, ar.DataQualityReport)
-    # Original frame must not be mutated
     assert list(df["name"]) == [" Alice ", " Bob "]
 
 
@@ -114,16 +115,14 @@ def test_pandas_accessor_validates_dataframe():
 
 
 def test_auto_clean_dry_run_with_return_report():
-    # dry_run=True with return_report=True should return (frame, report)
+    # dry_run=True with return_report=True should raise because dry_run
+    # already returns the report directly.
     frame = ar.from_pandas(pd.DataFrame({"name": [" Alice ", " Bob "]}))
 
-    result = ar.auto_clean(frame, dry_run=True, return_report=True)
-
-    assert isinstance(result, tuple)
-    original_frame, report = result
-    assert isinstance(report, ar.DataQualityReport)
-    # Frame must not be mutated
-    assert frame.dtypes["name"] == "string"
+    with pytest.raises(
+        ValueError, match="return_report=True cannot be used with dry_run=True"
+    ):
+        ar.auto_clean(frame, dry_run=True, return_report=True)
 
 
 def test_auto_clean_dry_run_safe_mode_does_not_mutate():
@@ -135,3 +134,29 @@ def test_auto_clean_dry_run_safe_mode_does_not_mutate():
     assert isinstance(result, ar.DataQualityReport)
     # Frame must not be mutated — score stays as string
     assert frame.dtypes["score"] == "string"
+
+
+# --- Issue #1397: expose explain= on pandas accessor auto_clean ---
+
+
+def test_pandas_accessor_auto_clean_explain_returns_dataframe_and_explanation():
+    df = pd.DataFrame({"name": [" Alice ", "Bob"]})
+
+    result, explanation = df.arnio.auto_clean(explain=True)
+
+    assert isinstance(result, pd.DataFrame)
+    assert list(result["name"]) == ["Alice", "Bob"]
+    assert isinstance(explanation, ar.CleanExplanation)
+    assert explanation.mode == "safe"
+    assert any(s.step == "strip_whitespace" for s in explanation.steps)
+
+
+def test_pandas_accessor_auto_clean_return_report_and_explain():
+    df = pd.DataFrame({"name": [" Alice ", "Bob"]})
+
+    result, report, explanation = df.arnio.auto_clean(return_report=True, explain=True)
+
+    assert isinstance(result, pd.DataFrame)
+    assert list(result["name"]) == ["Alice", "Bob"]
+    assert isinstance(report, ar.DataQualityReport)
+    assert isinstance(explanation, ar.CleanExplanation)

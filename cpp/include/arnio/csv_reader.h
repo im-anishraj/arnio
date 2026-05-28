@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <fstream>
 #include <memory>
 #include <optional>
@@ -56,6 +57,9 @@ class CsvParser {
 
    private:
     CsvConfig config_;
+    // 256-byte lookup table: non-zero for chars that stop the unquoted
+    // bulk-scan (delimiter, '"', '\r'). Initialised once in the constructor.
+    std::array<uint8_t, 256> stop_unquoted_{};
 };
 
 class CsvReader {

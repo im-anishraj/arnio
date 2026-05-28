@@ -65,3 +65,17 @@ When sharing benchmark results in an issue or PR comment, please copy the comple
 * **Python version** (e.g., 3.11, 3.12)
 * **CPU Model** (e.g., Apple M2 Max, AMD Ryzen 9 5900X)
 * **pandas & NumPy versions**
+
+### Stability sprint benchmark rule
+
+Performance claims should be tied to deterministic baselines, not one-off local
+runs. Before using a benchmark result in a release note, issue, or PR summary:
+
+1. Regenerate deterministic data with `python benchmarks/generate_data.py`.
+2. Run the benchmark from a clean environment after `pip install -e ".[dev]"`.
+3. Include the full system information log.
+4. Compare against `benchmarks/baseline.json` when a baseline exists.
+5. Treat missing baselines as "not yet proven", not as a pass.
+
+See [../CORE_STABILITY_SPRINT.md](../CORE_STABILITY_SPRINT.md) for the release
+gate that requires populated, reproducible benchmark baselines.

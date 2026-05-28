@@ -108,3 +108,63 @@ TEST_CASE("is_null_sentinel respects custom null_values config", "[csv_parser]")
     REQUIRE(parser.is_null_sentinel("NULL") == true);
     REQUIRE(parser.is_null_sentinel("alice") == false);
 }
+TEST_CASE("parse_line bulk fast path handles long unquoted field", "[csv_parser]") {
+    CsvParser parser;
+    std::string long_field(200, 'x');
+    std::string line = long_field + ",short,end";
+
+    auto fields = parser.parse_line(line);
+
+    REQUIRE(fields.size() == 3);
+    REQUIRE(fields[0] == long_field);
+    REQUIRE(fields[1] == "short");
+    REQUIRE(fields[2] == "end");
+}
+
+TEST_CASE("parse_line bulk fast path preserves quoted fields alongside long unquoted",
+          "[csv_parser]") {
+    CsvParser parser;
+    std::string long_field(200, 'a');
+    std::string line = long_field + ",\"quoted, value\",end";
+
+    auto fields = parser.parse_line(line);
+
+    REQUIRE(fields.size() == 3);
+    REQUIRE(fields[0] == long_field);
+    REQUIRE(fields[1] == "quoted, value");
+    REQUIRE(fields[2] == "end");
+}
+
+TEST_CASE("parse_line bulk fast path works with custom delimiter", "[csv_parser]") {
+    CsvConfig cfg;
+    cfg.delimiter = ';';
+    CsvParser parser(cfg);
+    std::string long_field(200, 'z');
+    std::string line = long_field + ";col2;col3";
+
+    auto fields = parser.parse_line(line);
+
+    REQUIRE(fields.size() == 3);
+    REQUIRE(fields[0] == long_field);
+    REQUIRE(fields[1] == "col2");
+}
+TEST_CASE("parse_line handles \\r correctly in unquoted field", "[csv_parser]") {
+    CsvParser parser;
+    auto fields = parser.parse_line("alice\r");
+    REQUIRE(fields.size() == 1);
+    REQUIRE(fields[0] == "alice");
+}
+
+TEST_CASE("parse_line row width — more fields than expected does not crash", "[csv_parser]") {
+    CsvParser parser;
+    auto fields = parser.parse_line("a,b,c,d,e");
+    REQUIRE(fields.size() == 5);
+    REQUIRE(fields[4] == "e");
+}
+
+TEST_CASE("parse_line row width — single field no delimiter", "[csv_parser]") {
+    CsvParser parser;
+    auto fields = parser.parse_line("onlyfield");
+    REQUIRE(fields.size() == 1);
+    REQUIRE(fields[0] == "onlyfield");
+}
