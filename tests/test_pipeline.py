@@ -1925,4 +1925,3 @@ def test_pipeline_bool_flags_valid():
         verbose=True,
     )
     assert isinstance(result, tuple)
-
