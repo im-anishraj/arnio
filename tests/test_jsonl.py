@@ -150,6 +150,14 @@ class TestReadJsonlNrows:
         frame = ar.read_jsonl(path, nrows=0)
         assert frame.shape[0] == 0
 
+    def test_nrows_zero_skips_extension_validation(self, tmp_path):
+        # nrows=0 short-circuits before extension validation — an unsupported
+        # extension must not raise when the caller requests zero rows.
+        path = tmp_path / "probe.txt"
+        path.write_text("not json\n", encoding="utf-8")
+        frame = ar.read_jsonl(path, nrows=0)
+        assert frame.shape[0] == 0
+
     def test_nrows_larger_than_file_reads_all(self, tmp_path):
         path = _write(tmp_path, "data.jsonl", [{"x": i} for i in range(5)])
         frame = ar.read_jsonl(path, nrows=100)
@@ -277,3 +285,24 @@ class TestReadJsonlPipelineCompat:
 
         assert report.row_count == 3
         assert report.duplicate_rows == 1
+
+
+def test_read_jsonl_encoding_non_string(tmp_path):
+    f = tmp_path / "x.jsonl"
+    f.write_text('{"a": 1}\n')
+    with pytest.raises(TypeError, match="encoding must be a string"):
+        ar.read_jsonl(f, encoding=123)
+
+
+def test_read_jsonl_encoding_none(tmp_path):
+    f = tmp_path / "x.jsonl"
+    f.write_text('{"a": 1}\n')
+    with pytest.raises(TypeError, match="encoding must be a string"):
+        ar.read_jsonl(f, encoding=None)
+
+
+def test_read_jsonl_encoding_unknown_codec(tmp_path):
+    f = tmp_path / "x.jsonl"
+    f.write_text('{"a": 1}\n')
+    with pytest.raises(ValueError, match="Unknown encoding"):
+        ar.read_jsonl(f, encoding="fake-codec")

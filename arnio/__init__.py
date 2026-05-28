@@ -14,6 +14,7 @@ except Exception:
 from .cleaning import (
     cast_types,
     clean,
+    clean_column_names,
     clip_numeric,
     coalesce_columns,
     combine_columns,
@@ -28,6 +29,7 @@ from .cleaning import (
     keep_rows_with_nulls,
     normalize_case,
     normalize_unicode,
+    normalize_whitespace,
     parse_bool_strings,
     rename_columns,
     replace_values,
@@ -40,7 +42,7 @@ from .cleaning import (
     validate_columns_exist,
     winsorize_outliers,
 )
-from .convert import from_pandas, to_arrow, to_pandas
+from .convert import from_dict, from_pandas, to_arrow, to_pandas
 from .exceptions import (
     ArnioError,
     CsvReadError,
@@ -101,6 +103,7 @@ from .schema import (
     SchemaDiff,
     SchemaDiffEntry,
     String,
+    TimeZone,
     ValidationIssue,
     ValidationResult,
     diff_schema,
@@ -132,9 +135,11 @@ __all__ = [
     "validate_columns_exist",
     "filter_rows",
     "replace_values",
+    "normalize_whitespace",
     "drop_duplicates",
     "drop_constant_columns",
     "drop_empty_columns",
+    "clean_column_names",
     "clip_numeric",
     "winsorize_outliers",
     "coalesce_columns",
@@ -155,6 +160,7 @@ __all__ = [
     "to_arrow",
     "from_pandas",
     "from_records",
+    "from_dict",
     # Integrations
     "ArnioPandasAccessor",
     "register_duckdb",
@@ -193,6 +199,7 @@ __all__ = [
     "CountryCode",
     "CurrencyCode",
     "LanguageCode",
+    "TimeZone",
     "Bool",
     "Email",
     "URL",

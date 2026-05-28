@@ -54,6 +54,37 @@ def test_arniocleaner_in_pipeline():
     assert list(result.columns) == ["A", "B"]
 
 
+def test_arniocleaner_feature_names_out_tracks_dropped_columns():
+    df = pd.DataFrame({"A": ["x", "y"], "B": [1, 2]})
+
+    cleaner = ArnioCleaner(steps=[("drop_columns", {"columns": ["B"]})])
+    cleaner.fit(df)
+    result = cleaner.transform(df)
+
+    assert list(result.columns) == ["A"]
+    assert cleaner.get_feature_names_out().tolist() == ["A"]
+
+
+def test_arniocleaner_feature_names_out_tracks_renamed_columns():
+    df = pd.DataFrame({"A": ["x", "y"], "B": [1, 2]})
+
+    cleaner = ArnioCleaner(steps=[("rename_columns", {"mapping": {"A": "name"}})])
+    cleaner.fit(df)
+    result = cleaner.transform(df)
+
+    assert list(result.columns) == ["name", "B"]
+    assert cleaner.get_feature_names_out(["A", "B"]).tolist() == ["name", "B"]
+
+
+def test_arniocleaner_feature_names_out_rejects_wrong_input_features():
+    df = pd.DataFrame({"A": ["x", "y"], "B": [1, 2]})
+
+    cleaner = ArnioCleaner().fit(df)
+
+    with pytest.raises(ValueError, match="input_features must match"):
+        cleaner.get_feature_names_out(["B", "A"])
+
+
 def test_arniocleaner_rejects_row_dropping_by_default():
     df = pd.DataFrame({"name": ["Alice", None], "age": [30, 40]})
 
@@ -245,3 +276,13 @@ def test_arniocleaner_warns_for_multiple_dtype_changes():
     messages = {str(w.message) for w in record}
     assert any("'a'" in m for m in messages)
     assert any("'b'" in m for m in messages)
+
+
+def test_arniocleaner_rejects_non_boolean_options():
+    """Ensure constructor explicitly blocks truthy/falsy non-boolean values."""
+    invalid_values = ["false", "True", 1, 0, None, [], {}]
+    for value in invalid_values:
+        with pytest.raises(TypeError, match="copy must be a bool"):
+            ArnioCleaner(copy=value)
+        with pytest.raises(TypeError, match="allow_row_count_change must be a bool"):
+            ArnioCleaner(allow_row_count_change=value)
