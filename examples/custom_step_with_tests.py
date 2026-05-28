@@ -8,6 +8,7 @@ Run with:
 
 import pandas as pd
 import pytest
+
 import arnio as ar
 
 # ---------------------------------------------------------------------------
