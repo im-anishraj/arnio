@@ -785,15 +785,28 @@ class ProfileComparison:
     right_profile: DataQualityReport
     drift_report: dict[str, dict[str, Any]]
     status_counts: dict[str, int] = field(default_factory=dict)
+
     def __post_init__(self) -> None:
         if not isinstance(self.left_profile, DataQualityReport):
             raise TypeError("left_profile must be an instance of DataQualityReport")
         if not isinstance(self.right_profile, DataQualityReport):
             raise TypeError("right_profile must be an instance of DataQualityReport")
+
         if not isinstance(self.drift_report, dict):
             raise TypeError("drift_report must be a dictionary")
+        for key, val in self.drift_report.items():
+            if not isinstance(key, str):
+                raise TypeError("drift_report keys must be strings")
+            if not isinstance(val, dict):
+                raise TypeError("drift_report must be a nested dictionary of dict")
+
         if not isinstance(self.status_counts, dict):
             raise TypeError("status_counts must be a dictionary")
+        for key, val in self.status_counts.items():
+            if not isinstance(key, str):
+                raise TypeError("status_counts keys must be strings")
+            if not isinstance(val, int):
+                raise TypeError("status_counts values must be integers")
 
     def to_dict(
         self,
