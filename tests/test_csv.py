@@ -1116,7 +1116,6 @@ class TestScanCsv:
         schema = ar.scan_csv(csv_path, skiprows=0)
         assert schema == {"id": "int64", "name": "string"}
 
-    @pytest.mark.xfail(reason="C++ engine scan_schema currently ignores skip_rows config")
     def test_scan_csv_skiprows_positive_with_metadata(self, tmp_path):
         """Positive skiprows correctly skips metadata rows before the header."""
         csv_path = tmp_path / "meta.csv"
