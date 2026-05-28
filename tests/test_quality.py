@@ -2429,7 +2429,9 @@ def test_data_quality_report_to_dict_unknown_column():
 
     report = ar.profile(frame)
 
-    with pytest.raises(KeyError, match="Unknown exclude_columns: \\['missing_column'\\]"):
+    with pytest.raises(
+        KeyError, match="Unknown exclude_columns: \\['missing_column'\\]"
+    ):
         report.to_dict(exclude_columns=["missing_column"])
 
 
