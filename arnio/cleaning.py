@@ -1351,6 +1351,54 @@ def filter_rows(
     return from_pandas(filtered) if is_arframe else filtered
 
 
+def remove_special_chars(frame: ArFrame, *, subset: list[str] | None = None) -> ArFrame:
+    """
+    Remove special characters from string columns.
+    Keeps only alphanumeric characters and whitespace.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input data frame.
+    subset : list of str, optional
+        Column names to apply cleaning on.
+        If None, applies to all string/object columns automatically.
+        Non-string columns (e.g. int64, float64) passed via ``subset``
+        are silently skipped — only string and object columns are modified.
+        Pass an unknown column name to raise a ``ValueError``.
+
+    Returns
+    -------
+    ArFrame
+        New frame with special characters removed from string columns.
+
+    Examples
+    --------
+    >>> frame = ar.read_csv("data.csv")
+    >>> clean = ar.remove_special_chars(frame)
+    >>> clean = ar.remove_special_chars(frame, subset=["name", "city"])
+    """
+    df = to_pandas(frame)
+
+    target_cols = (
+        subset
+        if subset is not None
+        else df.select_dtypes(include=["object", "string"]).columns.tolist()
+    )
+
+    missing = [c for c in target_cols if c not in df.columns]
+    if missing:
+        raise ValueError(f"remove_special_chars: unknown columns in subset: {missing}")
+
+    df = df.copy()
+
+    for col in target_cols:
+        if df[col].dtype == object or str(df[col].dtype) == "string":
+            df[col] = df[col].str.replace(r"[^a-zA-Z0-9\s]", "", regex=True)
+
+    return from_pandas(df)
+
+
 def round_numeric_columns(
     frame,
     *,
@@ -1381,8 +1429,6 @@ def round_numeric_columns(
     >>> rounded = ar.round_numeric_columns(frame, decimals=2)
     """
     import pandas as pd
-
-    from .convert import from_pandas, to_pandas
 
     if subset is not None and not isinstance(subset, list):
         raise TypeError("subset must be a list of column names")
@@ -1510,7 +1556,11 @@ def combine_columns(
 
 
 def safe_divide_columns(
-    frame, numerator: str, denominator: str, output_column: str, fill_value: float = 0.0
+    frame,
+    numerator: str,
+    denominator: str,
+    output_column: str,
+    fill_value: float = 0.0,
 ):
     """Divide one column by another, handling division by zero and nulls explicitly.
 
@@ -1528,7 +1578,7 @@ def safe_divide_columns(
     output_column : str
         Name of the new column to store the division result. Must be a
         non-empty string. If the column already exists, it will be
-        overwritten and a ``UserWarning`` is raised.
+        overwritten and a UserWarning is raised.
     fill_value : float, optional
         Value to use when denominator is zero or null. Defaults to 0.0.
 
@@ -1541,9 +1591,9 @@ def safe_divide_columns(
     >>> frame = ar.read_csv("data.csv")
     >>> result = ar.safe_divide_columns(frame, numerator="revenue", denominator="cost", output_column="ratio")
     """
-    import pandas as pd
+    import warnings
 
-    from .convert import from_pandas, to_pandas
+    import pandas as pd
 
     is_arframe = isinstance(frame, ArFrame)
 
@@ -1555,6 +1605,7 @@ def safe_divide_columns(
         raise ValueError(f"Denominator column '{denominator}' not found in frame.")
     if not isinstance(output_column, str) or not output_column.strip():
         raise ValueError("output_column must be a non-empty string.")
+    if output_column in df.columns:
     if output_column in columns:
         import warnings
 

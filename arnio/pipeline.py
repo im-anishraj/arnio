@@ -43,6 +43,7 @@ _STEP_REGISTRY: dict[str, Callable] = {
     "normalize_unicode": cleaning.normalize_unicode,
     "rename_columns": cleaning.rename_columns,
     "cast_types": cleaning.cast_types,
+    "remove_special_chars": cleaning.remove_special_chars,
     "round_numeric_columns": cleaning.round_numeric_columns,
     "combine_columns": cleaning.combine_columns,
     "trim_column_names": cleaning.trim_column_names,
