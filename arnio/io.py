@@ -1107,7 +1107,7 @@ def read_jsonl(
 
     records: list[dict] = []
 
-    def _reject_duplicate_keys(pairs):
+    def _reject_duplicate_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
         seen = set()
         result = {}
         for k, v in pairs:
