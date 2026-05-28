@@ -9,7 +9,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "arnio"
-version = "1.16.0"
+version = "1.18.0"
 description = "C++ accelerated data preparation for pandas and the Python data stack"
 readme = "README.md"
 license = { text = "MIT" }
@@ -22,6 +22,7 @@ classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
+    "Intended Audience :: Information Technology",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.9",
@@ -32,7 +33,10 @@ classifiers = [
     "Programming Language :: Python :: 3.14",
     "Programming Language :: C++",
     "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Information Analysis",
     "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Utilities",
+    "Typing :: Typed",
 ]
 dependencies = [
     "pandas>=1.5",
@@ -48,6 +52,7 @@ Changelog = "https://github.com/im-anishraj/arnio/blob/main/CHANGELOG.md"
 Discord = "https://discord.gg/xsEw7r78M"
 
 [project.optional-dependencies]
+arrow = ["pyarrow>=6.0"]
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",

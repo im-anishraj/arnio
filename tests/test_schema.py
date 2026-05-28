@@ -1,9 +1,14 @@
 """Tests for schema validation."""
 
+import io
+import json
+import warnings
+
 import pandas as pd
 import pytest
 
 import arnio as ar
+from arnio.schema import _is_safely_convertible_to_dtype
 
 
 def test_dtype_validation_reports_safe_int_conversion_for_numeric_strings():
@@ -46,6 +51,27 @@ def test_dtype_validation_reports_safe_float_conversion_for_numeric_strings():
     assert "safely convertible to 'float64'" in result.issues[0].message
 
 
+def test_schema_validation_row_indexed_issues_respect_cap():
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "name": [None, None, "ok"],
+            }
+        )
+    )
+
+    schema = ar.Schema(
+        {
+            "name": ar.Field(nullable=False),
+        }
+    )
+
+    result = ar.validate(frame, schema, max_errors=1)
+
+    assert result.issue_count == 1
+    assert result.bad_rows == [1]
+
+
 def test_dtype_validation_does_not_report_safe_conversion_for_invalid_numeric_strings():
     frame = ar.from_pandas(
         pd.DataFrame(
@@ -64,6 +90,18 @@ def test_dtype_validation_does_not_report_safe_conversion_for_invalid_numeric_st
 
     assert not result.passed
     assert "safely convertible" not in result.issues[0].message
+
+
+def test_validate_rejects_chunked_iterators(tmp_path):
+    path = tmp_path / "data.csv"
+    path.write_text("email\n" "a@example.com\n")
+
+    chunks = ar.read_csv_chunked(path, chunksize=1)
+
+    with pytest.raises(
+        TypeError, match="Chunked validation is not currently supported"
+    ):
+        ar.validate(chunks, {"email": ar.Email(nullable=False)})
 
 
 def test_dtype_validation_does_not_report_safe_conversion_for_identifier_like_columns():
@@ -188,6 +226,31 @@ def test_schema_validation_passes_for_valid_frame(sample_csv):
     assert result.bad_rows == []
 
 
+def test_schema_validation_stops_after_max_errors(tmp_path):
+    path = tmp_path / "bad.csv"
+
+    path.write_text(
+        "name,age,email\n"
+        ",150,invalid-email\n"
+        ",200,another-invalid\n"
+        ",300,bad-email\n"
+    )
+
+    frame = ar.read_csv(path)
+    schema = ar.Schema(
+        {
+            "name": ar.String(nullable=False),
+            "age": ar.Int64(min=0, max=120),
+            "email": ar.Email(nullable=False),
+        }
+    )
+
+    result = ar.validate(frame, schema, max_errors=2)
+
+    assert result.issue_count == 2
+    assert len(result.issues) == 2
+
+
 def test_schema_rejects_invalid_field_values_string(sample_csv):
     frame = ar.read_csv(sample_csv)
     with pytest.raises(TypeError, match="must be a Field instance"):
@@ -204,6 +267,24 @@ def test_schema_rejects_invalid_field_values_none(sample_csv):
     frame = ar.read_csv(sample_csv)
     with pytest.raises(TypeError, match="must be a Field instance"):
         ar.validate(frame, {"id": None})
+
+
+def test_schema_rejects_non_string_field_name_integer(sample_csv):
+    frame = ar.read_csv(sample_csv)
+    with pytest.raises(TypeError, match="Schema field names must be strings"):
+        ar.validate(frame, {1: ar.String()})
+
+
+def test_schema_rejects_non_string_field_name_none(sample_csv):
+    frame = ar.read_csv(sample_csv)
+    with pytest.raises(TypeError, match="Schema field names must be strings"):
+        ar.validate(frame, {None: ar.String()})
+
+
+def test_schema_rejects_non_string_field_name_tuple(sample_csv):
+    frame = ar.read_csv(sample_csv)
+    with pytest.raises(TypeError, match="Schema field names must be strings"):
+        ar.validate(frame, {("a", "b"): ar.String()})
 
 
 def test_schema_validation_collects_row_level_issues(tmp_path):
@@ -265,6 +346,52 @@ def test_validation_result_to_pandas_empty_has_stable_columns():
     ]
 
 
+def test_schema_validation_bool_max_errors_rejected():
+    frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
+    schema = ar.Schema({"a": ar.Field()})
+
+    with pytest.raises(TypeError, match="max_errors"):
+        ar.validate(frame, schema, max_errors=True)
+
+
+def test_schema_validation_float_max_errors_rejected():
+    frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
+    schema = ar.Schema({"a": ar.Field()})
+
+    with pytest.raises(TypeError, match="max_errors"):
+        ar.validate(frame, schema, max_errors=1.5)
+
+
+def test_schema_validation_custom_rule_respects_max_errors():
+    def bad_rule(df):
+        return [
+            ar.ValidationIssue(
+                column="a",
+                rule="custom",
+                message="error 1",
+                row_index=1,
+            ),
+            ar.ValidationIssue(
+                column="a",
+                rule="custom",
+                message="error 2",
+                row_index=2,
+            ),
+        ]
+
+    frame = ar.from_pandas(pd.DataFrame({"a": [1, 2]}))
+
+    schema = ar.Schema(
+        {"a": ar.Field()},
+        rules=[bad_rule],
+    )
+
+    result = ar.validate(frame, schema, max_errors=1)
+
+    assert result.issue_count == 1
+    assert result.bad_rows == [1]
+
+
 def test_validation_result_summary_counts_repeated_issues_in_one_column():
     result = ar.ValidationResult(
         row_count=3,
@@ -288,6 +415,114 @@ def test_validation_result_summary_counts_repeated_issues_in_one_column():
     assert summary["issues_by_rule"] == {"min": 3}
     assert summary["issues_by_column"] == {"age": 3}
     assert summary["issues_by_column_and_rule"] == {"age": {"min": 3}}
+
+
+def test_schema_validation_max_errors_zero(tmp_path):
+    path = tmp_path / "data.csv"
+
+    path.write_text("name,age\njohn,\n")
+
+    frame = ar.read_csv(path)
+
+    schema = ar.Schema(
+        {
+            "name": ar.String(),
+            "age": ar.Int64(nullable=False),
+        }
+    )
+    result = ar.validate(frame, schema, max_errors=0)
+
+    assert result.issue_count == 0
+    assert result.issues == []
+
+
+def test_schema_validation_negative_max_errors(tmp_path):
+    path = tmp_path / "data.csv"
+
+    path.write_text("name\njohn\n")
+
+    frame = ar.read_csv(path)
+
+    schema = ar.Schema(
+        {
+            "name": ar.String(),
+        }
+    )
+
+    with pytest.raises(ValueError):
+        ar.validate(frame, schema, max_errors=-1)
+
+
+def test_schema_validation_unique_missing_columns_respects_max_errors():
+    frame = ar.read_csv(io.StringIO("x\n1\n"))
+
+    schema = ar.Schema(
+        {},
+        unique=["a", "b"],
+    )
+
+    result = ar.validate(frame, schema, max_errors=1)
+
+    assert result.issue_count == 1
+
+
+def test_schema_validation_rule_keyerror_respects_max_errors():
+    def bad_rule(df):
+        _ = df["missing_column"]
+        return []
+
+    frame = ar.read_csv(io.StringIO("a\n1\n"))
+
+    schema = ar.Schema(
+        {
+            "a": ar.String(),
+        },
+        rules=[bad_rule],
+    )
+
+    result = ar.validate(frame, schema, max_errors=1)
+
+    assert result.issue_count == 1
+
+
+def test_schema_validation_strict_max_errors_cap(tmp_path):
+    path = tmp_path / "data.csv"
+
+    path.write_text("name,extra1,extra2\njohn,a,b\n")
+
+    frame = ar.read_csv(path)
+
+    schema = ar.Schema(
+        {
+            "name": ar.String(),
+        },
+        strict=True,
+    )
+
+    result = ar.validate(frame, schema, max_errors=1)
+
+    assert result.issue_count == 1
+    assert len(result.issues) == 1
+
+
+def test_schema_validation_unique_max_errors_cap(tmp_path):
+    path = tmp_path / "data.csv"
+
+    path.write_text("id\n1\n1\n1\n")
+
+    frame = ar.read_csv(path)
+
+    schema = ar.Schema(
+        {
+            "id": ar.Int64(),
+        },
+        unique=["id"],
+    )
+
+    result = ar.validate(frame, schema, max_errors=1)
+
+    assert result.issue_count == 1
+    assert len(result.issues) == 1
 
 
 def test_validation_result_summary_counts_issues_across_multiple_columns():
@@ -504,6 +739,30 @@ def test_validation_result_to_markdown_rejects_non_integer_max_issues(sample_csv
             raise AssertionError(f"Expected max_issues={invalid!r} to raise")
 
 
+def test_schema_construction_validates_rules():
+    with pytest.raises(TypeError, match="Schema 'rules' must be a list of callables"):
+        ar.Schema({"x": ar.Int64()}, rules="abc")
+
+    with pytest.raises(TypeError, match="Schema 'rules' must be a list of callables"):
+        ar.Schema({"x": ar.Int64()}, rules=123)
+
+    with pytest.raises(TypeError, match="Schema 'rules' must be a list of callables"):
+        ar.Schema({"x": ar.Int64()}, rules=object())
+
+    with pytest.raises(TypeError, match="Schema 'rules' must be a list of callables"):
+        ar.Schema({"x": ar.Int64()}, rules=[object()])
+
+    def valid_rule(df):
+        return []
+
+    with pytest.raises(TypeError, match="Schema 'rules' must be a list of callables"):
+        ar.Schema({"x": ar.Int64()}, rules=[valid_rule, 456])
+
+    assert ar.Schema({"x": ar.Int64()}, rules=[valid_rule]).rules is not None
+    assert ar.Schema({"x": ar.Int64()}, rules=(valid_rule,)).rules is not None
+    assert ar.Schema({"x": ar.Int64()}, rules=None).rules is None
+
+
 # ---------------------------------------------------------------------------
 # Regression tests: redaction policy for ValidationResult.to_markdown
 # ---------------------------------------------------------------------------
@@ -600,6 +859,16 @@ def test_validation_result_to_markdown_none_value_redacted():
     markdown_raw = result.to_markdown()  # default redaction is False
     # None -> empty cell in raw mode
     assert "[REDACTED]" not in markdown_raw
+
+
+def test_unique_constraint_detects_duplicates(tmp_path):
+    path = tmp_path / "unique.csv"
+    path.write_text("id,value\n1,100\n2,200\n1,300\n3,400\n")
+    result = ar.validate(ar.read_csv(path), {"id": ar.Int64(unique=True)})
+    assert not result.passed
+    assert any(
+        issue.rule == "unique" and issue.column == "id" for issue in result.issues
+    )
 
 
 def test_custom_pattern_validation(tmp_path):
@@ -1037,6 +1306,124 @@ def test_country_code_validation_rejects_invalid_codes(tmp_path):
     assert all(issue.rule == "country_code" for issue in result.issues)
 
 
+def test_language_code_validation_accepts_iso_639_1_codes(tmp_path):
+    path = tmp_path / "languages.csv"
+    path.write_text("language\nen\nhi\nfr\nde\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"language": ar.LanguageCode(nullable=False)},
+    )
+
+    assert result.passed
+    assert result.issue_count == 0
+
+
+def test_language_code_validation_rejects_invalid_codes(tmp_path):
+    path = tmp_path / "bad_languages.csv"
+    path.write_text("language\nenglish\neng\nEN\nEN-US\nzz\n123\n\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"language": ar.LanguageCode(nullable=False)},
+    )
+
+    assert not result.passed
+    assert result.issue_count == 6
+
+    assert [issue.row_index for issue in result.issues] == [1, 2, 3, 4, 5, 6]
+    assert all(issue.rule == "language_code" for issue in result.issues)
+
+
+def test_timezone_validation_accepts_iana_timezones(tmp_path):
+    path = tmp_path / "timezones.csv"
+    path.write_text("timezone\nAsia/Kolkata\nAmerica/New_York\nEurope/Paris\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"timezone": ar.TimeZone(nullable=False)},
+    )
+
+    assert result.passed
+    assert result.issue_count == 0
+
+
+def test_timezone_validation_rejects_invalid_values(tmp_path):
+    path = tmp_path / "bad_timezones.csv"
+    path.write_text("timezone\nIST\nGMT+5:30\nIndia\nAsia\\Kolkata\nrandom_text\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"timezone": ar.TimeZone(nullable=False)},
+    )
+
+    assert not result.passed
+    assert result.issue_count == 5
+    assert all(issue.rule == "timezone" for issue in result.issues)
+
+
+def test_language_code_validation_accepts_extended_iso_codes(tmp_path):
+    path = tmp_path / "extended_languages.csv"
+    path.write_text("language\nzu\nxh\nvo\nwa\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"language": ar.LanguageCode(nullable=False)},
+    )
+
+    assert result.passed
+    assert result.issue_count == 0
+
+
+def test_language_code_validation_nullable_behavior(tmp_path):
+    path = tmp_path / "nullable_languages.csv"
+    path.write_text('language\nen\n""\nfr\n')
+
+    result_nullable = ar.validate(
+        ar.read_csv(path),
+        {"language": ar.LanguageCode(nullable=True)},
+    )
+
+    assert result_nullable.passed
+    assert result_nullable.issue_count == 0
+
+    result_non_nullable = ar.validate(
+        ar.read_csv(path),
+        {"language": ar.LanguageCode(nullable=False)},
+    )
+
+    assert not result_non_nullable.passed
+    assert result_non_nullable.issue_count == 1
+
+
+def test_language_code_validation_rejects_mixed_case_codes(tmp_path):
+    path = tmp_path / "mixed_case_languages.csv"
+    path.write_text("language\nEn\nHI\nFr\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"language": ar.LanguageCode(nullable=False)},
+    )
+
+    assert not result.passed
+    assert result.issue_count == 3
+
+
+def test_language_code_validation_rejects_non_string_values(tmp_path):
+    path = tmp_path / "numeric_languages.csv"
+    path.write_text("language\n123\n456\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"language": ar.LanguageCode(nullable=False)},
+    )
+
+    assert not result.passed
+    assert result.issue_count == 3
+    assert any(issue.rule == "dtype" for issue in result.issues)
+    assert sum(issue.rule == "language_code" for issue in result.issues) == 2
+
+
 def test_country_code_enforces_uniqueness(tmp_path):
     path = tmp_path / "duplicate_countries.csv"
     path.write_text("country\nIN\nUS\nIN\n")
@@ -1132,6 +1519,32 @@ def test_string_max_length_boundary(tmp_path):
     assert result.issue_count == 1
     assert result.issues[0].rule == "max_length"
     assert result.issues[0].row_index == 2
+
+
+def test_string_allowed_rejects_bare_string():
+    with pytest.raises(
+        TypeError,
+        match="allowed must be a sequence of allowed values, not a bare string",
+    ):
+        ar.String(allowed="active")
+
+
+def test_string_allowed_rejects_bare_bytes():
+    with pytest.raises(
+        TypeError,
+        match="allowed must be a sequence of allowed values, not a bare string",
+    ):
+        ar.String(allowed=b"active")
+
+
+def test_string_allowed_accepts_list_tuple_and_set():
+    list_field = ar.String(allowed=["active"])
+    tuple_field = ar.String(allowed=("active",))
+    set_field = ar.String(allowed={"active"})
+
+    assert list_field.allowed == {"active"}
+    assert tuple_field.allowed == {"active"}
+    assert set_field.allowed == {"active"}
 
 
 def test_null_values_skip_length_validation(tmp_path):
@@ -1330,6 +1743,61 @@ def test_schema_unique_accepts_valid_types():
         unique=("user_id", "course_id"),
     )
     assert schema_tuple.unique == ("user_id", "course_id")
+
+
+@pytest.mark.parametrize("value", ["false", 1, None])
+def test_field_nullable_rejects_non_bool_values(value):
+    with pytest.raises(TypeError, match="nullable must be a bool"):
+        ar.String(nullable=value)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("value", ["yes", 1, None])
+def test_field_unique_rejects_non_bool_values(value):
+    with pytest.raises(TypeError, match="unique must be a bool"):
+        ar.Int64(unique=value)  # type: ignore[arg-type]
+
+
+def test_field_nullable_and_unique_accept_valid_bools():
+    field = ar.String(nullable=False, unique=True)
+
+    assert field.nullable is False
+    assert field.unique is True
+
+
+@pytest.mark.parametrize("value", ["status", 123])
+def test_required_if_rejects_non_tuple_shapes(value):
+    with pytest.raises(TypeError, match="required_if must be a tuple or None"):
+        ar.String(required_if=value)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("value", [("status",), ("status", "active", "extra")])
+def test_required_if_rejects_wrong_tuple_lengths(value):
+    with pytest.raises(
+        TypeError, match=r"required_if must be a \(column_name, expected_value\) tuple"
+    ):
+        ar.String(required_if=value)  # type: ignore[arg-type]
+
+
+def test_required_if_rejects_non_string_column_name():
+    with pytest.raises(TypeError, match="required_if column name must be a string"):
+        ar.String(required_if=(123, "active"))  # type: ignore[arg-type]
+
+
+def test_required_if_valid_conditional_validation(tmp_path):
+    path = tmp_path / "conditional_req.csv"
+    path.write_text("status,notes\n" "active,has notes\n" "inactive,\n" "active,\n")
+    frame = ar.read_csv(path)
+    schema = ar.Schema(
+        {"notes": ar.String(required_if=("status", "active"), nullable=True)}
+    )
+
+    result = ar.validate(frame, schema)
+    rules = [issue.rule for issue in result.issues]
+
+    assert not result.passed
+    assert result.issue_count == 1
+    assert "required_if" in rules
+    assert result.bad_rows == [3]
 
 
 def test_email_default_keeps_backward_compatibility(sample_csv):
@@ -1957,7 +2425,7 @@ def test_schema_rules_none_by_default(tmp_path):
 
 def test_currency_code_valid(tmp_path):
     path = tmp_path / "currencies.csv"
-    path.write_text("currency\nUSD\nEUR\nINR\nJPY\n")
+    path.write_text("currency\nUSD\nEUR\nINR\nJPY\nXXX\n")
 
     result = ar.validate(
         ar.read_csv(path),
@@ -1971,7 +2439,9 @@ def test_currency_code_valid(tmp_path):
 def test_currency_code_invalid(tmp_path):
     path = tmp_path / "bad_currencies.csv"
     # We add a dummy column so the empty currency row isn't skipped as a blank line
-    path.write_text("currency,dummy\nUS,1\nUSDD,2\nusd,3\nUS1,4\nEur,5\n,6\n")
+    path.write_text(
+        "currency,dummy\nUS,1\nUSDD,2\nusd,3\nUS1,4\nEur,5\n,6\nZZZ,7\nABC,8\n"
+    )
 
     result = ar.validate(
         ar.read_csv(path),
@@ -1979,13 +2449,42 @@ def test_currency_code_invalid(tmp_path):
     )
 
     assert not result.passed
-    assert result.issue_count == 6
+    assert result.issue_count == 8
 
-    assert sorted([issue.row_index for issue in result.issues]) == [1, 2, 3, 4, 5, 6]
+    assert sorted([issue.row_index for issue in result.issues]) == [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+    ]
 
     rules = {issue.rule for issue in result.issues}
     assert "currency_code" in rules
     assert "nullable" in rules
+
+
+def test_currency_code_override(tmp_path):
+    path = tmp_path / "custom_currencies.csv"
+    path.write_text("currency\nUSD\nZZZ\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"currency": ar.CurrencyCode(nullable=False, allowed={"USD", "ZZZ"})},
+    )
+    assert result.passed
+    assert result.issue_count == 0
+
+    result_default = ar.validate(
+        ar.read_csv(path),
+        {"currency": ar.CurrencyCode(nullable=False)},
+    )
+    assert not result_default.passed
+    assert result_default.issue_count == 1
+    assert result_default.issues[0].value == "ZZZ"
 
 
 def test_schema_rules_issue_shape_matches_validation_issue(tmp_path):
@@ -2251,14 +2750,18 @@ def test_schema_from_json_rejects_invalid_json():
         ar.Schema.from_json("{bad json}")
 
 
-def test_schema_to_json_rejects_rules():
+def test_schema_to_json_warns_and_omits_rules():
     schema = ar.Schema(
         {"id": ar.String()},
         rules=[lambda df: []],
     )
 
-    with pytest.raises(ValueError, match="not JSON serializable"):
-        schema.to_json()
+    with pytest.warns(UserWarning, match="rules_omitted"):
+        payload_str = schema.to_json()
+
+    payload = json.loads(payload_str)
+    assert payload["rules_omitted"] is True
+    assert "id" in payload["fields"]
 
 
 def test_schema_from_json_rejects_non_object_field_definition():
@@ -2297,3 +2800,341 @@ def test_empty_string_passes_when_nullable():
     result = ar.validate(ar.from_pandas(df), schema)
 
     assert result.issue_count == 0
+
+
+def test_url_https_only_accepts_https(tmp_path):
+    path = tmp_path / "urls.csv"
+    path.write_text("url\nhttps://example.com\nhttps://test.org\n")
+    result = ar.validate(ar.read_csv(path), {"url": ar.URL(allowed_schemes=["https"])})
+    assert result.passed
+
+
+def test_url_https_only_rejects_http(tmp_path):
+    path = tmp_path / "urls.csv"
+    path.write_text("url\nhttp://example.com\n")
+    result = ar.validate(ar.read_csv(path), {"url": ar.URL(allowed_schemes=["https"])})
+    assert not result.passed
+
+
+def test_url_multiple_schemes_accepted(tmp_path):
+    path = tmp_path / "urls.csv"
+    path.write_text("url\nhttps://example.com\nftp://files.example.com\n")
+    result = ar.validate(
+        ar.read_csv(path), {"url": ar.URL(allowed_schemes=["https", "ftp"])}
+    )
+    assert result.passed
+
+
+def test_url_multiple_schemes_rejects_unlisted(tmp_path):
+    path = tmp_path / "urls.csv"
+    path.write_text("url\nhttp://example.com\n")
+    result = ar.validate(
+        ar.read_csv(path), {"url": ar.URL(allowed_schemes=["https", "ftp"])}
+    )
+    assert not result.passed
+
+
+def test_url_default_accepts_http_and_https(tmp_path):
+    path = tmp_path / "urls.csv"
+    path.write_text("url\nhttp://example.com\nhttps://example.com\n")
+    result = ar.validate(ar.read_csv(path), {"url": ar.URL()})
+    assert result.passed
+
+
+def test_url_allowed_schemes_nullable_true_accepts_nulls(tmp_path):
+    path = tmp_path / "urls.csv"
+    path.write_text("url,dummy\nhttps://example.com,1\n,2\n")
+    result = ar.validate(
+        ar.read_csv(path), {"url": ar.URL(allowed_schemes=["https"], nullable=True)}
+    )
+    assert result.passed
+
+
+def test_url_allowed_schemes_nullable_false_rejects_nulls(tmp_path):
+    path = tmp_path / "urls.csv"
+    path.write_text("url,dummy\nhttps://example.com,1\n,2\n")
+    result = ar.validate(
+        ar.read_csv(path), {"url": ar.URL(allowed_schemes=["https"], nullable=False)}
+    )
+    assert not result.passed
+
+
+def test_url_allowed_schemes_empty_list_raises():
+    with pytest.raises(ValueError, match="non-empty"):
+        ar.URL(allowed_schemes=[])
+
+
+def test_url_allowed_schemes_empty_string_raises():
+    with pytest.raises(ValueError, match="non-empty strings"):
+        ar.URL(allowed_schemes=[""])
+
+
+def test_url_allowed_schemes_non_string_raises():
+    with pytest.raises(ValueError, match="non-empty strings"):
+        ar.URL(allowed_schemes=[123])
+
+
+def test_url_allowed_schemes_whitespace_string_raises():
+    with pytest.raises(ValueError, match="non-empty strings"):
+        ar.URL(allowed_schemes=["   "])
+
+
+# --- Issue #1279: Schema.to_json() rules_omitted contract ---
+
+
+def test_url_allowed_schemes_trims_whitespace():
+    ar.URL(allowed_schemes=[" https ", " ftp "])
+
+
+def test_url_allowed_schemes_accepts_tuple():
+    ar.URL(allowed_schemes=("https", "ftp"))
+
+
+def test_url_allowed_schemes_accepts_set():
+    ar.URL(allowed_schemes={"https", "ftp"})
+
+
+def test_url_allowed_schemes_rejects_bare_string():
+    with pytest.raises(TypeError, match="allowed_schemes must be a sequence"):
+        ar.URL(allowed_schemes="https")
+
+
+def test_url_allowed_schemes_rejects_bare_bytes():
+    with pytest.raises(TypeError, match="allowed_schemes must be a sequence"):
+        ar.URL(allowed_schemes=b"https")
+
+
+@pytest.mark.parametrize(
+    "scheme",
+    ["https://", "https ftp", "1http"],
+)
+def test_url_allowed_schemes_reject_invalid_scheme_names(scheme):
+    with pytest.raises(
+        ValueError,
+        match="allowed_schemes must contain URL scheme names",
+    ):
+        ar.URL(allowed_schemes=[scheme])
+
+
+def test_url_allowed_schemes_accept_valid_scheme_characters():
+    ar.URL(allowed_schemes=["git+ssh", "custom.scheme"])
+
+
+def test_schema_to_json_with_rules_emits_warning():
+    """to_json() emits UserWarning when rules are present."""
+    schema = ar.Schema(
+        {"start_date": ar.String(), "end_date": ar.String()},
+        rules=[lambda df: []],
+    )
+    with pytest.warns(UserWarning, match="rules_omitted"):
+        schema.to_json()
+
+
+def test_schema_to_json_with_rules_includes_marker():
+    """to_json() payload contains rules_omitted: true when rules are present."""
+    schema = ar.Schema(
+        {"id": ar.String()},
+        rules=[lambda df: []],
+    )
+    with pytest.warns(UserWarning):
+        payload = json.loads(schema.to_json())
+    assert payload["rules_omitted"] is True
+
+
+def test_schema_to_json_without_rules_no_marker():
+    """to_json() payload does not include rules_omitted when no rules are present."""
+    schema = ar.Schema({"id": ar.String()})
+    payload = json.loads(schema.to_json())
+    assert "rules_omitted" not in payload
+
+
+def test_schema_to_json_without_rules_no_warning():
+    """to_json() emits no warning when no rules are present."""
+    schema = ar.Schema({"id": ar.String()})
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", UserWarning)
+        schema.to_json()  # must not raise
+
+
+def test_schema_to_json_with_rules_fields_are_preserved():
+    """Field definitions are fully serialized even when rules are omitted."""
+    schema = ar.Schema(
+        {
+            "start_date": ar.String(nullable=False),
+            "end_date": ar.String(nullable=True),
+        },
+        rules=[lambda df: []],
+    )
+    with pytest.warns(UserWarning):
+        payload = json.loads(schema.to_json())
+    assert set(payload["fields"].keys()) == {"start_date", "end_date"}
+
+
+def test_schema_from_json_tolerates_rules_omitted_marker():
+    """from_json() accepts a payload with rules_omitted: true without error or warning."""
+    schema = ar.Schema(
+        {"id": ar.String(nullable=False)},
+        rules=[lambda df: []],
+    )
+    with pytest.warns(UserWarning):
+        json_str = schema.to_json()
+
+    # Must not raise or warn
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", UserWarning)
+        restored = ar.Schema.from_json(json_str)
+
+    assert "id" in restored.fields
+    assert not restored.rules
+
+
+def test_schema_field_only_roundtrip_with_rules_present():
+    """Fields, strict, and unique survive a to_json/from_json round-trip even when rules exist."""
+    schema = ar.Schema(
+        {
+            "id": ar.String(nullable=False),
+            "score": ar.Int64(nullable=True),
+        },
+        strict=True,
+        unique=["id"],
+        rules=[lambda df: []],
+    )
+    with pytest.warns(UserWarning):
+        restored = ar.Schema.from_json(schema.to_json())
+
+    assert restored.fields["id"] == schema.fields["id"]
+    assert restored.fields["score"] == schema.fields["score"]
+    assert restored.strict is True
+    assert list(restored.unique) == ["id"]
+    assert not restored.rules
+
+
+class TestIsSafelyConvertibleToDtype:
+    def test_id_column_rejects_leading_zeros(self):
+        series = pd.Series(["001", "002", "003"])
+        assert _is_safely_convertible_to_dtype(series, "int64", "id") is False
+
+    def test_user_id_column_rejects_leading_zeros(self):
+        series = pd.Series(["0001", "0002"])
+        assert _is_safely_convertible_to_dtype(series, "int64", "user_id") is False
+
+    def test_uuid_column_rejects_leading_zeros(self):
+        series = pd.Series(["0123", "0456"])
+        assert _is_safely_convertible_to_dtype(series, "int64", "uuid") is False
+
+    def test_zip_column_rejects_leading_zeros(self):
+        series = pd.Series(["01234", "02345"])
+        assert _is_safely_convertible_to_dtype(series, "int64", "zip") is False
+
+    def test_valid_int64_conversion(self):
+        series = pd.Series(["1", "2", "3"])
+        assert _is_safely_convertible_to_dtype(series, "int64", "count") is True
+
+    def test_negative_int64_conversion(self):
+        series = pd.Series(["-1", "2", "3"])
+        assert _is_safely_convertible_to_dtype(series, "int64", "delta") is True
+
+    def test_float64_conversion(self):
+        series = pd.Series(["1.5", "2.5", "3.0"])
+        assert _is_safely_convertible_to_dtype(series, "float64", "price") is True
+
+    def test_invalid_string_for_int64(self):
+        series = pd.Series(["abc", "def"])
+        assert _is_safely_convertible_to_dtype(series, "int64", "data") is False
+
+    def test_empty_series_returns_false(self):
+        series = pd.Series([], dtype="string")
+        assert _is_safely_convertible_to_dtype(series, "int64", "col") is False
+
+    def test_all_null_series_returns_false(self):
+        series = pd.Series([None, None])
+        assert _is_safely_convertible_to_dtype(series, "int64", "col") is False
+
+
+def test_int64_rejects_string_min():
+    with pytest.raises(TypeError, match="min must be numeric or None"):
+        ar.Int64(min="a")
+
+
+def test_int64_rejects_string_max():
+    with pytest.raises(TypeError, match="max must be numeric or None"):
+        ar.Int64(max="z")
+
+
+def test_int64_rejects_bool_min():
+    with pytest.raises(TypeError, match="min must be numeric or None"):
+        ar.Int64(min=True)
+
+
+def test_int64_rejects_bool_max():
+    with pytest.raises(TypeError, match="max must be numeric or None"):
+        ar.Int64(max=False)
+
+
+def test_int64_accepts_valid_numeric_bounds():
+    assert ar.Int64(min=0, max=10) is not None
+
+
+def test_int64_accepts_float_bounds():
+    assert ar.Int64(min=0.5, max=9.9) is not None
+
+
+def test_int64_accepts_none_bounds():
+    assert ar.Int64(min=None, max=None) is not None
+
+
+def test_int64_rejects_string_min_with_valid_max():
+    with pytest.raises(TypeError, match="min must be numeric or None"):
+        ar.Int64(min="a", max=1)
+
+
+def test_int64_rejects_valid_min_with_string_max():
+    with pytest.raises(TypeError, match="max must be numeric or None"):
+        ar.Int64(min=1, max="z")
+
+
+def test_int64_rejects_bool_pair():
+    with pytest.raises(TypeError, match="min must be numeric or None"):
+        ar.Int64(min=True, max=False)
+
+
+def test_float64_rejects_string_min_with_valid_max():
+    with pytest.raises(TypeError, match="min must be numeric or None"):
+        ar.Float64(min="a", max=1.0)
+
+
+def test_float64_rejects_bool_pair():
+    with pytest.raises(TypeError, match="min must be numeric or None"):
+        ar.Float64(min=True, max=False)
+
+
+def test_validation_issue_accepts_valid_severities():
+    error_issue = ar.ValidationIssue(
+        column="age", rule="min", message="Too small", severity="error"
+    )
+    warning_issue = ar.ValidationIssue(
+        column="age", rule="min", message="Too small", severity="warning"
+    )
+
+    assert error_issue.severity == "error"
+    assert warning_issue.severity == "warning"
+
+
+def test_validation_issue_rejects_invalid_severity_typo():
+    with pytest.raises(ValueError, match="severity must be 'error' or 'warning'"):
+        ar.ValidationIssue(
+            column="score", rule="custom", message="bad", severity="erorr"
+        )
+
+
+def test_custom_rule_with_invalid_severity_fails_validation_execution():
+    def bad_custom_rule(df):
+        return [
+            ar.ValidationIssue(column="x", rule="demo", message="bad", severity="erorr")
+        ]
+
+    frame = ar.from_pandas(pd.DataFrame({"x": [1]}))
+    schema = ar.Schema({"x": ar.Field()}, rules=[bad_custom_rule])
+
+    with pytest.raises(ValueError, match="severity must be 'error' or 'warning'"):
+        schema.validate(frame)

@@ -22,6 +22,22 @@ The existing C++ runtime, `ArFrame`, cleaning primitives, and schema layer
 remain the foundation. Integrations are the next layer built on top of that
 foundation.
 
+## Product Pillars
+
+Arnio should grow around five practical pillars:
+
+1. **Ingest safely**: read messy CSV, JSONL, and tabular data with clear errors
+   for malformed input instead of silent corruption.
+2. **Clean predictably**: make pipeline steps explicit, composable, and tested so
+   users understand when rows, columns, or dtypes change.
+3. **Validate trust**: provide schemas, quality gates, profiling, and reports
+   that can be used in notebooks and CI.
+4. **Interoperate cleanly**: hand trustworthy data to pandas, NumPy,
+   scikit-learn, DuckDB, Arrow, and Parquet workflows without pretending to
+   replace them.
+5. **Prove performance**: back speed claims with reproducible benchmarks and
+   environment details, not vague comparisons.
+
 ## Product Positioning
 
 Use this framing when writing docs, issues, release notes, or examples:
@@ -53,6 +69,11 @@ New integration work should be:
 - careful about optional dependencies
 
 Prefer additive APIs over breaking changes.
+
+Before opening large new feature batches, maintainers should first complete the
+[Core Stability Sprint](CORE_STABILITY_SPRINT.md). That sprint defines the
+install, correctness, API, benchmark, and contributor gates that make future
+growth sustainable.
 
 ## Near-Term Integration Roadmap
 
