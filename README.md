@@ -813,7 +813,7 @@ flowchart LR
 | **Boolean null masks** | Nulls are tracked in a separate `vector<bool>`, keeping data vectors dense. No sentinel values, no NaN tricks. |
 | **Two-pass CSV read** | Pass 1 infers types across all rows. Pass 2 parses values directly into the correct typed column. No string→object→cast overhead. |
 | **Zero-copy bridge** | `to_pandas()` exposes C++ memory directly via NumPy's buffer protocol where supported. Numeric columns preserve the fast zero-copy path by default, while `copy=True` requests defensive pandas-owned buffers. |
-| **Step registry** | Pipeline steps map to C++ function pointers. Adding a new cleaning primitive is a single function + one registry entry. |
+| **Step registry** | Built-in and native steps use the C++ core via `_STEP_REGISTRY`; Python-backed built-ins dispatch through `_PYTHON_STEP_REGISTRY`; custom user-defined steps follow the same Python registry path. Adding a new cleaning primitive is a single function + one registry entry. |
 
 > Full architecture documentation: **[ARCHITECTURE.md](ARCHITECTURE.md)**
 > API reference guide: **[Arnio API Reference](./API_REFERENCE.md)**
