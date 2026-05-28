@@ -596,7 +596,10 @@ def read_csv(
     try:
         effective_encoding = "utf-8" if is_materialized_text else encoding
         with _utf8_csv_path(
-            path, effective_encoding, encoding_errors=encoding_errors, delimiter=delimiter
+            path,
+            effective_encoding,
+            encoding_errors=encoding_errors,
+            delimiter=delimiter,
         ) as native_path:
             cpp_frame, bad_rows = reader.read(native_path, on_bad_lines)
 
@@ -754,7 +757,9 @@ def read_csv_chunked(
         raise
     try:
         effective_encoding = "utf-8" if is_materialized_text else encoding
-        with _utf8_csv_path(path, effective_encoding, delimiter=delimiter) as native_path:
+        with _utf8_csv_path(
+            path, effective_encoding, delimiter=delimiter
+        ) as native_path:
             reader.open(native_path)
             while True:
                 chunk = reader.next_chunk(chunksize, on_bad_lines)

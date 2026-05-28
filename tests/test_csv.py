@@ -2745,6 +2745,7 @@ def test_streaming_late_type_promotion_float(tmp_path):
 
 def test_read_csv_text_stream_encoding_override():
     import io
+
     csv_text = "col1,col2\nhello,café\n"
     # Even if caller passes a different encoding, text streams are handled as UTF-8
     stream = io.StringIO(csv_text)
@@ -2755,6 +2756,7 @@ def test_read_csv_text_stream_encoding_override():
 
 def test_read_csv_chunked_text_stream_encoding_override():
     import io
+
     csv_text = "col1,col2\nhello,café\n"
     stream = io.StringIO(csv_text)
     chunks = list(ar.read_csv_chunked(stream, encoding="utf-16"))
