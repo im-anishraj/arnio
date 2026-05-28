@@ -28,8 +28,14 @@
 
 ## Testing
 <!-- Paste commands you ran and summarize the result. -->
-- [ ] `make test`
-- [ ] `make lint`
+- [ ] `make test` (or `python -m pytest tests -v --cov=arnio`)
+- [ ] `make lint` (or run separately:
+  ```powershell
+  python -m ruff check .
+  python -m black --check .
+  ```
+)
+- [ ] optionally `python -m pytest tests -v --tb=short -x`
 - [ ] Other:
 
 ## Screenshots / Media
