@@ -1692,6 +1692,7 @@ def String(
         nullable: Whether null values are allowed.
         pattern: Regular expression pattern that non-null values must match.
         allowed: Allowed values for the field.
+        case_sensitive: Whether allowed string matching is case-sensitive.
         unique: Whether non-null values must be unique.
         severity: Severity level for validation issues.
         min_length: Minimum allowed string length.
@@ -2545,6 +2546,7 @@ def _field_to_dict(field_def: Field) -> dict[str, Any]:
         "pattern": field_def.pattern,
         "semantic": field_def.semantic,
         "allowed": _normalize_sequence(field_def.allowed),
+        "case_sensitive": field_def.case_sensitive,
         "unique": field_def.unique,
         "min_length": field_def.min_length,
         "max_length": field_def.max_length,
@@ -2603,6 +2605,7 @@ def _field_from_json_dict(name: str, payload: Any) -> Field:
         pattern=payload.get("pattern"),
         semantic=payload.get("semantic"),
         allowed=allowed,
+        case_sensitive=payload.get("case_sensitive", True),
         unique=payload.get("unique", False),
         min_length=payload.get("min_length"),
         max_length=payload.get("max_length"),

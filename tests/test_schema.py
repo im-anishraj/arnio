@@ -313,18 +313,27 @@ def test_schema_validation_collects_row_level_issues(tmp_path):
     assert {"nullable", "max", "min", "email", "allowed"} <= rules
     assert result.summary()["issues_by_column"]["age"] == 2
 
-    def test_string_allowed_is_case_sensitive_by_default(tmp_path):
-        path = tmp_path / "status.csv"
-        path.write_text("status\nactive\nACTIVE\nActive\n")
 
-        result = ar.validate(
-            ar.read_csv(path),
-            {"status": ar.String(allowed=["active"])},
-        )
+def test_string_allowed_is_case_sensitive_by_default(tmp_path):
+    path = tmp_path / "status.csv"
+    path.write_text("status\nactive\nACTIVE\nActive\n")
 
-        assert not result.passed
-        assert result.issue_count == 2
-        assert [issue.row_index for issue in result.issues] == [2, 3]
+    result = ar.validate(
+        ar.read_csv(path),
+        {"status": ar.String(allowed=["active"])},
+    )
+
+    assert not result.passed
+    assert result.issue_count == 2
+    assert [issue.row_index for issue in result.issues] == [2, 3]
+
+
+def test_string_case_sensitive_round_trips_through_json():
+    schema = ar.Schema({"status": ar.String(allowed=["active"], case_sensitive=False)})
+
+    restored = ar.Schema.from_json(schema.to_json())
+
+    assert restored.fields["status"].case_sensitive is False
 
 
 def test_string_allowed_supports_case_insensitive_matching(tmp_path):
