@@ -45,6 +45,26 @@ jobs:
           pip install twine
           twine check dist/*.tar.gz && echo "✅ Twine check passed" || { echo "❌ Twine check failed"; exit 1; }
 
+      - name: Install package from sdist
+        run: python -m pip install dist/*.tar.gz
+
+      - name: Smoke test sdist import
+        run: |
+          python - <<'PY'
+          import os
+          import subprocess
+          import sys
+          import tempfile
+
+          with tempfile.TemporaryDirectory() as tmp:
+              subprocess.run(
+                  [sys.executable, "-c", "import arnio"],
+                  cwd=tmp,
+                  check=True,
+                  env={**os.environ, "PYTHONPATH": ""},
+              )
+          PY
+
       - uses: actions/upload-artifact@v6
         with:
           name: sdist
@@ -98,7 +118,7 @@ jobs:
           echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
           echo "| Version validation     | ${{ needs.validate-version.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| sdist build + twine    | ${{ needs.build_sdist.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| sdist build + install smoke | ${{ needs.build_sdist.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
           # build_wheels is a matrix job, so needs.build_wheels.result
           # represents the aggregate status across all wheel platforms.
           echo "| Wheels + smoke (matrix) | ${{ needs.build_wheels.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
