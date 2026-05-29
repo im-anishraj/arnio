@@ -745,7 +745,9 @@ CellValue CsvParser::parse_value(const std::string& raw, DType dtype, bool is_fo
             int64_t value = 0;
             if (!try_parse_int64(cleaned, value)) {
                 if (is_forced) {
-                    throw std::runtime_error("CsvReadError: Invalid token '" + raw + "' for forced int64 column");
+                    throw std::runtime_error(
+                        "CsvReadError: Invalid token '" + raw +
+                        "' for forced int64 column");
                 }
                 return std::monostate{};
             }
@@ -756,7 +758,9 @@ CellValue CsvParser::parse_value(const std::string& raw, DType dtype, bool is_fo
             double value = 0.0;
             if (!try_parse_float64(cleaned, value)) {
                 if (is_forced) {
-                    throw std::runtime_error("CsvReadError: Invalid token '" + raw + "' for forced float64 column");
+                    throw std::runtime_error(
+                        "CsvReadError: Invalid token '" + raw +
+                        "' for forced float64 column");
                 }
                 return std::monostate{};
             }
