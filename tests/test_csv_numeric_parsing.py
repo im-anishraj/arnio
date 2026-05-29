@@ -1,4 +1,7 @@
+import pytest
+
 from arnio import read_csv
+from arnio.exceptions import CsvReadError
 
 
 def test_int_inference_valid(tmp_path):
@@ -138,10 +141,6 @@ def test_hex_int_is_string(tmp_path):
 
 
 def test_forced_int_invalid_token_raises(tmp_path):
-    import pytest
-
-    from arnio.exceptions import CsvReadError
-
     csv_file = tmp_path / "bad_int.csv"
     csv_file.write_text("a,b\n1,2\nabc,4\n")
 
@@ -152,10 +151,6 @@ def test_forced_int_invalid_token_raises(tmp_path):
 
 
 def test_forced_float_invalid_token_raises(tmp_path):
-    import pytest
-
-    from arnio.exceptions import CsvReadError
-
     csv_file = tmp_path / "bad_float.csv"
     csv_file.write_text("a,b\n1.5,2.0\n3.14,bad\n")
 
