@@ -1453,7 +1453,8 @@ sharing **aggregate statistics only** or **raw/sample cell values**.
 | --- | --- | --- |
 | `row_count`, `column_count`, `duplicate_rows`, `duplicate_ratio`, `quality_score`, `score_components` | Yes | No |
 | `null_count`, `null_ratio`, `unique_count`, `unique_ratio`, whitespace / empty-string counts | Yes | No |
-| Numeric `min` / `max` / `mean` / `std` / `q25`–`q95` | Statistics only | Uncommon on large datasets; small tables can still be identifying |
+| Numeric `min` / `max` / `mean` / `std` / `q25`–`q95` | Yes | Statistics only; small tables can still be identifying |
+| Numeric `iqr`, `outlier_lower_bound`, `outlier_upper_bound`, `outlier_count`, `outlier_ratio` | Yes | Aggregate Tukey-fence summary (thresholds and counts, not which rows are outliers) |
 | `semantic_type`, `suggested_dtype`, `warnings` | Metadata / hints | Can imply PII type (for example email-like), not redaction |
 | `ColumnProfile.sample_values` (in-memory) | No | **Yes** — first *N* non-null values (`sample_size` on `ar.profile()`) |
 | `ColumnProfile.top_values` | Includes counts / ratios | **Yes** — frequent **actual** values (exact or approximate; see below) |
@@ -1525,7 +1526,11 @@ HTML(report.to_html())
 # or: report.to_html(file_path="data_quality_report.html")
 ```
 
-Sample output now includes quantiles for numeric columns:
+Sample output now includes quantiles and IQR outlier summary for numeric columns:
+
+For numeric columns with at least four non-null values, Arnio reports `iqr` (`q75 − q25`), Tukey fences `outlier_lower_bound` (`q25 − 1.5×IQR`) and `outlier_upper_bound` (`q75 + 1.5×IQR`), plus `outlier_count` and `outlier_ratio`. A value is counted as an outlier only if it is **strictly less** than the lower bound or **strictly greater** than the upper bound. With fewer than four non-null values, quantiles may still appear but IQR/outlier fields are `null` in JSON.
+
+Illustrative `age` column (not from the `user_id` / `email` / `score` sample below):
 
 ```json
 {
@@ -1539,6 +1544,11 @@ Sample output now includes quantiles for numeric columns:
     "q50": 35.0,
     "q75": 44.0,
     "q95": 57.0,
+    "iqr": 16.5,
+    "outlier_lower_bound": 2.75,
+    "outlier_upper_bound": 68.75,
+    "outlier_count": 0,
+    "outlier_ratio": 0.0,
     "null_count": 0
   }
 }
@@ -1589,7 +1599,7 @@ DataQualityReport(
     columns={
         'user_id': ColumnProfile(dtype='int64', semantic_type='identifier', unique_count=4),
         'email': ColumnProfile(dtype='string', semantic_type='categorical', null_count=1, unique_ratio=0.666667, min=13, max=13, mean=13.0),
-        'score': ColumnProfile(dtype='float64', semantic_type='numeric', mean=87.9, min=85.5, max=90.0)
+        'score': ColumnProfile(dtype='float64', semantic_type='numeric', null_count=1, mean=87.9, min=85.5, max=90.0, std=1.8493, q25=86.85, q50=88.2, q75=89.1, q95=89.82, iqr=None, outlier_lower_bound=None, outlier_upper_bound=None, outlier_count=None, outlier_ratio=None, warnings=['contains_nulls'])
     }
 )
 ```
@@ -1630,6 +1640,16 @@ DataQualityReport(
       "mean": 87.9,
       "min": 85.5,
       "max": 90.0,
+      "std": 1.8493,
+      "q25": 86.85,
+      "q50": 88.2,
+      "q75": 89.1,
+      "q95": 89.82,
+      "iqr": null,
+      "outlier_lower_bound": null,
+      "outlier_upper_bound": null,
+      "outlier_count": null,
+      "outlier_ratio": null,
       "warnings": ["contains_nulls"],
       "histogram": [
         {"bucket_start": 85.5, "bucket_end": 85.95, "count": 1, "ratio": 0.333333},

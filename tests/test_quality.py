@@ -56,6 +56,29 @@ def test_profile_numeric_quantiles():
     assert profile["q50"] == 3.0
     assert profile["q75"] == 4.0
     assert profile["q95"] == 4.8
+    assert profile["iqr"] == 2.0
+    assert profile["outlier_lower_bound"] == -1.0
+    assert profile["outlier_upper_bound"] == 7.0
+    assert profile["outlier_count"] == 0
+    assert profile["outlier_ratio"] == 0.0
+
+
+def test_profile_numeric_quantiles_and_outliers():
+    frame = ar.from_pandas(pd.DataFrame({"x": [1.0, 2.0, 3.0, 4.0, 100.0]}))
+
+    report = ar.profile(frame)
+    profile = report.columns["x"].to_dict()
+
+    assert profile["q25"] == 2.0
+    assert profile["q50"] == 3.0
+    assert profile["q75"] == 4.0
+    assert profile["q95"] == 80.8
+    assert profile["iqr"] == 2.0
+    assert profile["outlier_lower_bound"] == -1.0
+    assert profile["outlier_upper_bound"] == 7.0
+    assert profile["outlier_count"] == 1
+    assert profile["outlier_ratio"] == 0.2
+    assert "potential_outliers" in profile["warnings"]
 
 
 def test_profile_all_null_numeric_quantiles():
@@ -70,6 +93,71 @@ def test_profile_all_null_numeric_quantiles():
     assert profile["q50"] is None
     assert profile["q75"] is None
     assert profile["q95"] is None
+    assert profile["outlier_count"] is None
+    assert profile["outlier_ratio"] is None
+    assert profile["iqr"] is None
+    assert profile["outlier_lower_bound"] is None
+    assert profile["outlier_upper_bound"] is None
+
+
+def test_profile_numeric_outliers_skipped_when_too_few_values():
+    frame = ar.from_pandas(pd.DataFrame({"x": [1.0, 2.0, 3.0]}))
+
+    report = ar.profile(frame)
+    profile = report.columns["x"].to_dict()
+
+    # Quartiles still computed; IQR summary needs >= 4 non-null values
+    assert profile["q25"] is not None
+    assert profile["outlier_count"] is None
+    assert profile["outlier_ratio"] is None
+    assert profile["iqr"] is None
+    assert profile["outlier_lower_bound"] is None
+    assert profile["outlier_upper_bound"] is None
+    assert "potential_outliers" not in profile["warnings"]
+
+
+def test_profile_numeric_outliers_skipped_with_two_values():
+    frame = ar.from_pandas(pd.DataFrame({"x": [1.0, 100.0]}))
+
+    report = ar.profile(frame)
+    profile = report.columns["x"].to_dict()
+
+    assert profile["outlier_count"] is None
+    assert profile["outlier_ratio"] is None
+    assert profile["iqr"] is None
+    assert profile["outlier_lower_bound"] is None
+    assert profile["outlier_upper_bound"] is None
+
+
+def test_profile_numeric_zero_iqr_constant_column_no_outliers():
+    frame = ar.from_pandas(pd.DataFrame({"x": [5.0, 5.0, 5.0, 5.0]}))
+
+    report = ar.profile(frame)
+    profile = report.columns["x"].to_dict()
+
+    assert profile["q25"] == profile["q75"] == 5.0
+    assert profile["iqr"] == 0.0
+    assert profile["outlier_lower_bound"] == 5.0
+    assert profile["outlier_upper_bound"] == 5.0
+    assert profile["outlier_count"] == 0
+    assert profile["outlier_ratio"] == 0.0
+    assert "potential_outliers" not in profile["warnings"]
+
+
+def test_profile_numeric_zero_iqr_with_extreme_value():
+    frame = ar.from_pandas(pd.DataFrame({"x": [10.0, 10.0, 10.0, 10.0, 50.0]}))
+
+    report = ar.profile(frame)
+    profile = report.columns["x"].to_dict()
+
+    assert profile["q25"] == 10.0
+    assert profile["q75"] == 10.0
+    assert profile["iqr"] == 0.0
+    assert profile["outlier_lower_bound"] == 10.0
+    assert profile["outlier_upper_bound"] == 10.0
+    assert profile["outlier_count"] == 1
+    assert profile["outlier_ratio"] == 0.2
+    assert profile["warnings"] == ["potential_outliers"]
 
 
 def test_profile_non_numeric_no_quantiles():
@@ -82,6 +170,11 @@ def test_profile_non_numeric_no_quantiles():
     assert "q50" not in profile
     assert "q75" not in profile
     assert "q95" not in profile
+    assert "iqr" not in profile
+    assert "outlier_lower_bound" not in profile
+    assert "outlier_upper_bound" not in profile
+    assert "outlier_count" not in profile
+    assert "outlier_ratio" not in profile
 
 
 def test_profile_email_and_url_validity_ratios():
@@ -1183,6 +1276,18 @@ def test_profile_string_metrics():
     assert profile.empty_string_count == 2
     assert profile.whitespace_count == 1
     assert "empty_strings" in profile.warnings
+
+
+def test_profile_empty_numeric_column_iqr_outliers_none():
+    frame = ar.from_pandas(pd.DataFrame({"score": pd.Series(dtype="float64")}))
+    report = ar.profile(frame)
+    profile = report.columns["score"].to_dict()
+
+    assert profile["iqr"] is None
+    assert profile["outlier_lower_bound"] is None
+    assert profile["outlier_upper_bound"] is None
+    assert profile["outlier_count"] is None
+    assert profile["outlier_ratio"] is None
 
 
 def test_profile_empty_and_null_strings():
