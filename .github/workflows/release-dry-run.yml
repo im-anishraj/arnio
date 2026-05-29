@@ -40,6 +40,19 @@ jobs:
       - name: Build sdist
         run: pipx run build --sdist
 
+      - name: Verify sdist safety
+        run: |
+          SDIST=$(ls dist/*.tar.gz | head -n 1)
+          echo "Checking $SDIST for leaked environments..."
+          tar -tf "$SDIST" > sdist_contents.txt
+
+          if grep -E -q '/(\.venv|venv|\.tox|site-packages)/' sdist_contents.txt; then
+            echo "::error::SDIST contains excluded virtual environment files!"
+            grep -E '/(\.venv|venv|\.tox|site-packages)/' sdist_contents.txt
+            exit 1
+          fi
+          echo "✅ SDIST is safe."
+
       - name: Twine check sdist
         run: |
           pip install twine
