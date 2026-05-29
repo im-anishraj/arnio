@@ -1,7 +1,7 @@
 name: Documentation task
 description: Improve docs, examples, tutorials, website content, or contributor guidance.
 title: "Docs: "
-labels: ["type:docs", "area: docs", "status:needs-triage"]
+labels: ["type:docs", "area:docs", "status:needs-triage"]
 body:
   - type: textarea
     id: problem
