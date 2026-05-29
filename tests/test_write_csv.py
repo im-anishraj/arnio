@@ -67,7 +67,9 @@ class TestWriteCsv:
         assert out.exists()
 
     def test_non_ascii_output_path_round_trip(self, tmp_path):
-        frame = ar.from_pandas(pd.DataFrame({"city": ["Łódź", "東京"], "sales": [10, 20]}))
+        frame = ar.from_pandas(
+            pd.DataFrame({"city": ["Łódź", "東京"], "sales": [10, 20]})
+        )
         out = tmp_path / "résumé_東京.csv"
 
         ar.write_csv(frame, str(out))
