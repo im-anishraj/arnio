@@ -963,9 +963,9 @@ def test_describe_non_finite_all_finite_column():
 
 def test_describe_non_finite_all_non_finite_column():
     """All-non-finite column: mean/min/max fall back to 0.0 deterministically."""
-    import math
+    import io
 
-    frame = ar.from_pandas(pd.DataFrame({"x": [math.inf, -math.inf]}))
+    frame = ar.read_csv(io.StringIO("x\ninf\n-inf\n"))
     stats = frame.describe()
 
     assert stats["x"]["count"] == 2.0
@@ -977,9 +977,9 @@ def test_describe_non_finite_all_non_finite_column():
 
 def test_describe_non_finite_negative_inf_only():
     """-inf only column is fully non-finite; fallback values are 0.0."""
-    import math
+    import io
 
-    frame = ar.from_pandas(pd.DataFrame({"x": [-math.inf, -math.inf]}))
+    frame = ar.read_csv(io.StringIO("x\n-inf\n-inf\n"))
     stats = frame.describe()
 
     assert stats["x"]["non_finite"] == 2.0
