@@ -279,6 +279,21 @@ class TestFromPandas:
 
         pd.testing.assert_series_equal(result["id"], df["id"])
 
+    def test_from_pandas_empty_int64_preserves_dtype(self):
+        df = pd.DataFrame({"a": pd.Series(dtype="int64")})
+        frame = ar.from_pandas(df)
+        result = ar.to_pandas(frame)
+        assert result.shape == (0, 1)
+        assert str(result["a"].dtype) == "Int64"
+
+    def test_from_pandas_mixed_empty_frame_preserves_dtypes(self):
+        df = pd.DataFrame({"a": pd.Series(dtype="int64"), "b": pd.Series(dtype="float64")})
+        frame = ar.from_pandas(df)
+        result = ar.to_pandas(frame)
+        assert result.shape == (0, 2)
+        assert str(result["a"].dtype) == "Int64"
+        assert str(result["b"].dtype) == "Float64"
+
     def test_roundtrip_values(self):
         df = pd.DataFrame(
             {

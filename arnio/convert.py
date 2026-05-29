@@ -339,6 +339,8 @@ def _pandas_dtype_to_arnio(dtype: object) -> _DType | None:
         return _DType.FLOAT64
     if dtype == pd.BooleanDtype() or str(dtype) == "bool":
         return _DType.BOOL
+    if str(dtype) == "int64":
+        return _DType.INT64
     return None
 
 
