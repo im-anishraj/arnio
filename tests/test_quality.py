@@ -304,6 +304,53 @@ def test_compare_profiles_handles_single_column_profiles():
     assert comparison.status_counts == {"ok": 1, "warning": 0, "changed": 0}
 
 
+def test_profile_comparison_accepts_valid_status_counts():
+    base = ar.DataQualityReport(0, 0, 0, 0, 0.0, {})
+
+    comparison = ar.ProfileComparison(
+        base,
+        base,
+        {},
+        {"ok": 1, "warning": 2, "changed": 0},
+    )
+
+    assert comparison.status_counts == {
+        "ok": 1,
+        "warning": 2,
+        "changed": 0,
+    }
+
+
+def test_profile_comparison_rejects_bool_status_counts():
+    base = ar.DataQualityReport(0, 0, 0, 0, 0.0, {})
+
+    with pytest.raises(
+        TypeError,
+        match="status_counts values must be non-negative integers",
+    ):
+        ar.ProfileComparison(
+            base,
+            base,
+            {},
+            {"passed": True},
+        )
+
+
+def test_profile_comparison_rejects_negative_status_counts():
+    base = ar.DataQualityReport(0, 0, 0, 0, 0.0, {})
+
+    with pytest.raises(
+        ValueError,
+        match="status_counts values must be non-negative integers",
+    ):
+        ar.ProfileComparison(
+            base,
+            base,
+            {},
+            {"failed": -1},
+        )
+
+
 def test_check_quality_gates_passes_identical_profiles():
     frame = ar.from_pandas(
         pd.DataFrame({"score": [10.0, 11.0, 12.0], "city": ["a", "b", "a"]})
