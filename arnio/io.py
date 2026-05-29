@@ -923,8 +923,10 @@ def write_csv(
         )
     if not isinstance(line_terminator, str):
         raise TypeError("line_terminator must be a string")
-    if line_terminator == "":
-        raise ValueError("line_terminator must not be empty")
+    if line_terminator not in {"\n", "\r\n", "\r"}:
+        raise ValueError(
+            f"line_terminator must be one of '\\n', '\\r\\n', or '\\r', got {line_terminator!r}"
+        )
 
     config = _CsvWriteConfig()
     config.delimiter = delimiter
