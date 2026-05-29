@@ -3586,3 +3586,38 @@ def test_validate_max_errors_zero_valid_data():
 
     with pytest.raises(ValueError, match="max_errors must be >= 1"):
         ar.validate(frame, schema, max_errors=0)
+
+
+def test_url_uppercase_scheme_accepted_with_lowercase_allowed(tmp_path):
+    path = tmp_path / "urls.csv"
+    path.write_text("url\nHTTPS://example.com\n")
+    result = ar.validate(ar.read_csv(path), {"url": ar.URL(allowed_schemes=["https"])})
+    assert result.passed
+
+
+def test_url_mixed_case_scheme_accepted(tmp_path):
+    path = tmp_path / "urls.csv"
+    path.write_text("url\nHttps://example.com\n")
+    result = ar.validate(ar.read_csv(path), {"url": ar.URL(allowed_schemes=["https"])})
+    assert result.passed
+
+
+def test_url_uppercase_allowed_scheme_matches_lowercase_url(tmp_path):
+    path = tmp_path / "urls.csv"
+    path.write_text("url\nhttps://example.com\n")
+    result = ar.validate(ar.read_csv(path), {"url": ar.URL(allowed_schemes=["HTTPS"])})
+    assert result.passed
+
+
+def test_url_uppercase_scheme_rejected_when_not_in_allowed(tmp_path):
+    path = tmp_path / "urls.csv"
+    path.write_text("url\nFTP://files.example.com\n")
+    result = ar.validate(ar.read_csv(path), {"url": ar.URL(allowed_schemes=["https"])})
+    assert not result.passed
+
+
+def test_url_mixed_case_allowed_scheme_and_mixed_case_url(tmp_path):
+    path = tmp_path / "urls.csv"
+    path.write_text("url\nHTTPS://example.com\nHttps://test.org\nhttps://lower.com\n")
+    result = ar.validate(ar.read_csv(path), {"url": ar.URL(allowed_schemes=["HTTPS"])})
+    assert result.passed
