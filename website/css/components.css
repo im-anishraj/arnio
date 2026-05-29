@@ -245,12 +245,19 @@
 }
 
 @media (max-width: 767px) {
-  .nav-links { display: none; }
-  .nav-hamburger { display: block; }
+  .nav-links {
+    display: none;
+  }
+
+  .nav-hamburger {
+    display: block;
+  }
+
   .nav-discord,
   .nav-github {
     display: none;
   }
+
   .nav-actions {
     gap: var(--space-2);
   }
@@ -274,7 +281,9 @@
   white-space: nowrap;
 }
 
-.btn:hover { text-decoration: none; }
+.btn:hover {
+  text-decoration: none;
+}
 
 .btn-primary {
   background: var(--color-accent);
@@ -420,7 +429,7 @@
   font-family: var(--font-mono);
 }
 
-.code-block-header + pre {
+.code-block-header+pre {
   border-radius: 0 0 var(--radius-md) var(--radius-md);
 }
 
@@ -445,6 +454,13 @@ pre:hover .copy-btn {
   opacity: 1;
 }
 
+.copy-btn:focus-visible {
+  opacity: 1;
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+
 .copy-btn:hover {
   background: var(--color-accent);
   color: #ffffff;
@@ -458,7 +474,7 @@ pre:hover .copy-btn {
   opacity: 1;
 }
 
-.code-block-header ~ .copy-btn {
+.code-block-header~.copy-btn {
   top: calc(var(--space-2) + 32px);
 }
 
