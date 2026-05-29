@@ -1356,22 +1356,12 @@ def validate(
         if isinstance(max_errors, bool) or not isinstance(max_errors, int):
             raise TypeError("max_errors must be an int or None")
 
-    if max_errors is not None and max_errors < 0:
-        raise ValueError("max_errors must be >= 0")
+        if max_errors <= 0:
+            raise ValueError("max_errors must be >= 1")
 
     df = to_pandas(frame)
     dtypes = frame.dtypes
     issues: list[ValidationIssue] = []
-
-    if max_errors == 0:
-        return ValidationResult(
-            row_count=len(df),
-            issue_count=0,
-            issues=[],
-            bad_rows=sorted(
-                {issue.row_index for issue in issues if issue.row_index is not None}
-            ),
-        )
 
     def reached_limit() -> bool:
         return max_errors is not None and len(issues) >= max_errors
