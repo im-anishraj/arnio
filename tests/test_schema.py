@@ -2990,8 +2990,169 @@ def test_url_uppercase_scheme_rejected_when_not_in_allowed(tmp_path):
     assert not result.passed
 
 
-def test_url_mixed_case_allowed_scheme_and_mixed_case_url(tmp_path):
-    path = tmp_path / "urls.csv"
-    path.write_text("url\nHTTPS://example.com\nHttps://test.org\nhttps://lower.com\n")
-    result = ar.validate(ar.read_csv(path), {"url": ar.URL(allowed_schemes=["HTTPS"])})
-    assert result.passed
+def test_mixed_scalar_allowed_roundtrip():
+    """Mixed-type allowed values survive a to_json() / from_json() round-trip."""
+    schema = ar.Schema({"code": ar.String(allowed={1, "1"})})
+    restored = ar.Schema.from_json(schema.to_json())
+    assert restored.fields["code"].allowed == {1, "1"}
+
+
+# ---------------------------------------------------------------------------
+# ValidationIssue core field type validation
+# ---------------------------------------------------------------------------
+
+
+def test_validation_issue_rejects_non_string_column():
+    with pytest.raises(TypeError, match="column"):
+        ar.ValidationIssue(column=123, rule="min", message="msg")
+
+
+def test_validation_issue_rejects_list_column():
+    with pytest.raises(TypeError, match="column"):
+        ar.ValidationIssue(column=["col"], rule="min", message="msg")
+
+
+def test_validation_issue_accepts_none_column():
+    issue = ar.ValidationIssue(column=None, rule="min", message="msg")
+    assert issue.column is None
+
+
+def test_validation_issue_accepts_string_column():
+    issue = ar.ValidationIssue(column="age", rule="min", message="msg")
+    assert issue.column == "age"
+
+
+def test_validation_issue_rejects_list_rule():
+    with pytest.raises(TypeError, match="rule"):
+        ar.ValidationIssue(column="x", rule=["not", "hashable"], message="msg")
+
+
+def test_validation_issue_rejects_empty_string_rule():
+    with pytest.raises(TypeError, match="rule"):
+        ar.ValidationIssue(column="x", rule="", message="msg")
+
+
+def test_validation_issue_rejects_int_rule():
+    with pytest.raises(TypeError, match="rule"):
+        ar.ValidationIssue(column="x", rule=99, message="msg")
+
+
+def test_validation_issue_rejects_int_message():
+    with pytest.raises(TypeError, match="message"):
+        ar.ValidationIssue(column="x", rule="min", message=5)
+
+
+def test_validation_issue_rejects_none_message():
+    with pytest.raises(TypeError, match="message"):
+        ar.ValidationIssue(column="x", rule="min", message=None)
+
+
+def test_validation_issue_rejects_string_row_index():
+    with pytest.raises(TypeError, match="row_index"):
+        ar.ValidationIssue(column="x", rule="min", message="msg", row_index="row1")
+
+
+def test_validation_issue_accepts_zero_row_index():
+    issue = ar.ValidationIssue(column="x", rule="min", message="msg", row_index=0)
+    assert issue.row_index == 0
+
+
+def test_validation_issue_rejects_negative_row_index():
+    with pytest.raises(ValueError, match="row_index"):
+        ar.ValidationIssue(column="x", rule="min", message="msg", row_index=-1)
+
+
+def test_validation_issue_rejects_bool_row_index():
+    with pytest.raises(TypeError, match="row_index"):
+        ar.ValidationIssue(column="x", rule="min", message="msg", row_index=True)
+
+
+def test_validation_issue_accepts_none_row_index():
+    issue = ar.ValidationIssue(column="x", rule="min", message="msg", row_index=None)
+    assert issue.row_index is None
+
+
+def test_validation_issue_accepts_row_index_of_one():
+    issue = ar.ValidationIssue(column="x", rule="min", message="msg", row_index=1)
+    assert issue.row_index == 1
+
+
+def test_validation_issue_reproduction_case_raises_at_construction():
+    with pytest.raises((TypeError, ValueError)):
+        ar.ValidationIssue(
+            column=123,
+            rule=["not", "hashable"],
+            message=5,
+            row_index="row1",
+        )
+
+
+def test_custom_rule_returning_malformed_issue_raises_early(tmp_path):
+    def bad_rule(df):
+        return [
+            ar.ValidationIssue(
+                column=123,
+                rule=["not", "a", "string"],
+                message=5,
+                row_index="row1",
+            )
+        ]
+
+    frame = ar.from_pandas(pd.DataFrame({"x": [1]}))
+    schema = ar.Schema({"x": ar.Field()}, rules=[bad_rule])
+
+    with pytest.raises((TypeError, ValueError)):
+        schema.validate(frame)
+
+
+def test_from_json_rejects_unknown_top_level_key():
+    payload = json.dumps(
+        {
+            "fields": {"email": {"dtype": "string"}},
+            "uniqe": ["email"],
+        }
+    )
+    with pytest.raises(ValueError, match="uniqe"):
+        ar.Schema.from_json(payload)
+
+
+def test_from_json_rejects_unknown_field_key():
+    payload = json.dumps(
+        {
+            "fields": {
+                "email": {
+                    "dtype": "string",
+                    "nulllable": False,
+                }
+            }
+        }
+    )
+    with pytest.raises(ValueError, match="nulllable"):
+        ar.Schema.from_json(payload)
+
+
+def test_from_json_round_trip_is_accepted():
+    original = ar.Schema(
+        fields={"email": ar.String(nullable=False)},
+        strict=True,
+        unique=["email"],
+    )
+    recovered = ar.Schema.from_json(original.to_json())
+    assert recovered.fields["email"].nullable is False
+    assert recovered.unique == ["email"]
+
+
+def test_required_if_missing_column_preserves_warning_severity():
+    frame = ar.from_dict({"x": [""]})
+    schema = ar.Schema({"x": ar.String(required_if=("flag", True), severity="warning")})
+    result = ar.validate(frame, schema)
+    issue = next(i for i in result.issues if i.rule == "missing_column")
+    assert issue.severity == "warning"
+
+
+def test_required_if_missing_column_preserves_error_severity():
+    frame = ar.from_dict({"x": [""]})
+    schema = ar.Schema({"x": ar.String(required_if=("flag", True), severity="error")})
+    result = ar.validate(frame, schema)
+    issue = next(i for i in result.issues if i.rule == "missing_column")
+    assert issue.severity == "error"

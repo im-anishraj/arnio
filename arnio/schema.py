@@ -2909,6 +2909,7 @@ def _validate_column(
                     column=condition_column,
                     rule="missing_column",
                     message=f"Column {condition_column!r} not found",
+                    severity=field_def.severity,
                 )
             )
         else:
