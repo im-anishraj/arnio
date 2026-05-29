@@ -1416,7 +1416,7 @@ def round_numeric_columns(
     frame : ArFrame or pd.DataFrame
         Input data frame.
     subset : sequence of str, optional
-    Column names to round. If None, applies to all numeric columns.
+        Column names to round. If None, applies to all numeric columns.
     decimals : int, default 0
         Number of decimal places to round to.
 
