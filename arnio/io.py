@@ -349,6 +349,22 @@ def _validate_parser_mode(mode: str) -> str:
     return mode
 
 
+def _validate_comment_char(comment: str | None) -> str | None:
+    """Validate comment character parameter."""
+    if comment is None:
+        return None
+    if not isinstance(comment, str):
+        raise TypeError("comment must be a string or None")
+    if len(comment) != 1:
+        raise ValueError("comment must be a single character")
+    if comment in {"\n", "\r", "\0", '"'}:
+        raise ValueError(
+            "comment character must not be a newline, carriage-return, "
+            "NUL byte, or double-quote"
+        )
+    return comment
+
+
 def _validate_on_bad_lines(on_bad_lines: str) -> str:
     if not isinstance(on_bad_lines, str):
         raise TypeError("on_bad_lines must be a string")
@@ -455,6 +471,7 @@ def read_csv(
     mode: str = "strict",
     encoding_errors: str = "strict",
     on_bad_lines: str = "error",
+    comment: str | None = None,
 ) -> ArFrame:
     """Read a CSV file into an ArFrame via C++ backend.
 
@@ -610,6 +627,9 @@ def read_csv(
         if skiprows is not None:
             config.skip_rows = _validate_skip_rows(skiprows)
 
+        if comment is not None:
+            config.comment_char = _validate_comment_char(comment)
+
         reader = _CsvReader(config)
     except Exception:
         if should_cleanup and os.path.exists(path):
@@ -661,6 +681,7 @@ def read_csv_chunked(
     null_values: list[str] | None = None,
     mode: str = "strict",
     on_bad_lines: str = "error",
+    comment: str | None = None,
 ) -> Iterator[ArFrame]:
     """Read a CSV file in chunks, yielding ArFrame objects.
 
@@ -813,6 +834,9 @@ def read_csv_chunked(
         config.mode = mode
         config.skip_rows = skip_rows
 
+        if comment is not None:
+            config.comment_char = _validate_comment_char(comment)
+
         if null_values is not None:
             config.null_values = _validate_null_values(null_values)
 
@@ -947,6 +971,7 @@ def scan_csv(
     has_header: bool = True,
     encoding_errors: str = "strict",
     on_bad_lines: str = "error",
+    comment: str | None = None,
 ) -> dict[str, str]:
     """Return schema (column names + inferred types) without loading data.
 
@@ -1049,6 +1074,9 @@ def scan_csv(
     config.thousands_separator = thousands_separator
     config.has_header = _validate_bool_option(has_header, "has_header")
     config.encoding_errors = encoding_errors
+
+    if comment is not None:
+        config.comment_char = _validate_comment_char(comment)
 
     if null_values is not None:
         config.null_values = _validate_null_values(null_values)
