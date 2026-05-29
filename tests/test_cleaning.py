@@ -1541,7 +1541,7 @@ class TestNormalizeCase:
         import pandas as pd
 
         frame = ar.from_pandas(pd.DataFrame({"x": ["A"]}))
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="case_type must be one of"):
             ar.normalize_case(frame, case_type="invalid")
 
 
@@ -2184,6 +2184,10 @@ class TestTrimColumnNames:
         result = ar.trim_column_names(frame)
         assert to_pandas(result).columns.tolist() == ["name", "age"]
 
+    def test_trim_column_names_rejects_non_frame_input(self):
+        with pytest.raises(TypeError, match="frame must be an ArFrame"):
+            ar.trim_column_names([])
+
     def test_trim_column_names_already_clean(self):
         df = pd.DataFrame({"name": [1], "age": [2]})
         frame = from_pandas(df)
@@ -2224,6 +2228,24 @@ class TestTrimColumnNames:
         frame = from_pandas(pd.DataFrame({" name ": [1]}))
         result = ar.trim_column_names(frame)
         assert result.columns == ["name"]
+
+
+class TestMixedFrameValidation:
+    @pytest.mark.parametrize(
+        ("func", "kwargs"),
+        [
+            (
+                "combine_columns",
+                {"subset": ["a"], "separator": "-", "output_column": "combined"},
+            ),
+            ("drop_constant_columns", {}),
+        ],
+    )
+    def test_mixed_helpers_reject_non_frame_input(self, func, kwargs):
+        with pytest.raises(
+            TypeError, match="frame must be an ArFrame or a pandas DataFrame"
+        ):
+            getattr(ar, func)([], **kwargs)
 
 
 def test_from_pandas_multiindex_columns_are_stringified():

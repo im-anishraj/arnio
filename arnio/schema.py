@@ -690,6 +690,7 @@ class Field:
     pattern: str | None = None
     semantic: str | None = None
     allowed: set[Any] | None = None
+    case_sensitive: bool = True
     unique: bool = False
     min_length: int | None = None
     max_length: int | None = None
@@ -704,6 +705,8 @@ class Field:
             raise TypeError("nullable must be a bool")
         if not isinstance(self.unique, bool):
             raise TypeError("unique must be a bool")
+        if not isinstance(self.case_sensitive, bool):
+            raise TypeError("case_sensitive must be a bool")
 
         if self.required_if is not None:
             if not isinstance(self.required_if, tuple):
@@ -721,7 +724,44 @@ class Field:
             if self.max is not None:
                 if isinstance(self.max, bool) or not isinstance(self.max, (int, float)):
                     raise TypeError("max must be numeric or None")
+        if self.dtype is not None and not isinstance(self.dtype, str):
+            raise TypeError(
+                f"dtype must be a str or None, got {type(self.dtype).__name__}"
+            )
 
+        if self.pattern is not None:
+            if not isinstance(self.pattern, str):
+                raise TypeError(
+                    f"pattern must be a str or None, got {type(self.pattern).__name__}"
+                )
+            try:
+                re.compile(self.pattern)
+            except re.error as exc:
+                raise ValueError(
+                    f"pattern is not a valid regular expression: {exc}"
+                ) from exc
+
+        if self.allowed is not None:
+            if not isinstance(self.allowed, (list, tuple, set)):
+                raise TypeError(
+                    f"allowed must be a list, tuple, or set, got {type(self.allowed).__name__}"
+                )
+        for _name, _val in [
+            ("min_length", self.min_length),
+            ("max_length", self.max_length),
+        ]:
+            if _val is not None:
+                if isinstance(_val, bool) or not isinstance(_val, int):
+                    raise TypeError(
+                        f"{_name} must be an int or None, got {type(_val).__name__}"
+                    )
+                if _val < 0:
+                    raise ValueError(f"{_name} must be >= 0, got {_val}")
+        if self.min_length is not None and self.max_length is not None:
+            if self.min_length > self.max_length:
+                raise ValueError(
+                    f"min_length ({self.min_length}) must be <= max_length ({self.max_length})"
+                )
         _validate_severity(self.severity)
 
 
@@ -1018,6 +1058,8 @@ class ValidationResult:
             raise TypeError("max_issues must be an integer or None")
         if max_issues is not None and max_issues < 0:
             raise ValueError("max_issues must be non-negative")
+        if not isinstance(redact_values, bool):
+            raise TypeError("redact_values must be a bool")
 
         status = "passed" if self.passed else "failed"
         lines = [
@@ -1676,6 +1718,7 @@ def String(
     nullable: bool = True,
     pattern: str | None = None,
     allowed: set[Any] | list[Any] | tuple[Any, ...] | None = None,
+    case_sensitive: bool = True,
     unique: bool = False,
     severity: str = "error",
     min_length: int | None = None,
@@ -1688,6 +1731,7 @@ def String(
         nullable: Whether null values are allowed.
         pattern: Regular expression pattern that non-null values must match.
         allowed: Allowed values for the field.
+        case_sensitive: Whether allowed string matching is case-sensitive.
         unique: Whether non-null values must be unique.
         severity: Severity level for validation issues.
         min_length: Minimum allowed string length.
@@ -1733,6 +1777,7 @@ def String(
         nullable=nullable,
         pattern=pattern,
         allowed=allowed_set,
+        case_sensitive=case_sensitive,
         unique=unique,
         min_length=min_length,
         max_length=max_length,
@@ -2263,7 +2308,18 @@ def _validate_column(
         )
 
     if field_def.allowed is not None:
-        invalid = non_null[~non_null.isin(field_def.allowed)]
+        if field_def.dtype == "string" and not field_def.case_sensitive:
+            allowed_values = {
+                value.casefold() if isinstance(value, str) else value
+                for value in field_def.allowed
+            }
+            comparable = non_null.map(
+                lambda value: value.casefold() if isinstance(value, str) else value
+            )
+            invalid = non_null[~comparable.isin(allowed_values)]
+        else:
+            invalid = non_null[~non_null.isin(field_def.allowed)]
+
         issues.extend(
             _row_issues(
                 invalid,
@@ -2273,7 +2329,6 @@ def _validate_column(
                 severity=field_def.severity,
             )
         )
-
     if field_def.dtype == "datetime":
         issues.extend(_validate_datetime(non_null, name, field_def))
 
@@ -2334,6 +2389,7 @@ def _validate_column(
                         column=name,
                         rule="custom",
                         message=f"Custom validator {validator_name!r} is not registered",
+                        severity=field_def.severity,
                     )
                 )
             else:
@@ -2365,6 +2421,7 @@ def _validate_column(
                         column=name,
                         rule="semantic",
                         message=f"Unknown semantic type: {field_def.semantic}",
+                        severity=field_def.severity,
                     )
                 )
             else:
@@ -2530,6 +2587,7 @@ def _field_to_dict(field_def: Field) -> dict[str, Any]:
         "pattern": field_def.pattern,
         "semantic": field_def.semantic,
         "allowed": _normalize_sequence(field_def.allowed),
+        "case_sensitive": field_def.case_sensitive,
         "unique": field_def.unique,
         "min_length": field_def.min_length,
         "max_length": field_def.max_length,
@@ -2537,6 +2595,7 @@ def _field_to_dict(field_def: Field) -> dict[str, Any]:
         "datetime_min": _clean_scalar(field_def._datetime_min),
         "datetime_max": _clean_scalar(field_def._datetime_max),
         "required_if": _normalize_sequence(field_def.required_if),
+        "severity": field_def.severity,
     }
 
 
@@ -2588,6 +2647,7 @@ def _field_from_json_dict(name: str, payload: Any) -> Field:
         pattern=payload.get("pattern"),
         semantic=payload.get("semantic"),
         allowed=allowed,
+        case_sensitive=payload.get("case_sensitive", True),
         unique=payload.get("unique", False),
         min_length=payload.get("min_length"),
         max_length=payload.get("max_length"),
@@ -2726,6 +2786,7 @@ def Custom(
     nullable: bool = True,
     unique: bool = False,
     severity: str = "error",
+    required_if: tuple[str, Any] | None = None,
 ) -> Field:
     """Create a field validated by a registered custom validator.
 
@@ -2758,4 +2819,5 @@ def Custom(
         unique=unique,
         semantic=f"custom:{name}",
         severity=severity,
+        required_if=required_if,
     )
