@@ -661,7 +661,12 @@ class ArFrame:
         return self.select_columns(matched)
 
     def describe(self) -> dict[str, dict[str, float]]:
-        """Generate summary statistics for all numeric and string columns.
+        """Generate summary statistics for numeric, string, and boolean columns.
+
+        Numeric columns include ``count``, ``nulls``, ``mean``, ``min``, and
+        ``max``. String columns include ``count``, ``nulls``, and ``unique``.
+        Boolean columns include ``count``, ``nulls``, ``true``, ``false``, and
+        ``true_ratio``.
 
         Returns
         -------

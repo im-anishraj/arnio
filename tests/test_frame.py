@@ -890,6 +890,46 @@ def test_describe_all_string_columns(csv_with_whitespace):
         assert metric_keys == ["count", "nulls", "unique"]
 
 
+def test_describe_includes_boolean_columns():
+    frame = ar.ArFrame.from_records(
+        [
+            {"flag": True, "name": "a"},
+            {"flag": False, "name": "b"},
+            {"flag": True, "name": "c"},
+        ]
+    )
+
+    stats = frame.describe()
+
+    assert list(stats.keys()) == ["flag", "name"]
+    assert list(stats["flag"].keys()) == [
+        "count",
+        "nulls",
+        "true",
+        "false",
+        "true_ratio",
+    ]
+    assert stats["flag"]["count"] == 3.0
+    assert stats["flag"]["nulls"] == 0.0
+    assert stats["flag"]["true"] == 2.0
+    assert stats["flag"]["false"] == 1.0
+    assert stats["flag"]["true_ratio"] == pytest.approx(2.0 / 3.0)
+
+
+def test_describe_boolean_columns_with_nulls():
+    frame = ar.from_pandas(
+        pd.DataFrame({"flag": pd.Series([True, None, False, True], dtype="boolean")})
+    )
+
+    stats = frame.describe()
+
+    assert stats["flag"]["count"] == 3.0
+    assert stats["flag"]["nulls"] == 1.0
+    assert stats["flag"]["true"] == 2.0
+    assert stats["flag"]["false"] == 1.0
+    assert stats["flag"]["true_ratio"] == pytest.approx(2.0 / 3.0)
+
+
 def test_astype_valid_single_type():
     from arnio.convert import to_pandas
     from arnio.frame import ArFrame
