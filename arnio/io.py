@@ -570,6 +570,13 @@ def read_csv(
     """
     path, should_cleanup, is_materialized_text = _materialize_csv_input(path)
 
+    if nrows is not None and nrows == 0:
+        if should_cleanup and os.path.exists(path):
+            os.unlink(path)
+        from .integrations.pandas import from_pandas
+        import pandas as pd
+        return from_pandas(pd.DataFrame())
+
     try:
         _validate_csv_path(path, encoding)
 
