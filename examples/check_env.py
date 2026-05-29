@@ -38,6 +38,10 @@ DEPENDENCIES = {
         "Required for Arrow export examples (pip install arnio[arrow]).",
     ),
     "pytest": ("pytest", "Required for running the integration and unit test suites."),
+    "pyarrow": (
+        "pyarrow",
+        "Required for Arrow integration examples.",
+    ),
 }
 
 
@@ -63,6 +67,9 @@ EXAMPLES = {
     "sklearn_pipeline.py": ["sklearn", "pandas"],
     "auto_clean_tutorial.py": ["pandas"],
     "arnio_with_jsonl.py": ["pandas"],
+    "arnio_chunk_reading.py": ["pandas"],
+    "arnio_with_arrow.py": ["pyarrow", "pandas"],
+    "schema_validation.py": [],
     "arnio_with_arrow.py": ["pandas", "pyarrow"],
     "arnio_chunk_reading.py": ["pandas"],
     "schema_validation.py": ["pandas"],
@@ -207,7 +214,7 @@ def print_dashboard(results, build_tools=None):
     print(f"{'Dependency':<15} | {'Status':<15} | {'Description'}")
     print("-" * 70)
 
-    for lib, (status, status_str) in results.items():
+    for lib, (status, _) in results.items():
         package, desc = DEPENDENCIES[lib]
         mark = "[OK]" if status else "[X]"
         print(f"{lib:<15} | {mark:<15} | {desc}")
