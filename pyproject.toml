@@ -66,6 +66,7 @@ dev = [
     "mypy>=1.0",
     "pandas-stubs",
     "types-setuptools",
+    "bandit>=1.7",
 ]
 sklearn = [
     "scikit-learn>=1.0",
