@@ -2735,6 +2735,7 @@ def test_currency_code_override(tmp_path):
     assert result_default.issue_count == 1
     assert result_default.issues[0].value == "ZZZ"
 
+
 def test_currency_code_rejects_bare_string_allowed():
     with pytest.raises(TypeError):
         ar.CurrencyCode(allowed="USD")
@@ -2750,7 +2751,7 @@ def test_currency_code_rejects_non_string_allowed_values():
     with pytest.raises(TypeError):
         ar.CurrencyCode(allowed=["USD", 123])
 
-        
+
 def test_currency_code_validation_respects_case_insensitive_field(tmp_path):
     path = tmp_path / "mixed_case_currencies.csv"
     path.write_text("currency\nusd\nEur\ninr\n")
