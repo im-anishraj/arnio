@@ -714,12 +714,6 @@ def read_csv_chunked(
         during numeric parsing.
     null_values : list[str], optional
         Strings treated as null values.
-    preserve_attrs : bool, default True
-        When True, DataFrame.attrs are written into Parquet metadata; all
-        attr values must be JSON-serializable or a TypeError is raised with
-        a clear message. Set to False to silently drop attrs on export.
-
-
 
     mode : {"strict", "permissive"}, default "strict"
         Controls malformed row handling.
@@ -901,8 +895,6 @@ def write_csv(
         If file format is unsupported.
     RuntimeError
         If the file cannot be opened or written.
-    TypeError
-        If preserve_attrs is True and DataFrame.attrs contains non-JSON-serializable values.
 
     Examples
     --------
