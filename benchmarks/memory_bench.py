@@ -146,4 +146,18 @@ def main():
 
 
 if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Memory benchmark: buffer-all vs two-pass streaming CSV read."
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Use a small row count for a quick smoke test.",
+    )
+    args = parser.parse_args()
+    if args.dry_run:
+        ROWS = 1_000  # override module-level constant
+
     main()

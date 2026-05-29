@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.19.0](https://github.com/im-anishraj/arnio/compare/v1.18.0...v1.19.0) (2026-05-29)
+
+
+### Features
+
+* add `ArFrame.from_pandas()` convenience constructor
+* add custom pipeline step unregister support
+* add `clean_column_names`, `normalize_whitespace`, and richer schema summary helpers
+* add schema validation improvements, including custom-field `required_if`, case-insensitive allowed strings, `LanguageCode`, and `TimeZone`
+* add data quality export helpers and richer quality summaries
+
+
+### Bug Fixes
+
+* harden CSV, JSONL, schema, cleaning, and pipeline input validation
+* reject unsafe read/write delimiters and nested JSONL values with clearer errors
+* improve optional Arrow/parquet release-test coverage
+
 ## [1.18.0](https://github.com/im-anishraj/arnio/compare/v1.17.1...v1.18.0) (2026-05-22)
 
 

@@ -1,7 +1,7 @@
 name: Testing task
 description: Add or improve unit, integration, fuzz, CI, packaging, or benchmark coverage.
 title: "Test: "
-labels: ["type:testing", "status: needs triage"]
+labels: ["type:testing", "status:needs-triage"]
 body:
   - type: textarea
     id: gap

@@ -3,6 +3,7 @@ Tests for ArFrame.schema_summary property.
 """
 
 import pandas as pd
+import pytest
 
 import arnio as ar
 from arnio.frame import ColumnSummary
@@ -13,6 +14,24 @@ from arnio.frame import ColumnSummary
 
 
 class TestColumnSummary:
+    def test_column_summary_invalid_name(self):
+        with pytest.raises(TypeError, match="name must be a str"):
+            ColumnSummary(name=1, dtype="int64", nullable=False)
+
+    def test_column_summary_invalid_dtype(self):
+        with pytest.raises(TypeError, match="dtype must be a str"):
+            ColumnSummary(name="id", dtype=2, nullable=False)
+
+    def test_column_summary_invalid_nullable(self):
+        with pytest.raises(TypeError, match="nullable must be a bool"):
+            ColumnSummary(name="id", dtype="int64", nullable="yes")
+
+    def test_column_summary_valid(self):
+        entry = ColumnSummary("id", "int64", True)
+        assert entry.name == "id"
+        assert entry.dtype == "int64"
+        assert entry.nullable is True
+
     def test_attributes(self):
         entry = ColumnSummary(name="age", dtype="int64", nullable=False)
         assert entry.name == "age"
@@ -166,6 +185,14 @@ class TestSchemaSummaryNormal:
         df = pd.DataFrame({"a": [1, None], "b": ["x", "y"]})
         frame = ar.from_pandas(df)
         assert frame.schema_summary == frame.schema_summary
+
+    def test_schema_summary_returns_valid_column_summaries(self):
+        df = pd.DataFrame({"id": [1, 2], "name": ["a", None]})
+        frame = ar.from_pandas(df)
+        for entry in frame.schema_summary:
+            assert isinstance(entry.name, str)
+            assert isinstance(entry.dtype, str)
+            assert isinstance(entry.nullable, bool)
 
 
 # ---------------------------------------------------------------------------

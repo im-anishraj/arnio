@@ -36,6 +36,7 @@ from .cleaning import (
     round_numeric_columns,
     safe_divide_columns,
     select_columns,
+    slugify_column_names,
     standardize_missing_tokens,
     strip_whitespace,
     trim_column_names,
@@ -48,6 +49,7 @@ from .exceptions import (
     CsvReadError,
     JsonlReadError,
     PipelineStepError,
+    SchemaValidationError,
     TypeCastError,
     UnknownStepError,
 )
@@ -69,6 +71,7 @@ from .pipeline import (
     pipeline,
     register_step,
     reset_steps,
+    unregister_step,
 )
 from .quality import (
     CleanExplanation,
@@ -153,6 +156,7 @@ __all__ = [
     "cast_types",
     "clean",
     "safe_divide_columns",
+    "slugify_column_names",
     "trim_column_names",
     "standardize_missing_tokens",
     # Conversion
@@ -167,6 +171,7 @@ __all__ = [
     # Pipeline
     "pipeline",
     "register_step",
+    "unregister_step",
     "get_builtin_step_signatures",
     "list_steps",
     "PipelineContext",
@@ -212,6 +217,7 @@ __all__ = [
     "JsonlReadError",
     "TypeCastError",
     "PipelineStepError",
+    "SchemaValidationError",
     "normalize_unicode",
     "Regex",
     "Custom",

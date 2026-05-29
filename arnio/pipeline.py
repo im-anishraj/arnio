@@ -45,6 +45,7 @@ _STEP_REGISTRY: dict[str, Callable] = {
     "cast_types": cleaning.cast_types,
     "round_numeric_columns": cleaning.round_numeric_columns,
     "combine_columns": cleaning.combine_columns,
+    "slugify_column_names": cleaning.slugify_column_names,
     "trim_column_names": cleaning.trim_column_names,
     "clean_column_names": cleaning.clean_column_names,
 }
@@ -56,6 +57,7 @@ _PYTHON_STEP_REGISTRY: dict[str, Callable] = {
     "coalesce_columns": cleaning.coalesce_columns,
     "normalize_whitespace": cleaning.normalize_whitespace,
 }
+_BUILTIN_PYTHON_STEP_REGISTRY: dict[str, Callable] = {}
 
 
 @dataclass(frozen=True)
@@ -129,6 +131,15 @@ def register_step(name: str, fn: Callable, overwrite: bool = False):
     ...     return df
     >>> ar.register_step("custom_clean", new_custom_clean, overwrite=True)
     """
+    # === ADDED FAIL-FAST VALIDATIONS ===
+    if not isinstance(name, str) or name.strip() == "":
+        raise ValueError("Step name must be a non-empty string.")
+    if not callable(fn):
+        raise TypeError(
+            f"Step function or class must be a callable object. Got {type(fn).__name__} instead."
+        )
+    # ===================================
+
     with _REGISTRY_LOCK:
         if name.startswith(f"{_BUILTIN_STEP_NAMESPACE}{_STEP_NAMESPACE_SEPARATOR}"):
             raise ValueError(
@@ -139,6 +150,11 @@ def register_step(name: str, fn: Callable, overwrite: bool = False):
         if name in _STEP_REGISTRY:
             raise ValueError(
                 f"Cannot register '{name}': conflicts with built-in C++ step. "
+                f"Use a different name."
+            )
+        if name in _BUILTIN_PYTHON_STEP_REGISTRY:
+            raise ValueError(
+                f"Cannot register '{name}': conflicts with built-in Python step. "
                 f"Use a different name."
             )
         if name in _DEPRECATED_STEP_ALIASES:
@@ -152,6 +168,24 @@ def register_step(name: str, fn: Callable, overwrite: bool = False):
                 "To intentionally overwrite it, set 'overwrite=True'."
             )
         _PYTHON_STEP_REGISTRY[name] = fn
+
+
+def unregister_step(name: str) -> None:
+    """Unregister a custom Python pipeline step."""
+    with _REGISTRY_LOCK:
+        if name not in _PYTHON_STEP_REGISTRY:
+            available_steps = sorted(set(_STEP_REGISTRY) | set(_PYTHON_STEP_REGISTRY))
+            raise UnknownStepError(name, available_steps)
+
+        # Protect only names that were registered as built-ins at module load
+        # time (i.e. present in _BUILTIN_PYTHON_STEP_REGISTRY).  Do NOT use
+        # _is_builtin_python_step here: that helper checks the function's
+        # __module__, which would wrongly block user-defined aliases whose
+        # underlying callable happens to live in arnio.cleaning.
+        if name in _BUILTIN_PYTHON_STEP_REGISTRY:
+            available_steps = sorted(set(_STEP_REGISTRY) | set(_PYTHON_STEP_REGISTRY))
+            raise UnknownStepError(name, available_steps)
+        del _PYTHON_STEP_REGISTRY[name]
 
 
 def get_builtin_step_signatures() -> dict[str, inspect.Signature]:
@@ -528,7 +562,7 @@ register_step("filter_rows", cleaning.filter_rows)
 register_step("drop_columns_matching", cleaning.drop_columns_matching)
 register_step("safe_divide_columns", cleaning.safe_divide_columns)
 register_step("replace_values", cleaning.replace_values)
-_BUILTIN_PYTHON_STEP_REGISTRY = dict(_PYTHON_STEP_REGISTRY)
+_BUILTIN_PYTHON_STEP_REGISTRY.update(_PYTHON_STEP_REGISTRY)
 
 
 def reset_steps() -> None:

@@ -259,6 +259,12 @@ def main() -> None:
         help="Keep the generated CSV file after benchmark",
     )
 
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Overwrite an existing --file path",
+    )
+
     args = parser.parse_args()
 
     csv_path = (
@@ -269,13 +275,21 @@ def main() -> None:
 
     warmup = not args.no_warmup
 
+    csv_existed_before = os.path.exists(csv_path)
     generated = False
 
-    if os.path.exists(csv_path) and args.reuse_file:
+    if csv_existed_before and args.reuse_file:
         print(f"Using existing dataset: {csv_path}")
 
+    elif csv_existed_before and not args.overwrite:
+        raise FileExistsError(
+            f"{csv_path} already exists. "
+            "Use --reuse-file to use it as-is or "
+            "--overwrite to replace it."
+        )
+
     else:
-        if os.path.exists(csv_path):
+        if csv_existed_before:
             print(f"Overwriting existing dataset: {csv_path}")
 
         generate_synthetic_data(

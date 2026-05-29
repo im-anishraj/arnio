@@ -233,6 +233,33 @@ std::vector<std::pair<std::string, std::vector<std::pair<std::string, double>>>>
             }
 
             summary.push_back({col_name, stats});
+        } else if (col.dtype() == DType::BOOL) {
+            size_t true_count = 0;
+            size_t false_count = 0;
+            const auto& values = std::get<std::vector<bool>>(col.data());
+
+            for (size_t i = 0; i < total_rows; ++i) {
+                if (col.is_null(i)) {
+                    null_count++;
+                    continue;
+                }
+                valid_count++;
+                if (values[i]) {
+                    true_count++;
+                } else {
+                    false_count++;
+                }
+            }
+
+            stats.push_back({"count", static_cast<double>(valid_count)});
+            stats.push_back({"nulls", static_cast<double>(null_count)});
+            stats.push_back({"true", static_cast<double>(true_count)});
+            stats.push_back({"false", static_cast<double>(false_count)});
+            stats.push_back({"true_ratio", valid_count > 0 ? static_cast<double>(true_count) /
+                                                                 static_cast<double>(valid_count)
+                                                           : 0.0});
+
+            summary.push_back({col_name, stats});
         } else if (type_str == "string") {
             std::unordered_set<std::string> unique_values;
 
