@@ -636,7 +636,15 @@ class TestFromPandas:
         result = ar.to_pandas(ar.from_pandas(df))
         assert len(result) == 3
         assert result["score"].isna().all()
-        assert str(result["score"].dtype) == "string"
+        assert str(result["score"].dtype) == "float64"
+
+    def test_from_pandas_mixed_null_float64_extension(self):
+        df = pd.DataFrame({"score": pd.Series([1.5, pd.NA, 3.7], dtype="Float64")})
+        result = ar.to_pandas(ar.from_pandas(df))
+        assert str(result["score"].dtype) == "float64"
+        assert result["score"].iloc[0] == 1.5
+        assert pd.isna(result["score"].iloc[1])
+        assert result["score"].iloc[2] == 3.7
 
     def test_from_pandas_all_null_boolean_extension(self):
         df = pd.DataFrame({"active": pd.Series([pd.NA, pd.NA, pd.NA], dtype="boolean")})
