@@ -581,8 +581,8 @@ class ArFrame:
         ------
         ValueError
             If neither *include* nor *exclude* is provided, if *include*
-            and *exclude* overlap, if an unrecognised dtype string is
-            passed, or if no columns match the filter.
+            and *exclude* overlap, or if an unrecognised dtype string is
+            passed.
         TypeError
             If *include* or *exclude* is not a string, list, or tuple of
             strings.
@@ -649,9 +649,7 @@ class ArFrame:
             matched.append(col)
 
         if not matched:
-            raise ValueError(
-                f"No columns match the dtype selection. Frame dtypes: {col_dtypes}."
-            )
+            return ArFrame(_Frame(len(self)), attrs=self._attrs.copy())
 
         return self.select_columns(matched)
 
