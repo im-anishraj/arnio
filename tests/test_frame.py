@@ -723,6 +723,17 @@ def test_str_keeps_normal_column_names():
     assert "..." not in result
 
 
+def test_str_zero_columns_non_empty_rows_has_explicit_message():
+    frame = ar.from_pandas(pd.DataFrame(index=range(2)))
+
+    result = str(frame)
+
+    assert "ArFrame: 2 rows × 0 columns" in result
+    assert "Columns: []" in result
+    assert "DTypes: {}" in result
+    assert "(no columns to display)" in result
+
+
 def test_add_column_accepts_matching_lengths():
     from arnio._arnio_cpp import Column, DType, Frame
 

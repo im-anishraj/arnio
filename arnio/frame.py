@@ -711,6 +711,14 @@ class ArFrame:
         if rows == 0:
             return f"{header}\nColumns: {truncated_names}\n(empty frame)"
 
+        if cols == 0:
+            dtypes_line = f"DTypes: {self.dtypes}"
+            memory_line = f"Memory: {self.memory_usage()} bytes"
+            return (
+                f"{header}\nColumns: {truncated_names}\n{dtypes_line}\n"
+                f"{memory_line}\n(no columns to display)"
+            )
+
         actual_n = min(5, rows)
         col_data = [
             [self._frame.column_by_index(i).at(r) for r in range(actual_n)]
