@@ -420,6 +420,30 @@ def test_tail_native_path_avoids_pandas_roundtrip(monkeypatch):
     assert result.columns == ["name", "salary"]
 
 
+@pytest.mark.parametrize("method_name", ["head", "tail"])
+def test_head_tail_preserve_attrs_roundtrip(method_name):
+    df = pd.DataFrame({"name": ["alice", "bob"], "score": [10, 20]})
+    df.attrs = {"source": "qa", "metadata": {"tags": ["sample"]}}
+    frame = ar.from_pandas(df)
+
+    subset = getattr(frame, method_name)(1)
+    result = ar.to_pandas(subset)
+
+    assert result.attrs == {"source": "qa", "metadata": {"tags": ["sample"]}}
+
+
+@pytest.mark.parametrize("method_name", ["head", "tail"])
+def test_head_tail_attrs_are_deep_copied(method_name):
+    df = pd.DataFrame({"name": ["alice", "bob"], "score": [10, 20]})
+    df.attrs = {"metadata": {"tags": ["sample"]}}
+    frame = ar.from_pandas(df)
+
+    subset = getattr(frame, method_name)(1)
+    subset._attrs["metadata"]["tags"].append("subset")
+
+    assert frame._attrs == {"metadata": {"tags": ["sample"]}}
+
+
 def test_head_default_n():
     frame = ar.from_pandas(
         pd.DataFrame(
