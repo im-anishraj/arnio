@@ -680,6 +680,22 @@ class TestDropColumns:
         assert list(df.columns) == ["id", "name"]
         assert list(df["name"]) == ["Alice", "Bob"]
 
+    def test_drop_columns_accepts_tuple_input(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "a": [1],
+                    "b": [2],
+                    "c": [3],
+                }
+            )
+        )
+
+        result = ar.drop_columns(frame, ("a",))
+        df = ar.to_pandas(result)
+
+        assert list(df.columns) == ["b", "c"]
+
     def test_drop_columns_allows_empty_input_as_no_op(self, sample_csv):
         frame = ar.read_csv(sample_csv)
 

@@ -984,6 +984,21 @@ class TestDropColumns:
         assert result.columns == ["a", "c"]
         assert result.shape == (2, 2)
 
+    def test_accepts_tuple_of_column_names(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "a": [1],
+                    "b": [2],
+                    "c": [3],
+                }
+            )
+        )
+
+        result = frame.drop_columns(("a",))
+
+        assert result.columns == ["b", "c"]
+
     def test_drop_multiple_columns(self):
         df = pd.DataFrame({"a": [1], "b": [2], "c": [3], "d": [4]})
         frame = ar.from_pandas(df)

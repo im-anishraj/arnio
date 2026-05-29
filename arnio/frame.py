@@ -518,7 +518,7 @@ class ArFrame:
         >>> frame = ar.read_csv("data.csv")
         >>> smaller = frame.drop_columns(["col1", "col2"])
         """
-        if not isinstance(cols, list):
+        if not isinstance(cols, (list, tuple)):
             raise TypeError(
                 f"cols must be a list of column names, got {type(cols).__name__!r}"
             )
