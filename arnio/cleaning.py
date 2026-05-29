@@ -2082,3 +2082,36 @@ def clean_column_names(
 
     result = _rename_columns(frame._frame, mapping)
     return ArFrame(result)
+
+
+def slugify_column_names(frame, on_duplicates="raise"):
+    import re
+
+    from .convert import from_pandas, to_pandas
+    from .frame import ArFrame
+
+    if on_duplicates not in ("raise",):
+        raise ValueError("on_duplicates must be 'raise'")
+
+    is_arframe = isinstance(frame, ArFrame)
+    df = to_pandas(frame) if is_arframe else frame
+
+    new_cols = []
+    for col in df.columns:
+        slug = col.strip()
+        slug = re.sub(r"[\s\-]+", "_", slug)
+        slug = re.sub(r"[^\w]", "", slug)
+        slug = re.sub(r"_+", "_", slug)
+        slug = slug.strip("_")
+        slug = slug.lower()
+        if not slug:
+            raise ValueError(f"Column name {col!r} slugifies to an empty string.")
+        new_cols.append(slug)
+
+    if len(new_cols) != len(set(new_cols)):
+        dupes = [c for c in new_cols if new_cols.count(c) > 1]
+        raise ValueError(f"Duplicate slugs after slugifying: {set(dupes)}")
+
+    df = df.copy()
+    df.columns = new_cols
+    return from_pandas(df) if is_arframe else df
