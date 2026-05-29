@@ -1235,7 +1235,10 @@ def sniff_delimiter(
     encoding : str, default "utf-8"
         File encoding.
     sample_size : int, default 2048
-        Number of bytes to sample from the start of the file for sniffing.
+        Number of characters to sample from the start of the file for sniffing.
+        Note: For multi-byte encodings like UTF-8 with multi-byte characters
+        (emoji, CJK), the actual bytes read may exceed this value since
+        characters are counted, not bytes.
 
     Returns
     -------

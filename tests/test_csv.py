@@ -1275,7 +1275,6 @@ class TestScanCsv:
         assert schema_full["value"] == "string"
 
     def test_scan_sample_size_invalid(self, sample_csv):
-
         with pytest.raises(ValueError, match="sample_size must be a positive integer"):
             ar.scan_csv(sample_csv, sample_size=0)
 
@@ -2200,6 +2199,26 @@ class TestSniffDelimiter:
         )
 
         assert ar.sniff_delimiter(path) == ";"
+
+    def test_sniff_delimiter_multibyte_utf8_characters(self, tmp_path):
+        """Verify sample_size is character-count based, not byte-count.
+
+        This regression test ensures that sample_size parameter counts
+        characters, not bytes. Multi-byte UTF-8 characters (emoji, CJK)
+        take multiple bytes, so if sample_size were byte-based, it would
+        read a different amount of actual characters.
+
+        See #1944 for the documentation clarification issue.
+        """
+        path = tmp_path / "multibyte.csv"
+        # Using emoji (4 bytes in UTF-8) and CJK characters (3 bytes each)
+        # The header line contains the delimiter, so sniff_delimiter should
+        # find it correctly even with multi-byte characters in the data
+        content = "名前,年齢,都市\nAlice,30,🗽\nBob,25,🏴\n"
+        path.write_text(content, encoding="utf-8")
+
+        result = ar.sniff_delimiter(path)
+        assert result == ","
 
 
 class TestArFrameGetItem:
