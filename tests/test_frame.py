@@ -1442,3 +1442,6 @@ def test_selection_methods_preserve_attrs():
     # Deep copy isolation check
     res_dtypes._attrs["metadata"]["version"] = 2
     assert frame._attrs["metadata"]["version"] == 1
+
+
+

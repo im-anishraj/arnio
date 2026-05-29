@@ -451,3 +451,4 @@ def from_dict(data: dict) -> ArFrame:
         _check_unsupported_dtype(col_name, df[col_name])
     return from_pandas(df)
 
+
