@@ -66,6 +66,16 @@ class TestWriteCsv:
         ar.write_csv(frame, out)
         assert out.exists()
 
+    def test_non_ascii_output_path_round_trip(self, tmp_path):
+        frame = ar.from_pandas(pd.DataFrame({"city": ["Łódź", "東京"], "sales": [10, 20]}))
+        out = tmp_path / "résumé_東京.csv"
+
+        ar.write_csv(frame, str(out))
+
+        assert out.exists()
+        round_tripped = ar.to_pandas(ar.read_csv(str(out)))
+        pd.testing.assert_frame_equal(round_tripped, ar.to_pandas(frame))
+
     def test_high_precision_float_round_trip(self, tmp_path):
         frame = ar.from_pandas(pd.DataFrame({"val": [1.23456789012345678]}))
         out = str(tmp_path / "float.csv")
