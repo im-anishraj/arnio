@@ -3595,12 +3595,9 @@ def test_normalize_sequence_homogeneous_strings():
 
 
 def test_normalize_sequence_homogeneous_numerics():
-    schema = ar.Schema({"code": ar.Field(allowed={3, 1, 2})})
+    schema = ar.Schema({"code": ar.Field(allowed={1, 2, 10})})
     payload = json.loads(schema.to_json())
-    assert payload["fields"]["code"]["allowed"] == ["1", "2", "3"] or payload["fields"][
-        "code"
-    ]["allowed"] == [1, 2, 3]
-    assert json.loads(schema.to_json()) == json.loads(schema.to_json())
+    assert payload["fields"]["code"]["allowed"] == [1, 2, 10]
 
 
 def test_normalize_sequence_mixed_scalar_allowed_does_not_raise():
@@ -3618,5 +3615,4 @@ def test_mixed_scalar_allowed_roundtrip():
     """Mixed-type allowed values survive a to_json() / from_json() round-trip."""
     schema = ar.Schema({"code": ar.String(allowed={1, "1"})})
     restored = ar.Schema.from_json(schema.to_json())
-    assert restored.fields["code"].allowed is not None
-    assert len(restored.fields["code"].allowed) == len(schema.fields["code"].allowed)
+    assert restored.fields["code"].allowed == {1, "1"}
