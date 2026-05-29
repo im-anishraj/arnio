@@ -1197,7 +1197,7 @@ schema = ar.Schema({
 
     "username": ar.String(min_length=3, max_length=20),
     "user_code": ar.Regex(r"^USR-\d{4}$", nullable=False),
-    "revenue": ar.Custom("positive", nullable=True),
+    "revenue": ar.Custom("positive", nullable=True, required_if=("user_type", "merchant")),
     "signup_date": ar.Date(nullable=False),
     "created_at": ar.DateTime(nullable=False, format="%Y-%m-%d"),
 

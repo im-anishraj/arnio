@@ -121,6 +121,65 @@ class ColumnProfile:
     top_values_sample_ratio: float | None = None
     histogram: list[tuple[float, float, int, float]] | None = None
 
+    def __post_init__(self) -> None:
+        """Validate structural field invariants for ColumnProfile."""
+        counts = {
+            "row_count": self.row_count,
+            "null_count": self.null_count,
+            "unique_count": self.unique_count,
+            "empty_string_count": self.empty_string_count,
+            "whitespace_count": self.whitespace_count,
+        }
+        for field_name, value in counts.items():
+            if not isinstance(value, int) or isinstance(value, bool):
+                raise TypeError(
+                    f"{field_name} must be an integer, got {type(value).__name__}"
+                )
+            if value < 0:
+                raise ValueError(f"{field_name} cannot be negative: {value}")
+
+        if self.top_values_sample_count is not None:
+            if not isinstance(self.top_values_sample_count, int) or isinstance(
+                self.top_values_sample_count, bool
+            ):
+                raise TypeError(
+                    f"top_values_sample_count must be an integer, got {type(self.top_values_sample_count).__name__}"
+                )
+            if self.top_values_sample_count < 0:
+                raise ValueError(
+                    f"top_values_sample_count cannot be negative: {self.top_values_sample_count}"
+                )
+
+        ratios = {
+            "null_ratio": self.null_ratio,
+            "unique_ratio": self.unique_ratio,
+        }
+        for field_name, value in ratios.items():
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise TypeError(
+                    f"{field_name} must be a number, got {type(value).__name__}"
+                )
+            if not math.isfinite(value) or value < 0.0 or value > 1.0:
+                raise ValueError(
+                    f"{field_name} must be a finite ratio between 0.0 and 1.0: {value}"
+                )
+
+        optional_ratios = {
+            "email_validity_ratio": self.email_validity_ratio,
+            "url_validity_ratio": self.url_validity_ratio,
+            "top_values_sample_ratio": self.top_values_sample_ratio,
+        }
+        for field_name, value in optional_ratios.items():
+            if value is not None:
+                if isinstance(value, bool) or not isinstance(value, (int, float)):
+                    raise TypeError(
+                        f"{field_name} must be a number, got {type(value).__name__}"
+                    )
+                if not math.isfinite(value) or value < 0.0 or value > 1.0:
+                    raise ValueError(
+                        f"{field_name} must be a finite ratio between 0.0 and 1.0: {value}"
+                    )
+
     def to_dict(self, *, redact_sample_values: bool = False) -> dict[str, Any]:
         """Return a JSON-friendly dictionary."""
         redact_sample_values = _validate_bool_option(
@@ -210,6 +269,52 @@ class DataQualityReport:
     score_components: dict[str, float] = field(default_factory=dict)
     suggestions: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
 
+    def __post_init__(self) -> None:
+        """Validate structural field invariants for DataQualityReport."""
+        counts = {
+            "row_count": self.row_count,
+            "column_count": self.column_count,
+            "memory_usage": self.memory_usage,
+            "duplicate_rows": self.duplicate_rows,
+        }
+        for field_name, value in counts.items():
+            if not isinstance(value, int) or isinstance(value, bool):
+                raise TypeError(
+                    f"{field_name} must be an integer, got {type(value).__name__}"
+                )
+            if value < 0:
+                raise ValueError(f"{field_name} cannot be negative: {value}")
+
+        if isinstance(self.duplicate_ratio, bool) or not isinstance(
+            self.duplicate_ratio, (int, float)
+        ):
+            raise TypeError(
+                f"duplicate_ratio must be a number, got {type(self.duplicate_ratio).__name__}"
+            )
+        if (
+            not math.isfinite(self.duplicate_ratio)
+            or self.duplicate_ratio < 0.0
+            or self.duplicate_ratio > 1.0
+        ):
+            raise ValueError(
+                f"duplicate_ratio must be a finite ratio between 0.0 and 1.0: {self.duplicate_ratio}"
+            )
+
+        if isinstance(self.quality_score, bool) or not isinstance(
+            self.quality_score, (int, float)
+        ):
+            raise TypeError(
+                f"quality_score must be a number, got {type(self.quality_score).__name__}"
+            )
+        if (
+            not math.isfinite(self.quality_score)
+            or self.quality_score < 0.0
+            or self.quality_score > 100.0
+        ):
+            raise ValueError(
+                f"quality_score must be a finite value between 0.0 and 100.0: {self.quality_score}"
+            )
+
     def to_dict(
         self,
         *,
@@ -232,6 +337,14 @@ class DataQualityReport:
                 raise TypeError("exclude_columns must contain only string column names")
 
             exclude_columns = set(exclude_columns)
+
+        unknown_exclude_columns = sorted(exclude_columns - set(self.columns))
+        if unknown_exclude_columns:
+            available_columns = ", ".join(self.columns) or "<none>"
+            raise KeyError(
+                "Unknown exclude_columns: "
+                f"{unknown_exclude_columns}. Available columns: {available_columns}"
+            )
 
         def _redact_reason(reason: str | None) -> str | None:
             if not reason or not exclude_columns:
@@ -1113,8 +1226,15 @@ def profile(
         approx_top_values_min_ratio, bool
     ):
         raise TypeError("approx_top_values_min_ratio must be a float")
+
+    if not math.isfinite(approx_top_values_min_ratio):
+        raise ValueError(
+            "approx_top_values_min_ratio must be a finite number between 0 and 1"
+        )
+
     if approx_top_values_min_ratio < 0 or approx_top_values_min_ratio > 1:
         raise ValueError("approx_top_values_min_ratio must be between 0 and 1")
+
     if not isinstance(approx_top_values_sample_size, int) or isinstance(
         approx_top_values_sample_size, bool
     ):
@@ -1322,10 +1442,10 @@ def check_quality_gates(
         "max_row_count_delta_ratio": _validate_gate_threshold(
             max_row_count_delta_ratio, "max_row_count_delta_ratio"
         ),
-        "max_duplicate_ratio_delta": _validate_gate_threshold(
+        "max_duplicate_ratio_delta": _validate_gate_ratio_threshold(
             max_duplicate_ratio_delta, "max_duplicate_ratio_delta"
         ),
-        "max_null_ratio_delta": _validate_gate_threshold(
+        "max_null_ratio_delta": _validate_gate_ratio_threshold(
             max_null_ratio_delta, "max_null_ratio_delta"
         ),
         "max_numeric_mean_delta_ratio": _validate_gate_threshold(
@@ -1523,6 +1643,16 @@ def _validate_gate_threshold(value: float | None, name: str) -> float | None:
     value = float(value)
     if not math.isfinite(value) or value < 0:
         raise ValueError(f"{name} must be a finite non-negative number")
+    return value
+
+
+def _validate_gate_ratio_threshold(value: float | None, name: str) -> float | None:
+    """Validate that a quality gate ratio threshold is between 0.0 and 1.0 inclusive."""
+    if value is None:
+        return None
+    value = _validate_gate_threshold(value, name)
+    if value > 1.0:
+        raise ValueError(f"{name} must be a ratio between 0.0 and 1.0")
     return value
 
 
