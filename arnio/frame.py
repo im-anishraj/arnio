@@ -649,9 +649,7 @@ class ArFrame:
             matched.append(col)
 
         if not matched:
-            raise ValueError(
-                f"No columns match the dtype selection. Frame dtypes: {col_dtypes}."
-            )
+            return ArFrame(_Frame(len(self)), attrs=self._attrs.copy())
 
         return self.select_columns(matched)
 

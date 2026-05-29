@@ -1314,3 +1314,35 @@ class TestFilterRows:
             match="cannot compare column 'name' with value 18 using operator '>'",
         ):
             ar.filter_rows(frame, column="name", op=">", value=18)
+
+
+# ── select_dtypes zero-column ─────────────────────────────────────────────────
+
+
+def test_select_dtypes_include_absent_dtype_returns_zero_col_frame():
+    frame = ar.from_pandas(pd.DataFrame({"age": [1, 2], "score": [3.5, 4.0]}))
+    result = frame.select_dtypes(include="string")
+    assert result.shape == (2, 0)
+    assert result.columns == []
+
+
+def test_select_dtypes_exclude_all_columns_returns_zero_col_frame():
+    frame = ar.from_pandas(pd.DataFrame({"age": [1, 2], "score": [3.5, 4.0]}))
+    result = frame.select_dtypes(exclude=["int64", "float64"])
+    assert result.shape == (2, 0)
+    assert result.columns == []
+
+
+def test_select_dtypes_zero_col_preserves_row_count():
+    frame = ar.from_pandas(pd.DataFrame({"age": [1, 2, 3, 4, 5]}))
+    result = frame.select_dtypes(include="string")
+    assert result.shape[0] == 5
+    assert result.shape[1] == 0
+
+
+def test_select_dtypes_zero_col_preserves_attrs():
+    frame = ar.from_pandas(pd.DataFrame({"age": [1, 2]}))
+    frame._attrs["source"] = "test"
+    result = frame.select_dtypes(include="string")
+    assert result._attrs == {"source": "test"}
+    assert result._attrs is not frame._attrs
