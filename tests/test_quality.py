@@ -3313,3 +3313,171 @@ def test_data_quality_report_invariant_invalid_metrics():
 
     with pytest.raises(ValueError, match="quality_score must be a finite value"):
         DataQualityReport(10, 2, 512, 0, 0.0, {}, quality_score=float("nan"))
+
+
+# ── CleanStepRecord and CleanExplanation validation tests (Fixes #1687) ──────
+
+
+class TestCleanStepRecordValidation:
+    """CleanStepRecord.__post_init__ must reject invalid field types early."""
+
+    def _valid_record(self, **overrides):
+        defaults = dict(
+            step="strip_whitespace",
+            kwargs={"subset": ["name"]},
+            rows_before=10,
+            rows_after=10,
+            rows_removed=0,
+            reason="whitespace found",
+        )
+        defaults.update(overrides)
+        return ar.CleanStepRecord(**defaults)
+
+    def test_valid_construction_succeeds(self):
+        rec = self._valid_record()
+        assert rec.step == "strip_whitespace"
+        assert rec.rows_removed == 0
+
+    def test_step_must_be_str(self):
+        with pytest.raises(TypeError, match="step must be a str"):
+            self._valid_record(step=42)
+
+    def test_reason_must_be_str(self):
+        with pytest.raises(TypeError, match="reason must be a str"):
+            self._valid_record(reason=None)
+
+    def test_kwargs_must_be_dict(self):
+        with pytest.raises(TypeError, match="kwargs must be a dict"):
+            self._valid_record(kwargs="not-a-dict")
+
+    def test_rows_before_must_be_int(self):
+        with pytest.raises(TypeError, match="rows_before must be an int"):
+            self._valid_record(rows_before="ten")
+
+    def test_rows_before_rejects_bool(self):
+        with pytest.raises(TypeError, match="rows_before must be an int"):
+            self._valid_record(rows_before=True)
+
+    def test_rows_after_must_be_int(self):
+        with pytest.raises(TypeError, match="rows_after must be an int"):
+            self._valid_record(rows_after=3.5)
+
+    def test_rows_removed_must_be_int(self):
+        with pytest.raises(TypeError, match="rows_removed must be an int"):
+            self._valid_record(rows_removed=[])
+
+    def test_rows_before_cannot_be_negative(self):
+        with pytest.raises(ValueError, match="rows_before cannot be negative"):
+            self._valid_record(rows_before=-1)
+
+    def test_rows_after_cannot_be_negative(self):
+        with pytest.raises(ValueError, match="rows_after cannot be negative"):
+            self._valid_record(rows_after=-5)
+
+    def test_rows_removed_cannot_be_negative(self):
+        with pytest.raises(ValueError, match="rows_removed cannot be negative"):
+            self._valid_record(rows_removed=-3)
+
+
+class TestCleanExplanationValidation:
+    """CleanExplanation.__post_init__ must reject invalid field types early."""
+
+    def _valid_record(self):
+        return ar.CleanStepRecord(
+            step="strip_whitespace",
+            kwargs={},
+            rows_before=5,
+            rows_after=5,
+            rows_removed=0,
+            reason="whitespace",
+        )
+
+    def _valid_explanation(self, **overrides):
+        defaults = dict(
+            mode="safe",
+            rows_before=5,
+            rows_after=5,
+            rows_removed=0,
+            steps=[],
+        )
+        defaults.update(overrides)
+        return ar.CleanExplanation(**defaults)
+
+    def test_valid_construction_empty_steps(self):
+        exp = self._valid_explanation()
+        assert exp.mode == "safe"
+        assert exp.steps == []
+
+    def test_valid_construction_with_steps(self):
+        exp = self._valid_explanation(steps=[self._valid_record()])
+        assert len(exp.steps) == 1
+
+    def test_mode_must_be_str(self):
+        with pytest.raises(TypeError, match="mode must be a str"):
+            self._valid_explanation(mode=123)
+
+    def test_mode_rejects_none(self):
+        with pytest.raises(TypeError, match="mode must be a str"):
+            self._valid_explanation(mode=None)
+
+    def test_rows_before_must_be_int(self):
+        with pytest.raises(TypeError, match="rows_before must be an int"):
+            self._valid_explanation(rows_before="a")
+
+    def test_rows_before_rejects_bool(self):
+        with pytest.raises(TypeError, match="rows_before must be an int"):
+            self._valid_explanation(rows_before=True)
+
+    def test_rows_after_must_be_int(self):
+        with pytest.raises(TypeError, match="rows_after must be an int"):
+            self._valid_explanation(rows_after=None)
+
+    def test_rows_removed_must_be_int(self):
+        with pytest.raises(TypeError, match="rows_removed must be an int"):
+            self._valid_explanation(rows_removed=[])
+
+    def test_rows_before_cannot_be_negative(self):
+        with pytest.raises(ValueError, match="rows_before cannot be negative"):
+            self._valid_explanation(rows_before=-1)
+
+    def test_rows_after_cannot_be_negative(self):
+        with pytest.raises(ValueError, match="rows_after cannot be negative"):
+            self._valid_explanation(rows_after=-1)
+
+    def test_rows_removed_cannot_be_negative(self):
+        with pytest.raises(ValueError, match="rows_removed cannot be negative"):
+            self._valid_explanation(rows_removed=-1)
+
+    def test_steps_must_be_list(self):
+        with pytest.raises(TypeError, match="steps must be a list"):
+            self._valid_explanation(steps="bad")
+
+    def test_steps_elements_must_be_cleansteprecord(self):
+        with pytest.raises(TypeError, match="steps\\[0\\] must be a CleanStepRecord"):
+            self._valid_explanation(steps=["bad"])
+
+    def test_steps_rejects_mixed_list(self):
+        with pytest.raises(TypeError, match="steps\\[1\\] must be a CleanStepRecord"):
+            self._valid_explanation(steps=[self._valid_record(), 42])
+
+    def test_original_issue_repro_raises_at_construction(self):
+        """Regression: invalid state must be caught at construction, not in __str__."""
+        with pytest.raises((TypeError, ValueError)):
+            ar.CleanExplanation(
+                mode=123,
+                rows_before="a",
+                rows_after=None,
+                rows_removed=[],
+                steps=["bad"],
+            )
+
+    def test_str_works_on_valid_explanation(self):
+        exp = self._valid_explanation(steps=[self._valid_record()])
+        text = str(exp)
+        assert "CleanExplanation" in text
+        assert "strip_whitespace" in text
+
+    def test_str_works_on_empty_steps(self):
+        exp = self._valid_explanation()
+        text = str(exp)
+        assert "(none)" in text
