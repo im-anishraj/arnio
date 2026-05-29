@@ -178,7 +178,7 @@ clean_df = df.arnio.clean([
     ("normalize_case", {"case_type": "lower"}),
     ("drop_duplicates",),
 ])
-
+`df.arnio.clean()` supports both pipeline-based cleaning steps and keyword-based convenience operations such as `drop_duplicates=True`.
 report = clean_df.arnio.profile()
 ```
 ## Cross-field validation rules
@@ -642,11 +642,8 @@ If row-dropping behavior is intentional, pass
 `allow_row_count_change=True` when constructing `ArnioCleaner`.
 
 ```python
-cleaner = ArnioCleaner(
-    steps=[
-        ("drop_nulls",),
-        ("strip_whitespace",),
-    ],
+cleaner = ar.ArnioCleaner(
+    steps=[...],
     allow_row_count_change=True,
 )
 ```
@@ -665,6 +662,8 @@ validation = clean_df.arnio.validate({
     "score": ar.Custom("positive"),
 })
 ```
+The accessor automatically converts dictionary-based validation rules into an internal `ar.Schema` instance.
+
 
 This keeps pandas as the analysis tool while Arnio handles the preparation,
 quality, and validation layer.
@@ -733,7 +732,7 @@ df = pd.read_csv("data.csv")              # 💥 RAM spike — entire file as ra
 df.columns = df.columns.str.strip()        # Why is this not automatic?
 df["name"] = df["name"].str.strip()        # Python loop over every cell
 df["name"] = df["name"].str.lower()        # Another Python loop
-df = df.dropna()                           # Another pass
+df = df.dropna(subset=["revenue"])         # Another pass
 df = df.drop_duplicates()                  # Another pass
 ```
 
@@ -1391,6 +1390,8 @@ print(suggestions)
 safe = ar.auto_clean(frame)
 strict = ar.auto_clean(frame, mode="strict")
 ```
+By default, `ar.auto_clean()` returns only the cleaned dataframe.  
+When `return_report=True` is provided, it returns a tuple containing both the cleaned dataframe and the generated report.
 
 Messy input:
 
@@ -1939,6 +1940,8 @@ print(ar.__version__)
 print(ar.scan_csv("/tmp/arnio-smoke.csv"))
 PY
 ```
+`scan_csv()` performs lazy or schema-aware CSV scanning before full dataframe materialization, unlike `read_csv()` which immediately loads the entire dataset into memory.
+
 
 5. Verify the GitHub release, PyPI project page, and install command all show the expected version before announcing the release.
 
