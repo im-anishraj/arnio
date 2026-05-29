@@ -1262,6 +1262,46 @@ def test_decimal_looking_strings_suggest_float64_not_int64():
 
     assert suggestions["price"] == "float64"
 
+def test_finite_numeric_strings_suggest_float64():
+    frame = ar.from_pandas(
+        pd.DataFrame({"x": ["1.5", "2.0", "3.14"]})
+    )
+
+    report = ar.profile(frame)
+
+    assert report.columns["x"].suggested_dtype == "float64"
+    
+
+@pytest.mark.parametrize(
+    "values",
+    [
+        ["inf", "2.0"],
+        ["-inf", "2.0"],
+        ["Infinity", "2.0"],
+    ],
+)
+def test_non_finite_numeric_strings_do_not_suggest_float64(values):
+    frame = ar.from_pandas(pd.DataFrame({"x": values}))
+
+    report = ar.profile(frame)
+
+    assert report.columns["x"].suggested_dtype is None
+     
+def test_auto_clean_strict_float64_suggestions_are_executable():
+    frame = ar.from_pandas(
+        pd.DataFrame({"x": ["1.5", "2.0"]})
+    )
+
+    clean = ar.auto_clean(
+        frame,
+        mode="strict",
+        allow_lossy_casts=True,
+    )
+
+    result = ar.to_pandas(clean)
+
+    assert pd.api.types.is_float_dtype(result["x"])
+    assert list(result["x"]) == [1.5, 2.0]
 
 def test_profile_string_metrics():
     df = pd.DataFrame({"text": ["a", "abc", "abcde", "", "  ", None]})

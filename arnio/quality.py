@@ -2473,10 +2473,13 @@ def _suggest_column_dtype(series: pd.Series, dtype: str) -> str | None:
         return "bool"
 
     numeric = pd.to_numeric(values, errors="coerce")
+
     if numeric.notna().all():
         if values.str.fullmatch(r"[+-]?\d+").all():
             return "int64"
-        return "float64"
+
+        if np.isfinite(numeric).all():
+            return "float64"
     return None
 
 
