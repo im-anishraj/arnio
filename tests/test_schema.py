@@ -3717,6 +3717,8 @@ def test_schema_unique_duplicate_columns():
         ValueError, match="Schema 'unique' must not contain duplicate column names."
     ):
         ar.Schema.from_json(invalid_json_str)
+
+
 # ---------------------------------------------------------------------------
 # ValidationIssue core field type validation
 # ---------------------------------------------------------------------------
