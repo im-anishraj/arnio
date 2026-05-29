@@ -105,6 +105,36 @@ class TestReadCsvChunked:
         chunks = _chunked_rows(str(path), chunksize=10)
         assert chunks == []
 
+    def test_warn_mode_skips_empty_chunks_from_bad_rows(self, tmp_path):
+        path = tmp_path / "bad_warn.csv"
+
+        path.write_text("a,b\n" "1,2,3\n" "4,5\n" "6,7,8\n")
+
+        chunks = list(
+            ar.read_csv_chunked(
+                str(path),
+                chunksize=1,
+                on_bad_lines="warn",
+            )
+        )
+
+        assert [chunk.shape for chunk in chunks] == [(1, 2)]
+
+    def test_skip_mode_skips_empty_chunks_from_bad_rows(self, tmp_path):
+        path = tmp_path / "bad_skip.csv"
+
+        path.write_text("a,b\n" "1,2,3\n" "4,5\n" "6,7,8\n")
+
+        chunks = list(
+            ar.read_csv_chunked(
+                str(path),
+                chunksize=1,
+                on_bad_lines="skip",
+            )
+        )
+
+        assert [chunk.shape for chunk in chunks] == [(1, 2)]
+
 
 class TestReadCsvChunkedParity:
     """Chunked reads must match read_csv for parser options."""

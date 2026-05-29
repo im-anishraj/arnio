@@ -837,6 +837,7 @@ def read_csv_chunked(
             path, effective_encoding, delimiter=delimiter
         ) as native_path:
             reader.open(native_path)
+            yielded_nonempty_chunk = False
             while True:
                 chunk = reader.next_chunk(chunksize, on_bad_lines)
                 if chunk is None:
@@ -845,8 +846,15 @@ def read_csv_chunked(
 
                 if on_bad_lines == "warn" and bad_rows:
                     _warn_bad_rows(bad_rows)
+                frame = ArFrame(cpp_frame)
 
-                yield ArFrame(cpp_frame)
+                if frame.shape[0] == 0 and bad_rows:
+                    if yielded_nonempty_chunk:
+                        continue
+
+                yielded_nonempty_chunk = yielded_nonempty_chunk or frame.shape[0] > 0
+
+                yield frame
     except ValueError:
         raise
     except CsvReadError:
