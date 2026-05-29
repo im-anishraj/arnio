@@ -178,6 +178,11 @@ If any of these are missing, keep the issue at `status: needs triage`.
 
 ---
 
+### 5. Remove status and reassign
+
+- Remove the `status: claimed` when a contributor does not post the progress update, request time extension or open a draft/regular PR within 3 days of an assignment.
+- Unassign/Reassign the issue to someone else if the contributor remains inactive after 5 days of no PR, no update or no extension request.
+
 ## Worked Example
 
 **Incoming issue title:** "drop_duplicates is slow on large datasets"
