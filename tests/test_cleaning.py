@@ -734,6 +734,31 @@ class TestDropDuplicates:
         res_subset = ar.to_pandas(ar.drop_duplicates(frame, subset=["val1"]))
         assert len(res_subset) == 2
 
+    def test_drop_duplicates_zero_column_keep_first(self):
+        frame = ar.from_pandas(pd.DataFrame(index=range(5)))
+        result = ar.drop_duplicates(frame, keep="first")
+        assert result.shape == (1, 0)
+
+    def test_drop_duplicates_zero_column_keep_last(self):
+        frame = ar.from_pandas(pd.DataFrame(index=range(5)))
+        result = ar.drop_duplicates(frame, keep="last")
+        assert result.shape == (1, 0)
+
+    def test_drop_duplicates_zero_column_keep_none(self):
+        frame = ar.from_pandas(pd.DataFrame(index=range(5)))
+        result = ar.drop_duplicates(frame, keep="none")
+        assert result.shape == (0, 0)
+
+    def test_drop_duplicates_zero_column_keep_false(self):
+        frame = ar.from_pandas(pd.DataFrame(index=range(5)))
+        result = ar.drop_duplicates(frame, keep=False)
+        assert result.shape == (0, 0)
+
+    def test_drop_duplicates_zero_column_no_rows(self):
+        frame = ar.from_pandas(pd.DataFrame(index=range(0)))
+        result = ar.drop_duplicates(frame)
+        assert result.shape == (0, 0)
+
 
 class TestDropColumns:
     def test_drop_columns_removes_requested_columns_and_preserves_order(self):

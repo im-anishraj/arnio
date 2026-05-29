@@ -488,6 +488,11 @@ def drop_duplicates(
     keep_arg = "none" if keep is False else keep
     if keep_arg not in {"first", "last", "none"}:
         raise ValueError("keep must be one of 'first', 'last', 'none', or False")
+    if subset is None and frame._frame.num_cols() == 0:
+        n = frame._frame.num_rows()
+        if n == 0 or keep_arg == "none":
+            return ArFrame(_Frame())
+        return ArFrame(_Frame(1))
     result = _drop_duplicates(frame._frame, subset=subset, keep=keep_arg)
     return ArFrame(result)
 
