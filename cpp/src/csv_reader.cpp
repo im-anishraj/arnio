@@ -745,9 +745,8 @@ CellValue CsvParser::parse_value(const std::string& raw, DType dtype, bool is_fo
             int64_t value = 0;
             if (!try_parse_int64(cleaned, value)) {
                 if (is_forced) {
-                    throw std::runtime_error(
-                        "CsvReadError: Invalid token '" + raw +
-                        "' for forced int64 column");
+                    throw std::runtime_error("CsvReadError: Invalid token '" + raw +
+                                             "' for forced int64 column");
                 }
                 return std::monostate{};
             }
@@ -758,9 +757,8 @@ CellValue CsvParser::parse_value(const std::string& raw, DType dtype, bool is_fo
             double value = 0.0;
             if (!try_parse_float64(cleaned, value)) {
                 if (is_forced) {
-                    throw std::runtime_error(
-                        "CsvReadError: Invalid token '" + raw +
-                        "' for forced float64 column");
+                    throw std::runtime_error("CsvReadError: Invalid token '" + raw +
+                                             "' for forced float64 column");
                 }
                 return std::monostate{};
             }
@@ -1007,8 +1005,11 @@ CsvParseResult CsvReader::read(const std::string& path, const std::string& on_ba
             for (size_t i = 0; i < col_indices.size(); ++i) {
                 size_t ci = col_indices[i];
                 if (ci < reusable_fields2.size()) {
-                    bool is_forced = (ci < explicit_dtype_columns.size() && explicit_dtype_columns[ci]);
-                    columns[i].push_back(parser_.parse_value(reusable_fields2[ci], col_types[ci], is_forced));
+                    bool is_forced =
+                        ci < explicit_dtype_columns.size() && explicit_dtype_columns[ci];
+                    CellValue parsed =
+                        parser_.parse_value(reusable_fields2[ci], col_types[ci], is_forced);
+                    columns[i].push_back(parsed);
                 } else {
                     columns[i].push_null();
                 }
@@ -1203,7 +1204,7 @@ Frame CsvChunkReader::build_frame(const std::vector<std::vector<std::string>>& r
         for (const auto& row : raw_data) {
             if (ci < row.size()) {
                 const std::string& raw_value = row[ci];
-                bool is_forced = (ci < explicit_dtype_columns_.size() && explicit_dtype_columns_[ci]);
+                bool is_forced = ci < explicit_dtype_columns_.size() && explicit_dtype_columns_[ci];
                 CellValue parsed = parser_.parse_value(raw_value, effective_type, is_forced);
 
                 // Fail-fast validation for locked schema in subsequent chunks
@@ -1354,6 +1355,9 @@ std::optional<CsvParseResult> CsvChunkReader::next_chunk(size_t chunksize,
         for (const auto& row : raw_data) {
             for (size_t ci : col_indices_) {
                 if (ci < row.size()) {
+                    if (ci < explicit_dtype_columns_.size() && explicit_dtype_columns_[ci]) {
+                        continue;
+                    }
                     DType inferred = parser_.infer_type(row[ci]);
                     col_types_[ci] = CsvParser::promote_type(col_types_[ci], inferred);
                 }

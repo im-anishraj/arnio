@@ -1,6 +1,6 @@
 import pytest
 
-from arnio import read_csv
+from arnio import read_csv, read_csv_chunked
 from arnio.exceptions import CsvReadError
 
 
@@ -158,3 +158,23 @@ def test_forced_float_invalid_token_raises(tmp_path):
         CsvReadError, match="Invalid token 'bad' for forced float64 column"
     ):
         read_csv(str(csv_file), dtype={"a": "float64", "b": "float64"})
+
+
+def test_partial_dtype_invalid_token_raises(tmp_path):
+    csv_file = tmp_path / "partial_bad.csv"
+    csv_file.write_text("a,b\n1,foo\nabc,bar\n")
+
+    with pytest.raises(
+        CsvReadError, match="Invalid token 'abc' for forced int64 column"
+    ):
+        read_csv(str(csv_file), dtype={"a": "int64"})
+
+
+def test_forced_int_invalid_token_raises_chunked(tmp_path):
+    csv_file = tmp_path / "bad_int_chunked.csv"
+    csv_file.write_text("a,b\n1,2\nabc,4\n")
+
+    with pytest.raises(
+        CsvReadError, match="Invalid token 'abc' for forced int64 column"
+    ):
+        list(read_csv_chunked(str(csv_file), chunksize=1, dtype={"a": "int64"}))

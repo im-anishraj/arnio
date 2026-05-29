@@ -140,19 +140,18 @@ class TestReadCsv:
         assert pdf["id"].tolist() == [1, 3]
         assert pdf["name"].tolist() == ["Alice", "Cara"]
 
-    def test_read_csv_dtype_parse_failure_becomes_null(self, tmp_path):
+    def test_read_csv_dtype_parse_failure_raises(self, tmp_path):
         path = tmp_path / "parse_failure.csv"
         path.write_text("quantity\nabc\n")
 
-        frame = ar.read_csv(
-            path,
-            dtype={"quantity": "int64"},
-        )
-
-        pdf = ar.to_pandas(frame)
-
-        assert frame.dtypes["quantity"] == "int64"
-        assert pdf["quantity"].isna().tolist() == [True]
+        with pytest.raises(
+            ar.CsvReadError,
+            match="Invalid token 'abc' for forced int64 column",
+        ):
+            ar.read_csv(
+                path,
+                dtype={"quantity": "int64"},
+            )
 
     def test_read_csv_dtype_non_selected_usecols_column(self, tmp_path):
         path = tmp_path / "dtype_usecols_error.csv"

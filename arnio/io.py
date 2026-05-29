@@ -648,6 +648,7 @@ def read_csv_chunked(
     path: str | os.PathLike[str] | io.TextIOBase,
     *,
     chunksize: int = 10_000,
+    dtype: dict[str, str] | None = None,
     delimiter: str | None = None,
     has_header: bool = True,
     usecols: list[str] | None = None,
@@ -815,6 +816,9 @@ def read_csv_chunked(
 
         if null_values is not None:
             config.null_values = _validate_null_values(null_values)
+
+        if dtype is not None:
+            config.dtype = _validate_dtype_mapping(dtype)
 
         if usecols is not None:
             config.usecols = _validate_usecols(usecols)
