@@ -59,11 +59,13 @@ df = ar.to_pandas(clean)
 |-----------|--------|
 | CSV parsing and cleaning | 🔨 Current |
 | Data quality and schema validation | 🔨 Current |
-| Chunked and streaming processing | 📋 Near Term |
-| Native CSV writers | 📋 Near Term |
+| Chunked CSV reading via `read_csv_chunked()` | ✅ Available |
+| Native CSV export via `write_csv()` | ✅ Available |
+| JSON Lines import via `read_jsonl()` | ✅ Available |
+| Parquet export via `write_parquet()` | ✅ Available |
+| Broader streaming workflows and file-format polish | 📋 Near Term |
 | Parallel column processing | 💭 Long Term |
 | SIMD string operations | 💭 Long Term |
-| JSON Lines and Parquet support | 💭 Long Term |
 
 > Full roadmap: [ROADMAP.md](ROADMAP.md)
 
