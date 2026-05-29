@@ -718,6 +718,8 @@ class Field:
                 )
             if not isinstance(self.required_if[0], str):
                 raise TypeError("required_if column name must be a string")
+            if not pd.api.types.is_scalar(self.required_if[1]):
+                raise TypeError("required_if expected value must be a scalar")
         if self.dtype in {"int64", "float64"}:
             if self.min is not None:
                 if isinstance(self.min, bool) or not isinstance(self.min, (int, float)):

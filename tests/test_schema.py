@@ -2032,6 +2032,26 @@ def test_required_if_rejects_non_string_column_name():
         ar.String(required_if=(123, "active"))  # type: ignore[arg-type]
 
 
+@pytest.mark.parametrize(
+    "value",
+    [
+        ["yes"],
+        ("yes",),
+        {"value": "yes"},
+    ],
+)
+def test_required_if_rejects_non_scalar_expected_value(value):
+    with pytest.raises(TypeError, match="required_if expected value must be a scalar"):
+        ar.String(required_if=("flag", value))
+
+
+@pytest.mark.parametrize("value", ["yes", 1, 1.5, True, None])
+def test_required_if_accepts_scalar_expected_value(value):
+    field = ar.String(required_if=("flag", value))
+
+    assert field.required_if == ("flag", value)
+
+
 def test_required_if_valid_conditional_validation(tmp_path):
     path = tmp_path / "conditional_req.csv"
     path.write_text("status,notes\n" "active,has notes\n" "inactive,\n" "active,\n")
