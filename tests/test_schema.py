@@ -1408,6 +1408,26 @@ def test_country_code_validation_rejects_invalid_codes(tmp_path):
     assert all(issue.rule == "country_code" for issue in result.issues)
 
 
+def test_country_code_validation_respects_case_insensitive_field(tmp_path):
+    path = tmp_path / "mixed_case_countries.csv"
+    path.write_text("country\nus\nGb\nfr\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {
+            "country": ar.Field(
+                dtype="string",
+                semantic="country_code",
+                case_sensitive=False,
+                nullable=False,
+            )
+        },
+    )
+
+    assert result.passed
+    assert result.issue_count == 0
+
+
 def test_language_code_validation_accepts_iso_639_1_codes(tmp_path):
     path = tmp_path / "languages.csv"
     path.write_text("language\nen\nhi\nfr\nde\n")
@@ -1444,6 +1464,26 @@ def test_timezone_validation_accepts_iana_timezones(tmp_path):
     result = ar.validate(
         ar.read_csv(path),
         {"timezone": ar.TimeZone(nullable=False)},
+    )
+
+    assert result.passed
+    assert result.issue_count == 0
+
+
+def test_language_code_validation_respects_case_insensitive_field(tmp_path):
+    path = tmp_path / "mixed_case_languages.csv"
+    path.write_text("language\nEN\nFr\nHI\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {
+            "language": ar.Field(
+                dtype="string",
+                semantic="language_code",
+                case_sensitive=False,
+                nullable=False,
+            )
+        },
     )
 
     assert result.passed
@@ -2670,6 +2710,26 @@ def test_currency_code_override(tmp_path):
     assert not result_default.passed
     assert result_default.issue_count == 1
     assert result_default.issues[0].value == "ZZZ"
+
+
+def test_currency_code_validation_respects_case_insensitive_field(tmp_path):
+    path = tmp_path / "mixed_case_currencies.csv"
+    path.write_text("currency\nusd\nEur\ninr\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {
+            "currency": ar.Field(
+                dtype="string",
+                semantic="currency_code",
+                case_sensitive=False,
+                nullable=False,
+            )
+        },
+    )
+
+    assert result.passed
+    assert result.issue_count == 0
 
 
 def test_schema_rules_issue_shape_matches_validation_issue(tmp_path):
