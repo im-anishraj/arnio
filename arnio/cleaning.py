@@ -1304,12 +1304,15 @@ def clean(
     ----------
     frame : ArFrame
         Input data frame.
-    strip_whitespace : bool, default True
+    strip_whitespace : bool or dict, default True
         Whether to trim leading/trailing whitespace from string columns.
-    drop_nulls : bool, default False
+        Pass a dict to specify kwargs (e.g., {"subset": ["col1"]}).
+    drop_nulls : bool or dict, default False
         Whether to remove rows containing null/empty values.
-    drop_duplicates : bool, default False
+        Pass a dict to specify kwargs (e.g., {"subset": ["col2"]}).
+    drop_duplicates : bool or dict, default False
         Whether to remove duplicate rows.
+        Pass a dict to specify kwargs (e.g., {"keep": "last"}).
 
     Returns
     -------
@@ -1319,7 +1322,10 @@ def clean(
     Examples
     --------
     >>> frame = ar.read_csv("data.csv")
+    >>> # Basic boolean usage
     >>> cleaned = ar.clean(frame, strip_whitespace=True, drop_nulls=True)
+    >>> # Advanced dict configuration usage
+    >>> cleaned = ar.clean(frame, drop_duplicates={"keep": "last"})
     """
     from .pipeline import pipeline
 
