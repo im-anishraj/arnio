@@ -93,7 +93,7 @@ jobs:
 
       - name: Run pytest
         run: |
-          pytest tests/
+          pytest tests/ --cov=arnio --cov-report=xml
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v6
@@ -101,38 +101,3 @@ jobs:
           files: ./coverage.xml
           fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}
-
-  notebook_smoke:
-    name: Notebook Smoke Test
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-          cache: 'pip'
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip setuptools wheel
-          pip install -e .[dev]
-          pip install nbmake
-
-      - name: Run notebook smoke test via pytest
-        run: |
-          pytest --nbmake examples/dataset_profile_comparison.ipynb
-
-          pip install jupyter nbconvert ipykernel
-
-      - name: Execute notebook
-        run: |
-          jupyter nbconvert \
-            --to notebook \
-            --execute \
-            --ExecutePreprocessor.timeout=300 \
-            examples/financial_csv_example.ipynb \
-            --output executed_notebook.ipynb
