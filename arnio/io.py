@@ -875,6 +875,8 @@ def write_csv(
     write_header: bool = True,
     line_terminator: str = "\n",
 ) -> None:
+    if not isinstance(frame, ArFrame):
+        raise TypeError("frame must be an ArFrame")
     """Write an ArFrame to a CSV file via C++ backend.
 
     Parameters
@@ -1395,6 +1397,8 @@ def write_parquet(
     compression: str = "snappy",
     row_group_size: int | None = None,
 ) -> None:
+    if not isinstance(frame, ArFrame):
+        raise TypeError("frame must be an ArFrame")
     """Write an ArFrame to a Parquet file via pyarrow.
 
     Requires the ``pyarrow`` package.  Install it with::
