@@ -1198,6 +1198,7 @@ def profile(
     approx_top_values_min_unique: int = 1000,
     approx_top_values_min_ratio: float = 0.2,
     approx_top_values_sample_size: int = 2000,
+    semantic_scoring: bool = False,
 ) -> DataQualityReport:
     """Profile data quality for an ArFrame.
 
@@ -1217,18 +1218,30 @@ def profile(
         Minimum unique ratio (unique / non-null) required to enable approximation.
     approx_top_values_sample_size : int, default 2000
         Number of non-null values sampled to estimate top values.
+    semantic_scoring : bool, default False
+        When True, include semantic validity penalties (invalid emails, URLs, etc.)
+        in the quality score. Structural penalties (duplicates, nulls, type mismatches)
+        are always included. Set to True to detect data quality issues related to
+        semantic constraints such as invalid email formats or malformed URLs.
 
     Returns
     -------
     DataQualityReport
         Report containing nulls, uniqueness, basic stats, semantic hints, and
-        safe cleaning suggestions.
+        safe cleaning suggestions. Score components include structural penalties
+        (duplicate_penalty, null_penalty, type_mismatch_penalty) and optionally
+        semantic penalties (email_invalid_ratio_penalty, url_invalid_ratio_penalty)
+        when semantic_scoring=True.
 
     Examples
     --------
     >>> frame = ar.read_csv("raw.csv")
     >>> report = ar.profile(frame, sample_size=3)
     >>> report.summary()
+
+    >>> # Enable semantic scoring to detect invalid emails/URLs
+    >>> report = ar.profile(frame, semantic_scoring=True)
+    >>> report.score_components  # Shows email/URL penalties if present
     """
     if not isinstance(frame, ArFrame):
         raise TypeError(
@@ -1267,6 +1280,9 @@ def profile(
 
     if approx_top_values_sample_size <= 0:
         raise ValueError("approx_top_values_sample_size must be positive")
+
+    if not isinstance(semantic_scoring, bool):
+        raise TypeError("semantic_scoring must be a bool")
 
     normalized_exclude_columns: list[str] = []
 
@@ -1323,7 +1339,7 @@ def profile(
     )
 
     quality_score, score_components = _calculate_quality_score(
-        row_count, duplicate_ratio, columns
+        row_count, duplicate_ratio, columns, semantic_scoring=semantic_scoring
     )
 
     return DataQualityReport(
@@ -1604,8 +1620,27 @@ def _calculate_quality_score(
     row_count: int,
     duplicate_ratio: float,
     columns: dict[str, ColumnProfile],
+    semantic_scoring: bool = False,
 ) -> tuple[float, dict[str, float]]:
-    """Compute an overall quality score and per-penalty breakdown from profile data."""
+    """Compute an overall quality score and per-penalty breakdown from profile data.
+
+    Parameters
+    ----------
+    row_count : int
+        Total number of rows in the dataset.
+    duplicate_ratio : float
+        Ratio of duplicate rows (0.0 to 1.0).
+    columns : dict[str, ColumnProfile]
+        Column profiles keyed by column name.
+    semantic_scoring : bool, default False
+        When True, apply semantic validity penalties (email, URL, etc.).
+        When False, only apply structural penalties (duplicates, nulls, type mismatches).
+
+    Returns
+    -------
+    tuple[float, dict[str, float]]
+        Quality score (0-100) and breakdown of score components as negative penalties.
+    """
     if row_count == 0 or not columns:
         return 100.0, {}
 
@@ -1627,8 +1662,50 @@ def _calculate_quality_score(
     if type_mismatch_penalty > 0:
         score_components["type_mismatch_penalty"] = -type_mismatch_penalty
 
+    # Semantic validity penalties (opt-in via semantic_scoring=True)
+    semantic_penalty = 0.0
+    if semantic_scoring:
+        # Calculate invalid ratios for semantic columns
+        invalid_email_ratios = [
+            1.0 - c.email_validity_ratio
+            for c in columns.values()
+            if c.email_validity_ratio is not None
+        ]
+        invalid_url_ratios = [
+            1.0 - c.url_validity_ratio
+            for c in columns.values()
+            if c.url_validity_ratio is not None
+        ]
+
+        # Average invalid ratios for each semantic type
+        avg_invalid_email = (
+            sum(invalid_email_ratios) / len(invalid_email_ratios)
+            if invalid_email_ratios
+            else 0.0
+        )
+        avg_invalid_url = (
+            sum(invalid_url_ratios) / len(invalid_url_ratios)
+            if invalid_url_ratios
+            else 0.0
+        )
+
+        # Apply penalties (max 10 points per semantic type, max 15 total)
+        email_penalty = round(min(avg_invalid_email * 100.0, 10.0), 2)
+        url_penalty = round(min(avg_invalid_url * 100.0, 10.0), 2)
+        semantic_penalty = round(min(email_penalty + url_penalty, 15.0), 2)
+
+        if email_penalty > 0:
+            score_components["email_invalid_ratio_penalty"] = -email_penalty
+        if url_penalty > 0:
+            score_components["url_invalid_ratio_penalty"] = -url_penalty
+
     quality_score = round(
-        100.0 - duplicate_penalty - null_penalty - type_mismatch_penalty, 2
+        100.0
+        - duplicate_penalty
+        - null_penalty
+        - type_mismatch_penalty
+        - semantic_penalty,
+        2,
     )
 
     return quality_score, score_components
