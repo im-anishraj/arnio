@@ -139,6 +139,7 @@ def test_hex_int_is_string(tmp_path):
 
 def test_forced_int_invalid_token_raises(tmp_path):
     import pytest
+
     from arnio.exceptions import CsvReadError
 
     csv_file = tmp_path / "bad_int.csv"
@@ -152,6 +153,7 @@ def test_forced_int_invalid_token_raises(tmp_path):
 
 def test_forced_float_invalid_token_raises(tmp_path):
     import pytest
+
     from arnio.exceptions import CsvReadError
 
     csv_file = tmp_path / "bad_float.csv"
