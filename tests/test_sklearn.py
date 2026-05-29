@@ -289,3 +289,22 @@ def test_arniocleaner_clone_with_invalid_params_does_not_raise():
     cleaner = ArnioCleaner(copy="yes")
     cloned = clone(cleaner)
     assert cloned.copy == "yes"
+
+
+def test_arniocleaner_preserves_index_when_row_count_unchanged():
+    """transform() must preserve the original pandas index when row count is unchanged."""
+    df = pd.DataFrame({"A": [" x ", " y "], "B": [1, 2]}, index=["row-a", "row-b"])
+    cleaner = ArnioCleaner(steps=[("strip_whitespace",)])
+    cleaner.fit(df)
+    result = cleaner.transform(df)
+    assert list(result.index) == ["row-a", "row-b"]
+
+
+def test_arniocleaner_rejects_invalid_params_at_transform():
+    """transform() must raise TypeError if params were mutated to invalid values after fit."""
+    df = pd.DataFrame({"A": [1, 2, 3]})
+    cleaner = ArnioCleaner()
+    cleaner.fit(df)
+    cleaner.copy = "bad"
+    with pytest.raises(TypeError, match="copy must be a bool"):
+        cleaner.transform(df)

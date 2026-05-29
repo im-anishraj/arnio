@@ -91,6 +91,7 @@ class ArnioCleaner(BaseEstimator, TransformerMixin):
         return self
 
     def transform(self, X, y=None):
+        self._validate_params()
         check_is_fitted(self, "n_features_in_")
         if not isinstance(X, pd.DataFrame):
             raise TypeError(f"ArnioCleaner requires a pandas DataFrame, got {type(X)}")
@@ -122,6 +123,8 @@ class ArnioCleaner(BaseEstimator, TransformerMixin):
                     "Use allow_row_count_change=True to allow this."
                 )
             X_out = X_out.reset_index(drop=True)
+        else:
+            X_out.index = X.index
 
         self.feature_names_out_ = np.array(X_out.columns, dtype=object)
         return X_out
