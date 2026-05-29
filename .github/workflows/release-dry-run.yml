@@ -40,6 +40,14 @@ jobs:
       - name: Build sdist
         run: pipx run build --sdist
 
+      - name: Verify sdist exclusions
+        run: |
+          if tar -tf dist/*.tar.gz | grep -E '\.venv|venv/|\.tox|\.pytest_cache|\.mypy_cache|site-packages'; then
+            echo "❌ sdist contains excluded directories!"
+            exit 1
+          fi
+          echo "✅ sdist exclusion check passed"
+
       - name: Twine check sdist
         run: |
           pip install twine

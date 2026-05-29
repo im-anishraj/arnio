@@ -23,6 +23,13 @@ jobs:
           ref: ${{ inputs.tag_name || github.ref }}
       - name: Build sdist
         run: pipx run build --sdist
+      - name: Verify sdist exclusions
+        run: |
+          if tar -tf dist/*.tar.gz | grep -E '\.venv|venv/|\.tox|\.pytest_cache|\.mypy_cache|site-packages'; then
+            echo "❌ sdist contains excluded directories!"
+            exit 1
+          fi
+          echo "✅ sdist exclusion check passed"
       - name: Install package from sdist
         run: pip install dist/*.tar.gz
       - name: Smoke test import
