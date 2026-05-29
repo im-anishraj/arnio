@@ -1028,6 +1028,44 @@ class TestReadCsv:
 
         assert exc.value.__cause__ is None
 
+    def test_preserves_mid_field_quote_characters(self, tmp_path):
+        csv_path = tmp_path / "mid_field_quotes.csv"
+        csv_path.write_text('id,value\n1,ab"cd"\n2,x"y"z\n')
+
+        frame = ar.read_csv(csv_path)
+        df = ar.to_pandas(frame)
+
+        assert df["value"].tolist() == ['ab"cd"', 'x"y"z']
+
+    def test_preserves_leading_quoted_field_with_trailing_text(self, tmp_path):
+        csv_path = tmp_path / "quoted_trailing_text.csv"
+        csv_path.write_text('id,value\n1,"ab"cd\n')
+
+        frame = ar.read_csv(csv_path)
+        df = ar.to_pandas(frame)
+
+        assert df["value"].iloc[0] == "abcd"
+
+    def test_preserves_escaped_quotes_in_quoted_fields(self, tmp_path):
+        csv_path = tmp_path / "escaped_quotes.csv"
+        csv_path.write_text('id,value\n1,"ab""cd"\n')
+
+        frame = ar.read_csv(csv_path)
+        df = ar.to_pandas(frame)
+
+        assert df["value"].iloc[0] == 'ab"cd'
+
+    def test_parses_delimiter_adjacent_quoted_fields(self, tmp_path):
+        csv_path = tmp_path / "delimiter_adjacent_quotes.csv"
+        csv_path.write_text('left,value,right\nA,"b,c",D\n')
+
+        frame = ar.read_csv(csv_path)
+        df = ar.to_pandas(frame)
+
+        assert df.loc[0, "left"] == "A"
+        assert df.loc[0, "value"] == "b,c"
+        assert df.loc[0, "right"] == "D"
+
     def test_empty_file_raises(self, tmp_path):
         csv_path = tmp_path / "empty.csv"
         csv_path.write_text("")

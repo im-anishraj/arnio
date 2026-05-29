@@ -28,6 +28,35 @@ TEST_CASE("parse_line handles escaped quotes inside quoted field", "[csv_parser]
     REQUIRE(fields[0] == "she said \"hello\"");
 }
 
+TEST_CASE("parse_line preserves mid-field quotes as literal data", "[csv_parser]") {
+    CsvParser parser;
+    auto fields = parser.parse_line("ab\"cd,2");
+    REQUIRE(fields.size() == 2);
+    REQUIRE(fields[0] == "ab\"cd");
+    REQUIRE(fields[1] == "2");
+}
+
+TEST_CASE("parse_line preserves mid-field quotes in non-first columns", "[csv_parser]") {
+    CsvParser parser;
+    auto fields = parser.parse_line("a,ab\"cd,z");
+    REQUIRE(fields.size() == 3);
+    REQUIRE(fields[1] == "ab\"cd");
+}
+
+TEST_CASE("parse_line keeps escaped quotes in proper quoted fields", "[csv_parser]") {
+    CsvParser parser;
+    auto fields = parser.parse_line("\"ab\"\"cd\",2");
+    REQUIRE(fields.size() == 2);
+    REQUIRE(fields[0] == "ab\"cd");
+}
+
+TEST_CASE("parse_line keeps trailing text after a quoted field", "[csv_parser]") {
+    CsvParser parser;
+    auto fields = parser.parse_line("\"ab\"cd,2");
+    REQUIRE(fields.size() == 2);
+    REQUIRE(fields[0] == "abcd");
+}
+
 TEST_CASE("parse_line handles empty fields", "[csv_parser]") {
     CsvParser parser;
     auto fields = parser.parse_line("a,,c");
