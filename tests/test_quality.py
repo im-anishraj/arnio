@@ -12,6 +12,7 @@ from arnio.quality import (
     _validate_gate_bool,
     _validate_gate_ratio_threshold,
     _validate_gate_threshold,
+    CleaningSuggestion,
 )
 
 
@@ -3313,3 +3314,8 @@ def test_data_quality_report_invariant_invalid_metrics():
 
     with pytest.raises(ValueError, match="quality_score must be a finite value"):
         DataQualityReport(10, 2, 512, 0, 0.0, {}, quality_score=float("nan"))
+
+def test_cleaning_suggestion_is_exported():
+    assert hasattr(ar, "CleaningSuggestion"), "CleaningSuggestion is missing from arnio.__init__ file"
+
+    assert ar.CleaningSuggestion is CleaningSuggestion, "Top-level CleaningSuggestion does not match the internal type"

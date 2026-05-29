@@ -85,6 +85,7 @@ from .quality import (
     compare_profiles,
     profile,
     suggest_cleaning,
+    CleaningSuggestion
 )
 from .schema import (
     URL,
@@ -157,6 +158,7 @@ __all__ = [
     "safe_divide_columns",
     "trim_column_names",
     "standardize_missing_tokens",
+    "CleaningSuggestion",
     # Conversion
     "to_pandas",
     "to_arrow",
