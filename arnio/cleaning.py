@@ -1433,7 +1433,7 @@ def round_numeric_columns(
     from .convert import from_pandas, to_pandas
 
     frame, is_arframe = _validate_frame(frame, allow_pandas=True)
-    
+
     if isinstance(decimals, bool) or not isinstance(decimals, int):
         raise TypeError("decimals must be an integer")
 

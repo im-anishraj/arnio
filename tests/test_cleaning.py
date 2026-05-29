@@ -2902,7 +2902,9 @@ class TestRoundNumericColumns:
 
         df = pd.DataFrame({"a": [1.123]})
         frame = ar.from_pandas(df)
-        with pytest.raises(TypeError, match="subset must be a sequence of column names"):
+        with pytest.raises(
+            TypeError, match="subset must be a sequence of column names"
+        ):
             ar.round_numeric_columns(frame, subset="a")
 
     def test_invalid_decimals_type(self):
