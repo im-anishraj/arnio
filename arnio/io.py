@@ -648,6 +648,7 @@ def read_csv_chunked(
     path: str | os.PathLike[str] | io.TextIOBase,
     *,
     chunksize: int = 10_000,
+    dtype: dict[str, str] | None = None,
     delimiter: str | None = None,
     has_header: bool = True,
     usecols: list[str] | None = None,
@@ -816,6 +817,9 @@ def read_csv_chunked(
         if null_values is not None:
             config.null_values = _validate_null_values(null_values)
 
+        if dtype is not None:
+            config.dtype = _validate_dtype_mapping(dtype)
+
         if usecols is not None:
             config.usecols = _validate_usecols(usecols)
 
@@ -833,6 +837,7 @@ def read_csv_chunked(
             path, effective_encoding, delimiter=delimiter
         ) as native_path:
             reader.open(native_path)
+            yielded_nonempty_chunk = False
             while True:
                 chunk = reader.next_chunk(chunksize, on_bad_lines)
                 if chunk is None:
@@ -841,8 +846,15 @@ def read_csv_chunked(
 
                 if on_bad_lines == "warn" and bad_rows:
                     _warn_bad_rows(bad_rows)
+                frame = ArFrame(cpp_frame)
 
-                yield ArFrame(cpp_frame)
+                if frame.shape[0] == 0 and bad_rows:
+                    if yielded_nonempty_chunk:
+                        continue
+
+                yielded_nonempty_chunk = yielded_nonempty_chunk or frame.shape[0] > 0
+
+                yield frame
     except ValueError:
         raise
     except CsvReadError:
@@ -919,8 +931,10 @@ def write_csv(
         )
     if not isinstance(line_terminator, str):
         raise TypeError("line_terminator must be a string")
-    if line_terminator == "":
-        raise ValueError("line_terminator must not be empty")
+    if line_terminator not in {"\n", "\r\n", "\r"}:
+        raise ValueError(
+            f"line_terminator must be one of '\\n', '\\r\\n', or '\\r', got {line_terminator!r}"
+        )
 
     config = _CsvWriteConfig()
     config.delimiter = delimiter
@@ -946,6 +960,7 @@ def scan_csv(
     null_values: list[str] | None = None,
     has_header: bool = True,
     encoding_errors: str = "strict",
+    mode: str = "strict",
     on_bad_lines: str = "error",
 ) -> dict[str, str]:
     """Return schema (column names + inferred types) without loading data.
@@ -991,6 +1006,11 @@ def scan_csv(
     encoding_errors : str, default "strict"
         How encoding errors are handled. One of ``"strict"``, ``"replace"``,
         or ``"ignore"``.
+
+    mode : {"strict", "permissive"}, default "strict"
+        Controls malformed row handling during schema inference. In
+        ``"permissive"`` mode, narrow rows are padded with nulls before type
+        inference so scanning matches ``read_csv(..., mode="permissive")``.
 
     on_bad_lines : str, default "error"
         What to do when a malformed row is encountered during schema inference.
@@ -1040,6 +1060,7 @@ def scan_csv(
     _validate_thousands_separator(thousands_separator, decimal_separator)
     delimiter = _validate_delimiter(delimiter)
     encoding_errors = _validate_encoding_errors(encoding_errors)
+    mode = _validate_parser_mode(mode)
     on_bad_lines = _validate_on_bad_lines(on_bad_lines)
     config = _CsvConfig()
     config.delimiter = delimiter
@@ -1049,6 +1070,7 @@ def scan_csv(
     config.thousands_separator = thousands_separator
     config.has_header = _validate_bool_option(has_header, "has_header")
     config.encoding_errors = encoding_errors
+    config.mode = mode
 
     if null_values is not None:
         config.null_values = _validate_null_values(null_values)
@@ -1449,6 +1471,12 @@ def write_parquet(
             "pyarrow is required for Parquet export. "
             "Install it with: pip install arnio[parquet]"
         ) from exc
+
+    rows, cols = frame.shape
+    if cols == 0 and rows > 0:
+        raise ValueError(
+            f"Cannot write a zero-column ArFrame with {rows} rows to Parquet: the current export path cannot preserve row count without columns."
+        )
 
     df = to_pandas(frame)
 

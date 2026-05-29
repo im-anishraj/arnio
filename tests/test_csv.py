@@ -140,19 +140,18 @@ class TestReadCsv:
         assert pdf["id"].tolist() == [1, 3]
         assert pdf["name"].tolist() == ["Alice", "Cara"]
 
-    def test_read_csv_dtype_parse_failure_becomes_null(self, tmp_path):
+    def test_read_csv_dtype_parse_failure_raises(self, tmp_path):
         path = tmp_path / "parse_failure.csv"
         path.write_text("quantity\nabc\n")
 
-        frame = ar.read_csv(
-            path,
-            dtype={"quantity": "int64"},
-        )
-
-        pdf = ar.to_pandas(frame)
-
-        assert frame.dtypes["quantity"] == "int64"
-        assert pdf["quantity"].isna().tolist() == [True]
+        with pytest.raises(
+            ar.CsvReadError,
+            match="Invalid token 'abc' for forced int64 column",
+        ):
+            ar.read_csv(
+                path,
+                dtype={"quantity": "int64"},
+            )
 
     def test_read_csv_dtype_non_selected_usecols_column(self, tmp_path):
         path = tmp_path / "dtype_usecols_error.csv"
@@ -1028,6 +1027,44 @@ class TestReadCsv:
 
         assert exc.value.__cause__ is None
 
+    def test_preserves_mid_field_quote_characters(self, tmp_path):
+        csv_path = tmp_path / "mid_field_quotes.csv"
+        csv_path.write_text('id,value\n1,ab"cd"\n2,x"y"z\n')
+
+        frame = ar.read_csv(csv_path)
+        df = ar.to_pandas(frame)
+
+        assert df["value"].tolist() == ['ab"cd"', 'x"y"z']
+
+    def test_preserves_leading_quoted_field_with_trailing_text(self, tmp_path):
+        csv_path = tmp_path / "quoted_trailing_text.csv"
+        csv_path.write_text('id,value\n1,"ab"cd\n')
+
+        frame = ar.read_csv(csv_path)
+        df = ar.to_pandas(frame)
+
+        assert df["value"].iloc[0] == "abcd"
+
+    def test_preserves_escaped_quotes_in_quoted_fields(self, tmp_path):
+        csv_path = tmp_path / "escaped_quotes.csv"
+        csv_path.write_text('id,value\n1,"ab""cd"\n')
+
+        frame = ar.read_csv(csv_path)
+        df = ar.to_pandas(frame)
+
+        assert df["value"].iloc[0] == 'ab"cd'
+
+    def test_parses_delimiter_adjacent_quoted_fields(self, tmp_path):
+        csv_path = tmp_path / "delimiter_adjacent_quotes.csv"
+        csv_path.write_text('left,value,right\nA,"b,c",D\n')
+
+        frame = ar.read_csv(csv_path)
+        df = ar.to_pandas(frame)
+
+        assert df.loc[0, "left"] == "A"
+        assert df.loc[0, "value"] == "b,c"
+        assert df.loc[0, "right"] == "D"
+
     def test_empty_file_raises(self, tmp_path):
         csv_path = tmp_path / "empty.csv"
         csv_path.write_text("")
@@ -1222,6 +1259,36 @@ class TestReadCsv:
                 encoding="utf-8",
                 encoding_errors="strict",
             )
+
+    def test_read_csv_bool_dtype_valid_values(self, tmp_path):
+        path = tmp_path / "bool_valid.csv"
+        path.write_text("flag\ntrue\nTrue\nTRUE\nfalse\nFalse\nFALSE\n")
+        frame = ar.read_csv(path, dtype={"flag": "bool"})
+        df = ar.to_pandas(frame)
+        assert frame.dtypes["flag"] == "bool"
+        assert df["flag"].tolist() == [True, True, True, False, False, False]
+
+    def test_read_csv_bool_dtype_invalid_token_raises(self, tmp_path):
+        path = tmp_path / "bool_invalid.csv"
+        path.write_text("flag\ntrue\nmaybe\nfalse\n")
+        with pytest.raises(
+            ar.CsvReadError, match="Invalid token 'maybe' for forced bool column"
+        ):
+            ar.read_csv(path, dtype={"flag": "bool"})
+
+    def test_read_csv_bool_dtype_yes_no_raises(self, tmp_path):
+        path = tmp_path / "bool_yes_no.csv"
+        path.write_text("flag\nyes\nno\n")
+        with pytest.raises(ar.CsvReadError, match="Invalid token"):
+            ar.read_csv(path, dtype={"flag": "bool"})
+
+    def test_read_csv_bool_dtype_null_sentinel_becomes_null(self, tmp_path):
+        path = tmp_path / "bool_nulls.csv"
+        path.write_text("flag\ntrue\nNA\nfalse\n")
+        frame = ar.read_csv(path, dtype={"flag": "bool"}, null_values=["NA"])
+        assert frame["flag"][0]
+        assert frame["flag"][1] is None
+        assert not frame["flag"][2]
 
 
 class TestScanCsv:

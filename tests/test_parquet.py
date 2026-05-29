@@ -150,6 +150,46 @@ class TestWriteParquetCompression:
 
 
 @skip_without_pyarrow
+class TestWriteParquetZeroColumn:
+    def test_zero_by_zero_frame_round_trips_empty(self, tmp_path):
+        frame = ar.from_pandas(pd.DataFrame())
+        assert frame.shape == (0, 0)
+
+        out = tmp_path / "empty.parquet"
+
+        ar.write_parquet(frame, out)
+        df = pd.read_parquet(out, engine="pyarrow")
+
+        assert df.shape == (0, 0)
+        assert out.exists()
+
+    def test_zero_column_with_row_raises(self, tmp_path):
+        frame = ar.from_pandas(pd.DataFrame(index=range(3)))
+        assert frame.shape == (3, 0)
+
+        out = tmp_path / "zero_cols.parquet"
+        with pytest.raises(
+            ValueError,
+            match="Cannot write a zero-column ArFrame with 3 rows to Parquet: the current export path cannot preserve row count without columns.",
+        ):
+            ar.write_parquet(frame, out)
+
+        assert not out.exists()
+
+    def test_normal_frame_still_round_trips(self, tmp_path):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1, 2, 3], "b": ["x", "y", "z"]}))
+        assert frame.shape == (3, 2)
+
+        out = tmp_path / "normal.parquet"
+        ar.write_parquet(frame, out)
+        df = pd.read_parquet(out, engine="pyarrow")
+        assert df.shape == (3, 2)
+        assert df["a"].tolist() == [1, 2, 3]
+        assert df["b"].tolist() == ["x", "y", "z"]
+        assert out.exists()
+
+
+@skip_without_pyarrow
 class TestWriteParquetRowGroupSize:
     def test_row_group_size_accepted(self, tmp_path):
         frame = ar.from_pandas(pd.DataFrame({"v": list(range(100))}))

@@ -724,6 +724,9 @@ class Field:
             if self.max is not None:
                 if isinstance(self.max, bool) or not isinstance(self.max, (int, float)):
                     raise TypeError("max must be numeric or None")
+            if self.min is not None and self.max is not None:
+                if self.min > self.max:
+                    raise ValueError("min must be less than or equal to max")
         if self.dtype is not None and not isinstance(self.dtype, str):
             raise TypeError(
                 f"dtype must be a str or None, got {type(self.dtype).__name__}"
@@ -2430,17 +2433,33 @@ def _validate_column(
                         {index: value for index, value in invalid_values}
                     )
                 elif field_def.semantic == "country_code":
-                    invalid = non_null[~non_null.isin(ISO_3166_1_ALPHA_2)]
+                    values = (
+                        non_null.str.upper()
+                        if not field_def.case_sensitive
+                        else non_null
+                    )
+                    invalid = non_null[~values.isin(ISO_3166_1_ALPHA_2)]
 
                 elif field_def.semantic == "language_code":
-                    invalid = non_null[~non_null.isin(ISO_639_1_CODES)]
+                    values = (
+                        non_null.str.lower()
+                        if not field_def.case_sensitive
+                        else non_null
+                    )
+                    invalid = non_null[~values.isin(ISO_639_1_CODES)]
+
                 elif field_def.semantic == "timezone":
                     invalid = non_null[~non_null.isin(IANA_TIMEZONES)]
                 elif field_def.semantic == "currency_code":
                     if field_def.allowed is not None:
                         invalid = pd.Series(dtype=object)
                     else:
-                        invalid = non_null[~non_null.isin(ISO_4217_CURRENCY_CODES)]
+                        values = (
+                            non_null.str.upper()
+                            if not field_def.case_sensitive
+                            else non_null
+                        )
+                        invalid = non_null[~values.isin(ISO_4217_CURRENCY_CODES)]
 
                 else:
                     invalid = non_null[~text.str.fullmatch(pattern, na=False)]
@@ -2663,9 +2682,18 @@ def _normalize_unique(
 
 
 def _normalize_sequence(value: Any) -> Any:
-    """Convert sets and tuples to lists for JSON-serializable output."""
+    """Convert sets and tuples to lists for JSON-serializable output.
+
+    Sets are sorted naturally when possible. If the set contains mixed
+    incomparable types (e.g. int and str), falls back to a type-safe key
+    so serialization never raises TypeError.
+    """
     if isinstance(value, set):
-        return sorted(value)
+        try:
+            return sorted(value)
+        except TypeError:
+            return sorted(value, key=lambda x: (type(x).__name__, repr(x)))
+
     if isinstance(value, tuple):
         return list(value)
     return value
