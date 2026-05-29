@@ -378,68 +378,46 @@ class DataQualityReport:
             "quality_score": self.quality_score,
             "score_components": self.score_components,
             "columns": {
-                name: self.columns[name].to_dict(
-                    redact_sample_values=redact_sample_values
-                )
-                for name in sorted(self.columns)
+                name: column.to_dict(redact_sample_values=redact_sample_values)
+                for name, column in self.columns.items()
                 if name not in exclude_columns
             },
             "suggestions": [
                 {
                     "step": s[0],
-                    "kwargs": {
-                        key: (
-                            [item for item in value if item not in exclude_columns]
-                            if key in {"subset", "columns"} and isinstance(value, list)
-                            else (
-                                {
-                                    col_name: col_type
-                                    for col_name, col_type in value.items()
-                                    if col_name not in exclude_columns
-                                }
-                                if key == "cast_types" and isinstance(value, dict)
-                                else value
+                    "kwargs": (
+                        {
+                            k: v
+                            for k, v in dict(s[1]).items()
+                            if k not in exclude_columns
+                        }
+                        if s[0] == "cast_types"
+                        else {
+                            key: (
+                                [item for item in value if item not in exclude_columns]
+                                if key in {"subset", "columns"}
+                                and isinstance(value, list)
+                                else (
+                                    {
+                                        col_name: col_type
+                                        for col_name, col_type in value.items()
+                                        if col_name not in exclude_columns
+                                    }
+                                    if key == "cast_types" and isinstance(value, dict)
+                                    else value
+                                )
                             )
-                        )
-                        for key, value in sorted(dict(s[1]).items())
-                        if key not in exclude_columns
-                    },
+                            for key, value in dict(s[1]).items()
+                        }
+                    ),
                     "confidence_score": getattr(s, "confidence_score", None),
                     "confidence_reason": _redact_reason(
                         getattr(s, "confidence_reason", None)
                     ),
                 }
-                for s in sorted(
-                    self.suggestions,
-                    key=lambda item: (
-                        item[0],
-                        json.dumps(item[1], sort_keys=True, default=str),
-                    ),
-                )
+                for s in self.suggestions
             ],
         }
-
-    def __repr__(self) -> str:
-        """Deterministic concise representation for terminals and notebooks."""
-
-        column_names = sorted(self.columns)
-
-        preview = ", ".join(column_names[:5])
-
-        if len(column_names) > 5:
-            preview += ", ..."
-
-        return (
-            "DataQualityReport("
-            f"rows={self.row_count}, "
-            f"columns={self.column_count}, "
-            f"duplicates={self.duplicate_rows}, "
-            f"quality_score={self.quality_score:.2f}, "
-            f"column_names=[{preview}]"
-            ")"
-        )
-
-    __str__ = __repr__
 
     def to_json(
         self,
@@ -953,30 +931,20 @@ class ProfileComparison:
             raise TypeError("right_profile must be an instance of DataQualityReport")
 
         if not isinstance(self.drift_report, dict):
-            raise TypeError("drift_report must be a nested dictionary of dict")
-
-        for key, value in self.drift_report.items():
+            raise TypeError("drift_report must be a dictionary")
+        for key, val in self.drift_report.items():
             if not isinstance(key, str):
                 raise TypeError("drift_report keys must be strings")
-
-            if not isinstance(value, dict):
+            if not isinstance(val, dict):
                 raise TypeError("drift_report must be a nested dictionary of dict")
 
         if not isinstance(self.status_counts, dict):
-            raise TypeError("status_counts must be a dict")
-
-        for key, value in self.status_counts.items():
+            raise TypeError("status_counts must be a dictionary")
+        for key, val in self.status_counts.items():
             if not isinstance(key, str):
                 raise TypeError("status_counts keys must be strings")
-
-            if isinstance(value, bool):
-                raise TypeError("status_counts values must not be booleans")
-
-            if not isinstance(value, int):
+            if not isinstance(val, int):
                 raise TypeError("status_counts values must be integers")
-
-            if value < 0:
-                raise ValueError("status_counts values must be non-negative integers")
 
     def to_dict(
         self,
