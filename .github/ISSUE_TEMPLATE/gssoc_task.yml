@@ -1,7 +1,7 @@
 name: GSSoC task proposal
 description: Maintainer-scoped task for GSSoC contributors.
 title: "GSSoC: "
-labels: ["gssoc", "status: needs triage"]
+labels: ["gssoc", "status:needs-triage"]
 body:
   - type: markdown
     attributes:
@@ -32,9 +32,10 @@ body:
     attributes:
       label: GSSoC level
       options:
-        - Level 1 - beginner
-        - Level 2 - intermediate
-        - Level 3 - advanced
+        - level:beginner
+        - level:intermediate
+        - level:advanced
+        - level:critical
         - Needs maintainer decision
     validations:
       required: true

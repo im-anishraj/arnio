@@ -28,8 +28,14 @@
 
 ## Testing
 <!-- Paste commands you ran and summarize the result. -->
-- [ ] `make test`
-- [ ] `make lint`
+- [ ] `make test` (or `python -m pytest tests -v --cov=arnio`)
+- [ ] `make lint` (or run separately:
+  ```powershell
+  python -m ruff check .
+  python -m black --check .
+  ```
+)
+- [ ] optionally `python -m pytest tests -v --tb=short -x`
 - [ ] Other:
 
 ## Screenshots / Media
@@ -37,6 +43,9 @@
 
 ## Performance Impact
 <!-- If this PR affects speed or memory, paste a snippet from `make benchmark` or other tools. -->
+
+## GSSoC labels
+<!-- Maintainers only: use exact scoring labels where applicable, for example `gssoc:approved`, `level:beginner`, `quality:clean`, and `type:bug`. Do not add labels only to increase points. -->
 
 ## Contributor checklist
 - [ ] I read the contributing guide.
