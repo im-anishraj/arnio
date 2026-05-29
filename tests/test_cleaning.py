@@ -2022,11 +2022,17 @@ class TestParseBoolStrings:
         df = pd.DataFrame({"active": ["yes", "no"]}, dtype=object)
         frame = ar.from_pandas(df)
 
-        with pytest.raises(TypeError, match="true_values must be a set, list, or tuple of strings"):
+        with pytest.raises(
+            TypeError, match="true_values must be a set, list, or tuple of strings"
+        ):
             ar.parse_bool_strings(frame, true_values=123)
 
-        with pytest.raises(TypeError, match="false_values must be a set, list, or tuple of strings",):
+        with pytest.raises(
+            TypeError,
+            match="false_values must be a set, list, or tuple of strings",
+        ):
             ar.parse_bool_strings(frame, false_values=45.6)
+
     def test_parse_bool_strings_rejects_mapping_containers(self):
         import pandas as pd
 
