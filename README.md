@@ -51,9 +51,8 @@ Colab install smoke test: **[COLAB_SMOKE_TEST.md](COLAB_SMOKE_TEST.md)**
 
 ## ⚡ Quickstart
 
-A simple workflow in just a few steps.
-
-> New to Arnio? Start with the pandas workflow example below before exploring advanced pipelines.
+If you're new to Arnio, the example below demonstrates a simple first-run workflow for loading, cleaning, and preparing CSV data before converting it back into a pandas DataFrame.
+The workflow starts by loading a CSV dataset into an Arnio frame for preprocessing and cleaning.
 
 ```python
 import arnio as ar
@@ -66,7 +65,12 @@ frame = ar.read_csv("messy_sales_data.csv", mode="strict")
 
 # Permissive mode fills missing trailing values with nulls
 frame = ar.read_csv("messy_sales_data.csv", mode="permissive")
+```
 
+Each pipeline step applies a specific transformation such as trimming whitespace, normalizing text formatting, handling missing values, and removing duplicate rows.
+
+
+```python
 # Declare what clean data looks like — arnio handles the rest
 clean = ar.pipeline(frame, [
     ("strip_whitespace",),
@@ -75,17 +79,17 @@ clean = ar.pipeline(frame, [
     ("drop_nulls",),
     ("drop_duplicates",),
 ])
+```
 
+After preprocessing is complete, the cleaned result can be converted back into a standard pandas DataFrame for further analysis or integration with existing workflows.
 
-
+```python
 # Out comes a standard pandas DataFrame — use it like you always have
 df = ar.to_pandas(clean)
 
 # Use copy=True when you need defensive pandas-owned buffers
 safe_df = ar.to_pandas(clean, copy=True)
 ```
-
-
 ### Dry Run Validation
 
 Use `dry_run=True` to validate pipeline configuration and
@@ -114,7 +118,6 @@ print(metadata["step_timings"])
 print(metadata["applied_steps"])
 print(metadata["row_counts"])
 ```
-
 ## Quick Example
 
 ```python
@@ -163,9 +166,7 @@ frame = ar.from_dict(data)
 frame = ar.ArFrame.from_dict(data)
 ```
 
-
-Already have a pandas `DataFrame`? Use Arnio in-place in your existing pandas
-workflow:
+Already working with a pandas `DataFrame`? Arnio can also be integrated directly into an existing pandas workflow without changing your current data-processing approach:
 
 ```python
 import pandas as pd
