@@ -738,7 +738,13 @@ CellValue CsvParser::parse_value(const std::string& raw, DType dtype, bool is_fo
             std::string trimmed = sanitized;
             trim_in_place(trimmed);
             std::string lower = to_lower_copy(trimmed);
-            return (lower == "true");
+            if (lower == "true") return true;
+            if (lower == "false") return false;
+            if (is_forced) {
+                throw std::runtime_error("CsvReadError: Invalid token '" + raw +
+                                         "' for forced bool column");
+            }
+            return std::monostate{};
         }
         case DType::INT64: {
             std::string cleaned = normalize_numeric(sanitized, config_);

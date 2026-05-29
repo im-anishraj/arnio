@@ -1222,6 +1222,36 @@ class TestReadCsv:
                 encoding_errors="strict",
             )
 
+    def test_read_csv_bool_dtype_valid_values(self, tmp_path):
+        path = tmp_path / "bool_valid.csv"
+        path.write_text("flag\ntrue\nTrue\nTRUE\nfalse\nFalse\nFALSE\n")
+        frame = ar.read_csv(path, dtype={"flag": "bool"})
+        df = ar.to_pandas(frame)
+        assert frame.dtypes["flag"] == "bool"
+        assert df["flag"].tolist() == [True, True, True, False, False, False]
+
+    def test_read_csv_bool_dtype_invalid_token_raises(self, tmp_path):
+        path = tmp_path / "bool_invalid.csv"
+        path.write_text("flag\ntrue\nmaybe\nfalse\n")
+        with pytest.raises(
+            ar.CsvReadError, match="Invalid token 'maybe' for forced bool column"
+        ):
+            ar.read_csv(path, dtype={"flag": "bool"})
+
+    def test_read_csv_bool_dtype_yes_no_raises(self, tmp_path):
+        path = tmp_path / "bool_yes_no.csv"
+        path.write_text("flag\nyes\nno\n")
+        with pytest.raises(ar.CsvReadError, match="Invalid token"):
+            ar.read_csv(path, dtype={"flag": "bool"})
+
+    def test_read_csv_bool_dtype_null_sentinel_becomes_null(self, tmp_path):
+        path = tmp_path / "bool_nulls.csv"
+        path.write_text("flag\ntrue\nNA\nfalse\n")
+        frame = ar.read_csv(path, dtype={"flag": "bool"}, null_values=["NA"])
+        assert frame["flag"][0]
+        assert frame["flag"][1] is None
+        assert not frame["flag"][2]
+
 
 class TestScanCsv:
     def test_scan_schema(self, sample_csv):
