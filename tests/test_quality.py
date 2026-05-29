@@ -326,7 +326,7 @@ def test_profile_comparison_rejects_bool_status_counts():
 
     with pytest.raises(
         TypeError,
-        match="status_counts values must be non-negative integers",
+        match="status_counts values must not be booleans",
     ):
         ar.ProfileComparison(
             base,
