@@ -482,25 +482,6 @@ def test_validation_result_summary_counts_repeated_issues_in_one_column():
     assert summary["issues_by_column_and_rule"] == {"age": {"min": 3}}
 
 
-def test_schema_validation_max_errors_zero(tmp_path):
-    path = tmp_path / "data.csv"
-
-    path.write_text("name,age\njohn,\n")
-
-    frame = ar.read_csv(path)
-
-    schema = ar.Schema(
-        {
-            "name": ar.String(),
-            "age": ar.Int64(nullable=False),
-        }
-    )
-    result = ar.validate(frame, schema, max_errors=0)
-
-    assert result.issue_count == 0
-    assert result.issues == []
-
-
 def test_schema_validation_negative_max_errors(tmp_path):
     path = tmp_path / "data.csv"
 
@@ -3538,3 +3519,35 @@ def test_missing_custom_validator_severity_preservation():
     for issue in result.issues:
         if issue.rule == "custom":
             assert issue.severity == "warning"
+
+
+def test_validate_max_errors_zero_invalid_data():
+    frame = ar.from_pandas(pd.DataFrame({"age": ["not-an-int"]}))
+    schema = ar.Schema({"age": ar.Int64()})
+
+    with pytest.raises(ValueError, match="max_errors must be >= 1"):
+        ar.validate(frame, schema, max_errors=0)
+
+
+def test_validate_max_errors_zero_missing_columns():
+    frame = ar.from_pandas(pd.DataFrame({"name": ["Alice"]}))
+    schema = ar.Schema({"age": ar.Int64()})
+
+    with pytest.raises(ValueError, match="max_errors must be >= 1"):
+        ar.validate(frame, schema, max_errors=0)
+
+
+def test_validate_max_errors_zero_strict_schema():
+    frame = ar.from_pandas(pd.DataFrame({"age": [25], "extra": ["unexpected"]}))
+    schema = ar.Schema({"age": ar.Int64()}, strict=True)
+
+    with pytest.raises(ValueError, match="max_errors must be >= 1"):
+        ar.validate(frame, schema, max_errors=0)
+
+
+def test_validate_max_errors_zero_valid_data():
+    frame = ar.from_pandas(pd.DataFrame({"age": [25]}))
+    schema = ar.Schema({"age": ar.Int64()})
+
+    with pytest.raises(ValueError, match="max_errors must be >= 1"):
+        ar.validate(frame, schema, max_errors=0)
