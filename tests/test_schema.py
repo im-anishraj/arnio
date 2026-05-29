@@ -1408,6 +1408,26 @@ def test_country_code_validation_rejects_invalid_codes(tmp_path):
     assert all(issue.rule == "country_code" for issue in result.issues)
 
 
+def test_country_code_validation_respects_case_insensitive_field(tmp_path):
+    path = tmp_path / "mixed_case_countries.csv"
+    path.write_text("country\nus\nGb\nfr\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {
+            "country": ar.Field(
+                dtype="string",
+                semantic="country_code",
+                case_sensitive=False,
+                nullable=False,
+            )
+        },
+    )
+
+    assert result.passed
+    assert result.issue_count == 0
+
+
 def test_language_code_validation_accepts_iso_639_1_codes(tmp_path):
     path = tmp_path / "languages.csv"
     path.write_text("language\nen\nhi\nfr\nde\n")
@@ -1444,6 +1464,26 @@ def test_timezone_validation_accepts_iana_timezones(tmp_path):
     result = ar.validate(
         ar.read_csv(path),
         {"timezone": ar.TimeZone(nullable=False)},
+    )
+
+    assert result.passed
+    assert result.issue_count == 0
+
+
+def test_language_code_validation_respects_case_insensitive_field(tmp_path):
+    path = tmp_path / "mixed_case_languages.csv"
+    path.write_text("language\nEN\nFr\nHI\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {
+            "language": ar.Field(
+                dtype="string",
+                semantic="language_code",
+                case_sensitive=False,
+                nullable=False,
+            )
+        },
     )
 
     assert result.passed
@@ -1686,6 +1726,30 @@ def test_float64_rejects_impossible_bounds():
         assert "min must be less than or equal to max" in str(exc)
     else:
         raise AssertionError("Expected invalid Float64 bounds to raise")
+
+
+def test_field_rejects_invalid_int_bounds():
+    with pytest.raises(ValueError, match="min must be less than or equal to max"):
+        ar.Field(dtype="int64", min=10, max=1)
+
+
+def test_field_rejects_invalid_float_bounds():
+    with pytest.raises(ValueError, match="min must be less than or equal to max"):
+        ar.Field(dtype="float64", min=10.0, max=1.0)
+
+
+def test_field_allows_equal_bounds():
+    field = ar.Field(dtype="int64", min=5, max=5)
+
+    assert field.min == 5
+    assert field.max == 5
+
+
+def test_field_allows_valid_increasing_bounds():
+    field = ar.Field(dtype="float64", min=1.0, max=10.0)
+
+    assert field.min == 1.0
+    assert field.max == 10.0
 
 
 def test_string_rejects_impossible_length_bounds():
@@ -2672,6 +2736,26 @@ def test_currency_code_override(tmp_path):
     assert result_default.issues[0].value == "ZZZ"
 
 
+def test_currency_code_validation_respects_case_insensitive_field(tmp_path):
+    path = tmp_path / "mixed_case_currencies.csv"
+    path.write_text("currency\nusd\nEur\ninr\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {
+            "currency": ar.Field(
+                dtype="string",
+                semantic="currency_code",
+                case_sensitive=False,
+                nullable=False,
+            )
+        },
+    )
+
+    assert result.passed
+    assert result.issue_count == 0
+
+
 def test_schema_rules_issue_shape_matches_validation_issue(tmp_path):
     path = tmp_path / "dates.csv"
     path.write_text("start_date,end_date\n2025-05-01,2025-01-01\n")
@@ -3586,3 +3670,33 @@ def test_validate_max_errors_zero_valid_data():
 
     with pytest.raises(ValueError, match="max_errors must be >= 1"):
         ar.validate(frame, schema, max_errors=0)
+
+
+def test_normalize_sequence_homogeneous_strings():
+    schema = ar.Schema({"status": ar.String(allowed={"active", "inactive", "pending"})})
+    payload = json.loads(schema.to_json())
+    assert payload["fields"]["status"]["allowed"] == ["active", "inactive", "pending"]
+
+
+def test_normalize_sequence_homogeneous_numerics():
+    schema = ar.Schema({"code": ar.Field(allowed={1, 2, 10})})
+    payload = json.loads(schema.to_json())
+    assert payload["fields"]["code"]["allowed"] == [1, 2, 10]
+
+
+def test_normalize_sequence_mixed_scalar_allowed_does_not_raise():
+    schema = ar.Schema({"code": ar.String(allowed={1, "1"})})
+    result = schema.to_json()
+    assert result is not None
+
+
+def test_normalize_sequence_mixed_scalar_allowed_is_deterministic():
+    schema = ar.Schema({"code": ar.String(allowed={1, "1", 2, "two"})})
+    assert schema.to_json() == schema.to_json()
+
+
+def test_mixed_scalar_allowed_roundtrip():
+    """Mixed-type allowed values survive a to_json() / from_json() round-trip."""
+    schema = ar.Schema({"code": ar.String(allowed={1, "1"})})
+    restored = ar.Schema.from_json(schema.to_json())
+    assert restored.fields["code"].allowed == {1, "1"}

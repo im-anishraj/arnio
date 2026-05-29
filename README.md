@@ -632,25 +632,34 @@ ar.register_duckdb(frame, conn, "my_table")
 result = conn.execute("SELECT * FROM my_table").fetchdf()
 ```
 
-### Row-dropping pipeline behavior
+### Row-dropping and schema-change behavior
 
-Some pipeline steps such as `drop_nulls` or `drop_duplicates`
-can change the number of rows returned during `transform`.
+`ArnioCleaner` enforces a strict transformer contract by default:
 
-By default, `ArnioCleaner` raises a `ValueError` if a pipeline
-changes row count during transform because many scikit-learn
-workflows expect input and output sample counts to remain aligned.
+- **Row-count-changing steps** (`drop_nulls`, `drop_duplicates`,
+  `filter_rows`, `keep_rows_with_nulls`) are **rejected by default** with a
+  clear `ValueError`. To allow row-count changes, pass `allow_row_count_change=True`.
 
-If row-dropping behavior is intentional, pass
-`allow_row_count_change=True` when constructing `ArnioCleaner`.
+- **Column schema-changing steps** (`rename_columns`, `drop_columns`,
+  `drop_constant_columns`, `combine_columns`) are **rejected by default**
+  and allowed only when `allow_schema_changes=True` is passed.
 
 ```python
+# Schema-preserving (default strict mode)
 cleaner = ArnioCleaner(
     steps=[
-        ("drop_nulls",),
         ("strip_whitespace",),
+        ("fill_nulls", {"value": 0}),
     ],
-    allow_row_count_change=True,
+)
+
+# Opt-in column schema changes
+cleaner = ArnioCleaner(
+    steps=[
+        ("rename_columns", {"old_name": "new_name"}),
+        ("drop_constant_columns",),
+    ],
+    allow_schema_changes=True,
 )
 ```
 
@@ -963,6 +972,7 @@ Most operations below run natively in C++. Currently, `filter_rows`, `replace_va
 | `drop_columns_matching` | Drop columns whose names match a regex pattern | `ar.drop_columns_matching(frame, pattern="^temp_")` |
 | `trim_column_names` | Strip leading/trailing whitespace from column names | `ar.trim_column_names(frame)` |
 | `select_columns` | Return a new frame containing only selected columns | `ar.select_columns(frame, ["id", "name"])` |
+| `slugify_column_names` | Normalise column names to snake_case | `ar.slugify_column_names(frame)` |
 
 #### `ArFrame.select_dtypes` — type-based column selection
 
@@ -1463,7 +1473,7 @@ sharing **aggregate statistics only** or **raw/sample cell values**.
 | `report.to_dict()` | Mixed | **Yes** — includes `sample_values` and `top_values` unless you redact samples |
 | `report.to_dict(redact_sample_values=True)` | Mixed | `sample_values` → `"[REDACTED]"` (same list length); `top_values[*].value` → `"[REDACTED]"` while counts and ratios remain |
 | `report.to_markdown()`, `report.summary()` | Yes | No raw cell values in output |
-| `report.to_html()` / notebook display of `report` | Partial | **Shows `top_values`** chips; does not list `sample_values` |
+| `report.to_html()` / notebook display of `report` | Partial | **Shows `top_values`** chips; does not list `sample_values`. Use `redact_top_values=True` or `exclude_columns` for safer sharing. |
 | `report.to_pandas()` | Partial | Includes **`top_values`**, not `sample_values` |
 | `ProfileComparison.to_dict()` | Nested profiles | **Yes** — embeds `left_profile` / `right_profile` via default `to_dict()` |
 
@@ -1475,7 +1485,7 @@ controls below for safer sharing.
 - **JSON logs and artifacts:** `report.to_dict(redact_sample_values=True)` before writing or uploading.
 - **Collect fewer samples:** `ar.profile(frame, sample_size=0)` skips `sample_values` (defaults still apply to `top_values` counts on string columns).
 - **Text summaries for CI or comments:** prefer `report.to_markdown()` or `report.summary()` when you do not need per-value examples.
-- **Notebooks and HTML exports:** avoid evaluating `report` or saving `report.to_html()` for sensitive data; HTML still shows `top_values`.
+- **Notebooks and HTML exports:** use `report.to_html(redact_top_values=True)` to replace every top-value chip label with `[REDACTED]` while preserving counts and ratios. To drop entire sensitive columns from the table, add `exclude_columns=["ssn", "email"]`. Avoid saving unredacted `report.to_html()` output for sensitive data.
 - **GitHub bug reports and examples:** use synthetic data (`user@example.com`, `ID-001`), a minimal CSV, and redacted `to_dict()` output — not production dumps.
 - **Pandas export:** `ar.to_pandas(frame)` returns full table data; redaction applies to **quality reports**, not the underlying frame.
 - **Profile comparison:** `ProfileComparison.to_dict()` nests full profiles; build shared artifacts with `profile.to_dict(redact_sample_values=True)` if needed.
@@ -1492,6 +1502,11 @@ report = ar.profile(df, sample_size=2)
 
 # Safer JSON for sharing (sample_values and top_values values redacted)
 safe_json = report.to_dict(redact_sample_values=True)
+
+# Safer HTML export (top-value chip labels replaced with [REDACTED])
+safe_html = report.to_html(redact_top_values=True)
+# or exclude an entire column from the HTML table:
+# safe_html = report.to_html(redact_top_values=True, exclude_columns=["email"])
 
 # Safer text summary (no sample_values or top_values in output)
 print(report.to_markdown())
@@ -2024,7 +2039,6 @@ arnio/
 <br>
 
 <sub>Built with C++ and pybind11 · Licensed under MIT · Maintained by <a href="https://github.com/im-anishraj">@im-anishraj</a></sub>
-
 </div>
 
 ## Security

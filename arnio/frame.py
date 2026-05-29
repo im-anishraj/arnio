@@ -487,14 +487,16 @@ class ArFrame:
         if missing:
             raise ValueError(f"Unknown columns: {missing}")
 
-        return ArFrame(self._frame.select_columns(columns))
+        return ArFrame(
+            self._frame.select_columns(columns), attrs=copy.deepcopy(self._attrs)
+        )
 
-    def drop_columns(self, cols: list[str]) -> ArFrame:
+    def drop_columns(self, cols: list[str] | tuple[str, ...]) -> ArFrame:
         """Return a new ArFrame with the specified columns removed.
 
         Parameters
         ----------
-        cols : list[str]
+        cols : list[str] | tuple[str, ...]
             Column names to drop. Duplicates are silently ignored.
             An empty list returns a copy of the frame unchanged.
 
@@ -515,10 +517,11 @@ class ArFrame:
         --------
         >>> frame = ar.read_csv("data.csv")
         >>> smaller = frame.drop_columns(["col1", "col2"])
+        >>> smaller = frame.drop_columns(("col1", "col2"))
         """
-        if not isinstance(cols, list):
+        if not isinstance(cols, (list, tuple)):
             raise TypeError(
-                f"cols must be a list of column names, got {type(cols).__name__!r}"
+                f"cols must be a list or tuple of column names, got {type(cols).__name__!r}"
             )
 
         if any(not isinstance(col, str) for col in cols):
@@ -541,7 +544,10 @@ class ArFrame:
 
         # Empty input — return unchanged copy
         if not unique_cols:
-            return ArFrame(self._frame.select_columns(self.columns))
+            return ArFrame(
+                self._frame.select_columns(self.columns),
+                attrs=copy.deepcopy(self._attrs),
+            )
 
         # Preserve original order of remaining columns
         drop_set = set(unique_cols)
@@ -551,7 +557,9 @@ class ArFrame:
         if not remaining:
             raise ValueError("drop_columns cannot remove all columns from the frame")
 
-        return ArFrame(self._frame.select_columns(remaining))
+        return ArFrame(
+            self._frame.select_columns(remaining), attrs=copy.deepcopy(self._attrs)
+        )
 
     def select_dtypes(
         self,
@@ -654,7 +662,12 @@ class ArFrame:
         return self.select_columns(matched)
 
     def describe(self) -> dict[str, dict[str, float]]:
-        """Generate summary statistics for all numeric and string columns.
+        """Generate summary statistics for numeric, string, and boolean columns.
+
+        Numeric columns include ``count``, ``nulls``, ``mean``, ``min``, and
+        ``max``. String columns include ``count``, ``nulls``, and ``unique``.
+        Boolean columns include ``count``, ``nulls``, ``true``, ``false``, and
+        ``true_ratio``.
 
         Returns
         -------
@@ -697,6 +710,14 @@ class ArFrame:
 
         if rows == 0:
             return f"{header}\nColumns: {truncated_names}\n(empty frame)"
+
+        if cols == 0:
+            dtypes_line = f"DTypes: {self.dtypes}"
+            memory_line = f"Memory: {self.memory_usage()} bytes"
+            return (
+                f"{header}\nColumns: {truncated_names}\n{dtypes_line}\n"
+                f"{memory_line}\n(no columns to display)"
+            )
 
         actual_n = min(5, rows)
         col_data = [

@@ -723,6 +723,17 @@ def test_str_keeps_normal_column_names():
     assert "..." not in result
 
 
+def test_str_zero_columns_non_empty_rows_has_explicit_message():
+    frame = ar.from_pandas(pd.DataFrame(index=range(2)))
+
+    result = str(frame)
+
+    assert "ArFrame: 2 rows × 0 columns" in result
+    assert "Columns: []" in result
+    assert "DTypes: {}" in result
+    assert "(no columns to display)" in result
+
+
 def test_add_column_accepts_matching_lengths():
     from arnio._arnio_cpp import Column, DType, Frame
 
@@ -890,6 +901,46 @@ def test_describe_all_string_columns(csv_with_whitespace):
         assert metric_keys == ["count", "nulls", "unique"]
 
 
+def test_describe_includes_boolean_columns():
+    frame = ar.ArFrame.from_records(
+        [
+            {"flag": True, "name": "a"},
+            {"flag": False, "name": "b"},
+            {"flag": True, "name": "c"},
+        ]
+    )
+
+    stats = frame.describe()
+
+    assert list(stats.keys()) == ["flag", "name"]
+    assert list(stats["flag"].keys()) == [
+        "count",
+        "nulls",
+        "true",
+        "false",
+        "true_ratio",
+    ]
+    assert stats["flag"]["count"] == 3.0
+    assert stats["flag"]["nulls"] == 0.0
+    assert stats["flag"]["true"] == 2.0
+    assert stats["flag"]["false"] == 1.0
+    assert stats["flag"]["true_ratio"] == pytest.approx(2.0 / 3.0)
+
+
+def test_describe_boolean_columns_with_nulls():
+    frame = ar.from_pandas(
+        pd.DataFrame({"flag": pd.Series([True, None, False, True], dtype="boolean")})
+    )
+
+    stats = frame.describe()
+
+    assert stats["flag"]["count"] == 3.0
+    assert stats["flag"]["nulls"] == 1.0
+    assert stats["flag"]["true"] == 2.0
+    assert stats["flag"]["false"] == 1.0
+    assert stats["flag"]["true_ratio"] == pytest.approx(2.0 / 3.0)
+
+
 def test_astype_valid_single_type():
     from arnio.convert import to_pandas
     from arnio.frame import ArFrame
@@ -983,6 +1034,21 @@ class TestDropColumns:
         result = frame.drop_columns(["b"])
         assert result.columns == ["a", "c"]
         assert result.shape == (2, 2)
+
+    def test_accepts_tuple_of_column_names(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "a": [1],
+                    "b": [2],
+                    "c": [3],
+                }
+            )
+        )
+
+        result = frame.drop_columns(("a",))
+
+        assert result.columns == ["b", "c"]
 
     def test_drop_multiple_columns(self):
         df = pd.DataFrame({"a": [1], "b": [2], "c": [3], "d": [4]})
@@ -1346,3 +1412,44 @@ def test_select_dtypes_zero_col_preserves_attrs():
     result = frame.select_dtypes(include="string")
     assert result._attrs == {"source": "test"}
     assert result._attrs is not frame._attrs
+
+
+# ── selection methods attrs preservation ──────────────────────────────────────
+
+
+def test_selection_methods_preserve_attrs():
+    df = pd.DataFrame({"a": [1, 2], "b": [3.5, 4.0], "c": ["x", "y"]})
+    frame = ar.from_pandas(df)
+    frame._attrs = {"metadata": {"source": "crm", "version": 1}}
+
+    # 1. select_columns
+    res_select = frame.select_columns(["a", "b"])
+    assert res_select._attrs == {"metadata": {"source": "crm", "version": 1}}
+    assert res_select._attrs is not frame._attrs
+    # Deep copy isolation check
+    res_select._attrs["metadata"]["version"] = 2
+    assert frame._attrs["metadata"]["version"] == 1
+
+    # 2. drop_columns
+    res_drop = frame.drop_columns(["c"])
+    assert res_drop._attrs == {"metadata": {"source": "crm", "version": 1}}
+    assert res_drop._attrs is not frame._attrs
+    # Deep copy isolation check
+    res_drop._attrs["metadata"]["version"] = 2
+    assert frame._attrs["metadata"]["version"] == 1
+
+    # 2.1 drop_columns empty input
+    res_drop_empty = frame.drop_columns([])
+    assert res_drop_empty._attrs == {"metadata": {"source": "crm", "version": 1}}
+    assert res_drop_empty._attrs is not frame._attrs
+    # Deep copy isolation check
+    res_drop_empty._attrs["metadata"]["version"] = 2
+    assert frame._attrs["metadata"]["version"] == 1
+
+    # 3. select_dtypes
+    res_dtypes = frame.select_dtypes(include="int64")
+    assert res_dtypes._attrs == {"metadata": {"source": "crm", "version": 1}}
+    assert res_dtypes._attrs is not frame._attrs
+    # Deep copy isolation check
+    res_dtypes._attrs["metadata"]["version"] = 2
+    assert frame._attrs["metadata"]["version"] == 1

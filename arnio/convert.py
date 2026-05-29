@@ -329,6 +329,8 @@ def to_arrow(frame: ArFrame) -> pa.Table:
 def _pandas_dtype_to_arnio(dtype: object) -> _DType | None:
     if dtype == pd.Int64Dtype():
         return _DType.INT64
+    if dtype == pd.Float64Dtype():
+        return _DType.FLOAT64
     if str(dtype) == "float64":
         return _DType.FLOAT64
     if dtype == pd.BooleanDtype() or str(dtype) == "bool":

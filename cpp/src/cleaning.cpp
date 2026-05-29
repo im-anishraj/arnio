@@ -174,6 +174,18 @@ static uint64_t hash_row(const Frame& frame, size_t row, const std::vector<size_
     return h;
 }
 
+static int64_t checked_double_to_int64(double value, const char* context) {
+    constexpr double int64_min = static_cast<double>(std::numeric_limits<int64_t>::min());
+    constexpr double int64_max_exclusive = 9223372036854775808.0;  // 2^63
+
+    if (!std::isfinite(value) || value != std::floor(value) || value < int64_min ||
+        value >= int64_max_exclusive) {
+        throw std::invalid_argument(std::string(context) +
+                                    " must be a finite integral value within int64 range.");
+    }
+    return static_cast<int64_t>(value);
+}
+
 static CellValue coerce_value(const CellValue& value, DType target) {
     if (std::holds_alternative<std::monostate>(value)) {
         return std::monostate{};
@@ -190,12 +202,13 @@ static CellValue coerce_value(const CellValue& value, DType target) {
         }
         if (std::holds_alternative<double>(value)) {
             double d = std::get<double>(value);
-            if (std::isnan(d) || std::isinf(d) || d != std::floor(d)) {
+            try {
+                return checked_double_to_int64(d, "Numeric fill value");
+            } catch (const std::invalid_argument&) {
                 throw std::invalid_argument(
                     "Lossy or non-finite numeric fill values are not permitted for integer "
                     "columns.");
             }
-            return static_cast<int64_t>(d);
         }
         if (std::holds_alternative<std::string>(value)) {
             const auto& s = std::get<std::string>(value);
@@ -752,9 +765,9 @@ Frame clip_numeric(const Frame& frame, std::optional<double> lower, std::optiona
         if (src.dtype() == DType::INT64) {
             const auto& vec = std::get<std::vector<int64_t>>(src.data());
             Column col(src.name(), DType::INT64);
-            const int64_t lo = lower.has_value() ? static_cast<int64_t>(lower.value())
+            const int64_t lo = lower.has_value() ? checked_double_to_int64(lower.value(), "lower")
                                                  : std::numeric_limits<int64_t>::min();
-            const int64_t hi = upper.has_value() ? static_cast<int64_t>(upper.value())
+            const int64_t hi = upper.has_value() ? checked_double_to_int64(upper.value(), "upper")
                                                  : std::numeric_limits<int64_t>::max();
             for (size_t r = 0; r < src.size(); ++r) {
                 if (src.is_null(r)) {
