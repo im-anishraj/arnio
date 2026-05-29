@@ -887,7 +887,7 @@ def test_describe_all_numeric_columns(large_csv):
 
     for col in ["id", "value"]:
         metric_keys = list(stats[col].keys())
-        assert metric_keys == ["count", "nulls", "mean", "min", "max"]
+        assert metric_keys == ["count", "nulls", "non_finite", "mean", "min", "max"]
 
 
 def test_describe_all_string_columns(csv_with_whitespace):
@@ -939,6 +939,74 @@ def test_describe_boolean_columns_with_nulls():
     assert stats["flag"]["true"] == 2.0
     assert stats["flag"]["false"] == 1.0
     assert stats["flag"]["true_ratio"] == pytest.approx(2.0 / 3.0)
+
+
+# ── non-finite describe regression tests ─────────────────────────────────────
+
+
+def test_describe_non_finite_mixed_float_column():
+    """inf and -inf are excluded from sum/min/max; non_finite count is reported."""
+    import io
+
+    frame = ar.read_csv(io.StringIO("x\n1.0\ninf\n-inf\n3.0\n"))
+    stats = frame.describe()
+
+    assert stats["x"]["count"] == 4.0
+    assert stats["x"]["nulls"] == 0.0
+    assert stats["x"]["non_finite"] == 2.0
+    assert stats["x"]["mean"] == pytest.approx(2.0)
+    assert stats["x"]["min"] == pytest.approx(1.0)
+    assert stats["x"]["max"] == pytest.approx(3.0)
+
+
+def test_describe_non_finite_all_finite_column():
+    """All-finite column: non_finite == 0, mean/min/max computed normally."""
+    import io
+
+    frame = ar.read_csv(io.StringIO("x\n2.0\n4.0\n6.0\n"))
+    stats = frame.describe()
+
+    assert stats["x"]["non_finite"] == 0.0
+    assert stats["x"]["mean"] == pytest.approx(4.0)
+    assert stats["x"]["min"] == pytest.approx(2.0)
+    assert stats["x"]["max"] == pytest.approx(6.0)
+
+
+def test_describe_non_finite_all_non_finite_column():
+    """All-non-finite column: mean/min/max fall back to 0.0 deterministically."""
+    import io
+
+    frame = ar.read_csv(io.StringIO("x\ninf\n-inf\n"))
+    stats = frame.describe()
+
+    assert stats["x"]["count"] == 2.0
+    assert stats["x"]["non_finite"] == 2.0
+    assert stats["x"]["mean"] == 0.0
+    assert stats["x"]["min"] == 0.0
+    assert stats["x"]["max"] == 0.0
+
+
+def test_describe_non_finite_negative_inf_only():
+    """-inf only column is fully non-finite; fallback values are 0.0."""
+    import io
+
+    frame = ar.read_csv(io.StringIO("x\n-inf\n-inf\n"))
+    stats = frame.describe()
+
+    assert stats["x"]["non_finite"] == 2.0
+    assert stats["x"]["mean"] == 0.0
+    assert stats["x"]["min"] == 0.0
+    assert stats["x"]["max"] == 0.0
+
+
+def test_describe_non_finite_int64_no_regression():
+    """int64 columns cannot hold inf; non_finite must always be 0."""
+    frame = ar.from_pandas(pd.DataFrame({"x": [10, 20, 30]}))
+    stats = frame.describe()
+
+    assert stats["x"]["non_finite"] == 0.0
+    assert stats["x"]["count"] == 3.0
+    assert stats["x"]["mean"] == pytest.approx(20.0)
 
 
 def test_astype_valid_single_type():
