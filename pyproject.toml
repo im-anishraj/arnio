@@ -61,6 +61,7 @@ dev = [
     "pre-commit>=3.0",
     "hypothesis>=6.0",
     "PyYAML>=6.0",
+    "duckdb>=1.0",
     "tomli; python_version < '3.11'",
 ]
 sklearn = [
