@@ -1092,15 +1092,22 @@ CsvReader::scan_schema(const std::string& path, const std::string& on_bad_lines)
         if (line.empty()) continue;
         parser_.parse_line(line, reusable_fields);
         if (reusable_fields.size() != num_cols) {
-            if (on_bad_lines == "error") {
-                validate_row_width(record_number, num_cols, reusable_fields.size());
-            } else if (on_bad_lines == "warn") {
-                bad_rows.push_back("CSV row " + std::to_string(record_number) + " has " +
-                                   std::to_string(reusable_fields.size()) + " fields; expected " +
-                                   std::to_string(num_cols));
-                continue;
-            } else if (on_bad_lines == "skip") {
-                continue;
+            const size_t actual = reusable_fields.size();
+            if (actual > num_cols || config.mode == "strict") {
+                if (on_bad_lines == "error") {
+                    validate_row_width(record_number, num_cols, actual);
+                } else if (on_bad_lines == "warn") {
+                    bad_rows.push_back("CSV row " + std::to_string(record_number) + " has " +
+                                       std::to_string(actual) + " fields; expected " +
+                                       std::to_string(num_cols));
+                    continue;
+                } else if (on_bad_lines == "skip") {
+                    continue;
+                }
+            } else {
+                while (reusable_fields.size() < num_cols) {
+                    reusable_fields.push_back("");
+                }
             }
         }
         for (size_t i = 0; i < num_cols && i < reusable_fields.size(); ++i) {

@@ -950,6 +950,7 @@ def scan_csv(
     null_values: list[str] | None = None,
     has_header: bool = True,
     encoding_errors: str = "strict",
+    mode: str = "strict",
     on_bad_lines: str = "error",
 ) -> dict[str, str]:
     """Return schema (column names + inferred types) without loading data.
@@ -995,6 +996,11 @@ def scan_csv(
     encoding_errors : str, default "strict"
         How encoding errors are handled. One of ``"strict"``, ``"replace"``,
         or ``"ignore"``.
+
+    mode : {"strict", "permissive"}, default "strict"
+        Controls malformed row handling during schema inference. In
+        ``"permissive"`` mode, narrow rows are padded with nulls before type
+        inference so scanning matches ``read_csv(..., mode="permissive")``.
 
     on_bad_lines : str, default "error"
         What to do when a malformed row is encountered during schema inference.
@@ -1044,6 +1050,7 @@ def scan_csv(
     _validate_thousands_separator(thousands_separator, decimal_separator)
     delimiter = _validate_delimiter(delimiter)
     encoding_errors = _validate_encoding_errors(encoding_errors)
+    mode = _validate_parser_mode(mode)
     on_bad_lines = _validate_on_bad_lines(on_bad_lines)
     config = _CsvConfig()
     config.delimiter = delimiter
@@ -1053,6 +1060,7 @@ def scan_csv(
     config.thousands_separator = thousands_separator
     config.has_header = _validate_bool_option(has_header, "has_header")
     config.encoding_errors = encoding_errors
+    config.mode = mode
 
     if null_values is not None:
         config.null_values = _validate_null_values(null_values)
