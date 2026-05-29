@@ -138,10 +138,8 @@ TEST_CASE("Frame::describe reports empty boolean summaries deterministically",
 
 // ── non-finite describe tests ─────────────────────────────────────────────────
 
-static double find_stat(
-    const std::vector<std::pair<std::string, double>>& stats,
-    const std::string& key)
-{
+static double find_stat(const std::vector<std::pair<std::string, double>>& stats,
+                        const std::string& key) {
     for (const auto& kv : stats) {
         if (kv.first == key) return kv.second;
     }
@@ -163,12 +161,12 @@ TEST_CASE("Frame::describe excludes non-finite floats and exposes non_finite cou
     REQUIRE(summary.size() == 1);
 
     const auto& stats = summary[0].second;
-    REQUIRE(find_stat(stats, "count")      == 4.0);
-    REQUIRE(find_stat(stats, "nulls")      == 0.0);
+    REQUIRE(find_stat(stats, "count") == 4.0);
+    REQUIRE(find_stat(stats, "nulls") == 0.0);
     REQUIRE(find_stat(stats, "non_finite") == 2.0);
-    REQUIRE(find_stat(stats, "mean")       == 2.0);
-    REQUIRE(find_stat(stats, "min")        == 1.0);
-    REQUIRE(find_stat(stats, "max")        == 3.0);
+    REQUIRE(find_stat(stats, "mean") == 2.0);
+    REQUIRE(find_stat(stats, "min") == 1.0);
+    REQUIRE(find_stat(stats, "max") == 3.0);
 }
 
 TEST_CASE("Frame::describe all-non-finite column returns zero fallback",
@@ -182,11 +180,11 @@ TEST_CASE("Frame::describe all-non-finite column returns zero fallback",
 
     auto summary = f.describe();
     const auto& stats = summary[0].second;
-    REQUIRE(find_stat(stats, "count")      == 2.0);
+    REQUIRE(find_stat(stats, "count") == 2.0);
     REQUIRE(find_stat(stats, "non_finite") == 2.0);
-    REQUIRE(find_stat(stats, "mean")       == 0.0);
-    REQUIRE(find_stat(stats, "min")        == 0.0);
-    REQUIRE(find_stat(stats, "max")        == 0.0);
+    REQUIRE(find_stat(stats, "mean") == 0.0);
+    REQUIRE(find_stat(stats, "min") == 0.0);
+    REQUIRE(find_stat(stats, "max") == 0.0);
 }
 
 TEST_CASE("Frame::describe negative-infinity only column is non-finite",
@@ -201,9 +199,9 @@ TEST_CASE("Frame::describe negative-infinity only column is non-finite",
     auto summary = f.describe();
     const auto& stats = summary[0].second;
     REQUIRE(find_stat(stats, "non_finite") == 2.0);
-    REQUIRE(find_stat(stats, "mean")       == 0.0);
-    REQUIRE(find_stat(stats, "min")        == 0.0);
-    REQUIRE(find_stat(stats, "max")        == 0.0);
+    REQUIRE(find_stat(stats, "mean") == 0.0);
+    REQUIRE(find_stat(stats, "min") == 0.0);
+    REQUIRE(find_stat(stats, "max") == 0.0);
 }
 
 TEST_CASE("Frame::describe int64 column non_finite is always zero",
@@ -219,8 +217,8 @@ TEST_CASE("Frame::describe int64 column non_finite is always zero",
     auto summary = f.describe();
     const auto& stats = summary[0].second;
     REQUIRE(find_stat(stats, "non_finite") == 0.0);
-    REQUIRE(find_stat(stats, "count")      == 3.0);
-    REQUIRE(find_stat(stats, "mean")       == 20.0);
-    REQUIRE(find_stat(stats, "min")        == 10.0);
-    REQUIRE(find_stat(stats, "max")        == 30.0);
+    REQUIRE(find_stat(stats, "count") == 3.0);
+    REQUIRE(find_stat(stats, "mean") == 20.0);
+    REQUIRE(find_stat(stats, "min") == 10.0);
+    REQUIRE(find_stat(stats, "max") == 30.0);
 }
