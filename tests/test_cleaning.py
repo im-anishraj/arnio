@@ -1735,7 +1735,6 @@ class TestNormalizeUnicode:
         assert frame_3_0_attrs._attrs["key"] == "value"
 
 
-
 class TestParseBoolStrings:
     def test_parse_basic_bool_strings(self):
         import pandas as pd
