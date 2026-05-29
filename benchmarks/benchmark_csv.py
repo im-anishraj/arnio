@@ -1,14 +1,17 @@
+import argparse
 import csv
-import os
+import tempfile
 import time
+from pathlib import Path
 
 import arnio
 
 
 def generate_test_csv(filename, num_rows=200000, num_cols=10):
-    if not os.path.exists(filename):
+    filename = Path(filename)
+    if not filename.exists():
         print(f"Generating test CSV with {num_rows} rows...")
-        with open(filename, "w", newline="", encoding="utf-8") as f:
+        with filename.open("w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
             header = [f"col_{i}" for i in range(num_cols)]
             writer.writerow(header)
@@ -33,10 +36,18 @@ def run_benchmark(filename):
 
 
 if __name__ == "__main__":
-    test_file = "large_benchmark.csv"
-    try:
-        generate_test_csv(test_file)
+    parser = argparse.ArgumentParser(
+        description="Benchmark arnio.read_csv() performance."
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Use a small row count instead of the full 200k-row dataset.",
+    )
+    args = parser.parse_args()
+
+    num_rows = 500 if args.dry_run else 200_000
+    with tempfile.TemporaryDirectory() as tmpdir:
+        test_file = Path(tmpdir) / "large_benchmark.csv"
+        generate_test_csv(test_file, num_rows=num_rows)
         run_benchmark(test_file)
-    finally:
-        if os.path.exists(test_file):
-            os.remove(test_file)
