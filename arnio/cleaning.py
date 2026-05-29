@@ -6,6 +6,7 @@ Data cleaning functions.
 from __future__ import annotations
 
 import copy
+import math
 import unicodedata
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any
@@ -1580,6 +1581,14 @@ def safe_divide_columns(
         raise ValueError(f"Denominator column '{denominator}' not found in frame.")
     if not isinstance(output_column, str) or not output_column.strip():
         raise ValueError("output_column must be a non-empty string.")
+    if isinstance(fill_value, bool):
+        raise TypeError("fill_value must be a finite float, not bool")
+    if not isinstance(fill_value, (int, float)):
+        raise TypeError(
+            f"fill_value must be a finite float, got {type(fill_value).__name__!r}"
+        )
+    if not math.isfinite(fill_value):
+        raise ValueError(f"fill_value must be finite, got {fill_value}")
     if output_column in columns:
         import warnings
 

@@ -3409,6 +3409,49 @@ class TestSafeDivideColumns:
                 frame, numerator="num", denominator="den", output_column="ratio"
             )
 
+    def test_fill_value_bool_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1.0, 2.0], "b": [1.0, 0.0]}))
+        with pytest.raises(
+            TypeError, match="fill_value must be a finite float, not bool"
+        ):
+            ar.safe_divide_columns(frame, "a", "b", "ratio", fill_value=True)
+
+    def test_fill_value_nan_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1.0, 2.0], "b": [1.0, 0.0]}))
+        with pytest.raises(ValueError, match="fill_value must be finite"):
+            ar.safe_divide_columns(frame, "a", "b", "ratio", fill_value=float("nan"))
+
+    def test_fill_value_inf_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1.0, 2.0], "b": [1.0, 0.0]}))
+        with pytest.raises(ValueError, match="fill_value must be finite"):
+            ar.safe_divide_columns(frame, "a", "b", "ratio", fill_value=float("inf"))
+
+    def test_fill_value_negative_inf_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1.0, 2.0], "b": [1.0, 0.0]}))
+        with pytest.raises(ValueError, match="fill_value must be finite"):
+            ar.safe_divide_columns(frame, "a", "b", "ratio", fill_value=float("-inf"))
+
+    def test_fill_value_valid_float_passes(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "a": [1.0, 2.0],
+                    "b": [1.0, 0.0],
+                }
+            )
+        )
+
+        result = ar.safe_divide_columns(
+            frame,
+            "a",
+            "b",
+            "ratio",
+            fill_value=0.5,
+        )
+
+        df = ar.to_pandas(result)
+        assert df["ratio"].tolist() == [1.0, 0.5]
+
 
 class TestClipNumericNativeRegression:
     """Regression tests verifying the native C++ clip_numeric hot-path.
