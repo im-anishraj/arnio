@@ -33,15 +33,18 @@ class ArnioCleaner(BaseEstimator, TransformerMixin):
     """
 
     def __init__(self, steps=None, copy=True, allow_row_count_change=False):
-        if not isinstance(copy, bool):
-            raise TypeError("copy must be a bool")
-        if not isinstance(allow_row_count_change, bool):
-            raise TypeError("allow_row_count_change must be a bool")
         self.steps = steps if steps is not None else []
         self.copy = copy
         self.allow_row_count_change = allow_row_count_change
 
+    def _validate_params(self):
+        if not isinstance(self.copy, bool):
+            raise TypeError("copy must be a bool")
+        if not isinstance(self.allow_row_count_change, bool):
+            raise TypeError("allow_row_count_change must be a bool")
+
     def fit(self, X, y=None):
+        self._validate_params()
         if not isinstance(X, pd.DataFrame):
             raise TypeError(f"ArnioCleaner requires a pandas DataFrame, got {type(X)}")
 
@@ -59,6 +62,7 @@ class ArnioCleaner(BaseEstimator, TransformerMixin):
 
     def transform(self, X, y=None):
         # Scikit-learn expectation: ensure the estimator was fitted
+        self._validate_params()
         check_is_fitted(self, "n_features_in_")
 
         if not isinstance(X, pd.DataFrame):

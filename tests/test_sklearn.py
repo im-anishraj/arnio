@@ -279,10 +279,28 @@ def test_arniocleaner_warns_for_multiple_dtype_changes():
 
 
 def test_arniocleaner_rejects_non_boolean_options():
-    """Ensure constructor explicitly blocks truthy/falsy non-boolean values."""
+    """Ensure non-boolean values are rejected at fit/transform, not construction."""
+    df = pd.DataFrame({"A": [1, 2, 3]})
     invalid_values = ["false", "True", 1, 0, None, [], {}]
     for value in invalid_values:
         with pytest.raises(TypeError, match="copy must be a bool"):
-            ArnioCleaner(copy=value)
+            ArnioCleaner(copy=value).fit(df)
         with pytest.raises(TypeError, match="allow_row_count_change must be a bool"):
-            ArnioCleaner(allow_row_count_change=value)
+            ArnioCleaner(allow_row_count_change=value).fit(df)
+
+
+def test_arniocleaner_construction_with_invalid_params_does_not_raise():
+    # Construction must succeed even with invalid types (sklearn convention)
+    cleaner = ArnioCleaner(copy="yes")
+    assert cleaner.copy == "yes"
+    cleaner2 = ArnioCleaner(allow_row_count_change=1)
+    assert cleaner2.allow_row_count_change == 1
+
+
+def test_arniocleaner_clone_with_invalid_params_does_not_raise():
+    # sklearn clone() must work without triggering validation
+    from sklearn.base import clone
+
+    cleaner = ArnioCleaner(copy="yes")
+    cloned = clone(cleaner)
+    assert cloned.copy == "yes"
