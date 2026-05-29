@@ -48,6 +48,51 @@ TEST_CASE("Column NULL_TYPE has zero size", "[column]") {
     REQUIRE(col.size() == 0);
 }
 
+TEST_CASE("NULL_TYPE column rejects non-null push_back", "[column]") {
+    Column col("test", DType::NULL_TYPE);
+
+    SECTION("int64 value is rejected") {
+        REQUIRE_THROWS_AS(col.push_back(int64_t{10}), std::invalid_argument);
+    }
+    SECTION("string value is rejected") {
+        REQUIRE_THROWS_AS(col.push_back(std::string("hi")), std::invalid_argument);
+    }
+    SECTION("double value is rejected") {
+        REQUIRE_THROWS_AS(col.push_back(double{3.14}), std::invalid_argument);
+    }
+    SECTION("bool value is rejected") {
+        REQUIRE_THROWS_AS(col.push_back(bool{true}), std::invalid_argument);
+    }
+}
+
+TEST_CASE("NULL_TYPE column state unchanged after rejected push_back", "[column]") {
+    Column col("guard", DType::NULL_TYPE);
+
+    // Attempt a non-null insertion that must be rejected
+    REQUIRE_THROWS_AS(col.push_back(int64_t{42}), std::invalid_argument);
+
+    // null_mask_ must not have grown — column size stays 0
+    REQUIRE(col.size() == 0);
+
+    // dtype and variant storage remain consistent
+    REQUIRE(col.dtype() == DType::NULL_TYPE);
+    REQUIRE(std::holds_alternative<std::monostate>(col.data()));
+}
+
+TEST_CASE("NULL_TYPE column allows null insertion", "[column]") {
+    Column col("nulls", DType::NULL_TYPE);
+
+    // Pushing an explicit null (std::monostate) is valid
+    col.push_back(std::monostate{});
+    REQUIRE(col.size() == 1);
+    REQUIRE(col.is_null(0) == true);
+
+    // push_null also works
+    col.push_null();
+    REQUIRE(col.size() == 2);
+    REQUIRE(col.is_null(1) == true);
+}
+
 TEST_CASE("Inconsistent column throws on operations", "[column]") {
     ColumnData bad_data = std::vector<std::string>{"hello"};
     Column bad("x", DType::INT64, std::move(bad_data), std::vector<bool>{false});

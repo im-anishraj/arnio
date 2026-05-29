@@ -3,6 +3,7 @@ Tests for ArFrame.schema_summary property.
 """
 
 import pandas as pd
+import pytest
 
 import arnio as ar
 from arnio.frame import ColumnSummary
@@ -13,6 +14,24 @@ from arnio.frame import ColumnSummary
 
 
 class TestColumnSummary:
+    def test_column_summary_invalid_name(self):
+        with pytest.raises(TypeError, match="name must be a str"):
+            ColumnSummary(name=1, dtype="int64", nullable=False)
+
+    def test_column_summary_invalid_dtype(self):
+        with pytest.raises(TypeError, match="dtype must be a str"):
+            ColumnSummary(name="id", dtype=2, nullable=False)
+
+    def test_column_summary_invalid_nullable(self):
+        with pytest.raises(TypeError, match="nullable must be a bool"):
+            ColumnSummary(name="id", dtype="int64", nullable="yes")
+
+    def test_column_summary_valid(self):
+        entry = ColumnSummary("id", "int64", True)
+        assert entry.name == "id"
+        assert entry.dtype == "int64"
+        assert entry.nullable is True
+
     def test_attributes(self):
         entry = ColumnSummary(name="age", dtype="int64", nullable=False)
         assert entry.name == "age"
@@ -167,6 +186,14 @@ class TestSchemaSummaryNormal:
         frame = ar.from_pandas(df)
         assert frame.schema_summary == frame.schema_summary
 
+    def test_schema_summary_returns_valid_column_summaries(self):
+        df = pd.DataFrame({"id": [1, 2], "name": ["a", None]})
+        frame = ar.from_pandas(df)
+        for entry in frame.schema_summary:
+            assert isinstance(entry.name, str)
+            assert isinstance(entry.dtype, str)
+            assert isinstance(entry.nullable, bool)
+
 
 # ---------------------------------------------------------------------------
 # Edge cases
@@ -226,3 +253,21 @@ class TestSchemaSummaryEdgeCases:
         frame = ar.from_pandas(df)
         for entry in frame.schema_summary:
             assert isinstance(entry, CS)
+
+    def test_schema_to_dict_empty_dataframe(self):
+        df = pd.DataFrame()
+        frame = ar.from_pandas(df)
+        res = ar.schema_export.schema_to_dict(frame)
+        assert res == {"fields": {}}
+
+    def test_schema_to_yaml_empty_dataframe(self):
+        df = pd.DataFrame()
+        frame = ar.from_pandas(df)
+        res = ar.schema_export.schema_to_yaml(frame)
+        assert res == "fields: {}\n"
+
+    def test_schema_to_dict_with_column_summary_list(self):
+        df = pd.DataFrame({"age": [20]})
+        frame = ar.from_pandas(df)
+        res = ar.schema_export.schema_to_dict(frame.schema_summary)
+        assert res == {"fields": {"age": {"type": "INT64", "nullable": False}}}

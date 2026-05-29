@@ -402,7 +402,9 @@ class TestPipeline:
         frame = ar.read_csv(sample_csv)
         result = ar.pipeline(frame, [("drop_columns", {"columns": []})])
 
-        assert result is frame
+        assert result is not frame
+        assert result.columns == frame.columns
+        assert len(result) == len(frame)
 
     def test_pipeline_drop_columns_rejects_missing_columns(self, sample_csv):
         import pytest
@@ -625,6 +627,28 @@ class TestPipeline:
         assert "marker" in df.columns
         assert set(df["marker"]) == {"done"}
 
+    def test_unregister_missing_step(self):
+        with pytest.raises(ar.UnknownStepError):
+            ar.unregister_step("missing_step")
+
+    def test_unregister_builtin_python_step(self):
+        with pytest.raises(ar.UnknownStepError):
+            ar.unregister_step("standardize_missing_tokens")
+
+    def test_unregister_custom_step(self):
+        def custom_step(df):
+            return df
+
+        ar.register_step("temporary_step", custom_step)
+
+        ar.unregister_step("temporary_step")
+
+        with pytest.raises(ar.UnknownStepError):
+            ar.pipeline(
+                ar.from_pandas(pd.DataFrame({"a": [1]})),
+                [("temporary_step",)],
+            )
+
     def test_pipeline_passes_context_to_opt_in_python_steps(self, sample_csv):
         frame = ar.read_csv(sample_csv)
         seen = {}
@@ -838,6 +862,176 @@ class TestPipeline:
         assert row_counts[0]["before"] == 3
         assert row_counts[0]["after"] == 3
         assert row_counts[0]["dry_run"] is True
+
+
+class TestPipelineDryRunIntermediateFrame:
+    """Regression tests for dry_run validating against intermediate frame."""
+
+    def test_dry_run_rename_then_validate(self):
+        frame = ar.from_pandas(pd.DataFrame({"old_name": [" Alice "]}))
+        result = ar.pipeline(
+            frame,
+            [
+                ("rename_columns", {"old_name": "name"}),
+                ("validate_columns_exist", {"columns": ["name"]}),
+            ],
+            dry_run=True,
+        )
+        assert result is frame
+        assert "old_name" in ar.to_pandas(result).columns
+
+    def test_dry_run_drop_then_validate_column_gone(self):
+        frame = ar.from_pandas(pd.DataFrame({"keep_me": [1], "drop_me": [2]}))
+        result = ar.pipeline(
+            frame,
+            [
+                ("drop_columns", {"columns": ["drop_me"]}),
+                ("validate_columns_exist", {"columns": ["keep_me"]}),
+            ],
+            dry_run=True,
+        )
+        assert result is frame
+
+    def test_dry_run_drop_then_validate_missing_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"keep_me": [1], "drop_me": [2]}))
+        with pytest.raises(KeyError, match="Missing columns"):
+            ar.pipeline(
+                frame,
+                [
+                    ("drop_columns", {"columns": ["keep_me"]}),
+                    ("validate_columns_exist", {"columns": ["keep_me"]}),
+                ],
+                dry_run=True,
+            )
+
+    def test_dry_run_rename_then_validate_missing_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"old_name": [" Alice "]}))
+        with pytest.raises(KeyError, match="Missing columns"):
+            ar.pipeline(
+                frame,
+                [
+                    ("rename_columns", {"old_name": "name"}),
+                    ("validate_columns_exist", {"columns": ["old_name"]}),
+                ],
+                dry_run=True,
+            )
+
+    def test_dry_run_select_then_validate(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [1], "y": [2], "z": [3]}))
+        result = ar.pipeline(
+            frame,
+            [
+                ("select_columns", {"columns": ["x", "y"]}),
+                ("validate_columns_exist", {"columns": ["x", "y"]}),
+            ],
+            dry_run=True,
+        )
+        assert result is frame
+
+    def test_dry_run_select_then_validate_dropped_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [1], "y": [2], "z": [3]}))
+        with pytest.raises(KeyError, match="Missing columns"):
+            ar.pipeline(
+                frame,
+                [
+                    ("select_columns", {"columns": ["x", "y"]}),
+                    ("validate_columns_exist", {"columns": ["z"]}),
+                ],
+                dry_run=True,
+            )
+
+    def test_dry_run_and_real_consistency(self):
+        frame = ar.from_pandas(
+            pd.DataFrame({"old_name": [" Alice "], "extra": [" Bob "]})
+        )
+        dry_result = ar.pipeline(
+            frame,
+            [
+                ("rename_columns", {"old_name": "name"}),
+                ("drop_columns", {"columns": ["extra"]}),
+                ("strip_whitespace",),
+            ],
+            dry_run=True,
+        )
+        real_result = ar.pipeline(
+            frame,
+            [
+                ("rename_columns", {"old_name": "name"}),
+                ("drop_columns", {"columns": ["extra"]}),
+                ("strip_whitespace",),
+            ],
+            dry_run=False,
+        )
+        assert dry_result is frame
+        assert "name" in ar.to_pandas(real_result).columns
+        assert "old_name" not in ar.to_pandas(real_result).columns
+        assert "extra" not in ar.to_pandas(real_result).columns
+
+    def test_dry_run_does_not_mutate_original(self):
+        original = pd.DataFrame({"delete_me": [1, 2], "keep": [3, 4]})
+        frame = ar.from_pandas(original.copy())
+        ar.pipeline(
+            frame,
+            [
+                ("drop_columns", {"columns": ["delete_me"]}),
+                ("validate_columns_exist", {"columns": ["keep"]}),
+            ],
+            dry_run=True,
+        )
+        pd.testing.assert_frame_equal(ar.to_pandas(frame), original, check_dtype=False)
+
+    def test_dry_run_python_step_advances_intermediate_frame(self):
+        def add_column_step(df):
+            df["added"] = "present"
+            return df
+
+        ar.register_step("test_dry_add_column", add_column_step)
+        frame = ar.from_pandas(pd.DataFrame({"x": [1]}))
+        ar.pipeline(
+            frame,
+            [
+                ("test_dry_add_column",),
+                ("validate_columns_exist", {"columns": ["added"]}),
+            ],
+            dry_run=True,
+        )
+
+    def test_dry_run_transform_then_validate_column_content_type(self):
+        frame = ar.from_pandas(pd.DataFrame({"age_str": ["10", "20", "30"]}))
+        result = ar.pipeline(
+            frame,
+            [
+                ("cast_types", {"age_str": "int64"}),
+                ("validate_columns_exist", {"columns": ["age_str"]}),
+            ],
+            dry_run=True,
+        )
+        assert result is frame
+
+    def test_dry_run_rename_with_mapping_shorthand_then_validate(self):
+        frame = ar.from_pandas(pd.DataFrame({"old": [1], "other": [2]}))
+        result = ar.pipeline(
+            frame,
+            [
+                ("rename_columns", {"old": "new"}),
+                ("validate_columns_exist", {"columns": ["new"]}),
+            ],
+            dry_run=True,
+        )
+        assert result is frame
+
+    def test_dry_run_metadata_still_uses_original_rows(self):
+        frame = ar.from_pandas(pd.DataFrame({"name": ["Alice", None, "Bob", None]}))
+        original_rows = frame.shape[0]
+        _, meta = ar.pipeline(
+            frame,
+            [("drop_nulls",), ("validate_columns_exist", {"columns": ["name"]})],
+            dry_run=True,
+            return_metadata=True,
+        )
+        for entry in meta["row_counts"]:
+            assert entry["after"] == original_rows
+            assert entry["dry_run"] is True
 
 
 def test_get_builtin_step_signatures_returns_normalized_signatures():
@@ -1701,3 +1895,76 @@ def test_pipeline_bool_flags_valid():
         verbose=True,
     )
     assert isinstance(result, tuple)
+
+
+class TestRegisterStepValidation:
+    @pytest.fixture(autouse=True)
+    def cleanup_registry(self):
+        """Ensure the global custom step registry resets after every single test in this class."""
+        yield
+        from arnio.pipeline import reset_steps
+
+        reset_steps()
+
+    # --- Happy Path ---
+    def test_registers_valid_callable(self):
+        from arnio.pipeline import list_steps, register_step
+
+        def dummy_clean(df):
+            return df
+
+        register_step("custom_dummy_step", dummy_clean)
+        assert "custom_dummy_step" in list_steps()
+
+    def test_allows_intentional_overwrite(self):
+        from arnio.pipeline import register_step
+
+        def first_step(df):
+            return df
+
+        def second_step(df):
+            return df
+
+        register_step("overwrite_step", first_step)
+        register_step("overwrite_step", second_step, overwrite=True)
+
+    # --- Edge Cases & Parameter Boundaries ---
+    def test_rejects_non_callable_objects(self):
+        from arnio.pipeline import register_step
+
+        """Verify TypeError is raised immediately for numbers, strings, and instances."""
+        with pytest.raises(TypeError, match="must be a callable object"):
+            register_step("bad_int", 123)
+        with pytest.raises(TypeError, match="must be a callable object"):
+            register_step("bad_str", "not_a_callable_function")
+        with pytest.raises(TypeError, match="must be a callable object"):
+            register_step("bad_dict", {"a": 1})
+
+    def test_rejects_empty_string_names(self):
+        from arnio.pipeline import register_step
+
+        def dummy_clean(df):
+            return df
+
+        with pytest.raises(ValueError, match="must be a non-empty string"):
+            register_step("", dummy_clean)
+
+    def test_rejects_whitespace_only_names(self):
+        from arnio.pipeline import register_step
+
+        def dummy_clean(df):
+            return df
+
+        with pytest.raises(ValueError, match="must be a non-empty string"):
+            register_step("    ", dummy_clean)
+
+    def test_rejects_invalid_name_types(self):
+        from arnio.pipeline import register_step
+
+        def dummy_clean(df):
+            return df
+
+        with pytest.raises(ValueError, match="must be a non-empty string"):
+            register_step(None, dummy_clean)  # type: ignore
+        with pytest.raises(ValueError, match="must be a non-empty string"):
+            register_step(42, dummy_clean)  # type: ignore

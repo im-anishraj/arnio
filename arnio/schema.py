@@ -30,6 +30,7 @@ ISSUE_COLUMNS = [
 ]
 
 DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+URL_SCHEME_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*$")
 
 _VALID_SEVERITIES = {"error", "warning"}
 
@@ -689,6 +690,7 @@ class Field:
     pattern: str | None = None
     semantic: str | None = None
     allowed: set[Any] | None = None
+    case_sensitive: bool = True
     unique: bool = False
     min_length: int | None = None
     max_length: int | None = None
@@ -703,6 +705,8 @@ class Field:
             raise TypeError("nullable must be a bool")
         if not isinstance(self.unique, bool):
             raise TypeError("unique must be a bool")
+        if not isinstance(self.case_sensitive, bool):
+            raise TypeError("case_sensitive must be a bool")
 
         if self.required_if is not None:
             if not isinstance(self.required_if, tuple):
@@ -713,7 +717,54 @@ class Field:
                 )
             if not isinstance(self.required_if[0], str):
                 raise TypeError("required_if column name must be a string")
+        if self.dtype in {"int64", "float64"}:
+            if self.min is not None:
+                if isinstance(self.min, bool) or not isinstance(self.min, (int, float)):
+                    raise TypeError("min must be numeric or None")
+            if self.max is not None:
+                if isinstance(self.max, bool) or not isinstance(self.max, (int, float)):
+                    raise TypeError("max must be numeric or None")
+            if self.min is not None and self.max is not None:
+                if self.min > self.max:
+                    raise ValueError("min must be less than or equal to max")
+        if self.dtype is not None and not isinstance(self.dtype, str):
+            raise TypeError(
+                f"dtype must be a str or None, got {type(self.dtype).__name__}"
+            )
 
+        if self.pattern is not None:
+            if not isinstance(self.pattern, str):
+                raise TypeError(
+                    f"pattern must be a str or None, got {type(self.pattern).__name__}"
+                )
+            try:
+                re.compile(self.pattern)
+            except re.error as exc:
+                raise ValueError(
+                    f"pattern is not a valid regular expression: {exc}"
+                ) from exc
+
+        if self.allowed is not None:
+            if not isinstance(self.allowed, (list, tuple, set)):
+                raise TypeError(
+                    f"allowed must be a list, tuple, or set, got {type(self.allowed).__name__}"
+                )
+        for _name, _val in [
+            ("min_length", self.min_length),
+            ("max_length", self.max_length),
+        ]:
+            if _val is not None:
+                if isinstance(_val, bool) or not isinstance(_val, int):
+                    raise TypeError(
+                        f"{_name} must be an int or None, got {type(_val).__name__}"
+                    )
+                if _val < 0:
+                    raise ValueError(f"{_name} must be >= 0, got {_val}")
+        if self.min_length is not None and self.max_length is not None:
+            if self.min_length > self.max_length:
+                raise ValueError(
+                    f"min_length ({self.min_length}) must be <= max_length ({self.max_length})"
+                )
         _validate_severity(self.severity)
 
 
@@ -760,6 +811,11 @@ class Schema:
                     raise TypeError(
                         f"Schema 'unique' members must be strings, got {type(item).__name__} for element {item!r}."
                     )
+
+            if len(set(self.unique)) != len(self.unique):
+                raise ValueError(
+                    "Schema 'unique' must not contain duplicate column names"
+                )
         if not isinstance(self.strict, bool):
             raise TypeError("Schema 'strict' must be a boolean")
 
@@ -912,6 +968,9 @@ class ValidationIssue:
     value: Any = None
     severity: str = "error"
 
+    def __post_init__(self) -> None:
+        _validate_severity(self.severity)
+
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-friendly dictionary."""
         return {
@@ -1002,6 +1061,8 @@ class ValidationResult:
             raise TypeError("max_issues must be an integer or None")
         if max_issues is not None and max_issues < 0:
             raise ValueError("max_issues must be non-negative")
+        if not isinstance(redact_values, bool):
+            raise TypeError("redact_values must be a bool")
 
         status = "passed" if self.passed else "failed"
         lines = [
@@ -1298,22 +1359,12 @@ def validate(
         if isinstance(max_errors, bool) or not isinstance(max_errors, int):
             raise TypeError("max_errors must be an int or None")
 
-    if max_errors is not None and max_errors < 0:
-        raise ValueError("max_errors must be >= 0")
+        if max_errors <= 0:
+            raise ValueError("max_errors must be >= 1")
 
     df = to_pandas(frame)
     dtypes = frame.dtypes
     issues: list[ValidationIssue] = []
-
-    if max_errors == 0:
-        return ValidationResult(
-            row_count=len(df),
-            issue_count=0,
-            issues=[],
-            bad_rows=sorted(
-                {issue.row_index for issue in issues if issue.row_index is not None}
-            ),
-        )
 
     def reached_limit() -> bool:
         return max_errors is not None and len(issues) >= max_errors
@@ -1592,6 +1643,12 @@ def Int64(
         Field: Configured int64 schema field.
     """
 
+    if min is not None:
+        if isinstance(min, bool) or not isinstance(min, (int, float)):
+            raise TypeError("min must be numeric or None")
+    if max is not None:
+        if isinstance(max, bool) or not isinstance(max, (int, float)):
+            raise TypeError("max must be numeric or None")
     if min is not None and max is not None and min > max:
         raise ValueError("min must be less than or equal to max")
 
@@ -1629,6 +1686,12 @@ def Float64(
         Field: Configured float64 schema field.
     """
 
+    if min is not None:
+        if isinstance(min, bool) or not isinstance(min, (int, float)):
+            raise TypeError("min must be numeric or None")
+    if max is not None:
+        if isinstance(max, bool) or not isinstance(max, (int, float)):
+            raise TypeError("max must be numeric or None")
     if min is not None and max is not None and min > max:
         raise ValueError("min must be less than or equal to max")
 
@@ -1648,6 +1711,7 @@ def String(
     nullable: bool = True,
     pattern: str | None = None,
     allowed: set[Any] | list[Any] | tuple[Any, ...] | None = None,
+    case_sensitive: bool = True,
     unique: bool = False,
     severity: str = "error",
     min_length: int | None = None,
@@ -1660,6 +1724,7 @@ def String(
         nullable: Whether null values are allowed.
         pattern: Regular expression pattern that non-null values must match.
         allowed: Allowed values for the field.
+        case_sensitive: Whether allowed string matching is case-sensitive.
         unique: Whether non-null values must be unique.
         severity: Severity level for validation issues.
         min_length: Minimum allowed string length.
@@ -1673,6 +1738,31 @@ def String(
     if min_length is not None and max_length is not None and min_length > max_length:
         raise ValueError("min_length must be less than or equal to max_length")
 
+    if isinstance(allowed, (str, bytes)):
+        raise TypeError(
+            "allowed must be a sequence of allowed values, not a bare string"
+        )
+
+    if pattern is not None:
+        if not isinstance(pattern, str):
+            raise TypeError("pattern must be a string or None")
+
+        try:
+            re.compile(pattern)
+        except re.error as exc:
+            raise ValueError(f"Invalid regex pattern: {pattern!r}") from exc
+
+    for name, value in (
+        ("min_length", min_length),
+        ("max_length", max_length),
+    ):
+        if value is not None:
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise TypeError(f"{name} must be an integer")
+
+            if value < 0:
+                raise ValueError(f"{name} must be greater than or equal to 0")
+
     allowed_set = set(allowed) if allowed is not None else None
 
     return Field(
@@ -1680,6 +1770,7 @@ def String(
         nullable=nullable,
         pattern=pattern,
         allowed=allowed_set,
+        case_sensitive=case_sensitive,
         unique=unique,
         min_length=min_length,
         max_length=max_length,
@@ -1732,8 +1823,13 @@ def Email(
     Returns:
         Field: Configured email-address schema field.
     """
+
+    if not isinstance(validation, str):
+        raise TypeError("Email validation must be a string: 'light' or 'strict'")
+
     if validation not in {"light", "strict"}:
         raise ValueError("Email validation must be 'light' or 'strict'")
+
     return Field(
         dtype="string",
         nullable=nullable,
@@ -1764,12 +1860,37 @@ def URL(
         Field: Configured URL schema field.
     """
     if allowed_schemes is not None:
-        if not isinstance(allowed_schemes, list) or len(allowed_schemes) == 0:
-            raise ValueError("allowed_schemes must be a non-empty list")
+        if isinstance(allowed_schemes, (str, bytes)):
+            raise TypeError(
+                "allowed_schemes must be a sequence of scheme names, not a bare string"
+            )
+
+        if not isinstance(allowed_schemes, (list, tuple, set)):
+            raise TypeError("allowed_schemes must be a sequence of scheme names")
+
+        normalized_schemes = set()
+
         for scheme in allowed_schemes:
-            if not isinstance(scheme, str) or scheme.strip() == "":
+            if not isinstance(scheme, str):
                 raise ValueError("allowed_schemes must contain non-empty strings")
-        schemes = "|".join(re.escape(s) for s in allowed_schemes)
+
+            scheme = scheme.strip()
+
+            if scheme == "":
+                raise ValueError("allowed_schemes must contain non-empty strings")
+
+            if URL_SCHEME_PATTERN.fullmatch(scheme) is None:
+                raise ValueError(
+                    "allowed_schemes must contain URL scheme names such as 'http' or 'https'"
+                )
+
+            normalized_schemes.add(scheme)
+
+        if len(normalized_schemes) == 0:
+            raise ValueError("allowed_schemes must be a non-empty sequence")
+
+        schemes = "|".join(re.escape(scheme) for scheme in sorted(normalized_schemes))
+
         semantic = f"url:{schemes}"
 
     else:
@@ -2152,7 +2273,7 @@ def _validate_column(
             )
         else:
             trigger_mask = df[condition_column] == expected_value
-            invalid = series[trigger_mask & series.isna()]
+            invalid = series[trigger_mask & is_null_mask]
 
             issues.extend(
                 _row_issues(
@@ -2180,7 +2301,18 @@ def _validate_column(
         )
 
     if field_def.allowed is not None:
-        invalid = non_null[~non_null.isin(field_def.allowed)]
+        if field_def.dtype == "string" and not field_def.case_sensitive:
+            allowed_values = {
+                value.casefold() if isinstance(value, str) else value
+                for value in field_def.allowed
+            }
+            comparable = non_null.map(
+                lambda value: value.casefold() if isinstance(value, str) else value
+            )
+            invalid = non_null[~comparable.isin(allowed_values)]
+        else:
+            invalid = non_null[~non_null.isin(field_def.allowed)]
+
         issues.extend(
             _row_issues(
                 invalid,
@@ -2190,7 +2322,6 @@ def _validate_column(
                 severity=field_def.severity,
             )
         )
-
     if field_def.dtype == "datetime":
         issues.extend(_validate_datetime(non_null, name, field_def))
 
@@ -2251,6 +2382,7 @@ def _validate_column(
                         column=name,
                         rule="custom",
                         message=f"Custom validator {validator_name!r} is not registered",
+                        severity=field_def.severity,
                     )
                 )
             else:
@@ -2282,6 +2414,7 @@ def _validate_column(
                         column=name,
                         rule="semantic",
                         message=f"Unknown semantic type: {field_def.semantic}",
+                        severity=field_def.severity,
                     )
                 )
             else:
@@ -2300,17 +2433,33 @@ def _validate_column(
                         {index: value for index, value in invalid_values}
                     )
                 elif field_def.semantic == "country_code":
-                    invalid = non_null[~non_null.isin(ISO_3166_1_ALPHA_2)]
+                    values = (
+                        non_null.str.upper()
+                        if not field_def.case_sensitive
+                        else non_null
+                    )
+                    invalid = non_null[~values.isin(ISO_3166_1_ALPHA_2)]
 
                 elif field_def.semantic == "language_code":
-                    invalid = non_null[~non_null.isin(ISO_639_1_CODES)]
+                    values = (
+                        non_null.str.lower()
+                        if not field_def.case_sensitive
+                        else non_null
+                    )
+                    invalid = non_null[~values.isin(ISO_639_1_CODES)]
+
                 elif field_def.semantic == "timezone":
                     invalid = non_null[~non_null.isin(IANA_TIMEZONES)]
                 elif field_def.semantic == "currency_code":
                     if field_def.allowed is not None:
                         invalid = pd.Series(dtype=object)
                     else:
-                        invalid = non_null[~non_null.isin(ISO_4217_CURRENCY_CODES)]
+                        values = (
+                            non_null.str.upper()
+                            if not field_def.case_sensitive
+                            else non_null
+                        )
+                        invalid = non_null[~values.isin(ISO_4217_CURRENCY_CODES)]
 
                 else:
                     invalid = non_null[~text.str.fullmatch(pattern, na=False)]
@@ -2447,6 +2596,7 @@ def _field_to_dict(field_def: Field) -> dict[str, Any]:
         "pattern": field_def.pattern,
         "semantic": field_def.semantic,
         "allowed": _normalize_sequence(field_def.allowed),
+        "case_sensitive": field_def.case_sensitive,
         "unique": field_def.unique,
         "min_length": field_def.min_length,
         "max_length": field_def.max_length,
@@ -2454,6 +2604,7 @@ def _field_to_dict(field_def: Field) -> dict[str, Any]:
         "datetime_min": _clean_scalar(field_def._datetime_min),
         "datetime_max": _clean_scalar(field_def._datetime_max),
         "required_if": _normalize_sequence(field_def.required_if),
+        "severity": field_def.severity,
     }
 
 
@@ -2505,6 +2656,7 @@ def _field_from_json_dict(name: str, payload: Any) -> Field:
         pattern=payload.get("pattern"),
         semantic=payload.get("semantic"),
         allowed=allowed,
+        case_sensitive=payload.get("case_sensitive", True),
         unique=payload.get("unique", False),
         min_length=payload.get("min_length"),
         max_length=payload.get("max_length"),
@@ -2530,9 +2682,18 @@ def _normalize_unique(
 
 
 def _normalize_sequence(value: Any) -> Any:
-    """Convert sets and tuples to lists for JSON-serializable output."""
+    """Convert sets and tuples to lists for JSON-serializable output.
+
+    Sets are sorted naturally when possible. If the set contains mixed
+    incomparable types (e.g. int and str), falls back to a type-safe key
+    so serialization never raises TypeError.
+    """
     if isinstance(value, set):
-        return sorted(value)
+        try:
+            return sorted(value)
+        except TypeError:
+            return sorted(value, key=lambda x: (type(x).__name__, repr(x)))
+
     if isinstance(value, tuple):
         return list(value)
     return value
@@ -2643,6 +2804,7 @@ def Custom(
     nullable: bool = True,
     unique: bool = False,
     severity: str = "error",
+    required_if: tuple[str, Any] | None = None,
 ) -> Field:
     """Create a field validated by a registered custom validator.
 
@@ -2660,6 +2822,10 @@ def Custom(
     >>> ar.register_validator("positive", lambda v: v > 0)
     >>> schema = ar.Schema({"score": ar.Custom("positive", nullable=False)})
     """
+
+    if not isinstance(name, str) or not name:
+        raise ValueError("name must be a non-empty string")
+
     if name not in _CUSTOM_VALIDATORS:
         raise ValueError(
             f"No validator registered under {name!r}. "
@@ -2671,4 +2837,5 @@ def Custom(
         unique=unique,
         semantic=f"custom:{name}",
         severity=severity,
+        required_if=required_if,
     )
