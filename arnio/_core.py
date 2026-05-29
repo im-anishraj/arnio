@@ -4,26 +4,29 @@ Internal module that imports the C++ extension.
 """
 
 try:
-    from ._arnio_cpp import (  # type: ignore[import-not-found]  # noqa: I001
-        Column as _Column,  # noqa: F401
-        CsvConfig as _CsvConfig,  # noqa: F401
-        CsvChunkReader as _CsvChunkReader,  # noqa: F401
-        CsvReader as _CsvReader,  # noqa: F401
-        CsvWriteConfig as _CsvWriteConfig,  # noqa: F401
-        CsvWriter as _CsvWriter,  # noqa: F401
-        DType as _DType,  # noqa: F401
-        Frame as _Frame,  # noqa: F401
-        cast_types as _cast_types,  # noqa: F401
-        clip_numeric as _clip_numeric,  # noqa: F401
-        drop_duplicates as _drop_duplicates,  # noqa: F401
-        drop_nulls as _drop_nulls,  # noqa: F401
-        fill_nulls as _fill_nulls,  # noqa: F401
-        normalize_case as _normalize_case,  # noqa: F401
-        rename_columns as _rename_columns,  # noqa: F401
-        strip_whitespace as _strip_whitespace,  # noqa: F401
+    from ._arnio_cpp import (  # noqa: F401, I001
+        Column as _Column,
+        CsvChunkReader as _CsvChunkReader,
+        CsvConfig as _CsvConfig,
+        CsvReader as _CsvReader,
+        CsvWriteConfig as _CsvWriteConfig,
+        CsvWriter as _CsvWriter,
+        DType as _DType,
+        Frame as _Frame,
+        cast_types as _cast_types,
+        clip_numeric as _clip_numeric,
+        drop_duplicates as _drop_duplicates,
+        drop_nulls as _drop_nulls,
+        fill_nulls as _fill_nulls,
+        normalize_case as _normalize_case,
+        rename_columns as _rename_columns,
+        safe_divide_columns as _safe_divide_columns,
+        strip_whitespace as _strip_whitespace,
     )
 except ImportError as e:
     raise ImportError(
-        "arnio C++ extension (_arnio_cpp) not found. "
-        "Please install arnio with: pip install ."
+        "arnio C++ extension (_arnio_cpp) not found.\n"
+        "Install from source: pip install -e .\n"
+        "Windows: Install 'Desktop development with C++' in Visual Studio Build Tools, or use WSL.\n"
+        "Linux/macOS: Ensure gcc or clang is installed."
     ) from e

@@ -13,21 +13,28 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Python 3.12
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
+          cache: 'pip'
 
       - name: Install lint dependencies
-        run: pip install "black>=24.0" "ruff>=0.4.0"
+        run: pip install "black>=24.0" "ruff>=0.4.0" "mypy>=1.0" pandas-stubs types-setuptools
+
+      - name: Documentation UTF-8 check
+        run: python scripts/check_docs_utf8.py
 
       - name: Black (check-only)
         run: black --check --diff .
 
       - name: Ruff (check-only)
         run: ruff check . --extend-exclude "*.ipynb"
+
+      - name: mypy (check-only)
+        run: mypy --config-file mypy.ini
 
       - name: Install clang-format
         run: |
@@ -39,21 +46,44 @@ jobs:
           find cpp/ bindings/ -type f \( -name '*.cpp' -o -name '*.h' \) \
             | xargs clang-format-17 --dry-run --Werror
 
+  cpp_tests:
+    name: C++ Native Tests (CMake + Catch2)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq cmake ninja-build python3-dev
+          pip install pybind11
+      - name: Configure CMake
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DARNIO_BUILD_CPP_TESTS=ON \
+            -DCMAKE_PREFIX_PATH=$(python3 -c "import pybind11; print(pybind11.get_cmake_dir())")
+      - name: Build
+        run: cmake --build build --parallel
+      - name: Run C++ tests
+        run: ctest --test-dir build --output-on-failure
+
   build_and_test:
     name: Test on ${{ matrix.os }} (Python ${{ matrix.python-version }})
+    needs: cpp_tests
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
           cache: 'pip'
@@ -70,37 +100,11 @@ jobs:
           pytest tests/ -v --cov=arnio --cov-report=xml
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v6
         with:
-          file: ./coverage.xml
+          files: ./coverage.xml
           fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}
-
-  python314_smoke:
-    name: Python 3.14 Smoke Test
-    runs-on: ubuntu-latest
-    continue-on-error: true
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python 3.14
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.14"
-          cache: 'pip'
-
-      - name: Upgrade pip and setuptools
-        run: python -m pip install --upgrade pip setuptools wheel
-
-      - name: Install dependencies and arnio
-        run: |
-          pip install -e .[dev]
-
-      - name: Run smoke test
-        run: |
-          python -c "import arnio; print('arnio import OK')"
 
   notebook_smoke:
     name: Notebook Smoke Test
@@ -108,10 +112,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Python 3.12
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: 'pip'
@@ -130,4 +134,31 @@ jobs:
             --ExecutePreprocessor.timeout=300 \
             examples/financial_csv_example.ipynb \
             --output executed_notebook.ipynb
-            
+
+  sklearn_integration:
+    name: scikit-learn Integration Tests
+    needs: build_and_test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: 'pip'
+
+      - name: Install dev + sklearn extras
+        run: pip install -e ".[dev,sklearn]"
+
+      - name: Run sklearn integration tests
+        run: pytest tests/test_sklearn.py -v --cov=arnio --cov-report=xml
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v6
+        with:
+          files: ./coverage.xml
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
