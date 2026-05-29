@@ -66,6 +66,7 @@ from .io import (
 from .pipeline import (
     PipelineContext,
     get_builtin_step_signatures,
+    list_registered_steps,
     list_steps,
     pipeline,
     register_step,
@@ -171,6 +172,7 @@ __all__ = [
     "register_step",
     "unregister_step",
     "get_builtin_step_signatures",
+    "list_registered_steps",
     "list_steps",
     "PipelineContext",
     "reset_steps",

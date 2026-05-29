@@ -298,6 +298,40 @@ class TestPipeline:
                 "strip_whitespace",
             )
 
+
+class TestListRegisteredSteps:
+    def test_list_registered_steps_groups_native_and_custom(self):
+        def custom_step(df):
+            return df
+
+        ar.register_step("my_custom_step", custom_step)
+        steps = ar.list_registered_steps()
+
+        assert "native" in steps
+        assert "custom" in steps
+
+        assert "drop_duplicates" in steps["native"]
+        assert "cast_types" in steps["native"]
+        assert "my_custom_step" not in steps["native"]
+
+        assert "my_custom_step" in steps["custom"]
+
+        # Test sorting/determinism
+        assert steps["native"] == sorted(steps["native"])
+        assert steps["custom"] == sorted(steps["custom"])
+
+    def test_list_registered_steps_after_reset(self):
+        def custom_step(df):
+            return df
+
+        ar.register_step("temporary_step", custom_step)
+        steps_before = ar.list_registered_steps()
+        assert "temporary_step" in steps_before["custom"]
+
+        ar.reset_steps()
+        steps_after = ar.list_registered_steps()
+        assert "temporary_step" not in steps_after["custom"]
+
     def test_register_step_rejects_reserved_deprecated_alias_name(self):
         pipeline_module._register_deprecated_step_alias(
             "legacy_strip",
@@ -1895,3 +1929,13 @@ def test_pipeline_bool_flags_valid():
         verbose=True,
     )
     assert isinstance(result, tuple)
+
+
+def test_list_registered_steps_custom_step_reusing_cleaning_function():
+    from arnio import cleaning
+
+    ar.register_step("custom_cleaning_function", cleaning.normalize_whitespace)
+    steps = ar.list_registered_steps()
+
+    assert "custom_cleaning_function" in steps["custom"]
+    assert "custom_cleaning_function" not in steps["native"]

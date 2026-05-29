@@ -211,6 +211,21 @@ def list_steps() -> list[str]:
     return sorted(set(_STEP_REGISTRY) | set(python_step_names))
 
 
+def list_registered_steps() -> dict[str, list[str]]:
+    """Return pipeline step names grouped by 'native' and 'custom'."""
+    with _REGISTRY_LOCK:
+        builtin_python = set(_BUILTIN_PYTHON_STEP_REGISTRY)
+        all_python = set(_PYTHON_STEP_REGISTRY)
+
+    native = set(_STEP_REGISTRY) | builtin_python
+    custom = all_python - builtin_python
+
+    return {
+        "native": sorted(native),
+        "custom": sorted(custom),
+    }
+
+
 def _register_deprecated_step_alias(old_name: str, new_name: str) -> None:
     """Register a deprecated step alias that warns and forwards to `new_name`."""
     with _REGISTRY_LOCK:
@@ -263,19 +278,17 @@ def _validate_pipeline_steps(
     for step in steps:
         if not isinstance(step, tuple) or not (1 <= len(step) <= 2):
             raise ValueError(
-                f"Invalid step format: {step!r}. " "Expected (name,) or (name, kwargs)"
+                f"Invalid step format: {step!r}. Expected (name,) or (name, kwargs)"
             )
 
         name = step[0]
 
         if not isinstance(name, str):
-            raise ValueError(
-                f"Invalid pipeline step name: {name!r}. " "Expected a string"
-            )
+            raise ValueError(f"Invalid pipeline step name: {name!r}. Expected a string")
 
         if len(step) == 2 and not isinstance(step[1], dict):
             raise ValueError(
-                f"Invalid step kwargs for '{name}': " f"{step[1]!r}. Expected a dict"
+                f"Invalid step kwargs for '{name}': {step[1]!r}. Expected a dict"
             )
 
         if name not in available_steps:
