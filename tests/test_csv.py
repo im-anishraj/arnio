@@ -699,6 +699,39 @@ class TestScanCsv:
 
         assert ar.scan_csv(csv_path) == {"value": "string"}
 
+    def test_scan_csv_stringio(self):
+        import io
+        stream = io.StringIO("name,age\nAlice,30\nBob,25\n")
+        schema = ar.scan_csv(stream)
+        assert schema == {"name": "string", "age": "int64"}
+
+    def test_scan_csv_bytesio(self):
+        import io
+        stream = io.BytesIO(b"name,age\nAlice,30\nBob,25\n")
+        schema = ar.scan_csv(stream)
+        assert schema == {"name": "string", "age": "int64"}
+
+    def test_scan_csv_stream_cleanup(self):
+        import io
+        from unittest.mock import patch
+        stream = io.StringIO("name,age\nAlice,30\n")
+        with patch('os.unlink') as mock_unlink:
+            ar.scan_csv(stream)
+            mock_unlink.assert_called_once()
+
+    def test_scan_csv_stream_parity_with_read_csv(self):
+        import io
+        csv_data = "a,b\n1,foo\n2,bar\n"
+        stream1 = io.StringIO(csv_data)
+        stream2 = io.StringIO(csv_data)
+        
+        schema = ar.scan_csv(stream1)
+        frame = ar.read_csv(stream2)
+        
+        assert schema["a"] == frame.dtypes["a"]
+        assert schema["b"] == frame.dtypes["b"]
+        assert schema == {"a": "int64", "b": "string"}
+
 
 # --- Issue #115: quoted multiline round-trip across line endings ---
 

@@ -6,6 +6,7 @@ CSV reading and writing functions.
 from __future__ import annotations
 
 import csv
+import io
 import os
 import shutil
 import tempfile
@@ -24,49 +25,102 @@ def _is_utf8_encoding(encoding: str) -> bool:
 
 
 @contextmanager
-def _utf8_csv_path(
-    path: str,
+def _materialize_csv_input(
+    input_data: str | os.PathLike[str] | io.IOBase,
     encoding: str,
     delimiter: str = ",",
     sample_rows: int | None = None,
 ) -> Iterator[str]:
-    """Return a UTF-8 file path for the C++ reader.
+    """Return a UTF-8 file path for the C++ reader, spooling streams if necessary."""
+    if not hasattr(input_data, "read"):
+        path = os.fspath(input_data)  # type: ignore
+        path_lower = path.lower()
+        if not (
+            path_lower.endswith(".csv")
+            or path_lower.endswith(".txt")
+            or path_lower.endswith(".tsv")
+        ):
+            raise ValueError(
+                f"Unsupported file format: {path}. Only .csv, .txt, and .tsv are supported."
+            )
 
-    The native reader currently consumes UTF-8 bytes. For other encodings,
-    transcode through a temporary UTF-8 file so the public encoding parameter is
-    honored without leaking platform-specific decoding behavior through pybind.
-    """
-    if _is_utf8_encoding(encoding):
-        yield path
+        try:
+            if os.path.getsize(path) == 0:
+                raise CsvReadError(f"CSV file is empty: {path!r}")
+        except FileNotFoundError:
+            pass  # Let C++ backend handle or raise standard error
+
+        if _is_utf8_encoding(encoding):
+            yield path
+            return
+
+        tmp_name: str | None = None
+        try:
+            with open(path, encoding=encoding, newline="") as src:
+                with tempfile.NamedTemporaryFile(
+                    "w", encoding="utf-8", newline="", suffix=".csv", delete=False
+                ) as tmp:
+                    if sample_rows is not None:
+                        reader = csv.reader(src, delimiter=delimiter)
+                        writer = csv.writer(tmp, delimiter=delimiter)
+                        for row_count, row in enumerate(reader):
+                            if row_count >= sample_rows:
+                                break
+                            writer.writerow(row)
+                    else:
+                        shutil.copyfileobj(src, tmp)
+                    tmp_name = tmp.name
+            yield tmp_name
+        except LookupError as e:
+            raise ValueError(f"Unknown encoding: {encoding}") from e
+        except UnicodeDecodeError as e:
+            raise CsvReadError(
+                f"Could not decode {path!r} using encoding {encoding!r}"
+            ) from e
+        except OSError as e:
+            raise CsvReadError(str(e)) from e
+        finally:
+            if tmp_name is not None:
+                try:
+                    os.unlink(tmp_name)
+                except OSError:
+                    pass
         return
 
-    tmp_name: str | None = None
+    # Handle file-like object
+    tmp_name = None
     try:
-        with open(path, encoding=encoding, newline="") as src:
-            with tempfile.NamedTemporaryFile(
-                "w", encoding="utf-8", newline="", suffix=".csv", delete=False
-            ) as tmp:
-                if sample_rows is not None:
-                    # Use csv.reader so we advance through complete CSV records
-                    # rather than raw physical lines. This prevents a quoted
-                    # multiline field from being split at the sampling boundary,
-                    # which would produce an invalid partial CSV for scan_schema.
-                    reader = csv.reader(src, delimiter=delimiter)
-                    writer = csv.writer(tmp, delimiter=delimiter)
+        with tempfile.NamedTemporaryFile(
+            "w", encoding="utf-8", newline="", suffix=".csv", delete=False
+        ) as tmp:
+            tmp_name = tmp.name
+            
+            src = input_data
+            if isinstance(src, io.RawIOBase) or isinstance(src, io.BufferedIOBase):
+                src = io.TextIOWrapper(src, encoding=encoding, newline="")  # type: ignore
+
+            if sample_rows is not None:
+                reader = csv.reader(src, delimiter=delimiter)  # type: ignore
+                writer = csv.writer(tmp, delimiter=delimiter)
+                try:
                     for row_count, row in enumerate(reader):
                         if row_count >= sample_rows:
                             break
                         writer.writerow(row)
-                else:
-                    shutil.copyfileobj(src, tmp)
-                tmp_name = tmp.name
+                except UnicodeDecodeError as e:
+                    raise CsvReadError(f"Could not decode stream using encoding {encoding!r}") from e
+            else:
+                try:
+                    shutil.copyfileobj(src, tmp)  # type: ignore
+                except UnicodeDecodeError as e:
+                    raise CsvReadError(f"Could not decode stream using encoding {encoding!r}") from e
+        
+        if os.path.getsize(tmp_name) == 0:
+            raise CsvReadError("CSV file is empty: <stream>")
+            
         yield tmp_name
     except LookupError as e:
         raise ValueError(f"Unknown encoding: {encoding}") from e
-    except UnicodeDecodeError as e:
-        raise CsvReadError(
-            f"Could not decode {path!r} using encoding {encoding!r}"
-        ) from e
     except OSError as e:
         raise CsvReadError(str(e)) from e
     finally:
@@ -185,7 +239,7 @@ def _validate_parser_mode(mode: str) -> str:
 
 
 def read_csv(
-    path: str | os.PathLike[str],
+    path: str | os.PathLike[str] | io.IOBase,
     *,
     delimiter: str = ",",
     has_header: bool = True,
@@ -250,23 +304,6 @@ def read_csv(
     --------
     >>> frame = ar.read_csv("data.csv", delimiter=",", has_header=True)
     """
-    path = os.fspath(path)
-    path_lower = path.lower()
-    if not (
-        path_lower.endswith(".csv")
-        or path_lower.endswith(".txt")
-        or path_lower.endswith(".tsv")
-    ):
-        raise ValueError(
-            f"Unsupported file format: {path}. Only .csv, .txt, and .tsv are supported."
-        )
-
-    try:
-        if os.path.getsize(path) == 0:
-            raise CsvReadError(f"CSV file is empty: {path!r}")
-    except FileNotFoundError:
-        pass  # Let C++ backend handle or raise standard error
-
     _validate_thousands_separator(thousands_separator)
     delimiter = _validate_delimiter(delimiter)
     mode = _validate_parser_mode(mode)
@@ -289,7 +326,7 @@ def read_csv(
 
     reader = _CsvReader(config)
     try:
-        with _utf8_csv_path(path, encoding, delimiter=delimiter) as native_path:
+        with _materialize_csv_input(path, encoding, delimiter=delimiter) as native_path:
             cpp_frame = reader.read(native_path)
     except ValueError:
         raise
@@ -302,7 +339,7 @@ def read_csv(
 
 
 def read_csv_chunked(
-    path: str | os.PathLike[str],
+    path: str | os.PathLike[str] | io.IOBase,
     *,
     chunksize: int = 10_000,
     delimiter: str = ",",
@@ -361,23 +398,6 @@ def read_csv_chunked(
     ...     df = ar.to_pandas(clean)
     ...     process(df)
     """
-    path = os.fspath(path)
-    path_lower = path.lower()
-    if not (
-        path_lower.endswith(".csv")
-        or path_lower.endswith(".txt")
-        or path_lower.endswith(".tsv")
-    ):
-        raise ValueError(
-            f"Unsupported file format: {path}. Only .csv, .txt, and .tsv are supported."
-        )
-
-    try:
-        if os.path.getsize(path) == 0:
-            raise CsvReadError(f"CSV file is empty: {path!r}")
-    except FileNotFoundError:
-        pass
-
     _validate_thousands_separator(thousands_separator)
     delimiter = _validate_delimiter(delimiter)
     mode = _validate_parser_mode(mode)
@@ -404,7 +424,7 @@ def read_csv_chunked(
 
     reader = _CsvChunkReader(config)
     try:
-        with _utf8_csv_path(path, encoding, delimiter=delimiter) as native_path:
+        with _materialize_csv_input(path, encoding, delimiter=delimiter) as native_path:
             reader.open(native_path)
             while True:
                 cpp_frame = reader.next_chunk(chunksize)
@@ -493,7 +513,7 @@ def write_csv(
 
 
 def scan_csv(
-    path: str | os.PathLike[str],
+    path: str | os.PathLike[str] | io.IOBase,
     *,
     delimiter: str = ",",
     encoding: str = "utf-8",
@@ -548,23 +568,6 @@ def scan_csv(
     >>> print(schema)
     {'name': 'string', 'age': 'int64'}
     """
-    path = os.fspath(path)
-    path_lower = path.lower()
-    if not (
-        path_lower.endswith(".csv")
-        or path_lower.endswith(".txt")
-        or path_lower.endswith(".tsv")
-    ):
-        raise ValueError(
-            f"Unsupported file format: {path}. Only .csv, .txt, and .tsv are supported."
-        )
-
-    try:
-        if os.path.getsize(path) == 0:
-            raise CsvReadError(f"CSV file is empty: {path!r}")
-    except FileNotFoundError:
-        pass
-
     _validate_thousands_separator(thousands_separator)
     delimiter = _validate_delimiter(delimiter)
 
@@ -587,10 +590,10 @@ def scan_csv(
     reader = _CsvReader(config)
     try:
         # Schema inference only needs a sample, avoiding full-file transcode.
-        # sample_rows is passed so _utf8_csv_path uses record-aware sampling
+        # sample_rows is passed so _materialize_csv_input uses record-aware sampling
         # via csv.reader, which correctly handles quoted multiline fields that
         # straddle the boundary.
-        with _utf8_csv_path(
+        with _materialize_csv_input(
             path,
             encoding,
             delimiter=delimiter,
