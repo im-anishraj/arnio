@@ -1432,11 +1432,19 @@ def write_parquet(
         Number of rows per Parquet row group.  If ``None``, pyarrow
         chooses the default (typically 128 MB per group).  Must be a
         positive integer when provided.
+    preserve_attrs : bool, default ``True``
+        When ``True``, ``DataFrame.attrs`` are written into Parquet
+        metadata; all attr values must be JSON-serializable or a
+        ``TypeError`` is raised with a clear message.  Set to ``False``
+        to silently drop attrs on export.
 
     Raises
     ------
     ImportError
         If ``pyarrow`` is not installed.
+    TypeError
+        If ``preserve_attrs`` is ``True`` and ``DataFrame.attrs``
+        contains non-JSON-serializable values.
     ValueError
         If the file extension is not ``.parquet`` or ``.pq``, if
         ``compression`` is not a recognised codec, or if
@@ -1447,6 +1455,7 @@ def write_parquet(
     >>> ar.write_parquet(frame, "output.parquet")
     >>> ar.write_parquet(frame, "output.pq", compression="zstd")
     >>> ar.write_parquet(frame, "output.parquet", row_group_size=50_000)
+    >>> ar.write_parquet(frame, "output.parquet", preserve_attrs=False)
     """
     if not isinstance(frame, ArFrame):
         raise TypeError("frame must be an ArFrame")
