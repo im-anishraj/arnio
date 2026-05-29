@@ -2673,7 +2673,6 @@ class TestFilterRows:
         ):
             ar.filter_rows(df, "name", ">", 1)
 
-
     def test_filter_rows_rejects_list_like_values(self):
         df = pd.DataFrame({"a": [1, 2, 3]})
         list_like_values = [
@@ -2689,20 +2688,17 @@ class TestFilterRows:
             with pytest.raises(TypeError, match="filter_rows value must be a scalar"):
                 ar.filter_rows(df, "a", "==", value)
 
-
     def test_filter_rows_non_string_column_raises_type_error(self):
         frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
 
         with pytest.raises(TypeError, match="column must be a non-empty string"):
             ar.filter_rows(frame, column=123, op="==", value=1)
 
-
     def test_filter_rows_empty_string_column_raises_type_error(self):
         frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
 
         with pytest.raises(TypeError, match="column must be a non-empty string"):
             ar.filter_rows(frame, column="", op="==", value=1)
-
 
     def test_filter_rows_non_string_op_raises_type_error(self):
         frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
