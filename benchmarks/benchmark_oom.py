@@ -1,7 +1,9 @@
-import pandas as pd
-import arnio as ar
-import tracemalloc
 import time
+import tracemalloc
+
+import pandas as pd
+
+import arnio as ar
 
 
 def benchmark():
