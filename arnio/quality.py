@@ -1125,7 +1125,7 @@ class QualityGateResult:
             "issues": [issue.to_dict() for issue in self.issues],
         }
 
-    def to_markdown(self) -> str:
+    def to_markdown(self, output: object = None) -> str:
         """Return a GitHub-friendly quality-gate report."""
         lines = ["# Data Quality Gates", ""]
         lines.append(f"- Status: {'passed' if self.passed else 'failed'}")
@@ -1136,7 +1136,15 @@ class QualityGateResult:
 
         if not self.issues:
             lines.append("All configured quality gates passed.")
-            return "\n".join(lines)
+            md = "\n".join(lines)
+            if output is not None:
+                if not hasattr(output, "write"):
+                    raise TypeError(
+                        f"output must be a writable object, got {type(output).__name__}"
+                    )
+                output.write(md)
+                return None
+            return md
 
         lines.append(
             "| Metric | Column | Baseline | Current | Delta | Threshold | Message |"
@@ -1155,7 +1163,16 @@ class QualityGateResult:
                 f"{_markdown_cell(issue.message)} |"
             )
 
-        return "\n".join(lines)
+        md = "\n".join(lines)
+        if output is not None:
+            if not hasattr(output, "write"):
+                 raise TypeError(
+                    f"output must be a writable object, got {type(output).__name__}"
+                 )
+            output.write(md)
+            return None
+        return md
+
 
     def raise_for_failures(self) -> None:
         """Raise ``ValueError`` if any configured quality gate failed."""

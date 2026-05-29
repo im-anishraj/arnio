@@ -1039,6 +1039,7 @@ class ValidationResult:
         *,
         max_issues: int | None = None,
         redact_values: bool = False,
+        output: object = None,
     ) -> str:
         """Return a GitHub-friendly Markdown validation report.
 
@@ -1108,7 +1109,15 @@ class ValidationResult:
                 ["", f"_Showing {len(visible_issues)} of {self.issue_count} issues._"]
             )
 
-        return "\n".join(lines)
+        md = "\n".join(lines)
+        if output is not None:
+            if not hasattr(output, "write"):
+                raise TypeError(
+                    f"output must be a writable object, got {type(output).__name__}"
+                )
+            output.write(md)
+            return None
+        return md    
 
     def raise_for_errors(self) -> None:
         """Raise an ArnioError when validation failed.
@@ -1191,7 +1200,7 @@ class SchemaDiff:
             "differences_by_column": by_column,
         }
 
-    def to_markdown(self) -> str:
+    def to_markdown(self, output: object = None) -> str:+
         """Return a GitHub-friendly Markdown schema diff report."""
         lines = [
             "## Schema Diff",
@@ -1200,7 +1209,15 @@ class SchemaDiff:
             f"- Differences found: {self.difference_count}",
         ]
         if not self.changed:
-            return "\n".join(lines)
+            md = "\n".join(lines)
+            if output is not None:
+                if not hasattr(output, "write"):
+                    raise TypeError(
+                        f"output must be a writable object, got {type(output).__name__}"
+                    )
+                output.write(md)
+                return None
+            return md    
 
         lines.extend(
             [
@@ -1218,7 +1235,16 @@ class SchemaDiff:
                 f"{_markdown_cell(_clean_scalar(diff.expected))} | "
                 f"{_markdown_cell(_clean_scalar(diff.observed))} |"
             )
-        return "\n".join(lines)
+        if not self.changed:
+            md = "\n".join(lines)
+            if output is not None:
+                if not hasattr(output, "write"):
+                    raise TypeError(
+                        f"output must be a writable object, got {type(output).__name__}"
+                    )
+                output.write(md)
+                return None
+            return md
 
 
 def diff_schema(
