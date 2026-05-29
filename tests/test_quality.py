@@ -2053,6 +2053,277 @@ def test_data_quality_report_repr_html_snippet():
     assert "<script>unsafe_col</script>" not in html_out
 
 
+# ── to_html redaction and column-exclusion tests (Fixes #1754) ────────────────
+
+
+def test_to_html_redact_top_values_hides_labels():
+    """redact_top_values=True must replace every chip label with [REDACTED]
+    while still rendering counts/ratios."""
+    from arnio.quality import ColumnProfile, DataQualityReport
+
+    col = ColumnProfile(
+        name="email",
+        dtype="string",
+        semantic_type="email",
+        row_count=10,
+        null_count=0,
+        null_ratio=0.0,
+        unique_count=3,
+        unique_ratio=0.3,
+        top_values=[
+            ("alice@secret.com", 5, 0.5),
+            ("bob@secret.com", 3, 0.3),
+            ("carol@secret.com", 2, 0.2),
+        ],
+    )
+    report = DataQualityReport(
+        row_count=10,
+        column_count=1,
+        memory_usage=100,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={"email": col},
+    )
+
+    html = report.to_html(redact_top_values=True)
+
+    assert "alice@secret.com" not in html
+    assert "bob@secret.com" not in html
+    assert "carol@secret.com" not in html
+    assert "[REDACTED]" in html
+    assert "50%" in html
+    assert "30%" in html
+    assert "20%" in html
+
+
+def test_to_html_redact_top_values_false_shows_real_labels():
+    """Default (redact_top_values=False) must still render actual top-value labels."""
+    from arnio.quality import ColumnProfile, DataQualityReport
+
+    col = ColumnProfile(
+        name="city",
+        dtype="string",
+        semantic_type="categorical",
+        row_count=6,
+        null_count=0,
+        null_ratio=0.0,
+        unique_count=2,
+        unique_ratio=0.333333,
+        top_values=[
+            ("Paris", 4, 0.666667),
+            ("Lyon", 2, 0.333333),
+        ],
+    )
+    report = DataQualityReport(
+        row_count=6,
+        column_count=1,
+        memory_usage=80,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={"city": col},
+    )
+
+    html = report.to_html()
+
+    assert "Paris" in html
+    assert "Lyon" in html
+    assert "[REDACTED]" not in html
+
+
+def test_to_html_exclude_columns_drops_column_from_table():
+    """exclude_columns must prevent the column row from appearing in the HTML table."""
+    from arnio.quality import ColumnProfile, DataQualityReport
+
+    def make_col(name: str) -> ColumnProfile:
+        return ColumnProfile(
+            name=name,
+            dtype="string",
+            semantic_type="text",
+            row_count=4,
+            null_count=0,
+            null_ratio=0.0,
+            unique_count=4,
+            unique_ratio=1.0,
+            top_values=[(f"val_{name}", 1, 0.25)],
+        )
+
+    report = DataQualityReport(
+        row_count=4,
+        column_count=2,
+        memory_usage=80,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={
+            "public_col": make_col("public_col"),
+            "secret_col": make_col("secret_col"),
+        },
+    )
+
+    html = report.to_html(exclude_columns=["secret_col"])
+
+    assert "secret_col" not in html
+    assert "val_secret_col" not in html
+    assert "public_col" in html
+    assert "val_public_col" in html
+
+
+def test_to_html_redact_and_exclude_combined():
+    """redact_top_values and exclude_columns can be used together."""
+    from arnio.quality import ColumnProfile, DataQualityReport
+
+    def make_col(name: str, value: str) -> ColumnProfile:
+        return ColumnProfile(
+            name=name,
+            dtype="string",
+            semantic_type="text",
+            row_count=4,
+            null_count=0,
+            null_ratio=0.0,
+            unique_count=2,
+            unique_ratio=0.5,
+            top_values=[(value, 3, 0.75)],
+        )
+
+    report = DataQualityReport(
+        row_count=4,
+        column_count=2,
+        memory_usage=80,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={
+            "visible": make_col("visible", "safe_value"),
+            "hidden": make_col("hidden", "secret_value"),
+        },
+    )
+
+    html = report.to_html(redact_top_values=True, exclude_columns=["hidden"])
+
+    assert "<code>hidden</code>" not in html
+    assert "secret_value" not in html
+    assert "visible" in html
+    assert "safe_value" not in html
+    assert "[REDACTED]" in html
+
+
+def test_to_html_redact_top_values_must_be_bool():
+    """redact_top_values rejects non-bool values."""
+    from arnio.quality import DataQualityReport
+
+    report = DataQualityReport(
+        row_count=0,
+        column_count=0,
+        memory_usage=0,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+    )
+    for bad in [1, "true", None, 0.0]:
+        with pytest.raises(TypeError, match="redact_top_values must be a bool"):
+            report.to_html(redact_top_values=bad)  # type: ignore[arg-type]
+
+
+def test_to_html_exclude_columns_rejects_unknown_column():
+    """exclude_columns raises KeyError for column names not in the report."""
+    from arnio.quality import DataQualityReport
+
+    report = DataQualityReport(
+        row_count=0,
+        column_count=0,
+        memory_usage=0,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+    )
+    with pytest.raises(KeyError, match="Unknown exclude_columns"):
+        report.to_html(exclude_columns=["does_not_exist"])
+
+
+def test_to_html_exclude_columns_rejects_non_collection():
+    """exclude_columns rejects bare strings and non-sequence types."""
+    from arnio.quality import DataQualityReport
+
+    report = DataQualityReport(
+        row_count=0,
+        column_count=0,
+        memory_usage=0,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+    )
+    with pytest.raises(
+        TypeError, match="exclude_columns must be a list, tuple, set, or None"
+    ):
+        report.to_html(exclude_columns="col_name")  # type: ignore[arg-type]
+
+    with pytest.raises(
+        TypeError, match="exclude_columns must be a list, tuple, set, or None"
+    ):
+        report.to_html(exclude_columns=123)  # type: ignore[arg-type]
+
+
+def test_to_html_exclude_columns_accepts_set_and_tuple():
+    """exclude_columns works when passed as a set or tuple."""
+    from arnio.quality import ColumnProfile, DataQualityReport
+
+    col = ColumnProfile(
+        name="sensitive",
+        dtype="string",
+        semantic_type="text",
+        row_count=2,
+        null_count=0,
+        null_ratio=0.0,
+        unique_count=2,
+        unique_ratio=1.0,
+    )
+    report = DataQualityReport(
+        row_count=2,
+        column_count=1,
+        memory_usage=50,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={"sensitive": col},
+    )
+
+    html_set = report.to_html(exclude_columns={"sensitive"})
+    html_tuple = report.to_html(exclude_columns=("sensitive",))
+
+    assert "sensitive" not in html_set
+    assert "sensitive" not in html_tuple
+
+
+def test_repr_html_unaffected_by_new_params():
+    """_repr_html_() still works with no arguments and shows values by default."""
+    from arnio.quality import ColumnProfile, DataQualityReport
+
+    col = ColumnProfile(
+        name="x",
+        dtype="string",
+        semantic_type="text",
+        row_count=2,
+        null_count=0,
+        null_ratio=0.0,
+        unique_count=2,
+        unique_ratio=1.0,
+        top_values=[("hello", 1, 0.5), ("world", 1, 0.5)],
+    )
+    report = DataQualityReport(
+        row_count=2,
+        column_count=1,
+        memory_usage=50,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={"x": col},
+    )
+
+    html = report._repr_html_()
+
+    assert "<!DOCTYPE html>" not in html
+    assert 'class="arnio-dqr"' in html
+    assert "hello" in html
+    assert "world" in html
+    assert "[REDACTED]" not in html
+
+
 # ── explain mode tests ────────────────────────────────────────────────────────
 
 

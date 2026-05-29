@@ -581,11 +581,30 @@ class DataQualityReport:
         file_path: str | None = None,
         output: Any | None = None,
         max_suggestions: int | None = None,
+        *,
+        redact_top_values: bool = False,
+        exclude_columns: list[str] | set[str] | tuple[str, ...] | None = None,
     ) -> str | None:
         """Return a self-contained, dependency-free HTML data quality report.
 
         In notebook environments, ``DataQualityReport`` will render a compact dashboard
         automatically via ``_repr_html_``.
+
+        Parameters
+        ----------
+        file_path : str or path-like, optional
+            Write the HTML to this file in addition to returning it.
+        output : writable text stream, optional
+            If provided, the HTML is written to this stream and None is returned.
+        max_suggestions : int or None, optional
+            Limit the number of cleaning suggestions rendered.
+        redact_top_values : bool, default False
+            When True, every top-values chip label is replaced with ``[REDACTED]``
+            while counts and ratios are preserved.  Use before sharing HTML reports
+            that contain sensitive string columns.
+        exclude_columns : list, set, or tuple of str, optional
+            Column names to omit entirely from the HTML column table.  Unknown
+            names raise ``KeyError``.
         """
         if file_path is not None:
             if isinstance(file_path, bool) or not isinstance(
@@ -595,10 +614,33 @@ class DataQualityReport:
                     f"file_path must be a string, bytes, or os.PathLike object, got {type(file_path).__name__}"
                 )
 
+        redact_top_values = _validate_bool_option(
+            redact_top_values, "redact_top_values"
+        )
+
+        if exclude_columns is None:
+            validated_exclude: set[str] = set()
+        elif not isinstance(exclude_columns, (list, tuple, set)):
+            raise TypeError("exclude_columns must be a list, tuple, set, or None")
+        else:
+            if not all(isinstance(c, str) for c in exclude_columns):
+                raise TypeError("exclude_columns must contain only string column names")
+            validated_exclude = set(exclude_columns)
+
+        if validated_exclude:
+            unknown = sorted(validated_exclude - set(self.columns))
+            if unknown:
+                available = ", ".join(self.columns) or "<none>"
+                raise KeyError(
+                    f"Unknown exclude_columns: {unknown}. Available columns: {available}"
+                )
+
         max_suggestions = self._validate_max_suggestions(max_suggestions)
         html_out = self._to_html_dashboard(
             full_document=True,
             max_suggestions=max_suggestions,
+            redact_top_values=redact_top_values,
+            exclude_columns=validated_exclude,
         )
         if file_path:
             with open(file_path, "w", encoding="utf-8") as f:
@@ -622,6 +664,8 @@ class DataQualityReport:
         *,
         full_document: bool,
         max_suggestions: int | None = None,
+        redact_top_values: bool = False,
+        exclude_columns: set[str] | None = None,
     ) -> str:
         def e(text: Any) -> str:
             return html.escape(str(text), quote=True)
@@ -745,6 +789,10 @@ class DataQualityReport:
             lines.append("</div>")
 
         if self.columns:
+            _excluded = exclude_columns or set()
+            visible_columns = {
+                name: col for name, col in self.columns.items() if name not in _excluded
+            }
             lines.append('<div class="section">')
             lines.append("<h2>Columns</h2>")
             lines.append("<table>")
@@ -755,8 +803,8 @@ class DataQualityReport:
                 "</tr></thead>"
             )
             lines.append("<tbody>")
-            for name in sorted(self.columns):
-                col = self.columns[name]
+            for name in sorted(visible_columns):
+                col = visible_columns[name]
                 null_pct = (col.null_ratio * 100.0) if col.row_count else 0.0
                 unique_pct = (col.unique_ratio * 100.0) if col.row_count else 0.0
                 warnings_str = ", ".join(col.warnings) if col.warnings else "-"
@@ -765,8 +813,9 @@ class DataQualityReport:
                 if col.top_values:
                     top_bits: list[str] = []
                     for v, _c, r in col.top_values[:3]:
+                        label = e("[REDACTED]") if redact_top_values else e(v)
                         top_bits.append(
-                            f"<span class=\"chip\">{e(v)} · {e(f'{r:.0%}')}</span>"
+                            f"<span class=\"chip\">{label} · {e(f'{r:.0%}')}</span>"
                         )
                     top_html = "".join(top_bits)
                 elif col.histogram:
