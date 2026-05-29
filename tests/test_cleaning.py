@@ -3331,9 +3331,12 @@ class TestSafeDivideColumns:
             ar.safe_divide_columns(
                 frame, numerator="num", denominator="den", output_column="ratio"
             )
+
     def test_fill_value_bool_raises(self):
         frame = ar.from_pandas(pd.DataFrame({"a": [1.0, 2.0], "b": [1.0, 0.0]}))
-        with pytest.raises(TypeError, match="fill_value must be a finite float, not bool"):
+        with pytest.raises(
+            TypeError, match="fill_value must be a finite float, not bool"
+        ):
             ar.safe_divide_columns(frame, "a", "b", "ratio", fill_value=True)
 
     def test_fill_value_nan_raises(self):
@@ -3353,10 +3356,12 @@ class TestSafeDivideColumns:
 
     def test_fill_value_valid_float_passes(self):
         frame = ar.from_pandas(
-            pd.DataFrame({
-                "a": [1.0, 2.0],
-                "b": [1.0, 0.0],
-            })
+            pd.DataFrame(
+                {
+                    "a": [1.0, 2.0],
+                    "b": [1.0, 0.0],
+                }
+            )
         )
 
         result = ar.safe_divide_columns(

@@ -1578,7 +1578,9 @@ def safe_divide_columns(
     if isinstance(fill_value, bool):
         raise TypeError("fill_value must be a finite float, not bool")
     if not isinstance(fill_value, (int, float)):
-        raise TypeError(f"fill_value must be a finite float, got {type(fill_value).__name__!r}")
+        raise TypeError(
+            f"fill_value must be a finite float, got {type(fill_value).__name__!r}"
+        )
     if not math.isfinite(fill_value):
         raise ValueError(f"fill_value must be finite, got {fill_value}")
     if output_column in columns:
