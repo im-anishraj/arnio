@@ -77,6 +77,14 @@ arnio = ["py.typed"]
 wheel.packages = ["arnio"]
 cmake.build-type = "Release"
 wheel.expand-macos-universal-tags = false
+sdist.exclude = [
+    ".venv*",
+    "venv/",
+    ".tox/",
+    ".pytest_cache/",
+    ".mypy_cache/",
+    "dist/",
+]
 
 [tool.black]
 line-length = 88
