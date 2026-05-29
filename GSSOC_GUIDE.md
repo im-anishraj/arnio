@@ -16,6 +16,13 @@ features.
 4. Wait for maintainer assignment before starting scored GSSoC work.
 5. Keep one issue to one PR unless a maintainer asks otherwise.
 
+## After the assignment of an issue
+
+1. Timeline - Assigned contributors should post the progress update or open a draft/regular PR within 3 days of an assignment.
+2. Time extension request - If the contributor needs more time, they should comment within those 3 days.
+3. Inactivity - If the assigned contributors remains inactive without any progress update, time extension request or do not open a draft/regular PR, then    maintainers may unassign/reassign that issue after 5 days.
+4. Github issue comments - All the conversation regarding an issue must remain in the github issue comments section of that particular issue and the github issue comments remain as the source of truth. 
+
 ## GSSoC FAQ
 
 **How do I set up the project locally?**
