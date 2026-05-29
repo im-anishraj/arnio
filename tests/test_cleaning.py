@@ -3871,6 +3871,7 @@ class TestCleanColumnNames:
         result = ar.pipeline(frame, [("clean_column_names", {"case_type": "upper"})])
         assert to_pandas(result).columns.tolist() == ["MY_NAME", "AGE"]
 
+
 class TestSlugifyColumnNames:
     def test_spaces_become_underscores(self):
         frame = ar.from_pandas(pd.DataFrame({"First Name": ["Alice"]}))
@@ -3896,3 +3897,13 @@ class TestSlugifyColumnNames:
         frame = ar.from_pandas(pd.DataFrame({"First Name": [1], "first name": [2]}))
         with pytest.raises(ValueError):
             ar.slugify_column_names(frame)
+
+    def test_pipeline_usage(self):
+        frame = ar.from_pandas(pd.DataFrame({"First Name": ["Alice"], "Age": [25]}))
+        result = ar.pipeline(frame, [("slugify_column_names", {})])
+        assert result.columns == ["first_name", "age"]
+
+    def test_on_duplicates_invalid_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
+        with pytest.raises(ValueError):
+            ar.slugify_column_names(frame, on_duplicates="ignore")
