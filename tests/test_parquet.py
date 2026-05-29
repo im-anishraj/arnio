@@ -258,11 +258,14 @@ class TestWriteParquetErrors:
             with pytest.raises(ImportError, match="pip install arnio\\[parquet\\]"):
                 ar.write_parquet(frame, tmp_path / "out.parquet")
 
-    @pytest.mark.parametrize("bad_input", [
-        object(),
-        None,
-        pd.DataFrame({"a": [1, 2]}),
-    ])
+    @pytest.mark.parametrize(
+        "bad_input",
+        [
+            object(),
+            None,
+            pd.DataFrame({"a": [1, 2]}),
+        ],
+    )
     def test_write_parquet_invalid_frame(self, tmp_path, bad_input):
         with pytest.raises(TypeError, match="frame must be an ArFrame"):
             ar.write_parquet(bad_input, tmp_path / "out.parquet")

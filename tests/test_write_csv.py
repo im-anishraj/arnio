@@ -8,14 +8,19 @@ import pytest
 
 import arnio as ar
 
-@pytest.mark.parametrize("bad_input", [
-    object(),
-    None,
-    pd.DataFrame({"a": [1, 2]}),
-])
+
+@pytest.mark.parametrize(
+    "bad_input",
+    [
+        object(),
+        None,
+        pd.DataFrame({"a": [1, 2]}),
+    ],
+)
 def test_write_csv_invalid_frame(bad_input, tmp_path):
     with pytest.raises(TypeError, match="frame must be an ArFrame"):
         ar.write_csv(bad_input, tmp_path / "out.csv")
+
 
 class TestWriteCsv:
     def test_basic_write(self, tmp_path, sample_csv):
