@@ -900,7 +900,21 @@ def parse_bool_strings(
         raise TypeError(
             "false_values must be a set/list/tuple of strings, not a bare string"
         )
+    if true_values is not None and (
+        isinstance(true_values, Mapping)
+        or not isinstance(true_values, (set, list, tuple))
+    ):
+        raise TypeError(
+            "true_values must be a set, list, or tuple of strings"
+        )
 
+    if false_values is not None and (
+        isinstance(false_values, Mapping)
+        or not isinstance(false_values, (set, list, tuple))
+    ):
+        raise TypeError(
+            "false_values must be a set, list, or tuple of strings"
+        )
     df = to_pandas(frame).copy(deep=False)
     if true_values is None:
         true_values = {"true", "yes", "y", "1"}

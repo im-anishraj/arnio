@@ -2022,11 +2022,28 @@ class TestParseBoolStrings:
         df = pd.DataFrame({"active": ["yes", "no"]}, dtype=object)
         frame = ar.from_pandas(df)
 
-        with pytest.raises(TypeError, match="'int' object is not iterable"):
+        with pytest.raises(TypeError, match="true_values must be a set, list, or tuple of strings"):
             ar.parse_bool_strings(frame, true_values=123)
 
-        with pytest.raises(TypeError, match="'float' object is not iterable"):
+        with pytest.raises(TypeError, match="false_values must be a set, list, or tuple of strings",):
             ar.parse_bool_strings(frame, false_values=45.6)
+    def test_parse_bool_strings_rejects_mapping_containers(self):
+        import pandas as pd
+
+        df = pd.DataFrame({"active": ["yes", "no"]}, dtype=object)
+        frame = ar.from_pandas(df)
+
+        with pytest.raises(
+            TypeError,
+            match="true_values must be a set, list, or tuple of strings",
+        ):
+            ar.parse_bool_strings(frame, true_values={"yes": 1})
+
+        with pytest.raises(
+            TypeError,
+            match="false_values must be a set, list, or tuple of strings",
+        ):
+            ar.parse_bool_strings(frame, false_values={"no": 1})
 
     def test_parse_bool_strings_overlap_whitespace_and_case_normalization(self):
         """Test that tokens that overlap after case folding and whitespace stripping are correctly rejected."""
