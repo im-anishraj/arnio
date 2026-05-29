@@ -24,6 +24,9 @@ jobs:
       - name: Install lint dependencies
         run: pip install "black>=24.0" "ruff>=0.4.0" "mypy>=1.0" pandas-stubs types-setuptools
 
+      - name: Documentation UTF-8 check
+        run: python scripts/check_docs_utf8.py
+
       - name: Black (check-only)
         run: black --check --diff .
 
@@ -58,6 +61,7 @@ jobs:
         run: |
           cmake -S . -B build \
             -DCMAKE_BUILD_TYPE=Debug \
+            -DARNIO_BUILD_CPP_TESTS=ON \
             -DCMAKE_PREFIX_PATH=$(python3 -c "import pybind11; print(pybind11.get_cmake_dir())")
       - name: Build
         run: cmake --build build --parallel

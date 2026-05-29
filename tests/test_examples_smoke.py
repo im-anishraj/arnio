@@ -57,6 +57,9 @@ EXAMPLE_SPECS: tuple[ExampleSpec, ...] = (
 # Scripts intentionally excluded from subprocess smoke (with reason for maintainers).
 EXCLUDED_EXAMPLES: dict[str, str] = {
     "check_env.py": ("Dashboard utility; behavior covered by tests/test_check_env.py."),
+    "custom_step_with_tests.py": (
+        "Pytest-oriented example; run directly with pytest instead of subprocess smoke."
+    ),
 }
 
 

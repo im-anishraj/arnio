@@ -208,6 +208,22 @@ class TestReadCsv:
         ):
             ar.read_csv(csv_path, usecols=["id", "id"])
 
+        with pytest.raises(
+            ValueError,
+            match="usecols must not be empty",
+        ):
+            ar.read_csv(csv_path, usecols=[])
+
+    def test_invalid_empty_usecols_chunked(self, tmp_path):
+        csv_path = tmp_path / "chunked.csv"
+        csv_path.write_text("id,name\n1,Alice\n2,Bob\n")
+
+        with pytest.raises(
+            ValueError,
+            match="usecols must not be empty",
+        ):
+            list(ar.read_csv_chunked(csv_path, chunksize=1, usecols=[]))
+
     def test_invalid_nrows(self, tmp_path):
         csv_path = tmp_path / "test.csv"
         csv_path.write_text("a,b\n1,2\n")
@@ -2296,6 +2312,69 @@ class TestReadCsvSkipRows:
             ar.read_csv(csv_path, skiprows=1.5)
 
 
+class TestReadCsvChunkedSkiprowsAlias:
+    """Tests for the skiprows alias in read_csv_chunked (issue #1293).
+
+    skip_rows / skiprows in chunked mode skip data rows *after* the header.
+    skiprows is a naming alias only — semantics are unchanged.
+    """
+
+    def test_skiprows_alias_skips_rows(self, tmp_path):
+        # skiprows=2 skips the first 2 data rows after the header.
+        csv_path = tmp_path / "data.csv"
+        csv_path.write_text("name,age\nAlice,30\nBob,25\nCharlie,35\n")
+        chunks = list(ar.read_csv_chunked(csv_path, skiprows=2))
+        assert len(chunks) == 1
+        df = ar.to_pandas(chunks[0])
+        assert df["name"].tolist() == ["Charlie"]
+
+    def test_skiprows_alias_zero_is_noop(self, tmp_path):
+        csv_path = tmp_path / "data.csv"
+        csv_path.write_text("name,age\nAlice,30\n")
+        chunks = list(ar.read_csv_chunked(csv_path, skiprows=0))
+        assert sum(c.shape[0] for c in chunks) == 1
+
+    def test_skip_rows_still_works(self, tmp_path):
+        # Existing skip_rows parameter must remain backward-compatible.
+        csv_path = tmp_path / "data.csv"
+        csv_path.write_text("name,age\nAlice,30\nBob,25\n")
+        chunks = list(ar.read_csv_chunked(csv_path, skip_rows=1))
+        df = ar.to_pandas(chunks[0])
+        assert df["name"].tolist() == ["Bob"]
+
+    def test_skiprows_and_skip_rows_agree_no_error(self, tmp_path):
+        # Both may be passed if they have the same value.
+        csv_path = tmp_path / "data.csv"
+        csv_path.write_text("name,age\nAlice,30\nBob,25\n")
+        chunks = list(ar.read_csv_chunked(csv_path, skiprows=1, skip_rows=1))
+        df = ar.to_pandas(chunks[0])
+        assert df["name"].tolist() == ["Bob"]
+
+    def test_skiprows_and_skip_rows_conflict_raises(self, tmp_path):
+        csv_path = tmp_path / "data.csv"
+        csv_path.write_text("name,age\nAlice,30\n")
+        with pytest.raises(ValueError, match="Conflicting values"):
+            list(ar.read_csv_chunked(csv_path, skiprows=1, skip_rows=2))
+
+    def test_skiprows_invalid_negative_raises(self, tmp_path):
+        csv_path = tmp_path / "data.csv"
+        csv_path.write_text("a,b\n1,2\n")
+        with pytest.raises(ValueError, match="non-negative"):
+            list(ar.read_csv_chunked(csv_path, skiprows=-1))
+
+    def test_skiprows_invalid_bool_raises(self, tmp_path):
+        csv_path = tmp_path / "data.csv"
+        csv_path.write_text("a,b\n1,2\n")
+        with pytest.raises(TypeError, match="integer"):
+            list(ar.read_csv_chunked(csv_path, skiprows=True))
+
+    def test_skiprows_invalid_float_raises(self, tmp_path):
+        csv_path = tmp_path / "data.csv"
+        csv_path.write_text("a,b\n1,2\n")
+        with pytest.raises(TypeError, match="integer"):
+            list(ar.read_csv_chunked(csv_path, skiprows=1.5))
+
+
 class TestInferTypeLocaleAndNumericEdgeCases:
     def test_float_decimal_dot(self, tmp_path):
         path = tmp_path / "decimal.csv"
@@ -2745,6 +2824,7 @@ def test_streaming_late_type_promotion_float(tmp_path):
 
 def test_read_csv_text_stream_encoding_override():
     import io
+
     csv_text = "col1,col2\nhello,café\n"
     # Even if caller passes a different encoding, text streams are handled as UTF-8
     stream = io.StringIO(csv_text)
@@ -2755,6 +2835,7 @@ def test_read_csv_text_stream_encoding_override():
 
 def test_read_csv_chunked_text_stream_encoding_override():
     import io
+
     csv_text = "col1,col2\nhello,café\n"
     stream = io.StringIO(csv_text)
     chunks = list(ar.read_csv_chunked(stream, encoding="utf-16"))

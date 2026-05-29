@@ -1,5 +1,6 @@
 """Tests for write_csv functionality."""
 
+import os
 from pathlib import Path
 
 import pandas as pd
@@ -304,3 +305,49 @@ class TestWriteCsvQuoteCharValidation:
             ValueError, match="delimiter must not be the CSV quote character"
         ):
             ar.write_csv(frame, str(tmp_path / "out.csv"), delimiter='"')
+
+
+class TestWriteCsvControlCharValidation:
+    """Control character validation: unsafe control characters must be rejected."""
+
+    @pytest.mark.parametrize("delimiter", ["\0", "\x1f", "\x7f"])
+    def test_control_character_delimiter_rejected(self, tmp_path, delimiter):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
+        with pytest.raises(
+            ValueError, match="delimiter must not be a control character"
+        ):
+            ar.write_csv(frame, str(tmp_path / "out.csv"), delimiter=delimiter)
+
+
+def test_write_csv_rejects_bool_path(tmp_path):
+    frame = ar.from_pandas(pd.DataFrame({"a": [1, 2, 3]}))
+    with pytest.raises(TypeError, match="path must be a string"):
+        ar.write_csv(frame, True)
+
+
+def test_write_csv_rejects_int_path(tmp_path):
+    frame = ar.from_pandas(pd.DataFrame({"a": [1, 2, 3]}))
+    with pytest.raises(TypeError, match="path must be a string"):
+        ar.write_csv(frame, 42)
+
+
+class _BytesPathLike:
+    def __init__(self, path: bytes) -> None:
+        self._path = path
+
+    def __fspath__(self) -> bytes:
+        return self._path
+
+
+def test_write_csv_accepts_bytes_path(tmp_path):
+    frame = ar.from_pandas(pd.DataFrame({"a": [1, 2, 3]}))
+    out = tmp_path / "out.csv"
+    ar.write_csv(frame, os.fsencode(out))
+    assert out.exists()
+
+
+def test_write_csv_accepts_pathlike_bytes_path(tmp_path):
+    frame = ar.from_pandas(pd.DataFrame({"a": [1, 2, 3]}))
+    out = tmp_path / "out.csv"
+    ar.write_csv(frame, _BytesPathLike(os.fsencode(out)))
+    assert out.exists()

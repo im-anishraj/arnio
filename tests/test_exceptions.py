@@ -11,6 +11,7 @@ def test_public_exception_hierarchy():
         ar.JsonlReadError,
         ar.TypeCastError,
         ar.UnknownStepError,
+        ar.SchemaValidationError,
     ]
 
     for exc_type in public_exceptions:
@@ -173,3 +174,26 @@ def test_jsonl_read_error_can_be_caught_as_arnio_error(tmp_path):
 def test_jsonl_read_error_message_is_non_empty_string():
     err = ar.JsonlReadError("test error message")
     assert str(err) == "test error message"
+
+
+def test_schema_validation_error_is_arnio_error():
+    assert issubclass(ar.SchemaValidationError, ar.ArnioError)
+
+
+def test_schema_validation_error_attributes():
+    message = "Schema validation failed"
+    result = "dummy_result"
+
+    exc = ar.SchemaValidationError(message, result=result)
+
+    assert str(exc) == message
+    assert exc.result == result
+
+
+def test_schema_validation_error_optional_result():
+    message = "Schema validation failed"
+
+    exc = ar.SchemaValidationError(message)
+
+    assert str(exc) == message
+    assert exc.result is None
