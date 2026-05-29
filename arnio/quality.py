@@ -2341,6 +2341,31 @@ def auto_clean(
     step_records: list[CleanStepRecord] = []
     rows_before_all = result.shape[0]
 
+    if mode == "strict":
+        for suggestion in report.suggestions:
+            step = suggestion.step if isinstance(suggestion, CleaningSuggestion) else suggestion[0]
+            if step == "cast_types":
+                kwargs = suggestion.kwargs if isinstance(suggestion, CleaningSuggestion) else suggestion[1]
+                if not allow_lossy_casts:
+                    raise ValueError(
+                        "auto_clean(mode='strict') would apply type casts. "
+                        f"Proposed mapping: {kwargs}. Run with dry_run=True to inspect "
+                        "the report, then pass allow_lossy_casts=True and "
+                        "confirmed_casts=<proposed mapping> to apply them."
+                    )
+                if confirmed_casts_map is None:
+                    raise ValueError(
+                        "auto_clean(mode='strict') requires confirmed_casts before "
+                        "applying type casts. Run with dry_run=True to inspect the "
+                        f"proposed mapping, then pass confirmed_casts={kwargs!r}."
+                    )
+                if confirmed_casts_map != kwargs:
+                    raise ValueError(
+                        "confirmed_casts must match the proposed cast mapping exactly. "
+                        f"Proposed mapping: {kwargs}. Confirmed mapping: "
+                        f"{confirmed_casts_map}."
+                    )
+
     for suggestion in report.suggestions:
         if isinstance(suggestion, CleaningSuggestion):
             step = suggestion.step
@@ -2358,25 +2383,6 @@ def auto_clean(
         if step == "strip_whitespace":
             result = strip_whitespace(result, **kwargs)
         elif step == "cast_types":
-            if not allow_lossy_casts:
-                raise ValueError(
-                    "auto_clean(mode='strict') would apply type casts. "
-                    f"Proposed mapping: {kwargs}. Run with dry_run=True to inspect "
-                    "the report, then pass allow_lossy_casts=True and "
-                    "confirmed_casts=<proposed mapping> to apply them."
-                )
-            if confirmed_casts_map is None:
-                raise ValueError(
-                    "auto_clean(mode='strict') requires confirmed_casts before "
-                    "applying type casts. Run with dry_run=True to inspect the "
-                    f"proposed mapping, then pass confirmed_casts={kwargs!r}."
-                )
-            if confirmed_casts_map != kwargs:
-                raise ValueError(
-                    "confirmed_casts must match the proposed cast mapping exactly. "
-                    f"Proposed mapping: {kwargs}. Confirmed mapping: "
-                    f"{confirmed_casts_map}."
-                )
             result = cast_types(result, kwargs)
         elif step == "drop_duplicates":
             result = drop_duplicates(result, **kwargs)
