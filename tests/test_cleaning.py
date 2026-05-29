@@ -888,22 +888,18 @@ class TestDropConstantColumns:
         result = ar.drop_constant_columns(df)
 
         assert result is not df
-        assert result.shape == (0, 1)        
+        assert result.shape == (0, 1)
 
     def test_drop_constant_columns_zero_row_arframe_returns_new_object(self):
-        frame = ar.from_pandas(
-            pd.DataFrame({"a": pd.Series(dtype="int64")})
-        )
+        frame = ar.from_pandas(pd.DataFrame({"a": pd.Series(dtype="int64")}))
 
         result = ar.drop_constant_columns(frame)
 
         assert result is not frame
-        assert result.shape == (0, 1)    
+        assert result.shape == (0, 1)
 
     def test_drop_constant_columns_zero_row_attrs_not_shared(self):
-        frame = ar.from_pandas(
-            pd.DataFrame({"a": pd.Series(dtype="int64")})
-        )
+        frame = ar.from_pandas(pd.DataFrame({"a": pd.Series(dtype="int64")}))
 
         frame._attrs = {"nested": {"x": 1}}
 
@@ -911,7 +907,7 @@ class TestDropConstantColumns:
 
         result._attrs["nested"]["x"] = 2
 
-        assert frame._attrs["nested"]["x"] == 1    
+        assert frame._attrs["nested"]["x"] == 1
 
 
 class TestDropEmptyColumns:
