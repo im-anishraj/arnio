@@ -4,9 +4,11 @@ on:
   push:
     paths:
       - 'pyproject.toml'
+      - '.github/workflows/dependency-audit.yml'
   pull_request:
     paths:
       - 'pyproject.toml'
+      - '.github/workflows/dependency-audit.yml'
   schedule:
     - cron: '0 6 * * 1' # Weekly Monday morning run
 
@@ -33,7 +35,7 @@ jobs:
         run: pip install -e ".[dev,arrow,sklearn,parquet]"
 
       - name: Run pip-audit
-        run: pip-audit --strict --output json --output-file audit-results.json
+        run: pip-audit --strict --format json --output audit-results.json
 
       - name: Upload audit results
         if: always()
