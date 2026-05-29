@@ -314,6 +314,71 @@ def test_schema_validation_collects_row_level_issues(tmp_path):
     assert result.summary()["issues_by_column"]["age"] == 2
 
 
+def test_string_allowed_is_case_sensitive_by_default(tmp_path):
+    path = tmp_path / "status.csv"
+    path.write_text("status\nactive\nACTIVE\nActive\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"status": ar.String(allowed=["active"])},
+    )
+
+    assert not result.passed
+    assert result.issue_count == 2
+    assert [issue.row_index for issue in result.issues] == [2, 3]
+
+
+def test_string_case_sensitive_round_trips_through_json():
+    schema = ar.Schema({"status": ar.String(allowed=["active"], case_sensitive=False)})
+
+    restored = ar.Schema.from_json(schema.to_json())
+
+    assert restored.fields["status"].case_sensitive is False
+
+
+def test_string_allowed_supports_case_insensitive_matching(tmp_path):
+    path = tmp_path / "status.csv"
+    path.write_text("status\nactive\nACTIVE\nActive\ninactive\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {
+            "status": ar.String(
+                allowed=["active", "inactive"],
+                case_sensitive=False,
+            )
+        },
+    )
+
+    assert result.passed
+    assert result.issue_count == 0
+
+
+def test_string_allowed_case_insensitive_rejects_invalid_values(tmp_path):
+    path = tmp_path / "status.csv"
+    path.write_text("status\nactive\nACTIVE\npending\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {
+            "status": ar.String(
+                allowed=["active"],
+                case_sensitive=False,
+            )
+        },
+    )
+
+    assert not result.passed
+    assert result.issue_count == 1
+    assert result.issues[0].row_index == 3
+    assert result.issues[0].rule == "allowed"
+
+
+def test_string_case_sensitive_must_be_bool():
+    with pytest.raises(TypeError, match="case_sensitive must be a bool"):
+        ar.String(allowed=["active"], case_sensitive="false")
+
+
 def test_schema_reports_missing_and_unexpected_columns(sample_csv):
     frame = ar.read_csv(sample_csv)
     schema = ar.Schema({"missing": ar.String()}, strict=True)
@@ -859,6 +924,53 @@ def test_validation_result_to_markdown_none_value_redacted():
     markdown_raw = result.to_markdown()  # default redaction is False
     # None -> empty cell in raw mode
     assert "[REDACTED]" not in markdown_raw
+
+
+def _make_failing_result() -> ar.ValidationResult:
+    """Helper: a ValidationResult with one issue, for redact_values type tests."""
+    return ar.ValidationResult(
+        row_count=1,
+        issue_count=1,
+        issues=[
+            ar.ValidationIssue(
+                column="col",
+                rule="min",
+                row_index=1,
+                value=0,
+                message="below minimum",
+            )
+        ],
+        bad_rows=[1],
+    )
+
+
+def test_to_markdown_rejects_non_bool_redact_values():
+    """to_markdown() must raise TypeError for any non-bool redact_values argument."""
+    result = _make_failing_result()
+
+    for invalid in ("false", "true", "", 0, 1, None, [], {}):
+        try:
+            result.to_markdown(redact_values=invalid)  # type: ignore[arg-type]
+        except TypeError as exc:
+            assert "redact_values must be a bool" in str(
+                exc
+            ), f"Wrong error message for {invalid!r}: {exc}"
+        else:
+            raise AssertionError(
+                f"Expected TypeError for redact_values={invalid!r}, but no exception was raised"
+            )
+
+
+def test_to_markdown_accepts_bool_redact_values():
+    """to_markdown() must not raise for redact_values=True or redact_values=False."""
+    result = _make_failing_result()
+
+    md_false = result.to_markdown(redact_values=False)
+    md_true = result.to_markdown(redact_values=True)
+
+    assert "0" in md_false, "Raw value should appear when redact_values=False"
+    assert "[REDACTED]" in md_true, "[REDACTED] should appear when redact_values=True"
+    assert "0" not in md_true.split("| Value |")[-1] or "[REDACTED]" in md_true
 
 
 def test_unique_constraint_detects_duplicates(tmp_path):
@@ -3297,3 +3409,132 @@ def test_field_allowed_rejects_generator():
 def test_field_allowed_rejects_bytes():
     with pytest.raises(TypeError, match="allowed must be a list, tuple, or set"):
         ar.Field(allowed=b"abc")
+
+
+def test_custom_field_required_if_validation_passes_when_condition_matches(tmp_path):
+    ar.register_validator("positive_req", lambda v: v > 0)
+
+    path = tmp_path / "custom_conditional_pass.csv"
+    path.write_text("status,score\n" "active,10\n" "inactive,\n")
+    frame = ar.read_csv(path)
+
+    schema = ar.Schema(
+        {
+            "status": ar.String(nullable=False),
+            "score": ar.Custom(
+                "positive_req", nullable=True, required_if=("status", "active")
+            ),
+        }
+    )
+
+    result = schema.validate(frame)
+    assert result.passed
+    assert result.issue_count == 0
+
+
+def test_custom_field_required_if_validation_fails_when_condition_matches(tmp_path):
+    ar.register_validator("positive_req", lambda v: v > 0)
+
+    path = tmp_path / "custom_conditional_fail.csv"
+    path.write_text("status,score\n" "active,\n" "inactive,5\n")
+    frame = ar.read_csv(path)
+
+    schema = ar.Schema(
+        {
+            "status": ar.String(nullable=False),
+            "score": ar.Custom(
+                "positive_req", nullable=True, required_if=("status", "active")
+            ),
+        }
+    )
+
+    result = schema.validate(frame)
+    assert not result.passed
+    assert result.issue_count == 1
+    assert result.issues[0].rule == "required_if"
+    assert result.issues[0].column == "score"
+    assert result.issues[0].row_index == 1
+
+
+def test_custom_field_required_if_validation_ignores_non_matching_conditions(tmp_path):
+    ar.register_validator("positive_req", lambda v: v > 0)
+
+    path = tmp_path / "custom_conditional_ignore.csv"
+    path.write_text("status,score\n" "pending,\n" "inactive,\n")
+    frame = ar.read_csv(path)
+
+    schema = ar.Schema(
+        {
+            "status": ar.String(nullable=False),
+            "score": ar.Custom(
+                "positive_req", nullable=True, required_if=("status", "active")
+            ),
+        }
+    )
+
+    result = schema.validate(frame)
+    assert result.passed
+    assert result.issue_count == 0
+
+
+def test_custom_field_required_if_enforces_rule_logic_when_matched(tmp_path):
+    ar.register_validator("positive_req", lambda v: v > 0)
+
+    path = tmp_path / "custom_conditional_rule_fail.csv"
+    path.write_text("status,score\n" "active,-5\n")
+    frame = ar.read_csv(path)
+
+    schema = ar.Schema(
+        {
+            "status": ar.String(nullable=False),
+            "score": ar.Custom(
+                "positive_req", nullable=True, required_if=("status", "active")
+            ),
+        }
+    )
+
+    result = schema.validate(frame)
+    assert not result.passed
+    assert result.issue_count == 1
+    assert result.issues[0].rule == "custom"
+    assert result.issues[0].column == "score"
+    assert result.issues[0].row_index == 1
+
+
+def test_custom_field_json_roundtrip_preserves_required_if():
+    ar.register_validator("positive_req_json", lambda v: v > 0)
+
+    schema = ar.Schema(
+        fields={
+            "id": ar.String(nullable=False),
+            "score": ar.Custom(
+                "positive_req_json", nullable=True, required_if=("id", "A1")
+            ),
+        }
+    )
+
+    restored = ar.Schema.from_json(schema.to_json())
+    assert restored == schema
+
+
+def test_unknown_semantic_severity_preservation():
+    frame = ar.from_dict({"x": ["abc"]})
+    unknown_schema = ar.Schema({"x": ar.Field(semantic="unknown", severity="warning")})
+
+    result = ar.validate(frame, unknown_schema)
+    assert not result.issues[0].passed if hasattr(result.issues[0], "passed") else True
+    assert len(result.issues) == 1
+    assert result.issues[0].rule == "semantic"
+    assert result.issues[0].severity == "warning"
+
+
+def test_missing_custom_validator_severity_preservation():
+    frame = ar.from_dict({"x": ["abc"]})
+    missing_custom_schema = ar.Schema(
+        {"x": ar.Field(semantic="custom:missing", severity="warning")}
+    )
+
+    result = ar.validate(frame, missing_custom_schema)
+    for issue in result.issues:
+        if issue.rule == "custom":
+            assert issue.severity == "warning"

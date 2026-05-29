@@ -164,3 +164,21 @@ class TestDiffSchema:
         assert len(changed) == 1
         assert changed[0].expected is None
         assert changed[0].observed == "^[A-Z][a-z]+$"
+
+    def test_severity_warning_to_error(self):
+        """diff_schema detects severity change from warning to error."""
+        expected = Schema({"age": Field(dtype="int64", severity="warning")})
+        observed = Schema({"age": Field(dtype="int64", severity="error")})
+        diff = diff_schema(expected, observed)
+        assert diff.changed is True
+        assert diff.difference_count == 1
+        assert diff.differences[0].attribute == "severity"
+
+    def test_severity_error_to_warning(self):
+        """diff_schema detects severity change from error to warning."""
+        expected = Schema({"age": Field(dtype="int64", severity="error")})
+        observed = Schema({"age": Field(dtype="int64", severity="warning")})
+        diff = diff_schema(expected, observed)
+        assert diff.changed is True
+        assert diff.difference_count == 1
+        assert diff.differences[0].attribute == "severity"

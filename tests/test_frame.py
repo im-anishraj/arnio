@@ -6,6 +6,7 @@ import copy
 import math
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -1002,6 +1003,37 @@ def test_astype_dict_object_dtype_rejected():
         match="Column 'a' cannot be cast to object dtype",
     ):
         frame.astype({"a": np.dtype("O")})
+@pytest.mark.parametrize("invalid_dtype", [[], (), set()])
+def test_astype_rejects_invalid_dtype_containers(invalid_dtype):
+    frame = ar.ArFrame.from_records([{"a": 1, "b": "x"}, {"a": 2, "b": "y"}])
+
+    with pytest.raises(TypeError, match="dtype must"):
+        frame.astype(invalid_dtype)
+
+
+def test_astype_rejects_unknown_mapping_columns():
+    frame = ar.ArFrame.from_records([{"a": 1}, {"a": 2}])
+
+    with pytest.raises(ValueError, match="Unknown column"):
+        frame.astype({"missing": int})
+
+
+def test_astype_rejects_invalid_mapping_dtype():
+    frame = ar.ArFrame.from_records([{"a": 1}, {"a": 2}])
+
+    with pytest.raises(TypeError, match="dtype must"):
+        frame.astype({"a": []})
+
+
+@pytest.mark.parametrize(
+    "invalid_dtype",
+    [object, "object", np.object_, np.dtype("O")],
+)
+def test_astype_rejects_object_dtype_aliases(invalid_dtype):
+    frame = ar.ArFrame.from_records([{"a": 1}, {"a": 2}])
+
+    with pytest.raises(TypeError, match="dtype must"):
+        frame.astype(invalid_dtype)
 
 
 # ── drop_columns ──────────────────────────────────────────────────────────────
