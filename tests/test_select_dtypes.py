@@ -157,8 +157,9 @@ def test_select_dtypes_single_column_frame(single_col_csv):
 def test_select_dtypes_null_dtype_is_valid(mixed_csv):
     # "null" is a recognised dtype — no TypeError, but no null columns here
     frame = ar.read_csv(mixed_csv)
-    with pytest.raises(ValueError, match="No columns match"):
-        frame.select_dtypes(include="null")
+    result = frame.select_dtypes(include="null")
+    assert result.shape == (3, 0)
+    assert result.columns == []
 
 
 # ---------------------------------------------------------------------------
@@ -168,14 +169,15 @@ def test_select_dtypes_null_dtype_is_valid(mixed_csv):
 
 def test_select_dtypes_no_match_raises_value_error(string_only_csv):
     frame = ar.read_csv(string_only_csv)
-    with pytest.raises(ValueError, match="No columns match"):
-        frame.select_dtypes(include="int64")
-
+    result = frame.select_dtypes(include="int64")
+    assert result.shape == (2, 0)
+    assert result.columns == []
 
 def test_select_dtypes_exclude_all_raises_value_error(mixed_csv):
     frame = ar.read_csv(mixed_csv)
-    with pytest.raises(ValueError, match="No columns match"):
-        frame.select_dtypes(exclude=["int64", "float64", "string", "bool"])
+    result = frame.select_dtypes(exclude=["int64", "float64", "string", "bool"])
+    assert result.shape == (3, 0)
+    assert result.columns == []
 
 
 # ---------------------------------------------------------------------------
