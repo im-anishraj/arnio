@@ -74,6 +74,7 @@ from .pipeline import (
 )
 from .quality import (
     CleanExplanation,
+    CleaningSuggestion,
     CleanStepRecord,
     ColumnProfile,
     DataQualityReport,
@@ -85,7 +86,6 @@ from .quality import (
     compare_profiles,
     profile,
     suggest_cleaning,
-    CleaningSuggestion
 )
 from .schema import (
     URL,
