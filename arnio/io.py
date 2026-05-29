@@ -846,7 +846,12 @@ def read_csv_chunked(
                 if on_bad_lines == "warn" and bad_rows:
                     _warn_bad_rows(bad_rows)
 
-                yield ArFrame(cpp_frame)
+                frame = ArFrame(cpp_frame)
+
+                if frame.shape[0] == 0 and bad_rows:
+                    continue
+
+                yield frame
     except ValueError:
         raise
     except CsvReadError:
