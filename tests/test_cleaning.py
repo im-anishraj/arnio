@@ -4020,6 +4020,26 @@ class TestCleanColumnNames:
         result = ar.clean_column_names(frame)
         assert to_pandas(result).columns.tolist() == ["my_name", "age"]
 
+    def test_clean_column_names_noop_returns_fresh_frame(self):
+        df = pd.DataFrame({"name": [1], "age": [2]})
+        frame = from_pandas(df)
+
+        result = ar.clean_column_names(frame)
+
+        assert result is not frame
+        assert to_pandas(result).equals(to_pandas(frame))
+
+    def test_clean_column_names_noop_attrs_are_isolated(self):
+        df = pd.DataFrame({"name": [1], "age": [2]})
+        frame = from_pandas(df)
+        frame._attrs = {"source": {"name": "original"}}
+
+        result = ar.clean_column_names(frame)
+
+        result._attrs["source"]["name"] = "mutated"
+
+        assert frame._attrs["source"]["name"] == "original"
+
     def test_clean_column_names_consecutive_and_boundary_underscores(self):
         df = pd.DataFrame({"__col__name__": [1], "-another--col-": [2]})
         frame = from_pandas(df)
