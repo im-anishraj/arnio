@@ -140,20 +140,24 @@ def test_hex_int_is_string(tmp_path):
 def test_forced_int_invalid_token_raises(tmp_path):
     import pytest
     from arnio.exceptions import CsvReadError
-    
+
     csv_file = tmp_path / "bad_int.csv"
     csv_file.write_text("a,b\n1,2\nabc,4\n")
 
-    with pytest.raises(CsvReadError, match="Invalid token 'abc' for forced int64 column"):
+    with pytest.raises(
+        CsvReadError, match="Invalid token 'abc' for forced int64 column"
+    ):
         read_csv(str(csv_file), dtype={"a": "int64", "b": "int64"})
 
 
 def test_forced_float_invalid_token_raises(tmp_path):
     import pytest
     from arnio.exceptions import CsvReadError
-    
+
     csv_file = tmp_path / "bad_float.csv"
     csv_file.write_text("a,b\n1.5,2.0\n3.14,bad\n")
 
-    with pytest.raises(CsvReadError, match="Invalid token 'bad' for forced float64 column"):
+    with pytest.raises(
+        CsvReadError, match="Invalid token 'bad' for forced float64 column"
+    ):
         read_csv(str(csv_file), dtype={"a": "float64", "b": "float64"})
