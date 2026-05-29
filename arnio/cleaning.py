@@ -1381,9 +1381,7 @@ def filter_rows(
         )
 
     if not isinstance(op, str):
-        raise TypeError(
-            f"filter_rows: op must be a string, got {type(op).__name__!r}"
-        )
+        raise TypeError(f"filter_rows: op must be a string, got {type(op).__name__!r}")
     df = to_pandas(frame) if is_arframe else frame
 
     ops = {
