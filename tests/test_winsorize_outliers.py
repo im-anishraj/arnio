@@ -135,7 +135,9 @@ class TestWinsorizeOutliersBoundary:
         assert list(result_df.columns) == list(original_df.columns)
         assert list(result_df["name"]) == list(original_df["name"])
 
-    def test_no_numeric_columns_with_subset_empty_after_filter_returns_distinct_frame(self):
+    def test_no_numeric_columns_with_subset_empty_after_filter_returns_distinct_frame(
+        self,
+    ):
         """winsorize_outliers returns a new ArFrame when the frame has no numeric columns at all."""
         frame = ar.from_pandas(
             pd.DataFrame({"label": ["x", "y"], "category": ["a", "b"]})
