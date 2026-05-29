@@ -1297,10 +1297,11 @@ def sniff_delimiter(
     except FileNotFoundError as e:
         raise FileNotFoundError(f"File not found: {path!r}") from e
 
-    try:
-        _reject_utf8_nul_bytes(path)
-    except FileNotFoundError:
-        pass
+    if _is_utf8_encoding(encoding):
+        try:
+            _reject_utf8_nul_bytes(path)
+        except FileNotFoundError:
+            pass
 
     # 3. Read Sample
     try:
