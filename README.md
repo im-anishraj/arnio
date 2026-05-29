@@ -362,14 +362,14 @@ If a dtype is partially supported, users may need conversion before processing. 
 | `datetime64[ns]` | ❌ Unsupported | No native datetime parsing or conversion support yet |
 | `category` | ⚠️ Limited | Converted to string/object during processing |
 | `object` (mixed columns) | ⚠️ Limited | Mixed object columns may coerce to string and reduce type inference reliability |
-| nullable pandas dtypes (`Int64`, `boolean`) | ⚠️ Limited | Supported through pandas extension dtypes with null-mask handling |
-| `timedelta64[ns]` | ❌ Unsupported | Not currently supported |
+| nullable pandas dtypes (`Int64`, `boolean`) | ⚠️ Partial | Outbound `to_pandas()` preserves null semantics via null masks, but inbound `from_pandas()` support for pandas extension dtypes is still limited || `timedelta64[ns]` | ❌ Unsupported | Not currently supported |
 
 ### Notes
 
 - Numeric and boolean columns are optimized for zero-copy conversion between C++ and pandas.
 - String columns require Python string object creation during `to_pandas()` conversion.
 - Mixed `object` columns may reduce type inference accuracy and may require preprocessing.
+- Nullable pandas extension dtypes currently have asymmetric support: outbound `to_pandas()` preserves null semantics through Arnio's null-mask model, while inbound `from_pandas()` support remains limited.
 - Unsupported dtypes should raise clear user-facing errors instead of silent failures.
 
 <br>

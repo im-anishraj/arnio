@@ -65,11 +65,16 @@ The following dtypes are not natively supported but may work through conversion 
 - mixed `object` columns
 These may require conversion before pipeline execution. Mixed object columns can reduce type inference reliability, and categorical workflows may require normalization before cleaning operations.
 
-### Planned Support
-The following pandas-specific nullable dtypes require additional handling for null semantics and conversion consistency:
+### Partial Nullable-Dtype Support
+Arnio's internal column model tracks nulls separately using boolean null masks. As a result, outbound `to_pandas()` conversions can preserve null semantics for supported native column types.
+
+However, inbound `from_pandas()` support for pandas extension dtypes is currently limited.
+
+The following pandas nullable extension dtypes are not yet fully supported as native inbound types:
 - nullable integer types such as `Int64`
 - nullable boolean dtype such as `boolean`
-Support improvements for these dtypes are planned for future releases.
+
+These workflows may require conversion to standard pandas/numpy dtypes before ingestion into Arnio. Improved inbound extension-dtype support is planned for future releases.
 
 ### Currently Unsupported
 The following dtype is currently unsupported:
