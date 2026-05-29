@@ -44,16 +44,34 @@ inline void strip_utf8_bom(std::string& s) {
     }
 }
 
-inline bool record_complete(const std::string& record) {
+inline bool record_complete(const std::string& record, char delimiter) {
     bool in_quotes = false;
+    bool at_field_start = true;
 
     for (size_t i = 0; i < record.size(); ++i) {
-        if (record[i] != '"') continue;
+        const char c = record[i];
 
-        if (in_quotes && i + 1 < record.size() && record[i + 1] == '"') {
-            ++i;
-        } else {
-            in_quotes = !in_quotes;
+        if (in_quotes) {
+            if (c == '"') {
+                if (i + 1 < record.size() && record[i + 1] == '"') {
+                    ++i;
+                } else {
+                    in_quotes = false;
+                    at_field_start = false;
+                }
+            }
+            continue;
+        }
+
+        if (c == '"') {
+            if (at_field_start) {
+                in_quotes = true;
+                at_field_start = false;
+            }
+        } else if (c == delimiter) {
+            at_field_start = true;
+        } else if (c != '\r') {
+            at_field_start = false;
         }
     }
 
@@ -137,7 +155,8 @@ class BufferedStreamReader {
 
 class RecordReader {
    public:
-    explicit RecordReader(std::istream& stream) : reader_(stream) {
+    explicit RecordReader(std::istream& stream, char delimiter)
+        : reader_(stream), delimiter_(delimiter) {
         record_.reserve(1024);
         line_.reserve(1024);
     }
@@ -161,13 +180,13 @@ class RecordReader {
             prev_line_ending_ = line_ending_;
             first = false;
 
-            if (record_complete(record_)) {
+            if (record_complete(record_, delimiter_)) {
                 out_record = record_;
                 return true;
             }
         }
 
-        if (!record_.empty() && !record_complete(record_)) {
+        if (!record_.empty() && !record_complete(record_, delimiter_)) {
             throw std::runtime_error("Unterminated quoted field starting at line " +
                                      std::to_string(record_start_line));
         }
@@ -185,6 +204,7 @@ class RecordReader {
     std::string line_;
     std::string line_ending_;
     std::string prev_line_ending_;
+    char delimiter_;
 };
 
 namespace {
@@ -586,6 +606,7 @@ void CsvParser::parse_line(const std::string& line, std::vector<std::string>& fi
     std::string field;
     field.reserve(line.size() / 4 + 1);  // heuristic for average field length
     bool in_quotes = false;
+    bool at_field_start = true;
 
     for (size_t i = 0; i < line.size(); ++i) {
         char c = line[i];
@@ -596,16 +617,23 @@ void CsvParser::parse_line(const std::string& line, std::vector<std::string>& fi
                     ++i;
                 } else {
                     in_quotes = false;
+                    at_field_start = false;
                 }
             } else {
                 field += c;
             }
         } else {
             if (c == '"') {
-                in_quotes = true;
+                if (at_field_start) {
+                    in_quotes = true;
+                    at_field_start = false;
+                } else {
+                    field += c;
+                }
             } else if (c == config_.delimiter) {
                 add_field(field);
                 field.clear();
+                at_field_start = true;
             } else if (c == '\r') {
                 continue;
             } else {
@@ -623,6 +651,7 @@ void CsvParser::parse_line(const std::string& line, std::vector<std::string>& fi
                 // After loop's ++i, i will point at the first stop char (or
                 // one past end), so subtract 1 to compensate.
                 i = static_cast<size_t>(scan - line.data()) - 1;
+                at_field_start = false;
             }
         }
     }
@@ -794,7 +823,7 @@ CsvParseResult CsvReader::read(const std::string& path, const std::string& on_ba
         std::ifstream file;
         open_binary_input(file, path);
         if (!file.is_open()) throw std::runtime_error("Cannot open file: " + path);
-        RecordReader record_reader(file);
+        RecordReader record_reader(file, config.delimiter);
 
         size_t record_number = 0;
         size_t line_number = 0;
@@ -936,7 +965,7 @@ CsvParseResult CsvReader::read(const std::string& path, const std::string& on_ba
     {
         std::ifstream file2;
         open_binary_input(file2, path);
-        RecordReader record_reader2(file2);
+        RecordReader record_reader2(file2, config.delimiter);
 
         size_t record_number2 = 0;
         size_t line_number2 = 0;
@@ -1030,7 +1059,7 @@ CsvReader::scan_schema(const std::string& path, const std::string& on_bad_lines)
         throw std::runtime_error("Cannot open file: " + path);
     }
 
-    RecordReader record_reader(file);
+    RecordReader record_reader(file, config.delimiter);
 
     std::string line;
     std::vector<std::string> header;
@@ -1256,7 +1285,7 @@ void CsvChunkReader::open(const std::string& path) {
         throw std::runtime_error("Cannot open file: " + path);
     }
 
-    record_reader_ = std::make_unique<RecordReader>(file_);
+    record_reader_ = std::make_unique<RecordReader>(file_, config.delimiter);
 
     opened_ = true;
     record_number_ = 0;
