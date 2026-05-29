@@ -8,6 +8,11 @@ on:
   pull_request:
     paths:
       - ".github/workflows/parquet-extra-test.yml"
+      - "cpp/**"
+      - "bindings/**"
+      - "arnio/_core.py"
+      - "arnio/_arnio_cpp.pyi"
+      - "arnio/convert.py"
       - "arnio/io.py"
       - "tests/test_parquet.py"
       - "pyproject.toml"
