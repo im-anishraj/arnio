@@ -2929,7 +2929,9 @@ class TestRoundNumericColumns:
 
         df = pd.DataFrame({"a": [1.123]})
         frame = ar.from_pandas(df)
-        with pytest.raises(TypeError, match="subset must be a list"):
+        with pytest.raises(
+            TypeError, match="subset must be a sequence of column names"
+        ):
             ar.round_numeric_columns(frame, subset="a")
 
     def test_invalid_decimals_type(self):
@@ -2959,6 +2961,41 @@ class TestRoundNumericColumns:
         assert result["a"].tolist() == [1.2, 5.7]
         assert result["label"].tolist() == ["x", "y"]
         assert df["a"].tolist() == [1.234, 5.678]
+
+    def test_round_tuple_subset(self):
+        import pandas as pd
+
+        df = pd.DataFrame({"a": [1.123, 2.456], "b": [3.789, 4.0]})
+
+        frame = ar.from_pandas(df)
+
+        result = ar.round_numeric_columns(
+            frame,
+            subset=("a",),
+            decimals=1,
+        )
+
+        result_df = ar.to_pandas(result)
+
+        assert list(result_df["a"]) == [1.1, 2.5]
+        assert list(result_df["b"]) == [3.789, 4.0]
+
+    def test_round_tuple_subset_non_string_member(self):
+        import pandas as pd
+
+        df = pd.DataFrame({"a": [1.123]})
+
+        frame = ar.from_pandas(df)
+
+        with pytest.raises(
+            TypeError,
+            match="string column names",
+        ):
+            ar.round_numeric_columns(
+                frame,
+                subset=("a", 123),
+                decimals=1,
+            )
 
 
 class TestCombineColumns:

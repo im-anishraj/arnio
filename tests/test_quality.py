@@ -3908,3 +3908,107 @@ class TestCleanExplanationValidation:
         exp = self._valid_explanation()
         text = str(exp)
         assert "(none)" in text
+
+
+class TestQualityGateResultConstructorValidation:
+    """Tests for QualityGateIssue and QualityGateResult constructor field validation."""
+
+    def test_quality_gate_issue_valid(self):
+        issue = ar.QualityGateIssue(
+            metric="null_ratio",
+            message="Column has too many nulls",
+            column="age",
+            baseline=0.05,
+            current=0.10,
+            threshold=0.08,
+            delta=0.05,
+        )
+        assert issue.metric == "null_ratio"
+        assert issue.message == "Column has too many nulls"
+        assert issue.column == "age"
+        assert issue.delta == 0.05
+        assert issue.to_dict()["metric"] == "null_ratio"
+
+    def test_quality_gate_issue_invalid_metric(self):
+        with pytest.raises(TypeError, match="metric must be a str"):
+            ar.QualityGateIssue(metric=123, message="msg")
+        with pytest.raises(ValueError, match="metric must be a non-empty string"):
+            ar.QualityGateIssue(metric="   ", message="msg")
+
+    def test_quality_gate_issue_invalid_message(self):
+        with pytest.raises(TypeError, match="message must be a str"):
+            ar.QualityGateIssue(metric="null_ratio", message=42)
+        with pytest.raises(ValueError, match="message must be a non-empty string"):
+            ar.QualityGateIssue(metric="null_ratio", message="")
+
+    def test_quality_gate_issue_invalid_column(self):
+        with pytest.raises(TypeError, match="column must be a str or None"):
+            ar.QualityGateIssue(metric="null_ratio", message="msg", column=123)
+
+    def test_quality_gate_issue_invalid_delta(self):
+        with pytest.raises(TypeError, match="delta must be a float, integer, or None"):
+            ar.QualityGateIssue(metric="null_ratio", message="msg", delta="0.5")
+        with pytest.raises(TypeError, match="delta must be a float, integer, or None"):
+            ar.QualityGateIssue(metric="null_ratio", message="msg", delta=True)
+
+    def test_quality_gate_result_valid(self):
+        df = pd.DataFrame({"x": [1, 2, 3]})
+        report = ar.profile(ar.from_pandas(df))
+
+        issue = ar.QualityGateIssue(metric="null_ratio", message="msg")
+        res = ar.QualityGateResult(
+            baseline_profile=report,
+            current_profile=report,
+            issues=[issue],
+            thresholds={"null_ratio": 0.05},
+        )
+        assert res.passed is False
+        assert len(res.issues) == 1
+        assert res.thresholds == {"null_ratio": 0.05}
+
+    def test_quality_gate_result_invalid_profiles(self):
+        issue = ar.QualityGateIssue(metric="null_ratio", message="msg")
+        with pytest.raises(
+            TypeError, match="baseline_profile must be a DataQualityReport instance"
+        ):
+            ar.QualityGateResult(
+                baseline_profile="not a report",
+                current_profile="not a report",
+                issues=[issue],
+                thresholds={},
+            )
+
+    def test_quality_gate_result_invalid_issues(self):
+        df = pd.DataFrame({"x": [1, 2, 3]})
+        report = ar.profile(ar.from_pandas(df))
+
+        with pytest.raises(TypeError, match="issues must be a list"):
+            ar.QualityGateResult(
+                baseline_profile=report,
+                current_profile=report,
+                issues="not a list",
+                thresholds={},
+            )
+
+        with pytest.raises(
+            TypeError, match="issues\\[0\\] must be a QualityGateIssue instance"
+        ):
+            ar.QualityGateResult(
+                baseline_profile=report,
+                current_profile=report,
+                issues=["not an issue"],
+                thresholds={},
+            )
+
+    def test_quality_gate_result_invalid_thresholds(self):
+        df = pd.DataFrame({"x": [1, 2, 3]})
+        report = ar.profile(ar.from_pandas(df))
+        issue = ar.QualityGateIssue(metric="null_ratio", message="msg")
+
+        with pytest.raises(TypeError, match="thresholds must be a dict"):
+            ar.QualityGateResult(
+                baseline_profile=report,
+                current_profile=report,
+                issues=[issue],
+                thresholds="not a dict",
+            )

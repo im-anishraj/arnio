@@ -1154,6 +1154,25 @@ class QualityGateIssue:
     threshold: Any = None
     delta: float | None = None
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.metric, str):
+            raise TypeError(f"metric must be a str, got {type(self.metric).__name__}")
+        if not self.metric.strip():
+            raise ValueError("metric must be a non-empty string")
+        if not isinstance(self.message, str):
+            raise TypeError(f"message must be a str, got {type(self.message).__name__}")
+        if not self.message.strip():
+            raise ValueError("message must be a non-empty string")
+        if self.column is not None and not isinstance(self.column, str):
+            raise TypeError(
+                f"column must be a str or None, got {type(self.column).__name__}"
+            )
+        if self.delta is not None:
+            if isinstance(self.delta, bool) or not isinstance(self.delta, (int, float)):
+                raise TypeError(
+                    f"delta must be a float, integer, or None, got {type(self.delta).__name__}"
+                )
+
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-friendly dictionary representation."""
         return {
@@ -1175,6 +1194,29 @@ class QualityGateResult:
     current_profile: DataQualityReport
     issues: list[QualityGateIssue]
     thresholds: dict[str, Any]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.baseline_profile, DataQualityReport):
+            raise TypeError(
+                f"baseline_profile must be a DataQualityReport instance, got {type(self.baseline_profile).__name__}"
+            )
+        if not isinstance(self.current_profile, DataQualityReport):
+            raise TypeError(
+                f"current_profile must be a DataQualityReport instance, got {type(self.current_profile).__name__}"
+            )
+        if not isinstance(self.issues, list):
+            raise TypeError(
+                f"issues must be a list of QualityGateIssue instances, got {type(self.issues).__name__}"
+            )
+        for i, issue in enumerate(self.issues):
+            if not isinstance(issue, QualityGateIssue):
+                raise TypeError(
+                    f"issues[{i}] must be a QualityGateIssue instance, got {type(issue).__name__}"
+                )
+        if not isinstance(self.thresholds, dict):
+            raise TypeError(
+                f"thresholds must be a dict, got {type(self.thresholds).__name__}"
+            )
 
     @property
     def passed(self) -> bool:

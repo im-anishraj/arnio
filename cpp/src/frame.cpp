@@ -1,5 +1,6 @@
 #include "arnio/frame.h"
 
+#include <cmath>
 #include <stdexcept>
 
 namespace arnio {
@@ -199,6 +200,8 @@ std::vector<std::pair<std::string, std::vector<std::pair<std::string, double>>>>
             double sum = 0.0;
             double min_val = std::numeric_limits<double>::infinity();
             double max_val = -std::numeric_limits<double>::infinity();
+            size_t finite_count = 0;
+            size_t non_finite_count = 0;
 
             for (size_t i = 0; i < total_rows; ++i) {
                 if (col.is_null(i)) {
@@ -214,16 +217,22 @@ std::vector<std::pair<std::string, std::vector<std::pair<std::string, double>>>>
                     val = std::get<double>(col.at(i));
                 }
 
+                if (!std::isfinite(val)) {
+                    non_finite_count++;
+                    continue;
+                }
+
+                finite_count++;
                 sum += val;
                 if (val < min_val) min_val = val;
                 if (val > max_val) max_val = val;
             }
 
-            // Push metrics in the exact forward order requested by the maintainer
             stats.push_back({"count", static_cast<double>(valid_count)});
             stats.push_back({"nulls", static_cast<double>(null_count)});
-            if (valid_count > 0) {
-                stats.push_back({"mean", sum / valid_count});
+            stats.push_back({"non_finite", static_cast<double>(non_finite_count)});
+            if (finite_count > 0) {
+                stats.push_back({"mean", sum / finite_count});
                 stats.push_back({"min", min_val});
                 stats.push_back({"max", max_val});
             } else {

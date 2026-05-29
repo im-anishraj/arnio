@@ -12,7 +12,7 @@ except ImportError:
     )
     exit(1)
 
-from arnio.integrations.sklearn import ArnioCleaner
+from arnio.integrations import ArnioCleaner  # requires: pip install arnio[sklearn]
 
 
 def main():
