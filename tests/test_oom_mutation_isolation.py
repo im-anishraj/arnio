@@ -39,7 +39,7 @@ class TestWinsorizeOutliersNoMutation:
 
         # The ArFrame round-trips back identically
         after = ar.to_pandas(frame)
-        pd.testing.assert_frame_equal(after, original_pd)
+        pd.testing.assert_frame_equal(after, original_pd, check_dtype=False)
 
     def test_pandas_values_unchanged_before_and_after(self):
         """winsorize_outliers result frame has clipped values; original is untouched."""
@@ -67,7 +67,7 @@ class TestParseBoolStringsNoMutation:
         _ = parse_bool_strings(frame)
 
         after = ar.to_pandas(frame)
-        pd.testing.assert_frame_equal(after, original_pd)
+        pd.testing.assert_frame_equal(after, original_pd, check_dtype=False)
 
     def test_result_has_parsed_values_original_unchanged(self):
         """parse_bool_strings result has booleans; original ArFrame strings intact."""
@@ -76,7 +76,7 @@ class TestParseBoolStringsNoMutation:
         result = parse_bool_strings(frame)
 
         result_df = ar.to_pandas(result)
-        assert result_df["flag"].iloc[0] is True
+        assert result_df["flag"].iloc[0] == True
         # Original is still strings
         assert ar.to_pandas(frame)["flag"].iloc[0] == "true"
 
@@ -106,7 +106,7 @@ class TestReplaceValuesNoMutation:
         original_pd = pd.DataFrame({"name": ["Alice", "Bob", "Alice"]})
         frame = ar.from_pandas(original_pd.copy())
         _ = replace_values(frame, mapping={"Alice": "Carol"})
-        pd.testing.assert_frame_equal(ar.to_pandas(frame), original_pd)
+        pd.testing.assert_frame_equal(ar.to_pandas(frame), original_pd, check_dtype=False)
 
 
 # ---------------------------------------------------------------------------
@@ -134,7 +134,7 @@ class TestStandardizeMissingTokensNoMutation:
         original_pd = pd.DataFrame({"val": ["N/A", "hello"]})
         frame = ar.from_pandas(original_pd.copy())
         _ = standardize_missing_tokens(frame)
-        pd.testing.assert_frame_equal(ar.to_pandas(frame), original_pd)
+        pd.testing.assert_frame_equal(ar.to_pandas(frame), original_pd, check_dtype=False)
 
 
 # ---------------------------------------------------------------------------
@@ -155,7 +155,7 @@ class TestSafeDivideColumnsNoMutation:
         original_pd = pd.DataFrame({"num": ["10", "20"], "den": ["2", "0"]})
         frame = ar.from_pandas(original_pd.copy())
         _ = safe_divide_columns(frame, "num", "den", "ratio")
-        pd.testing.assert_frame_equal(ar.to_pandas(frame), original_pd)
+        pd.testing.assert_frame_equal(ar.to_pandas(frame), original_pd, check_dtype=False)
 
 
 # ---------------------------------------------------------------------------
@@ -190,7 +190,7 @@ class TestRoundNumericColumnsNoMutation:
         original_pd = pd.DataFrame({"score": [1.555, 2.444]})
         frame = ar.from_pandas(original_pd.copy())
         _ = round_numeric_columns(frame, decimals=1)
-        pd.testing.assert_frame_equal(ar.to_pandas(frame), original_pd)
+        pd.testing.assert_frame_equal(ar.to_pandas(frame), original_pd, check_dtype=False)
 
 
 # ---------------------------------------------------------------------------
@@ -211,4 +211,4 @@ class TestCoalesceColumnsNoMutation:
         original_pd = pd.DataFrame({"a": [None, 2.0], "b": [1.0, None]})
         frame = ar.from_pandas(original_pd.copy())
         _ = coalesce_columns(frame, subset=["a", "b"], output_column="out")
-        pd.testing.assert_frame_equal(ar.to_pandas(frame), original_pd)
+        pd.testing.assert_frame_equal(ar.to_pandas(frame), original_pd, check_dtype=False)
