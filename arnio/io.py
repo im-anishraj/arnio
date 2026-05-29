@@ -1456,8 +1456,6 @@ def write_parquet(
             f"Cannot write a zero-column ArFrame with {rows} rows to Parquet: the current export path cannot preserve row count without columns."
         )
 
-    """ If the frame has zero columns and a positive row count. """
-
     df = to_pandas(frame)
 
     kwargs: dict = {
