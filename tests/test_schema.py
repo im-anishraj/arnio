@@ -3139,12 +3139,17 @@ def test_custom_rule_with_invalid_severity_fails_validation_execution():
     with pytest.raises(ValueError, match="severity must be 'error' or 'warning'"):
         schema.validate(frame)
 
+
 def test_schema_unique_duplicate_columns():
     # 1. Test direct construction coverage
-    with pytest.raises(ValueError, match="Schema 'unique' must not contain duplicate column names."):
+    with pytest.raises(
+        ValueError, match="Schema 'unique' must not contain duplicate column names."
+    ):
         ar.Schema({"id": ar.Int64()}, unique=["id", "id"])
 
     # 2. Test JSON deserialization coverage
     invalid_json_str = '{"fields": {"id": {"dtype": "int64"}}, "unique": ["id", "id"]}'
-    with pytest.raises(ValueError, match="Schema 'unique' must not contain duplicate column names."):
-        ar.Schema.from_json(invalid_json_str)        
+    with pytest.raises(
+        ValueError, match="Schema 'unique' must not contain duplicate column names."
+    ):
+        ar.Schema.from_json(invalid_json_str)

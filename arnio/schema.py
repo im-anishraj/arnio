@@ -769,7 +769,9 @@ class Schema:
                         f"Schema 'unique' members must be strings, got {type(item).__name__} for element {item!r}."
                     )
                 if len(self.unique) != len(set(self.unique)):
-                    raise ValueError("Schema 'unique' must not contain duplicate column names.")
+                    raise ValueError(
+                        "Schema 'unique' must not contain duplicate column names."
+                    )
         if not isinstance(self.strict, bool):
             raise TypeError("Schema 'strict' must be a boolean")
 
