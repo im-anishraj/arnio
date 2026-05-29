@@ -13,16 +13,19 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Python 3.12
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: 'pip'
 
       - name: Install lint dependencies
         run: pip install "black>=24.0" "ruff>=0.4.0" "mypy>=1.0" pandas-stubs types-setuptools
+
+      - name: Documentation UTF-8 check
+        run: python scripts/check_docs_utf8.py
 
       - name: Black (check-only)
         run: black --check --diff .
@@ -48,7 +51,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Install dependencies
         run: |
           sudo apt-get update -qq
@@ -58,6 +61,7 @@ jobs:
         run: |
           cmake -S . -B build \
             -DCMAKE_BUILD_TYPE=Debug \
+            -DARNIO_BUILD_CPP_TESTS=ON \
             -DCMAKE_PREFIX_PATH=$(python3 -c "import pybind11; print(pybind11.get_cmake_dir())")
       - name: Build
         run: cmake --build build --parallel
@@ -76,10 +80,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
           cache: 'pip'
@@ -96,9 +100,9 @@ jobs:
           pytest tests/ -v --cov=arnio --cov-report=xml
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v6
         with:
-          file: ./coverage.xml
+          files: ./coverage.xml
           fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}
 
@@ -108,10 +112,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Python 3.12
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: 'pip'
@@ -130,3 +134,31 @@ jobs:
             --ExecutePreprocessor.timeout=300 \
             examples/financial_csv_example.ipynb \
             --output executed_notebook.ipynb
+
+  sklearn_integration:
+    name: scikit-learn Integration Tests
+    needs: build_and_test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: 'pip'
+
+      - name: Install dev + sklearn extras
+        run: pip install -e ".[dev,sklearn]"
+
+      - name: Run sklearn integration tests
+        run: pytest tests/test_sklearn.py -v --cov=arnio --cov-report=xml
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v6
+        with:
+          files: ./coverage.xml
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}

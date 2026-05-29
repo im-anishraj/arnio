@@ -1,7 +1,7 @@
 name: Bug report
 description: Report a reproducible runtime, API, packaging, or documentation bug.
 title: "Bug: "
-labels: ["type: bug", "status: needs triage"]
+labels: ["type:bug", "status:needs-triage"]
 body:
   - type: markdown
     attributes:

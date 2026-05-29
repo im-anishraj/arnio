@@ -28,6 +28,7 @@ cd arnio
 pip install -e ".[dev]"
 pre-commit install
 ```
+> `pip install -e ".[dev]"` builds Arnio's native C++ extension. If you see `nmake` or `CMAKE_CXX_COMPILER` errors on Windows, install the "Desktop development with C++" workload in Visual Studio Build Tools or use WSL, then retry the install.
 Alternatively, use WSL for a faster setup experience.
 
 If the editable install or wheel build fails, see the Windows build troubleshooting section in the [README](../README.md#windows-build-troubleshooting).
@@ -63,8 +64,8 @@ Most new features do not require touching C++! You can write a pure Python step 
 ```python
 import arnio as ar
 
-def remove_special_chars(df, columns=None):
-    cols = columns or df.select_dtypes("object").columns
+def remove_special_chars(df, subset=None):
+    cols = subset or df.select_dtypes("object").columns
     for col in cols:
         df[col] = df[col].str.replace(r"[^a-zA-Z0-9\s]", "", regex=True)
     return df
@@ -104,6 +105,12 @@ def test_remove_special_chars(sample_csv):
 8. Open the pull request and link the issue with `Fixes #issue-number` when complete.
 9. Ensure your PR title follows **Conventional Commits**.
 
+## C++ extension stubs
+
+If you change the C++ pybind11 API, update the stub file at
+[arnio/_arnio_cpp.pyi](../arnio/_arnio_cpp.pyi) and keep the Python call sites
+aligned. See [STUBS_UPDATE.md](../STUBS_UPDATE.md) for the short checklist.
+
 ### Review expectations
 
 - Do not open duplicate PRs for the same issue.
@@ -111,6 +118,7 @@ def test_remove_special_chars(sample_csv):
 - Do not edit generated files, build output, cache folders, or local logs.
 - Be patient during review. Maintainers may ask for tests, edge cases, or a narrower scope.
 - If you stop working on an assigned issue, please comment so it can be reassigned.
+- If you need more time, comment within 3 days of assignment.
 
 ### Commit Message Convention
 We use an automated release system that relies on [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/). Your PR title must use one of the following prefixes:

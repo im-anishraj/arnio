@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Architecture — Arnio</title>
+  <meta name="description" content="Current Arnio architecture: C++ core, pybind11 bindings, Python API, quality engine, schema engine, and integrations.">
+  <link rel="icon" type="image/svg+xml" href="updated-icon.svg">
+  <link rel="stylesheet" href="css/variables.css?v=20260522">
+  <link rel="stylesheet" href="css/base.css?v=20260522">
+  <link rel="stylesheet" href="css/layout.css?v=20260522">
+  <link rel="stylesheet" href="css/components.css?v=20260522">
+  <link rel="stylesheet" href="css/pages.css?v=20260522">
+  <script src="js/theme.js"></script>
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://arnio.vercel.app/">
+  <meta property="og:title" content="Arnio — Production Data Preparation for Python">
+  <meta property="og:description" content="Arnio combines a native C++ CSV engine with Python APIs for cleaning, quality profiling, and schema validation.">
+  <meta property="og:image" content="https://arnio.vercel.app/arnio-transparent-logo.svg">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Arnio — Production Data Preparation for Python">
+  <meta name="twitter:description" content="Arnio combines a native C++ CSV engine with Python APIs for cleaning, quality profiling, and schema validation.">
+  <meta name="twitter:image" content="https://arnio.vercel.app/arnio-transparent-logo.svg">
+</head>
+<body>
+  <a href="#main-content" class="skip-link">Skip to content</a>
+  <nav class="top-nav" aria-label="Main navigation"><div class="container container--wide"><a href="index.html" class="nav-brand"><img src="arnio-transparent-logo.svg" alt="Arnio" height="32"></a><ul class="nav-links"><li><a href="docs.html">Docs</a></li><li><a href="api.html">API</a></li><li><a href="benchmarks.html">Benchmarks</a></li><li><a href="contributing.html">Contributing</a></li><li><a href="architecture.html">Architecture</a></li><li><a href="roadmap.html">Roadmap</a></li><li><a href="community.html">Community</a></li><li><a href="changelog.html">Changelog</a></li></ul><div class="nav-actions"><a href="https://discord.gg/xsEw7r78M" class="nav-discord" target="_blank" rel="noopener">Discord</a><a href="https://github.com/im-anishraj/arnio" class="nav-github" target="_blank" rel="noopener">GitHub</a><button class="theme-toggle" aria-label="Toggle theme">Theme</button><button class="nav-hamburger" aria-label="Open menu" aria-expanded="false">☰</button></div></div></nav>
+  <div class="mobile-menu" aria-label="Mobile navigation"><a href="index.html">Home</a><a href="docs.html">Documentation</a><a href="api.html">API Reference</a><a href="benchmarks.html">Benchmarks</a><a href="contributing.html">Contributing</a><a href="architecture.html">Architecture</a><a href="roadmap.html">Roadmap</a><a href="community.html">Community</a><a href="https://discord.gg/xsEw7r78M" target="_blank" rel="noopener">Discord</a><a href="changelog.html">Changelog</a></div>
+
+  <header class="page-hero"><div class="container"><h1>Architecture</h1><p>Arnio is a small native core wrapped by Python APIs for data preparation, validation, reporting, and interop with pandas-first workflows.</p></div></header>
+
+  <main id="main-content" class="main-content">
+    <div class="container">
+      <h2>System shape</h2>
+      <div class="code-block"><div class="code-block-header">Runtime flow</div><pre><code>CSV / JSONL / pandas records
+        |
+        v
+C++ parser and columnar Frame
+        |
+        v
+pybind11 extension (_arnio_cpp)
+        |
+        v
+Python ArFrame wrapper
+        |
+        +--> cleaning pipeline
+        +--> quality profile and gates
+        +--> schema validation
+        +--> pandas / Arrow / DuckDB / Parquet</code></pre></div>
+
+      <h2>C++ core</h2>
+      <p class="section-lede">The native layer owns the columnar data model, CSV parsing, CSV writing, and performance-sensitive cleaning primitives.</p>
+      <div class="feature-list">
+        <article class="card"><h3>Frame and Column</h3><p>Typed columns store values and null masks. Frame-level guards protect row-count consistency and duplicate names.</p></article>
+        <article class="card"><h3>CSV reader</h3><p>Handles quoted records, multiline fields, malformed row widths, decimal separators, dtype overrides, Unicode paths, and decoding policy.</p></article>
+        <article class="card"><h3>CSV writer</h3><p>Writes validated delimiters, headers, quoted values, multiline fields, and line terminators.</p></article>
+        <article class="card"><h3>Native transforms</h3><p>Common string and numeric operations run close to the stored columns where the implementation benefits from C++.</p></article>
+      </div>
+
+      <h2>Python API layer</h2>
+      <p>The Python package wraps native frames with stable, typed user-facing APIs. This layer validates Python inputs, translates lower-level errors into Arnio exceptions, preserves pandas attrs where supported, and exposes helpers that are easier to compose from notebooks and ETL jobs.</p>
+      <div class="pill-row"><span class="pill">ArFrame</span><span class="pill">read_csv</span><span class="pill">pipeline</span><span class="pill">profile</span><span class="pill">validate</span><span class="pill">to_arrow</span></div>
+
+      <h2>Quality engine</h2>
+      <p>The quality layer converts an <code>ArFrame</code> to a pandas DataFrame for inspection-oriented analytics. That keeps reporting expressive while the parser and storage stay native.</p>
+      <table>
+        <thead><tr><th>Object</th><th>Role</th></tr></thead>
+        <tbody>
+          <tr><td><code>ColumnProfile</code></td><td>Column-level dtype, null, uniqueness, examples, warnings, and top-value signals.</td></tr>
+          <tr><td><code>DataQualityReport</code></td><td>Whole-frame score, score components, suggestions, Markdown/HTML/Pandas/JSON exports, and optional redaction/exclusions.</td></tr>
+          <tr><td><code>ProfileComparison</code></td><td>Drift summary between two quality reports.</td></tr>
+          <tr><td><code>QualityGateResult</code></td><td>Pass/fail wrapper for CI and release gates.</td></tr>
+        </tbody>
+      </table>
+
+      <h2>Schema engine</h2>
+      <p>The schema layer validates public data contracts after ingestion and cleaning. It supports strictness, row-level issues, warning severities, max-error limits, Markdown/Pandas output, JSON round-trip, schema diffs, YAML export helpers, and custom validators.</p>
+
+      <h2>Interop boundaries</h2>
+      <div class="feature-list">
+        <article class="card"><h3>Pandas</h3><p><code>to_pandas</code>, <code>from_pandas</code>, and the <code>df.arnio</code> accessor make pandas the analysis boundary.</p></article>
+        <article class="card"><h3>Arrow and Parquet</h3><p><code>to_arrow</code> returns a pyarrow table; <code>write_parquet</code> writes files through the optional Parquet extra.</p></article>
+        <article class="card"><h3>DuckDB</h3><p><code>register_duckdb</code> registers an ArFrame as a SQL relation through pandas interop.</p></article>
+        <article class="card"><h3>scikit-learn</h3><p><code>ArnioCleaner</code> provides controlled transforms with row-count and feature-name checks.</p></article>
+      </div>
+
+      <h2>Production hardening</h2>
+      <p>Recent releases fixed duplicate-header behavior, malformed CSV row handling, zero-column row-count preservation, duplicate column guards, JSONL <code>nrows</code> parsing, Windows clean targets, and clearer validation errors. These are reflected in the API and changelog pages.</p>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-brand"><img src="arnio-transparent-logo.svg" alt="Arnio" height="32"><p>C++ accelerated data preparation for pandas and the Python data stack.</p></div>
+        <div><h4 class="footer-heading">Project</h4><ul class="footer-links"><li><a href="docs.html">Docs</a></li><li><a href="api.html">API</a></li><li><a href="changelog.html">Changelog</a></li></ul></div>
+        <div><h4 class="footer-heading">Engineering</h4><ul class="footer-links"><li><a href="architecture.html">Architecture</a></li><li><a href="benchmarks.html">Benchmarks</a></li><li><a href="roadmap.html">Roadmap</a></li></ul></div>
+        <div><h4 class="footer-heading">Community</h4><ul class="footer-links"><li><a href="contributing.html">Contributing</a></li><li><a href="community.html">Community</a></li>
+         <li class="footer-socials">
+            <a href="https://github.com/im-anishraj/arnio" target="_blank" rel="noopener" aria-label="GitHub">
+              <svg viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61-.546-1.387-1.333-1.757-1.333-1.757-1.09-.745.082-.729.082-.729 1.205.084 1.84 1.237 1.84 1.237 1.07 1.834 2.807 1.304 3.492.997.108-.775.418-1.304.76-1.604-2.665-.305-5.467-1.332-5.467-5.93 0-1.31.467-2.382 1.235-3.222-.123-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.3 1.23A11.52 11.52 0 0112 6.844c1.02.005 2.045.138 3.003.404 2.29-1.552 3.296-1.23 3.296-1.23.654 1.653.242 2.874.12 3.176.77.84 1.233 1.911 1.233 3.222 0 4.61-2.807 5.623-5.48 5.921.43.37.814 1.102.814 2.222 0 1.606-.015 2.898-.015 3.293 0 .322.216.694.825.576C20.565 21.796 24 17.297 24 12c0-6.63-5.373-12-12-12z"/>
+              </svg>
+            </a>
+
+            <a href="https://www.linkedin.com/in/im-anishraj" target="_blank" rel="noopener" aria-label="LinkedIn">
+              <svg viewBox="0 0 24 24" fill="currentColor">
+                <path d="M20.447 20.452H16.89V14.87c0-1.332-.026-3.045-1.854-3.045-1.854 0-2.137 1.447-2.137 2.946v5.68H9.343V9h3.414v1.561h.049c.476-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.063 2.063 0 11.001-4.126 2.063 2.063 0 01-.001 4.126zM7.119 20.452H3.556V9H7.12v11.452z"/>
+              </svg>
+            </a>
+          </li></ul></div>
+      </div>
+      <div class="footer-bottom"><span>© 2026 Anish Raj. MIT License.</span><span>Latest release: v1.18.0</span></div>
+    </div>
+  </footer>
+  <script src="js/main.js"></script>
+  <script src="js/code.js"></script>
+</body>
+</html>

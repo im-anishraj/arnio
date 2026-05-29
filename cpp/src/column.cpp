@@ -78,54 +78,113 @@ size_t Column::memory_usage() const {
     return usage;
 }
 
+struct PushbackVisitor {
+    ColumnData& data;
+
+    void operator()(std::monostate) {
+        std::visit(
+            [](auto& vec) {
+                using T = std::decay_t<decltype(vec)>;
+                if constexpr (!std::is_same_v<T, std::monostate>)
+                    vec.push_back(typename T::value_type{});
+            },
+            data);
+    }
+
+    void operator()(const std::string& val) {
+        std::visit(
+            [&val](auto& vec) {
+                using T = std::decay_t<decltype(vec)>;
+
+                if constexpr (std::is_same_v<T, std::vector<std::string>>)
+                    vec.push_back(val);
+
+                else if constexpr (std::is_same_v<T, std::vector<int64_t>>)
+                    vec.push_back(int64_t{});
+
+                else if constexpr (std::is_same_v<T, std::vector<double>>)
+                    vec.push_back(double{});
+
+                else if constexpr (std::is_same_v<T, std::vector<bool>>)
+                    vec.push_back(false);
+            },
+            data);
+    }
+
+    void operator()(int64_t val) {
+        std::visit(
+            [val](auto& vec) {
+                using T = std::decay_t<decltype(vec)>;
+
+                if constexpr (std::is_same_v<T, std::vector<std::string>>)
+                    vec.push_back(std::to_string(val));
+
+                if constexpr (std::is_same_v<T, std::vector<int64_t>>) vec.push_back(val);
+
+                if constexpr (std::is_same_v<T, std::vector<double>>)
+                    vec.push_back(static_cast<double>(val));
+
+                if constexpr (std::is_same_v<T, std::vector<bool>>)
+                    vec.push_back(val ? true : false);
+            },
+            data);
+    }
+
+    void operator()(double val) {
+        std::visit(
+            [val](auto& vec) {
+                using T = std::decay_t<decltype(vec)>;
+
+                if constexpr (std::is_same_v<T, std::vector<std::string>>)
+                    vec.push_back(std::to_string(val));
+
+                if constexpr (std::is_same_v<T, std::vector<int64_t>>)
+                    vec.push_back(static_cast<int64_t>(val));
+
+                if constexpr (std::is_same_v<T, std::vector<double>>) vec.push_back(val);
+
+                if constexpr (std::is_same_v<T, std::vector<bool>>)
+                    vec.push_back(val ? true : false);
+            },
+            data);
+    }
+
+    void operator()(bool val) {
+        std::visit(
+            [val](auto& vec) {
+                using T = std::decay_t<decltype(vec)>;
+
+                if constexpr (std::is_same_v<T, std::vector<std::string>>)
+                    vec.push_back(val ? "true" : "false");
+
+                if constexpr (std::is_same_v<T, std::vector<int64_t>>) vec.push_back(val ? 1 : 0);
+
+                if constexpr (std::is_same_v<T, std::vector<double>>)
+                    vec.push_back(val ? 1.0 : 0.0);
+
+                if constexpr (std::is_same_v<T, std::vector<bool>>) vec.push_back(val);
+            },
+            data);
+    }
+};
+
 void Column::push_back(const CellValue& value) {
     assert_type_consistency();
     bool is_null_val = std::holds_alternative<std::monostate>(value);
+
+    // Guard: reject non-null insertions into NULL_TYPE columns before
+    // mutating any internal state.  NULL_TYPE storage is std::monostate
+    // and has no backing vector, so allowing a non-null value would grow
+    // null_mask_ without a corresponding data element, leaving the
+    // variant storage and null tracking permanently out of sync.
+    if (dtype_ == DType::NULL_TYPE && !is_null_val) {
+        throw std::invalid_argument("Cannot push non-null value into a NULL_TYPE column");
+    }
+
     null_mask_.push_back(is_null_val);
 
-    if (std::holds_alternative<std::vector<std::string>>(data_)) {
-        auto& vec = std::get<std::vector<std::string>>(data_);
-        if (std::holds_alternative<std::string>(value))
-            vec.push_back(std::get<std::string>(value));
-        else if (std::holds_alternative<int64_t>(value))
-            vec.push_back(std::to_string(std::get<int64_t>(value)));
-        else if (std::holds_alternative<double>(value))
-            vec.push_back(std::to_string(std::get<double>(value)));
-        else if (std::holds_alternative<bool>(value))
-            vec.push_back(std::get<bool>(value) ? "true" : "false");
-        else
-            vec.push_back("");
-    } else if (std::holds_alternative<std::vector<int64_t>>(data_)) {
-        auto& vec = std::get<std::vector<int64_t>>(data_);
-        if (std::holds_alternative<int64_t>(value))
-            vec.push_back(std::get<int64_t>(value));
-        else if (std::holds_alternative<bool>(value))
-            vec.push_back(std::get<bool>(value) ? 1 : 0);
-        else if (std::holds_alternative<double>(value))
-            vec.push_back(static_cast<int64_t>(std::get<double>(value)));
-        else
-            vec.push_back(0);
-    } else if (std::holds_alternative<std::vector<double>>(data_)) {
-        auto& vec = std::get<std::vector<double>>(data_);
-        if (std::holds_alternative<double>(value))
-            vec.push_back(std::get<double>(value));
-        else if (std::holds_alternative<int64_t>(value))
-            vec.push_back(static_cast<double>(std::get<int64_t>(value)));
-        else if (std::holds_alternative<bool>(value))
-            vec.push_back(std::get<bool>(value) ? 1.0 : 0.0);
-        else
-            vec.push_back(0.0);
-    } else if (std::holds_alternative<std::vector<bool>>(data_)) {
-        auto& vec = std::get<std::vector<bool>>(data_);
-        if (std::holds_alternative<bool>(value))
-            vec.push_back(std::get<bool>(value));
-        else if (std::holds_alternative<int64_t>(value))
-            vec.push_back(std::get<int64_t>(value) != 0);
-        else if (std::holds_alternative<double>(value))
-            vec.push_back(std::get<double>(value) != 0.0);
-        else
-            vec.push_back(false);
-    }
+    PushbackVisitor pv{data_};
+    std::visit(pv, value);
 }
 
 void Column::push_null() {

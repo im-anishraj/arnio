@@ -51,9 +51,8 @@ Colab install smoke test: **[COLAB_SMOKE_TEST.md](COLAB_SMOKE_TEST.md)**
 
 ## ⚡ Quickstart
 
-A simple workflow in just a few steps.
-
-> New to Arnio? Start with the pandas workflow example below before exploring advanced pipelines.
+If you're new to Arnio, the example below demonstrates a simple first-run workflow for loading, cleaning, and preparing CSV data before converting it back into a pandas DataFrame.
+The workflow starts by loading a CSV dataset into an Arnio frame for preprocessing and cleaning.
 
 ```python
 import arnio as ar
@@ -66,7 +65,12 @@ frame = ar.read_csv("messy_sales_data.csv", mode="strict")
 
 # Permissive mode fills missing trailing values with nulls
 frame = ar.read_csv("messy_sales_data.csv", mode="permissive")
+```
 
+Each pipeline step applies a specific transformation such as trimming whitespace, normalizing text formatting, handling missing values, and removing duplicate rows.
+
+
+```python
 # Declare what clean data looks like — arnio handles the rest
 clean = ar.pipeline(frame, [
     ("strip_whitespace",),
@@ -75,17 +79,17 @@ clean = ar.pipeline(frame, [
     ("drop_nulls",),
     ("drop_duplicates",),
 ])
+```
 
+After preprocessing is complete, the cleaned result can be converted back into a standard pandas DataFrame for further analysis or integration with existing workflows.
 
-
+```python
 # Out comes a standard pandas DataFrame — use it like you always have
 df = ar.to_pandas(clean)
 
 # Use copy=True when you need defensive pandas-owned buffers
 safe_df = ar.to_pandas(clean, copy=True)
 ```
-
-
 ### Dry Run Validation
 
 Use `dry_run=True` to validate pipeline configuration and
@@ -114,7 +118,6 @@ print(metadata["step_timings"])
 print(metadata["applied_steps"])
 print(metadata["row_counts"])
 ```
-
 ## Quick Example
 
 ```python
@@ -147,8 +150,23 @@ ar.pipeline(
 
 This prevents partial pipeline execution when later pipeline steps are invalid.
 
-Already have a pandas `DataFrame`? Use Arnio in-place in your existing pandas
-workflow:
+### from_dict support
+
+This adds support for creating an ArFrame from a Python dictionary.
+
+You can build an `ArFrame` directly from a dictionary of equal-length columns, which is useful for small inline datasets that you want to pass into a pipeline.
+
+```python
+import arnio as ar
+
+data = {"name": ["Alice", "Bob"], "age": [25, 30]}
+
+frame = ar.from_dict(data)
+# or
+frame = ar.ArFrame.from_dict(data)
+```
+
+Already working with a pandas `DataFrame`? Arnio can also be integrated directly into an existing pandas workflow without changing your current data-processing approach:
 
 ```python
 import pandas as pd
@@ -342,6 +360,8 @@ export policy should stay explicit in the application that writes the file.
 ### Schema Validation
 
 `ar.validate()` returns a `ValidationResult`; it does not raise for validation failures. Check `result.passed` and `result.issues` for `dtype` or `required_column` rule violations.
+
+`validate()` currently operates on a single in-memory `ArFrame`. Chunked validation via `read_csv_chunked()` iterators is not yet supported directly. Validate each chunk individually or materialize the data before validation when working with streamed/chunked inputs.
 
 ### Pipeline Step Errors
 
@@ -593,12 +613,14 @@ not to replace it.
 | **pandas** | Clean, validate, and profile messy `DataFrame`s through `df.arnio`. |
 | **NumPy** | Prepare typed numeric data before array/modeling workflows. |
 | **scikit-learn** | Use Arnio cleaning as a preprocessing layer before model training. |
-| **DuckDB / Arrow** | Validate and prepare data before analytics and columnar exchange. |
+| **DuckDB / Arrow** | Validate and prepare data before analytics and columnar exchange. Export ArFrame to pyarrow.Table via ``ar.to_arrow(frame)``. |
 | **notebooks** | Inspect quality issues and cleaning suggestions before analysis. |
 
 ### DuckDB registration
 
 Use `ar.register_duckdb(frame, conn, "table_name")` to register an ArFrame directly as a DuckDB relation without writing pandas conversion glue yourself. DuckDB is an optional dependency — install it with `pip install duckdb` when needed.
+
+For development and CI, `pip install -e ".[dev]"` now includes DuckDB so the integration test module in `tests/test_integrations_duckdb.py` runs in the default test job.
 
 ```python
 import duckdb
@@ -610,25 +632,34 @@ ar.register_duckdb(frame, conn, "my_table")
 result = conn.execute("SELECT * FROM my_table").fetchdf()
 ```
 
-### Row-dropping pipeline behavior
+### Row-dropping and schema-change behavior
 
-Some pipeline steps such as `drop_nulls` or `drop_duplicates`
-can change the number of rows returned during `transform`.
+`ArnioCleaner` enforces a strict transformer contract by default:
 
-By default, `ArnioCleaner` raises a `ValueError` if a pipeline
-changes row count during transform because many scikit-learn
-workflows expect input and output sample counts to remain aligned.
+- **Row-count-changing steps** (`drop_nulls`, `drop_duplicates`,
+  `filter_rows`, `keep_rows_with_nulls`) are **rejected by default** with a
+  clear `ValueError`. To allow row-count changes, pass `allow_row_count_change=True`.
 
-If row-dropping behavior is intentional, pass
-`allow_row_count_change=True` when constructing `ArnioCleaner`.
+- **Column schema-changing steps** (`rename_columns`, `drop_columns`,
+  `drop_constant_columns`, `combine_columns`) are **rejected by default**
+  and allowed only when `allow_schema_changes=True` is passed.
 
 ```python
+# Schema-preserving (default strict mode)
 cleaner = ArnioCleaner(
     steps=[
-        ("drop_nulls",),
         ("strip_whitespace",),
+        ("fill_nulls", {"value": 0}),
     ],
-    allow_row_count_change=True,
+)
+
+# Opt-in column schema changes
+cleaner = ArnioCleaner(
+    steps=[
+        ("rename_columns", {"old_name": "new_name"}),
+        ("drop_constant_columns",),
+    ],
+    allow_schema_changes=True,
 )
 ```
 
@@ -688,6 +719,13 @@ They follow a simple workflow:
   Run:
 ```bash
   python examples/arnio_with_duckdb.py
+```
+
+- **Arnio + Arrow**
+  Export ArFrame to pyarrow.Table using ``ar.to_arrow()`` for zero-copy interop with Arrow-native tools.
+  Run:
+```bash
+  python examples/arnio_with_arrow.py
 ```
 
 
@@ -787,7 +825,7 @@ flowchart LR
 | **Boolean null masks** | Nulls are tracked in a separate `vector<bool>`, keeping data vectors dense. No sentinel values, no NaN tricks. |
 | **Two-pass CSV read** | Pass 1 infers types across all rows. Pass 2 parses values directly into the correct typed column. No string→object→cast overhead. |
 | **Zero-copy bridge** | `to_pandas()` exposes C++ memory directly via NumPy's buffer protocol where supported. Numeric columns preserve the fast zero-copy path by default, while `copy=True` requests defensive pandas-owned buffers. |
-| **Step registry** | Pipeline steps map to C++ function pointers. Adding a new cleaning primitive is a single function + one registry entry. |
+| **Step registry** | Built-in and native steps use the C++ core via `_STEP_REGISTRY`; Python-backed built-ins dispatch through `_PYTHON_STEP_REGISTRY`; custom user-defined steps follow the same Python registry path. Adding a new cleaning primitive is a single function + one registry entry. |
 
 > Full architecture documentation: **[ARCHITECTURE.md](ARCHITECTURE.md)**
 > API reference guide: **[Arnio API Reference](./API_REFERENCE.md)**
@@ -934,6 +972,7 @@ Most operations below run natively in C++. Currently, `filter_rows`, `replace_va
 | `drop_columns_matching` | Drop columns whose names match a regex pattern | `ar.drop_columns_matching(frame, pattern="^temp_")` |
 | `trim_column_names` | Strip leading/trailing whitespace from column names | `ar.trim_column_names(frame)` |
 | `select_columns` | Return a new frame containing only selected columns | `ar.select_columns(frame, ["id", "name"])` |
+| `slugify_column_names` | Normalise column names to snake_case | `ar.slugify_column_names(frame)` |
 
 #### `ArFrame.select_dtypes` — type-based column selection
 
@@ -970,6 +1009,22 @@ clean = ar.pipeline(frame, [
     ("drop_duplicates", {"keep": "first"}),
 ])
 ```
+
+### Winsorize outliers
+
+`winsorize_outliers()` clips extreme numeric values using lower and upper quantiles. Non-numeric columns are ignored unless explicitly selected in `subset`.
+
+```python
+frame = ar.read_csv("data.csv")
+
+result = ar.winsorize_outliers(
+    frame,
+    lower=0.05,
+    upper=0.95,
+)
+```
+
+It can also be used inside `ar.pipeline()` as `("winsorize_outliers", {"lower": 0.05, "upper": 0.95})`.
 
 ### 🔁 Replace values
 
@@ -1147,9 +1202,15 @@ schema = ar.Schema({
     # CurrencyCode validates 3-letter uppercase formats (e.g., USD, EUR, INR).
     "currency": ar.CurrencyCode(),
 
+    # LanguageCode validates lowercase ISO 639-1 language codes (e.g., en, hi, fr).
+    "language": ar.LanguageCode(),
+
+    # TimeZone validates IANA timezone identifiers (e.g., Asia/Kolkata).
+    "timezone": ar.TimeZone(),
+
     "username": ar.String(min_length=3, max_length=20),
     "user_code": ar.Regex(r"^USR-\d{4}$", nullable=False),
-    "revenue": ar.Custom("positive", nullable=True),
+    "revenue": ar.Custom("positive", nullable=True, required_if=("user_type", "merchant")),
     "signup_date": ar.Date(nullable=False),
     "created_at": ar.DateTime(nullable=False, format="%Y-%m-%d"),
 
@@ -1295,7 +1356,16 @@ result = ar.validate(frame, schema)
 ```
 
 
-For low-risk automatic cleanup:
+For automatic cleaning suggestions based on the profile:
+
+```python
+suggestions = ar.suggest_cleaning(frame)
+# e.g. [("strip_whitespace", {"subset": ["name", "city"]}),
+#       ("drop_duplicates", {"keep": "first"})]
+clean = ar.pipeline(frame, suggestions)
+```
+
+For low-risk automatic cleanup in one call:
 
 ```python
 clean, report = ar.auto_clean(frame, mode="strict", return_report=True)
@@ -1395,12 +1465,13 @@ sharing **aggregate statistics only** or **raw/sample cell values**.
 | --- | --- | --- |
 | `row_count`, `column_count`, `duplicate_rows`, `duplicate_ratio`, `quality_score`, `score_components` | Yes | No |
 | `null_count`, `null_ratio`, `unique_count`, `unique_ratio`, whitespace / empty-string counts | Yes | No |
-| Numeric `min` / `max` / `mean` / `std` / `q25`–`q95` | Statistics only | Uncommon on large datasets; small tables can still be identifying |
+| Numeric `min` / `max` / `mean` / `std` / `q25`–`q95` | Yes | Statistics only; small tables can still be identifying |
+| Numeric `iqr`, `outlier_lower_bound`, `outlier_upper_bound`, `outlier_count`, `outlier_ratio` | Yes | Aggregate Tukey-fence summary (thresholds and counts, not which rows are outliers) |
 | `semantic_type`, `suggested_dtype`, `warnings` | Metadata / hints | Can imply PII type (for example email-like), not redaction |
 | `ColumnProfile.sample_values` (in-memory) | No | **Yes** — first *N* non-null values (`sample_size` on `ar.profile()`) |
 | `ColumnProfile.top_values` | Includes counts / ratios | **Yes** — frequent **actual** values (exact or approximate; see below) |
 | `report.to_dict()` | Mixed | **Yes** — includes `sample_values` and `top_values` unless you redact samples |
-| `report.to_dict(redact_sample_values=True)` | Mixed | `sample_values` → `"[REDACTED]"` (same list length); **`top_values` unchanged** |
+| `report.to_dict(redact_sample_values=True)` | Mixed | `sample_values` → `"[REDACTED]"` (same list length); `top_values[*].value` → `"[REDACTED]"` while counts and ratios remain |
 | `report.to_markdown()`, `report.summary()` | Yes | No raw cell values in output |
 | `report.to_html()` / notebook display of `report` | Partial | **Shows `top_values`** chips; does not list `sample_values` |
 | `report.to_pandas()` | Partial | Includes **`top_values`**, not `sample_values` |
@@ -1412,7 +1483,7 @@ controls below for safer sharing.
 **Safe sharing practices**
 
 - **JSON logs and artifacts:** `report.to_dict(redact_sample_values=True)` before writing or uploading.
-- **Collect fewer samples:** `ar.profile(frame, sample_size=0)` skips `sample_values` (defaults still apply to `top_values` on string columns).
+- **Collect fewer samples:** `ar.profile(frame, sample_size=0)` skips `sample_values` (defaults still apply to `top_values` counts on string columns).
 - **Text summaries for CI or comments:** prefer `report.to_markdown()` or `report.summary()` when you do not need per-value examples.
 - **Notebooks and HTML exports:** avoid evaluating `report` or saving `report.to_html()` for sensitive data; HTML still shows `top_values`.
 - **GitHub bug reports and examples:** use synthetic data (`user@example.com`, `ID-001`), a minimal CSV, and redacted `to_dict()` output — not production dumps.
@@ -1429,7 +1500,7 @@ df = ar.from_pandas(pd.DataFrame({
 }))
 report = ar.profile(df, sample_size=2)
 
-# Safer JSON for sharing (sample_values only; top_values still present)
+# Safer JSON for sharing (sample_values and top_values values redacted)
 safe_json = report.to_dict(redact_sample_values=True)
 
 # Safer text summary (no sample_values or top_values in output)
@@ -1467,7 +1538,11 @@ HTML(report.to_html())
 # or: report.to_html(file_path="data_quality_report.html")
 ```
 
-Sample output now includes quantiles for numeric columns:
+Sample output now includes quantiles and IQR outlier summary for numeric columns:
+
+For numeric columns with at least four non-null values, Arnio reports `iqr` (`q75 − q25`), Tukey fences `outlier_lower_bound` (`q25 − 1.5×IQR`) and `outlier_upper_bound` (`q75 + 1.5×IQR`), plus `outlier_count` and `outlier_ratio`. A value is counted as an outlier only if it is **strictly less** than the lower bound or **strictly greater** than the upper bound. With fewer than four non-null values, quantiles may still appear but IQR/outlier fields are `null` in JSON.
+
+Illustrative `age` column (not from the `user_id` / `email` / `score` sample below):
 
 ```json
 {
@@ -1481,6 +1556,11 @@ Sample output now includes quantiles for numeric columns:
     "q50": 35.0,
     "q75": 44.0,
     "q95": 57.0,
+    "iqr": 16.5,
+    "outlier_lower_bound": 2.75,
+    "outlier_upper_bound": 68.75,
+    "outlier_count": 0,
+    "outlier_ratio": 0.0,
     "null_count": 0
   }
 }
@@ -1531,7 +1611,7 @@ DataQualityReport(
     columns={
         'user_id': ColumnProfile(dtype='int64', semantic_type='identifier', unique_count=4),
         'email': ColumnProfile(dtype='string', semantic_type='categorical', null_count=1, unique_ratio=0.666667, min=13, max=13, mean=13.0),
-        'score': ColumnProfile(dtype='float64', semantic_type='numeric', mean=87.9, min=85.5, max=90.0)
+        'score': ColumnProfile(dtype='float64', semantic_type='numeric', null_count=1, mean=87.9, min=85.5, max=90.0, std=1.8493, q25=86.85, q50=88.2, q75=89.1, q95=89.82, iqr=None, outlier_lower_bound=None, outlier_upper_bound=None, outlier_count=None, outlier_ratio=None, warnings=['contains_nulls'])
     }
 )
 ```
@@ -1572,6 +1652,16 @@ DataQualityReport(
       "mean": 87.9,
       "min": 85.5,
       "max": 90.0,
+      "std": 1.8493,
+      "q25": 86.85,
+      "q50": 88.2,
+      "q75": 89.1,
+      "q95": 89.82,
+      "iqr": null,
+      "outlier_lower_bound": null,
+      "outlier_upper_bound": null,
+      "outlier_count": null,
+      "outlier_ratio": null,
       "warnings": ["contains_nulls"],
       "histogram": [
         {"bucket_start": 85.5, "bucket_end": 85.95, "count": 1, "ratio": 0.333333},
@@ -1658,13 +1748,21 @@ null values were observed during profiling.
 
 ## 🗺️ Roadmap
 
-| Version | Focus | Status |
-|:---:|:---|:---:|
-| **v1.0** | Stable release · cross-platform wheels · CI/CD · PyPI publishing · Google Colab support | ✅ Shipped |
-| **v1.1** | Production readiness · release hardening · docs/tooling | ✅ Shipped |
-| **v1.2** | C++ pipeline optimization · speed parity with pandas · hash-based deduplication | 🔨 Active |
-| **v1.3** | Chunked / streaming processing · Parquet & JSON readers | 📋 Planned |
-| **v1.4** | Parallel column processing · SIMD string operations | 💭 Exploring |
+| Phase | Focus | Status |
+|:---|:---|:---:|
+| Stable foundations | Cross-platform wheels · CI/CD · PyPI publishing · Google Colab support · release hardening | ✅ Shipped |
+| Current focus | Reliability · contributor workflow · data-stack integrations · public API stability · benchmark baselines | 🔨 Active |
+| Next focus | Broader streaming workflows · richer file-format coverage · reproducible performance comparisons | 📋 Planned |
+| Later focus | Parallel column processing · SIMD string operations · lower-copy native cleaning paths | 💭 Exploring |
+
+Before expanding the backlog again, maintainers should complete the
+**[Core Stability Sprint](CORE_STABILITY_SPRINT.md)**: install reliability,
+correctness hardening, public API stability, benchmark baselines, and PR queue
+hygiene.
+
+The current release line is tracked in `pyproject.toml` and `CHANGELOG.md`.
+Feature status in this roadmap is phase-based so it does not drift behind the
+package version.
 
 > For CLI command reference and examples, see [CLI_REFERENCE.md](CLI_REFERENCE.md).
 <br>
@@ -1691,7 +1789,11 @@ Discord is for fast conversation and support. GitHub remains the source of truth
 
 ## 📚 Documentation
 
+- [Project Direction](PROJECT_DIRECTION.md)
+- [Core Stability Sprint](CORE_STABILITY_SPRINT.md)
+- [Roadmap](ROADMAP.md)
 - [Troubleshooting Guide](docs/TROUBLESHOOTING.md)
+- [Nullable dtype compatibility](docs/nullable_dtype_compat.md)
 
 ## 🤝 Contribute
 
@@ -1736,6 +1838,7 @@ make test      # pytest with coverage
 make lint      # ruff + black
 
 # Windows
+python examples/check_env.py
 pip install -e ".[dev]"
 pre-commit install
 pytest tests/ -v
@@ -1764,6 +1867,21 @@ frame2 = ar.from_records(
 
 Missing keys in dict records are filled with `None`. Nested values raise `TypeError`. An empty list raises `ValueError`.
 
+## Type Casting
+
+You can cast columns to a different data type using the `.astype()` convenience wrapper:
+
+```python
+import arnio as ar
+
+# Assume 'frame' is an existing ArFrame
+# Cast the entire frame to a single type
+float_frame = frame.astype(float)
+
+# Cast specific columns using a dictionary mapping
+casted_frame = frame.astype({"age": int})
+```
+
 #### Windows build troubleshooting
 
 If `pip install -e ".[dev]"` fails on Windows, work through this checklist before retrying:
@@ -1780,6 +1898,15 @@ If `pip install -e ".[dev]"` fails on Windows, work through this checklist befor
    pre-commit install
    pytest tests/ -v
    ```
+
+Before retrying, run the environment doctor:
+
+```bash
+python examples/check_env.py
+```
+
+If it reports `[BUILD BLOCKED]`, fix the missing compiler/CMake/NMake entry
+first. That is a build-toolchain problem, not a test failure.
 
 If you want a quick wheel-build smoke test before running the full suite, use:
 
@@ -1801,6 +1928,8 @@ If you prefer a Linux-like toolchain on Windows, WSL is also supported.
 
 For GSSoC contributors, please read **[GSSOC_GUIDE.md](GSSOC_GUIDE.md)** before asking to be assigned. It explains issue claiming, contribution levels, review expectations, and what maintainers look for in a strong PR. If you want a quick onboarding refresher, see the [GSSoC FAQ](GSSOC_GUIDE.md#gssoc-faq).
 If you are new to Arnio terms, see the [contributor glossary](.github/CONTRIBUTING.md#contributor-glossary).
+
+- [Custom Pipeline Step Cookbook](docs/custom_pipeline_steps.md)
 
 <p align="center">
 <a href=".github/CONTRIBUTING.md"><b>📖 Full Contributing Guide</b></a>&ensp;·&ensp;
@@ -1874,7 +2003,7 @@ arnio/
 ├── tests/                   # pytest suite — CSV, cleaning, pipeline, conversions
 ├── benchmarks/              # Reproducible arnio vs pandas benchmark
 ├── examples/                # basic_usage.py, auto_clean_tutorial.py, custom_step.py and ready to run recipes for sales, customers, survey, logs, finance
-└── website/                 # Project website — arnio.vercel.app
+└── website/                 # Project website — arniolib.vercel.app
 ```
 
 <br>
@@ -1899,11 +2028,14 @@ arnio/
 <a href="https://pypi.org/project/arnio/"><img src="https://img.shields.io/pypi/dm/arnio?style=flat-square&logo=pypi&logoColor=white&labelColor=0d1117&color=3572A5&label=installs" alt="Downloads"></a>&ensp;
 <a href="https://github.com/im-anishraj/arnio/stargazers"><img src="https://img.shields.io/github/stars/im-anishraj/arnio?style=flat-square&logo=github&labelColor=0d1117&color=e3b341&label=stars" alt="Stars"></a>&ensp;
 <a href="https://github.com/im-anishraj/arnio/network/members"><img src="https://img.shields.io/github/forks/im-anishraj/arnio?style=flat-square&logo=github&labelColor=0d1117&color=8b949e&label=forks" alt="Forks"></a>&ensp;
-<a href="https://arnio.vercel.app/"><img src="https://img.shields.io/badge/website-arnio.vercel.app-blue?style=flat-square&labelColor=0d1117" alt="Website"></a>&ensp;
+<a href="https://arniolib.vercel.app/"><img src="https://img.shields.io/badge/website-arniolib.vercel.app-blue?style=flat-square&labelColor=0d1117" alt="Website"></a>&ensp;
 <a href="https://discord.gg/xsEw7r78M"><img src="https://img.shields.io/badge/community-Discord-5865F2?style=flat-square&logo=discord&logoColor=white&labelColor=0d1117" alt="Discord"></a>
 
 <br>
 
 <sub>Built with C++ and pybind11 · Licensed under MIT · Maintained by <a href="https://github.com/im-anishraj">@im-anishraj</a></sub>
-
 </div>
+
+## Security
+
+Please review our [Security Policy](SECURITY.md) for responsible vulnerability reporting guidelines.
