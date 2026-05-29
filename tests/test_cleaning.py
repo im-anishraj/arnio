@@ -3940,6 +3940,91 @@ class TestSelectColumns:
         with pytest.raises(ValueError):
             ar.select_columns(frame, ["id", "id"])
 
+    def test_select_columns_null_nan_handling(self):
+        df = pd.DataFrame(
+            {
+                "id": [1, None, 3],
+                "name": ["Alice", "Bob", None],
+                "score": [95.5, float("nan"), 80.0],
+            }
+        )
+        frame = ar.from_pandas(df)
+        selected = ar.select_columns(frame, ["id", "score"])
+        res_df = ar.to_pandas(selected)
+        assert pd.isna(res_df["id"].iloc[1])
+        assert pd.isna(res_df["score"].iloc[1])
+        assert res_df["id"].iloc[0] == 1
+        assert res_df["score"].iloc[0] == 95.5
+
+    def test_select_columns_single_column_frame(self):
+        df = pd.DataFrame({"id": [1, 2]})
+        frame = ar.from_pandas(df)
+        selected = ar.select_columns(frame, ["id"])
+        assert selected.columns == ["id"]
+        assert selected.shape == (2, 1)
+
+        multi_df = pd.DataFrame({"id": [1, 2], "name": ["A", "B"]})
+        multi_frame = ar.from_pandas(multi_df)
+        selected_single = ar.select_columns(multi_frame, ["name"])
+        assert selected_single.columns == ["name"]
+        assert selected_single.shape == (2, 1)
+
+    def test_select_columns_reordering(self):
+        df = pd.DataFrame(
+            {
+                "id": [1, 2],
+                "name": ["Alice", "Bob"],
+                "age": [25, 30],
+            }
+        )
+        frame = ar.from_pandas(df)
+        reordered = ar.select_columns(frame, ["age", "id", "name"])
+        assert reordered.columns == ["age", "id", "name"]
+        res_df = ar.to_pandas(reordered)
+        assert list(res_df["age"]) == [25, 30]
+        assert list(res_df["id"]) == [1, 2]
+        assert list(res_df["name"]) == ["Alice", "Bob"]
+
+    def test_select_columns_invalid_container_types(self):
+        df = pd.DataFrame({"id": [1, 2], "name": ["A", "B"]})
+        frame = ar.from_pandas(df)
+
+        with pytest.raises(TypeError, match="must be a list or tuple"):
+            ar.select_columns(frame, {"id": "name"})
+
+        gen = (col for col in ["id"])
+        with pytest.raises(TypeError, match="must be a list or tuple"):
+            ar.select_columns(frame, gen)
+
+        with pytest.raises(TypeError, match="must be a list or tuple"):
+            ar.select_columns(frame, None)
+        with pytest.raises(TypeError, match="must be a list or tuple"):
+            ar.select_columns(frame, 123)
+
+    def test_select_columns_dtype_preservation(self):
+        df = pd.DataFrame(
+            {
+                "int_col": pd.Series([1, 2], dtype="Int64"),
+                "float_col": pd.Series([1.5, 2.5], dtype="float64"),
+                "bool_col": pd.Series([True, False], dtype="boolean"),
+                "str_col": pd.Series(["A", "B"], dtype="string"),
+            }
+        )
+        frame = ar.from_pandas(df)
+        original_dtypes = frame.dtypes
+
+        selected = ar.select_columns(frame, ["float_col", "str_col", "int_col"])
+        new_dtypes = selected.dtypes
+
+        assert new_dtypes["int_col"] == original_dtypes["int_col"]
+        assert new_dtypes["float_col"] == original_dtypes["float_col"]
+        assert new_dtypes["str_col"] == original_dtypes["str_col"]
+
+        res_df = ar.to_pandas(selected)
+        assert res_df["int_col"].dtype == pd.Int64Dtype()
+        assert res_df["float_col"].dtype == "float64"
+        assert res_df["str_col"].dtype == pd.StringDtype()
+
 
 class TestFilterReplaceTypeAnnotations:
     """Issue #1257 — filter_rows and replace_values accept and return both ArFrame and pd.DataFrame."""
