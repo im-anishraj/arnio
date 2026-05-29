@@ -3042,3 +3042,52 @@ def test_float64_rejects_string_min_with_valid_max():
 def test_float64_rejects_bool_pair():
     with pytest.raises(TypeError, match="min must be numeric or None"):
         ar.Float64(min=True, max=False)
+
+
+def test_string_length_integer_subclass_serialization():
+    class MyInt(int):
+        pass
+
+    schema = ar.Schema(
+        {
+            "x": ar.String(
+                min_length=MyInt(3),
+                max_length=MyInt(5),
+            )
+        }
+    )
+
+    json_data = schema.to_json()
+    loaded = ar.Schema.from_json(json_data)
+
+    loaded_field = loaded.fields["x"]
+
+    assert loaded_field.min_length == 3
+    assert loaded_field.max_length == 5
+
+    assert loaded_field.min_length.__class__ is int
+    assert loaded_field.max_length.__class__ is int
+
+
+def test_string_length_validation_invalid_types():
+    with pytest.raises(TypeError, match="min_length must be an integer or None"):
+        ar.String(min_length="a")
+
+    with pytest.raises(TypeError, match="max_length must be an integer or None"):
+        ar.String(max_length=1.5)
+
+
+def test_string_length_validation_booleans():
+    with pytest.raises(TypeError, match="min_length must be an integer or None"):
+        ar.String(min_length=True)
+
+    with pytest.raises(TypeError, match="max_length must be an integer or None"):
+        ar.String(max_length=False)
+
+
+def test_string_length_validation_negative():
+    with pytest.raises(ValueError, match="min_length must be >= 0"):
+        ar.String(min_length=-1)
+
+    with pytest.raises(ValueError, match="max_length must be >= 0"):
+        ar.String(max_length=-1)
