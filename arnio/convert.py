@@ -434,7 +434,7 @@ def from_dict(data: dict) -> ArFrame:
 
     for col_name, value in data.items():
         if isinstance(value, dict):
-            raise ValueError(f"Nested objects are not supported in column {col_name}")
+            raise ValueError(f"Nested objects are not supported in column '{col_name}'")
 
         if hasattr(value, "__len__") and not isinstance(value, (str, bytes)):
             lengths[col_name] = len(value)
