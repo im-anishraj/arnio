@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import codecs
 import io
+import json
 import os
 import shutil
 import tempfile
@@ -713,6 +714,10 @@ def read_csv_chunked(
         during numeric parsing.
     null_values : list[str], optional
         Strings treated as null values.
+    preserve_attrs : bool, default True
+        When True, DataFrame.attrs are written into Parquet metadata; all
+        attr values must be JSON-serializable or a TypeError is raised with
+        a clear message. Set to False to silently drop attrs on export.
 
 
 
@@ -896,6 +901,8 @@ def write_csv(
         If file format is unsupported.
     RuntimeError
         If the file cannot be opened or written.
+    TypeError
+        If preserve_attrs is True and DataFrame.attrs contains non-JSON-serializable values.
 
     Examples
     --------
@@ -1400,6 +1407,7 @@ def write_parquet(
     *,
     compression: str = "snappy",
     row_group_size: int | None = None,
+    preserve_attrs: bool = True,
 ) -> None:
     """Write an ArFrame to a Parquet file via pyarrow.
 
@@ -1488,6 +1496,20 @@ def write_parquet(
         )
 
     df = to_pandas(frame)
+
+    if df.attrs:
+        if preserve_attrs:
+            try:
+                json.dumps(df.attrs)
+            except (TypeError, ValueError) as exc:
+                raise TypeError(
+                    "write_parquet() requires that DataFrame.attrs contain only "
+                    "JSON-serializable values (str, int, float, bool, list, dict, None). "
+                    f"Serialization failed: {exc}. "
+                    "To export without metadata, pass preserve_attrs=False."
+                ) from exc
+        else:
+            df.attrs = {}
 
     kwargs: dict = {
         "engine": "pyarrow",

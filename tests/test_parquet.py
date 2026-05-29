@@ -270,6 +270,38 @@ class TestWriteParquetErrors:
         with pytest.raises(TypeError, match="frame must be an ArFrame"):
             ar.write_parquet(bad_input, tmp_path / "out.parquet")
 
+    @skip_without_pyarrow
+    def test_write_parquet_json_safe_attrs(tmp_path):
+        src = pd.DataFrame({"a": [1]})
+        src.attrs = {"tag": "v1", "count": 42, "flag": True, "meta": {"x": [1, 2]}}
+        ar.write_parquet(
+            ar.from_pandas(src), tmp_path / "out.parquet"
+        )  # must not raise
+
+
+@skip_without_pyarrow
+def test_write_parquet_unsupported_attrs_raises(tmp_path):
+    src = pd.DataFrame({"a": [1]})
+    src.attrs = {"bad": object()}
+    with pytest.raises(TypeError, match="JSON-serializable"):
+        ar.write_parquet(ar.from_pandas(src), tmp_path / "out.parquet")
+
+
+@skip_without_pyarrow
+def test_write_parquet_preserve_attrs_false_drops_metadata(tmp_path):
+    src = pd.DataFrame({"a": [1]})
+    src.attrs = {"bad": object()}
+    out = tmp_path / "out.parquet"
+    ar.write_parquet(ar.from_pandas(src), out, preserve_attrs=False)  # must not raise
+    assert pd.read_parquet(out).attrs == {}
+
+
+@skip_without_pyarrow
+def test_write_parquet_empty_attrs_skips_validation(tmp_path):
+    src = pd.DataFrame({"a": [1]})
+    # no attrs set — validation path is skipped entirely
+    ar.write_parquet(ar.from_pandas(src), tmp_path / "out.parquet")
+
 
 def test_write_parquet_rejects_bool_path(tmp_path):
     frame = ar.from_pandas(pd.DataFrame({"a": [1, 2, 3]}))
