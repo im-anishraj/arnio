@@ -15,6 +15,9 @@ on:
     - cron: "0 6 * * 1"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   parquet-extra-test:
     name: write_parquet with pyarrow (${{ matrix.python-version }})

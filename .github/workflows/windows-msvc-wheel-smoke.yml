@@ -20,6 +20,9 @@ on:
       - "cpp/**"
       - ".github/workflows/windows-msvc-wheel-smoke.yml"
 
+permissions:
+  contents: read
+
 jobs:
   windows_msvc_wheel_smoke:
     name: Windows MSVC Wheel Smoke Test

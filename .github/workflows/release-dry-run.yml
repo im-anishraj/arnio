@@ -3,6 +3,9 @@ name: Release Dry-Run Checklist
 on:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   # ── 1. Validate version in pyproject.toml ─────────────────────────────────
   validate-version:

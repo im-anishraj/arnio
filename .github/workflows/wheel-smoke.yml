@@ -12,6 +12,9 @@ on:
     - cron: '0 4 * * 1'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   wheel-smoke:
     name: Build manylinux wheel and smoke test
