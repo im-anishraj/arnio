@@ -1,4 +1,4 @@
-"""Tests for schema validation."""
+﻿"""Tests for schema validation."""
 
 import io
 import json
@@ -664,7 +664,7 @@ def test_validation_result_to_markdown_includes_issue_table(sample_csv):
         {"age": ar.Int64(min=31), "missing": ar.String()},
     )
 
-    # Default: redact_values=False — raw values are shown
+    # Default: redact_values=False â€” raw values are shown
     markdown = result.to_markdown()
 
     assert "- Status: **failed**" in markdown
@@ -709,7 +709,7 @@ def test_validation_result_to_markdown_escapes_table_cells():
     assert "left\\|right<br>next" in markdown
     assert "Expected one\\|two<br>lines" in markdown
 
-    # Opt-in to redaction — value is replaced with [REDACTED]
+    # Opt-in to redaction â€” value is replaced with [REDACTED]
     markdown_redacted = result.to_markdown(redact_values=True)
     assert "notes\\|raw" in markdown_redacted
     assert "[REDACTED]" in markdown_redacted
@@ -2259,7 +2259,7 @@ def test_row_index_convention_is_documented_and_correct(tmp_path):
 
     assert not result.passed
     assert len(result.issues) == 1
-    # Bob is the second data row → row_index must be 2, not 0 or 1
+    # Bob is the second data row â†’ row_index must be 2, not 0 or 1
     assert result.issues[0].row_index == 2
     assert result.issues[0].column == "age"
     assert result.issues[0].rule == "min"
@@ -3138,3 +3138,38 @@ def test_custom_rule_with_invalid_severity_fails_validation_execution():
 
     with pytest.raises(ValueError, match="severity must be 'error' or 'warning'"):
         schema.validate(frame)
+
+
+def test_url_uppercase_scheme_accepted_with_lowercase_allowed(tmp_path):
+    path = tmp_path / "urls.csv"
+    path.write_text("url\nHTTPS://example.com\n")
+    result = ar.validate(ar.read_csv(path), {"url": ar.URL(allowed_schemes=["https"])})
+    assert result.passed
+
+
+def test_url_mixed_case_scheme_accepted(tmp_path):
+    path = tmp_path / "urls.csv"
+    path.write_text("url\nHttps://example.com\n")
+    result = ar.validate(ar.read_csv(path), {"url": ar.URL(allowed_schemes=["https"])})
+    assert result.passed
+
+
+def test_url_uppercase_allowed_scheme_matches_lowercase_url(tmp_path):
+    path = tmp_path / "urls.csv"
+    path.write_text("url\nhttps://example.com\n")
+    result = ar.validate(ar.read_csv(path), {"url": ar.URL(allowed_schemes=["HTTPS"])})
+    assert result.passed
+
+
+def test_url_uppercase_scheme_rejected_when_not_in_allowed(tmp_path):
+    path = tmp_path / "urls.csv"
+    path.write_text("url\nFTP://files.example.com\n")
+    result = ar.validate(ar.read_csv(path), {"url": ar.URL(allowed_schemes=["https"])})
+    assert not result.passed
+
+
+def test_url_mixed_case_allowed_scheme_and_mixed_case_url(tmp_path):
+    path = tmp_path / "urls.csv"
+    path.write_text("url\nHTTPS://example.com\nHttps://test.org\nhttps://lower.com\n")
+    result = ar.validate(ar.read_csv(path), {"url": ar.URL(allowed_schemes=["HTTPS"])})
+    assert result.passed

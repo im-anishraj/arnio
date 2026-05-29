@@ -1816,7 +1816,7 @@ def URL(
                     "allowed_schemes must contain URL scheme names such as 'http' or 'https'"
                 )
 
-            normalized_schemes.add(scheme)
+            normalized_schemes.add(scheme.lower())
 
         if len(normalized_schemes) == 0:
             raise ValueError("allowed_schemes must be a non-empty sequence")
@@ -1824,7 +1824,6 @@ def URL(
         schemes = "|".join(re.escape(scheme) for scheme in sorted(normalized_schemes))
 
         semantic = f"url:{schemes}"
-
     else:
         semantic = "url"
     return Field(
@@ -2328,7 +2327,7 @@ def _validate_column(
             pattern = _SEMANTIC_PATTERNS.get(field_def.semantic)
             if pattern is None and field_def.semantic.startswith("url:"):
                 schemes = field_def.semantic[len("url:") :]
-                pattern = rf"({schemes})://[^\s]+"
+                pattern = rf"(?i)({schemes})://[^\s]+"
             if pattern is None:
                 issues.append(
                     ValidationIssue(
