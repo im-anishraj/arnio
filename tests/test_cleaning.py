@@ -2492,14 +2492,30 @@ class TestCleanAPI:
 
         assert len(result) < len(frame)
 
+    @pytest.mark.parametrize("invalid_val", ["yes", 1, None, []])
+    def test_clean_invalid_strip_whitespace(self, csv_with_whitespace, invalid_val):
+        frame = ar.read_csv(csv_with_whitespace)
+        with pytest.raises(TypeError, match="strip_whitespace must be bool or dict"):
+            ar.clean(frame, strip_whitespace=invalid_val)
+
+    @pytest.mark.parametrize("invalid_val", ["yes", 1, None, []])
+    def test_clean_invalid_drop_nulls(self, csv_with_whitespace, invalid_val):
+        frame = ar.read_csv(csv_with_whitespace)
+        with pytest.raises(TypeError, match="drop_nulls must be bool or dict"):
+            ar.clean(frame, drop_nulls=invalid_val)
+
+    @pytest.mark.parametrize("invalid_val", ["yes", 1, None, []])
+    def test_clean_invalid_drop_duplicates(self, csv_with_whitespace, invalid_val):
+        frame = ar.read_csv(csv_with_whitespace)
+        with pytest.raises(TypeError, match="drop_duplicates must be bool or dict"):
+            ar.clean(frame, drop_duplicates=invalid_val)
+
     def test_clean_drop_nulls_with_subset(self):
-        frame = ar.from_pandas(
-            pd.DataFrame(
-                {
-                    "name": ["Alice", None, "Charlie"],
-                    "age": [25, 30, None],
-                }
-            )
+        frame = ar.from_dict(
+            {
+                "name": ["Alice", None, "Charlie"],
+                "age": [25, 30, None],
+            }
         )
 
         result = ar.clean(
@@ -2513,21 +2529,16 @@ class TestCleanAPI:
         assert data["age"] == [25, None]
 
     def test_clean_drop_duplicates_keep_last(self):
-        frame = ar.from_pandas(
-            pd.DataFrame(
-                {
-                    "id": [1, 1, 2],
-                    "value": ["first", "last", "unique"],
-                }
-            )
+        frame = ar.from_dict(
+            {
+                "id": [1, 1, 2],
+                "value": ["first", "last", "unique"],
+            }
         )
 
         result = ar.clean(
             frame,
-            drop_duplicates={
-                "subset": ["id"],
-                "keep": "last",
-            },
+            drop_duplicates={"subset": ["id"], "keep": "last"},
         )
 
         data = result.to_dict()
@@ -2536,13 +2547,11 @@ class TestCleanAPI:
         assert data["value"] == ["last", "unique"]
 
     def test_clean_strip_whitespace_subset(self):
-        frame = ar.from_pandas(
-            pd.DataFrame(
-                {
-                    "name": ["  Alice  ", "  Bob  "],
-                    "city": ["  NYC  ", "  LA  "],
-                }
-            )
+        frame = ar.from_dict(
+            {
+                "name": ["  Alice  ", "  Bob  "],
+                "city": ["  NYC  ", "  LA  "],
+            }
         )
 
         result = ar.clean(
@@ -2557,31 +2566,11 @@ class TestCleanAPI:
         # city should remain untouched
         assert data["city"] == ["  NYC  ", "  LA  "]
 
-    def test_clean_backward_compatibility_boolean_usage(self):
-        frame = ar.from_pandas(
-            pd.DataFrame(
-                {
-                    "name": ["  Alice  ", " Bob "],
-                }
-            )
-        )
-
-        result = ar.clean(
-            frame,
-            strip_whitespace=True,
-        )
-
-        data = result.to_dict()
-
-        assert data["name"] == ["Alice", "Bob"]
-
     def test_clean_invalid_option_type(self):
-        frame = ar.from_pandas(
-            pd.DataFrame(
-                {
-                    "name": ["Alice"],
-                }
-            )
+        frame = ar.from_dict(
+            {
+                "name": ["Alice"],
+            }
         )
 
         with pytest.raises(TypeError):

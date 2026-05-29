@@ -1273,7 +1273,6 @@ def _append_clean_step(
     if isinstance(option, Mapping):
         steps.append((name, dict(option)))
         return
-
     raise TypeError(f"{name} must be bool or dict, got {type(option).__name__}")
 
 
