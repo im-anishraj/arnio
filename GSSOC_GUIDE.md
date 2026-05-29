@@ -54,10 +54,10 @@ Share what you tried, the exact command or code, the error output, and your oper
 ## Good First Contributions
 
 Start with issues labeled:
-- `gssoc: good first issue`
+- `gssoc:good-first-issue`
 - `level:beginner`
-- `size: xs` or `size: s`
-- `status: ready`
+- `size:xs` or `size:s`
+- `status:ready`
 
 Good first tasks usually involve tests, docs, examples, small API validation, or focused Python wrappers.
 
