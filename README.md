@@ -305,7 +305,7 @@ frame = ar.read_csv(
     encoding_errors="strict",
 )
 
-# Replace invalid bytes with the Unicode replacement character ( )
+# Replace invalid bytes with the Unicode replacement character (�)
 frame = ar.read_csv(
     "data.csv",
     encoding_errors="replace",
@@ -635,9 +635,8 @@ result = conn.execute("SELECT * FROM my_table").fetchdf()
 `ArnioCleaner` enforces a strict transformer contract by default:
 
 - **Row-count-changing steps** (`drop_nulls`, `drop_duplicates`,
-  `filter_rows`, `keep_rows_with_nulls`) are **always rejected** with a
-  clear `ValueError`. Scikit-learn transformers must return the same
-  number of rows as the input.
+  `filter_rows`, `keep_rows_with_nulls`) are **rejected by default** with a
+  clear `ValueError`. To allow row-count changes, pass `allow_row_count_change=True`.
 
 - **Column schema-changing steps** (`rename_columns`, `drop_columns`,
   `drop_constant_columns`, `combine_columns`) are **rejected by default**

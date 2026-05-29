@@ -115,11 +115,13 @@ class ArnioCleaner(BaseEstimator, TransformerMixin):
         cleaned = run_pipeline(from_pandas(X_in), self.steps)
         X_out = to_pandas(cleaned)
 
-        if len(X_out) != len(X) and not self.allow_row_count_change:
-            raise ValueError(
-                f"A pipeline step changed the row count from {len(X)} to {len(X_out)}. "
-                "Use allow_row_count_change=True to allow this."
-            )
+        if len(X_out) != len(X):
+            if not self.allow_row_count_change:
+                raise ValueError(
+                    f"A pipeline step changed the row count from {len(X)} to {len(X_out)}. "
+                    "Use allow_row_count_change=True to allow this."
+                )
+            X_out = X_out.reset_index(drop=True)
 
         self.feature_names_out_ = np.array(X_out.columns, dtype=object)
         return X_out
