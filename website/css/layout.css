@@ -232,35 +232,40 @@
 }
 
 /* =========================
-   Page transition animation
+   Page transitions
 ========================= */
-
-html {
-  scroll-behavior: smooth;
-}
 
 body {
   opacity: 1;
 }
 
-body.page-transition {
-  opacity: 0;
-  animation: pageFadeIn 0.25s ease-in-out forwards;
+/* Entry animation */
+body.page-enter {
+  animation: pageFadeIn 180ms ease-in-out;
 }
 
-body.fade-out {
+/* Exit animation */
+body.page-exit {
   opacity: 0;
+  transition: opacity 180ms ease-in-out;
 }
 
 @keyframes pageFadeIn {
   from {
     opacity: 0;
-    transform: translateY(4px);
   }
 
   to {
     opacity: 1;
-    transform: translateY(0);
+  }
+}
+
+/* Accessibility */
+@media (prefers-reduced-motion: reduce) {
+  body.page-enter,
+  body.page-exit {
+    animation: none !important;
+    transition: none !important;
   }
 }
 

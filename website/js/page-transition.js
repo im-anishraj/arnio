@@ -1,25 +1,48 @@
 document.addEventListener("DOMContentLoaded", () => {
+  const prefersReducedMotion = window.matchMedia(
+    "(prefers-reduced-motion: reduce)"
+  ).matches;
+
+  // Entry animation
+  if (!prefersReducedMotion) {
+    document.body.classList.add("page-enter");
+  }
+
   const links = document.querySelectorAll("a[href]");
 
   links.forEach((link) => {
-    const href = link.getAttribute("href");
+    link.addEventListener("click", (event) => {
+      const href = link.getAttribute("href");
 
-    if (
-      href &&
-      !href.startsWith("#") &&
-      !href.startsWith("http") &&
-      !link.hasAttribute("target")
-    ) {
-      link.addEventListener("click", (e) => {
-        e.preventDefault();
+      // Ignore invalid links
+      if (!href || href.startsWith("#")) {
+        return;
+      }
 
-        document.body.classList.add("page-transition");
-        document.body.classList.add("fade-out");
+      // Preserve new-tab / modifier behavior
+      if (
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey ||
+        event.button !== 0 ||
+        link.target === "_blank"
+      ) {
+        return;
+      }
 
-        setTimeout(() => {
-          window.location.href = href;
-        }, 180);
-      });
-    }
+      // Skip transition for reduced motion
+      if (prefersReducedMotion) {
+        return;
+      }
+
+      event.preventDefault();
+
+      document.body.classList.add("page-exit");
+
+      setTimeout(() => {
+        window.location.href = href;
+      }, 180);
+    });
   });
 });
