@@ -41,6 +41,12 @@ class ColumnSummary:
     __slots__ = ("name", "dtype", "nullable")
 
     def __init__(self, name: str, dtype: str, nullable: bool) -> None:
+        if not isinstance(name, str):
+            raise TypeError("name must be a str")
+        if not isinstance(dtype, str):
+            raise TypeError("dtype must be a str")
+        if not isinstance(nullable, bool):
+            raise TypeError("nullable must be a bool")
         self.name = name
         self.dtype = dtype
         self.nullable = nullable
