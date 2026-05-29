@@ -475,3 +475,201 @@ class TestReadCsvChunkedTsvDelimiter:
         assert chunked_df.shape == (9, 2)
         assert chunked_df["id"].tolist() == list(range(9))
         assert chunked_df["value"].tolist() == [i * 10 for i in range(9)]
+
+
+class TestReadCsvChunkedCoverage:
+    def test_invalid_path_type_raises_type_error(self):
+        with pytest.raises(TypeError, match="expected a filesystem path or text file-like object"):
+            list(ar.read_csv_chunked(123))
+
+    def test_missing_file_raises_csv_read_error(self):
+        with pytest.raises(CsvReadError, match="Cannot open file"):
+            list(ar.read_csv_chunked("nonexistent_file.csv"))
+
+    def test_unsupported_encoding_raises_value_error(self, tmp_path):
+        path = tmp_path / "encoding_test.csv"
+        path.write_text("a,b\n1,2\n")
+        with pytest.raises(ValueError, match="Unknown encoding"):
+            list(ar.read_csv_chunked(str(path), encoding="invalid_encoding"))
+
+    def test_invalid_encoding_decode_error(self, tmp_path):
+        path = tmp_path / "decode_test.csv"
+        # Write non-ascii byte sequence
+        path.write_bytes(b"\x80\n")
+        with pytest.raises(CsvReadError, match="Could not decode.*using encoding 'ascii'"):
+            list(ar.read_csv_chunked(str(path), encoding="ascii"))
+
+    def test_empty_file_raises_csv_read_error(self, tmp_path):
+        path = tmp_path / "empty_file.csv"
+        path.write_text("")
+        with pytest.raises(CsvReadError, match="CSV file is empty"):
+            list(ar.read_csv_chunked(str(path)))
+
+    def test_whitespace_only_file_raises(self, tmp_path):
+        path = tmp_path / "whitespace_only.csv"
+        path.write_text("   \n\n  \n")
+        with pytest.raises(CsvReadError):
+            list(ar.read_csv_chunked(str(path)))
+
+    def test_invalid_delimiter_raises(self, tmp_path):
+        path = tmp_path / "config_test.csv"
+        path.write_text("a,b\n1,2\n")
+        with pytest.raises(TypeError, match="delimiter must be a string"):
+            list(ar.read_csv_chunked(str(path), delimiter=123))
+        with pytest.raises(ValueError, match="delimiter must be exactly one character"):
+            list(ar.read_csv_chunked(str(path), delimiter="abc"))
+
+    def test_invalid_mode_raises(self, tmp_path):
+        path = tmp_path / "config_test.csv"
+        path.write_text("a,b\n1,2\n")
+        with pytest.raises(TypeError, match="mode must be a string"):
+            list(ar.read_csv_chunked(str(path), mode=123))
+        with pytest.raises(ValueError, match="mode must be either 'strict' or 'permissive'"):
+            list(ar.read_csv_chunked(str(path), mode="invalid_mode"))
+
+    def test_invalid_on_bad_lines_raises(self, tmp_path):
+        path = tmp_path / "config_test.csv"
+        path.write_text("a,b\n1,2\n")
+        with pytest.raises(TypeError, match="on_bad_lines must be a string"):
+            list(ar.read_csv_chunked(str(path), on_bad_lines=123))
+        with pytest.raises(ValueError, match="on_bad_lines must be either"):
+            list(ar.read_csv_chunked(str(path), on_bad_lines="invalid_action"))
+
+    def test_invalid_skip_rows_raises(self, tmp_path):
+        path = tmp_path / "config_test.csv"
+        path.write_text("a,b\n1,2\n")
+        with pytest.raises(TypeError, match="skip_rows must be an integer"):
+            list(ar.read_csv_chunked(str(path), skip_rows="one"))
+        with pytest.raises(ValueError, match="skip_rows must be non-negative"):
+            list(ar.read_csv_chunked(str(path), skip_rows=-5))
+
+    def test_invalid_decimal_separator_raises(self, tmp_path):
+        path = tmp_path / "config_test.csv"
+        path.write_text("a,b\n1,2\n")
+        with pytest.raises(TypeError, match="decimal_separator must be a string"):
+            list(ar.read_csv_chunked(str(path), decimal_separator=123))
+        with pytest.raises(ValueError, match="decimal_separator must be a single character"):
+            list(ar.read_csv_chunked(str(path), decimal_separator="abc"))
+        with pytest.raises(ValueError, match="Invalid decimal_separator"):
+            list(ar.read_csv_chunked(str(path), decimal_separator="+"))
+
+    def test_invalid_thousands_separator_raises(self, tmp_path):
+        path = tmp_path / "config_test.csv"
+        path.write_text("a,b\n1,2\n")
+        with pytest.raises(TypeError, match="thousands_separator must be a string"):
+            list(ar.read_csv_chunked(str(path), thousands_separator=123))
+        with pytest.raises(ValueError, match="thousands_separator must differ from decimal_separator"):
+            list(ar.read_csv_chunked(str(path), thousands_separator="."))
+
+    def test_invalid_boolean_options_raise(self, tmp_path):
+        path = tmp_path / "config_test.csv"
+        path.write_text("a,b\n1,2\n")
+        with pytest.raises(TypeError, match="has_header must be True or False"):
+            list(ar.read_csv_chunked(str(path), has_header="yes"))
+        with pytest.raises(TypeError, match="trim_headers must be True or False"):
+            list(ar.read_csv_chunked(str(path), trim_headers="yes"))
+
+    def test_invalid_usecols_raises(self, tmp_path):
+        path = tmp_path / "config_test.csv"
+        path.write_text("a,b\n1,2\n")
+        with pytest.raises(TypeError, match="usecols must be a sequence of column names, not a string"):
+            list(ar.read_csv_chunked(str(path), usecols="a"))
+        with pytest.raises(TypeError, match="usecols must contain only strings"):
+            list(ar.read_csv_chunked(str(path), usecols=[123]))
+        with pytest.raises(ValueError, match="usecols must not be empty"):
+            list(ar.read_csv_chunked(str(path), usecols=[]))
+        with pytest.raises(ValueError, match="usecols must not contain duplicate column names"):
+            list(ar.read_csv_chunked(str(path), usecols=["a", "a"]))
+
+    def test_invalid_null_values_raises(self, tmp_path):
+        path = tmp_path / "config_test.csv"
+        path.write_text("a,b\n1,2\n")
+        with pytest.raises(TypeError, match="null_values must be a list of strings, not a bare string"):
+            list(ar.read_csv_chunked(str(path), null_values="NA"))
+        with pytest.raises(TypeError, match="null_values must contain only strings"):
+            list(ar.read_csv_chunked(str(path), null_values=[123]))
+
+    def test_invalid_dtype_raises(self, tmp_path):
+        path = tmp_path / "config_test.csv"
+        path.write_text("a,b\n1,2\n")
+        with pytest.raises(TypeError, match="dtype must be a dictionary"):
+            list(ar.read_csv_chunked(str(path), dtype="int64"))
+        with pytest.raises(TypeError, match="dtype column names must be strings"):
+            list(ar.read_csv_chunked(str(path), dtype={123: "int64"}))
+        with pytest.raises(TypeError, match="dtype values must be strings"):
+            list(ar.read_csv_chunked(str(path), dtype={"a": 123}))
+        with pytest.raises(ValueError, match="Unsupported dtype"):
+            list(ar.read_csv_chunked(str(path), dtype={"a": "invalid_type"}))
+
+    def test_invalid_nrows_raises(self, tmp_path):
+        path = tmp_path / "config_test.csv"
+        path.write_text("a,b\n1,2\n")
+        with pytest.raises(TypeError, match="nrows must be an integer"):
+            list(ar.read_csv_chunked(str(path), nrows=1.5))
+        with pytest.raises(TypeError, match="nrows must be an integer"):
+            list(ar.read_csv_chunked(str(path), nrows="one"))
+        with pytest.raises(ValueError, match="nrows must be non-negative"):
+            list(ar.read_csv_chunked(str(path), nrows=-1))
+
+    def test_skiprows_and_skip_rows_conflicts(self, tmp_path):
+        path = tmp_path / "config_test.csv"
+        path.write_text("a,b\n1,2\n")
+        with pytest.raises(TypeError, match="skiprows must be an integer"):
+            list(ar.read_csv_chunked(str(path), skiprows=1.5))
+        with pytest.raises(ValueError, match="skiprows must be non-negative"):
+            list(ar.read_csv_chunked(str(path), skiprows=-1))
+        with pytest.raises(ValueError, match="Conflicting values"):
+            list(ar.read_csv_chunked(str(path), skip_rows=1, skiprows=2))
+
+    def test_invalid_chunksize_types_raise(self, tmp_path):
+        path = tmp_path / "config_test.csv"
+        path.write_text("a,b\n1,2\n")
+        with pytest.raises(TypeError, match="chunksize must be an integer"):
+            list(ar.read_csv_chunked(str(path), chunksize=1.5))
+        with pytest.raises(TypeError, match="chunksize must be an integer"):
+            list(ar.read_csv_chunked(str(path), chunksize="one"))
+        with pytest.raises(ValueError, match="chunksize must be a positive integer"):
+            list(ar.read_csv_chunked(str(path), chunksize=-5))
+
+    def test_nrows_and_chunksize_edge_cases(self, tmp_path):
+        # 10 data rows
+        lines = ["id"] + [str(i) for i in range(10)]
+        path = tmp_path / "edge_cases.csv"
+        path.write_text("\n".join(lines) + "\n")
+
+        # nrows is 0
+        chunks = list(ar.read_csv_chunked(str(path), chunksize=5, nrows=0))
+        assert len(chunks) == 0
+
+        # nrows is smaller than chunksize
+        chunks = list(ar.read_csv_chunked(str(path), chunksize=5, nrows=3))
+        assert len(chunks) == 1
+        assert chunks[0].shape[0] == 3
+        assert ar.to_pandas(chunks[0])["id"].tolist() == [0, 1, 2]
+
+        # nrows is a multiple of chunksize
+        chunks = list(ar.read_csv_chunked(str(path), chunksize=3, nrows=6))
+        assert len(chunks) == 2
+        assert [c.shape[0] for c in chunks] == [3, 3]
+        df = pd.concat([ar.to_pandas(c) for c in chunks], ignore_index=True)
+        assert df["id"].tolist() == [0, 1, 2, 3, 4, 5]
+
+        # nrows is not a multiple of chunksize
+        chunks = list(ar.read_csv_chunked(str(path), chunksize=3, nrows=8))
+        assert len(chunks) == 3
+        assert [c.shape[0] for c in chunks] == [3, 3, 2]
+        df = pd.concat([ar.to_pandas(c) for c in chunks], ignore_index=True)
+        assert df["id"].tolist() == [0, 1, 2, 3, 4, 5, 6, 7]
+
+        # nrows is larger than total file rows (should read all rows and stop)
+        chunks = list(ar.read_csv_chunked(str(path), chunksize=3, nrows=100))
+        assert len(chunks) == 4  # 3 + 3 + 3 + 1
+        df = pd.concat([ar.to_pandas(c) for c in chunks], ignore_index=True)
+        assert df.shape[0] == 10
+        assert df["id"].tolist() == list(range(10))
+
+        # chunksize is larger than total file rows
+        chunks = list(ar.read_csv_chunked(str(path), chunksize=50))
+        assert len(chunks) == 1
+        assert chunks[0].shape[0] == 10
+        assert ar.to_pandas(chunks[0])["id"].tolist() == list(range(10))
