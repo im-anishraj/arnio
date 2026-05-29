@@ -487,7 +487,9 @@ class ArFrame:
         if missing:
             raise ValueError(f"Unknown columns: {missing}")
 
-        return ArFrame(self._frame.select_columns(columns))
+        return ArFrame(
+            self._frame.select_columns(columns), attrs=copy.deepcopy(self._attrs)
+        )
 
     def drop_columns(self, cols: list[str]) -> ArFrame:
         """Return a new ArFrame with the specified columns removed.
@@ -541,7 +543,10 @@ class ArFrame:
 
         # Empty input — return unchanged copy
         if not unique_cols:
-            return ArFrame(self._frame.select_columns(self.columns))
+            return ArFrame(
+                self._frame.select_columns(self.columns),
+                attrs=copy.deepcopy(self._attrs),
+            )
 
         # Preserve original order of remaining columns
         drop_set = set(unique_cols)
@@ -551,7 +556,9 @@ class ArFrame:
         if not remaining:
             raise ValueError("drop_columns cannot remove all columns from the frame")
 
-        return ArFrame(self._frame.select_columns(remaining))
+        return ArFrame(
+            self._frame.select_columns(remaining), attrs=copy.deepcopy(self._attrs)
+        )
 
     def select_dtypes(
         self,

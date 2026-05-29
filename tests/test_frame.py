@@ -1346,3 +1346,44 @@ def test_select_dtypes_zero_col_preserves_attrs():
     result = frame.select_dtypes(include="string")
     assert result._attrs == {"source": "test"}
     assert result._attrs is not frame._attrs
+
+
+# ── selection methods attrs preservation ──────────────────────────────────────
+
+
+def test_selection_methods_preserve_attrs():
+    df = pd.DataFrame({"a": [1, 2], "b": [3.5, 4.0], "c": ["x", "y"]})
+    frame = ar.from_pandas(df)
+    frame._attrs = {"metadata": {"source": "crm", "version": 1}}
+
+    # 1. select_columns
+    res_select = frame.select_columns(["a", "b"])
+    assert res_select._attrs == {"metadata": {"source": "crm", "version": 1}}
+    assert res_select._attrs is not frame._attrs
+    # Deep copy isolation check
+    res_select._attrs["metadata"]["version"] = 2
+    assert frame._attrs["metadata"]["version"] == 1
+
+    # 2. drop_columns
+    res_drop = frame.drop_columns(["c"])
+    assert res_drop._attrs == {"metadata": {"source": "crm", "version": 1}}
+    assert res_drop._attrs is not frame._attrs
+    # Deep copy isolation check
+    res_drop._attrs["metadata"]["version"] = 2
+    assert frame._attrs["metadata"]["version"] == 1
+
+    # 2.1 drop_columns empty input
+    res_drop_empty = frame.drop_columns([])
+    assert res_drop_empty._attrs == {"metadata": {"source": "crm", "version": 1}}
+    assert res_drop_empty._attrs is not frame._attrs
+    # Deep copy isolation check
+    res_drop_empty._attrs["metadata"]["version"] = 2
+    assert frame._attrs["metadata"]["version"] == 1
+
+    # 3. select_dtypes
+    res_dtypes = frame.select_dtypes(include="int64")
+    assert res_dtypes._attrs == {"metadata": {"source": "crm", "version": 1}}
+    assert res_dtypes._attrs is not frame._attrs
+    # Deep copy isolation check
+    res_dtypes._attrs["metadata"]["version"] = 2
+    assert frame._attrs["metadata"]["version"] == 1
