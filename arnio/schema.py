@@ -969,6 +969,32 @@ class ValidationIssue:
     severity: str = "error"
 
     def __post_init__(self) -> None:
+        if not (self.column is None or isinstance(self.column, str)):
+            raise TypeError(
+                f"ValidationIssue 'column' must be a str or None, "
+                f"got {type(self.column).__name__}"
+            )
+        if not isinstance(self.rule, str) or not self.rule:
+            raise TypeError(
+                f"ValidationIssue 'rule' must be a non-empty str, "
+                f"got {type(self.rule).__name__}"
+            )
+        if not isinstance(self.message, str):
+            raise TypeError(
+                "ValidationIssue 'message' must be a str, "
+                f"got {type(self.message).__name__}"
+            )
+        if self.row_index is not None:
+            if isinstance(self.row_index, bool) or not isinstance(self.row_index, int):
+                raise TypeError(
+                    f"ValidationIssue 'row_index' must be an int or None, "
+                    f"got {type(self.row_index).__name__}"
+                )
+            if self.row_index < 0:
+                raise ValueError(
+                    f"ValidationIssue 'row_index' must be >= 0, "
+                    f"got {self.row_index}"
+                )
         _validate_severity(self.severity)
 
     def to_dict(self) -> dict[str, Any]:
