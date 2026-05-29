@@ -173,6 +173,7 @@ def test_select_dtypes_no_match_raises_value_error(string_only_csv):
     assert result.shape == (2, 0)
     assert result.columns == []
 
+
 def test_select_dtypes_exclude_all_raises_value_error(mixed_csv):
     frame = ar.read_csv(mixed_csv)
     result = frame.select_dtypes(exclude=["int64", "float64", "string", "bool"])
