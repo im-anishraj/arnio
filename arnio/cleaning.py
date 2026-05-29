@@ -773,7 +773,7 @@ def winsorize_outliers(
         target_columns = numeric_columns
 
     if not target_columns:
-        return frame
+        return from_pandas(to_pandas(frame))
 
     df = to_pandas(frame).copy(deep=False)
 
