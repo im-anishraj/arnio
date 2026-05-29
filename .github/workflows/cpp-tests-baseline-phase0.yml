@@ -4,8 +4,6 @@ name: C++ Tests Baseline (Phase 0)
 
 on:
   workflow_dispatch:
-  push:
-    branches: [ci/cpp-tests-cross-platform]
 
 jobs:
   cpp_tests_baseline:
