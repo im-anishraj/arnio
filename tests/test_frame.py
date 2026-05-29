@@ -1151,3 +1151,166 @@ def test_repr_html_does_not_convert_full_frame(large_csv, monkeypatch):
     assert (
         call_sizes == []
     ), f"_repr_html_() should not call to_pandas(), but got calls with {call_sizes} rows"
+
+
+# ── filter_rows() tests ───────────────────────────────────────────────────────
+
+
+class TestFilterRows:
+    """Tests for arnio.filter_rows function."""
+
+    def test_filter_rows_numeric_greater_than(self):
+        # We test '>' on a numeric column.
+        data = {"name": ["Alice", "Bob", "Charlie"], "age": [25, 17, 30]}
+        frame = ar.from_dict(data)
+        filtered = ar.filter_rows(frame, column="age", op=">", value=18)
+        assert filtered.columns == ["name", "age"]
+        assert filtered.shape == (2, 2)
+        assert filtered["name"] == ["Alice", "Charlie"]
+        assert filtered["age"] == [25, 30]
+
+    def test_filter_rows_numeric_less_than(self):
+        # We test '<' on a numeric column.
+        data = {"name": ["Alice", "Bob", "Charlie"], "age": [25, 17, 30]}
+        frame = ar.from_dict(data)
+        filtered = ar.filter_rows(frame, column="age", op="<", value=18)
+        assert filtered.shape == (1, 2)
+        assert filtered["name"] == ["Bob"]
+        assert filtered["age"] == [17]
+
+    def test_filter_rows_numeric_greater_equal(self):
+        # We test '>=' on a numeric column.
+        data = {"name": ["Alice", "Bob", "Charlie"], "age": [25, 18, 30]}
+        frame = ar.from_dict(data)
+        filtered = ar.filter_rows(frame, column="age", op=">=", value=18)
+        assert filtered.shape == (3, 2)
+        assert filtered["name"] == ["Alice", "Bob", "Charlie"]
+
+    def test_filter_rows_numeric_less_equal(self):
+        # We test '<=' on a numeric column.
+        data = {"name": ["Alice", "Bob", "Charlie"], "age": [25, 18, 30]}
+        frame = ar.from_dict(data)
+        filtered = ar.filter_rows(frame, column="age", op="<=", value=18)
+        assert filtered.shape == (1, 2)
+        assert filtered["name"] == ["Bob"]
+
+    def test_filter_rows_numeric_equal(self):
+        # We test '==' on a numeric column.
+        data = {"name": ["Alice", "Bob", "Charlie"], "age": [25, 18, 30]}
+        frame = ar.from_dict(data)
+        filtered = ar.filter_rows(frame, column="age", op="==", value=18)
+        assert filtered.shape == (1, 2)
+        assert filtered["name"] == ["Bob"]
+
+    def test_filter_rows_numeric_not_equal(self):
+        # We test '!=' on a numeric column.
+        data = {"name": ["Alice", "Bob", "Charlie"], "age": [25, 18, 30]}
+        frame = ar.from_dict(data)
+        filtered = ar.filter_rows(frame, column="age", op="!=", value=18)
+        assert filtered.shape == (2, 2)
+        assert filtered["name"] == ["Alice", "Charlie"]
+
+    def test_filter_rows_string_equal(self):
+        # We test '==' on a string column.
+        data = {"name": ["Alice", "Bob", "Charlie"], "city": ["NYC", "Paris", "NYC"]}
+        frame = ar.from_dict(data)
+        filtered = ar.filter_rows(frame, column="city", op="==", value="NYC")
+        assert filtered.shape == (2, 2)
+        assert filtered["name"] == ["Alice", "Charlie"]
+
+    def test_filter_rows_string_not_equal(self):
+        # We test '!=' on a string column.
+        data = {"name": ["Alice", "Bob", "Charlie"], "city": ["NYC", "Paris", "NYC"]}
+        frame = ar.from_dict(data)
+        filtered = ar.filter_rows(frame, column="city", op="!=", value="NYC")
+        assert filtered.shape == (1, 2)
+        assert filtered["name"] == ["Bob"]
+
+    def test_filter_rows_boolean_equal(self):
+        # We test '==' on a boolean column.
+        data = {"name": ["Alice", "Bob", "Charlie"], "active": [True, False, True]}
+        frame = ar.from_dict(data)
+        filtered = ar.filter_rows(frame, column="active", op="==", value=True)
+        assert filtered.shape == (2, 2)
+        assert filtered["name"] == ["Alice", "Charlie"]
+
+    def test_filter_rows_boolean_not_equal(self):
+        # We test '!=' on a boolean column.
+        data = {"name": ["Alice", "Bob", "Charlie"], "active": [True, False, True]}
+        frame = ar.from_dict(data)
+        filtered = ar.filter_rows(frame, column="active", op="!=", value=True)
+        assert filtered.shape == (1, 2)
+        assert filtered["name"] == ["Bob"]
+
+    def test_filter_rows_with_null_values_filled_false(self):
+        # Null values inside a filtered column should be filled with False in the comparison mask
+        # and not raise errors or keep the null rows for operators like >.
+        data = {"name": ["Alice", "Bob", "Charlie", "David"], "age": [25, None, 30, 15]}
+        frame = ar.from_dict(data)
+        filtered = ar.filter_rows(frame, column="age", op=">", value=18)
+        assert filtered.shape == (2, 2)
+        assert filtered["name"] == ["Alice", "Charlie"]
+
+    def test_filter_rows_accepts_and_returns_pandas_dataframe(self):
+        # When filter_rows gets a pd.DataFrame, it should return a pd.DataFrame.
+        data = {"name": ["Alice", "Bob"], "age": [25, 17]}
+        df = pd.DataFrame(data)
+        filtered = ar.filter_rows(df, column="age", op=">", value=18)
+        assert isinstance(filtered, pd.DataFrame)
+        assert len(filtered) == 1
+        assert list(filtered["name"]) == ["Alice"]
+
+    def test_filter_rows_empty_frame(self):
+        # Filtering an empty frame should return a brand new empty frame with the same columns.
+        data = {"name": [], "age": []}
+        frame = ar.from_dict(data)
+        filtered = ar.filter_rows(frame, column="age", op=">", value=18)
+        assert filtered.is_empty is True
+        assert filtered.columns == ["name", "age"]
+
+    def test_filter_rows_zero_matching_rows(self):
+        # If no rows match, we should get an empty frame.
+        data = {"name": ["Alice", "Bob"], "age": [25, 17]}
+        frame = ar.from_dict(data)
+        filtered = ar.filter_rows(frame, column="age", op=">", value=100)
+        assert filtered.is_empty is True
+        assert filtered.columns == ["name", "age"]
+
+    def test_filter_rows_all_matching_rows(self):
+        # If all rows match, we should get all rows back.
+        data = {"name": ["Alice", "Bob"], "age": [25, 17]}
+        frame = ar.from_dict(data)
+        filtered = ar.filter_rows(frame, column="age", op=">", value=10)
+        assert filtered.shape == (2, 2)
+        assert filtered["name"] == ["Alice", "Bob"]
+
+    def test_filter_rows_invalid_operator(self):
+        # Passing an unsupported operator should raise ValueError.
+        data = {"name": ["Alice", "Bob"], "age": [25, 17]}
+        frame = ar.from_dict(data)
+        with pytest.raises(ValueError, match="Unsupported operator: %%"):
+            ar.filter_rows(frame, column="age", op="%%", value=18)
+
+    def test_filter_rows_missing_column(self):
+        # Passing a non-existent column name should raise ValueError.
+        data = {"name": ["Alice", "Bob"], "age": [25, 17]}
+        frame = ar.from_dict(data)
+        with pytest.raises(ValueError, match="Unknown column: salary"):
+            ar.filter_rows(frame, column="salary", op=">", value=18)
+
+    def test_filter_rows_non_scalar_value(self):
+        # Passing a non-scalar value (like a list) should raise TypeError.
+        data = {"name": ["Alice", "Bob"], "age": [25, 17]}
+        frame = ar.from_dict(data)
+        with pytest.raises(TypeError, match="filter_rows value must be a scalar"):
+            ar.filter_rows(frame, column="age", op=">", value=[18])
+
+    def test_filter_rows_incompatible_types_comparison(self):
+        # Comparing incompatible types (e.g. string vs number with '>') should raise TypeError.
+        data = {"name": ["Alice", "Bob"], "age": [25, 17]}
+        frame = ar.from_dict(data)
+        with pytest.raises(
+            TypeError,
+            match="cannot compare column 'name' with value 18 using operator '>'",
+        ):
+            ar.filter_rows(frame, column="name", op=">", value=18)
