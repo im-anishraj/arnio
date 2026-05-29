@@ -811,7 +811,7 @@ class Schema:
 
             if len(set(self.unique)) != len(self.unique):
                 raise ValueError(
-                    "Schema 'unique' must not contain duplicate column names"
+                    "Schema 'unique' must not contain duplicate column names."
                 )
         if not isinstance(self.strict, bool):
             raise TypeError("Schema 'strict' must be a boolean")
