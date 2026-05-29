@@ -581,8 +581,8 @@ class ArFrame:
         ------
         ValueError
             If neither *include* nor *exclude* is provided, if *include*
-            and *exclude* overlap, if an unrecognised dtype string is
-            passed, or if no columns match the filter.
+            and *exclude* overlap, or if an unrecognised dtype string is
+            passed.
         TypeError
             If *include* or *exclude* is not a string, list, or tuple of
             strings.
