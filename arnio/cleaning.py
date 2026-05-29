@@ -1112,7 +1112,7 @@ def normalize_unicode(
         else:
             new_columns[name] = col.to_python_list()
             dtype_hints[name] = dtype
-    new_cpp_frame = _Frame.from_dict(new_columns, dtype_hints)
+    new_cpp_frame = _Frame.from_dict(new_columns, dtype_hints, frame.shape[0])
     return ArFrame(
         new_cpp_frame,
         attrs=copy.deepcopy(frame._attrs) if frame._attrs is not None else None,

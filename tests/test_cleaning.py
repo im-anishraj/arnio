@@ -1699,6 +1699,42 @@ class TestNormalizeUnicode:
         result._attrs["meta"]["key"] = "mutated"
         assert frame._attrs["meta"]["key"] == "value"
 
+    def test_normalize_unicode_zero_columns(self):
+        import pandas as pd
+
+        import arnio as ar
+
+        # Non-empty zero-column frame
+        frame_3_0 = ar.from_pandas(pd.DataFrame(index=range(3)))
+        assert frame_3_0.shape == (3, 0)
+        result_3_0 = ar.normalize_unicode(frame_3_0)
+        assert result_3_0.shape == (3, 0)
+
+        # Empty zero-column frame
+        frame_0_0 = ar.from_pandas(pd.DataFrame())
+        assert frame_0_0.shape == (0, 0)
+        result_0_0 = ar.normalize_unicode(frame_0_0)
+        assert result_0_0.shape == (0, 0)
+
+        # Normal string-column behavior
+        df_normal = pd.DataFrame({"text": ["cafe\u0301"], "other": [1]})
+        frame_normal = ar.from_pandas(df_normal)
+        result_normal = ar.normalize_unicode(frame_normal)
+        assert result_normal.shape == (1, 2)
+        assert ar.to_pandas(result_normal)["text"].iloc[0] == "café"
+
+        # attrs preservation on the zero-column path
+        frame_3_0_attrs = ar.from_pandas(pd.DataFrame(index=range(3)))
+        frame_3_0_attrs._attrs = {"key": "value"}
+        result_3_0_attrs = ar.normalize_unicode(frame_3_0_attrs)
+        assert result_3_0_attrs.shape == (3, 0)
+        assert result_3_0_attrs._attrs == {"key": "value"}
+
+        # attrs deepcopy check on zero-column path
+        result_3_0_attrs._attrs["key"] = "mutated"
+        assert frame_3_0_attrs._attrs["key"] == "value"
+
+
 
 class TestParseBoolStrings:
     def test_parse_basic_bool_strings(self):
