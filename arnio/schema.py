@@ -2017,6 +2017,36 @@ def TimeZone(
     )
 
 
+# def CurrencyCode(
+#     *,
+#     nullable: bool = True,
+#     unique: bool = False,
+#     severity: str = "error",
+#     required_if: tuple[str, Any] | None = None,
+#     allowed: set[Any] | list[Any] | tuple[Any, ...] | None = None,
+# ) -> Field:
+#     """Create a currency-code schema field.
+
+#     Args:
+#         nullable: Whether null values are allowed.
+#         unique: Whether non-null values must be unique.
+#         severity: Severity level for validation issues.
+#         required_if: Conditional requirement as a column/value pair.
+#         allowed: Allowed currency codes, overriding the default active ISO 4217 set.
+
+#     Returns:
+#         Field: Configured 3-letter uppercase currency-code schema field.
+#     """
+#     allowed_set = set(allowed) if allowed is not None else None
+#     return Field(
+#         dtype="string",
+#         nullable=nullable,
+#         semantic="currency_code",
+#         unique=unique,
+#         severity=severity,
+#         required_if=required_if,
+#         allowed=allowed_set,
+#     )
 def CurrencyCode(
     *,
     nullable: bool = True,
@@ -2037,7 +2067,21 @@ def CurrencyCode(
     Returns:
         Field: Configured 3-letter uppercase currency-code schema field.
     """
+
+    if isinstance(allowed, (str, bytes)):
+        raise TypeError(
+            "allowed must be a sequence of currency codes, not a bare string"
+        )
+
+    if allowed is not None:
+        for value in allowed:
+            if not isinstance(value, str):
+                raise TypeError(
+                    "all allowed currency codes must be strings"
+                )
+
     allowed_set = set(allowed) if allowed is not None else None
+
     return Field(
         dtype="string",
         nullable=nullable,
@@ -2047,7 +2091,6 @@ def CurrencyCode(
         required_if=required_if,
         allowed=allowed_set,
     )
-
 
 def Date(
     *,
