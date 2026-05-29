@@ -2987,6 +2987,41 @@ def test_empty_string_passes_when_nullable():
     assert result.issue_count == 0
 
 
+def test_required_if_treats_blank_strings_as_missing():
+    df = pd.DataFrame(
+        {
+            "user_type": [
+                "international",
+                "international",
+                "local",
+            ],
+            "country": [
+                "",
+                "   ",
+                "",
+            ],
+        }
+    )
+
+    schema = ar.Schema(
+        {
+            "user_type": ar.String(nullable=False),
+            "country": ar.String(
+                nullable=True,
+                required_if=("user_type", "international"),
+            ),
+        }
+    )
+
+    result = ar.validate(ar.from_pandas(df), schema)
+
+    assert result.issue_count == 2
+
+    for issue in result.issues:
+        assert issue.column == "country"
+        assert issue.rule == "required_if"
+
+
 def test_url_https_only_accepts_https(tmp_path):
     path = tmp_path / "urls.csv"
     path.write_text("url\nhttps://example.com\nhttps://test.org\n")
