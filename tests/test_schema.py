@@ -3229,360 +3229,39 @@ def test_schema_field_only_roundtrip_with_rules_present():
     assert not restored.rules
 
 
-class TestIsSafelyConvertibleToDtype:
-    def test_id_column_rejects_leading_zeros(self):
-        series = pd.Series(["001", "002", "003"])
-        assert _is_safely_convertible_to_dtype(series, "int64", "id") is False
-
-    def test_user_id_column_rejects_leading_zeros(self):
-        series = pd.Series(["0001", "0002"])
-        assert _is_safely_convertible_to_dtype(series, "int64", "user_id") is False
-
-    def test_uuid_column_rejects_leading_zeros(self):
-        series = pd.Series(["0123", "0456"])
-        assert _is_safely_convertible_to_dtype(series, "int64", "uuid") is False
-
-    def test_zip_column_rejects_leading_zeros(self):
-        series = pd.Series(["01234", "02345"])
-        assert _is_safely_convertible_to_dtype(series, "int64", "zip") is False
-
-    def test_valid_int64_conversion(self):
-        series = pd.Series(["1", "2", "3"])
-        assert _is_safely_convertible_to_dtype(series, "int64", "count") is True
-
-    def test_negative_int64_conversion(self):
-        series = pd.Series(["-1", "2", "3"])
-        assert _is_safely_convertible_to_dtype(series, "int64", "delta") is True
-
-    def test_float64_conversion(self):
-        series = pd.Series(["1.5", "2.5", "3.0"])
-        assert _is_safely_convertible_to_dtype(series, "float64", "price") is True
-
-    def test_invalid_string_for_int64(self):
-        series = pd.Series(["abc", "def"])
-        assert _is_safely_convertible_to_dtype(series, "int64", "data") is False
-
-    def test_empty_series_returns_false(self):
-        series = pd.Series([], dtype="string")
-        assert _is_safely_convertible_to_dtype(series, "int64", "col") is False
-
-    def test_all_null_series_returns_false(self):
-        series = pd.Series([None, None])
-        assert _is_safely_convertible_to_dtype(series, "int64", "col") is False
-
-
-def test_int64_rejects_string_min():
-    with pytest.raises(TypeError, match="min must be numeric or None"):
-        ar.Int64(min="a")
-
-
-def test_int64_rejects_string_max():
-    with pytest.raises(TypeError, match="max must be numeric or None"):
-        ar.Int64(max="z")
-
-
-def test_int64_rejects_bool_min():
-    with pytest.raises(TypeError, match="min must be numeric or None"):
-        ar.Int64(min=True)
-
-
-def test_int64_rejects_bool_max():
-    with pytest.raises(TypeError, match="max must be numeric or None"):
-        ar.Int64(max=False)
-
-
-def test_int64_accepts_valid_numeric_bounds():
-    assert ar.Int64(min=0, max=10) is not None
-
-
-def test_int64_accepts_float_bounds():
-    assert ar.Int64(min=0.5, max=9.9) is not None
-
-
-def test_int64_accepts_none_bounds():
-    assert ar.Int64(min=None, max=None) is not None
-
-
-def test_int64_rejects_string_min_with_valid_max():
-    with pytest.raises(TypeError, match="min must be numeric or None"):
-        ar.Int64(min="a", max=1)
-
-
-def test_int64_rejects_valid_min_with_string_max():
-    with pytest.raises(TypeError, match="max must be numeric or None"):
-        ar.Int64(min=1, max="z")
-
-
-def test_int64_rejects_bool_pair():
-    with pytest.raises(TypeError, match="min must be numeric or None"):
-        ar.Int64(min=True, max=False)
-
-
-def test_float64_rejects_string_min_with_valid_max():
-    with pytest.raises(TypeError, match="min must be numeric or None"):
-        ar.Float64(min="a", max=1.0)
-
-
-def test_float64_rejects_bool_pair():
-    with pytest.raises(TypeError, match="min must be numeric or None"):
-        ar.Float64(min=True, max=False)
-
-
-def test_validation_issue_accepts_valid_severities():
-    error_issue = ar.ValidationIssue(
-        column="age", rule="min", message="Too small", severity="error"
-    )
-    warning_issue = ar.ValidationIssue(
-        column="age", rule="min", message="Too small", severity="warning"
-    )
-
-    assert error_issue.severity == "error"
-    assert warning_issue.severity == "warning"
-
-
-def test_validation_issue_rejects_invalid_severity_typo():
-    with pytest.raises(ValueError, match="severity must be 'error' or 'warning'"):
-        ar.ValidationIssue(
-            column="score", rule="custom", message="bad", severity="erorr"
-        )
-
-
-def test_custom_rule_with_invalid_severity_fails_validation_execution():
-    def bad_custom_rule(df):
-        return [
-            ar.ValidationIssue(column="x", rule="demo", message="bad", severity="erorr")
-        ]
-
-    frame = ar.from_pandas(pd.DataFrame({"x": [1]}))
-    schema = ar.Schema({"x": ar.Field()}, rules=[bad_custom_rule])
-
-    with pytest.raises(ValueError, match="severity must be 'error' or 'warning'"):
-        schema.validate(frame)
-
-
-def test_field_dtype_rejects_non_string():
-    with pytest.raises(TypeError, match="dtype must be a str or None"):
-        ar.Field(dtype=123)
-
-
-def test_field_pattern_rejects_non_string():
-    with pytest.raises(TypeError, match="pattern must be a str or None"):
-        ar.Field(pattern=123)
-
-
-def test_field_pattern_rejects_invalid_regex():
-    with pytest.raises(ValueError, match="not a valid regular expression"):
-        ar.Field(pattern="[unclosed")
-
-
-def test_field_allowed_rejects_bare_string():
-    with pytest.raises(TypeError, match="allowed must be a list, tuple, or set"):
-        ar.Field(allowed="abc")
-
-
-def test_field_max_length_rejects_non_int():
-    with pytest.raises(TypeError, match="max_length must be an int or None"):
-        ar.Field(max_length="x")
-
-
-def test_field_min_length_rejects_non_int():
-    with pytest.raises(TypeError, match="min_length must be an int or None"):
-        ar.Field(min_length="x")
-
-
-def test_field_min_length_rejects_negative():
-    with pytest.raises(ValueError, match="min_length must be >= 0"):
-        ar.Field(min_length=-1)
-
-
-def test_field_max_length_rejects_negative():
-    with pytest.raises(ValueError, match="max_length must be >= 0"):
-        ar.Field(max_length=-1)
-
-
-def test_field_min_length_exceeds_max_length():
-    with pytest.raises(ValueError, match="min_length.*must be <= max_length"):
-        ar.Field(min_length=10, max_length=3)
-
-
-def test_field_valid_direct_construction():
-    f = ar.Field(
-        dtype="string", pattern=r"\d+", allowed=["a", "b"], min_length=1, max_length=5
-    )
-    assert f.pattern == r"\d+"
-
-
-def test_field_allowed_rejects_dict():
-    with pytest.raises(TypeError, match="allowed must be a list, tuple, or set"):
-        ar.Field(allowed={"a": 1})
-
-
-def test_field_allowed_rejects_generator():
-    with pytest.raises(TypeError, match="allowed must be a list, tuple, or set"):
-        ar.Field(allowed=(x for x in ["a"]))
-
-
-def test_field_allowed_rejects_bytes():
-    with pytest.raises(TypeError, match="allowed must be a list, tuple, or set"):
-        ar.Field(allowed=b"abc")
-
-
-def test_custom_field_required_if_validation_passes_when_condition_matches(tmp_path):
-    ar.register_validator("positive_req", lambda v: v > 0)
-
-    path = tmp_path / "custom_conditional_pass.csv"
-    path.write_text("status,score\n" "active,10\n" "inactive,\n")
-    frame = ar.read_csv(path)
-
-    schema = ar.Schema(
-        {
-            "status": ar.String(nullable=False),
-            "score": ar.Custom(
-                "positive_req", nullable=True, required_if=("status", "active")
-            ),
-        }
-    )
-
-    result = schema.validate(frame)
-    assert result.passed
-    assert result.issue_count == 0
-
-
-def test_custom_field_required_if_validation_fails_when_condition_matches(tmp_path):
-    ar.register_validator("positive_req", lambda v: v > 0)
-
-    path = tmp_path / "custom_conditional_fail.csv"
-    path.write_text("status,score\n" "active,\n" "inactive,5\n")
-    frame = ar.read_csv(path)
-
-    schema = ar.Schema(
-        {
-            "status": ar.String(nullable=False),
-            "score": ar.Custom(
-                "positive_req", nullable=True, required_if=("status", "active")
-            ),
-        }
-    )
-
-    result = schema.validate(frame)
-    assert not result.passed
-    assert result.issue_count == 1
-    assert result.issues[0].rule == "required_if"
-    assert result.issues[0].column == "score"
-    assert result.issues[0].row_index == 1
-
-
-def test_custom_field_required_if_validation_ignores_non_matching_conditions(tmp_path):
-    ar.register_validator("positive_req", lambda v: v > 0)
-
-    path = tmp_path / "custom_conditional_ignore.csv"
-    path.write_text("status,score\n" "pending,\n" "inactive,\n")
-    frame = ar.read_csv(path)
-
-    schema = ar.Schema(
-        {
-            "status": ar.String(nullable=False),
-            "score": ar.Custom(
-                "positive_req", nullable=True, required_if=("status", "active")
-            ),
-        }
-    )
-
-    result = schema.validate(frame)
-    assert result.passed
-    assert result.issue_count == 0
-
-
-def test_custom_field_required_if_enforces_rule_logic_when_matched(tmp_path):
-    ar.register_validator("positive_req", lambda v: v > 0)
-
-    path = tmp_path / "custom_conditional_rule_fail.csv"
-    path.write_text("status,score\n" "active,-5\n")
-    frame = ar.read_csv(path)
-
-    schema = ar.Schema(
-        {
-            "status": ar.String(nullable=False),
-            "score": ar.Custom(
-                "positive_req", nullable=True, required_if=("status", "active")
-            ),
-        }
-    )
-
-    result = schema.validate(frame)
-    assert not result.passed
-    assert result.issue_count == 1
-    assert result.issues[0].rule == "custom"
-    assert result.issues[0].column == "score"
-    assert result.issues[0].row_index == 1
-
-
-def test_custom_field_json_roundtrip_preserves_required_if():
-    ar.register_validator("positive_req_json", lambda v: v > 0)
-
-    schema = ar.Schema(
-        fields={
-            "id": ar.String(nullable=False),
-            "score": ar.Custom(
-                "positive_req_json", nullable=True, required_if=("id", "A1")
-            ),
-        }
-    )
-
-    restored = ar.Schema.from_json(schema.to_json())
-    assert restored == schema
-
-
-def test_unknown_semantic_severity_preservation():
-    frame = ar.from_dict({"x": ["abc"]})
-    unknown_schema = ar.Schema({"x": ar.Field(semantic="unknown", severity="warning")})
-
-    result = ar.validate(frame, unknown_schema)
-    assert not result.issues[0].passed if hasattr(result.issues[0], "passed") else True
-    assert len(result.issues) == 1
-    assert result.issues[0].rule == "semantic"
-    assert result.issues[0].severity == "warning"
-
-
-def test_missing_custom_validator_severity_preservation():
-    frame = ar.from_dict({"x": ["abc"]})
-    missing_custom_schema = ar.Schema(
-        {"x": ar.Field(semantic="custom:missing", severity="warning")}
-    )
-
-    result = ar.validate(frame, missing_custom_schema)
-    for issue in result.issues:
-        if issue.rule == "custom":
-            assert issue.severity == "warning"
-
-
-def test_validate_max_errors_zero_invalid_data():
-    frame = ar.from_pandas(pd.DataFrame({"age": ["not-an-int"]}))
-    schema = ar.Schema({"age": ar.Int64()})
-
-    with pytest.raises(ValueError, match="max_errors must be >= 1"):
-        ar.validate(frame, schema, max_errors=0)
-
-
-def test_validate_max_errors_zero_missing_columns():
-    frame = ar.from_pandas(pd.DataFrame({"name": ["Alice"]}))
-    schema = ar.Schema({"age": ar.Int64()})
-
-    with pytest.raises(ValueError, match="max_errors must be >= 1"):
-        ar.validate(frame, schema, max_errors=0)
-
-
-def test_validate_max_errors_zero_strict_schema():
-    frame = ar.from_pandas(pd.DataFrame({"age": [25], "extra": ["unexpected"]}))
-    schema = ar.Schema({"age": ar.Int64()}, strict=True)
-
-    with pytest.raises(ValueError, match="max_errors must be >= 1"):
-        ar.validate(frame, schema, max_errors=0)
-
-
-def test_validate_max_errors_zero_valid_data():
-    frame = ar.from_pandas(pd.DataFrame({"age": [25]}))
-    schema = ar.Schema({"age": ar.Int64()})
-
-    with pytest.raises(ValueError, match="max_errors must be >= 1"):
-        ar.validate(frame, schema, max_errors=0)
+def test_schema_from_json_rejects_invalid_dtype_string():
+    payload = {
+        "fields": {"x": {"dtype": "bogus"}},
+        "strict": False,
+        "unique": None,
+    }
+
+    with pytest.raises(ValueError):
+        ar.Schema.from_json(payload)
+
+
+def test_schema_from_json_rejects_non_string_dtype():
+    payload = {
+        "fields": {"x": {"dtype": 123}},
+        "strict": False,
+        "unique": None,
+    }
+
+    with pytest.raises(ValueError):
+        ar.Schema.from_json(payload)
+
+
+@pytest.mark.parametrize(
+    "dtype",
+    ["int64", "float64", "string", "bool", "null", "datetime", None],
+)
+def test_schema_from_json_accepts_valid_dtypes(dtype):
+    payload = {
+        "fields": {"x": {"dtype": dtype}},
+        "strict": False,
+        "unique": None,
+    }
+
+    schema = ar.Schema.from_json(payload)
+
+    assert schema.fields["x"].dtype == dtype

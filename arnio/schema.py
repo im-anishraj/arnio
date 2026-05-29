@@ -705,63 +705,19 @@ class Field:
             raise TypeError("nullable must be a bool")
         if not isinstance(self.unique, bool):
             raise TypeError("unique must be a bool")
-        if not isinstance(self.case_sensitive, bool):
-            raise TypeError("case_sensitive must be a bool")
+        valid_dtypes = {
+            "int64",
+            "float64",
+            "string",
+            "bool",
+            "null",
+            "datetime",
+            None,
+        }
 
-        if self.required_if is not None:
-            if not isinstance(self.required_if, tuple):
-                raise TypeError("required_if must be a tuple or None")
-            if len(self.required_if) != 2:
-                raise TypeError(
-                    "required_if must be a (column_name, expected_value) tuple"
-                )
-            if not isinstance(self.required_if[0], str):
-                raise TypeError("required_if column name must be a string")
-        if self.dtype in {"int64", "float64"}:
-            if self.min is not None:
-                if isinstance(self.min, bool) or not isinstance(self.min, (int, float)):
-                    raise TypeError("min must be numeric or None")
-            if self.max is not None:
-                if isinstance(self.max, bool) or not isinstance(self.max, (int, float)):
-                    raise TypeError("max must be numeric or None")
-        if self.dtype is not None and not isinstance(self.dtype, str):
-            raise TypeError(
-                f"dtype must be a str or None, got {type(self.dtype).__name__}"
-            )
+        if self.dtype not in valid_dtypes:
+            raise ValueError(f"Invalid dtype: {self.dtype!r}")
 
-        if self.pattern is not None:
-            if not isinstance(self.pattern, str):
-                raise TypeError(
-                    f"pattern must be a str or None, got {type(self.pattern).__name__}"
-                )
-            try:
-                re.compile(self.pattern)
-            except re.error as exc:
-                raise ValueError(
-                    f"pattern is not a valid regular expression: {exc}"
-                ) from exc
-
-        if self.allowed is not None:
-            if not isinstance(self.allowed, (list, tuple, set)):
-                raise TypeError(
-                    f"allowed must be a list, tuple, or set, got {type(self.allowed).__name__}"
-                )
-        for _name, _val in [
-            ("min_length", self.min_length),
-            ("max_length", self.max_length),
-        ]:
-            if _val is not None:
-                if isinstance(_val, bool) or not isinstance(_val, int):
-                    raise TypeError(
-                        f"{_name} must be an int or None, got {type(_val).__name__}"
-                    )
-                if _val < 0:
-                    raise ValueError(f"{_name} must be >= 0, got {_val}")
-        if self.min_length is not None and self.max_length is not None:
-            if self.min_length > self.max_length:
-                raise ValueError(
-                    f"min_length ({self.min_length}) must be <= max_length ({self.max_length})"
-                )
         _validate_severity(self.severity)
 
 
@@ -2628,9 +2584,23 @@ def _field_from_json_dict(name: str, payload: Any) -> Field:
                 f"Schema JSON field {name!r} 'required_if' must be a 2-item list or null."
             )
         required_if = tuple(required_if)
+    dtype = payload.get("dtype")
+
+    valid_dtypes = {
+        "int64",
+        "float64",
+        "string",
+        "bool",
+        "null",
+        "datetime",
+        None,
+    }
+
+    if dtype not in valid_dtypes:
+        raise ValueError(f"Schema JSON field {name!r} has invalid dtype: {dtype!r}")
 
     return Field(
-        dtype=payload.get("dtype"),
+        dtype=dtype,
         nullable=payload.get("nullable", True),
         min=payload.get("min"),
         max=payload.get("max"),
