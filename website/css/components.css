@@ -445,6 +445,12 @@ pre:hover .copy-btn {
   opacity: 1;
 }
 
+.copy-btn:focus-visible {
+  opacity: 1;
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
 .copy-btn:hover {
   background: var(--color-accent);
   color: #ffffff;
