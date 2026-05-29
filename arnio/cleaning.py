@@ -539,7 +539,15 @@ def drop_empty_columns(frame: ArFrame) -> ArFrame:
     from .convert import to_pandas
 
     if frame.shape[0] == 0:
-        return frame
+        attrs = copy.deepcopy(frame._attrs) if frame._attrs is not None else None
+        empty_columns_data: dict[str, list[object]] = {}
+        empty_dtype_hints: dict[str, _DType] = {}
+        for col_name in frame.columns:
+            empty_columns_data[col_name] = []
+            empty_dtype_hints[col_name] = frame._frame.column_by_name(col_name).dtype()
+        return ArFrame(
+            _Frame.from_dict(empty_columns_data, empty_dtype_hints, 0), attrs=attrs
+        )
 
     df = to_pandas(frame)
     empty_columns: list[str] = []

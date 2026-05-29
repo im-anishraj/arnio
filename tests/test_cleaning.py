@@ -930,6 +930,20 @@ class TestDropEmptyColumns:
         assert result.shape[0] == 0
         assert result.shape[1] == 3
 
+    def test_drop_empty_columns_zero_row_metadata_isolation(self):
+        df = pd.DataFrame({"a": pd.Series(dtype="object")})
+        frame = ar.from_pandas(df)
+        frame._attrs = {"nested": {"x": 1}}
+
+        result = ar.drop_empty_columns(frame)
+
+        assert result is not frame
+        assert result.columns == ["a"]
+        assert result.shape == (0, 1)
+
+        result._attrs["nested"]["x"] = 2
+        assert frame._attrs["nested"]["x"] == 1
+
 
 class TestClipNumeric:
     def test_clip_numeric_lower_only(self):
