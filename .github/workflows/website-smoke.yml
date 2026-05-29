@@ -30,4 +30,3 @@ jobs:
 
       - name: Check local links, fragments, and required assets
         run: python scripts/check_website.py
-
