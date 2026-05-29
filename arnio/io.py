@@ -47,71 +47,30 @@ def _materialize_csv_input(
     sample_rows: int | None = None,
     encoding_errors: str = "strict",
 ) -> Iterator[str]:
-    """Return a UTF-8 file path for the C++ reader.
+    """Return a UTF-8 file path for the C++ reader."""
+    
+    @contextmanager
+    def _get_src():
+        if hasattr(path, "read"):
+            if isinstance(path, (io.RawIOBase, io.BufferedIOBase)):
+                yield io.TextIOWrapper(path, encoding=encoding, errors=encoding_errors, newline="")  # type: ignore
+            else:
+                yield path
+        else:
+            with open(os.fspath(path), encoding=encoding, errors=encoding_errors, newline="") as src:
+                yield src
 
-    The native reader currently consumes UTF-8 bytes. For other encodings,
-    transcode through a temporary UTF-8 file so the public encoding parameter is
-    honored without leaking platform-specific decoding behavior through pybind.
-    """
-    if hasattr(path, "read"):
-        input_data = path
-        tmp_name = None
-        try:
-            with tempfile.NamedTemporaryFile(
-                "w", encoding="utf-8", newline="", suffix=".csv", delete=False
-            ) as tmp:
-                tmp_name = tmp.name
-                
-                src = input_data
-                if isinstance(src, io.RawIOBase) or isinstance(src, io.BufferedIOBase):
-                    src = io.TextIOWrapper(src, encoding=encoding, newline="")  # type: ignore
-
-                if sample_rows is not None:
-                    reader = csv.reader(src, delimiter=delimiter)  # type: ignore
-                    writer = csv.writer(tmp, delimiter=delimiter)
-                    try:
-                        for row_count, row in enumerate(reader):
-                            if row_count >= sample_rows:
-                                break
-                            writer.writerow(row)
-                    except UnicodeDecodeError as e:
-                        raise CsvReadError(f"Could not decode stream using encoding {encoding!r}") from e
-                else:
-                    try:
-                        shutil.copyfileobj(src, tmp)  # type: ignore
-                    except UnicodeDecodeError as e:
-                        raise CsvReadError(f"Could not decode stream using encoding {encoding!r}") from e
-            
-            if os.path.getsize(tmp_name) == 0:
-                raise CsvReadError("CSV file is empty: <stream>")
-                
-            yield tmp_name
-        except LookupError as e:
-            raise ValueError(f"Unknown encoding: {encoding}") from e
-        except OSError as e:
-            raise CsvReadError(str(e)) from e
-        finally:
-            if tmp_name is not None:
-                try:
-                    os.unlink(tmp_name)
-                except OSError:
-                    pass
-        return
-
-    if _is_utf8_encoding(encoding):
-        yield path
+    if not hasattr(path, "read") and _is_utf8_encoding(encoding):
+        yield os.fspath(path)  # type: ignore
         return
 
     tmp_name: str | None = None
     try:
-        with open(path, encoding=encoding, errors=encoding_errors, newline="") as src:
+        with _get_src() as src:
             with tempfile.NamedTemporaryFile(
                 "w", encoding="utf-8", newline="", suffix=".csv", delete=False
             ) as tmp:
                 if sample_rows is not None:
-                    # Preserve the original decoded CSV text while sampling
-                    # complete logical records so scan_schema does not see a
-                    # rewritten file with normalized quoting or line endings.
                     row_count = 0
                     in_quotes = False
                     pending_quote = False
@@ -181,29 +140,30 @@ def _materialize_csv_input(
                         and not last_char_was_terminator
                         and tmp.tell() > 0
                     ):
-                        # Count a final record that reaches EOF without a line
-                        # terminator so sampling semantics match the previous
-                        # logical-record-based behavior.
                         row_count += 1
                 else:
                     shutil.copyfileobj(src, tmp)
                 tmp_name = tmp.name
+                
+            if os.path.getsize(tmp_name) == 0:
+                raise CsvReadError("CSV file is empty")
+                
         yield tmp_name
     except LookupError as e:
         raise ValueError(f"Unknown encoding: {encoding}") from e
     except UnicodeDecodeError as e:
-        raise CsvReadError(
-            f"Could not decode {path!r} using encoding {encoding!r}"
-        ) from e
+        raise CsvReadError(f"Could not decode stream using encoding {encoding!r}") from e
     except OSError as e:
-        _raise_csv_path_os_error(path, e)
+        if hasattr(path, "read"):
+            raise CsvReadError(str(e)) from e
+        else:
+            _raise_csv_path_os_error(os.fspath(path), e)  # type: ignore
     finally:
         if tmp_name is not None:
             try:
                 os.unlink(tmp_name)
             except OSError:
                 pass
-
 
 def _validate_thousands_separator(
     thousands_separator: str | None,
