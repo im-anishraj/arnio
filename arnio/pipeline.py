@@ -36,6 +36,7 @@ _STEP_REGISTRY: dict[str, Callable] = {
     "drop_constant_columns": cleaning.drop_constant_columns,
     "drop_empty_columns": cleaning.drop_empty_columns,
     "clip_numeric": cleaning.clip_numeric,
+    "winsorize_outliers": cleaning.winsorize_outliers,
     "strip_whitespace": cleaning.strip_whitespace,
     "parse_bool_strings": cleaning.parse_bool_strings,
     "normalize_case": cleaning.normalize_case,
@@ -45,6 +46,7 @@ _STEP_REGISTRY: dict[str, Callable] = {
     "round_numeric_columns": cleaning.round_numeric_columns,
     "combine_columns": cleaning.combine_columns,
     "trim_column_names": cleaning.trim_column_names,
+    "clean_column_names": cleaning.clean_column_names,
 }
 
 _REGISTRY_LOCK = Lock()
@@ -52,6 +54,7 @@ _DEPRECATED_STEP_ALIASES: dict[str, str] = {}
 _PYTHON_STEP_REGISTRY: dict[str, Callable] = {
     "standardize_missing_tokens": cleaning.standardize_missing_tokens,
     "coalesce_columns": cleaning.coalesce_columns,
+    "normalize_whitespace": cleaning.normalize_whitespace,
 }
 
 
@@ -149,6 +152,20 @@ def register_step(name: str, fn: Callable, overwrite: bool = False):
                 "To intentionally overwrite it, set 'overwrite=True'."
             )
         _PYTHON_STEP_REGISTRY[name] = fn
+
+
+def unregister_step(name: str) -> None:
+    """Unregister a custom Python pipeline step."""
+    with _REGISTRY_LOCK:
+        if name not in _PYTHON_STEP_REGISTRY:
+            available_steps = sorted(set(_STEP_REGISTRY) | set(_PYTHON_STEP_REGISTRY))
+            raise UnknownStepError(name, available_steps)
+        fn = _PYTHON_STEP_REGISTRY[name]
+
+        if _is_builtin_python_step(name, fn):
+            available_steps = sorted(set(_STEP_REGISTRY) | set(_PYTHON_STEP_REGISTRY))
+            raise UnknownStepError(name, available_steps)
+        del _PYTHON_STEP_REGISTRY[name]
 
 
 def get_builtin_step_signatures() -> dict[str, inspect.Signature]:
@@ -316,6 +333,25 @@ def pipeline(
     ...     ("drop_duplicates", {"keep": "first"}),
     ... ])
     """
+    if not isinstance(frame, ArFrame):
+        raise TypeError("frame must be an ArFrame")
+    if not isinstance(return_metadata, bool):
+        raise TypeError(
+            f"return_metadata must be a bool, got {type(return_metadata).__name__!r}"
+        )
+    if not isinstance(dry_run, bool):
+        raise TypeError(f"dry_run must be a bool, got {type(dry_run).__name__!r}")
+    if not isinstance(verbose, bool):
+        raise TypeError(f"verbose must be a bool, got {type(verbose).__name__!r}")
+    if (
+        steps is None
+        or isinstance(steps, (str, bytes, dict))
+        or isinstance(steps, tuple)
+    ):
+        raise TypeError(
+            "steps must be a list of step tuples, " 'for example [("drop_nulls",)]'
+        )
+
     with _REGISTRY_LOCK:
         python_step_registry = dict(_PYTHON_STEP_REGISTRY)
         namespaced_builtin_steps = _get_namespaced_builtin_steps(python_step_registry)
@@ -328,6 +364,7 @@ def pipeline(
     )
 
     result = frame
+    working_frame = frame
 
     step_timings: list[dict[str, Any]] = []
     applied_steps: list[str] = []
@@ -360,28 +397,32 @@ def pipeline(
             if name == "rename_columns" and (
                 "mapping" not in kwargs or not isinstance(kwargs["mapping"], dict)
             ):
-                step_result = fn(result, mapping=kwargs)
+                step_result = fn(working_frame, mapping=kwargs)
 
                 if not dry_run:
                     result = step_result
+                working_frame = step_result
 
             elif name == "cast_types" and (
                 "mapping" not in kwargs or not isinstance(kwargs["mapping"], dict)
             ):
-                step_result = fn(result, kwargs)
+                step_result = fn(working_frame, kwargs)
 
                 if not dry_run:
                     result = step_result
+                working_frame = step_result
 
             else:
-                target_frame = result
+                target_frame = working_frame
 
                 step_result = fn(target_frame, **kwargs)
 
                 if not dry_run:
                     result = step_result
+                working_frame = step_result
 
-            elapsed_ms = (perf_counter() - started_at) * 1000
+            elapsed_sec = perf_counter() - started_at
+            elapsed_ms = elapsed_sec * 1000
 
             if verbose:
                 execution_path = f"{fn.__module__}.{fn.__name__}"
@@ -403,13 +444,15 @@ def pipeline(
                     {
                         "step": name,
                         "before": rows_before,
-                        "after": step_result.shape[0],
+                        "after": rows_before if dry_run else step_result.shape[0],
+                        "dry_run": dry_run,
                     }
                 )
                 step_timings.append(
                     {
                         "step": name,
-                        "seconds": round(perf_counter() - started_at, 9),
+                        "seconds": round(elapsed_sec, 9),
+                        "dry_run": dry_run,
                     }
                 )
         elif name in python_step_registry:
@@ -419,7 +462,7 @@ def pipeline(
 
             fn = python_step_registry[name]
 
-            df = to_pandas(result)
+            df = to_pandas(working_frame)
 
             # Isolate genuine custom steps from internal core library functions
             is_builtin = _is_builtin_python_step(name, fn)
@@ -454,8 +497,10 @@ def pipeline(
             step_result = from_pandas(returned)
             if not dry_run:
                 result = step_result
+            working_frame = step_result
 
-            elapsed_ms = (perf_counter() - started_at) * 1000
+            elapsed_sec = perf_counter() - started_at
+            elapsed_ms = elapsed_sec * 1000
 
             if verbose:
                 step_name = getattr(fn, "__name__", name)
@@ -478,13 +523,15 @@ def pipeline(
                     {
                         "step": name,
                         "before": rows_before,
-                        "after": step_result.shape[0],
+                        "after": rows_before if dry_run else step_result.shape[0],
+                        "dry_run": dry_run,
                     }
                 )
                 step_timings.append(
                     {
                         "step": name,
-                        "seconds": round(perf_counter() - started_at, 9),
+                        "seconds": round(elapsed_sec, 9),
+                        "dry_run": dry_run,
                     }
                 )
         else:
