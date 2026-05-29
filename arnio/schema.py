@@ -2893,14 +2893,8 @@ def _normalize_validator_result(result: object, validator_name: str) -> bool:
         return True
     if result is False or result is None:
         return False
-    # Check for pd.NA without importing pandas at module level
-    try:
-        import pandas as _pd
-
-        if result is _pd.NA:
-            return False
-    except ImportError:
-        pass
+    if result is pd.NA:
+        return False
     raise TypeError(
         f"Custom validator {validator_name!r} returned "
         f"{type(result).__name__!r} ({result!r}); "
