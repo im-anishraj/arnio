@@ -2563,18 +2563,18 @@ def test_required_if_validation_handles_null_trigger_values(tmp_path):
 
 
 def test_register_validator_and_custom_field_passes(tmp_path):
-    ar.register_validator("positive", lambda v: v > 0)
+    ar.register_validator("positive_pass", lambda v: v > 0)
     path = tmp_path / "scores.csv"
     path.write_text("score\n1\n5\n100\n")
-    result = ar.validate(ar.read_csv(path), {"score": ar.Custom("positive")})
+    result = ar.validate(ar.read_csv(path), {"score": ar.Custom("positive_pass")})
     assert result.passed
 
 
 def test_register_validator_and_custom_field_fails(tmp_path):
-    ar.register_validator("positive", lambda v: v > 0)
+    ar.register_validator("positive_fail", lambda v: v > 0)
     path = tmp_path / "scores.csv"
     path.write_text("score\n1\n-5\n0\n")
-    result = ar.validate(ar.read_csv(path), {"score": ar.Custom("positive")})
+    result = ar.validate(ar.read_csv(path), {"score": ar.Custom("positive_fail")})
     assert not result.passed
     assert result.issues[0].rule == "custom"
     assert result.issues[0].row_index == 2
@@ -2583,10 +2583,12 @@ def test_register_validator_and_custom_field_fails(tmp_path):
 def test_custom_field_respects_nullable(tmp_path):
     import pandas as pd
 
-    ar.register_validator("positive", lambda v: v > 0)
+    ar.register_validator("positive_nullable", lambda v: v > 0)
     df = pd.DataFrame({"score": [1, None, 5]})
     frame = ar.from_pandas(df)
-    result = ar.validate(frame, {"score": ar.Custom("positive", nullable=False)})
+    result = ar.validate(
+        frame, {"score": ar.Custom("positive_nullable", nullable=False)}
+    )
     assert not result.passed
     assert any(i.rule == "nullable" for i in result.issues)
 
@@ -3512,7 +3514,7 @@ def test_field_allowed_rejects_bytes():
 
 
 def test_custom_field_required_if_validation_passes_when_condition_matches(tmp_path):
-    ar.register_validator("positive_req", lambda v: v > 0)
+    ar.register_validator("positive_req_pass", lambda v: v > 0)
 
     path = tmp_path / "custom_conditional_pass.csv"
     path.write_text("status,score\n" "active,10\n" "inactive,\n")
@@ -3522,7 +3524,7 @@ def test_custom_field_required_if_validation_passes_when_condition_matches(tmp_p
         {
             "status": ar.String(nullable=False),
             "score": ar.Custom(
-                "positive_req", nullable=True, required_if=("status", "active")
+                "positive_req_pass", nullable=True, required_if=("status", "active")
             ),
         }
     )
@@ -3533,7 +3535,7 @@ def test_custom_field_required_if_validation_passes_when_condition_matches(tmp_p
 
 
 def test_custom_field_required_if_validation_fails_when_condition_matches(tmp_path):
-    ar.register_validator("positive_req", lambda v: v > 0)
+    ar.register_validator("positive_req_required", lambda v: v > 0)
 
     path = tmp_path / "custom_conditional_fail.csv"
     path.write_text("status,score\n" "active,\n" "inactive,5\n")
@@ -3543,7 +3545,7 @@ def test_custom_field_required_if_validation_fails_when_condition_matches(tmp_pa
         {
             "status": ar.String(nullable=False),
             "score": ar.Custom(
-                "positive_req", nullable=True, required_if=("status", "active")
+                "positive_req_required", nullable=True, required_if=("status", "active")
             ),
         }
     )
@@ -3557,7 +3559,7 @@ def test_custom_field_required_if_validation_fails_when_condition_matches(tmp_pa
 
 
 def test_custom_field_required_if_validation_ignores_non_matching_conditions(tmp_path):
-    ar.register_validator("positive_req", lambda v: v > 0)
+    ar.register_validator("positive_req_ignore", lambda v: v > 0)
 
     path = tmp_path / "custom_conditional_ignore.csv"
     path.write_text("status,score\n" "pending,\n" "inactive,\n")
@@ -3567,7 +3569,7 @@ def test_custom_field_required_if_validation_ignores_non_matching_conditions(tmp
         {
             "status": ar.String(nullable=False),
             "score": ar.Custom(
-                "positive_req", nullable=True, required_if=("status", "active")
+                "positive_req_ignore", nullable=True, required_if=("status", "active")
             ),
         }
     )
@@ -3578,7 +3580,7 @@ def test_custom_field_required_if_validation_ignores_non_matching_conditions(tmp
 
 
 def test_custom_field_required_if_enforces_rule_logic_when_matched(tmp_path):
-    ar.register_validator("positive_req", lambda v: v > 0)
+    ar.register_validator("positive_req_rule", lambda v: v > 0)
 
     path = tmp_path / "custom_conditional_rule_fail.csv"
     path.write_text("status,score\n" "active,-5\n")
@@ -3588,7 +3590,7 @@ def test_custom_field_required_if_enforces_rule_logic_when_matched(tmp_path):
         {
             "status": ar.String(nullable=False),
             "score": ar.Custom(
-                "positive_req", nullable=True, required_if=("status", "active")
+                "positive_req_rule", nullable=True, required_if=("status", "active")
             ),
         }
     )

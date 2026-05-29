@@ -2738,10 +2738,15 @@ _SEMANTIC_PATTERNS = {
 }
 
 # Registry for custom validators registered via register_validator()
-_CUSTOM_VALIDATORS: dict[str, callable] = {}
+_CUSTOM_VALIDATORS: dict[str, Callable[[Any], object]] = {}
 
 
-def register_validator(name: str, fn: callable) -> None:
+def register_validator(
+    name: str,
+    fn: Callable[[Any], object],
+    *,
+    overwrite: bool = False,
+) -> None:
     """Register a custom validator function for use with Custom().
 
     Parameters
@@ -2751,17 +2756,32 @@ def register_validator(name: str, fn: callable) -> None:
     fn : callable
         A function that accepts a scalar value and returns True if valid,
         False otherwise.
+    overwrite : bool, default False
+        If True, allows replacing an existing custom validator with the same
+        name.
+
+    Raises
+    ------
+    ValueError
+        If the validator name is already registered and `overwrite` is False.
 
     Examples
     --------
     >>> def is_positive(value):
     ...     return value > 0
     >>> ar.register_validator("positive", is_positive)
+    # Overwriting an existing validator intentionally
+    >>> ar.register_validator("positive", lambda value: value >= 0, overwrite=True)
     """
     if not callable(fn):
         raise TypeError("fn must be callable")
     if not isinstance(name, str) or not name:
         raise ValueError("name must be a non-empty string")
+    if name in _CUSTOM_VALIDATORS and not overwrite:
+        raise ValueError(
+            f"Validator {name!r} is already registered. "
+            "To intentionally overwrite it, set 'overwrite=True'."
+        )
     _CUSTOM_VALIDATORS[name] = fn
 
 
