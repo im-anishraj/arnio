@@ -941,6 +941,7 @@ def test_astype_invalid_raises_error():
 
 
 def test_astype_object_dtype_rejected():
+    import numpy as np
     import pytest
 
     from arnio.frame import ArFrame
@@ -952,9 +953,27 @@ def test_astype_object_dtype_rejected():
         match="Arnio does not support casting columns to object dtype",
     ):
         frame.astype(object)
+    with pytest.raises(
+        TypeError,
+        match="Arnio does not support casting columns to object dtype",
+    ):
+        frame.astype("object")
+
+    with pytest.raises(
+        TypeError,
+        match="Arnio does not support casting columns to object dtype",
+    ):
+        frame.astype(np.object_)
+
+    with pytest.raises(
+        TypeError,
+        match="Arnio does not support casting columns to object dtype",
+    ):
+        frame.astype(np.dtype("O"))
 
 
 def test_astype_dict_object_dtype_rejected():
+    import numpy as np
     import pytest
 
     from arnio.frame import ArFrame
@@ -966,6 +985,23 @@ def test_astype_dict_object_dtype_rejected():
         match="Column 'a' cannot be cast to object dtype",
     ):
         frame.astype({"a": object})
+    with pytest.raises(
+        TypeError,
+        match="Column 'a' cannot be cast to object dtype",
+    ):
+        frame.astype({"a": "object"})
+
+    with pytest.raises(
+        TypeError,
+        match="Column 'a' cannot be cast to object dtype",
+    ):
+        frame.astype({"a": np.object_})
+
+    with pytest.raises(
+        TypeError,
+        match="Column 'a' cannot be cast to object dtype",
+    ):
+        frame.astype({"a": np.dtype("O")})
 
 
 # ── drop_columns ──────────────────────────────────────────────────────────────
