@@ -724,6 +724,9 @@ class Field:
             if self.max is not None:
                 if isinstance(self.max, bool) or not isinstance(self.max, (int, float)):
                     raise TypeError("max must be numeric or None")
+            if self.min is not None and self.max is not None:
+                if self.min > self.max:
+                    raise ValueError("min must be less than or equal to max")
         if self.dtype is not None and not isinstance(self.dtype, str):
             raise TypeError(
                 f"dtype must be a str or None, got {type(self.dtype).__name__}"
