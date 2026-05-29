@@ -1117,6 +1117,15 @@ class TestClipNumeric:
 
         assert list(df["x"]) == [0, 2, 5]
 
+    def test_clip_numeric_out_of_range_bound_on_int64_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [-1, 2, 10]}))
+
+        with pytest.raises(ValueError, match="within int64 range"):
+            ar.clip_numeric(frame, upper=1e20)
+
+        with pytest.raises(ValueError, match="within int64 range"):
+            ar.clip_numeric(frame, lower=-1e20)
+
     def test_clip_numeric_non_integral_bound_on_float64_accepted(self):
         # Non-integral bounds are valid for float64 columns.
         frame = ar.from_pandas(pd.DataFrame({"v": [-1.0, 2.5, 9.9]}))
@@ -3690,6 +3699,12 @@ def test_fill_nulls_validation_lossy_and_non_finite():
         match="Lossy or non-finite numeric fill values are not permitted for integer columns.",
     ):
         ar.fill_nulls(int_frame, float("nan"), subset=["x"])
+
+    with pytest.raises(
+        ValueError,
+        match="Lossy or non-finite numeric fill values are not permitted for integer columns.",
+    ):
+        ar.fill_nulls(int_frame, 1e20, subset=["x"])
 
     float_frame = ar.from_pandas(pd.DataFrame({"x": [1.0, None]}))
 
