@@ -1,3 +1,4 @@
+import argparse
 import csv
 import tempfile
 import time
@@ -35,7 +36,18 @@ def run_benchmark(filename):
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="Benchmark arnio.read_csv() performance."
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Use a small row count instead of the full 200k-row dataset.",
+    )
+    args = parser.parse_args()
+
+    num_rows = 500 if args.dry_run else 200_000
     with tempfile.TemporaryDirectory() as tmpdir:
         test_file = Path(tmpdir) / "large_benchmark.csv"
-        generate_test_csv(test_file)
+        generate_test_csv(test_file, num_rows=num_rows)
         run_benchmark(test_file)
