@@ -63,6 +63,9 @@ dev = [
     "PyYAML>=6.0",
     "duckdb>=1.0",
     "tomli; python_version < '3.11'",
+    "mypy>=1.0",
+    "pandas-stubs",
+    "types-setuptools",
 ]
 sklearn = [
     "scikit-learn>=1.0",
