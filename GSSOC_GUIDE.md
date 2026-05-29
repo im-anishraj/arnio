@@ -20,8 +20,8 @@ features.
 
 1. Timeline: Assigned contributors should post the progress update or open a draft/regular PR within 3 days of an assignment.
 2. Time extension request: If the contributor needs more time, they should comment within those 3 days.
-3. Inactivity: If the assigned contributors remains inactive without any progress update, time extension request or do not open a draft/regular PR, then    maintainers may unassign/reassign that issue after 5 days.
-4. Github issue comments: All the conversation regarding an issue must remain in the github issue comments section of that particular issue and it remains as the source of truth. 
+3. Inactivity: If the assigned contributors remains inactive without any progress update, time extension request or do not open a draft/regular PR, maintainers may unassign/reassign that issue after 5 days.
+4. Github issue comments: All the conversation regarding an issue must remain in the Github issue comments section of that particular issue and it remains as the source of truth. 
 
 ## GSSoC FAQ
 
