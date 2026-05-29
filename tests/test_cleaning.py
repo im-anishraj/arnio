@@ -162,6 +162,18 @@ class TestFillNulls:
         df = ar.to_pandas(result)
         assert df["b"].isnull().sum() == 0, "Nulls remain after filling with 'missing'"
 
+    def test_fill_nulls_empty_subset_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1, None], "b": ["x", None]}))
+        with pytest.raises(ValueError, match="subset cannot be empty"):
+            ar.fill_nulls(frame, 0, subset=[])
+
+    def test_fill_nulls_subset_none_still_works(self):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1, None], "b": ["x", None]}))
+        result = ar.fill_nulls(frame, 0)
+        df = ar.to_pandas(result)
+        assert df["a"].isnull().sum() == 0
+        assert df["b"].isnull().sum() == 0
+
 
 class TestWinsorizeOutliers:
     def test_winsorize_outliers_clips_numeric_values(self):
@@ -733,6 +745,31 @@ class TestDropDuplicates:
         # subset with NaN
         res_subset = ar.to_pandas(ar.drop_duplicates(frame, subset=["val1"]))
         assert len(res_subset) == 2
+
+    def test_drop_duplicates_zero_column_keep_first(self):
+        frame = ar.from_pandas(pd.DataFrame(index=range(5)))
+        result = ar.drop_duplicates(frame, keep="first")
+        assert result.shape == (1, 0)
+
+    def test_drop_duplicates_zero_column_keep_last(self):
+        frame = ar.from_pandas(pd.DataFrame(index=range(5)))
+        result = ar.drop_duplicates(frame, keep="last")
+        assert result.shape == (1, 0)
+
+    def test_drop_duplicates_zero_column_keep_none(self):
+        frame = ar.from_pandas(pd.DataFrame(index=range(5)))
+        result = ar.drop_duplicates(frame, keep="none")
+        assert result.shape == (0, 0)
+
+    def test_drop_duplicates_zero_column_keep_false(self):
+        frame = ar.from_pandas(pd.DataFrame(index=range(5)))
+        result = ar.drop_duplicates(frame, keep=False)
+        assert result.shape == (0, 0)
+
+    def test_drop_duplicates_zero_column_no_rows(self):
+        frame = ar.from_pandas(pd.DataFrame(index=range(0)))
+        result = ar.drop_duplicates(frame)
+        assert result.shape == (0, 0)
 
 
 class TestDropColumns:

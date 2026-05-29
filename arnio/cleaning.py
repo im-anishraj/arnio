@@ -421,15 +421,6 @@ def fill_nulls(
             raise ValueError(
                 "fill_nulls: subset cannot be empty; pass subset=None to fill all columns"
             )
-        subset = _validate_existing_column_sequence(
-            subset,
-            available_columns=frame.columns,
-            argument_name="subset",
-            missing_message=lambda missing, available: (
-                f"Missing columns for fill_nulls: {missing}. "
-                f"Available columns: {available}"
-            ),
-        )
     if not isinstance(value, (str, int, float, bool)):
         raise TypeError(
             f"fill value must be a supported scalar (str, int, float, or bool), "
