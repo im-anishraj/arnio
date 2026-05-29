@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import re
 import warnings
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Callable
@@ -1224,6 +1225,29 @@ class SchemaDiff:
         return "\n".join(lines)
 
 
+def _schema_rule_name(rule: Callable[[pd.DataFrame], list[ValidationIssue]]) -> str:
+    """Return a stable best-effort display name for a schema rule callable."""
+    qualname = getattr(rule, "__qualname__", None)
+    if isinstance(qualname, str) and qualname:
+        return qualname
+
+    name = getattr(rule, "__name__", None)
+    if isinstance(name, str) and name:
+        return name
+
+    rule_type = type(rule)
+    return getattr(rule_type, "__qualname__", rule_type.__name__)
+
+
+def _normalize_schema_rules(
+    rules: Sequence[Callable[[pd.DataFrame], list[ValidationIssue]]] | None,
+) -> tuple[str, ...] | None:
+    """Summarize schema rules by visible callable identity for diff output."""
+    if not rules:
+        return None
+    return tuple(_schema_rule_name(rule) for rule in rules)
+
+
 def diff_schema(
     expected: Schema | dict[str, Field],
     observed: Schema | dict[str, Field],
@@ -1241,7 +1265,10 @@ def diff_schema(
     -------
     SchemaDiff
         Structured differences covering missing columns, extra columns,
-        changed field attributes, and schema-level options.
+        changed field attributes, and schema-level options. Cross-field
+        ``Schema.rules`` are compared by best-effort callable identity using
+        visible callable names and rule count; exact callable equivalence is
+        intentionally not inferred.
     """
     expected_schema = expected if isinstance(expected, Schema) else Schema(expected)
     observed_schema = observed if isinstance(observed, Schema) else Schema(observed)
@@ -1306,6 +1333,19 @@ def diff_schema(
                 attribute="unique",
                 expected=_normalize_unique(expected_schema.unique),
                 observed=_normalize_unique(observed_schema.unique),
+            )
+        )
+
+    expected_rules = _normalize_schema_rules(expected_schema.rules)
+    observed_rules = _normalize_schema_rules(observed_schema.rules)
+    if expected_rules != observed_rules:
+        differences.append(
+            SchemaDiffEntry(
+                column=None,
+                change="changed_schema",
+                attribute="rules",
+                expected=expected_rules,
+                observed=observed_rules,
             )
         )
 
