@@ -2697,15 +2697,25 @@ def _normalize_sequence(value: Any) -> Any:
 
 
 def _clean_scalar(value: Any) -> Any:
-    """Recursively convert numpy scalars and NaN values to JSON-safe Python types."""
+    """Recursively convert numpy/pandas values to JSON-safe Python types."""
     if isinstance(value, dict):
         return {key: _clean_scalar(val) for key, val in value.items()}
+
+    if isinstance(value, np.ndarray):
+        return [_clean_scalar(item) for item in value.tolist()]
+
     if isinstance(value, (list, tuple, set)):
         return [_clean_scalar(item) for item in value]
+
+    if isinstance(value, pd.Timestamp):
+        return value.isoformat()
+
     if pd.isna(value):
         return None
+
     if hasattr(value, "item"):
         return value.item()
+
     return value
 
 
