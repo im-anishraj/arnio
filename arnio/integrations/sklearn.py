@@ -128,26 +128,19 @@ class ArnioCleaner(BaseEstimator, TransformerMixin):
         if input_features is None:
             return self.feature_names_out_
 
-        # ---------- NEW VALIDATION ----------
         # 1. Reject bare strings / bytes
         if isinstance(input_features, (str, bytes)):
-            raise TypeError(
-                "input_features must be a sequence of strings, not str"
-            )
+            raise TypeError("input_features must be a sequence of strings, not str")
 
         # 2. Reject non‑iterable / non‑sequence values
-        if not hasattr(input_features, '__len__') or not hasattr(input_features, '__iter__'):
-            raise TypeError(
-                "input_features must be a sequence of strings"
-            )
+        if not hasattr(input_features, "__len__") or not hasattr(
+            input_features, "__iter__"
+        ):
+            raise TypeError("input_features must be a sequence of strings")
 
         # 3. Reject sequences containing non‑string elements
         if not all(isinstance(f, str) for f in input_features):
-            raise TypeError(
-                "All input_features must be strings"
-            )
-        # ---------- END NEW VALIDATION ----------
-
+            raise TypeError("All input_features must be strings")
         # Existing length and order checks (unchanged)
         if len(input_features) != self.n_features_in_:
             raise ValueError(

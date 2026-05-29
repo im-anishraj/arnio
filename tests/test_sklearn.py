@@ -306,10 +306,6 @@ def test_arniocleaner_clone_with_invalid_params_does_not_raise():
     assert cloned.copy == "yes"
 
 
-# ============================================================
-# NEW TESTS for get_feature_names_out input validation (issue #1947)
-# ============================================================
-
 @pytest.fixture
 def fitted_cleaner():
     """Cleaner fitted on two features 'A' and 'B' for input validation tests."""
