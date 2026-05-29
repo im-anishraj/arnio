@@ -1,3 +1,4 @@
+# CodeQL Security Scan
 name: "CodeQL Security Scan"
 
 on:
