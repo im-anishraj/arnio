@@ -1,3 +1,4 @@
+import importlib
 import warnings
 
 import numpy as np
@@ -9,6 +10,47 @@ pytest.importorskip("sklearn")
 from sklearn.pipeline import Pipeline  # noqa: E402
 
 from arnio.integrations.sklearn import ArnioCleaner  # noqa: E402
+
+# ---------------------------------------------------------------------------
+# Namespace discoverability tests (issue: from arnio.integrations import
+# ArnioCleaner should work when sklearn is installed)
+# ---------------------------------------------------------------------------
+
+
+def test_arniocleaner_importable_from_integrations_namespace():
+    """ArnioCleaner must be importable from arnio.integrations when sklearn is installed."""
+    from arnio.integrations import ArnioCleaner as AC  # noqa: PLC0415
+
+    assert AC is ArnioCleaner
+
+
+def test_arniocleaner_in_integrations_all():
+    """ArnioCleaner must be listed in arnio.integrations.__all__."""
+    import arnio.integrations as integrations  # noqa: PLC0415
+
+    assert "ArnioCleaner" in integrations.__all__
+
+
+def test_arniocleaner_missing_sklearn_raises_clear_import_error():
+    """When sklearn is absent, importing ArnioCleaner from arnio.integrations
+    must raise ImportError with a message directing users to install arnio[sklearn].
+    """
+    from unittest.mock import patch  # noqa: PLC0415
+
+    import arnio.integrations as integrations  # noqa: PLC0415
+
+    # Patch importlib.import_module inside the integrations __getattr__ so that
+    # importing "arnio.integrations.sklearn" behaves as if sklearn is not installed.
+    def _raise_import_error(name, *args, **kwargs):
+        if name == "arnio.integrations.sklearn":
+            raise ImportError("No module named 'sklearn'")
+        return importlib.import_module(name, *args, **kwargs)
+
+    with patch(
+        "arnio.integrations.importlib.import_module", side_effect=_raise_import_error
+    ):
+        with pytest.raises(ImportError, match="arnio\\[sklearn\\]"):
+            _ = integrations.__getattr__("ArnioCleaner")
 
 
 def test_arniocleaner_non_dataframe_input():

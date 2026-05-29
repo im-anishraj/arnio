@@ -400,7 +400,9 @@ class ArFrame:
 
         actual_n = min(n, len(self))
 
-        return ArFrame(self._frame.select_rows(0, actual_n))
+        return ArFrame(
+            self._frame.select_rows(0, actual_n), attrs=copy.deepcopy(self._attrs)
+        )
 
     def tail(self, n: int = 5) -> ArFrame:
         """Return the last n rows as an ArFrame.
@@ -421,7 +423,9 @@ class ArFrame:
         actual_n = min(n, len(self))
         start = max(0, len(self) - actual_n)
 
-        return ArFrame(self._frame.select_rows(start, actual_n))
+        return ArFrame(
+            self._frame.select_rows(start, actual_n), attrs=copy.deepcopy(self._attrs)
+        )
 
     def to_dict(self) -> dict[str, list]:
         """Export the frame as a Python dictionary.
@@ -710,6 +714,14 @@ class ArFrame:
 
         if rows == 0:
             return f"{header}\nColumns: {truncated_names}\n(empty frame)"
+
+        if cols == 0:
+            dtypes_line = f"DTypes: {self.dtypes}"
+            memory_line = f"Memory: {self.memory_usage()} bytes"
+            return (
+                f"{header}\nColumns: {truncated_names}\n{dtypes_line}\n"
+                f"{memory_line}\n(no columns to display)"
+            )
 
         actual_n = min(5, rows)
         col_data = [

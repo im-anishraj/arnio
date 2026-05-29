@@ -1414,7 +1414,7 @@ def filter_rows(
 def round_numeric_columns(
     frame,
     *,
-    subset: list[str] | None = None,
+    subset: Sequence[str] | None = None,
     decimals: int = 0,
 ):
     """Round numeric columns to specified decimal places.
@@ -1425,7 +1425,7 @@ def round_numeric_columns(
     ----------
     frame : ArFrame or pd.DataFrame
         Input data frame.
-    subset : list[str], optional
+    subset : sequence of str, optional
         Column names to round. If None, applies to all numeric columns.
     decimals : int, default 0
         Number of decimal places to round to.
@@ -1443,8 +1443,7 @@ def round_numeric_columns(
     from .convert import from_pandas, to_pandas
 
     frame, is_arframe = _validate_frame(frame, allow_pandas=True)
-    if subset is not None and not isinstance(subset, list):
-        raise TypeError("subset must be a list of column names")
+
     if isinstance(decimals, bool) or not isinstance(decimals, int):
         raise TypeError("decimals must be an integer")
 

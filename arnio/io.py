@@ -902,6 +902,9 @@ def write_csv(
     >>> ar.write_csv(frame, "output.csv")
     >>> ar.write_csv(frame, "output.tsv", delimiter="\\t")
     """
+    if not isinstance(frame, ArFrame):
+        raise TypeError("frame must be an ArFrame")
+
     if not isinstance(path, (str, bytes, os.PathLike)):
         raise TypeError(
             f"path must be a string, bytes, or os.PathLike object, got {type(path).__name__!r}"
@@ -1111,6 +1114,7 @@ def read_jsonl(
     path: str | os.PathLike[str],
     *,
     encoding: str = "utf-8",
+    encoding_errors: str = "strict",
     nrows: int | None = None,
 ) -> ArFrame:
     """Read a JSON Lines file into an ArFrame.
@@ -1163,6 +1167,8 @@ def read_jsonl(
 
     path = os.fspath(path)
 
+    encoding_errors = _validate_encoding_errors(encoding_errors)
+
     if nrows is not None:
         if isinstance(nrows, bool) or not isinstance(nrows, int):
             raise TypeError("nrows must be an integer")
@@ -1196,7 +1202,7 @@ def read_jsonl(
         return result
 
     try:
-        with open(path, encoding=encoding) as fh:
+        with open(path, encoding=encoding, errors=encoding_errors) as fh:
             for lineno, raw_line in enumerate(fh, start=1):
                 line = raw_line.rstrip("\r\n")
                 if not line.strip():
@@ -1434,6 +1440,9 @@ def write_parquet(
     >>> ar.write_parquet(frame, "output.pq", compression="zstd")
     >>> ar.write_parquet(frame, "output.parquet", row_group_size=50_000)
     """
+    if not isinstance(frame, ArFrame):
+        raise TypeError("frame must be an ArFrame")
+
     from .convert import to_pandas
 
     if not isinstance(path, (str, bytes, os.PathLike)):
