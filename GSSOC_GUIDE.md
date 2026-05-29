@@ -54,10 +54,10 @@ Share what you tried, the exact command or code, the error output, and your oper
 ## Good First Contributions
 
 Start with issues labeled:
-- `gssoc: good first issue`
+- `gssoc:good-first-issue`
 - `level:beginner`
-- `size: xs` or `size: s`
-- `status: ready`
+- `size:xs` or `size:s`
+- `status:ready`
 
 Good first tasks usually involve tests, docs, examples, small API validation, or focused Python wrappers.
 
@@ -103,7 +103,8 @@ On Windows, install Visual Studio Build Tools with the "Desktop development with
 - Unassigned GSSoC PRs for claimed issues.
 - Huge refactors mixed with a small fix.
 - AI-generated bulk changes without understanding or tests.
-- Editing unrelated files.
+- **Editing unrelated files or modifying sensitive workflows:** Do not touch files in `.github/workflows/` unless your issue explicitly requires it and a maintainer has approved.
+- **Stray root files:** Always check `git status` before committing. Do not accidentally commit generated artifacts, temporary files (like `=`), or unrelated files at the repository root. Keep your PR strictly scoped to your issue.
 - Adding dependencies without maintainer approval.
 
 ## Asking for Help

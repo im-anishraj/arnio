@@ -402,7 +402,9 @@ class TestPipeline:
         frame = ar.read_csv(sample_csv)
         result = ar.pipeline(frame, [("drop_columns", {"columns": []})])
 
-        assert result is frame
+        assert result is not frame
+        assert result.columns == frame.columns
+        assert len(result) == len(frame)
 
     def test_pipeline_drop_columns_rejects_missing_columns(self, sample_csv):
         import pytest

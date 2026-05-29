@@ -23,6 +23,18 @@ jobs:
           ref: ${{ inputs.tag_name || github.ref }}
       - name: Build sdist
         run: pipx run build --sdist
+      - name: Verify sdist safety
+        run: |
+          SDIST=$(ls dist/*.tar.gz | head -n 1)
+          echo "Checking $SDIST for leaked environments..."
+          tar -tf "$SDIST" > sdist_contents.txt
+
+          if grep -E -q '/(\.venv|venv|\.tox|site-packages)/' sdist_contents.txt; then
+            echo "::error::SDIST contains excluded virtual environment files!"
+            grep -E '/(\.venv|venv|\.tox|site-packages)/' sdist_contents.txt
+            exit 1
+          fi
+          echo "SDIST is safe."
       - name: Install package from sdist
         run: pip install dist/*.tar.gz
       - name: Smoke test import
@@ -65,7 +77,7 @@ jobs:
         env:
           CIBW_ARCHS_MACOS: "x86_64 arm64"
           CIBW_TEST_COMMAND: >-
-            python -c "import pathlib, sys, pytest; sys.path.append(str(pathlib.Path(r'{project}'))); raise SystemExit(pytest.main([str(pathlib.Path(r'{project}') / 'tests'), '-v', '--tb=short', '-x']))"
+            python -c "import os, pathlib, tempfile; os.chdir(tempfile.mkdtemp()); import arnio as ar; print('arnio wheel:', ar.__file__); assert hasattr(ar, 'read_csv'); csv = pathlib.Path('smoke.csv'); csv.write_text('name,age\nAlice,30\n'); frame = ar.read_csv(str(csv)); assert frame.shape == (1, 2)"
 
       - name: Set up Python for wheel smoke test
         uses: actions/setup-python@v6

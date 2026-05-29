@@ -683,9 +683,12 @@ class TestDropColumns:
     def test_drop_columns_allows_empty_input_as_no_op(self, sample_csv):
         frame = ar.read_csv(sample_csv)
 
-        result = ar.drop_columns(frame, [])
+        result_helper = ar.drop_columns(frame, [])
+        result_method = frame.drop_columns([])
 
-        assert result is frame
+        assert result_helper is not frame
+        assert result_helper == frame
+        assert result_helper == result_method
 
     def test_drop_columns_rejects_missing_columns(self, sample_csv):
         frame = ar.read_csv(sample_csv)
@@ -1371,6 +1374,26 @@ class TestStandardizeMissingTokens:
         assert result["value"].iloc[2] == "--"
         assert result["value"].iloc[3] == "kept"
 
+    def test_standardize_missing_tokens_scalar_int_raises(self):
+        frame = pd.DataFrame({"x": ["NA", "N", "ok"]})
+        with pytest.raises(TypeError, match="tokens must be a list of strings"):
+            ar.standardize_missing_tokens(frame, tokens=1)
+
+    def test_standardize_missing_tokens_dict_raises(self):
+        frame = pd.DataFrame({"x": ["NA", "N", "ok"]})
+        with pytest.raises(TypeError, match="tokens must be a list of strings"):
+            ar.standardize_missing_tokens(frame, tokens={"NA": "bad"})
+
+    def test_standardize_missing_tokens_bare_string_raises(self):
+        frame = pd.DataFrame({"x": ["NA", "N", "ok"]})
+        with pytest.raises(TypeError, match="tokens must be a list of strings"):
+            ar.standardize_missing_tokens(frame, tokens="NA")
+
+    def test_standardize_missing_tokens_list_with_non_string_item_raises(self):
+        frame = pd.DataFrame({"x": ["NA", "N", "ok"]})
+        with pytest.raises(TypeError, match="tokens must be a list of strings"):
+            ar.standardize_missing_tokens(frame, tokens=["NA", 1])
+
 
 class TestStripWhitespace:
     def test_strip(self, csv_with_whitespace):
@@ -1518,7 +1541,7 @@ class TestNormalizeCase:
         import pandas as pd
 
         frame = ar.from_pandas(pd.DataFrame({"x": ["A"]}))
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="case_type must be one of"):
             ar.normalize_case(frame, case_type="invalid")
 
 
@@ -2161,6 +2184,10 @@ class TestTrimColumnNames:
         result = ar.trim_column_names(frame)
         assert to_pandas(result).columns.tolist() == ["name", "age"]
 
+    def test_trim_column_names_rejects_non_frame_input(self):
+        with pytest.raises(TypeError, match="frame must be an ArFrame"):
+            ar.trim_column_names([])
+
     def test_trim_column_names_already_clean(self):
         df = pd.DataFrame({"name": [1], "age": [2]})
         frame = from_pandas(df)
@@ -2201,6 +2228,24 @@ class TestTrimColumnNames:
         frame = from_pandas(pd.DataFrame({" name ": [1]}))
         result = ar.trim_column_names(frame)
         assert result.columns == ["name"]
+
+
+class TestMixedFrameValidation:
+    @pytest.mark.parametrize(
+        ("func", "kwargs"),
+        [
+            (
+                "combine_columns",
+                {"subset": ["a"], "separator": "-", "output_column": "combined"},
+            ),
+            ("drop_constant_columns", {}),
+        ],
+    )
+    def test_mixed_helpers_reject_non_frame_input(self, func, kwargs):
+        with pytest.raises(
+            TypeError, match="frame must be an ArFrame or a pandas DataFrame"
+        ):
+            getattr(ar, func)([], **kwargs)
 
 
 def test_from_pandas_multiindex_columns_are_stringified():
@@ -3286,6 +3331,49 @@ class TestSafeDivideColumns:
             ar.safe_divide_columns(
                 frame, numerator="num", denominator="den", output_column="ratio"
             )
+
+    def test_fill_value_bool_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1.0, 2.0], "b": [1.0, 0.0]}))
+        with pytest.raises(
+            TypeError, match="fill_value must be a finite float, not bool"
+        ):
+            ar.safe_divide_columns(frame, "a", "b", "ratio", fill_value=True)
+
+    def test_fill_value_nan_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1.0, 2.0], "b": [1.0, 0.0]}))
+        with pytest.raises(ValueError, match="fill_value must be finite"):
+            ar.safe_divide_columns(frame, "a", "b", "ratio", fill_value=float("nan"))
+
+    def test_fill_value_inf_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1.0, 2.0], "b": [1.0, 0.0]}))
+        with pytest.raises(ValueError, match="fill_value must be finite"):
+            ar.safe_divide_columns(frame, "a", "b", "ratio", fill_value=float("inf"))
+
+    def test_fill_value_negative_inf_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1.0, 2.0], "b": [1.0, 0.0]}))
+        with pytest.raises(ValueError, match="fill_value must be finite"):
+            ar.safe_divide_columns(frame, "a", "b", "ratio", fill_value=float("-inf"))
+
+    def test_fill_value_valid_float_passes(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "a": [1.0, 2.0],
+                    "b": [1.0, 0.0],
+                }
+            )
+        )
+
+        result = ar.safe_divide_columns(
+            frame,
+            "a",
+            "b",
+            "ratio",
+            fill_value=0.5,
+        )
+
+        df = ar.to_pandas(result)
+        assert df["ratio"].tolist() == [1.0, 0.5]
 
 
 class TestClipNumericNativeRegression:

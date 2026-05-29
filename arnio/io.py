@@ -194,6 +194,9 @@ def _validate_decimal_separator(decimal_separator: str) -> str:
     return decimal_separator
 
 
+_INVALID_DELIMITERS: frozenset[str] = frozenset({"\n", "\r", "\0", '"'})
+
+
 def _validate_delimiter(delimiter: str) -> str:
     """Validate CSV delimiter."""
     if not isinstance(delimiter, str):
@@ -202,6 +205,12 @@ def _validate_delimiter(delimiter: str) -> str:
     if len(delimiter) != 1:
         raise ValueError("delimiter must be exactly one character")
 
+    if delimiter in _INVALID_DELIMITERS:
+        raise ValueError(
+            f"delimiter {delimiter!r} is not allowed; the following characters "
+            f"cannot be used as field delimiters: newline (\\n), "
+            f'carriage-return (\\r), NUL (\\0), double-quote (").'
+        )
     return delimiter
 
 
@@ -212,6 +221,9 @@ def _validate_usecols(usecols: Sequence[str]) -> list[str]:
 
     if not isinstance(usecols, Sequence):
         raise TypeError("usecols must be a sequence of strings")
+
+    if len(usecols) == 0:
+        raise ValueError("usecols must not be empty")
 
     for col in usecols:
         if not isinstance(col, str):
@@ -636,7 +648,7 @@ def read_csv_chunked(
     path: str | os.PathLike[str] | io.TextIOBase,
     *,
     chunksize: int = 10_000,
-    delimiter: str = ",",
+    delimiter: str | None = None,
     has_header: bool = True,
     usecols: list[str] | None = None,
     nrows: int | None = None,
@@ -660,11 +672,17 @@ def read_csv_chunked(
     path : str or file-like object
         Path to the CSV file. Supports .csv, .txt, and .tsv extensions.
         Text file-like objects are copied to a temporary file in bounded
-        chunks before native parsing.
+        chunks before native parsing.  For ``.tsv`` paths the delimiter is
+        automatically set to ``'\\t'`` when ``delimiter`` is omitted.
     chunksize : int, default 10_000
         Maximum number of data rows per yielded chunk.
-    delimiter : str, default ","
-        Field delimiter character.
+    delimiter : str or None, default None
+        Field delimiter character.  When ``None`` (the default) the
+        delimiter is inferred from the file extension: ``'\\t'`` for
+        ``.tsv`` files and ``','`` for everything else.  Passing an
+        explicit value always takes precedence — for example,
+        ``delimiter=','`` reads a comma-delimited ``.tsv`` file without
+        any auto-detection.
     has_header : bool, default True
         Whether the file has a header row.
     usecols : list[str], optional
@@ -723,12 +741,22 @@ def read_csv_chunked(
     ...     clean = ar.pipeline(chunk, [("drop_nulls",)])
     ...     df = ar.to_pandas(clean)
     ...     process(df)
+
+    Read a TSV file — tab delimiter is inferred automatically:
+
+    >>> for chunk in ar.read_csv_chunked("data.tsv", chunksize=10_000):
+    ...     process(chunk)
+
+    Override auto-detection (e.g. a comma-delimited file with a .tsv extension):
+
+    >>> for chunk in ar.read_csv_chunked("data.tsv", delimiter=",", chunksize=10_000):
+    ...     process(chunk)
     """
     is_path_input = isinstance(path, (str, os.PathLike))
     path, should_cleanup, is_materialized_text = _materialize_csv_input(path)
     try:
+        path_lower = path.lower()
         if is_path_input:
-            path_lower = path.lower()
             if not (
                 path_lower.endswith(".csv")
                 or path_lower.endswith(".txt")
@@ -740,6 +768,14 @@ def read_csv_chunked(
                 )
 
         _validate_csv_path(path, encoding)
+
+        # Resolve the sentinel: auto-detect tab for .tsv only when the caller
+        # truly omitted delimiter (None).  An explicit delimiter="," is always
+        # honoured, even for .tsv paths.  File-like objects are materialised
+        # to a temporary .csv path, so auto-detection safely falls back to ","
+        # for those inputs — consistent with read_csv behaviour.
+        if delimiter is None:
+            delimiter = "\t" if path_lower.endswith(".tsv") else ","
 
         decimal_separator = _validate_decimal_separator(decimal_separator)
         _validate_thousands_separator(thousands_separator, decimal_separator)
@@ -854,7 +890,11 @@ def write_csv(
     >>> ar.write_csv(frame, "output.csv")
     >>> ar.write_csv(frame, "output.tsv", delimiter="\\t")
     """
-    path = os.fspath(path)
+    if not isinstance(path, (str, bytes, os.PathLike)):
+        raise TypeError(
+            f"path must be a string, bytes, or os.PathLike object, got {type(path).__name__!r}"
+        )
+    path = os.fsdecode(os.fspath(path))
     path_lower = path.lower()
     if not (
         path_lower.endswith(".csv")
@@ -873,6 +913,10 @@ def write_csv(
         raise ValueError("delimiter must not be a newline character")
     if delimiter == '"':
         raise ValueError("delimiter must not be the CSV quote character")
+    if (ord(delimiter) < 32 or ord(delimiter) == 127) and delimiter != "\t":
+        raise ValueError(
+            f"delimiter must not be a control character, got {delimiter!r}"
+        )
     if not isinstance(line_terminator, str):
         raise TypeError("line_terminator must be a string")
     if line_terminator == "":
@@ -1076,7 +1120,8 @@ def read_jsonl(
         ``nrows`` is not a non-negative integer.
     JsonlReadError
         If the file is empty (no data rows), or if a line contains invalid
-        JSON.  The error message includes the 1-based line number.
+        JSON or unsupported nested values. The error message includes the
+        1-based line number.
 
     Examples
     --------
@@ -1085,7 +1130,7 @@ def read_jsonl(
     """
     import json
 
-    from .convert import from_pandas
+    from .convert import _is_nested, from_pandas
 
     if not isinstance(encoding, str):
         raise TypeError(f"encoding must be a string, got {type(encoding).__name__!r}")
@@ -1117,6 +1162,17 @@ def read_jsonl(
         )
 
     records: list[dict] = []
+
+    def _reject_duplicate_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
+        seen = set()
+        result = {}
+        for k, v in pairs:
+            if k in seen:
+                raise ValueError(f"duplicate key {k!r}")
+            seen.add(k)
+            result[k] = v
+        return result
+
     try:
         with open(path, encoding=encoding) as fh:
             for lineno, raw_line in enumerate(fh, start=1):
@@ -1126,16 +1182,27 @@ def read_jsonl(
                 if nrows is not None and len(records) >= nrows:
                     break
                 try:
-                    obj = json.loads(line)
+                    obj = json.loads(line, object_pairs_hook=_reject_duplicate_keys)
                 except json.JSONDecodeError as exc:
                     raise JsonlReadError(
                         f"Invalid JSON on line {lineno} of {path!r}: {exc}"
+                    ) from exc
+                except ValueError as exc:
+                    raise JsonlReadError(
+                        f"Duplicate key on line {lineno} of {path!r}: {exc}"
                     ) from exc
                 if not isinstance(obj, dict):
                     raise JsonlReadError(
                         f"Expected a JSON object on line {lineno} of {path!r}, "
                         f"got {type(obj).__name__}"
                     )
+                for key, val in obj.items():
+                    if _is_nested(val):
+                        raise JsonlReadError(
+                            f"Column {key!r} contains unsupported nested value "
+                            f"of type {type(val).__name__!r} on line {lineno} of {path!r}. "
+                            "Convert nested objects to strings or flatten them first."
+                        )
                 records.append(obj)
     except OSError as exc:
         raise JsonlReadError(str(exc)) from exc
@@ -1168,7 +1235,10 @@ def sniff_delimiter(
     encoding : str, default "utf-8"
         File encoding.
     sample_size : int, default 2048
-        Number of bytes to sample from the start of the file for sniffing.
+        Number of characters to sample from the start of the file for sniffing.
+        Note: For multi-byte encodings like UTF-8 with multi-byte characters
+        (emoji, CJK), the actual bytes read may exceed this value since
+        characters are counted, not bytes.
 
     Returns
     -------
@@ -1344,13 +1414,21 @@ def write_parquet(
     """
     from .convert import to_pandas
 
-    path = os.fspath(path)
+    if not isinstance(path, (str, bytes, os.PathLike)):
+        raise TypeError(
+            f"path must be a string, bytes, or os.PathLike object, got {type(path).__name__!r}"
+        )
+
+    path = os.fsdecode(os.fspath(path))
     path_lower = path.lower()
     if not (path_lower.endswith(".parquet") or path_lower.endswith(".pq")):
         raise ValueError(
             f"Unsupported file format: {path}. "
             "write_parquet only supports .parquet and .pq files."
         )
+
+    if not isinstance(compression, str):
+        raise TypeError("compression must be a string")
 
     if compression not in _VALID_COMPRESSIONS:
         raise ValueError(

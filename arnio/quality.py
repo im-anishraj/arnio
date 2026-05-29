@@ -93,6 +93,12 @@ class ColumnProfile:
     estimated from a deterministic sample. When ``True``,
     ``top_values_sample_count`` and ``top_values_sample_ratio`` describe the
     sample used for the counts/ratios.
+
+        For numeric columns with at least four non-null values, ``iqr``,
+    ``outlier_lower_bound``, and ``outlier_upper_bound`` describe the
+    1.5×IQR (Tukey) fences used with ``outlier_count`` / ``outlier_ratio``.
+    A value is an outlier when it is strictly less than
+    ``outlier_lower_bound`` or strictly greater than ``outlier_upper_bound``.
     """
 
     name: str
@@ -116,6 +122,11 @@ class ColumnProfile:
     q50: float | None = None
     q75: float | None = None
     q95: float | None = None
+    iqr: float | None = None
+    outlier_lower_bound: float | None = None
+    outlier_upper_bound: float | None = None
+    outlier_count: int | None = None
+    outlier_ratio: float | None = None
     sample_values: list[Any] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     top_values: list[tuple[Any, int, float]] | None = None
@@ -123,6 +134,65 @@ class ColumnProfile:
     top_values_sample_count: int | None = None
     top_values_sample_ratio: float | None = None
     histogram: list[tuple[float, float, int, float]] | None = None
+
+    def __post_init__(self) -> None:
+        """Validate structural field invariants for ColumnProfile."""
+        counts = {
+            "row_count": self.row_count,
+            "null_count": self.null_count,
+            "unique_count": self.unique_count,
+            "empty_string_count": self.empty_string_count,
+            "whitespace_count": self.whitespace_count,
+        }
+        for field_name, value in counts.items():
+            if not isinstance(value, int) or isinstance(value, bool):
+                raise TypeError(
+                    f"{field_name} must be an integer, got {type(value).__name__}"
+                )
+            if value < 0:
+                raise ValueError(f"{field_name} cannot be negative: {value}")
+
+        if self.top_values_sample_count is not None:
+            if not isinstance(self.top_values_sample_count, int) or isinstance(
+                self.top_values_sample_count, bool
+            ):
+                raise TypeError(
+                    f"top_values_sample_count must be an integer, got {type(self.top_values_sample_count).__name__}"
+                )
+            if self.top_values_sample_count < 0:
+                raise ValueError(
+                    f"top_values_sample_count cannot be negative: {self.top_values_sample_count}"
+                )
+
+        ratios = {
+            "null_ratio": self.null_ratio,
+            "unique_ratio": self.unique_ratio,
+        }
+        for field_name, value in ratios.items():
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise TypeError(
+                    f"{field_name} must be a number, got {type(value).__name__}"
+                )
+            if not math.isfinite(value) or value < 0.0 or value > 1.0:
+                raise ValueError(
+                    f"{field_name} must be a finite ratio between 0.0 and 1.0: {value}"
+                )
+
+        optional_ratios = {
+            "email_validity_ratio": self.email_validity_ratio,
+            "url_validity_ratio": self.url_validity_ratio,
+            "top_values_sample_ratio": self.top_values_sample_ratio,
+        }
+        for field_name, value in optional_ratios.items():
+            if value is not None:
+                if isinstance(value, bool) or not isinstance(value, (int, float)):
+                    raise TypeError(
+                        f"{field_name} must be a number, got {type(value).__name__}"
+                    )
+                if not math.isfinite(value) or value < 0.0 or value > 1.0:
+                    raise ValueError(
+                        f"{field_name} must be a finite ratio between 0.0 and 1.0: {value}"
+                    )
 
     def to_dict(self, *, redact_sample_values: bool = False) -> dict[str, Any]:
         """Return a JSON-friendly dictionary."""
@@ -173,6 +243,11 @@ class ColumnProfile:
                     "q50": _clean_scalar(self.q50),
                     "q75": _clean_scalar(self.q75),
                     "q95": _clean_scalar(self.q95),
+                    "iqr": _clean_scalar(self.iqr),
+                    "outlier_lower_bound": _clean_scalar(self.outlier_lower_bound),
+                    "outlier_upper_bound": _clean_scalar(self.outlier_upper_bound),
+                    "outlier_count": self.outlier_count,
+                    "outlier_ratio": self.outlier_ratio,
                 }
                 if _is_numeric_dtype(self.dtype)
                 else {}
@@ -213,6 +288,52 @@ class DataQualityReport:
     score_components: dict[str, float] = field(default_factory=dict)
     suggestions: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
 
+    def __post_init__(self) -> None:
+        """Validate structural field invariants for DataQualityReport."""
+        counts = {
+            "row_count": self.row_count,
+            "column_count": self.column_count,
+            "memory_usage": self.memory_usage,
+            "duplicate_rows": self.duplicate_rows,
+        }
+        for field_name, value in counts.items():
+            if not isinstance(value, int) or isinstance(value, bool):
+                raise TypeError(
+                    f"{field_name} must be an integer, got {type(value).__name__}"
+                )
+            if value < 0:
+                raise ValueError(f"{field_name} cannot be negative: {value}")
+
+        if isinstance(self.duplicate_ratio, bool) or not isinstance(
+            self.duplicate_ratio, (int, float)
+        ):
+            raise TypeError(
+                f"duplicate_ratio must be a number, got {type(self.duplicate_ratio).__name__}"
+            )
+        if (
+            not math.isfinite(self.duplicate_ratio)
+            or self.duplicate_ratio < 0.0
+            or self.duplicate_ratio > 1.0
+        ):
+            raise ValueError(
+                f"duplicate_ratio must be a finite ratio between 0.0 and 1.0: {self.duplicate_ratio}"
+            )
+
+        if isinstance(self.quality_score, bool) or not isinstance(
+            self.quality_score, (int, float)
+        ):
+            raise TypeError(
+                f"quality_score must be a number, got {type(self.quality_score).__name__}"
+            )
+        if (
+            not math.isfinite(self.quality_score)
+            or self.quality_score < 0.0
+            or self.quality_score > 100.0
+        ):
+            raise ValueError(
+                f"quality_score must be a finite value between 0.0 and 100.0: {self.quality_score}"
+            )
+
     def to_dict(
         self,
         *,
@@ -235,6 +356,14 @@ class DataQualityReport:
                 raise TypeError("exclude_columns must contain only string column names")
 
             exclude_columns = set(exclude_columns)
+
+        unknown_exclude_columns = sorted(exclude_columns - set(self.columns))
+        if unknown_exclude_columns:
+            available_columns = ", ".join(self.columns) or "<none>"
+            raise KeyError(
+                "Unknown exclude_columns: "
+                f"{unknown_exclude_columns}. Available columns: {available_columns}"
+            )
 
         def _redact_reason(reason: str | None) -> str | None:
             if not reason or not exclude_columns:
@@ -778,6 +907,15 @@ class DataQualityReport:
                             "q50": _clean_scalar(column.q50),
                             "q75": _clean_scalar(column.q75),
                             "q95": _clean_scalar(column.q95),
+                            "iqr": _clean_scalar(column.iqr),
+                            "outlier_lower_bound": _clean_scalar(
+                                column.outlier_lower_bound
+                            ),
+                            "outlier_upper_bound": _clean_scalar(
+                                column.outlier_upper_bound
+                            ),
+                            "outlier_count": column.outlier_count,
+                            "outlier_ratio": column.outlier_ratio,
                         }
                         if _is_numeric_dtype(column.dtype)
                         else {}
@@ -802,6 +940,28 @@ class ProfileComparison:
     right_profile: DataQualityReport
     drift_report: dict[str, dict[str, Any]]
     status_counts: dict[str, int] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.left_profile, DataQualityReport):
+            raise TypeError("left_profile must be an instance of DataQualityReport")
+        if not isinstance(self.right_profile, DataQualityReport):
+            raise TypeError("right_profile must be an instance of DataQualityReport")
+
+        if not isinstance(self.drift_report, dict):
+            raise TypeError("drift_report must be a dictionary")
+        for key, val in self.drift_report.items():
+            if not isinstance(key, str):
+                raise TypeError("drift_report keys must be strings")
+            if not isinstance(val, dict):
+                raise TypeError("drift_report must be a nested dictionary of dict")
+
+        if not isinstance(self.status_counts, dict):
+            raise TypeError("status_counts must be a dictionary")
+        for key, val in self.status_counts.items():
+            if not isinstance(key, str):
+                raise TypeError("status_counts keys must be strings")
+            if not isinstance(val, int):
+                raise TypeError("status_counts values must be integers")
 
     def to_dict(
         self,
@@ -1108,8 +1268,15 @@ def profile(
         approx_top_values_min_ratio, bool
     ):
         raise TypeError("approx_top_values_min_ratio must be a float")
+
+    if not math.isfinite(approx_top_values_min_ratio):
+        raise ValueError(
+            "approx_top_values_min_ratio must be a finite number between 0 and 1"
+        )
+
     if approx_top_values_min_ratio < 0 or approx_top_values_min_ratio > 1:
         raise ValueError("approx_top_values_min_ratio must be between 0 and 1")
+
     if not isinstance(approx_top_values_sample_size, int) or isinstance(
         approx_top_values_sample_size, bool
     ):
@@ -1317,10 +1484,10 @@ def check_quality_gates(
         "max_row_count_delta_ratio": _validate_gate_threshold(
             max_row_count_delta_ratio, "max_row_count_delta_ratio"
         ),
-        "max_duplicate_ratio_delta": _validate_gate_threshold(
+        "max_duplicate_ratio_delta": _validate_gate_ratio_threshold(
             max_duplicate_ratio_delta, "max_duplicate_ratio_delta"
         ),
-        "max_null_ratio_delta": _validate_gate_threshold(
+        "max_null_ratio_delta": _validate_gate_ratio_threshold(
             max_null_ratio_delta, "max_null_ratio_delta"
         ),
         "max_numeric_mean_delta_ratio": _validate_gate_threshold(
@@ -1518,6 +1685,16 @@ def _validate_gate_threshold(value: float | None, name: str) -> float | None:
     value = float(value)
     if not math.isfinite(value) or value < 0:
         raise ValueError(f"{name} must be a finite non-negative number")
+    return value
+
+
+def _validate_gate_ratio_threshold(value: float | None, name: str) -> float | None:
+    """Validate that a quality gate ratio threshold is between 0.0 and 1.0 inclusive."""
+    if value is None:
+        return None
+    value = _validate_gate_threshold(value, name)
+    if value > 1.0:
+        raise ValueError(f"{name} must be a ratio between 0.0 and 1.0")
     return value
 
 
@@ -2062,6 +2239,8 @@ def _profile_column(
     top_values_sample_count = None
     top_values_sample_ratio = None
     q25 = q50 = q75 = q95 = None
+    iqr = outlier_lower_bound = outlier_upper_bound = None
+    outlier_count = outlier_ratio = None
     std = None
     if dtype == "string" or pd.api.types.is_string_dtype(series.dtype):
         as_text = non_null.astype("string")
@@ -2097,6 +2276,17 @@ def _profile_column(
             q50 = round(float(quantiles.loc[0.50]), 4)
             q75 = round(float(quantiles.loc[0.75]), 4)
             q95 = round(float(quantiles.loc[0.95]), 4)
+            (
+                outlier_count,
+                outlier_ratio,
+                iqr,
+                outlier_lower_bound,
+                outlier_upper_bound,
+            ) = _iqr_outlier_summary(
+                numeric_non_null,
+                q25=q25,
+                q75=q75,
+            )
 
             # Calculate histogram
             finite_values = numeric_non_null[np.isfinite(numeric_non_null)]
@@ -2148,6 +2338,9 @@ def _profile_column(
         dominant_ratio=dominant_ratio,
     )
 
+    if outlier_count is not None and outlier_count > 0:
+        warnings.append("potential_outliers")
+
     return ColumnProfile(
         name=name,
         dtype=dtype,
@@ -2170,6 +2363,11 @@ def _profile_column(
         q50=q50,
         q75=q75,
         q95=q95,
+        iqr=iqr,
+        outlier_lower_bound=outlier_lower_bound,
+        outlier_upper_bound=outlier_upper_bound,
+        outlier_count=outlier_count,
+        outlier_ratio=outlier_ratio,
         sample_values=sample_values,
         warnings=warnings,
         top_values=top_values,
@@ -2245,6 +2443,33 @@ def _suggest_column_dtype(series: pd.Series, dtype: str) -> str | None:
             return "int64"
         return "float64"
     return None
+
+
+def _iqr_outlier_summary(
+    numeric_non_null: pd.Series,
+    *,
+    q25: float,
+    q75: float,
+    min_values: int = 4,
+) -> tuple[int | None, float | None, float | None, float | None, float | None]:
+    if len(numeric_non_null) < min_values:
+        return (None, None, None, None, None)
+    iqr = q75 - q25
+    lower_bound = q25 - 1.5 * iqr
+    upper_bound = q75 + 1.5 * iqr
+    outlier_count = len(
+        numeric_non_null[
+            (numeric_non_null < lower_bound) | (numeric_non_null > upper_bound)
+        ]
+    )
+    outlier_ratio = _ratio(outlier_count, len(numeric_non_null))
+    return (
+        outlier_count,
+        outlier_ratio,
+        round(float(iqr), 4),
+        round(float(lower_bound), 4),
+        round(float(upper_bound), 4),
+    )
 
 
 def _column_warnings(

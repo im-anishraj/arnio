@@ -41,6 +41,12 @@ class ColumnSummary:
     __slots__ = ("name", "dtype", "nullable")
 
     def __init__(self, name: str, dtype: str, nullable: bool) -> None:
+        if not isinstance(name, str):
+            raise TypeError("name must be a str")
+        if not isinstance(dtype, str):
+            raise TypeError("dtype must be a str")
+        if not isinstance(nullable, bool):
+            raise TypeError("nullable must be a bool")
         self.name = name
         self.dtype = dtype
         self.nullable = nullable
@@ -75,6 +81,13 @@ class ArFrame:
         from .convert import from_dict as _from_dict
 
         return _from_dict(data)
+
+    @classmethod
+    def from_pandas(cls, df) -> ArFrame:
+        """Build an ArFrame from a pandas DataFrame."""
+        from .convert import from_pandas as _from_pandas
+
+        return _from_pandas(df)
 
     @classmethod
     def from_records(
@@ -113,6 +126,20 @@ class ArFrame:
 
         if len(records) == 0:
             raise ValueError("records must be non-empty")
+
+        if columns is not None:
+            if isinstance(columns, (str, bytes)):
+                raise TypeError(
+                    "columns must be a list or tuple of strings, not a string or bytes"
+                )
+
+            if not isinstance(columns, (list, tuple)):
+                raise TypeError("columns must be a list or tuple of strings")
+
+            non_strings = [col for col in columns if not isinstance(col, str)]
+
+            if non_strings:
+                raise TypeError("columns must contain only strings")
 
         first = records[0]
 
@@ -179,10 +206,64 @@ class ArFrame:
         ValueError
             If invalid values are passed or column conversion fails.
         """
+        import numpy as np
+        import pandas as pd
+
         from .convert import from_pandas, to_pandas
+
+        def _validate_dtype_value(value):
+            if isinstance(value, (list, tuple, set, dict)):
+                raise TypeError(
+                    "dtype must be a string, Python type, "
+                    "NumPy/pandas dtype, or mapping "
+                    "of column names to dtypes"
+                )
+
+            if value in (object, "object"):
+                raise TypeError(
+                    "dtype must be a string, Python type, "
+                    "NumPy/pandas dtype, or mapping "
+                    "of column names to dtypes"
+                )
+
+            try:
+                resolved = pd.api.types.pandas_dtype(value)
+
+                if resolved == np.dtype("O"):
+                    raise TypeError(
+                        "dtype must be a string, Python type, "
+                        "NumPy/pandas dtype, or mapping "
+                        "of column names to dtypes"
+                    )
+
+            except (TypeError, ValueError):
+                raise TypeError(
+                    "dtype must be a string, Python type, "
+                    "NumPy/pandas dtype, or mapping "
+                    "of column names to dtypes"
+                )
 
         if dtype is None:
             raise TypeError("dtype cannot be None")
+
+        if isinstance(dtype, dict):
+            missing = [col for col in dtype if col not in self.columns]
+
+            if missing:
+                raise ValueError(f"Unknown column(s) in dtype mapping: {missing}")
+
+            for value in dtype.values():
+                _validate_dtype_value(value)
+
+        elif isinstance(dtype, (list, tuple, set)):
+            raise TypeError(
+                "dtype must be a string, Python type, "
+                "NumPy/pandas dtype, or mapping "
+                "of column names to dtypes"
+            )
+
+        else:
+            _validate_dtype_value(dtype)
 
         try:
             df = to_pandas(self)

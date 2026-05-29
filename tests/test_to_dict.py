@@ -1,6 +1,7 @@
 """Tests for ArFrame.to_dict method - additional coverage."""
 
 import pandas as pd
+import pytest
 
 import arnio as ar
 
@@ -110,3 +111,10 @@ class TestArFrameToDictExtended:
         result = frame.to_dict()
         assert len(result["a"]) == len(frame)
         assert len(result["b"]) == len(frame)
+
+    def test_to_dict_duplicate_column_names_blocked(self):
+        """from_pandas raises error for duplicate column names."""
+        with pytest.raises(
+            ValueError, match="does not support duplicate column labels"
+        ):
+            ar.from_pandas(pd.DataFrame([[1, 2, 3]], columns=["a", "b", "a"]))

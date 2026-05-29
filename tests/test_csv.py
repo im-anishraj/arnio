@@ -96,6 +96,50 @@ class TestReadCsv:
         assert frame.dtypes["price"] == "float64"
         assert pdf["zip"].tolist() == ["07001", "08002"]
 
+    def test_read_csv_fully_explicit_dtype_with_usecols(self, tmp_path):
+        path = tmp_path / "usecols_full_dtype.csv"
+        path.write_text("zip,quantity,price\n07001,5,12.5\n08002,10,20.0\n")
+
+        frame = ar.read_csv(
+            path,
+            usecols=["zip", "price"],
+            dtype={"zip": "string", "price": "float64"},
+        )
+
+        pdf = ar.to_pandas(frame)
+
+        assert list(pdf.columns) == ["zip", "price"]
+        assert frame.dtypes == {"zip": "string", "price": "float64"}
+        assert pdf["zip"].tolist() == ["07001", "08002"]
+        assert pdf["price"].tolist() == [12.5, 20.0]
+
+    def test_read_csv_fully_explicit_dtype_preserves_bad_line_errors(self, tmp_path):
+        path = tmp_path / "full_dtype_bad_line_error.csv"
+        path.write_text("id,name\n1,Alice\n2,Bob,extra\n")
+
+        with pytest.raises(ar.CsvReadError, match="CSV row 3 has 3 fields; expected 2"):
+            ar.read_csv(
+                path,
+                dtype={"id": "int64", "name": "string"},
+            )
+
+    def test_read_csv_fully_explicit_dtype_preserves_bad_line_warnings(self, tmp_path):
+        path = tmp_path / "full_dtype_bad_line_warn.csv"
+        path.write_text("id,name\n1,Alice\n2,Bob,extra\n3,Cara\n")
+
+        with pytest.warns(UserWarning, match="CSV row 3 has 3 fields; expected 2"):
+            frame = ar.read_csv(
+                path,
+                dtype={"id": "int64", "name": "string"},
+                on_bad_lines="warn",
+            )
+
+        pdf = ar.to_pandas(frame)
+
+        assert frame.dtypes == {"id": "int64", "name": "string"}
+        assert pdf["id"].tolist() == [1, 3]
+        assert pdf["name"].tolist() == ["Alice", "Cara"]
+
     def test_read_csv_dtype_parse_failure_becomes_null(self, tmp_path):
         path = tmp_path / "parse_failure.csv"
         path.write_text("quantity\nabc\n")
@@ -207,6 +251,22 @@ class TestReadCsv:
             match="usecols must not contain duplicate column names",
         ):
             ar.read_csv(csv_path, usecols=["id", "id"])
+
+        with pytest.raises(
+            ValueError,
+            match="usecols must not be empty",
+        ):
+            ar.read_csv(csv_path, usecols=[])
+
+    def test_invalid_empty_usecols_chunked(self, tmp_path):
+        csv_path = tmp_path / "chunked.csv"
+        csv_path.write_text("id,name\n1,Alice\n2,Bob\n")
+
+        with pytest.raises(
+            ValueError,
+            match="usecols must not be empty",
+        ):
+            list(ar.read_csv_chunked(csv_path, chunksize=1, usecols=[]))
 
     def test_invalid_nrows(self, tmp_path):
         csv_path = tmp_path / "test.csv"
@@ -1259,7 +1319,6 @@ class TestScanCsv:
         assert schema_full["value"] == "string"
 
     def test_scan_sample_size_invalid(self, sample_csv):
-
         with pytest.raises(ValueError, match="sample_size must be a positive integer"):
             ar.scan_csv(sample_csv, sample_size=0)
 
@@ -2184,6 +2243,26 @@ class TestSniffDelimiter:
         )
 
         assert ar.sniff_delimiter(path) == ";"
+
+    def test_sniff_delimiter_multibyte_utf8_characters(self, tmp_path):
+        """Verify sample_size is character-count based, not byte-count.
+
+        This regression test ensures that sample_size parameter counts
+        characters, not bytes. Multi-byte UTF-8 characters (emoji, CJK)
+        take multiple bytes, so if sample_size were byte-based, it would
+        read a different amount of actual characters.
+
+        See #1944 for the documentation clarification issue.
+        """
+        path = tmp_path / "multibyte.csv"
+        # Using emoji (4 bytes in UTF-8) and CJK characters (3 bytes each)
+        # The header line contains the delimiter, so sniff_delimiter should
+        # find it correctly even with multi-byte characters in the data
+        content = "名前,年齢,都市\nAlice,30,🗽\nBob,25,🏴\n"
+        path.write_text(content, encoding="utf-8")
+
+        result = ar.sniff_delimiter(path)
+        assert result == ","
 
 
 class TestArFrameGetItem:
