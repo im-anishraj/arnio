@@ -72,13 +72,21 @@ def test_benchmark_script_runs_successfully(script_path):
     if script_path.name == "benchmark_vs_pandas.py":
         generate_path = BENCHMARKS_DIR / "generate_data.py"
         try:
-            subprocess.run(
+            result = subprocess.run(
                 [sys.executable, str(generate_path)],
                 env=env,
                 capture_output=True,
                 text=True,
                 cwd=str(BENCHMARKS_DIR.parent),
                 timeout=10,
+                check=True,
+            )
+        except subprocess.CalledProcessError as e:
+            pytest.fail(
+                "Pre-generating data for benchmark_vs_pandas failed.\n"
+                f"Return code: {e.returncode}\n"
+                f"Stdout:\n{e.stdout}\n"
+                f"Stderr:\n{e.stderr}"
             )
         except subprocess.SubprocessError as e:
             pytest.fail(f"Pre-generating data for benchmark_vs_pandas failed: {e}")

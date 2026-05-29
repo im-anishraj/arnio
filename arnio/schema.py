@@ -1356,22 +1356,12 @@ def validate(
         if isinstance(max_errors, bool) or not isinstance(max_errors, int):
             raise TypeError("max_errors must be an int or None")
 
-    if max_errors is not None and max_errors < 0:
-        raise ValueError("max_errors must be >= 0")
+        if max_errors <= 0:
+            raise ValueError("max_errors must be >= 1")
 
     df = to_pandas(frame)
     dtypes = frame.dtypes
     issues: list[ValidationIssue] = []
-
-    if max_errors == 0:
-        return ValidationResult(
-            row_count=len(df),
-            issue_count=0,
-            issues=[],
-            bad_rows=sorted(
-                {issue.row_index for issue in issues if issue.row_index is not None}
-            ),
-        )
 
     def reached_limit() -> bool:
         return max_errors is not None and len(issues) >= max_errors
@@ -2389,6 +2379,7 @@ def _validate_column(
                         column=name,
                         rule="custom",
                         message=f"Custom validator {validator_name!r} is not registered",
+                        severity=field_def.severity,
                     )
                 )
             else:
@@ -2420,6 +2411,7 @@ def _validate_column(
                         column=name,
                         rule="semantic",
                         message=f"Unknown semantic type: {field_def.semantic}",
+                        severity=field_def.severity,
                     )
                 )
             else:
@@ -2784,6 +2776,7 @@ def Custom(
     nullable: bool = True,
     unique: bool = False,
     severity: str = "error",
+    required_if: tuple[str, Any] | None = None,
 ) -> Field:
     """Create a field validated by a registered custom validator.
 
@@ -2816,4 +2809,5 @@ def Custom(
         unique=unique,
         semantic=f"custom:{name}",
         severity=severity,
+        required_if=required_if,
     )

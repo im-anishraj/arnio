@@ -482,25 +482,6 @@ def test_validation_result_summary_counts_repeated_issues_in_one_column():
     assert summary["issues_by_column_and_rule"] == {"age": {"min": 3}}
 
 
-def test_schema_validation_max_errors_zero(tmp_path):
-    path = tmp_path / "data.csv"
-
-    path.write_text("name,age\njohn,\n")
-
-    frame = ar.read_csv(path)
-
-    schema = ar.Schema(
-        {
-            "name": ar.String(),
-            "age": ar.Int64(nullable=False),
-        }
-    )
-    result = ar.validate(frame, schema, max_errors=0)
-
-    assert result.issue_count == 0
-    assert result.issues == []
-
-
 def test_schema_validation_negative_max_errors(tmp_path):
     path = tmp_path / "data.csv"
 
@@ -3006,6 +2987,41 @@ def test_empty_string_passes_when_nullable():
     assert result.issue_count == 0
 
 
+def test_required_if_treats_blank_strings_as_missing():
+    df = pd.DataFrame(
+        {
+            "user_type": [
+                "international",
+                "international",
+                "local",
+            ],
+            "country": [
+                "",
+                "   ",
+                "",
+            ],
+        }
+    )
+
+    schema = ar.Schema(
+        {
+            "user_type": ar.String(nullable=False),
+            "country": ar.String(
+                nullable=True,
+                required_if=("user_type", "international"),
+            ),
+        }
+    )
+
+    result = ar.validate(ar.from_pandas(df), schema)
+
+    assert result.issue_count == 2
+
+    for issue in result.issues:
+        assert issue.column == "country"
+        assert issue.rule == "required_if"
+
+
 def test_url_https_only_accepts_https(tmp_path):
     path = tmp_path / "urls.csv"
     path.write_text("url\nhttps://example.com\nhttps://test.org\n")
@@ -3409,3 +3425,164 @@ def test_field_allowed_rejects_generator():
 def test_field_allowed_rejects_bytes():
     with pytest.raises(TypeError, match="allowed must be a list, tuple, or set"):
         ar.Field(allowed=b"abc")
+
+
+def test_custom_field_required_if_validation_passes_when_condition_matches(tmp_path):
+    ar.register_validator("positive_req", lambda v: v > 0)
+
+    path = tmp_path / "custom_conditional_pass.csv"
+    path.write_text("status,score\n" "active,10\n" "inactive,\n")
+    frame = ar.read_csv(path)
+
+    schema = ar.Schema(
+        {
+            "status": ar.String(nullable=False),
+            "score": ar.Custom(
+                "positive_req", nullable=True, required_if=("status", "active")
+            ),
+        }
+    )
+
+    result = schema.validate(frame)
+    assert result.passed
+    assert result.issue_count == 0
+
+
+def test_custom_field_required_if_validation_fails_when_condition_matches(tmp_path):
+    ar.register_validator("positive_req", lambda v: v > 0)
+
+    path = tmp_path / "custom_conditional_fail.csv"
+    path.write_text("status,score\n" "active,\n" "inactive,5\n")
+    frame = ar.read_csv(path)
+
+    schema = ar.Schema(
+        {
+            "status": ar.String(nullable=False),
+            "score": ar.Custom(
+                "positive_req", nullable=True, required_if=("status", "active")
+            ),
+        }
+    )
+
+    result = schema.validate(frame)
+    assert not result.passed
+    assert result.issue_count == 1
+    assert result.issues[0].rule == "required_if"
+    assert result.issues[0].column == "score"
+    assert result.issues[0].row_index == 1
+
+
+def test_custom_field_required_if_validation_ignores_non_matching_conditions(tmp_path):
+    ar.register_validator("positive_req", lambda v: v > 0)
+
+    path = tmp_path / "custom_conditional_ignore.csv"
+    path.write_text("status,score\n" "pending,\n" "inactive,\n")
+    frame = ar.read_csv(path)
+
+    schema = ar.Schema(
+        {
+            "status": ar.String(nullable=False),
+            "score": ar.Custom(
+                "positive_req", nullable=True, required_if=("status", "active")
+            ),
+        }
+    )
+
+    result = schema.validate(frame)
+    assert result.passed
+    assert result.issue_count == 0
+
+
+def test_custom_field_required_if_enforces_rule_logic_when_matched(tmp_path):
+    ar.register_validator("positive_req", lambda v: v > 0)
+
+    path = tmp_path / "custom_conditional_rule_fail.csv"
+    path.write_text("status,score\n" "active,-5\n")
+    frame = ar.read_csv(path)
+
+    schema = ar.Schema(
+        {
+            "status": ar.String(nullable=False),
+            "score": ar.Custom(
+                "positive_req", nullable=True, required_if=("status", "active")
+            ),
+        }
+    )
+
+    result = schema.validate(frame)
+    assert not result.passed
+    assert result.issue_count == 1
+    assert result.issues[0].rule == "custom"
+    assert result.issues[0].column == "score"
+    assert result.issues[0].row_index == 1
+
+
+def test_custom_field_json_roundtrip_preserves_required_if():
+    ar.register_validator("positive_req_json", lambda v: v > 0)
+
+    schema = ar.Schema(
+        fields={
+            "id": ar.String(nullable=False),
+            "score": ar.Custom(
+                "positive_req_json", nullable=True, required_if=("id", "A1")
+            ),
+        }
+    )
+
+    restored = ar.Schema.from_json(schema.to_json())
+    assert restored == schema
+
+
+def test_unknown_semantic_severity_preservation():
+    frame = ar.from_dict({"x": ["abc"]})
+    unknown_schema = ar.Schema({"x": ar.Field(semantic="unknown", severity="warning")})
+
+    result = ar.validate(frame, unknown_schema)
+    assert not result.issues[0].passed if hasattr(result.issues[0], "passed") else True
+    assert len(result.issues) == 1
+    assert result.issues[0].rule == "semantic"
+    assert result.issues[0].severity == "warning"
+
+
+def test_missing_custom_validator_severity_preservation():
+    frame = ar.from_dict({"x": ["abc"]})
+    missing_custom_schema = ar.Schema(
+        {"x": ar.Field(semantic="custom:missing", severity="warning")}
+    )
+
+    result = ar.validate(frame, missing_custom_schema)
+    for issue in result.issues:
+        if issue.rule == "custom":
+            assert issue.severity == "warning"
+
+
+def test_validate_max_errors_zero_invalid_data():
+    frame = ar.from_pandas(pd.DataFrame({"age": ["not-an-int"]}))
+    schema = ar.Schema({"age": ar.Int64()})
+
+    with pytest.raises(ValueError, match="max_errors must be >= 1"):
+        ar.validate(frame, schema, max_errors=0)
+
+
+def test_validate_max_errors_zero_missing_columns():
+    frame = ar.from_pandas(pd.DataFrame({"name": ["Alice"]}))
+    schema = ar.Schema({"age": ar.Int64()})
+
+    with pytest.raises(ValueError, match="max_errors must be >= 1"):
+        ar.validate(frame, schema, max_errors=0)
+
+
+def test_validate_max_errors_zero_strict_schema():
+    frame = ar.from_pandas(pd.DataFrame({"age": [25], "extra": ["unexpected"]}))
+    schema = ar.Schema({"age": ar.Int64()}, strict=True)
+
+    with pytest.raises(ValueError, match="max_errors must be >= 1"):
+        ar.validate(frame, schema, max_errors=0)
+
+
+def test_validate_max_errors_zero_valid_data():
+    frame = ar.from_pandas(pd.DataFrame({"age": [25]}))
+    schema = ar.Schema({"age": ar.Int64()})
+
+    with pytest.raises(ValueError, match="max_errors must be >= 1"):
+        ar.validate(frame, schema, max_errors=0)

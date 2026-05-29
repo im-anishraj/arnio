@@ -6,6 +6,7 @@ Data cleaning functions.
 from __future__ import annotations
 
 import copy
+import math
 import unicodedata
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any
@@ -538,7 +539,15 @@ def drop_empty_columns(frame: ArFrame) -> ArFrame:
     from .convert import to_pandas
 
     if frame.shape[0] == 0:
-        return frame
+        attrs = copy.deepcopy(frame._attrs) if frame._attrs is not None else None
+        empty_columns_data: dict[str, list[object]] = {}
+        empty_dtype_hints: dict[str, _DType] = {}
+        for col_name in frame.columns:
+            empty_columns_data[col_name] = []
+            empty_dtype_hints[col_name] = frame._frame.column_by_name(col_name).dtype()
+        return ArFrame(
+            _Frame.from_dict(empty_columns_data, empty_dtype_hints, 0), attrs=attrs
+        )
 
     df = to_pandas(frame)
     empty_columns: list[str] = []
@@ -756,7 +765,7 @@ def winsorize_outliers(
     if not target_columns:
         return frame
 
-    df = to_pandas(frame).copy()
+    df = to_pandas(frame).copy(deep=False)
 
     for column in target_columns:
         lower_bound = df[column].quantile(lower)
@@ -833,7 +842,7 @@ def normalize_whitespace(frame, columns=None):
     >>> clean = ar.pipeline(frame, [("normalize_whitespace",)])
     """
     frame, is_arframe = _validate_frame(frame, allow_pandas=True)
-    df = to_pandas(frame) if is_arframe else frame.copy()
+    df = to_pandas(frame) if is_arframe else frame.copy(deep=False)
 
     if columns is not None:
         cols = list(columns)
@@ -899,8 +908,18 @@ def parse_bool_strings(
         raise TypeError(
             "false_values must be a set/list/tuple of strings, not a bare string"
         )
+    if true_values is not None and (
+        isinstance(true_values, Mapping)
+        or not isinstance(true_values, (set, list, tuple))
+    ):
+        raise TypeError("true_values must be a set, list, or tuple of strings")
 
-    df = to_pandas(frame).copy()
+    if false_values is not None and (
+        isinstance(false_values, Mapping)
+        or not isinstance(false_values, (set, list, tuple))
+    ):
+        raise TypeError("false_values must be a set, list, or tuple of strings")
+    df = to_pandas(frame).copy(deep=False)
     if true_values is None:
         true_values = {"true", "yes", "y", "1"}
     else:
@@ -1103,7 +1122,7 @@ def normalize_unicode(
         else:
             new_columns[name] = col.to_python_list()
             dtype_hints[name] = dtype
-    new_cpp_frame = _Frame.from_dict(new_columns, dtype_hints)
+    new_cpp_frame = _Frame.from_dict(new_columns, dtype_hints, frame.shape[0])
     return ArFrame(
         new_cpp_frame,
         attrs=copy.deepcopy(frame._attrs) if frame._attrs is not None else None,
@@ -1419,7 +1438,7 @@ def round_numeric_columns(
     if isinstance(decimals, bool) or not isinstance(decimals, int):
         raise TypeError("decimals must be an integer")
 
-    df = to_pandas(frame) if is_arframe else frame.copy()
+    df = to_pandas(frame) if is_arframe else frame.copy(deep=False)
 
     if subset is not None:
         cols_to_round = _validate_existing_column_sequence(
@@ -1519,7 +1538,7 @@ def combine_columns(
         return ArFrame(result)
 
     # Pandas fallback
-    df = frame.copy()
+    df = frame.copy(deep=False)
     combined = (
         df[subset_columns].astype("string").fillna("").agg(separator.join, axis=1)
     )
@@ -1574,6 +1593,14 @@ def safe_divide_columns(
         raise ValueError(f"Denominator column '{denominator}' not found in frame.")
     if not isinstance(output_column, str) or not output_column.strip():
         raise ValueError("output_column must be a non-empty string.")
+    if isinstance(fill_value, bool):
+        raise TypeError("fill_value must be a finite float, not bool")
+    if not isinstance(fill_value, (int, float)):
+        raise TypeError(
+            f"fill_value must be a finite float, got {type(fill_value).__name__!r}"
+        )
+    if not math.isfinite(fill_value):
+        raise ValueError(f"fill_value must be finite, got {fill_value}")
     if output_column in columns:
         import warnings
 
@@ -1634,7 +1661,7 @@ def safe_divide_columns(
     is_zero_or_null = denominator_values.isna() | (denominator_values == 0)
     safe_denom = denominator_values.mask(is_zero_or_null)
     result = numerator_values / safe_denom
-    df = df.copy()
+    df = df.copy(deep=False)
     df[output_column] = result.fillna(fill_value)
 
     return from_pandas(df) if is_arframe else df
@@ -1767,7 +1794,7 @@ def replace_values(
         ),
     )
     # Avoid mutating the caller's DataFrame in the direct pandas API path.
-    df = to_pandas(frame) if is_arframe else frame.copy()
+    df = to_pandas(frame) if is_arframe else frame.copy(deep=False)
 
     if column is not None:
         if not isinstance(column, str) or not column.strip():
@@ -1859,7 +1886,7 @@ def standardize_missing_tokens(frame, tokens=None, subset=None):
     frame, is_arframe = _validate_frame(frame, allow_pandas=True)
     df = to_pandas(frame) if is_arframe else frame
 
-    df = df.copy()
+    df = df.copy(deep=False)
     if isinstance(subset, str):
         raise TypeError(
             f"subset must be a list of column names, not a string. "
@@ -1991,7 +2018,7 @@ def coalesce_columns(
     if output_column in column_names:
         raise ValueError(f"Output column '{output_column}' already exists.")
 
-    df = to_pandas(frame) if is_arframe else frame.copy()
+    df = to_pandas(frame) if is_arframe else frame.copy(deep=False)
 
     # Select the first non-null/non-NaN/non-None value per row
     df[output_column] = df[subset_columns].bfill(axis=1).iloc[:, 0]
@@ -2067,3 +2094,36 @@ def clean_column_names(
 
     result = _rename_columns(frame._frame, mapping)
     return ArFrame(result)
+
+
+def slugify_column_names(frame, on_duplicates="raise"):
+    import re
+
+    from .convert import from_pandas, to_pandas
+    from .frame import ArFrame
+
+    if on_duplicates not in ("raise",):
+        raise ValueError("on_duplicates must be 'raise'")
+
+    is_arframe = isinstance(frame, ArFrame)
+    df = to_pandas(frame) if is_arframe else frame
+
+    new_cols = []
+    for col in df.columns:
+        slug = col.strip()
+        slug = re.sub(r"[\s\-]+", "_", slug)
+        slug = re.sub(r"[^\w]", "", slug)
+        slug = re.sub(r"_+", "_", slug)
+        slug = slug.strip("_")
+        slug = slug.lower()
+        if not slug:
+            raise ValueError(f"Column name {col!r} slugifies to an empty string.")
+        new_cols.append(slug)
+
+    if len(new_cols) != len(set(new_cols)):
+        dupes = [c for c in new_cols if new_cols.count(c) > 1]
+        raise ValueError(f"Duplicate slugs after slugifying: {set(dupes)}")
+
+    df = df.copy()
+    df.columns = new_cols
+    return from_pandas(df) if is_arframe else df

@@ -1895,3 +1895,76 @@ def test_pipeline_bool_flags_valid():
         verbose=True,
     )
     assert isinstance(result, tuple)
+
+
+class TestRegisterStepValidation:
+    @pytest.fixture(autouse=True)
+    def cleanup_registry(self):
+        """Ensure the global custom step registry resets after every single test in this class."""
+        yield
+        from arnio.pipeline import reset_steps
+
+        reset_steps()
+
+    # --- Happy Path ---
+    def test_registers_valid_callable(self):
+        from arnio.pipeline import list_steps, register_step
+
+        def dummy_clean(df):
+            return df
+
+        register_step("custom_dummy_step", dummy_clean)
+        assert "custom_dummy_step" in list_steps()
+
+    def test_allows_intentional_overwrite(self):
+        from arnio.pipeline import register_step
+
+        def first_step(df):
+            return df
+
+        def second_step(df):
+            return df
+
+        register_step("overwrite_step", first_step)
+        register_step("overwrite_step", second_step, overwrite=True)
+
+    # --- Edge Cases & Parameter Boundaries ---
+    def test_rejects_non_callable_objects(self):
+        from arnio.pipeline import register_step
+
+        """Verify TypeError is raised immediately for numbers, strings, and instances."""
+        with pytest.raises(TypeError, match="must be a callable object"):
+            register_step("bad_int", 123)
+        with pytest.raises(TypeError, match="must be a callable object"):
+            register_step("bad_str", "not_a_callable_function")
+        with pytest.raises(TypeError, match="must be a callable object"):
+            register_step("bad_dict", {"a": 1})
+
+    def test_rejects_empty_string_names(self):
+        from arnio.pipeline import register_step
+
+        def dummy_clean(df):
+            return df
+
+        with pytest.raises(ValueError, match="must be a non-empty string"):
+            register_step("", dummy_clean)
+
+    def test_rejects_whitespace_only_names(self):
+        from arnio.pipeline import register_step
+
+        def dummy_clean(df):
+            return df
+
+        with pytest.raises(ValueError, match="must be a non-empty string"):
+            register_step("    ", dummy_clean)
+
+    def test_rejects_invalid_name_types(self):
+        from arnio.pipeline import register_step
+
+        def dummy_clean(df):
+            return df
+
+        with pytest.raises(ValueError, match="must be a non-empty string"):
+            register_step(None, dummy_clean)  # type: ignore
+        with pytest.raises(ValueError, match="must be a non-empty string"):
+            register_step(42, dummy_clean)  # type: ignore

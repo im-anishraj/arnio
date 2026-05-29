@@ -41,6 +41,12 @@ class ColumnSummary:
     __slots__ = ("name", "dtype", "nullable")
 
     def __init__(self, name: str, dtype: str, nullable: bool) -> None:
+        if not isinstance(name, str):
+            raise TypeError("name must be a str")
+        if not isinstance(dtype, str):
+            raise TypeError("dtype must be a str")
+        if not isinstance(nullable, bool):
+            raise TypeError("nullable must be a bool")
         self.name = name
         self.dtype = dtype
         self.nullable = nullable
@@ -75,6 +81,13 @@ class ArFrame:
         from .convert import from_dict as _from_dict
 
         return _from_dict(data)
+
+    @classmethod
+    def from_pandas(cls, df) -> ArFrame:
+        """Build an ArFrame from a pandas DataFrame."""
+        from .convert import from_pandas as _from_pandas
+
+        return _from_pandas(df)
 
     @classmethod
     def from_records(
@@ -193,10 +206,64 @@ class ArFrame:
         ValueError
             If invalid values are passed or column conversion fails.
         """
+        import numpy as np
+        import pandas as pd
+
         from .convert import from_pandas, to_pandas
+
+        def _validate_dtype_value(value):
+            if isinstance(value, (list, tuple, set, dict)):
+                raise TypeError(
+                    "dtype must be a string, Python type, "
+                    "NumPy/pandas dtype, or mapping "
+                    "of column names to dtypes"
+                )
+
+            if value in (object, "object"):
+                raise TypeError(
+                    "dtype must be a string, Python type, "
+                    "NumPy/pandas dtype, or mapping "
+                    "of column names to dtypes"
+                )
+
+            try:
+                resolved = pd.api.types.pandas_dtype(value)
+
+                if resolved == np.dtype("O"):
+                    raise TypeError(
+                        "dtype must be a string, Python type, "
+                        "NumPy/pandas dtype, or mapping "
+                        "of column names to dtypes"
+                    )
+
+            except (TypeError, ValueError):
+                raise TypeError(
+                    "dtype must be a string, Python type, "
+                    "NumPy/pandas dtype, or mapping "
+                    "of column names to dtypes"
+                )
 
         if dtype is None:
             raise TypeError("dtype cannot be None")
+
+        if isinstance(dtype, dict):
+            missing = [col for col in dtype if col not in self.columns]
+
+            if missing:
+                raise ValueError(f"Unknown column(s) in dtype mapping: {missing}")
+
+            for value in dtype.values():
+                _validate_dtype_value(value)
+
+        elif isinstance(dtype, (list, tuple, set)):
+            raise TypeError(
+                "dtype must be a string, Python type, "
+                "NumPy/pandas dtype, or mapping "
+                "of column names to dtypes"
+            )
+
+        else:
+            _validate_dtype_value(dtype)
 
         try:
             df = to_pandas(self)
@@ -420,14 +487,16 @@ class ArFrame:
         if missing:
             raise ValueError(f"Unknown columns: {missing}")
 
-        return ArFrame(self._frame.select_columns(columns))
+        return ArFrame(
+            self._frame.select_columns(columns), attrs=copy.deepcopy(self._attrs)
+        )
 
-    def drop_columns(self, cols: list[str]) -> ArFrame:
+    def drop_columns(self, cols: list[str] | tuple[str, ...]) -> ArFrame:
         """Return a new ArFrame with the specified columns removed.
 
         Parameters
         ----------
-        cols : list[str]
+        cols : list[str] | tuple[str, ...]
             Column names to drop. Duplicates are silently ignored.
             An empty list returns a copy of the frame unchanged.
 
@@ -448,10 +517,11 @@ class ArFrame:
         --------
         >>> frame = ar.read_csv("data.csv")
         >>> smaller = frame.drop_columns(["col1", "col2"])
+        >>> smaller = frame.drop_columns(("col1", "col2"))
         """
-        if not isinstance(cols, list):
+        if not isinstance(cols, (list, tuple)):
             raise TypeError(
-                f"cols must be a list of column names, got {type(cols).__name__!r}"
+                f"cols must be a list or tuple of column names, got {type(cols).__name__!r}"
             )
 
         if any(not isinstance(col, str) for col in cols):
@@ -474,7 +544,10 @@ class ArFrame:
 
         # Empty input — return unchanged copy
         if not unique_cols:
-            return ArFrame(self._frame.select_columns(self.columns))
+            return ArFrame(
+                self._frame.select_columns(self.columns),
+                attrs=copy.deepcopy(self._attrs),
+            )
 
         # Preserve original order of remaining columns
         drop_set = set(unique_cols)
@@ -484,7 +557,9 @@ class ArFrame:
         if not remaining:
             raise ValueError("drop_columns cannot remove all columns from the frame")
 
-        return ArFrame(self._frame.select_columns(remaining))
+        return ArFrame(
+            self._frame.select_columns(remaining), attrs=copy.deepcopy(self._attrs)
+        )
 
     def select_dtypes(
         self,
@@ -514,8 +589,8 @@ class ArFrame:
         ------
         ValueError
             If neither *include* nor *exclude* is provided, if *include*
-            and *exclude* overlap, if an unrecognised dtype string is
-            passed, or if no columns match the filter.
+            and *exclude* overlap, or if an unrecognised dtype string is
+            passed.
         TypeError
             If *include* or *exclude* is not a string, list, or tuple of
             strings.
@@ -582,14 +657,17 @@ class ArFrame:
             matched.append(col)
 
         if not matched:
-            raise ValueError(
-                f"No columns match the dtype selection. Frame dtypes: {col_dtypes}."
-            )
+            return ArFrame(_Frame(len(self)), attrs=self._attrs.copy())
 
         return self.select_columns(matched)
 
     def describe(self) -> dict[str, dict[str, float]]:
-        """Generate summary statistics for all numeric and string columns.
+        """Generate summary statistics for numeric, string, and boolean columns.
+
+        Numeric columns include ``count``, ``nulls``, ``mean``, ``min``, and
+        ``max``. String columns include ``count``, ``nulls``, and ``unique``.
+        Boolean columns include ``count``, ``nulls``, ``true``, ``false``, and
+        ``true_ratio``.
 
         Returns
         -------
