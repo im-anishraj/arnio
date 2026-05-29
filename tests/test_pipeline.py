@@ -499,12 +499,12 @@ class TestPipeline:
     def test_pipeline_rejects_invalid_frame_before_non_empty_steps(self):
         with pytest.raises(TypeError, match="frame must be an ArFrame"):
             ar.pipeline("not-frame", [("strip_whitespace",)])
+
     def test_pipeline_rejects_none_steps_container(self):
         frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
 
         with pytest.raises(TypeError, match="steps must be a list of step tuples"):
             ar.pipeline(frame, None)
-
 
     def test_pipeline_rejects_string_steps_container(self):
         frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
@@ -512,13 +512,11 @@ class TestPipeline:
         with pytest.raises(TypeError, match="steps must be a list of step tuples"):
             ar.pipeline(frame, "drop_nulls")
 
-
     def test_pipeline_rejects_tuple_steps_container(self):
         frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
 
         with pytest.raises(TypeError, match="steps must be a list of step tuples"):
             ar.pipeline(frame, ("drop_nulls",))
-
 
     def test_pipeline_rejects_dict_steps_container(self):
         frame = ar.from_pandas(pd.DataFrame({"a": [1]}))

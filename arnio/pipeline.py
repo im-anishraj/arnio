@@ -349,10 +349,9 @@ def pipeline(
         or isinstance(steps, tuple)
     ):
         raise TypeError(
-            'steps must be a list of step tuples, '
-            'for example [("drop_nulls",)]'
+            "steps must be a list of step tuples, " 'for example [("drop_nulls",)]'
         )
-    
+
     with _REGISTRY_LOCK:
         python_step_registry = dict(_PYTHON_STEP_REGISTRY)
         namespaced_builtin_steps = _get_namespaced_builtin_steps(python_step_registry)
