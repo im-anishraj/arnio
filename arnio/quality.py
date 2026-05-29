@@ -2006,6 +2006,31 @@ class CleanStepRecord:
     reason: str
     """Human-readable explanation of why this step was selected."""
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.step, str):
+            raise TypeError(
+                f"CleanStepRecord.step must be a str, got {type(self.step).__name__}"
+            )
+        if not isinstance(self.reason, str):
+            raise TypeError(
+                f"CleanStepRecord.reason must be a str, got {type(self.reason).__name__}"
+            )
+        if not isinstance(self.kwargs, dict):
+            raise TypeError(
+                f"CleanStepRecord.kwargs must be a dict, got {type(self.kwargs).__name__}"
+            )
+        for name, value in (
+            ("rows_before", self.rows_before),
+            ("rows_after", self.rows_after),
+            ("rows_removed", self.rows_removed),
+        ):
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise TypeError(
+                    f"CleanStepRecord.{name} must be an int, got {type(value).__name__}"
+                )
+            if value < 0:
+                raise ValueError(f"CleanStepRecord.{name} cannot be negative: {value}")
+
 
 @dataclass(frozen=True)
 class CleanExplanation:
@@ -2026,6 +2051,33 @@ class CleanExplanation:
     """Total rows removed across all steps."""
     steps: list[CleanStepRecord]
     """Ordered list of steps that were actually applied."""
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.mode, str):
+            raise TypeError(
+                f"CleanExplanation.mode must be a str, got {type(self.mode).__name__}"
+            )
+        for name, value in (
+            ("rows_before", self.rows_before),
+            ("rows_after", self.rows_after),
+            ("rows_removed", self.rows_removed),
+        ):
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise TypeError(
+                    f"CleanExplanation.{name} must be an int, got {type(value).__name__}"
+                )
+            if value < 0:
+                raise ValueError(f"CleanExplanation.{name} cannot be negative: {value}")
+        if not isinstance(self.steps, list):
+            raise TypeError(
+                f"CleanExplanation.steps must be a list, got {type(self.steps).__name__}"
+            )
+        for i, step in enumerate(self.steps):
+            if not isinstance(step, CleanStepRecord):
+                raise TypeError(
+                    f"CleanExplanation.steps[{i}] must be a CleanStepRecord, "
+                    f"got {type(step).__name__}"
+                )
 
     def __str__(self) -> str:
         lines: list[str] = [
