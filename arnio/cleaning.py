@@ -1568,7 +1568,7 @@ def combine_columns(
         return ArFrame(result)
 
     # Pandas fallback
-    df = frame.copy(deep=False)
+    df = frame.copy(deep=True)
     combined = (
         df[subset_columns].astype("string").fillna("").agg(separator.join, axis=1)
     )
