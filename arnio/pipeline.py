@@ -175,9 +175,13 @@ def unregister_step(name: str) -> None:
         if name not in _PYTHON_STEP_REGISTRY:
             available_steps = sorted(set(_STEP_REGISTRY) | set(_PYTHON_STEP_REGISTRY))
             raise UnknownStepError(name, available_steps)
-        fn = _PYTHON_STEP_REGISTRY[name]
 
-        if _is_builtin_python_step(name, fn):
+        # Protect only names that were registered as built-ins at module load
+        # time (i.e. present in _BUILTIN_PYTHON_STEP_REGISTRY).  Do NOT use
+        # _is_builtin_python_step here: that helper checks the function's
+        # __module__, which would wrongly block user-defined aliases whose
+        # underlying callable happens to live in arnio.cleaning.
+        if name in _BUILTIN_PYTHON_STEP_REGISTRY:
             available_steps = sorted(set(_STEP_REGISTRY) | set(_PYTHON_STEP_REGISTRY))
             raise UnknownStepError(name, available_steps)
         del _PYTHON_STEP_REGISTRY[name]
