@@ -210,6 +210,28 @@ class TestCustomValidator:
         assert f1.semantic == "custom:positive"
         assert f2.semantic == "custom:email"
 
+    def test_custom_validator_name_validation(self):
+        import pytest
+        import arnio as ar
+
+        """Test unhashable type raises TypeError"""
+        with pytest.raises(TypeError, match="The validator name must be a string."):
+            ar.Custom(["validator"])
+
+        """Test invalid scalar type raises TypeError"""
+        with pytest.raises(TypeError, match="The validator name must be a string."):
+            ar.Custom(123)
+
+        """Test None type raises TypeError"""
+        with pytest.raises(TypeError, match="The validator name must be a string."):
+            ar.Custom(None)
+
+        """Test empty string raises ValueError"""
+        with pytest.raises(ValueError, match="The validator name cannot be an empty string."):
+            ar.Custom("")
+        with pytest.raises(ValueError, match="The validator name cannot be an empty string."):
+            ar.Custom("   ")
+
 
 class TestCustomValidatorReturnNormalization:
     """Regression tests for issue #1469.

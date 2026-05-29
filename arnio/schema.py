@@ -2795,8 +2795,10 @@ def Custom(
     >>> schema = ar.Schema({"score": ar.Custom("positive", nullable=False)})
     """
 
-    if not isinstance(name, str) or not name:
-        raise ValueError("name must be a non-empty string")
+    if not isinstance(name, str):
+        raise TypeError("The validator name must be a string.")
+    if not name.strip():
+        raise ValueError("The validator name cannot be an empty string.")
 
     if name not in _CUSTOM_VALIDATORS:
         raise ValueError(
