@@ -118,6 +118,7 @@ aligned. See [STUBS_UPDATE.md](../STUBS_UPDATE.md) for the short checklist.
 - Do not edit generated files, build output, cache folders, or local logs.
 - Be patient during review. Maintainers may ask for tests, edge cases, or a narrower scope.
 - If you stop working on an assigned issue, please comment so it can be reassigned.
+- If you need more time then you should comment within 3 days of an issue assignment.
 
 ### Commit Message Convention
 We use an automated release system that relies on [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/). Your PR title must use one of the following prefixes:
