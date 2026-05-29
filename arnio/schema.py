@@ -2663,9 +2663,14 @@ def _normalize_unique(
 
 
 def _normalize_sequence(value: Any) -> Any:
-    """Convert sets and tuples to lists for JSON-serializable output."""
+    """Convert sets and tuples to lists for JSON-serializable output.
+
+    Sets are sorted with a type-safe key so mixed scalar types (e.g. ``{1, "1"}``)
+    do not raise ``TypeError``.
+    """
     if isinstance(value, set):
-        return sorted(value)
+        return sorted(value, key=lambda x: (type(x).__name__, repr(x)))
+
     if isinstance(value, tuple):
         return list(value)
     return value
