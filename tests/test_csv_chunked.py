@@ -479,7 +479,9 @@ class TestReadCsvChunkedTsvDelimiter:
 
 class TestReadCsvChunkedCoverage:
     def test_invalid_path_type_raises_type_error(self):
-        with pytest.raises(TypeError, match="expected a filesystem path or text file-like object"):
+        with pytest.raises(
+            TypeError, match="expected a filesystem path or text file-like object"
+        ):
             list(ar.read_csv_chunked(123))
 
     def test_missing_file_raises_csv_read_error(self):
@@ -496,7 +498,9 @@ class TestReadCsvChunkedCoverage:
         path = tmp_path / "decode_test.csv"
         # Write non-ascii byte sequence
         path.write_bytes(b"\x80\n")
-        with pytest.raises(CsvReadError, match="Could not decode.*using encoding 'ascii'"):
+        with pytest.raises(
+            CsvReadError, match="Could not decode.*using encoding 'ascii'"
+        ):
             list(ar.read_csv_chunked(str(path), encoding="ascii"))
 
     def test_empty_file_raises_csv_read_error(self, tmp_path):
@@ -524,7 +528,9 @@ class TestReadCsvChunkedCoverage:
         path.write_text("a,b\n1,2\n")
         with pytest.raises(TypeError, match="mode must be a string"):
             list(ar.read_csv_chunked(str(path), mode=123))
-        with pytest.raises(ValueError, match="mode must be either 'strict' or 'permissive'"):
+        with pytest.raises(
+            ValueError, match="mode must be either 'strict' or 'permissive'"
+        ):
             list(ar.read_csv_chunked(str(path), mode="invalid_mode"))
 
     def test_invalid_on_bad_lines_raises(self, tmp_path):
@@ -548,7 +554,9 @@ class TestReadCsvChunkedCoverage:
         path.write_text("a,b\n1,2\n")
         with pytest.raises(TypeError, match="decimal_separator must be a string"):
             list(ar.read_csv_chunked(str(path), decimal_separator=123))
-        with pytest.raises(ValueError, match="decimal_separator must be a single character"):
+        with pytest.raises(
+            ValueError, match="decimal_separator must be a single character"
+        ):
             list(ar.read_csv_chunked(str(path), decimal_separator="abc"))
         with pytest.raises(ValueError, match="Invalid decimal_separator"):
             list(ar.read_csv_chunked(str(path), decimal_separator="+"))
@@ -558,7 +566,9 @@ class TestReadCsvChunkedCoverage:
         path.write_text("a,b\n1,2\n")
         with pytest.raises(TypeError, match="thousands_separator must be a string"):
             list(ar.read_csv_chunked(str(path), thousands_separator=123))
-        with pytest.raises(ValueError, match="thousands_separator must differ from decimal_separator"):
+        with pytest.raises(
+            ValueError, match="thousands_separator must differ from decimal_separator"
+        ):
             list(ar.read_csv_chunked(str(path), thousands_separator="."))
 
     def test_invalid_boolean_options_raise(self, tmp_path):
@@ -572,19 +582,25 @@ class TestReadCsvChunkedCoverage:
     def test_invalid_usecols_raises(self, tmp_path):
         path = tmp_path / "config_test.csv"
         path.write_text("a,b\n1,2\n")
-        with pytest.raises(TypeError, match="usecols must be a sequence of column names, not a string"):
+        with pytest.raises(
+            TypeError, match="usecols must be a sequence of column names, not a string"
+        ):
             list(ar.read_csv_chunked(str(path), usecols="a"))
         with pytest.raises(TypeError, match="usecols must contain only strings"):
             list(ar.read_csv_chunked(str(path), usecols=[123]))
         with pytest.raises(ValueError, match="usecols must not be empty"):
             list(ar.read_csv_chunked(str(path), usecols=[]))
-        with pytest.raises(ValueError, match="usecols must not contain duplicate column names"):
+        with pytest.raises(
+            ValueError, match="usecols must not contain duplicate column names"
+        ):
             list(ar.read_csv_chunked(str(path), usecols=["a", "a"]))
 
     def test_invalid_null_values_raises(self, tmp_path):
         path = tmp_path / "config_test.csv"
         path.write_text("a,b\n1,2\n")
-        with pytest.raises(TypeError, match="null_values must be a list of strings, not a bare string"):
+        with pytest.raises(
+            TypeError, match="null_values must be a list of strings, not a bare string"
+        ):
             list(ar.read_csv_chunked(str(path), null_values="NA"))
         with pytest.raises(TypeError, match="null_values must contain only strings"):
             list(ar.read_csv_chunked(str(path), null_values=[123]))
