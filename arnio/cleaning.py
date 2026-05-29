@@ -937,7 +937,7 @@ def normalize_unicode(
     if not isinstance(form, str):
         raise TypeError("form must be a string")
     if form not in valid_forms:
-        raise ValueError(f"Unsupported Unicode normalization form: {form}")
+        raise ValueError(f"Unsupported normalization form: '{form}'. Supported forms: {', '.join(sorted(valid_forms))}")
     if subset is not None:
         validate_columns_exist(
             frame,
