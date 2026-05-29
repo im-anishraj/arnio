@@ -130,6 +130,15 @@ def register_step(name: str, fn: Callable, overwrite: bool = False):
     ...     return df
     >>> ar.register_step("custom_clean", new_custom_clean, overwrite=True)
     """
+    # === ADDED FAIL-FAST VALIDATIONS ===
+    if not isinstance(name, str) or name.strip() == "":
+        raise ValueError("Step name must be a non-empty string.")
+    if not callable(fn):
+        raise TypeError(
+            f"Step function or class must be a callable object. Got {type(fn).__name__} instead."
+        )
+    # ===================================
+
     with _REGISTRY_LOCK:
         if name.startswith(f"{_BUILTIN_STEP_NAMESPACE}{_STEP_NAMESPACE_SEPARATOR}"):
             raise ValueError(
