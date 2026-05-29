@@ -1472,6 +1472,12 @@ def write_parquet(
             "Install it with: pip install arnio[parquet]"
         ) from exc
 
+    rows, cols = frame.shape
+    if cols == 0 and rows > 0:
+        raise ValueError(
+            f"Cannot write a zero-column ArFrame with {rows} rows to Parquet: the current export path cannot preserve row count without columns."
+        )
+
     df = to_pandas(frame)
 
     kwargs: dict = {

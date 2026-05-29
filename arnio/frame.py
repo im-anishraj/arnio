@@ -491,12 +491,12 @@ class ArFrame:
             self._frame.select_columns(columns), attrs=copy.deepcopy(self._attrs)
         )
 
-    def drop_columns(self, cols: list[str]) -> ArFrame:
+    def drop_columns(self, cols: list[str] | tuple[str, ...]) -> ArFrame:
         """Return a new ArFrame with the specified columns removed.
 
         Parameters
         ----------
-        cols : list[str]
+        cols : list[str] | tuple[str, ...]
             Column names to drop. Duplicates are silently ignored.
             An empty list returns a copy of the frame unchanged.
 
@@ -517,10 +517,11 @@ class ArFrame:
         --------
         >>> frame = ar.read_csv("data.csv")
         >>> smaller = frame.drop_columns(["col1", "col2"])
+        >>> smaller = frame.drop_columns(("col1", "col2"))
         """
-        if not isinstance(cols, list):
+        if not isinstance(cols, (list, tuple)):
             raise TypeError(
-                f"cols must be a list of column names, got {type(cols).__name__!r}"
+                f"cols must be a list or tuple of column names, got {type(cols).__name__!r}"
             )
 
         if any(not isinstance(col, str) for col in cols):
@@ -661,7 +662,12 @@ class ArFrame:
         return self.select_columns(matched)
 
     def describe(self) -> dict[str, dict[str, float]]:
-        """Generate summary statistics for all numeric and string columns.
+        """Generate summary statistics for numeric, string, and boolean columns.
+
+        Numeric columns include ``count``, ``nulls``, ``mean``, ``min``, and
+        ``max``. String columns include ``count``, ``nulls``, and ``unique``.
+        Boolean columns include ``count``, ``nulls``, ``true``, ``false``, and
+        ``true_ratio``.
 
         Returns
         -------

@@ -680,6 +680,22 @@ class TestDropColumns:
         assert list(df.columns) == ["id", "name"]
         assert list(df["name"]) == ["Alice", "Bob"]
 
+    def test_drop_columns_accepts_tuple_input(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "a": [1],
+                    "b": [2],
+                    "c": [3],
+                }
+            )
+        )
+
+        result = ar.drop_columns(frame, ("a",))
+        df = ar.to_pandas(result)
+
+        assert list(df.columns) == ["b", "c"]
+
     def test_drop_columns_allows_empty_input_as_no_op(self, sample_csv):
         frame = ar.read_csv(sample_csv)
 
@@ -1708,6 +1724,41 @@ class TestNormalizeUnicode:
         result._attrs["meta"]["key"] = "mutated"
         assert frame._attrs["meta"]["key"] == "value"
 
+    def test_normalize_unicode_zero_columns(self):
+        import pandas as pd
+
+        import arnio as ar
+
+        # Non-empty zero-column frame
+        frame_3_0 = ar.from_pandas(pd.DataFrame(index=range(3)))
+        assert frame_3_0.shape == (3, 0)
+        result_3_0 = ar.normalize_unicode(frame_3_0)
+        assert result_3_0.shape == (3, 0)
+
+        # Empty zero-column frame
+        frame_0_0 = ar.from_pandas(pd.DataFrame())
+        assert frame_0_0.shape == (0, 0)
+        result_0_0 = ar.normalize_unicode(frame_0_0)
+        assert result_0_0.shape == (0, 0)
+
+        # Normal string-column behavior
+        df_normal = pd.DataFrame({"text": ["cafe\u0301"], "other": [1]})
+        frame_normal = ar.from_pandas(df_normal)
+        result_normal = ar.normalize_unicode(frame_normal)
+        assert result_normal.shape == (1, 2)
+        assert ar.to_pandas(result_normal)["text"].iloc[0] == "café"
+
+        # attrs preservation on the zero-column path
+        frame_3_0_attrs = ar.from_pandas(pd.DataFrame(index=range(3)))
+        frame_3_0_attrs._attrs = {"key": "value"}
+        result_3_0_attrs = ar.normalize_unicode(frame_3_0_attrs)
+        assert result_3_0_attrs.shape == (3, 0)
+        assert result_3_0_attrs._attrs == {"key": "value"}
+
+        # attrs deepcopy check on zero-column path
+        result_3_0_attrs._attrs["key"] = "mutated"
+        assert frame_3_0_attrs._attrs["key"] == "value"
+
 
 class TestParseBoolStrings:
     def test_parse_basic_bool_strings(self):
@@ -2045,11 +2096,34 @@ class TestParseBoolStrings:
         df = pd.DataFrame({"active": ["yes", "no"]}, dtype=object)
         frame = ar.from_pandas(df)
 
-        with pytest.raises(TypeError, match="'int' object is not iterable"):
+        with pytest.raises(
+            TypeError, match="true_values must be a set, list, or tuple of strings"
+        ):
             ar.parse_bool_strings(frame, true_values=123)
 
-        with pytest.raises(TypeError, match="'float' object is not iterable"):
+        with pytest.raises(
+            TypeError,
+            match="false_values must be a set, list, or tuple of strings",
+        ):
             ar.parse_bool_strings(frame, false_values=45.6)
+
+    def test_parse_bool_strings_rejects_mapping_containers(self):
+        import pandas as pd
+
+        df = pd.DataFrame({"active": ["yes", "no"]}, dtype=object)
+        frame = ar.from_pandas(df)
+
+        with pytest.raises(
+            TypeError,
+            match="true_values must be a set, list, or tuple of strings",
+        ):
+            ar.parse_bool_strings(frame, true_values={"yes": 1})
+
+        with pytest.raises(
+            TypeError,
+            match="false_values must be a set, list, or tuple of strings",
+        ):
+            ar.parse_bool_strings(frame, false_values={"no": 1})
 
     def test_parse_bool_strings_overlap_whitespace_and_case_normalization(self):
         """Test that tokens that overlap after case folding and whitespace stripping are correctly rejected."""

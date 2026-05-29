@@ -93,3 +93,45 @@ TEST_CASE("Frame::add_column succeeds for distinct column names", "[frame]") {
     REQUIRE(f.has_column("price") == true);
     REQUIRE(f.has_column("quantity") == true);
 }
+
+TEST_CASE("Frame::describe includes boolean column metrics", "[frame][describe]") {
+    Column flags("flag", DType::BOOL);
+    flags.push_back(true);
+    flags.push_back(false);
+    flags.push_null();
+    flags.push_back(true);
+
+    Frame f;
+    f.add_column(std::move(flags));
+
+    auto summary = f.describe();
+    REQUIRE(summary.size() == 1);
+    REQUIRE(summary[0].first == "flag");
+
+    const auto& stats = summary[0].second;
+    REQUIRE(stats.size() == 5);
+    REQUIRE(stats[0] == std::make_pair(std::string("count"), 3.0));
+    REQUIRE(stats[1] == std::make_pair(std::string("nulls"), 1.0));
+    REQUIRE(stats[2] == std::make_pair(std::string("true"), 2.0));
+    REQUIRE(stats[3] == std::make_pair(std::string("false"), 1.0));
+    REQUIRE(stats[4].first == "true_ratio");
+    REQUIRE(stats[4].second == 2.0 / 3.0);
+}
+
+TEST_CASE("Frame::describe reports empty boolean summaries deterministically",
+          "[frame][describe]") {
+    Column flags("flag", DType::BOOL);
+
+    Frame f;
+    f.add_column(std::move(flags));
+
+    auto summary = f.describe();
+    REQUIRE(summary.size() == 1);
+
+    const auto& stats = summary[0].second;
+    REQUIRE(stats[0] == std::make_pair(std::string("count"), 0.0));
+    REQUIRE(stats[1] == std::make_pair(std::string("nulls"), 0.0));
+    REQUIRE(stats[2] == std::make_pair(std::string("true"), 0.0));
+    REQUIRE(stats[3] == std::make_pair(std::string("false"), 0.0));
+    REQUIRE(stats[4] == std::make_pair(std::string("true_ratio"), 0.0));
+}

@@ -304,6 +304,53 @@ def test_compare_profiles_handles_single_column_profiles():
     assert comparison.status_counts == {"ok": 1, "warning": 0, "changed": 0}
 
 
+def test_profile_comparison_accepts_valid_status_counts():
+    base = ar.DataQualityReport(0, 0, 0, 0, 0.0, {})
+
+    comparison = ar.ProfileComparison(
+        base,
+        base,
+        {},
+        {"ok": 1, "warning": 2, "changed": 0},
+    )
+
+    assert comparison.status_counts == {
+        "ok": 1,
+        "warning": 2,
+        "changed": 0,
+    }
+
+
+def test_profile_comparison_rejects_bool_status_counts():
+    base = ar.DataQualityReport(0, 0, 0, 0, 0.0, {})
+
+    with pytest.raises(
+        TypeError,
+        match="status_counts values must not be booleans",
+    ):
+        ar.ProfileComparison(
+            base,
+            base,
+            {},
+            {"passed": True},
+        )
+
+
+def test_profile_comparison_rejects_negative_status_counts():
+    base = ar.DataQualityReport(0, 0, 0, 0, 0.0, {})
+
+    with pytest.raises(
+        ValueError,
+        match="status_counts values must be non-negative integers",
+    ):
+        ar.ProfileComparison(
+            base,
+            base,
+            {},
+            {"failed": -1},
+        )
+
+
 def test_check_quality_gates_passes_identical_profiles():
     frame = ar.from_pandas(
         pd.DataFrame({"score": [10.0, 11.0, 12.0], "city": ["a", "b", "a"]})
@@ -2584,6 +2631,80 @@ def test_profile_duplicate_count_hash_path_matches_pandas_baseline_at_scale():
     assert ar.profile(frame).duplicate_rows == baseline_count
 
 
+def test_report_repr_is_concise_and_stable():
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "b": [1, 2],
+                "a": [3, 4],
+            }
+        )
+    )
+
+    report = ar.profile(frame)
+
+    output = repr(report)
+
+    assert "DataQualityReport(" in output
+    assert "rows=2" in output
+    assert "columns=2" in output
+
+    # deterministic ordering
+    assert "column_names=[a, b]" in output
+
+
+def test_report_repr_handles_empty_reports():
+    frame = ar.from_pandas(pd.DataFrame())
+
+    report = ar.profile(frame)
+
+    output = repr(report)
+
+    assert "rows=0" in output
+    assert "columns=0" in output
+    assert "column_names=[]" in output
+
+
+def test_report_to_dict_is_deterministic():
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "z": [1],
+                "a": [2],
+                "m": [3],
+            }
+        )
+    )
+
+    report = ar.profile(frame)
+
+    result = report.to_dict()
+
+    assert list(result["columns"].keys()) == ["a", "m", "z"]
+
+
+def test_report_suggestions_are_deterministic():
+    report = ar.DataQualityReport(
+        row_count=1,
+        column_count=1,
+        memory_usage=1,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+        suggestions=[
+            ("z_step", {"b": 2, "a": 1}),
+            ("a_step", {"d": 4, "c": 3}),
+        ],
+    )
+
+    result = report.to_dict()
+
+    assert result["suggestions"][0]["step"] == "a_step"
+    assert result["suggestions"][1]["step"] == "z_step"
+
+    assert list(result["suggestions"][0]["kwargs"].keys()) == ["c", "d"]
+
+
 # ── numeric histogram tests ──────────────────────────────────────────────────
 
 
@@ -3130,6 +3251,38 @@ def test_data_quality_report_to_json_redact_sample_values():
     assert parsed["columns"]["name"]["sample_values"] == ["[REDACTED]"]
 
 
+def test_report_suggestions_are_deterministic_with_nested_kwargs():
+    report = ar.DataQualityReport(
+        row_count=1,
+        column_count=1,
+        memory_usage=1,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+        suggestions=[
+            (
+                "same_step",
+                {
+                    "config": {"z": 1, "a": 2},
+                    "values": [3, 2, 1],
+                },
+            ),
+            (
+                "same_step",
+                {
+                    "config": {"a": 2, "z": 1},
+                    "values": [1, 2, 3],
+                },
+            ),
+        ],
+    )
+
+    result = report.to_dict()
+
+    assert result["suggestions"][0]["step"] == "same_step"
+    assert result["suggestions"][1]["step"] == "same_step"
+
+
 def test_data_quality_report_to_json_redacts_top_values():
     frame = ar.from_pandas(
         pd.DataFrame(
@@ -3281,6 +3434,9 @@ def test_quality_gate_result_to_json_invalid_output_raises():
     result = ar.check_quality_gates(p, p)
     with pytest.raises(TypeError, match="writable text stream"):
         result.to_json(output=123)
+
+
+# --- Tests for ProfileComparison.to_json() ---
 
 
 def test_compare_profiles_mismatched_exclude_columns_hints_user():
