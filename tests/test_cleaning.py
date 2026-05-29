@@ -508,18 +508,67 @@ class TestSharedColumnSequenceValidation:
 
         assert list(df.columns) == ["id", "name"]
 
-    def test_combine_columns_preserves_duplicate_subset_entries(self):
+    def test_combine_columns_rejects_duplicate_subset_entries(self):
         frame = ar.from_pandas(pd.DataFrame({"word": ["go"], "suffix": ["!"]}))
 
-        result = ar.combine_columns(
-            frame,
-            subset=["word", "word", "suffix"],
-            separator="-",
-            output_column="combined",
-        )
-        df = ar.to_pandas(result)
+        with pytest.raises(ValueError, match="duplicate column names"):
+            ar.combine_columns(
+                frame,
+                subset=["word", "word", "suffix"],
+                separator="-",
+                output_column="combined",
+            )
 
-        assert df["combined"].tolist() == ["go-go-!"]
+    def test_combine_columns_rejects_duplicate_subset_direct(self):
+        frame = ar.from_pandas(pd.DataFrame({"a": ["x"], "b": ["y"]}))
+
+        with pytest.raises(ValueError, match="duplicate column names"):
+            ar.combine_columns(frame, subset=["a", "a"], output_column="combined")
+
+    def test_combine_columns_pipeline_rejects_duplicate_subset(self):
+        frame = ar.from_pandas(pd.DataFrame({"a": ["x"], "b": ["y"]}))
+
+        with pytest.raises(ValueError, match="duplicate column names"):
+            ar.pipeline(
+                frame,
+                [
+                    (
+                        "combine_columns",
+                        {"subset": ["a", "a"], "output_column": "combined"},
+                    )
+                ],
+            )
+
+    def test_coalesce_columns_rejects_duplicate_subset_entries(self):
+        frame = ar.from_pandas(
+            pd.DataFrame({"nickname": [None, "Bee"], "name": ["Alice", "Bob"]})
+        )
+
+        with pytest.raises(ValueError, match="duplicate column names"):
+            ar.coalesce_columns(
+                frame,
+                subset=["nickname", "nickname"],
+                output_column="display_name",
+            )
+
+    def test_coalesce_columns_pipeline_rejects_duplicate_subset(self):
+        frame = ar.from_pandas(
+            pd.DataFrame({"nickname": [None, "Bee"], "name": ["Alice", "Bob"]})
+        )
+
+        with pytest.raises(ValueError, match="duplicate column names"):
+            ar.pipeline(
+                frame,
+                [
+                    (
+                        "coalesce_columns",
+                        {
+                            "subset": ["nickname", "nickname"],
+                            "output_column": "display_name",
+                        },
+                    )
+                ],
+            )
 
 
 class TestDropDuplicates:

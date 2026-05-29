@@ -118,6 +118,7 @@ def _validate_existing_column_sequence(
     available_columns: Sequence[str],
     argument_name: str,
     allow_empty: bool = True,
+    reject_duplicates: bool = False,
     missing_error: type[Exception] = KeyError,
     missing_message: Callable[[list[str], str], str] | None = None,
 ) -> list[str]:
@@ -125,6 +126,18 @@ def _validate_existing_column_sequence(
 
     if not normalized and not allow_empty:
         raise ValueError(f"{argument_name} cannot be empty")
+
+    if reject_duplicates:
+        seen = set()
+        duplicates = []
+        for col in normalized:
+            if col in seen and col not in duplicates:
+                duplicates.append(col)
+            seen.add(col)
+        if duplicates:
+            raise ValueError(
+                f"{argument_name} contains duplicate column names: {duplicates}"
+            )
 
     missing = [column for column in normalized if column not in available_columns]
     if missing:
@@ -1526,6 +1539,7 @@ def combine_columns(
             subset,
             available_columns=column_names,
             argument_name="subset",
+            reject_duplicates=True,
             missing_message=lambda missing, available: (
                 f"Missing columns for combine_columns: {missing}. "
                 f"Available columns: {available}"
@@ -2015,6 +2029,7 @@ def coalesce_columns(
         subset,
         available_columns=column_names,
         argument_name="subset",
+        reject_duplicates=True,
         missing_message=lambda missing, available: (
             f"Missing columns for coalesce_columns: {missing}. "
             f"Available columns: {available}"
