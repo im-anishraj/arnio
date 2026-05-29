@@ -304,3 +304,49 @@ def test_arniocleaner_clone_with_invalid_params_does_not_raise():
     cleaner = ArnioCleaner(copy="yes")
     cloned = clone(cleaner)
     assert cloned.copy == "yes"
+
+
+# ============================================================
+# NEW TESTS for get_feature_names_out input validation (issue #1947)
+# ============================================================
+
+@pytest.fixture
+def fitted_cleaner():
+    """Cleaner fitted on two features 'A' and 'B' for input validation tests."""
+    df = pd.DataFrame({"A": [1], "B": [2]})
+    return ArnioCleaner().fit(df)
+
+
+def test_get_feature_names_out_bare_string(fitted_cleaner):
+    with pytest.raises(TypeError, match="must be a sequence of strings"):
+        fitted_cleaner.get_feature_names_out("A")
+
+
+def test_get_feature_names_out_integer(fitted_cleaner):
+    with pytest.raises(TypeError, match="must be a sequence of strings"):
+        fitted_cleaner.get_feature_names_out(123)
+
+
+def test_get_feature_names_out_bytes(fitted_cleaner):
+    with pytest.raises(TypeError, match="must be a sequence of strings"):
+        fitted_cleaner.get_feature_names_out(b"A")
+
+
+def test_get_feature_names_out_non_string_elements(fitted_cleaner):
+    with pytest.raises(TypeError, match="All input_features must be strings"):
+        fitted_cleaner.get_feature_names_out([1, 2])
+
+
+def test_get_feature_names_out_valid_list(fitted_cleaner):
+    result = fitted_cleaner.get_feature_names_out(["A", "B"])
+    assert list(result) == ["A", "B"]
+
+
+def test_get_feature_names_out_valid_tuple(fitted_cleaner):
+    result = fitted_cleaner.get_feature_names_out(("A", "B"))
+    assert list(result) == ["A", "B"]
+
+
+def test_get_feature_names_out_none(fitted_cleaner):
+    result = fitted_cleaner.get_feature_names_out(None)
+    assert list(result) == ["A", "B"]
