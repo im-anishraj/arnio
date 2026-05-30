@@ -8,6 +8,8 @@ from __future__ import annotations
 import copy
 import json
 import math
+from collections.abc import Iterator
+from typing import Any
 
 from ._core import _Frame
 
@@ -1051,3 +1053,42 @@ class ArFrame:
             )
 
         return summary + table + notice
+
+
+class ChunkedArFrame:
+    """A streaming, lazily-evaluated data container for chunked processing."""
+
+    __slots__ = ("_chunks", "_attrs")
+
+    def __init__(self, chunks: Iterator[ArFrame], attrs: dict | None = None) -> None:
+        self._chunks = chunks
+        self._attrs: dict = attrs if attrs is not None else {}
+
+    def __iter__(self) -> Iterator[ArFrame]:
+        return self._chunks
+
+    def to_pandas(self):
+        """Materialize all chunks into a single pandas DataFrame.
+        
+        Warning: This will exhaust the generator and pull all data into memory.
+        """
+        import pandas as pd
+        from .convert import to_pandas as _to_pandas
+
+        dfs = []
+        for chunk in self._chunks:
+            dfs.append(_to_pandas(chunk, copy=False))
+        if not dfs:
+            return pd.DataFrame()
+        return pd.concat(dfs, ignore_index=True)
+
+    def pipeline(self, steps: list[tuple], **kwargs: Any) -> ChunkedArFrame:
+        """Apply a pipeline lazily to each chunk."""
+        from .pipeline import pipeline as _pipeline
+
+        def _generator() -> Iterator[ArFrame]:
+            from typing import cast
+            for chunk in self._chunks:
+                yield cast(ArFrame, _pipeline(chunk, steps, **kwargs))
+
+        return ChunkedArFrame(_generator(), attrs=copy.deepcopy(self._attrs))

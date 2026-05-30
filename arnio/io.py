@@ -12,9 +12,9 @@ import os
 import shutil
 import tempfile
 import warnings
-from collections.abc import Iterator, Sequence
+from collections.abc import Generator, Iterator, Sequence
 from contextlib import contextmanager
-from typing import cast
+from typing import Any, BinaryIO, cast
 
 from ._core import (
     _CsvChunkReader,
@@ -24,7 +24,7 @@ from ._core import (
     _CsvWriter,
 )
 from .exceptions import CsvReadError, JsonlReadError
-from .frame import ArFrame
+from .frame import ArFrame, ChunkedArFrame
 
 
 def _is_utf8_encoding(encoding: str) -> bool:
@@ -47,7 +47,7 @@ def _utf8_csv_path(
     delimiter: str = ",",
     sample_rows: int | None = None,
     encoding_errors: str = "strict",
-) -> Iterator[str]:
+) -> Generator[str, None, None]:
     """Return a UTF-8 file path for the C++ reader.
 
     The native reader currently consumes UTF-8 bytes. For other encodings,
@@ -459,7 +459,8 @@ def read_csv(
     mode: str = "strict",
     encoding_errors: str = "strict",
     on_bad_lines: str = "error",
-) -> ArFrame:
+    chunksize: int | None = None,
+) -> ArFrame | ChunkedArFrame:
     """Read a CSV file into an ArFrame via C++ backend.
 
     Parameters
@@ -579,11 +580,32 @@ def read_csv(
 
         path_lower = path.lower()
 
-        # Resolve the sentinel: auto-detect tab for .tsv only when the caller
-        # truly omitted delimiter (None).  An explicit delimiter="," is always
-        # honoured, even for .tsv paths.
+        # resolve sentinel
         if delimiter is None:
             delimiter = "\t" if path_lower.endswith(".tsv") else ","
+
+        if chunksize is not None:
+            if not isinstance(chunksize, int) or chunksize <= 0:
+                raise ValueError("chunksize must be a positive integer")
+            # We don't support encoding_errors in read_csv_chunked currently, so we drop it.
+            # skip_rows vs skiprows
+            return ChunkedArFrame(read_csv_chunked(
+                path=path,
+                chunksize=chunksize,
+                dtype=dtype,
+                delimiter=delimiter,
+                has_header=has_header,
+                usecols=usecols,
+                nrows=nrows,
+                skiprows=skiprows,
+                encoding=encoding,
+                trim_headers=trim_headers,
+                decimal_separator=decimal_separator,
+                thousands_separator=thousands_separator,
+                null_values=null_values,
+                mode=mode,
+                on_bad_lines=on_bad_lines,
+            ))
 
         decimal_separator = _validate_decimal_separator(decimal_separator)
         _validate_thousands_separator(thousands_separator, decimal_separator)

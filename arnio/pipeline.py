@@ -19,7 +19,7 @@ import pandas as pd
 from . import cleaning
 from .convert import from_pandas, to_pandas
 from .exceptions import PipelineStepError, UnknownStepError
-from .frame import ArFrame
+from .frame import ArFrame, ChunkedArFrame
 
 logger = logging.getLogger("arnio")
 _BUILTIN_STEP_NAMESPACE = "builtin"
@@ -59,6 +59,11 @@ _PYTHON_STEP_REGISTRY: dict[str, Callable] = {
     "normalize_whitespace": cleaning.normalize_whitespace,
 }
 _BUILTIN_PYTHON_STEP_REGISTRY: dict[str, Callable] = {}
+
+# Steps that require a full pass over the data and cannot be applied per-chunk
+_FULL_PASS_STEPS: frozenset[str] = frozenset({
+    "drop_duplicates",
+})
 
 
 @dataclass(frozen=True)
@@ -342,7 +347,7 @@ def pipeline(
     return_metadata: bool = False,
     dry_run: bool = False,
     verbose: bool = False,
-) -> ArFrame | tuple[ArFrame, dict[str, Any]]:
+) -> ArFrame | ChunkedArFrame | tuple[ArFrame, dict[str, Any]]:
     """Apply a list of cleaning steps sequentially.
 
     Each step is a tuple of (step_name,) or (step_name, kwargs_dict).
@@ -389,8 +394,8 @@ def pipeline(
     ...     ("drop_duplicates", {"keep": "first"}),
     ... ])
     """
-    if not isinstance(frame, ArFrame):
-        raise TypeError("frame must be an ArFrame")
+    if not isinstance(frame, (ArFrame, ChunkedArFrame)):
+        raise TypeError("frame must be an ArFrame or ChunkedArFrame")
     if not isinstance(return_metadata, bool):
         raise TypeError(
             f"return_metadata must be a bool, got {type(return_metadata).__name__!r}"
@@ -409,6 +414,19 @@ def pipeline(
         python_step_registry,
         deprecated_step_aliases,
     )
+
+    if isinstance(frame, ChunkedArFrame):
+        # Validation for full pass steps
+        for step in steps:
+            name = step[0] if len(step) >= 1 else None
+            if name:
+                name = _resolve_step_name(name, deprecated_step_aliases)
+                name = namespaced_builtin_steps.get(name, name)
+                if name in _FULL_PASS_STEPS:
+                    raise ValueError(f"Step '{name}' requires a full pass and cannot be used in a streaming pipeline.")
+        if return_metadata:
+            raise ValueError("return_metadata=True is not supported for chunked pipelines.")
+        return frame.pipeline(steps, return_metadata=False, dry_run=dry_run, verbose=verbose)
 
     result = frame
     working_frame = frame
