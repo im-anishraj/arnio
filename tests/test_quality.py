@@ -9,8 +9,8 @@ import pytest
 
 import arnio as ar
 from arnio.quality import (
-    CleaningSuggestion,
     QUALITY_REPORT_COLUMNS,
+    CleaningSuggestion,
     _validate_gate_bool,
     _validate_gate_ratio_threshold,
     _validate_gate_threshold,
