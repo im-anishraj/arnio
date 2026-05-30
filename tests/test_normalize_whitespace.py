@@ -42,6 +42,12 @@ def test_empty_string_stays_empty():
     assert result["name"][0] == ""
 
 
+def test_whitespace_only_string_becomes_empty():
+    frame = ar.from_pandas(pd.DataFrame({"name": ["   \t\n   "]}))
+    result = ar.to_pandas(ar.pipeline(frame, [("normalize_whitespace",)]))
+    assert result["name"][0] == ""
+
+
 def test_skips_non_string_columns_by_default():
     frame = ar.from_pandas(pd.DataFrame({"age": [25, 30]}))
     result = ar.to_pandas(ar.pipeline(frame, [("normalize_whitespace",)]))

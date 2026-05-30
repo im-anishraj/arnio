@@ -1,3 +1,4 @@
+import os
 import sys
 import time
 import tracemalloc
@@ -107,4 +108,18 @@ def run_all_benchmarks():
 
 
 if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Benchmark arnio .to_pandas() conversion overhead."
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Run with minimal row counts (equivalent to ARNIO_BENCHMARK_DRY_RUN=1).",
+    )
+    args = parser.parse_args()
+    if args.dry_run:
+        os.environ["ARNIO_BENCHMARK_DRY_RUN"] = "1"
+
     run_all_benchmarks()

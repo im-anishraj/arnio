@@ -1,11 +1,25 @@
 """Tests for write_csv functionality."""
 
+import os
 from pathlib import Path
 
 import pandas as pd
 import pytest
 
 import arnio as ar
+
+
+@pytest.mark.parametrize(
+    "bad_input",
+    [
+        object(),
+        None,
+        pd.DataFrame({"a": [1, 2]}),
+    ],
+)
+def test_write_csv_invalid_frame(bad_input, tmp_path):
+    with pytest.raises(TypeError, match="frame must be an ArFrame"):
+        ar.write_csv(bad_input, tmp_path / "out.csv")
 
 
 class TestWriteCsv:
@@ -64,6 +78,18 @@ class TestWriteCsv:
         out = tmp_path / "out.csv"
         ar.write_csv(frame, out)
         assert out.exists()
+
+    def test_non_ascii_output_path_round_trip(self, tmp_path):
+        frame = ar.from_pandas(
+            pd.DataFrame({"city": ["Łódź", "東京"], "sales": [10, 20]})
+        )
+        out = tmp_path / "résumé_東京.csv"
+
+        ar.write_csv(frame, str(out))
+
+        assert out.exists()
+        round_tripped = ar.to_pandas(ar.read_csv(str(out)))
+        pd.testing.assert_frame_equal(round_tripped, ar.to_pandas(frame))
 
     def test_high_precision_float_round_trip(self, tmp_path):
         frame = ar.from_pandas(pd.DataFrame({"val": [1.23456789012345678]}))
@@ -129,16 +155,30 @@ class TestWriteCsvLineTerminatorBytes:
         assert b"\r\r" not in raw
 
     def test_custom_terminator_writes_exact_bytes(self, tmp_path):
-        # An arbitrary terminator (e.g. "|") must be written verbatim.
+        # Arbitrary/custom terminators (e.g. "|") must be rejected.
         frame = ar.from_pandas(pd.DataFrame({"x": [7]}))
         out = tmp_path / "out.csv"
-        ar.write_csv(frame, out, line_terminator="|")
+        with pytest.raises(ValueError, match="line_terminator must be one of"):
+            ar.write_csv(frame, out, line_terminator="|")
+
+    def test_r_terminator_writes_exact_r_bytes(self, tmp_path):
+        # line_terminator="\r" must produce CR bytes verbatim.
+        frame = ar.from_pandas(pd.DataFrame({"a": [1, 2]}))
+        out = tmp_path / "out.csv"
+        ar.write_csv(frame, out, line_terminator="\r")
         raw = out.read_bytes()
-        assert raw == b"x|7|"
+        assert raw == b"a\r1\r2\r"
+
+    def test_arbitrary_strings_rejected(self, tmp_path):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1, 2]}))
+        out = tmp_path / "out.csv"
+        for term in ["END", "\n\0", "\0", "\r\r\n"]:
+            with pytest.raises(ValueError, match="line_terminator must be one of"):
+                ar.write_csv(frame, out, line_terminator=term)
 
     def test_empty_line_terminator_rejected(self, tmp_path):
         frame = ar.from_pandas(pd.DataFrame({"a": [1, 2]}))
-        with pytest.raises(ValueError, match="line_terminator must not be empty"):
+        with pytest.raises(ValueError, match="line_terminator must be one of"):
             ar.write_csv(frame, tmp_path / "out.csv", line_terminator="")
 
     def test_non_string_line_terminator_rejected(self, tmp_path):
@@ -304,3 +344,49 @@ class TestWriteCsvQuoteCharValidation:
             ValueError, match="delimiter must not be the CSV quote character"
         ):
             ar.write_csv(frame, str(tmp_path / "out.csv"), delimiter='"')
+
+
+class TestWriteCsvControlCharValidation:
+    """Control character validation: unsafe control characters must be rejected."""
+
+    @pytest.mark.parametrize("delimiter", ["\0", "\x1f", "\x7f"])
+    def test_control_character_delimiter_rejected(self, tmp_path, delimiter):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
+        with pytest.raises(
+            ValueError, match="delimiter must not be a control character"
+        ):
+            ar.write_csv(frame, str(tmp_path / "out.csv"), delimiter=delimiter)
+
+
+def test_write_csv_rejects_bool_path(tmp_path):
+    frame = ar.from_pandas(pd.DataFrame({"a": [1, 2, 3]}))
+    with pytest.raises(TypeError, match="path must be a string"):
+        ar.write_csv(frame, True)
+
+
+def test_write_csv_rejects_int_path(tmp_path):
+    frame = ar.from_pandas(pd.DataFrame({"a": [1, 2, 3]}))
+    with pytest.raises(TypeError, match="path must be a string"):
+        ar.write_csv(frame, 42)
+
+
+class _BytesPathLike:
+    def __init__(self, path: bytes) -> None:
+        self._path = path
+
+    def __fspath__(self) -> bytes:
+        return self._path
+
+
+def test_write_csv_accepts_bytes_path(tmp_path):
+    frame = ar.from_pandas(pd.DataFrame({"a": [1, 2, 3]}))
+    out = tmp_path / "out.csv"
+    ar.write_csv(frame, os.fsencode(out))
+    assert out.exists()
+
+
+def test_write_csv_accepts_pathlike_bytes_path(tmp_path):
+    frame = ar.from_pandas(pd.DataFrame({"a": [1, 2, 3]}))
+    out = tmp_path / "out.csv"
+    ar.write_csv(frame, _BytesPathLike(os.fsencode(out)))
+    assert out.exists()

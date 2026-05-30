@@ -93,3 +93,132 @@ TEST_CASE("Frame::add_column succeeds for distinct column names", "[frame]") {
     REQUIRE(f.has_column("price") == true);
     REQUIRE(f.has_column("quantity") == true);
 }
+
+TEST_CASE("Frame::describe includes boolean column metrics", "[frame][describe]") {
+    Column flags("flag", DType::BOOL);
+    flags.push_back(true);
+    flags.push_back(false);
+    flags.push_null();
+    flags.push_back(true);
+
+    Frame f;
+    f.add_column(std::move(flags));
+
+    auto summary = f.describe();
+    REQUIRE(summary.size() == 1);
+    REQUIRE(summary[0].first == "flag");
+
+    const auto& stats = summary[0].second;
+    REQUIRE(stats.size() == 5);
+    REQUIRE(stats[0] == std::make_pair(std::string("count"), 3.0));
+    REQUIRE(stats[1] == std::make_pair(std::string("nulls"), 1.0));
+    REQUIRE(stats[2] == std::make_pair(std::string("true"), 2.0));
+    REQUIRE(stats[3] == std::make_pair(std::string("false"), 1.0));
+    REQUIRE(stats[4].first == "true_ratio");
+    REQUIRE(stats[4].second == 2.0 / 3.0);
+}
+
+TEST_CASE("Frame::describe reports empty boolean summaries deterministically",
+          "[frame][describe]") {
+    Column flags("flag", DType::BOOL);
+
+    Frame f;
+    f.add_column(std::move(flags));
+
+    auto summary = f.describe();
+    REQUIRE(summary.size() == 1);
+
+    const auto& stats = summary[0].second;
+    REQUIRE(stats[0] == std::make_pair(std::string("count"), 0.0));
+    REQUIRE(stats[1] == std::make_pair(std::string("nulls"), 0.0));
+    REQUIRE(stats[2] == std::make_pair(std::string("true"), 0.0));
+    REQUIRE(stats[3] == std::make_pair(std::string("false"), 0.0));
+    REQUIRE(stats[4] == std::make_pair(std::string("true_ratio"), 0.0));
+}
+
+// ── non-finite describe tests ─────────────────────────────────────────────────
+
+static double find_stat(const std::vector<std::pair<std::string, double>>& stats,
+                        const std::string& key) {
+    for (const auto& kv : stats) {
+        if (kv.first == key) return kv.second;
+    }
+    return -999.0;  // sentinel: key not found
+}
+
+TEST_CASE("Frame::describe excludes non-finite floats and exposes non_finite count",
+          "[frame][describe][non_finite]") {
+    Column x("x", DType::FLOAT64);
+    x.push_back(CellValue(1.0));
+    x.push_back(CellValue(std::numeric_limits<double>::infinity()));
+    x.push_back(CellValue(-std::numeric_limits<double>::infinity()));
+    x.push_back(CellValue(3.0));
+
+    Frame f;
+    f.add_column(std::move(x));
+
+    auto summary = f.describe();
+    REQUIRE(summary.size() == 1);
+
+    const auto& stats = summary[0].second;
+    REQUIRE(find_stat(stats, "count") == 4.0);
+    REQUIRE(find_stat(stats, "nulls") == 0.0);
+    REQUIRE(find_stat(stats, "non_finite") == 2.0);
+    REQUIRE(find_stat(stats, "mean") == 2.0);
+    REQUIRE(find_stat(stats, "min") == 1.0);
+    REQUIRE(find_stat(stats, "max") == 3.0);
+}
+
+TEST_CASE("Frame::describe all-non-finite column returns zero fallback",
+          "[frame][describe][non_finite]") {
+    Column x("x", DType::FLOAT64);
+    x.push_back(CellValue(std::numeric_limits<double>::infinity()));
+    x.push_back(CellValue(-std::numeric_limits<double>::infinity()));
+
+    Frame f;
+    f.add_column(std::move(x));
+
+    auto summary = f.describe();
+    const auto& stats = summary[0].second;
+    REQUIRE(find_stat(stats, "count") == 2.0);
+    REQUIRE(find_stat(stats, "non_finite") == 2.0);
+    REQUIRE(find_stat(stats, "mean") == 0.0);
+    REQUIRE(find_stat(stats, "min") == 0.0);
+    REQUIRE(find_stat(stats, "max") == 0.0);
+}
+
+TEST_CASE("Frame::describe negative-infinity only column is non-finite",
+          "[frame][describe][non_finite]") {
+    Column x("x", DType::FLOAT64);
+    x.push_back(CellValue(-std::numeric_limits<double>::infinity()));
+    x.push_back(CellValue(-std::numeric_limits<double>::infinity()));
+
+    Frame f;
+    f.add_column(std::move(x));
+
+    auto summary = f.describe();
+    const auto& stats = summary[0].second;
+    REQUIRE(find_stat(stats, "non_finite") == 2.0);
+    REQUIRE(find_stat(stats, "mean") == 0.0);
+    REQUIRE(find_stat(stats, "min") == 0.0);
+    REQUIRE(find_stat(stats, "max") == 0.0);
+}
+
+TEST_CASE("Frame::describe int64 column non_finite is always zero",
+          "[frame][describe][non_finite]") {
+    Column x("x", DType::INT64);
+    x.push_back(CellValue(int64_t(10)));
+    x.push_back(CellValue(int64_t(20)));
+    x.push_back(CellValue(int64_t(30)));
+
+    Frame f;
+    f.add_column(std::move(x));
+
+    auto summary = f.describe();
+    const auto& stats = summary[0].second;
+    REQUIRE(find_stat(stats, "non_finite") == 0.0);
+    REQUIRE(find_stat(stats, "count") == 3.0);
+    REQUIRE(find_stat(stats, "mean") == 20.0);
+    REQUIRE(find_stat(stats, "min") == 10.0);
+    REQUIRE(find_stat(stats, "max") == 30.0);
+}

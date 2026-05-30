@@ -53,7 +53,7 @@ class CsvParser {
     bool is_null_sentinel(const std::string& value) const;
     DType infer_type(const std::string& value) const;
     static DType promote_type(DType current, DType incoming);
-    CellValue parse_value(const std::string& raw, DType dtype) const;
+    CellValue parse_value(const std::string& raw, DType dtype, bool is_forced = false) const;
 
    private:
     CsvConfig config_;
@@ -94,6 +94,7 @@ class CsvChunkReader {
     std::vector<std::string> header_;
     std::vector<size_t> col_indices_;
     std::vector<DType> col_types_;
+    std::vector<bool> explicit_dtype_columns_;
     std::optional<size_t> expected_cols_;
     size_t record_number_ = 0;
     size_t rows_read_total_ = 0;
