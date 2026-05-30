@@ -2503,8 +2503,8 @@ class TestCastTypes:
     def test_cast_rejects_invalid_errors_policy(self, sample_csv):
         frame = ar.read_csv(sample_csv)
 
-        with pytest.raises(ValueError, match="errors must be either"):
-            ar.cast_types(frame, {"age": "int64"}, errors="ignore")
+        with pytest.raises(ValueError, match="errors must be one of"):
+            ar.cast_types(frame, {"age": "int64"}, errors="warn")
 
     @pytest.mark.parametrize(
         "mapping",
@@ -2628,6 +2628,15 @@ class TestCastTypes:
         assert df["score"].iloc[0] == 1.5
         assert pd.isna(df["score"].iloc[1])
 
+    def test_cast_string_to_float_unparseable_ignores_column(self):
+        frame = ar.from_pandas(pd.DataFrame({"score": ["1.5", "abc"]}))
+
+        result = ar.cast_types(frame, {"score": "float64"}, errors="ignore")
+        df = ar.to_pandas(result)
+
+        assert result.dtypes["score"] == "string"
+        assert list(df["score"]) == ["1.5", "abc"]
+
     def test_cast_string_to_int_unparseable_raises(self):
         # "hello" cannot be parsed as int64, raises TypeCastError by default
         frame = ar.from_pandas(pd.DataFrame({"age": ["10", "hello"]}))
@@ -2642,6 +2651,34 @@ class TestCastTypes:
         assert result.dtypes["age"] == "int64"
         assert df["age"].iloc[0] == 10
         assert pd.isna(df["age"].iloc[1])
+
+    def test_cast_ignore_casts_valid_columns_and_preserves_invalid_columns(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "age": ["10", "hello"],
+                    "score": ["1.5", "2.25"],
+                }
+            )
+        )
+
+        result = ar.cast_types(
+            frame,
+            {"age": "int64", "score": "float64"},
+            errors="ignore",
+        )
+        df = ar.to_pandas(result)
+
+        assert result.dtypes["age"] == "string"
+        assert result.dtypes["score"] == "float64"
+        assert list(df["age"]) == ["10", "hello"]
+        assert list(df["score"]) == [1.5, 2.25]
+
+    def test_cast_ignore_still_rejects_unknown_target_dtype(self):
+        frame = ar.from_pandas(pd.DataFrame({"age": ["10", "20"]}))
+
+        with pytest.raises(ar.TypeCastError, match="Unknown target dtype"):
+            ar.cast_types(frame, {"age": "datetime"}, errors="ignore")
 
     def test_cast_invalid_dtype_string_raises(self):
         # "datetime" is not a supported type, raises TypeCastError

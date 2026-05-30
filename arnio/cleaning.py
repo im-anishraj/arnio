@@ -1257,8 +1257,9 @@ def cast_types(
         Input data frame.
     mapping : dict[str, str]
         Dictionary mapping column names to target type strings (e.g., "int64", "float64", "bool", "string").
-    errors : {"raise", "coerce"}, default "raise"
-        Whether invalid casts raise ``TypeCastError`` or become null values.
+    errors : {"raise", "coerce", "ignore"}, default "raise"
+        Whether invalid casts raise ``TypeCastError``, become null values, or
+        leave the affected column unchanged.
 
     Returns
     -------
@@ -1271,8 +1272,8 @@ def cast_types(
     >>> casted = ar.cast_types(frame, {"age": "int64", "score": "float64"})
     """
     frame, _ = _validate_frame(frame)
-    if errors not in {"raise", "coerce"}:
-        raise ValueError("errors must be either 'raise' or 'coerce'")
+    if errors not in {"raise", "coerce", "ignore"}:
+        raise ValueError("errors must be one of 'raise', 'coerce', or 'ignore'")
 
     mapping = _validate_string_mapping(mapping, argument_name="mapping")
     validate_columns_exist(
@@ -1281,11 +1282,20 @@ def cast_types(
         operation="cast_types",
     )
     try:
-        result = _cast_types(
-            frame._frame,
-            mapping,
-            errors == "coerce",
-        )
+        if errors == "ignore":
+            result = frame._frame
+            for column, dtype in mapping.items():
+                try:
+                    result = _cast_types(result, {column: dtype}, False)
+                except ValueError as e:
+                    if not str(e).startswith("Cannot cast column "):
+                        raise
+        else:
+            result = _cast_types(
+                frame._frame,
+                mapping,
+                errors == "coerce",
+            )
     except ValueError as e:
         raise TypeCastError(str(e)) from e
     return ArFrame(result)
