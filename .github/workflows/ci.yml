@@ -129,14 +129,20 @@ jobs:
           pip install -e .[dev]
           pip install jupyter nbconvert ipykernel
 
-      - name: Execute notebook
+      - name: Execute notebooks
         run: |
           jupyter nbconvert \
             --to notebook \
             --execute \
             --ExecutePreprocessor.timeout=300 \
             examples/financial_csv_example.ipynb \
-            --output executed_notebook.ipynb
+            --output financial_csv_example.executed.ipynb
+          jupyter nbconvert \
+            --to notebook \
+            --execute \
+            --ExecutePreprocessor.timeout=300 \
+            examples/ignite_arnio_cleaning.ipynb \
+            --output ignite_arnio_cleaning.executed.ipynb
 
   sklearn_integration:
     name: scikit-learn Integration Tests
