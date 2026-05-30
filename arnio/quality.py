@@ -346,11 +346,13 @@ class DataQualityReport:
             exclude_columns = set()
 
         elif not isinstance(exclude_columns, (list, tuple, set)):
-            raise TypeError("exclude_columns must be a list, tuple, set, or None")
+            raise TypeError(
+                "exclude_columns must be a list, tuple, set, or None")
 
         else:
             if not all(isinstance(column, str) for column in exclude_columns):
-                raise TypeError("exclude_columns must contain only string column names")
+                raise TypeError(
+                    "exclude_columns must contain only string column names")
 
             exclude_columns = set(exclude_columns)
 
@@ -497,7 +499,8 @@ class DataQualityReport:
             for name in sorted(self.columns):
                 column = self.columns[name]
 
-                warnings = ", ".join(column.warnings) if column.warnings else "-"
+                warnings = ", ".join(
+                    column.warnings) if column.warnings else "-"
 
                 lines.append(
                     f"| {_markdown_cell(column.name)} "
@@ -623,8 +626,10 @@ class DataQualityReport:
             return "bad"
 
         total_warnings = sum(len(c.warnings) for c in self.columns.values())
-        cols_with_warnings = sum(1 for c in self.columns.values() if c.warnings)
-        cols_with_nulls = sum(1 for c in self.columns.values() if c.null_count > 0)
+        cols_with_warnings = sum(
+            1 for c in self.columns.values() if c.warnings)
+        cols_with_nulls = sum(
+            1 for c in self.columns.values() if c.null_count > 0)
 
         styles = """
         /* Scoped styles for notebook output */
@@ -670,7 +675,8 @@ class DataQualityReport:
             lines.append("  <title>Data Quality Report</title>")
             lines.append(f"  <style>{styles}</style>")
             lines.append("</head>")
-            lines.append('<body style="margin:0;padding:16px;background:#f3f4f6;">')
+            lines.append(
+                '<body style="margin:0;padding:16px;background:#f3f4f6;">')
             lines.append('<div class="arnio-dqr">')
         else:
             lines.append(f"<style>{styles}</style>")
@@ -685,13 +691,15 @@ class DataQualityReport:
         )
         lines.append("</div>")
         lines.append(
-            f"<div class=\"pill\"><span class=\"muted\">Quality score</span> <span class=\"score {score_class(self.quality_score)}\">{e(f'{self.quality_score:.2f}')}</span></div>"
+            f"<div class=\"pill\"><span class=\"muted\">Quality score</span> <span class=\"score {score_class(self.quality_score)}\">{e(f'{self.quality_score:.2f}')
+                                                                                                                                      }</span></div>"
         )
         lines.append("</div>")
 
         lines.append('<div class="grid">')
         cards: list[tuple[str, str]] = [
-            ("Duplicate rows", f"{self.duplicate_rows} ({self.duplicate_ratio:.2%})"),
+            ("Duplicate rows",
+             f"{self.duplicate_rows} ({self.duplicate_ratio:.2%})"),
             ("Columns w/ nulls", str(cols_with_nulls)),
             ("Columns w/ warnings", str(cols_with_warnings)),
             ("Total warnings", str(total_warnings)),
@@ -710,7 +718,8 @@ class DataQualityReport:
             lines.append('<div class="section">')
             lines.append("<h2>Score Components</h2>")
             lines.append("<table>")
-            lines.append("<thead><tr><th>Component</th><th>Delta</th></tr></thead>")
+            lines.append(
+                "<thead><tr><th>Component</th><th>Delta</th></tr></thead>")
             lines.append("<tbody>")
             for key, value in sorted(self.score_components.items()):
                 cls = "warn" if value < 0 else "muted"
@@ -736,7 +745,8 @@ class DataQualityReport:
             for name in sorted(self.columns):
                 col = self.columns[name]
                 null_pct = (col.null_ratio * 100.0) if col.row_count else 0.0
-                unique_pct = (col.unique_ratio * 100.0) if col.row_count else 0.0
+                unique_pct = (col.unique_ratio *
+                              100.0) if col.row_count else 0.0
                 warnings_str = ", ".join(col.warnings) if col.warnings else "-"
                 suggested = col.suggested_dtype if col.suggested_dtype else "-"
 
@@ -744,11 +754,13 @@ class DataQualityReport:
                     top_bits: list[str] = []
                     for v, _c, r in col.top_values[:3]:
                         top_bits.append(
-                            f"<span class=\"chip\">{e(v)} · {e(f'{r:.0%}')}</span>"
+                            f"<span class=\"chip\">{e(v)} · {e(f'{r:.0%}')
+                                                             }</span>"
                         )
                     top_html = "".join(top_bits)
                 elif col.histogram:
-                    max_ratio = max((r for _, _, _, r in col.histogram), default=1.0)
+                    max_ratio = max(
+                        (r for _, _, _, r in col.histogram), default=1.0)
                     if max_ratio == 0:
                         max_ratio = 1.0
                     bars = []
@@ -926,9 +938,11 @@ class ProfileComparison:
 
     def __post_init__(self) -> None:
         if not isinstance(self.left_profile, DataQualityReport):
-            raise TypeError("left_profile must be an instance of DataQualityReport")
+            raise TypeError(
+                "left_profile must be an instance of DataQualityReport")
         if not isinstance(self.right_profile, DataQualityReport):
-            raise TypeError("right_profile must be an instance of DataQualityReport")
+            raise TypeError(
+                "right_profile must be an instance of DataQualityReport")
 
         if not isinstance(self.drift_report, dict):
             raise TypeError("drift_report must be a dictionary")
@@ -936,7 +950,8 @@ class ProfileComparison:
             if not isinstance(key, str):
                 raise TypeError("drift_report keys must be strings")
             if not isinstance(val, dict):
-                raise TypeError("drift_report must be a nested dictionary of dict")
+                raise TypeError(
+                    "drift_report must be a nested dictionary of dict")
 
         if not isinstance(self.status_counts, dict):
             raise TypeError("status_counts must be a dictionary")
@@ -1166,13 +1181,12 @@ class QualityGateResult:
         md = "\n".join(lines)
         if output is not None:
             if not hasattr(output, "write"):
-                 raise TypeError(
+                raise TypeError(
                     f"output must be a writable object, got {type(output).__name__}"
-                 )
+                )
             output.write(md)
             return None
         return md
-
 
     def raise_for_failures(self) -> None:
         """Raise ``ValueError`` if any configured quality gate failed."""
@@ -1393,7 +1407,8 @@ def compare_profiles(
     if not isinstance(profile_a, DataQualityReport) or not isinstance(
         profile_b, DataQualityReport
     ):
-        raise TypeError("compare_profiles expects two DataQualityReport instances")
+        raise TypeError(
+            "compare_profiles expects two DataQualityReport instances")
 
     columns_a = set(profile_a.columns)
     columns_b = set(profile_b.columns)
@@ -1478,7 +1493,8 @@ def check_quality_gates(
     if not isinstance(baseline_profile, DataQualityReport) or not isinstance(
         current_profile, DataQualityReport
     ):
-        raise TypeError("check_quality_gates expects two DataQualityReport instances")
+        raise TypeError(
+            "check_quality_gates expects two DataQualityReport instances")
 
     thresholds = {
         "max_row_count_delta_ratio": _validate_gate_threshold(
@@ -1629,10 +1645,12 @@ def _calculate_quality_score(
     duplicate_penalty = round(min(duplicate_ratio * 100.0, 20.0), 2)
 
     null_ratios = [c.null_ratio for c in columns.values()]
-    avg_null_ratio = sum(null_ratios) / len(null_ratios) if null_ratios else 0.0
+    avg_null_ratio = sum(null_ratios) / \
+        len(null_ratios) if null_ratios else 0.0
     null_penalty = round(min(avg_null_ratio * 100.0, 40.0), 2)
 
-    type_mismatches = sum(1 for c in columns.values() if c.suggested_dtype is not None)
+    type_mismatches = sum(1 for c in columns.values()
+                          if c.suggested_dtype is not None)
     mismatch_ratio = type_mismatches / len(columns) if columns else 0.0
     type_mismatch_penalty = round(min(mismatch_ratio * 100.0, 40.0), 2)
 
@@ -1669,7 +1687,8 @@ def _clean_drift_entry(entry: dict[str, Any]) -> dict[str, Any]:
     return {
         "status": entry["status"],
         "changes": {
-            metric: {key: _clean_scalar(value) for key, value in change.items()}
+            metric: {key: _clean_scalar(value)
+                     for key, value in change.items()}
             for metric, change in entry["changes"].items()
         },
         "reasons": list(entry["reasons"]),
@@ -1871,7 +1890,8 @@ def _compare_column_profiles(
         "unique_count",
         column_a.unique_count,
         column_b.unique_count,
-        warning_threshold=max(1.0, column_a.row_count * 0.1, column_b.row_count * 0.1),
+        warning_threshold=max(1.0, column_a.row_count *
+                              0.1, column_b.row_count * 0.1),
         changed_threshold=max(
             2.0, column_a.row_count * 0.25, column_b.row_count * 0.25
         ),
@@ -2046,7 +2066,8 @@ class CleanStepRecord:
                     f"CleanStepRecord.{name} must be an int, got {type(value).__name__}"
                 )
             if value < 0:
-                raise ValueError(f"CleanStepRecord.{name} cannot be negative: {value}")
+                raise ValueError(
+                    f"CleanStepRecord.{name} cannot be negative: {value}")
 
 
 @dataclass(frozen=True)
@@ -2084,7 +2105,8 @@ class CleanExplanation:
                     f"CleanExplanation.{name} must be an int, got {type(value).__name__}"
                 )
             if value < 0:
-                raise ValueError(f"CleanExplanation.{name} cannot be negative: {value}")
+                raise ValueError(
+                    f"CleanExplanation.{name} cannot be negative: {value}")
         if not isinstance(self.steps, list):
             raise TypeError(
                 f"CleanExplanation.steps must be a list, got {type(self.steps).__name__}"
@@ -2343,7 +2365,8 @@ def _profile_column(
             # Calculate histogram
             finite_values = numeric_non_null[np.isfinite(numeric_non_null)]
             if len(finite_values):
-                counts, bin_edges = np.histogram(finite_values.to_numpy(), bins=10)
+                counts, bin_edges = np.histogram(
+                    finite_values.to_numpy(), bins=10)
                 total = int(counts.sum())
                 histogram = [
                     (

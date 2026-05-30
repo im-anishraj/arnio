@@ -3586,3 +3586,58 @@ def test_validate_max_errors_zero_valid_data():
 
     with pytest.raises(ValueError, match="max_errors must be >= 1"):
         ar.validate(frame, schema, max_errors=0)
+
+
+def test_validation_result_to_markdown_returns_string():
+    frame = ar.from_dict({"x":[1,2]})
+    result = ar.validate(frame, ar.Schema({"x": ar.Field(dtype="int64")}))
+    md = result.to_markdown()
+    assert isinstance(md, str)
+
+def test_validation_result_to_markdown_stringio():
+    frame = ar.from_dict({"x":[1,2]})
+    result = ar.validate(frame, ar.Schema({"x": ar.Field(dtype="int64")}))
+    buffer = io.StringIO()
+    ret = result.to_markdown(output=buffer)
+    assert ret is None
+    assert len(buffer.getvalue()) > 0
+
+def test_validation_result_to_markdown_invalid_output():
+    frame = ar.from_dict({"x":[1,2]})
+    result = ar.validate(frame, ar.Schema({"x": ar.Field(dtype="int64")})) 
+    with pytest.raises(TypeError):
+        result.to_markdown(output=123)
+
+def test_schema_diff_to_markdown_returns_string():
+    schema1 = ar.Schema({"x": ar.Field(dtype="int64")})
+    schema2 = ar.Schema({"x": ar.Field(dtype="float64")})
+    diff = ar.diff_schema(chema1,schema2)
+    md = diff.to_markdown()
+    assert isinstance(md, str)  
+
+
+def test_schema_diff_to_markdown_stringio():
+    schema1 = ar.Schema({"x": ar.Field(dtype="int64")})
+    schema2 = ar.Schema({"x": ar.Field(dtype="float64")})
+    diff = ar.diff_schema(chema1,schema2)
+    buffer = io.StringIO()
+    ret = diff.to_markdown(output=buffer)
+    assert ret is None
+    assert len(buffer.getvalue()) > 0
+
+
+def test_schema_diff_to_markdown_invalid_output():
+    schema1 = ar.Schema({"x": ar.Field(dtype="int64")})
+    schema2 = ar.Schema({"x": ar.Field(dtype="float64")})
+    diff = ar.diff_schema(chema1,schema2)
+    with pytest.raises(TypeError):
+        diff.to_markdown(output=123)
+
+def test_validation_result_to_markdown_file_output(tmp_path):
+    frame = ar.from_dict({"x":[1,2]})
+    result = ar.validate(frame, ar.Schema({"x": ar.Field(dtype="int64")}))
+    f = tmp_path / "out.md"
+    with open(f, "w") as file:
+        ret = result.to_markdown(output=file)
+    assert f.read_text() != ""
+

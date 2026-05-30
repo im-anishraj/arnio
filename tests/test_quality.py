@@ -3481,3 +3481,27 @@ class TestCleanExplanationValidation:
         exp = self._valid_explanation()
         text = str(exp)
         assert "(none)" in text
+
+    def test_quality_gate_to_markdown_returns_string():
+        frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+        p = ar.profile(frame)
+        result = ar.check_quality_gates(p, p)
+        md = result.to_markdown()
+        assert isinstance(md, str)
+
+
+    def test_quality_gate_result_to_markdown_stringio():
+        frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+        p = ar.profile(frame)
+        result = ar.check_quality_gates(p, p)
+        buf = io.StringIO()
+        ret = result.to_markdown(output=buf)
+        assert ret is None
+        assert len(buf.getvalue()) > 0
+
+    def test_quality_gate_result_to_markdown_invalid_output():
+        frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+        p = ar.profile(frame)
+        result = ar.check_quality_gates(p, p)
+        with pytest.raises(TypeError):
+            result.to_markdown(output=42)

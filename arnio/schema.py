@@ -821,7 +821,8 @@ class Schema:
                 raise TypeError("Schema 'rules' must be a list of callables")
             for rule in self.rules:
                 if not callable(rule):
-                    raise TypeError("Schema 'rules' must be a list of callables")
+                    raise TypeError(
+                        "Schema 'rules' must be a list of callables")
 
     def validate(
         self,
@@ -902,7 +903,8 @@ class Schema:
 
         unique = payload.get("unique")
         if unique is not None and not isinstance(unique, list):
-            raise TypeError("Schema JSON 'unique' must be a list of strings or null.")
+            raise TypeError(
+                "Schema JSON 'unique' must be a list of strings or null.")
 
         # rules_omitted marker is accepted and silently ignored — rules
         # cannot be round-tripped through JSON and must be re-attached
@@ -932,7 +934,8 @@ class Schema:
         from .quality import DataQualityReport
 
         if not isinstance(report, DataQualityReport):
-            raise TypeError(f"Expected DataQualityReport, got {type(report).__name__}")
+            raise TypeError(
+                f"Expected DataQualityReport, got {type(report).__name__}")
         if not report.columns:
             raise ValueError(
                 "Cannot bootstrap schema from an empty report (no columns)."
@@ -949,7 +952,8 @@ class Schema:
                 )
 
             arnio_dtype = _DTYPE_MAP.get(str(dtype_val).lower(), "string")
-            fields[col_name] = Field(dtype=arnio_dtype, nullable=null_count > 0)
+            fields[col_name] = Field(
+                dtype=arnio_dtype, nullable=null_count > 0)
 
         return cls(fields=fields)
 
@@ -1012,7 +1016,8 @@ class ValidationResult:
         severity_counts: dict[str, int] = {}
         for issue in self.issues:
             by_rule[issue.rule] = by_rule.get(issue.rule, 0) + 1
-            severity_counts[issue.severity] = severity_counts.get(issue.severity, 0) + 1
+            severity_counts[issue.severity] = severity_counts.get(
+                issue.severity, 0) + 1
             if issue.column is not None:
                 by_column[issue.column] = by_column.get(issue.column, 0) + 1
                 column_rules = by_column_and_rule.setdefault(issue.column, {})
@@ -1106,7 +1111,8 @@ class ValidationResult:
         hidden_count = self.issue_count - len(visible_issues)
         if hidden_count > 0:
             lines.extend(
-                ["", f"_Showing {len(visible_issues)} of {self.issue_count} issues._"]
+                ["",
+                    f"_Showing {len(visible_issues)} of {self.issue_count} issues._"]
             )
 
         md = "\n".join(lines)
@@ -1117,7 +1123,7 @@ class ValidationResult:
                 )
             output.write(md)
             return None
-        return md    
+        return md
 
     def raise_for_errors(self) -> None:
         """Raise an ArnioError when validation failed.
@@ -1200,7 +1206,7 @@ class SchemaDiff:
             "differences_by_column": by_column,
         }
 
-    def to_markdown(self, output: object = None) -> str:+
+    def to_markdown(self, output: object = None) -> str:
         """Return a GitHub-friendly Markdown schema diff report."""
         lines = [
             "## Schema Diff",
@@ -1209,15 +1215,7 @@ class SchemaDiff:
             f"- Differences found: {self.difference_count}",
         ]
         if not self.changed:
-            md = "\n".join(lines)
-            if output is not None:
-                if not hasattr(output, "write"):
-                    raise TypeError(
-                        f"output must be a writable object, got {type(output).__name__}"
-                    )
-                output.write(md)
-                return None
-            return md    
+            return "\n".join(lines)
 
         lines.extend(
             [
@@ -1235,7 +1233,7 @@ class SchemaDiff:
                 f"{_markdown_cell(_clean_scalar(diff.expected))} | "
                 f"{_markdown_cell(_clean_scalar(diff.observed))} |"
             )
-        if not self.changed:
+
             md = "\n".join(lines)
             if output is not None:
                 if not hasattr(output, "write"):
@@ -1266,8 +1264,10 @@ def diff_schema(
         Structured differences covering missing columns, extra columns,
         changed field attributes, and schema-level options.
     """
-    expected_schema = expected if isinstance(expected, Schema) else Schema(expected)
-    observed_schema = observed if isinstance(observed, Schema) else Schema(observed)
+    expected_schema = expected if isinstance(
+        expected, Schema) else Schema(expected)
+    observed_schema = observed if isinstance(
+        observed, Schema) else Schema(observed)
     differences: list[SchemaDiffEntry] = []
 
     expected_columns = set(expected_schema.fields)
@@ -1848,7 +1848,8 @@ def Email(
     """
 
     if not isinstance(validation, str):
-        raise TypeError("Email validation must be a string: 'light' or 'strict'")
+        raise TypeError(
+            "Email validation must be a string: 'light' or 'strict'")
 
     if validation not in {"light", "strict"}:
         raise ValueError("Email validation must be 'light' or 'strict'")
@@ -1889,18 +1890,21 @@ def URL(
             )
 
         if not isinstance(allowed_schemes, (list, tuple, set)):
-            raise TypeError("allowed_schemes must be a sequence of scheme names")
+            raise TypeError(
+                "allowed_schemes must be a sequence of scheme names")
 
         normalized_schemes = set()
 
         for scheme in allowed_schemes:
             if not isinstance(scheme, str):
-                raise ValueError("allowed_schemes must contain non-empty strings")
+                raise ValueError(
+                    "allowed_schemes must contain non-empty strings")
 
             scheme = scheme.strip()
 
             if scheme == "":
-                raise ValueError("allowed_schemes must contain non-empty strings")
+                raise ValueError(
+                    "allowed_schemes must contain non-empty strings")
 
             if URL_SCHEME_PATTERN.fullmatch(scheme) is None:
                 raise ValueError(
@@ -1912,7 +1916,8 @@ def URL(
         if len(normalized_schemes) == 0:
             raise ValueError("allowed_schemes must be a non-empty sequence")
 
-        schemes = "|".join(re.escape(scheme) for scheme in sorted(normalized_schemes))
+        schemes = "|".join(re.escape(scheme)
+                           for scheme in sorted(normalized_schemes))
 
         semantic = f"url:{schemes}"
 
@@ -2268,7 +2273,8 @@ def _validate_column(
 
     is_null_mask = series.isna()
     if actual_dtype in ("object", "string"):
-        is_null_mask = is_null_mask | (series.fillna("").astype(str).str.strip() == "")
+        is_null_mask = is_null_mask | (
+            series.fillna("").astype(str).str.strip() == "")
 
     if not field_def.nullable:
         issues.extend(
@@ -2397,7 +2403,7 @@ def _validate_column(
 
     if field_def.semantic is not None:
         if field_def.semantic.startswith("custom:"):
-            validator_name = field_def.semantic[len("custom:") :]
+            validator_name = field_def.semantic[len("custom:"):]
             fn = _CUSTOM_VALIDATORS.get(validator_name)
             if fn is None:
                 issues.append(
@@ -2411,7 +2417,8 @@ def _validate_column(
             else:
                 invalid = non_null[
                     ~non_null.map(
-                        lambda v: _normalize_validator_result(fn(v), validator_name)
+                        lambda v: _normalize_validator_result(
+                            fn(v), validator_name)
                     )
                 ]
                 issues.extend(
@@ -2429,7 +2436,7 @@ def _validate_column(
         else:
             pattern = _SEMANTIC_PATTERNS.get(field_def.semantic)
             if pattern is None and field_def.semantic.startswith("url:"):
-                schemes = field_def.semantic[len("url:") :]
+                schemes = field_def.semantic[len("url:"):]
                 pattern = rf"({schemes})://[^\s]+"
             if pattern is None:
                 issues.append(
@@ -2466,7 +2473,8 @@ def _validate_column(
                     if field_def.allowed is not None:
                         invalid = pd.Series(dtype=object)
                     else:
-                        invalid = non_null[~non_null.isin(ISO_4217_CURRENCY_CODES)]
+                        invalid = non_null[~non_null.isin(
+                            ISO_4217_CURRENCY_CODES)]
 
                 else:
                     invalid = non_null[~text.str.fullmatch(pattern, na=False)]
@@ -2567,7 +2575,8 @@ def _parse_datetime_bound(value: Any, name: str) -> pd.Timestamp | None:
         ) from exc
 
     if not isinstance(parsed, pd.Timestamp) or pd.isna(parsed):
-        raise ValueError(f"DateTime {name} must be a parseable datetime scalar")
+        raise ValueError(
+            f"DateTime {name} must be a parseable datetime scalar")
     return parsed
 
 
