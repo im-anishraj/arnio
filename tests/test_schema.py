@@ -3676,6 +3676,54 @@ def test_float64_rejects_bool_pair():
         ar.Float64(min=True, max=False)
 
 
+def test_int64_rejects_nan_min():
+    with pytest.raises(ValueError, match="finite"):
+        ar.Int64(min=float("nan"))
+
+
+def test_int64_rejects_nan_max():
+    with pytest.raises(ValueError, match="finite"):
+        ar.Int64(max=float("nan"))
+
+
+def test_int64_rejects_inf_min():
+    with pytest.raises(ValueError, match="finite"):
+        ar.Int64(min=float("inf"))
+
+
+def test_int64_rejects_neg_inf_max():
+    with pytest.raises(ValueError, match="finite"):
+        ar.Int64(max=float("-inf"))
+
+
+def test_float64_rejects_nan_min():
+    with pytest.raises(ValueError, match="finite"):
+        ar.Float64(min=float("nan"))
+
+
+def test_float64_rejects_nan_max():
+    with pytest.raises(ValueError, match="finite"):
+        ar.Float64(max=float("nan"))
+
+
+def test_float64_rejects_inf_min():
+    with pytest.raises(ValueError, match="finite"):
+        ar.Float64(min=float("inf"))
+
+
+def test_float64_rejects_neg_inf_max():
+    with pytest.raises(ValueError, match="finite"):
+        ar.Float64(max=float("-inf"))
+
+
+def test_int64_finite_bounds_still_pass():
+    assert ar.Int64(min=-100, max=100) is not None
+
+
+def test_float64_finite_bounds_still_pass():
+    assert ar.Float64(min=-1.5, max=1.5) is not None
+
+
 def test_validation_issue_accepts_valid_severities():
     error_issue = ar.ValidationIssue(
         column="age", rule="min", message="Too small", severity="error"
