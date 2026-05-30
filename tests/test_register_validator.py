@@ -343,26 +343,28 @@ class TestCustomValidatorNameValidation:
         schema._CUSTOM_VALIDATORS.update(self._original_validators)
 
     def test_raises_type_error_when_name_is_empty_string(self):
-        """Custom raises typeerror when name is an empty string."""
-        with pytest.raises(TypeError, match="non-empty string"):
+        """Custom raises ValueError when name is an empty string."""
+        with pytest.raises(
+            ValueError, match="The validator name cannot be an empty string."
+        ):
             Custom("")
 
     def test_raises_type_error_when_name_is_integer(self):
-        """Custom raises typeerror when name is an integer."""
-        with pytest.raises(TypeError, match="non-empty string"):
+        """Custom raises TypeError when name is an integer."""
+        with pytest.raises(TypeError, match="The validator name must be a string."):
             Custom(123)
 
     def test_raises_type_error_when_name_is_none(self):
-        """Custom raises typeerror when name is None."""
-        with pytest.raises(TypeError, match="non-empty string"):
+        """Custom raises TypeError when name is None."""
+        with pytest.raises(TypeError, match="The validator name must be a string."):
             Custom(None)
 
     def test_raises_type_error_when_name_is_list(self):
-        """Custom raises typeerror when name is a list."""
-        with pytest.raises(TypeError, match="non-empty string"):
+        """Custom raises TypeError when name is a list."""
+        with pytest.raises(TypeError, match="The validator name must be a string."):
             Custom(["my_validator"])
 
     def test_valid_name_still_raises_when_unregistered(self):
         """A valid string name that isn't registered raises the registry error, not the name error."""
-        with pytest.raises(TypeError, match="No validator registered"):
+        with pytest.raises(ValueError, match="No validator registered"):
             Custom("unregistered_name_xyz")
