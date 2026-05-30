@@ -70,6 +70,7 @@ dev = [
     "duckdb>=1.0",
     "tomli; python_version < '3.11'",
     "mypy>=1.0",
+    "bandit>=1.7.0",
     "pandas-stubs",
     "types-setuptools",
 ]
