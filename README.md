@@ -1368,10 +1368,24 @@ clean = ar.pipeline(frame, suggestions)
 For low-risk automatic cleanup in one call:
 
 ```python
-clean, report = ar.auto_clean(frame, mode="strict", return_report=True)
+clean, report = ar.auto_clean(frame, return_report=True)
 ```
 
-This is the layer pandas does not try to own: profiling, data contracts, row-level validation issues, and safe cleaning suggestions for messy incoming datasets.
+For strict automatic cleanup, inspect type casts before applying them:
+
+```python
+report = ar.auto_clean(frame, mode="strict", dry_run=True)
+cast_mapping = dict(report.suggestions).get("cast_types")
+
+clean = ar.auto_clean(
+    frame,
+    mode="strict",
+    allow_lossy_casts=True,
+    confirmed_casts=cast_mapping,
+)
+```
+
+This is the layer pandas does not try to own: profiling, data contracts, row-level validation issues, and preview-gated cleaning suggestions for messy incoming datasets.
 
 <br>
 
@@ -1424,7 +1438,7 @@ Expected cleaned output with `mode="strict"`:
 | 1003 | Pranay | New York |
 | 1004 | Dhruv | Tokyo |
 
-`mode="safe"` only trims whitespace. Use `mode="strict"` when you also want deterministic built-in cleanup such as exact duplicate removal.
+`mode="safe"` only trims whitespace. Use `mode="strict"` when you also want deterministic built-in cleanup such as exact duplicate removal. If strict mode proposes type casts, run `dry_run=True` first and pass the exact proposed mapping as `confirmed_casts` with `allow_lossy_casts=True`.
 
 See [examples/auto_clean_tutorial.py](examples/auto_clean_tutorial.py) for a runnable version of this walkthrough, and [examples/schema_validation.py](examples/schema_validation.py) for a focused validation tutorial.
 

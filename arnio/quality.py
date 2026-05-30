@@ -2219,6 +2219,31 @@ class CleanExplanation:
         return "\n".join(lines)
 
 
+def _validate_confirmed_casts(
+    confirmed_casts: dict[str, str] | None,
+) -> dict[str, str] | None:
+    """Validate and copy an explicit auto_clean cast confirmation mapping."""
+    if confirmed_casts is None:
+        return None
+    if not isinstance(confirmed_casts, dict):
+        raise TypeError("confirmed_casts must be a dict[str, str] or None")
+
+    normalized: dict[str, str] = {}
+    for column, dtype in confirmed_casts.items():
+        if not isinstance(column, str):
+            raise TypeError(
+                "confirmed_casts keys must be str column names, "
+                f"got {type(column).__name__}"
+            )
+        if not isinstance(dtype, str):
+            raise TypeError(
+                "confirmed_casts values must be str dtype names, "
+                f"got {type(dtype).__name__}"
+            )
+        normalized[column] = dtype
+    return normalized
+
+
 def auto_clean(
     frame: ArFrame,
     *,
@@ -2226,6 +2251,7 @@ def auto_clean(
     return_report: bool = False,
     dry_run: bool = False,
     allow_lossy_casts: bool = False,
+    confirmed_casts: dict[str, str] | None = None,
     explain: bool = False,
 ) -> (
     ArFrame
@@ -2248,7 +2274,13 @@ def auto_clean(
     dry_run : bool, default False
         Return the proposed pre-cleaning report without mutating the frame.
     allow_lossy_casts : bool, default False
-        Required before strict mode applies suggested type casts.
+        Required before strict mode applies suggested type casts. Type casts
+        also require *confirmed_casts* so callers explicitly confirm the exact
+        mapping they previewed.
+    confirmed_casts : dict[str, str] or None, default None
+        Exact cast mapping to apply in strict mode. Use ``dry_run=True`` or
+        ``suggest_cleaning()`` to inspect the proposed ``cast_types`` mapping,
+        then pass the same mapping here with ``allow_lossy_casts=True``.
     explain : bool, default False
         When ``True``, return a :class:`CleanExplanation` object that records
         which steps ran, before/after row counts for each step, and why each
@@ -2272,7 +2304,8 @@ def auto_clean(
     --------
     >>> clean = ar.auto_clean(frame)
     >>> report = ar.auto_clean(frame, mode="strict", dry_run=True)
-    >>> clean = ar.auto_clean(frame, mode="strict", allow_lossy_casts=True)
+    >>> casts = dict(report.suggestions)["cast_types"]
+    >>> clean = ar.auto_clean(frame, mode="strict", allow_lossy_casts=True, confirmed_casts=casts)
     >>> clean, report = ar.auto_clean(frame, mode="strict", return_report=True)
     >>> clean, explanation = ar.auto_clean(frame, explain=True)
     >>> print(explanation)
@@ -2291,6 +2324,7 @@ def auto_clean(
         raise TypeError("dry_run must be a bool")
     if not isinstance(allow_lossy_casts, bool):
         raise TypeError("allow_lossy_casts must be a bool")
+    confirmed_casts_map = _validate_confirmed_casts(confirmed_casts)
     if not isinstance(explain, bool):
         raise TypeError("explain must be a bool")
 
@@ -2328,7 +2362,20 @@ def auto_clean(
                 raise ValueError(
                     "auto_clean(mode='strict') would apply type casts. "
                     f"Proposed mapping: {kwargs}. Run with dry_run=True to inspect "
-                    "the report, or pass allow_lossy_casts=True to apply them."
+                    "the report, then pass allow_lossy_casts=True and "
+                    "confirmed_casts=<proposed mapping> to apply them."
+                )
+            if confirmed_casts_map is None:
+                raise ValueError(
+                    "auto_clean(mode='strict') requires confirmed_casts before "
+                    "applying type casts. Run with dry_run=True to inspect the "
+                    f"proposed mapping, then pass confirmed_casts={kwargs!r}."
+                )
+            if confirmed_casts_map != kwargs:
+                raise ValueError(
+                    "confirmed_casts must match the proposed cast mapping exactly. "
+                    f"Proposed mapping: {kwargs}. Confirmed mapping: "
+                    f"{confirmed_casts_map}."
                 )
             result = cast_types(result, kwargs)
         elif step == "drop_duplicates":

@@ -592,6 +592,41 @@ def test_auto_clean_strict_casts_require_explicit_opt_in():
         ar.auto_clean(frame, mode="strict")
 
 
+def test_auto_clean_strict_casts_require_preview_confirmation():
+    frame = ar.from_pandas(pd.DataFrame({"active": ["true", "false"]}))
+
+    with pytest.raises(ValueError, match="requires confirmed_casts"):
+        ar.auto_clean(frame, mode="strict", allow_lossy_casts=True)
+
+
+def test_auto_clean_strict_rejects_mismatched_cast_confirmation():
+    frame = ar.from_pandas(pd.DataFrame({"active": ["true", "false"]}))
+
+    with pytest.raises(ValueError, match="must match the proposed cast mapping"):
+        ar.auto_clean(
+            frame,
+            mode="strict",
+            allow_lossy_casts=True,
+            confirmed_casts={"active": "int64"},
+        )
+
+
+@pytest.mark.parametrize(
+    "confirmed_casts",
+    [
+        [("active", "bool")],
+        {1: "bool"},
+        {"active": 1},
+    ],
+    ids=["list", "non-string-key", "non-string-value"],
+)
+def test_auto_clean_rejects_invalid_confirmed_casts(confirmed_casts):
+    frame = ar.from_pandas(pd.DataFrame({"active": ["true", "false"]}))
+
+    with pytest.raises(TypeError, match="confirmed_casts"):
+        ar.auto_clean(frame, mode="strict", confirmed_casts=confirmed_casts)
+
+
 def test_exclude_columns_prevents_leakage_in_json():
     import json
 
@@ -612,6 +647,23 @@ def test_auto_clean_dry_run_returns_report_without_mutating():
     assert isinstance(report, ar.DataQualityReport)
     assert ("cast_types", {"active": "bool"}) in report.suggestions
     assert frame.dtypes["active"] == "string"
+
+
+def test_auto_clean_strict_casts_after_explicit_preview_confirmation():
+    frame = ar.from_pandas(pd.DataFrame({"active": ["true", "false"]}))
+    report = ar.auto_clean(frame, mode="strict", dry_run=True)
+    confirmed_casts = dict(report.suggestions)["cast_types"]
+
+    clean = ar.auto_clean(
+        frame,
+        mode="strict",
+        allow_lossy_casts=True,
+        confirmed_casts=confirmed_casts,
+    )
+    result = ar.to_pandas(clean)
+
+    assert list(result["active"]) == [True, False]
+    assert pd.api.types.is_bool_dtype(result["active"])
 
 
 def test_auto_clean_dry_run_with_return_report_raises():
@@ -678,8 +730,14 @@ def test_auto_clean_strict_casts_ambiguous_numeric_strings():
     with pytest.raises(ValueError, match="would apply type casts"):
         ar.auto_clean(frame, mode="strict")
 
-    # Apply strict mode with allow_lossy_casts
-    clean = ar.auto_clean(frame, mode="strict", allow_lossy_casts=True)
+    # Apply strict mode after explicitly confirming the previewed cast mapping.
+    report = ar.auto_clean(frame, mode="strict", dry_run=True)
+    clean = ar.auto_clean(
+        frame,
+        mode="strict",
+        allow_lossy_casts=True,
+        confirmed_casts=dict(report.suggestions)["cast_types"],
+    )
     result = ar.to_pandas(clean)
 
     # "code" is cast to int64, losing leading zeros
@@ -1066,7 +1124,13 @@ def test_identifier_numeric_cast_prevention():
     assert "customer_id" not in suggestions
     assert "zip_code" not in suggestions
 
-    cleaned = ar.auto_clean(frame, mode="strict", allow_lossy_casts=True)
+    report = ar.auto_clean(frame, mode="strict", dry_run=True)
+    cleaned = ar.auto_clean(
+        frame,
+        mode="strict",
+        allow_lossy_casts=True,
+        confirmed_casts=dict(report.suggestions)["cast_types"],
+    )
     result = ar.to_pandas(cleaned)
     assert list(result["id"]) == ["001", "002", "003"]
     assert list(result["customer_id"]) == ["00123", "00456", "00789"]
@@ -1336,11 +1400,13 @@ def test_non_finite_numeric_strings_do_not_suggest_float64(values):
 
 def test_auto_clean_strict_float64_suggestions_are_executable():
     frame = ar.from_pandas(pd.DataFrame({"x": ["1.5", "2.0"]}))
+    report = ar.auto_clean(frame, mode="strict", dry_run=True)
 
     clean = ar.auto_clean(
         frame,
         mode="strict",
         allow_lossy_casts=True,
+        confirmed_casts=dict(report.suggestions)["cast_types"],
     )
 
     result = ar.to_pandas(clean)
