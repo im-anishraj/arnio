@@ -26,7 +26,6 @@ from .cleaning import (
 from .convert import to_pandas
 from .frame import ArFrame
 
-
 _QUALITY_REPORT_EXPORT_COLUMNS = [
     "name",
     "dtype",
