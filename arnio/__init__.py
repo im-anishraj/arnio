@@ -160,7 +160,7 @@ __all__ = [
     "slugify_column_names",
     "trim_column_names",
     "standardize_missing_tokens",
-    "CleaningSuggestion",
+    # CleaningSuggestion is internal API; not part of the public docs
     # Conversion
     "to_pandas",
     "to_arrow",
