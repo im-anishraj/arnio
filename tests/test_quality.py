@@ -10,6 +10,7 @@ import pytest
 import arnio as ar
 from arnio.quality import (
     CleaningSuggestion,
+    QUALITY_REPORT_COLUMNS,
     _validate_gate_bool,
     _validate_gate_ratio_threshold,
     _validate_gate_threshold,
@@ -45,6 +46,58 @@ def test_report_summary_and_pandas_output(csv_with_whitespace):
     assert summary["columns_with_whitespace"] == ["name", "city"]
     assert isinstance(df, pd.DataFrame)
     assert set(df["name"]) == {"name", "city"}
+
+
+def test_report_to_pandas_uses_stable_columns_for_empty_report():
+    report = ar.DataQualityReport(
+        row_count=0,
+        column_count=0,
+        memory_usage=0,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+        suggestions=[],
+    )
+
+    df = report.to_pandas()
+
+    assert df.columns.tolist() == QUALITY_REPORT_COLUMNS
+    assert df.shape == (0, len(QUALITY_REPORT_COLUMNS))
+
+
+def test_report_to_pandas_uses_stable_columns_when_all_columns_are_excluded():
+    frame = ar.from_pandas(pd.DataFrame({"id": [1, 2], "name": ["Alice", "Bob"]}))
+
+    report = ar.profile(frame, exclude_columns=["id", "name"])
+    df = report.to_pandas()
+
+    assert report.column_count == 0
+    assert report.columns == {}
+    assert df.columns.tolist() == QUALITY_REPORT_COLUMNS
+    assert df.shape == (0, len(QUALITY_REPORT_COLUMNS))
+
+
+def test_report_to_pandas_preserves_columns_and_values_for_normal_reports():
+    report = ar.profile(
+        ar.from_pandas(pd.DataFrame({"name": ["Alice", "Bob"], "score": [1.0, 2.0]}))
+    )
+
+    df = report.to_pandas()
+
+    assert df.columns.tolist() == QUALITY_REPORT_COLUMNS
+    assert df["name"].tolist() == ["name", "score"]
+
+    name_row = df.loc[df["name"] == "name"].iloc[0]
+    score_row = df.loc[df["name"] == "score"].iloc[0]
+
+    assert name_row["name"] == "name"
+    assert name_row["null_count"] == 0
+    assert pd.isna(name_row["q25"])
+    assert score_row["name"] == "score"
+    assert score_row["null_count"] == 0
+    assert score_row["min"] == 1.0
+    assert score_row["max"] == 2.0
+    assert pd.notna(score_row["q25"])
 
 
 def test_profile_numeric_quantiles():
