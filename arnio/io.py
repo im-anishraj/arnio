@@ -333,10 +333,106 @@ def _validate_nrows(nrows: int) -> int:
 _PREVIEW_BAD_ROWS = 10
 
 
-class _BadRow(Protocol):
-    row: int
-    actual: int
-    expected: int
+def _fetch_url_to_tempfile(url: str) -> str:
+    """Fetch an HTTP/HTTPS URL and write its content to a UTF-8 temp file.
+
+    Parameters
+    ----------
+    url : str
+        A well-formed ``http://`` or ``https://`` URL whose response body
+        is assumed to be UTF-8 encoded CSV text.
+
+    Returns
+    -------
+    str
+        Absolute path to the temporary file.  The caller is responsible for
+        deleting it (``should_cleanup=True`` is returned by
+        ``_materialize_csv_input``).
+
+    Raises
+    ------
+    RemoteReadError
+        On any network-level failure (DNS, timeout, connection refused) or
+        a non-2xx HTTP response.
+    """
+    tmp = tempfile.NamedTemporaryFile(
+        mode="w",
+        encoding="utf-8",
+        suffix=".csv",
+        delete=False,
+    )
+    tmp_name = tmp.name
+    try:
+        req = urllib.request.Request(
+            url,
+            headers={"User-Agent": "arnio/read_csv"},
+        )
+        try:
+            response = urllib.request.urlopen(req, timeout=_URL_FETCH_TIMEOUT)  # nosec B310
+        except urllib.error.HTTPError as exc:
+            raise RemoteReadError(
+                f"HTTP {exc.code} fetching CSV URL {url!r}: {exc.reason}",
+                url=url,
+                status_code=exc.code,
+            ) from exc
+        except urllib.error.URLError as exc:
+            raise RemoteReadError(
+                f"Could not fetch CSV URL {url!r}: {exc.reason}",
+                url=url,
+            ) from exc
+
+        # Stream response body into temp file using an incremental UTF-8
+        # decoder so that multi-byte characters split across read() chunk
+        # boundaries are handled correctly and do not raise a false
+        # RemoteReadError.
+        with response:
+            decoder = codecs.getincrementaldecoder("utf-8")("strict")
+            raw_bytes = response.read(_URL_FETCH_CHUNK_SIZE)
+            while raw_bytes:
+                try:
+                    tmp.write(decoder.decode(raw_bytes, final=False))
+                except UnicodeDecodeError as exc:
+                    raise RemoteReadError(
+                        f"Remote CSV at {url!r} is not valid UTF-8: {exc}",
+                        url=url,
+                    ) from exc
+                raw_bytes = response.read(_URL_FETCH_CHUNK_SIZE)
+            # Flush any bytes buffered inside the decoder for the final
+            # (possibly incomplete) multi-byte sequence.
+            try:
+                tmp.write(decoder.decode(b"", final=True))
+            except UnicodeDecodeError as exc:
+                raise RemoteReadError(
+                    f"Remote CSV at {url!r} is not valid UTF-8: {exc}",
+                    url=url,
+                ) from exc
+
+        tmp.close()
+        return tmp_name
+
+    except RemoteReadError:
+        try:
+            tmp.close()
+        except OSError:
+            pass
+        try:
+            os.unlink(tmp_name)
+        except OSError:
+            pass
+        raise
+    except Exception as exc:
+        try:
+            tmp.close()
+        except OSError:
+            pass
+        try:
+            os.unlink(tmp_name)
+        except OSError:
+            pass
+        raise RemoteReadError(
+            f"Unexpected error fetching CSV URL {url!r}: {exc}",
+            url=url,
+        ) from exc
 
 
 def _warn_bad_rows(bad_rows: Sequence[object]) -> None:
