@@ -277,7 +277,9 @@ def test_arniocleaner_rejects_non_boolean_options():
 
 
 def test_arniocleaner_set_params_rejects_invalid_runtime_updates_and_rolls_back():
-    cleaner = ArnioCleaner(copy=True, allow_row_count_change=False, allow_schema_changes=False)
+    cleaner = ArnioCleaner(
+        copy=True, allow_row_count_change=False, allow_schema_changes=False
+    )
 
     with pytest.raises(TypeError, match="copy must be a bool"):
         cleaner.set_params(copy="not-a-bool")
