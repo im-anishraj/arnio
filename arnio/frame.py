@@ -987,8 +987,10 @@ class ArFrame:
         )
 
         # ── empty-frame fast path ─────────────────────────────────────────
-        if num_cols == 0 or num_rows == 0:
+        if num_rows == 0:
             return summary + "<p><em>(empty)</em></p>"
+        if num_cols == 0:
+            return summary + "<p><em>(no columns to display)</em></p>"
 
         # ── column header ─────────────────────────────────────────────────
         th_style = (

@@ -1356,6 +1356,18 @@ def test_repr_html_empty_frame_no_crash(tmp_path):
     assert len(out) > 0
 
 
+def test_repr_html_zero_columns_preserves_row_count():
+    frame = ar.from_pandas(pd.DataFrame({"a": [None, None]}))
+    zero = ar.drop_empty_columns(frame)
+
+    out = zero._repr_html_()
+
+    assert zero.shape == (2, 0)
+    assert "ArFrame [2 rows × 0 cols]" in out
+    assert "(no columns to display)" in out
+    assert "(empty)" not in out
+
+
 def test_repr_html_with_nulls_no_crash(csv_with_nulls):
     frame = ar.read_csv(csv_with_nulls)
     out = frame._repr_html_()
