@@ -62,6 +62,10 @@
           <a href="#schema" class="sidebar-nav-link">Schema</a>
           <a href="#integrations" class="sidebar-nav-link">Integrations</a>
         </div>
+        <div class="sidebar-nav-group">
+          <div class="sidebar-nav-title">Notebook</div>
+          <a href="#notebook-display" class="sidebar-nav-link">Display</a>
+        </div>
       </aside>
 
       <article class="docs-content">
@@ -182,6 +186,15 @@ profile = df.arnio.profile()
 
 arrow_table = ar.to_arrow(frame)
 ar.register_duckdb(frame, conn, "clean_sales")</code></pre></div>
+
+        <h2 id="notebook-display">Notebook Display</h2>
+        <p>ArFrame and DataQualityReport render HTML automatically in Jupyter and IPython. When an object is the last expression in a notebook cell, the frontend calls <code>_repr_html_</code> and renders a rich view—no extra conversion needed.</p>
+        <div class="code-block"><div class="code-block-header">Python</div><pre><code class="language-python">import arnio as ar
+
+frame  # ArFrame renders a bounded HTML preview of up to 10 rows
+report = ar.profile(frame)
+report  # DataQualityReport renders its full HTML dashboard</code></pre></div>
+        <p>The preview is bounded so notebook output stays readable on large frames. Use <code>frame.head()</code>, <code>report.to_html("file.html")</code>, or <code>report.to_dict()</code> for fuller inspection.</p>
       </article>
     </div>
   </main>
