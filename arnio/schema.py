@@ -82,6 +82,8 @@ _DTYPE_MAP = {
     "null": "null",
 }
 
+_VALID_DTYPES = {"int64", "float64", "bool", "string", "null", "datetime"}
+
 
 ISO_3166_1_ALPHA_2 = {
     "AD",
@@ -759,6 +761,11 @@ class Field:
         if self.dtype is not None and not isinstance(self.dtype, str):
             raise TypeError(
                 f"dtype must be a str or None, got {type(self.dtype).__name__}"
+            )
+        if self.dtype is not None and self.dtype not in _VALID_DTYPES:
+            raise ValueError(
+                f"dtype must be one of {sorted(_VALID_DTYPES | {None})}, "
+                f"got {self.dtype!r}."
             )
 
         if self.pattern is not None:
@@ -2819,7 +2826,21 @@ def _field_from_json_dict(name: str, payload: Any) -> Field:
             )
         required_if = tuple(required_if)
 
+    dtype = payload.get("dtype")
+    if dtype is not None:
+        if not isinstance(dtype, str):
+            raise TypeError(
+                f"Schema JSON field {name!r} 'dtype' must be a string or null, "
+                f"got {type(dtype).__name__}."
+            )
+        if dtype not in _VALID_DTYPES:
+            raise ValueError(
+                f"Schema JSON field {name!r} 'dtype' must be one of "
+                f"{sorted(_VALID_DTYPES | {None})}, got {dtype!r}."
+            )
+
     return Field(
+        dtype=dtype,
         dtype=payload.get("dtype"),
         nullable=payload.get("nullable", True),
         min=payload.get("min"),
