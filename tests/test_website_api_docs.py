@@ -3,10 +3,15 @@
 Extends the existing suite with targeted regression coverage for the six
 public I/O functions whose signatures drifted on website/api.html.
 
+Each new test extracts only the specific function's signature row from the
+HTML before asserting, so a token present in another function's row cannot
+mask drift in the target function.
+
 Fixes #2174
 """
 
 import ast
+import re
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -36,6 +41,20 @@ def _api_html() -> str:
     return (REPO_ROOT / "website" / "api.html").read_text()
 
 
+def _signature_row(fn_name: str, html: str) -> str:
+    """Return the text of the single .api-func-header element whose content
+    starts with *fn_name*.  Raises AssertionError if not found."""
+    # Match the content between the opening and closing tag of api-func-header
+    # that begins with the target function name.
+    pattern = re.compile(
+        r'class="api-func-header">(' + re.escape(fn_name) + r"\([^<]*)\<",
+        re.DOTALL,
+    )
+    m = pattern.search(html)
+    assert m, f"No api-func-header row found for {fn_name!r} in website/api.html"
+    return m.group(1)
+
+
 def _io_params(fn_name: str) -> tuple[list[str], dict[str, str]]:
     """Return (param_names, defaults) for *fn_name* from arnio/io.py.
 
@@ -50,8 +69,6 @@ def _io_params(fn_name: str) -> tuple[list[str], dict[str, str]]:
         all_params = [a.arg for a in args.args] + [a.arg for a in args.kwonlyargs]
 
         def _dq(node) -> str:
-            # HTML signatures use double-quoted string literals; ast.unparse
-            # uses single quotes, so normalise for a direct substring search.
             if isinstance(node, ast.Constant) and isinstance(node.value, str):
                 return f'"{node.value}"'
             return ast.unparse(node)
@@ -68,19 +85,17 @@ def _io_params(fn_name: str) -> tuple[list[str], dict[str, str]]:
     raise AssertionError(f"Function {fn_name!r} not found in arnio/io.py")
 
 
-def _check(
-    fn_name: str, html: str, params: list[str], defaults: dict[str, str]
-) -> None:
-    """Assert *params* names and *defaults* tokens appear in *html*."""
-    missing = [p for p in params if p not in html]
+def _check(fn_name: str, row: str, params: list[str], defaults: dict[str, str]) -> None:
+    """Assert *params* names and *defaults* tokens appear in *row*."""
+    missing = [p for p in params if p not in row]
     assert (
         missing == []
-    ), f"{fn_name}: parameter(s) absent from website/api.html: {missing}"
+    ), f"{fn_name}: parameter(s) absent from its api-func-header row: {missing}"
     for param, value in defaults.items():
         token = f"{param}={value}"
         assert (
-            token in html
-        ), f"{fn_name}: expected token '{token}' not found in website/api.html"
+            token in row
+        ), f"{fn_name}: expected token '{token}' not found in its api-func-header row"
 
 
 # ---------------------------------------------------------------------------
@@ -104,15 +119,16 @@ def test_website_profile_signature_matches_current_options():
 
 # ---------------------------------------------------------------------------
 # New: targeted drift checks for the six stale I/O signatures (#2174)
+# Each test extracts only that function's own signature row before asserting.
 # ---------------------------------------------------------------------------
 
 
 def test_read_csv_signature_matches_website():
-    """read_csv: required params present; delimiter=None not hardcoded as ','."""
-    html = _api_html()
+    """read_csv: required params present in its own row; delimiter=None not ','."""
+    row = _signature_row("read_csv", _api_html())
     _check(
         "read_csv",
-        html,
+        row,
         params=[
             "delimiter",
             "trim_headers",
@@ -121,7 +137,7 @@ def test_read_csv_signature_matches_website():
             "mode",
         ],
         defaults={
-            "delimiter": "None",  # website previously showed delimiter=","
+            "delimiter": "None",
             "mode": '"strict"',
             "encoding_errors": '"strict"',
             "on_bad_lines": '"error"',
@@ -130,11 +146,11 @@ def test_read_csv_signature_matches_website():
 
 
 def test_read_csv_chunked_signature_matches_website():
-    """read_csv_chunked: required params present and key defaults correct."""
-    html = _api_html()
+    """read_csv_chunked: required params present in its own row."""
+    row = _signature_row("read_csv_chunked", _api_html())
     _check(
         "read_csv_chunked",
-        html,
+        row,
         params=[
             "dtype",
             "usecols",
@@ -156,11 +172,11 @@ def test_read_csv_chunked_signature_matches_website():
 
 
 def test_scan_csv_signature_matches_website():
-    """scan_csv: required params present and key defaults correct."""
-    html = _api_html()
+    """scan_csv: required params present in its own row."""
+    row = _signature_row("scan_csv", _api_html())
     _check(
         "scan_csv",
-        html,
+        row,
         params=[
             "thousands_separator",
             "sample_size",
@@ -178,11 +194,11 @@ def test_scan_csv_signature_matches_website():
 
 
 def test_read_jsonl_signature_matches_website():
-    """read_jsonl: encoding and encoding_errors must be documented."""
-    html = _api_html()
+    """read_jsonl: encoding and encoding_errors in its own row."""
+    row = _signature_row("read_jsonl", _api_html())
     _check(
         "read_jsonl",
-        html,
+        row,
         params=["encoding", "encoding_errors"],
         defaults={
             "encoding": '"utf-8"',
@@ -192,25 +208,25 @@ def test_read_jsonl_signature_matches_website():
 
 
 def test_write_parquet_signature_matches_website():
-    """write_parquet: compression default must be 'snappy', not None."""
-    html = _api_html()
+    """write_parquet: compression='snappy' and preserve_attrs in its own row."""
+    row = _signature_row("write_parquet", _api_html())
     _check(
         "write_parquet",
-        html,
+        row,
         params=["compression", "preserve_attrs"],
         defaults={
-            "compression": '"snappy"',  # website previously showed compression=None
+            "compression": '"snappy"',
             "preserve_attrs": "True",
         },
     )
 
 
 def test_sniff_delimiter_signature_matches_website():
-    """sniff_delimiter: sample_size must be documented."""
-    html = _api_html()
+    """sniff_delimiter: sample_size present in its own row."""
+    row = _signature_row("sniff_delimiter", _api_html())
     _check(
         "sniff_delimiter",
-        html,
+        row,
         params=["sample_size"],
         defaults={
             "sample_size": "2048",
