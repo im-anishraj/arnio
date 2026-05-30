@@ -165,8 +165,8 @@ class TestCustomValidator:
         assert field.severity == "warning"
 
     def test_custom_raises_when_validator_not_registered(self):
-        """Custom raises typeerror when validator name not registered."""
-        with pytest.raises(TypeError, match="No validator registered"):
+        """Custom raises ValueError when validator name not registered."""
+        with pytest.raises(ValueError, match="No validator registered"):
             Custom("nonexistent_validator_name_xyz")
 
     def test_custom_repr_contains_name(self):
