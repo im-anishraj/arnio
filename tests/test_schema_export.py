@@ -75,6 +75,11 @@ class TestSchemaToDict:
         result = schema_to_dict(schema)
         assert result["fields"]["val"]["default"] is None
 
+    def test_schema_object_with_severity_preserved_in_dict(self):
+        schema = ar.Schema({"x": ar.Int64(severity="warning")})
+        result = schema_to_dict(schema)
+        assert result["fields"]["x"]["severity"] == "warning"
+
     def test_unsupported_type_raises(self):
         with pytest.raises(TypeError, match="Expected a dict"):
             schema_to_dict(42)
@@ -115,6 +120,11 @@ class TestSchemaToYamlOutput:
         out = schema_to_yaml(raw)
         assert "min: 0" in out
         assert "max: 150" in out
+
+    def test_schema_object_with_severity_preserved_in_yaml(self):
+        schema = ar.Schema({"x": ar.Int64(severity="warning")})
+        out = schema_to_yaml(schema)
+        assert "severity: warning" in out
 
     def test_bool_false(self):
         raw = {"flag": {"type": "BOOL", "nullable": False}}
