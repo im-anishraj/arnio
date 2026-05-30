@@ -4187,6 +4187,7 @@ def test_custom_rule_returning_malformed_issue_raises_early(tmp_path):
     with pytest.raises((TypeError, ValueError)):
         schema.validate(frame)
 
+
 def test_from_json_rejects_unknown_top_level_key():
     payload = json.dumps(
         {
