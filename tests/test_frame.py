@@ -1683,3 +1683,33 @@ def test_shallow_copy_independent_frame():
     assert shallow._frame is not original._frame
     ar.rename_columns(original, {"a": "b"})
     assert "a" in shallow.columns  # mutation must not leak
+
+
+# ── from_records empty-columns guard ─────────────────────────────────────────
+
+
+def test_from_records_dict_empty_columns_raises():
+    """columns=[] with dict records must raise ValueError, not silently lose rows."""
+    with pytest.raises(ValueError, match="columns must not be empty"):
+        ar.ArFrame.from_records([{"a": 1}, {"a": 2}], columns=[])
+
+
+def test_from_records_dict_empty_columns_message_is_helpful():
+    """The error message should mention passing columns=None."""
+    with pytest.raises(ValueError, match="columns=None"):
+        ar.ArFrame.from_records([{"a": 1}], columns=[])
+
+
+def test_from_records_dict_columns_none_infers_from_keys():
+    """columns=None (default) should infer column names from dict keys."""
+    frame = ar.ArFrame.from_records([{"a": 1}, {"a": 2}])
+    assert frame.shape == (2, 1)
+    assert frame.columns == ["a"]
+
+
+def test_from_records_dict_explicit_valid_columns_subset():
+    """A non-empty explicit columns list should select only those columns."""
+    frame = ar.ArFrame.from_records([{"a": 1, "b": 2}, {"a": 3, "b": 4}], columns=["a"])
+    assert frame.shape == (2, 1)
+    assert frame.columns == ["a"]
+    assert frame["a"] == [1, 3]
