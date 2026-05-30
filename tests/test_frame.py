@@ -1200,8 +1200,35 @@ def test_astype_rejects_invalid_mapping_dtype():
 def test_astype_rejects_object_dtype_aliases(invalid_dtype):
     frame = ar.ArFrame.from_records([{"a": 1}, {"a": 2}])
 
-    with pytest.raises(TypeError, match="dtype must"):
+    with pytest.raises(TypeError, match="dtype must|Cannot cast to 'object' dtype"):
         frame.astype(invalid_dtype)
+
+
+def test_astype_object_whole_frame_raises():
+    """astype(object) must be rejected because Arnio re-infers dtypes on conversion."""
+    frame = ar.from_pandas(pd.DataFrame({"a": [1, 2], "b": [True, False]}))
+
+    with pytest.raises(TypeError, match="Cannot cast to 'object' dtype"):
+        frame.astype(object)
+
+
+def test_astype_object_dict_raises():
+    """astype({col: object}) must be rejected because Arnio re-infers dtypes on conversion."""
+    frame = ar.from_pandas(pd.DataFrame({"a": [1, 2], "b": [True, False]}))
+
+    with pytest.raises(TypeError, match="Cannot cast column 'a' to 'object' dtype"):
+        frame.astype({"a": object})
+
+    with pytest.raises(TypeError, match="Cannot cast column 'b' to 'object' dtype"):
+        frame.astype({"b": object})
+
+
+def test_astype_object_dict_mixed_raises_on_object_column():
+    """A dict with one object cast and one valid cast must still reject the whole request."""
+    frame = ar.from_pandas(pd.DataFrame({"a": [1, 2], "b": [3.0, 4.0]}))
+
+    with pytest.raises(TypeError, match="Cannot cast column 'a' to 'object' dtype"):
+        frame.astype({"a": object, "b": float})
 
 
 # ── drop_columns ──────────────────────────────────────────────────────────────

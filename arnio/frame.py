@@ -246,6 +246,25 @@ class ArFrame:
         if dtype is None:
             raise TypeError("dtype cannot be None")
 
+        if dtype is object:
+            raise TypeError(
+                "Cannot cast to 'object' dtype: Arnio does not preserve "
+                "object columns because values are re-inferred from Python "
+                "objects on conversion. Use a specific dtype (int, float, "
+                "bool, string) or a dict of column names to dtypes."
+            )
+
+        if isinstance(dtype, dict):
+            for col, col_dtype in dtype.items():
+                if col_dtype is object:
+                    raise TypeError(
+                        f"Cannot cast column {col!r} to 'object' dtype: "
+                        "Arnio does not preserve object columns because "
+                        "values are re-inferred from Python objects on "
+                        "conversion. Use a specific dtype (int, float, "
+                        "bool, string)."
+                    )
+
         if isinstance(dtype, dict):
             missing = [col for col in dtype if col not in self.columns]
 
