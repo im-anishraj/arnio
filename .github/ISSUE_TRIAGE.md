@@ -15,7 +15,7 @@ Every issue that lands in our backlog gets categorized along key dimensions:
 5. **Type** — what kind of change it is
 6. **Area** — which part of the codebase it touches
 
-This makes the backlog navigable: a beginner GSSoC contributor can filter for `level:beginner` + `size: s` + `status: ready` and instantly find an entry point. Maintainers can spot `priority: critical` + `status: blocked` issues that need unblocking.
+This makes the backlog navigable: a beginner GSSoC contributor can filter for `level:beginner` + `size:s` + `status:ready` and instantly find an entry point. Maintainers can spot `priority:critical` + `status:blocked` issues that need unblocking.
 
 ---
 
@@ -27,10 +27,10 @@ How urgent is this issue?
 
 | Label | Meaning | Example |
 |:---|:---|:---|
-| `priority: critical` | Production-breaking bug, security issue, or release blocker. Drop everything. | A regression that crashes `read_csv()` on valid input |
-| `priority: high` | Important and time-sensitive. Should be picked up this week. | A documented public API returns wrong results for common case |
-| `priority: medium` | Solid improvement, not urgent. Pick up this milestone. | Add new pipeline step or improve an existing one |
-| `priority: low` | Nice-to-have. May sit in backlog for a while. | Tweak terminology in an internal log message |
+| `priority:critical` | Production-breaking bug, security issue, or release blocker. Drop everything. | A regression that crashes `read_csv()` on valid input |
+| `priority:high` | Important and time-sensitive. Should be picked up this week. | A documented public API returns wrong results for common case |
+| `priority:medium` | Solid improvement, not urgent. Pick up this milestone. | Add new pipeline step or improve an existing one |
+| `priority:low` | Nice-to-have. May sit in backlog for a while. | Tweak terminology in an internal log message |
 
 ---
 
@@ -53,10 +53,10 @@ How much effort will this take?
 
 | Label | Estimate | Typical scope |
 |:---|:---|:---|
-| `size: xs` | < 30 minutes | Single docstring, tiny fix, comment update |
-| `size: s` | < 2 hours | Single function, doc fix, small test addition |
-| `size: m` | Half a day | New pipeline step + tests, small refactor |
-| `size: l` | 1–2 days | New module, multi-file feature, schema validation |
+| `size:xs` | < 30 minutes | Single docstring, tiny fix, comment update |
+| `size:s` | < 2 hours | Single function, doc fix, small test addition |
+| `size:m` | Half a day | New pipeline step + tests, small refactor |
+| `size:l` | 1–2 days | New module, multi-file feature, schema validation |
 
 ---
 
@@ -85,21 +85,21 @@ Which part of the codebase does this touch?
 
 | Label | Covers |
 |:---|:---|
-| `area: csv-parser` | CSV reading, RFC 4180 compliance, BOM handling |
-| `area: cpp-core` | C++ runtime — types, columns, frames, cleaning engine |
-| `area: python-api` | Python API in `arnio/` — IO, pipeline, conversion |
-| `area: pipeline` | Step registry, pipeline executor, custom steps |
-| `area: cleaning` | Cleaning primitives — drop_nulls, fill_nulls, dedup, etc. |
-| `area: pandas-interop` | pandas bridge, zero-copy conversion, buffer protocol |
-| `area: quality` | Data quality engine, profiling, validation, suggestions |
-| `area: schema` | Schema definition, type casting, validation |
-| `area: docs` | README, architecture docs, guides, examples |
-| `area: website` | arnio.vercel.app, landing page, tutorials |
-| `area: ci-packaging` | GitHub Actions, PyPI wheels, releases |
-| `area: benchmarks` | Performance testing, reproduction scripts |
-| `area: examples` | Usage examples, notebooks, tutorials |
-| `area: developer-experience` | Error messages, CLI tooling, dev setup |
-| `area: release` | Version bumping, changelogs, deployment |
+| `area:csv-parser` | CSV reading, RFC 4180 compliance, BOM handling |
+| `area:cpp-core` | C++ runtime — types, columns, frames, cleaning engine |
+| `area:python-api` | Python API in `arnio/` — IO, pipeline, conversion |
+| `area:pipeline` | Step registry, pipeline executor, custom steps |
+| `area:cleaning` | Cleaning primitives — drop_nulls, fill_nulls, dedup, etc. |
+| `area:pandas-interop` | pandas bridge, zero-copy conversion, buffer protocol |
+| `area:quality` | Data quality engine, profiling, validation, suggestions |
+| `area:schema` | Schema definition, type casting, validation |
+| `area:docs` | README, architecture docs, guides, examples |
+| `area:website` | arnio.vercel.app, landing page, tutorials |
+| `area:ci-packaging` | GitHub Actions, PyPI wheels, releases |
+| `area:benchmarks` | Performance testing, reproduction scripts |
+| `area:examples` | Usage examples, notebooks, tutorials |
+| `area:developer-experience` | Error messages, CLI tooling, dev setup |
+| `area:release` | Version bumping, changelogs, deployment |
 
 ---
 
@@ -109,11 +109,11 @@ Where is the issue in the lifecycle?
 
 | Label | Meaning |
 |:---|:---|
-| `status: needs triage` | New issue, not yet categorized or scoped |
-| `status: ready` | Triaged, scoped, ready for a contributor to pick up |
-| `status: claimed` | Assigned and being actively worked on |
-| `status: blocked` | Cannot proceed — waiting on a decision, dependency, or upstream change |
-| `status: needs maintainer` | Requires maintainer decision or code review |
+| `status:needs-triage` | New issue, not yet categorized or scoped |
+| `status:ready` | Triaged, scoped, ready for a contributor to pick up |
+| `status:claimed` | Assigned and being actively worked on |
+| `status:blocked` | Cannot proceed — waiting on a decision, dependency, or upstream change |
+| `status:needs-maintainer` | Requires maintainer decision or code review |
 
 ---
 
@@ -125,7 +125,7 @@ For [GSSoC 2026](https://gssoc.girlscript.tech/) participants:
 |:---|:---|
 | `gssoc` | Issue is eligible for GSSoC contribution credit |
 | `gssoc:approved` | PR has been accepted/merged for GSSoC credit |
-| `gssoc: good first issue` | Strongly recommended starting point for new GSSoC contributors |
+| `gssoc:good-first-issue` | Strongly recommended starting point for new GSSoC contributors |
 | `level:beginner` | Beginner-tier scoring |
 | `level:intermediate` | Intermediate-tier scoring |
 | `level:advanced` | Advanced-tier scoring |
@@ -143,20 +143,20 @@ When a new issue arrives, work through these steps in order:
 
 ### 1. Read and reproduce
 
-- For bugs: try to reproduce locally. If the report lacks information, apply `status: needs triage` and ask for: OS, Python version, arnio version, minimal reproduction.
-- For feature requests: confirm the proposed behavior fits the project scope. If unclear, apply `status: needs triage` and start a discussion.
+- For bugs: try to reproduce locally. If the report lacks information, apply `status:needs-triage` and ask for: OS, Python version, arnio version, minimal reproduction.
+- For feature requests: confirm the proposed behavior fits the project scope. If unclear, apply `status:needs-triage` and start a discussion.
 
 ### 2. Categorize
 
 Apply labels from each required category:
 
-- ✅ `priority: *` (required)
+- ✅ `priority:*` (required)
 - ✅ `level:*` (required for GSSoC-scored issues/PRs)
-- ✅ `size: *` (required)
-- ✅ `status: *` (required — start with `status: needs triage`)
+- ✅ `size:*` (required)
+- ✅ `status:*` (required — start with `status:needs-triage`)
 - ✅ `type:*` (required)
-- ✅ `area: *` (one or more, required)
-- 🟡 `gssoc: *` (only if appropriate for GSSoC contributors)
+- ✅ `area:*` (one or more, required)
+- 🟡 `gssoc:*` (only if appropriate for GSSoC contributors)
 
 ### 3. Scope the issue
 
@@ -167,20 +167,20 @@ A well-triaged issue includes:
 - **Scope** — what's in and out of scope
 - **Acceptance criteria** — checkboxes the contributor can tick off
 
-If any of these are missing, keep the issue at `status: needs triage`.
+If any of these are missing, keep the issue at `status:needs-triage`.
 
 ### 4. Set status and assign
 
-- Move to `status: ready` once the issue is fully scoped and ready for pickup
-- Move to `status: claimed` when a contributor is assigned
-- Move to `status: blocked` if external dependencies appear during work
-- Use `status: needs maintainer` if you need another maintainer's input
+- Move to `status:ready` once the issue is fully scoped and ready for pickup
+- Move to `status:claimed` when a contributor is assigned
+- Move to `status:blocked` if external dependencies appear during work
+- Use `status:needs-maintainer` if you need another maintainer's input
 
 ---
 
 ### 5. Remove status and reassign inactive issues
 
-- Remove `status: claimed` when a contributor does not post a progress update, request a time extension or open a draft/regular PR within 3 days of assignment.
+- Remove `status:claimed` when a contributor does not post a progress update, request a time extension or open a draft/regular PR within 3 days of assignment.
 - Unassign or reassign the issue to someone else if the contributor remains inactive after 5 days of no PR, no update or no extension request.
 
 ## Worked Example
@@ -191,12 +191,12 @@ If any of these are missing, keep the issue at `status: needs triage`.
 
 | Label | Value | Reasoning |
 |:---|:---|:---|
-| Priority | `priority: high` | Performance is a roadmap focus for v1.2 |
+| Priority | `priority:high` | Performance is a roadmap focus for v1.2 |
 | Level | `level:advanced` | Requires C++ work in the cleaning engine |
-| Size | `size: l` | Hash-based comparison replacement is multi-file |
-| Status | `status: ready` | Reproducible, well-scoped, fix path is clear |
+| Size | `size:l` | Hash-based comparison replacement is multi-file |
+| Status | `status:ready` | Reproducible, well-scoped, fix path is clear |
 | Type | `type:performance` | Performance improvement |
-| Area | `area: cpp-core` | Lives in `cpp/src/cleaning.cpp` |
+| Area | `area:cpp-core` | Lives in `cpp/src/cleaning.cpp` |
 | GSSoC | `level:advanced` | Advanced-tier scoring if a GSSoC contributor picks it up |
 
 ---
@@ -205,13 +205,13 @@ If any of these are missing, keep the issue at `status: needs triage`.
 
 When in doubt, default to:
 
-- **Priority** → `priority: medium`
+- **Priority** → `priority:medium`
 - **Level** → match the actual code complexity, not the issue description length
 - **Size** → estimate as a maintainer would do it, not as a beginner would
-- **Status** → start at `status: needs triage` if anything is unclear; promote to `status: ready` once scoped
+- **Status** → start at `status:needs-triage` if anything is unclear; promote to `status:ready` once scoped
 - **Type** → `type:discussion` if direction is unclear
 
-For consistency, every issue should reach `status: ready` before being advertised as a good first issue or GSSoC pickup.
+For consistency, every issue should reach `status:ready` before being advertised as a good first issue or GSSoC pickup.
 
 ---
 
