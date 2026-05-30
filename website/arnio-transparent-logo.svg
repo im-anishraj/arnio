@@ -1,4 +1,18 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 120" width="400" height="120">
-  <text x="20" y="80" font-family="Arial, Helvetica, sans-serif" font-size="72" font-weight="bold" fill="#4F46E5">arnio</text>
-  <text x="20" y="105" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#6B7280">C++ accelerated data preparation</text>
+  <defs>
+    <linearGradient id="brandGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6366F1"/>
+      <stop offset="100%" stop-color="#4F46E5"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(8,20)">
+    <g transform="translate(2,8)">
+      <polygon points="20,0 40,12 40,36 20,48 0,36 0,12" fill="none" stroke="url(#brandGrad)" stroke-width="3.2" stroke-linejoin="round"/>
+      <polygon points="20,6 34,14 34,30 20,38 6,30 6,14" fill="#4F46E5" opacity="0.15"/>
+      <polygon points="20,12 28,16 28,24 20,28 12,24 12,16" fill="#4F46E5"/>
+      <circle cx="20" cy="20" r="3" fill="white"/>
+    </g>
+    <text x="68" y="38" font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif" font-size="34" font-weight="800" fill="#4F46E5" letter-spacing="-1">arnio</text>
+    <text x="68" y="58" font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif" font-size="12" fill="#6B7280" letter-spacing="0.3">C++ accelerated data preparation</text>
+  </g>
 </svg>
