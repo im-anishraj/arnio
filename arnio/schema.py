@@ -35,6 +35,32 @@ URL_SCHEME_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*$")
 
 _VALID_SEVERITIES = {"error", "warning"}
 
+_ALLOWED_FIELD_KEYS = {
+    "dtype",
+    "nullable",
+    "min",
+    "max",
+    "pattern",
+    "semantic",
+    "allowed",
+    "case_sensitive",
+    "unique",
+    "min_length",
+    "max_length",
+    "format",
+    "datetime_min",
+    "datetime_max",
+    "required_if",
+    "severity",
+}
+
+_ALLOWED_SCHEMA_KEYS = {
+    "fields",
+    "strict",
+    "unique",
+    "rules_omitted",
+}
+
 
 def _validate_severity(severity: str) -> None:
     """Raise ValueError if severity is not 'error' or 'warning'."""
@@ -889,6 +915,13 @@ class Schema:
         if not isinstance(payload, dict):
             raise TypeError(
                 "Schema JSON must decode to an object with 'fields', 'strict', and optional 'unique'."
+            )
+
+        unknown = set(payload.keys()) - _ALLOWED_SCHEMA_KEYS
+        if unknown:
+            raise ValueError(
+                f"Schema JSON contains unknown key(s): {sorted(unknown)}. "
+                f"Allowed keys: {sorted(_ALLOWED_SCHEMA_KEYS)}"
             )
 
         fields_payload = payload.get("fields")
@@ -2710,6 +2743,13 @@ def _field_from_json_dict(name: str, payload: Any) -> Field:
     if not isinstance(payload, dict):
         raise TypeError(
             f"Schema JSON field for column {name!r} must be an object, got {type(payload).__name__}."
+        )
+
+    unknown = set(payload.keys()) - _ALLOWED_FIELD_KEYS
+    if unknown:
+        raise ValueError(
+            f"Schema JSON field {name!r} contains unknown key(s): {sorted(unknown)}. "
+            f"Allowed keys: {sorted(_ALLOWED_FIELD_KEYS)}"
         )
 
     allowed = payload.get("allowed")

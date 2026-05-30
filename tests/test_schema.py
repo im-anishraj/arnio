@@ -3913,3 +3913,40 @@ def test_custom_rule_returning_malformed_issue_raises_early(tmp_path):
 
     with pytest.raises((TypeError, ValueError)):
         schema.validate(frame)
+
+
+def test_from_json_rejects_unknown_top_level_key():
+    payload = json.dumps(
+        {
+            "fields": {"email": {"dtype": "string"}},
+            "uniqe": ["email"],
+        }
+    )
+    with pytest.raises(ValueError, match="uniqe"):
+        ar.Schema.from_json(payload)
+
+
+def test_from_json_rejects_unknown_field_key():
+    payload = json.dumps(
+        {
+            "fields": {
+                "email": {
+                    "dtype": "string",
+                    "nulllable": False,
+                }
+            }
+        }
+    )
+    with pytest.raises(ValueError, match="nulllable"):
+        ar.Schema.from_json(payload)
+
+
+def test_from_json_round_trip_is_accepted():
+    original = ar.Schema(
+        fields={"email": ar.String(nullable=False)},
+        strict=True,
+        unique=["email"],
+    )
+    recovered = ar.Schema.from_json(original.to_json())
+    assert recovered.fields["email"].nullable is False
+    assert recovered.unique == ["email"]
