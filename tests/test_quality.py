@@ -45,6 +45,7 @@ def test_report_summary_and_pandas_output(csv_with_whitespace):
     assert summary["rows"] == 3
     assert summary["columns_with_whitespace"] == ["name", "city"]
     assert isinstance(df, pd.DataFrame)
+    assert df.columns.tolist() == QUALITY_REPORT_COLUMNS
     assert set(df["name"]) == {"name", "city"}
 
 

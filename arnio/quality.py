@@ -971,6 +971,10 @@ class DataQualityReport:
 
     def to_pandas(self) -> pd.DataFrame:
         """Return one row per column as a pandas DataFrame."""
+        expected_columns = QUALITY_REPORT_COLUMNS
+        if not self.columns:
+            return pd.DataFrame(columns=expected_columns)
+
         return pd.DataFrame(
             [
                 {
@@ -1018,7 +1022,7 @@ class DataQualityReport:
                 }
                 for column in self.columns.values()
             ],
-            columns=QUALITY_REPORT_COLUMNS,
+            columns=expected_columns,
         )
 
 
