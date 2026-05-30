@@ -14,7 +14,7 @@ import tempfile
 import warnings
 from collections.abc import Generator, Iterator, Sequence
 from contextlib import contextmanager
-from typing import Any, BinaryIO, cast
+from typing import cast
 
 from ._core import (
     _CsvChunkReader,
@@ -589,23 +589,25 @@ def read_csv(
                 raise ValueError("chunksize must be a positive integer")
             # We don't support encoding_errors in read_csv_chunked currently, so we drop it.
             # skip_rows vs skiprows
-            return ChunkedArFrame(read_csv_chunked(
-                path=path,
-                chunksize=chunksize,
-                dtype=dtype,
-                delimiter=delimiter,
-                has_header=has_header,
-                usecols=usecols,
-                nrows=nrows,
-                skiprows=skiprows,
-                encoding=encoding,
-                trim_headers=trim_headers,
-                decimal_separator=decimal_separator,
-                thousands_separator=thousands_separator,
-                null_values=null_values,
-                mode=mode,
-                on_bad_lines=on_bad_lines,
-            ))
+            return ChunkedArFrame(
+                read_csv_chunked(
+                    path=path,
+                    chunksize=chunksize,
+                    dtype=dtype,
+                    delimiter=delimiter,
+                    has_header=has_header,
+                    usecols=usecols,
+                    nrows=nrows,
+                    skiprows=skiprows,
+                    encoding=encoding,
+                    trim_headers=trim_headers,
+                    decimal_separator=decimal_separator,
+                    thousands_separator=thousands_separator,
+                    null_values=null_values,
+                    mode=mode,
+                    on_bad_lines=on_bad_lines,
+                )
+            )
 
         decimal_separator = _validate_decimal_separator(decimal_separator)
         _validate_thousands_separator(thousands_separator, decimal_separator)

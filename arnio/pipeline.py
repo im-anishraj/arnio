@@ -61,9 +61,11 @@ _PYTHON_STEP_REGISTRY: dict[str, Callable] = {
 _BUILTIN_PYTHON_STEP_REGISTRY: dict[str, Callable] = {}
 
 # Steps that require a full pass over the data and cannot be applied per-chunk
-_FULL_PASS_STEPS: frozenset[str] = frozenset({
-    "drop_duplicates",
-})
+_FULL_PASS_STEPS: frozenset[str] = frozenset(
+    {
+        "drop_duplicates",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -423,10 +425,16 @@ def pipeline(
                 name = _resolve_step_name(name, deprecated_step_aliases)
                 name = namespaced_builtin_steps.get(name, name)
                 if name in _FULL_PASS_STEPS:
-                    raise ValueError(f"Step '{name}' requires a full pass and cannot be used in a streaming pipeline.")
+                    raise ValueError(
+                        f"Step '{name}' requires a full pass and cannot be used in a streaming pipeline."
+                    )
         if return_metadata:
-            raise ValueError("return_metadata=True is not supported for chunked pipelines.")
-        return frame.pipeline(steps, return_metadata=False, dry_run=dry_run, verbose=verbose)
+            raise ValueError(
+                "return_metadata=True is not supported for chunked pipelines."
+            )
+        return frame.pipeline(
+            steps, return_metadata=False, dry_run=dry_run, verbose=verbose
+        )
 
     result = frame
     working_frame = frame

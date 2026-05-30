@@ -1069,10 +1069,11 @@ class ChunkedArFrame:
 
     def to_pandas(self):
         """Materialize all chunks into a single pandas DataFrame.
-        
+
         Warning: This will exhaust the generator and pull all data into memory.
         """
         import pandas as pd
+
         from .convert import to_pandas as _to_pandas
 
         dfs = []
@@ -1088,6 +1089,7 @@ class ChunkedArFrame:
 
         def _generator() -> Iterator[ArFrame]:
             from typing import cast
+
             for chunk in self._chunks:
                 yield cast(ArFrame, _pipeline(chunk, steps, **kwargs))
 
