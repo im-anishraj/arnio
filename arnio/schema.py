@@ -1021,6 +1021,57 @@ class ValidationResult:
     issues: list[ValidationIssue]
     bad_rows: list[int] = field(default_factory=list)
 
+    def __post_init__(self) -> None:
+        if isinstance(self.row_count, bool) or not isinstance(self.row_count, int):
+            raise TypeError(
+                f"ValidationResult 'row_count' must be a non-negative int, "
+                f"got {type(self.row_count).__name__}"
+            )
+        if self.row_count < 0:
+            raise ValueError(
+                f"ValidationResult 'row_count' must be >= 0, got {self.row_count}"
+            )
+        if isinstance(self.issue_count, bool) or not isinstance(self.issue_count, int):
+            raise TypeError(
+                f"ValidationResult 'issue_count' must be a non-negative int, "
+                f"got {type(self.issue_count).__name__}"
+            )
+        if self.issue_count < 0:
+            raise ValueError(
+                f"ValidationResult 'issue_count' must be >= 0, got {self.issue_count}"
+            )
+        if not isinstance(self.issues, list):
+            raise TypeError(
+                f"ValidationResult 'issues' must be a list of ValidationIssue instances, "
+                f"got {type(self.issues).__name__}"
+            )
+        for i, item in enumerate(self.issues):
+            if not isinstance(item, ValidationIssue):
+                raise TypeError(
+                    f"ValidationResult 'issues[{i}]' must be a ValidationIssue instance, "
+                    f"got {type(item).__name__}"
+                )
+        if not isinstance(self.bad_rows, list):
+            raise TypeError(
+                f"ValidationResult 'bad_rows' must be a list of non-negative ints, "
+                f"got {type(self.bad_rows).__name__}"
+            )
+        for i, item in enumerate(self.bad_rows):
+            if isinstance(item, bool) or not isinstance(item, int):
+                raise TypeError(
+                    f"ValidationResult 'bad_rows[{i}]' must be an int, "
+                    f"got {type(item).__name__}"
+                )
+            if item < 0:
+                raise ValueError(
+                    f"ValidationResult 'bad_rows[{i}]' must be >= 0, got {item}"
+                )
+        if self.issue_count != len(self.issues):
+            raise ValueError(
+                f"ValidationResult 'issue_count' ({self.issue_count}) does not match "
+                f"len(issues) ({len(self.issues)})"
+            )
+
     @property
     def passed(self) -> bool:
         """Whether validation passed with zero error-level issues."""

@@ -391,6 +391,87 @@ def test_schema_reports_missing_and_unexpected_columns(sample_csv):
     assert "unexpected_column" in rules
 
 
+# --- ValidationResult constructor validation (regression for #1684) ---
+
+
+def test_validation_result_rejects_string_row_count():
+    with pytest.raises(TypeError, match="row_count"):
+        ar.ValidationResult(row_count="1", issue_count=0, issues=[])
+
+
+def test_validation_result_rejects_negative_row_count():
+    with pytest.raises(ValueError, match="row_count"):
+        ar.ValidationResult(row_count=-1, issue_count=0, issues=[])
+
+
+def test_validation_result_rejects_bool_row_count():
+    with pytest.raises(TypeError, match="row_count"):
+        ar.ValidationResult(row_count=True, issue_count=0, issues=[])
+
+
+def test_validation_result_rejects_string_issue_count():
+    with pytest.raises(TypeError, match="issue_count"):
+        ar.ValidationResult(row_count=1, issue_count="0", issues=[])
+
+
+def test_validation_result_rejects_negative_issue_count():
+    with pytest.raises(ValueError, match="issue_count"):
+        ar.ValidationResult(row_count=1, issue_count=-1, issues=[])
+
+
+def test_validation_result_rejects_bool_issue_count():
+    with pytest.raises(TypeError, match="issue_count"):
+        ar.ValidationResult(row_count=1, issue_count=False, issues=[])
+
+
+def test_validation_result_rejects_non_list_issues():
+    with pytest.raises(TypeError, match="issues"):
+        ar.ValidationResult(row_count=1, issue_count=0, issues=None)
+
+
+def test_validation_result_rejects_string_item_in_issues():
+    with pytest.raises(TypeError, match="issues"):
+        ar.ValidationResult(row_count=1, issue_count=1, issues=["bad"])
+
+
+def test_validation_result_rejects_string_bad_rows():
+    with pytest.raises(TypeError, match="bad_rows"):
+        ar.ValidationResult(row_count=1, issue_count=0, issues=[], bad_rows="abc")
+
+
+def test_validation_result_rejects_negative_bad_rows_entry():
+    with pytest.raises(ValueError, match="bad_rows"):
+        ar.ValidationResult(row_count=1, issue_count=0, issues=[], bad_rows=[-1])
+
+
+def test_validation_result_rejects_non_int_bad_rows_entry():
+    with pytest.raises(TypeError, match="bad_rows"):
+        ar.ValidationResult(row_count=1, issue_count=0, issues=[], bad_rows=["1"])
+
+
+def test_validation_result_rejects_mismatched_issue_count():
+    issue = ar.ValidationIssue(column="x", rule="dtype", message="bad type")
+    with pytest.raises(ValueError, match="issue_count"):
+        ar.ValidationResult(row_count=1, issue_count=2, issues=[issue])
+
+
+def test_validation_result_valid_construction():
+    issue = ar.ValidationIssue(column="x", rule="dtype", message="bad type")
+    result = ar.ValidationResult(
+        row_count=5,
+        issue_count=1,
+        issues=[issue],
+        bad_rows=[0],
+    )
+    assert result.row_count == 5
+    assert result.issue_count == 1
+    assert len(result.issues) == 1
+    assert result.bad_rows == [0]
+
+
+# --- end ValidationResult constructor validation ---
+
+
 def test_validation_result_to_pandas_empty_has_stable_columns():
     result = ar.ValidationResult(
         row_count=3,
