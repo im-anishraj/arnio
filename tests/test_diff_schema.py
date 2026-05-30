@@ -164,3 +164,14 @@ class TestDiffSchema:
         assert len(changed) == 1
         assert changed[0].expected is None
         assert changed[0].observed == "^[A-Z][a-z]+$"
+
+    def test_schema_diff_validation_exceptions(self):
+        """Check SchemaDiffEntry raises appropriate errors for bad validation paths."""
+        import pytest
+        from arnio.schema import SchemaDiffEntry
+
+        with pytest.raises(TypeError, match="change must be a string"):
+            SchemaDiffEntry(change=123)
+
+        with pytest.raises(ValueError, match="change cannot be an empty string"):
+            SchemaDiffEntry(change="   ")
