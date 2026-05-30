@@ -751,7 +751,7 @@ class DataQualityReport:
         )
         lines.append("</div>")
         lines.append(
-            f"<div class=\"pill\"><span class=\"muted\">Quality score</span> <span class=\"score {score_class(self.quality_score)}\">{e(f'{self.quality_score:.2f}')}</span></div>"
+            f'<div class="pill"><span class="muted">Quality score</span> <span class="score {score_class(self.quality_score)}">{e(f"{self.quality_score:.2f}")}</span></div>'
         )
         lines.append("</div>")
 
@@ -782,7 +782,7 @@ class DataQualityReport:
                 cls = "warn" if value < 0 else "muted"
                 lines.append("<tr>")
                 lines.append(f"<td><code>{e(key)}</code></td>")
-                lines.append(f"<td class=\"{cls}\">{e(f'{value:+.2f}')}</td>")
+                lines.append(f'<td class="{cls}">{e(f"{value:+.2f}")}</td>')
                 lines.append("</tr>")
             lines.append("</tbody>")
             lines.append("</table>")
@@ -815,7 +815,7 @@ class DataQualityReport:
                     for v, _c, r in col.top_values[:3]:
                         label = e("[REDACTED]") if redact_top_values else e(v)
                         top_bits.append(
-                            f"<span class=\"chip\">{label} · {e(f'{r:.0%}')}</span>"
+                            f'<span class="chip">{label} · {e(f"{r:.0%}")}</span>'
                         )
                     top_html = "".join(top_bits)
                 elif col.histogram:
@@ -839,7 +839,7 @@ class DataQualityReport:
                         f'<div style="display:inline-flex;align-items:flex-end;gap:1.5px;'
                         f'height:20px;width:100px;background:#f3f4f6;border-radius:3px;padding:2px;" '
                         f'title="Numeric Distribution Histogram">'
-                        f'{"".join(bars)}'
+                        f"{''.join(bars)}"
                         f"</div>"
                     )
                 else:
@@ -851,19 +851,19 @@ class DataQualityReport:
                 lines.append(f"<td>{e(col.semantic_type)}</td>")
                 lines.append(
                     "<td>"
-                    f"{e(col.null_count)} <span class=\"muted\">({e(f'{null_pct:.1f}%')})</span>"
+                    f'{e(col.null_count)} <span class="muted">({e(f"{null_pct:.1f}%")})</span>'
                     f'<div class="bar"><span style="width:{max(0.0, min(100.0, null_pct)):.2f}%"></span></div>'
                     "</td>"
                 )
                 lines.append(
                     "<td>"
-                    f"{e(col.unique_count)} <span class=\"muted\">({e(f'{unique_pct:.1f}%')})</span>"
+                    f'{e(col.unique_count)} <span class="muted">({e(f"{unique_pct:.1f}%")})</span>'
                     f'<div class="bar"><span style="width:{max(0.0, min(100.0, unique_pct)):.2f}%"></span></div>'
                     "</td>"
                 )
                 lines.append(f"<td>{top_html}</td>")
                 lines.append(
-                    f"<td class=\"{'warn' if col.warnings else 'muted'}\">{e(warnings_str)}</td>"
+                    f'<td class="{"warn" if col.warnings else "muted"}">{e(warnings_str)}</td>'
                 )
                 lines.append(f"<td>{e(suggested)}</td>")
                 lines.append("</tr>")
@@ -2473,30 +2473,28 @@ def _profile_column(
         numeric = pd.to_numeric(series, errors="coerce")
         numeric_non_null = numeric.dropna()
         if len(numeric_non_null):
-            min_value = numeric_non_null.min()
-            max_value = numeric_non_null.max()
-            mean = float(numeric_non_null.mean())
-            std = float(numeric_non_null.std(ddof=0))
-            quantiles = numeric_non_null.quantile([0.25, 0.50, 0.75, 0.95])
-            q25 = round(float(quantiles.loc[0.25]), 4)
-            q50 = round(float(quantiles.loc[0.50]), 4)
-            q75 = round(float(quantiles.loc[0.75]), 4)
-            q95 = round(float(quantiles.loc[0.95]), 4)
-            (
-                outlier_count,
-                outlier_ratio,
-                iqr,
-                outlier_lower_bound,
-                outlier_upper_bound,
-            ) = _iqr_outlier_summary(
-                numeric_non_null,
-                q25=q25,
-                q75=q75,
-            )
-
-            # Calculate histogram
             finite_values = numeric_non_null[np.isfinite(numeric_non_null)]
             if len(finite_values):
+                min_value = finite_values.min()
+                max_value = finite_values.max()
+                mean = float(finite_values.mean())
+                std = float(finite_values.std(ddof=0))
+                quantiles = finite_values.quantile([0.25, 0.50, 0.75, 0.95])
+                q25 = round(float(quantiles.loc[0.25]), 4)
+                q50 = round(float(quantiles.loc[0.50]), 4)
+                q75 = round(float(quantiles.loc[0.75]), 4)
+                q95 = round(float(quantiles.loc[0.95]), 4)
+                (
+                    outlier_count,
+                    outlier_ratio,
+                    iqr,
+                    outlier_lower_bound,
+                    outlier_upper_bound,
+                ) = _iqr_outlier_summary(
+                    finite_values,
+                    q25=q25,
+                    q75=q75,
+                )
                 counts, bin_edges = np.histogram(finite_values.to_numpy(), bins=10)
                 total = int(counts.sum())
                 histogram = [
@@ -2509,6 +2507,10 @@ def _profile_column(
                     for i in range(len(counts))
                 ]
             else:
+                min_value = max_value = mean = std = None
+                q25 = q50 = q75 = q95 = None
+                iqr = outlier_count = outlier_ratio = None
+                outlier_lower_bound = outlier_upper_bound = None
                 histogram = None
     elif len(non_null) and (
         dtype == "string" or pd.api.types.is_string_dtype(series.dtype)
@@ -2747,11 +2749,19 @@ def _ratio(part: int, total: int) -> float:
 
 
 def _clean_scalar(value: Any) -> Any:
-    """Convert NaN and numpy scalar values to JSON-safe Python types."""
+    """Convert NaN/inf/-inf and numpy scalar values to JSON-safe Python types.
+
+    Non-finite floats (NaN, inf, -inf) are mapped to ``None`` so that
+    ``json.dumps(..., allow_nan=False)`` never raises on report output.
+    This covers sample_values, top_values, min/max, histogram bucket edges,
+    and any other scalar path that passes through to_dict().
+    """
     if pd.isna(value):
         return None
     if hasattr(value, "item"):
-        return value.item()
+        value = value.item()
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
     return value
 
 

@@ -3,11 +3,14 @@
 import io
 import json
 import math
+import warnings
 
 import pandas as pd
 import pytest
 
 import arnio as ar
+from arnio._core import _DType, _Frame
+from arnio.frame import ArFrame
 from arnio.quality import (
     _validate_gate_bool,
     _validate_gate_ratio_threshold,
@@ -1244,7 +1247,7 @@ def test_profile_exclude_columns_default_behavior(sample_csv):
 def test_profile_exclude_columns_valid_exclusion(tmp_path):
     path = tmp_path / "profile_exclude.csv"
     path.write_text(
-        "id,status,raw_payload\n" "1,active,{a}\n" "2,inactive,{b}\n" "3,active,{c}\n",
+        "id,status,raw_payload\n1,active,{a}\n2,inactive,{b}\n3,active,{c}\n",
         encoding="utf-8",
     )
 
@@ -1335,7 +1338,7 @@ def test_profile_exclude_columns_accepts_empty_list(sample_csv):
 def test_profile_exclude_columns_scopes_report_metrics_and_suggestions(tmp_path):
     path = tmp_path / "profile_scope.csv"
     path.write_text(
-        "id,score\n" "1,10\n" "1,10\n" "2,20\n",
+        "id,score\n1,10\n1,10\n2,20\n",
         encoding="utf-8",
     )
 
@@ -2930,25 +2933,48 @@ def test_profile_numeric_histogram_to_pandas():
     assert pdf.loc[pdf["name"] == "nums", "histogram"].values[0] is not None
 
 
+@pytest.mark.filterwarnings("ignore::RuntimeWarning")
 def test_profile_numeric_histogram_non_finite_values():
     # Test handling of infinite values in histogram calculation
-    from arnio._core import _DType, _Frame
-    from arnio.frame import ArFrame
 
     cpp_frame = _Frame.from_dict(
         {"nums": [1.0, 2.0, float("inf"), float("-inf"), None, 3.0]},
         {"nums": _DType.FLOAT64},
     )
     frame = ArFrame(cpp_frame)
-    report = ar.profile(frame)
+
+    # Profile must be warning-free
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        report = ar.profile(frame)
+    runtime_warnings = [w for w in caught if issubclass(w.category, RuntimeWarning)]
+    assert (
+        runtime_warnings == []
+    ), f"Unexpected RuntimeWarnings: {[str(w.message) for w in runtime_warnings]}"
+
     profile = report.columns["nums"]
 
-    # The histogram should filter out +/- inf and NaNs, binning only [1.0, 2.0, 3.0]
+    # The histogram should filter out +/- inf and NaNs
     assert profile.histogram is not None
     assert len(profile.histogram) == 10
 
     counts = [c for _, _, c, _ in profile.histogram]
     assert sum(counts) == 3
+
+    # Summary stats must be finite and reflect only the finite values
+    assert profile.min == 1.0
+    assert profile.max == 3.0
+    for stat_name, value in [
+        ("mean", profile.mean),
+        ("std", profile.std),
+        ("q25", profile.q25),
+        ("q50", profile.q50),
+        ("q75", profile.q75),
+        ("q95", profile.q95),
+    ]:
+        assert value is not None and math.isfinite(
+            float(value)
+        ), f"{stat_name} should be finite, got {value}"
 
     # All infinities (no finite values to bin)
     cpp_frame_all_inf = _Frame.from_dict(
@@ -2959,6 +2985,36 @@ def test_profile_numeric_histogram_non_finite_values():
     report_all_inf = ar.profile(frame_all_inf)
     profile_all_inf = report_all_inf.columns["nums"]
     assert profile_all_inf.histogram is None
+
+
+def test_profile_non_finite_values_json_safe():
+    """to_dict() and to_json() must never produce NaN/Infinity JSON tokens."""
+    frame = ArFrame(
+        _Frame.from_dict(
+            {"nums": [1.0, 2.0, float("inf"), float("-inf"), None, 3.0]},
+            {"nums": _DType.FLOAT64},
+        )
+    )
+    report = ar.profile(frame)
+
+    # Strictest check: raises ValueError on any NaN/Infinity token
+    json.dumps(report.to_dict(), allow_nan=False)
+
+    # to_json() must produce valid JSON parseable by a strict consumer
+    json_str = report.to_json()
+    assert json_str is not None
+    parsed = json.loads(json_str)
+    col = parsed["columns"]["nums"]
+
+    # Core stats must be present and finite
+    for key in ("min", "max", "mean", "std"):
+        assert col[key] is not None, f"{key} should not be None after finite-value fix"
+        assert math.isfinite(col[key]), f"{key} should be finite, got {col[key]}"
+
+    # sample_values must contain no inf/-inf
+    for v in col["sample_values"]:
+        if isinstance(v, float):
+            assert math.isfinite(v), f"sample_values contains non-finite: {v}"
 
 
 def test_report_to_markdown_escapes_newlines_in_column_cells():
