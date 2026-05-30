@@ -278,20 +278,14 @@ result = schema.validate(frame)</code></pre></div></div>
               <tr>
                 <td><code>UUID(...)</code></td>
                 <td>Semantic</td>
-                <td><code>nullable=True</code>, <code>unique=False</code>, <code>severity="error"</code>, <code>required_if=None</code></td>
-                <td>Validates the canonical 8-4-4-4-12 hexadecimal UUID format (RFC 4122, e.g. <code>"550e8400-e29b-41d4-a716-446655440000"</code>). Both upper- and lower-case hex digits are accepted.</td>
+                <td><code>nullable=True</code>, <code>unique=False</code>, <code>version=None</code>, <code>severity="error"</code>, <code>required_if=None</code></td>
+                <td>Validates hexadecimal UUID strings. Optional <code>version</code> (1-5) enforces a specific UUID version; Nil UUIDs are rejected when version filtering is active.</td>
               </tr>
               <tr>
-                <td><code>IPv4(...)</code></td>
+                <td><code>IPAddress(...)</code></td>
                 <td>Semantic</td>
-                <td><code>nullable=True</code>, <code>unique=False</code>, <code>severity="error"</code>, <code>required_if=None</code></td>
-                <td>Validates strict dotted-decimal IPv4 addresses (e.g. <code>"192.168.1.1"</code>). Each octet must be 0&#8211;255; leading zeros are rejected.</td>
-              </tr>
-              <tr>
-                <td><code>MACAddress(...)</code></td>
-                <td>Semantic</td>
-                <td><code>nullable=True</code>, <code>unique=False</code>, <code>severity="error"</code>, <code>required_if=None</code></td>
-                <td>Validates IEEE 802 MAC-48 addresses in colon-separated (<code>"AA:BB:CC:DD:EE:FF"</code>) or hyphen-separated (<code>"AA-BB-CC-DD-EE-FF"</code>) notation.</td>
+                <td><code>nullable=True</code>, <code>unique=False</code>, <code>version=None</code>, <code>severity="error"</code>, <code>required_if=None</code></td>
+                <td>Validates standard IP address strings. Optional <code>version</code> (4 or 6) enforces strict IPv4 or IPv6 checking.</td>
               </tr>
               <tr>
                 <td><code>Date(...)</code></td>
