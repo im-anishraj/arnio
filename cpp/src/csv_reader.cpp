@@ -1072,6 +1072,15 @@ CsvReader::scan_schema(const std::string& path, const std::string& on_bad_lines)
 
     std::vector<std::string> first_row;
 
+// Advance the reader past the skipped rows
+    if (config.skip_rows.has_value()) {
+        size_t to_skip = config.skip_rows.value();
+        size_t skipped = 0;
+        while (skipped < to_skip && record_reader.read(line)) {
+            ++skipped;
+        }
+    }
+
     if (record_reader.read(line)) {
         strip_utf8_bom(line);
 

@@ -1292,6 +1292,45 @@ class TestReadCsv:
 
 
 class TestScanCsv:
+    # --- scan_csv skiprows regression tests ---
+
+    def test_scan_csv_skiprows_default_behavior(self, tmp_path):
+        """Default behavior remains unchanged when skiprows is not provided."""
+        csv_path = tmp_path / "default.csv"
+        csv_path.write_text("id,name\n1,Alice\n2,Bob\n")
+        schema = ar.scan_csv(csv_path)
+        assert schema == {"id": "int64", "name": "string"}
+
+    def test_scan_csv_skiprows_zero(self, tmp_path):
+        """skiprows=0 behaves identically to default behavior."""
+        csv_path = tmp_path / "zero.csv"
+        csv_path.write_text("id,name\n1,Alice\n2,Bob\n")
+        schema = ar.scan_csv(csv_path, skiprows=0)
+        assert schema == {"id": "int64", "name": "string"}
+
+    def test_scan_csv_skiprows_positive_with_metadata(self, tmp_path):
+        """Positive skiprows correctly skips metadata rows before the header."""
+        csv_path = tmp_path / "meta.csv"
+        csv_path.write_text(
+            "System Report\nGenerated 2026-05-25\nid,name\n1,Alice\n2,Bob\n"
+        )
+        schema = ar.scan_csv(csv_path, skiprows=2)
+        assert schema == {"id": "int64", "name": "string"}
+
+    def test_scan_csv_skiprows_invalid_values(self, tmp_path):
+        """Invalid skiprows values (negative, float, bool) raise appropriate errors."""
+        csv_path = tmp_path / "invalid.csv"
+        csv_path.write_text("id,name\n1,Alice\n")
+
+        with pytest.raises(ValueError, match="non-negative"):
+            ar.scan_csv(csv_path, skiprows=-1)
+
+        with pytest.raises(TypeError, match="integer"):
+            ar.scan_csv(csv_path, skiprows=1.5)
+
+        with pytest.raises(TypeError, match="integer"):
+            ar.scan_csv(csv_path, skiprows=True)
+
     def test_scan_schema(self, sample_csv):
         schema = ar.scan_csv(sample_csv)
         assert isinstance(schema, dict)

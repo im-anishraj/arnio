@@ -947,6 +947,7 @@ def scan_csv(
     *,
     delimiter: str | None = None,
     encoding: str = "utf-8",
+    skiprows: int | None = None,
     trim_headers: bool = True,
     decimal_separator: str = ".",
     thousands_separator: str | None = None,
@@ -973,6 +974,9 @@ def scan_csv(
     encoding : str, default "utf-8"
         File encoding. For non-UTF-8 inputs, a sample of the file is
         transcoded to infer the schema.
+    skiprows : int or None, default None
+        Number of lines to skip at the beginning of the file before reading the
+        header or data. Useful for bypassing unstructured metadata.
     trim_headers : bool, default True
         Strip leading/trailing whitespace from column names.  Regardless
         of this setting, headers that differ only by leading or trailing
@@ -1019,11 +1023,11 @@ def scan_csv(
     Raises
     ------
     ValueError
-        If thousands_separator is invalid.
+        If thousands_separator or skiprows is invalid.
 
     TypeError
         If delimiter is not a string or None, or thousands_separator is
-        not a string or None.
+        not a string or None, or skiprows is not an integer.
 
     CsvReadError
         If CSV input contains NUL bytes and appears binary or corrupted.
@@ -1066,6 +1070,8 @@ def scan_csv(
     config.encoding_errors = encoding_errors
     config.mode = mode
 
+    if skiprows is not None:
+        config.skip_rows = _validate_skip_rows(skiprows)
     if null_values is not None:
         config.null_values = _validate_null_values(null_values)
 
@@ -1077,6 +1083,13 @@ def scan_csv(
         config.sample_size = sample_size
 
     reader = _CsvReader(config)
+
+    # Calculate the total rows needed from the file to satisfy the sample
+    # request, ensuring skipped rows don't reduce the effective sample size.
+    effective_sample_rows = 100 if sample_size is None else sample_size
+    if skiprows is not None:
+        effective_sample_rows += skiprows
+
     try:
         # Schema inference only needs a sample, avoiding full-file transcode.
         # sample_rows is passed so _utf8_csv_path uses record-aware sampling
@@ -1086,7 +1099,7 @@ def scan_csv(
             encoding,
             encoding_errors=encoding_errors,
             delimiter=delimiter,
-            sample_rows=100 if sample_size is None else sample_size,
+            sample_rows=effective_sample_rows,
         ) as native_path:
             schema, bad_row_msgs = reader.scan_schema(native_path, on_bad_lines)
             if on_bad_lines == "warn" and bad_row_msgs:
