@@ -27,6 +27,41 @@ from .convert import to_pandas
 from .frame import ArFrame
 
 
+_QUALITY_REPORT_EXPORT_COLUMNS = [
+    "name",
+    "dtype",
+    "semantic_type",
+    "null_count",
+    "null_ratio",
+    "unique_count",
+    "unique_ratio",
+    "empty_string_count",
+    "whitespace_count",
+    "suggested_dtype",
+    "email_validity_ratio",
+    "url_validity_ratio",
+    "min",
+    "max",
+    "mean",
+    "std",
+    "q25",
+    "q50",
+    "q75",
+    "q95",
+    "iqr",
+    "outlier_lower_bound",
+    "outlier_upper_bound",
+    "outlier_count",
+    "outlier_ratio",
+    "warnings",
+    "top_values",
+    "top_values_is_approximate",
+    "top_values_sample_count",
+    "top_values_sample_ratio",
+    "histogram",
+]
+
+
 class CleaningSuggestion(tuple):
     """A data quality cleaning suggestion that is backwards-compatible with tuples.
 
@@ -982,7 +1017,8 @@ class DataQualityReport:
                     "histogram": column.histogram,
                 }
                 for column in self.columns.values()
-            ]
+            ],
+            columns=_QUALITY_REPORT_EXPORT_COLUMNS,
         )
 
 

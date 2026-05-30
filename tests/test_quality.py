@@ -10,6 +10,7 @@ import pytest
 import arnio as ar
 from arnio.quality import (
     CleaningSuggestion,
+    _QUALITY_REPORT_EXPORT_COLUMNS,
     _validate_gate_bool,
     _validate_gate_ratio_threshold,
     _validate_gate_threshold,
@@ -1333,6 +1334,26 @@ def test_profile_exclude_columns_accepts_empty_list(sample_csv):
     assert report.column_count == full_report.column_count
 
 
+def test_profile_empty_frame_to_pandas_has_stable_columns():
+    frame = ar.from_pandas(pd.DataFrame(index=range(2)))
+
+    report = ar.profile(frame)
+    df = report.to_pandas()
+
+    assert list(df.columns) == _QUALITY_REPORT_EXPORT_COLUMNS
+    assert df.shape == (0, len(_QUALITY_REPORT_EXPORT_COLUMNS))
+
+
+def test_profile_excluding_all_columns_to_pandas_has_stable_columns():
+    frame = ar.from_pandas(pd.DataFrame({"id": [1, 2], "name": ["a", "b"]}))
+
+    report = ar.profile(frame, exclude_columns=["id", "name"])
+    df = report.to_pandas()
+
+    assert list(df.columns) == _QUALITY_REPORT_EXPORT_COLUMNS
+    assert df.shape == (0, len(_QUALITY_REPORT_EXPORT_COLUMNS))
+
+
 def test_profile_exclude_columns_scopes_report_metrics_and_suggestions(tmp_path):
     path = tmp_path / "profile_scope.csv"
     path.write_text(
@@ -1503,6 +1524,8 @@ def test_profile_string_metrics_to_pandas():
     frame = ar.from_pandas(df)
     report = ar.profile(frame)
     result_df = report.to_pandas()
+
+    assert list(result_df.columns) == _QUALITY_REPORT_EXPORT_COLUMNS
 
     row = result_df[result_df["name"] == "label"].iloc[0]
     assert row["min"] == 1
