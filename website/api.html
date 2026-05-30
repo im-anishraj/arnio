@@ -91,7 +91,11 @@
         <div class="api-func"><div class="api-func-header">Quality result classes</div><div class="api-func-body"><p><code>ColumnProfile</code>, <code>CleaningSuggestion</code>, <code>CleanStepRecord</code>, <code>CleanExplanation</code>, <code>ProfileComparison</code>, <code>QualityGateIssue</code>, and <code>QualityGateResult</code> describe structured profiling, cleaning, comparison, and gate output.</p></div></div>
 
         <h2 id="schema">Schema</h2>
-        <div class="api-func"><div class="api-func-header">Schema(fields, strict=False).validate(frame, max_errors=None) / validate(frame, schema, max_errors=None)</div><div class="api-func-body"><p>Validate frames against field definitions. <code>max_errors</code> was added in v1.18.0.</p></div></div>
+        <div class="api-func"><div class="api-func-header">Schema(fields, strict=False, unique=None, rules=None).validate(frame, max_errors=None) / validate(frame, schema, max_errors=None)</div><div class="api-func-body"><p>Validate frames against field definitions. <code>max_errors</code> was added in v1.18.0.</p><p><code>unique</code>: list or tuple of column names that must contain no duplicate values in the frame.</p><p><code>rules</code>: list of callables <code>(pd.DataFrame) -&gt; list[ValidationIssue]</code> for cross-field or custom contract checks.</p><pre><code>schema = ar.Schema(
+    fields={"email": ar.Email(), "user_id": ar.Int64()},
+    unique=["email"],
+)
+result = schema.validate(frame)</code></pre></div></div>
         <div class="api-func"><div class="api-func-header">Field builders</div><div class="api-func-body"><p><code>Int64</code>, <code>Float64</code>, <code>String</code>, <code>Bool</code>, <code>Email</code>, <code>URL(allowed_schemes=...)</code>, <code>PhoneNumber</code>, <code>CountryCode</code>, <code>CurrencyCode</code>, <code>LanguageCode</code>, <code>TimeZone</code>, <code>Date</code>, <code>DateTime</code>, <code>Regex</code>, and <code>Custom</code>.</p></div></div>
         <div class="api-func"><div class="api-func-header">diff_schema, schema_to_dict, schema_to_yaml, register_validator</div><div class="api-func-body"><p>Compare schema contracts, export schema definitions, and register custom semantic validators. Structured results include <code>SchemaDiff</code>, <code>SchemaDiffEntry</code>, <code>ValidationIssue</code>, and <code>ValidationResult</code>.</p></div></div>
 
