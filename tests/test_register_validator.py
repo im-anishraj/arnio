@@ -228,9 +228,13 @@ class TestCustomValidator:
             ar.Custom(None)
 
         """Test empty string raises ValueError"""
-        with pytest.raises(ValueError, match="The validator name cannot be an empty string."):
+        with pytest.raises(
+            ValueError, match="The validator name cannot be an empty string."
+        ):
             ar.Custom("")
-        with pytest.raises(ValueError, match="The validator name cannot be an empty string."):
+        with pytest.raises(
+            ValueError, match="The validator name cannot be an empty string."
+        ):
             ar.Custom("   ")
 
 
