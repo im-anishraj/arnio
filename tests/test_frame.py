@@ -212,16 +212,22 @@ def test_length_mismatch_ArFrame():
 
 
 def test_scalar_dict():
-    # Pandas pd.DataFrame({"a": 1}) fails because it requires an index.
     data = {"name": "Alice", "age": 25}
-    with pytest.raises(ValueError):
+
+    with pytest.raises(
+        TypeError,
+        match="Column 'name' must be a sequence of values",
+    ):
         ar.from_dict(data)
 
 
 def test_scalar_dict_ArFrame():
-    # Pandas pd.DataFrame({"a": 1}) fails because it requires an index.
     data = {"name": "Alice", "age": 25}
-    with pytest.raises(ValueError):
+
+    with pytest.raises(
+        TypeError,
+        match="Column 'name' must be a sequence of values",
+    ):
         ar.ArFrame.from_dict(data)
 
 
