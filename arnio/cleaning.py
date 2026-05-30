@@ -416,6 +416,11 @@ def fill_nulls(
     """
     frame, _ = _validate_frame(frame)
     if subset is not None:
+        subset = _validate_column_sequence(subset, argument_name="subset")
+        if len(subset) == 0:
+            raise ValueError(
+                "fill_nulls: subset cannot be empty; pass subset=None to fill all columns"
+            )
         subset = _validate_existing_column_sequence(
             subset,
             available_columns=frame.columns,
