@@ -3245,6 +3245,47 @@ class TestSafeDivideColumns:
                 output_column="ratio",
             )
 
+    def test_numerator_must_be_string(self, tmp_path):
+        path = tmp_path / "data.csv"
+        path.write_text("revenue,cost\n100,50\n")
+        frame = ar.read_csv(path)
+
+        with pytest.raises(TypeError, match="numerator must be a string column name"):
+            ar.safe_divide_columns(
+                frame,
+                numerator=123,
+                denominator="cost",
+                output_column="ratio",
+            )
+
+    def test_denominator_must_be_string(self, tmp_path):
+        path = tmp_path / "data.csv"
+        path.write_text("revenue,cost\n100,50\n")
+        frame = ar.read_csv(path)
+
+        with pytest.raises(TypeError, match="denominator must be a string column name"):
+            ar.safe_divide_columns(
+                frame,
+                numerator="revenue",
+                denominator=None,
+                output_column="ratio",
+            )
+
+    def test_valid_string_columns_still_work(self, tmp_path):
+        path = tmp_path / "data.csv"
+        path.write_text("revenue,cost\n100,50\n")
+        frame = ar.read_csv(path)
+
+        result = ar.safe_divide_columns(
+            frame,
+            numerator="revenue",
+            denominator="cost",
+            output_column="ratio",
+        )
+
+        df = ar.to_pandas(result)
+        assert df["ratio"].iloc[0] == 2.0
+
     def test_output_column_already_exists(self, tmp_path):
         import warnings
 
