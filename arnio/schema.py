@@ -2967,8 +2967,8 @@ def register_validator(
     """
     if not callable(fn):
         raise TypeError("fn must be callable")
-    if not isinstance(name, str) or not name:
-        raise ValueError("name must be a non-empty string")
+    if not isinstance(name, str) or not name.strip():
+        raise ValueError("Validator name must be a non-empty, non-whitespace string")
     if name in _CUSTOM_VALIDATORS and not overwrite:
         raise ValueError(
             f"Validator {name!r} is already registered. "
