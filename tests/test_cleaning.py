@@ -4003,6 +4003,20 @@ def test_fill_nulls_validation_lossy_and_non_finite():
         )
 
 
+def test_fill_nulls_empty_subset_raises():
+    frame = ar.from_pandas(pd.DataFrame({"a": [1, None], "b": [None, 2]}))
+    with pytest.raises(ValueError, match="subset cannot be empty"):
+        ar.fill_nulls(frame, 0, subset=[])
+
+
+def test_fill_nulls_none_subset_fills_all():
+    frame = ar.from_pandas(pd.DataFrame({"a": [1, None], "b": [None, 2]}))
+    result = ar.fill_nulls(frame, 0, subset=None)
+    df = ar.to_pandas(result)
+    assert df["a"].tolist() == [1.0, 0.0]
+    assert df["b"].tolist() == [0.0, 2.0]
+
+
 class TestSelectColumns:
     def test_select_columns_keeps_requested_columns_and_preserves_order(self):
         frame = ar.from_pandas(
