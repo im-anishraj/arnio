@@ -118,3 +118,71 @@ class TestArFrameToDictExtended:
             ValueError, match="does not support duplicate column labels"
         ):
             ar.from_pandas(pd.DataFrame([[1, 2, 3]], columns=["a", "b", "a"]))
+
+    def test_to_dict_records_orient(self):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1, 2], "b": [3, 4]}))
+
+        result = frame.to_dict(orient="records")
+
+        assert result == [
+            {"a": 1, "b": 3},
+            {"a": 2, "b": 4},
+        ]
+
+    def test_to_dict_split_orient(self):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1, 2], "b": [3, 4]}))
+
+        result = frame.to_dict(orient="split")
+
+        assert result == {
+            "columns": ["a", "b"],
+            "data": [
+                [1, 3],
+                [2, 4],
+            ],
+        }
+
+    def test_to_dict_invalid_orient(self):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1, 2]}))
+
+        with pytest.raises(
+            ValueError,
+            match="orient must be one of",
+        ):
+            frame.to_dict(orient="invalid")
+
+    def test_to_dict_split_empty_frame(self):
+        frame = ar.from_pandas(pd.DataFrame(columns=["a", "b"]))
+
+        result = frame.to_dict(orient="split")
+
+        assert result == {
+            "columns": ["a", "b"],
+            "data": [],
+        }
+
+    def test_to_dict_records_preserves_none(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {"name": ["Alice", None]},
+                dtype=object,
+            )
+        )
+
+        result = frame.to_dict(orient="records")
+
+        assert result == [
+            {"name": "Alice"},
+            {"name": None},
+        ]
+
+    def test_to_dict_split_preserves_column_order(self):
+        frame = ar.from_pandas(pd.DataFrame({"z": [1], "a": [2], "m": [3]}))
+
+        result = frame.to_dict(orient="split")
+
+        assert result["columns"] == [
+            "z",
+            "a",
+            "m",
+        ]
