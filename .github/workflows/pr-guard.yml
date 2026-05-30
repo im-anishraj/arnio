@@ -1,0 +1,28 @@
+name: PR Guard
+
+on:
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  guard-sensitive-paths:
+    name: Guard Sensitive Paths and Root Files
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for unauthorized file changes
+        env:
+          PR_LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+        run: |
+          # Try to load the trusted script from the base branch to prevent PRs from tampering with the guard
+          if git rev-parse "origin/${GITHUB_BASE_REF}:.github/scripts/pr_guard.py" >/dev/null 2>&1; then
+            git show "origin/${GITHUB_BASE_REF}:.github/scripts/pr_guard.py" > trusted_pr_guard.py
+            python3 trusted_pr_guard.py
+          else
+            # Fallback for the initial PR that introduces the script
+            python3 .github/scripts/pr_guard.py
+          fi

@@ -10,6 +10,9 @@ on:
     - cron: '0 3 * * 1'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   compat:
     name: pandas=${{ matrix.pandas-version }} numpy=${{ matrix.numpy-version }} (Python ${{ matrix.python-version }})

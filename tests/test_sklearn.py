@@ -1,3 +1,4 @@
+import importlib
 import warnings
 
 import numpy as np
@@ -10,10 +11,50 @@ from sklearn.pipeline import Pipeline  # noqa: E402
 
 from arnio.integrations.sklearn import ArnioCleaner  # noqa: E402
 
+# ---------------------------------------------------------------------------
+# Namespace discoverability tests (issue: from arnio.integrations import
+# ArnioCleaner should work when sklearn is installed)
+# ---------------------------------------------------------------------------
+
+
+def test_arniocleaner_importable_from_integrations_namespace():
+    """ArnioCleaner must be importable from arnio.integrations when sklearn is installed."""
+    from arnio.integrations import ArnioCleaner as AC  # noqa: PLC0415
+
+    assert AC is ArnioCleaner
+
+
+def test_arniocleaner_in_integrations_all():
+    """ArnioCleaner must be listed in arnio.integrations.__all__."""
+    import arnio.integrations as integrations  # noqa: PLC0415
+
+    assert "ArnioCleaner" in integrations.__all__
+
+
+def test_arniocleaner_missing_sklearn_raises_clear_import_error():
+    """When sklearn is absent, importing ArnioCleaner from arnio.integrations
+    must raise ImportError with a message directing users to install arnio[sklearn].
+    """
+    from unittest.mock import patch  # noqa: PLC0415
+
+    import arnio.integrations as integrations  # noqa: PLC0415
+
+    # Patch importlib.import_module inside the integrations __getattr__ so that
+    # importing "arnio.integrations.sklearn" behaves as if sklearn is not installed.
+    def _raise_import_error(name, *args, **kwargs):
+        if name == "arnio.integrations.sklearn":
+            raise ImportError("No module named 'sklearn'")
+        return importlib.import_module(name, *args, **kwargs)
+
+    with patch(
+        "arnio.integrations.importlib.import_module", side_effect=_raise_import_error
+    ):
+        with pytest.raises(ImportError, match="arnio\\[sklearn\\]"):
+            _ = integrations.__getattr__("ArnioCleaner")
+
 
 def test_arniocleaner_non_dataframe_input():
     cleaner = ArnioCleaner()
-    # Test lists and numpy arrays fail safely
     with pytest.raises(TypeError, match="requires a pandas DataFrame"):
         cleaner.fit([[1, 2], [3, 4]])
 
@@ -34,11 +75,9 @@ def test_arniocleaner_configured_steps():
 def test_arniocleaner_copy_behavior():
     df = pd.DataFrame({"A": ["  dirty  ", "data "]})
 
-    # Test copy=True (default) ensures the original dataframe isn't mutated
     cleaner = ArnioCleaner(steps=[("strip_whitespace",)], copy=True)
     cleaner.fit_transform(df)
 
-    # Original should still have spaces
     assert df.iloc[0, 0] == "  dirty  "
 
 
@@ -57,7 +96,9 @@ def test_arniocleaner_in_pipeline():
 def test_arniocleaner_feature_names_out_tracks_dropped_columns():
     df = pd.DataFrame({"A": ["x", "y"], "B": [1, 2]})
 
-    cleaner = ArnioCleaner(steps=[("drop_columns", {"columns": ["B"]})])
+    cleaner = ArnioCleaner(
+        steps=[("drop_columns", {"columns": ["B"]})], allow_schema_changes=True
+    )
     cleaner.fit(df)
     result = cleaner.transform(df)
 
@@ -68,7 +109,10 @@ def test_arniocleaner_feature_names_out_tracks_dropped_columns():
 def test_arniocleaner_feature_names_out_tracks_renamed_columns():
     df = pd.DataFrame({"A": ["x", "y"], "B": [1, 2]})
 
-    cleaner = ArnioCleaner(steps=[("rename_columns", {"mapping": {"A": "name"}})])
+    cleaner = ArnioCleaner(
+        steps=[("rename_columns", {"mapping": {"A": "name"}})],
+        allow_schema_changes=True,
+    )
     cleaner.fit(df)
     result = cleaner.transform(df)
 
@@ -147,8 +191,6 @@ def test_arniocleaner_rejects_transform_with_missing_columns():
 
 
 # --- Issue: ArnioCleaner row-dropping pipeline behavior ---
-# Tests added to cover drop_nulls and filter_rows changing row count
-# as required by the acceptance criteria
 
 
 def test_drop_nulls_changes_row_count_when_allowed():
@@ -163,7 +205,6 @@ def test_drop_nulls_changes_row_count_when_allowed():
 
 
 def test_filter_rows_changes_row_count_when_allowed():
-    # filter_rows takes column, op, value as separate kwargs
     df = pd.DataFrame({"score": [10, 50, 90], "label": ["low", "mid", "high"]})
     cleaner = ArnioCleaner(
         steps=[("filter_rows", {"column": "score", "op": ">", "value": 20})],
@@ -175,7 +216,6 @@ def test_filter_rows_changes_row_count_when_allowed():
 
 
 def test_drop_nulls_rejects_row_count_change_by_default():
-    # drop_nulls without allow_row_count_change=True must raise ValueError
     df = pd.DataFrame({"name": ["Alice", None], "age": [30, 40]})
     cleaner = ArnioCleaner(steps=[("drop_nulls",)])
     with pytest.raises(ValueError, match="changed the row count"):
@@ -183,7 +223,6 @@ def test_drop_nulls_rejects_row_count_change_by_default():
 
 
 def test_filter_rows_rejects_row_count_change_by_default():
-    # filter_rows without allow_row_count_change=True must raise ValueError
     df = pd.DataFrame({"score": [10, 50, 90]})
     cleaner = ArnioCleaner(
         steps=[("filter_rows", {"column": "score", "op": ">", "value": 20})]
@@ -196,9 +235,7 @@ def test_filter_rows_rejects_row_count_change_by_default():
 
 
 def test_arniocleaner_warns_on_dtype_change_in_transform():
-    """transform() emits UserWarning when a column dtype changed since fit()."""
     train_df = pd.DataFrame({"age": [25, 30, 35], "score": [1.0, 2.0, 3.0]})
-    # Simulate dtype drift: age is now object/string after a CSV round-trip
     test_df = pd.DataFrame({"age": ["25", "30", "35"], "score": [1.0, 2.0, 3.0]})
 
     cleaner = ArnioCleaner(steps=[])
@@ -209,20 +246,17 @@ def test_arniocleaner_warns_on_dtype_change_in_transform():
 
 
 def test_arniocleaner_no_warning_when_dtypes_unchanged():
-    """transform() emits no warning when dtypes match what was seen in fit()."""
     df = pd.DataFrame({"age": [25, 30, 35], "score": [1.0, 2.0, 3.0]})
 
     cleaner = ArnioCleaner(steps=[])
     cleaner.fit(df)
 
-    # Should complete without any warning
     with warnings.catch_warnings():
         warnings.simplefilter("error", UserWarning)
         cleaner.transform(df)
 
 
 def test_arniocleaner_dtype_warning_names_the_changed_column():
-    """The UserWarning message names the specific column that changed dtype."""
     train_df = pd.DataFrame({"id": [1, 2], "value": [10, 20]})
     test_df = pd.DataFrame({"id": ["1", "2"], "value": [10, 20]})
 
@@ -234,7 +268,6 @@ def test_arniocleaner_dtype_warning_names_the_changed_column():
 
 
 def test_arniocleaner_dtype_warning_does_not_block_transform():
-    """transform() still returns a result even when a dtype warning is emitted."""
     train_df = pd.DataFrame({"score": [1, 2, 3]})
     test_df = pd.DataFrame({"score": ["1", "2", "3"]})
 
@@ -249,7 +282,6 @@ def test_arniocleaner_dtype_warning_does_not_block_transform():
 
 
 def test_arniocleaner_fit_stores_feature_dtypes():
-    """fit() stores feature_dtypes_in_ for every column."""
     df = pd.DataFrame({"a": [1, 2], "b": [1.0, 2.0], "c": ["x", "y"]})
     cleaner = ArnioCleaner(steps=[])
     cleaner.fit(df)
@@ -261,7 +293,6 @@ def test_arniocleaner_fit_stores_feature_dtypes():
 
 
 def test_arniocleaner_warns_for_multiple_dtype_changes():
-    """A warning is emitted for each column that changed dtype."""
     train_df = pd.DataFrame({"a": [1, 2], "b": [3, 4]})
     test_df = pd.DataFrame({"a": ["1", "2"], "b": ["3", "4"]})
 
@@ -271,7 +302,6 @@ def test_arniocleaner_warns_for_multiple_dtype_changes():
     with pytest.warns(UserWarning) as record:
         cleaner.transform(test_df)
 
-    # One warning per changed column
     assert len(record) == 2
     messages = {str(w.message) for w in record}
     assert any("'a'" in m for m in messages)
@@ -279,10 +309,84 @@ def test_arniocleaner_warns_for_multiple_dtype_changes():
 
 
 def test_arniocleaner_rejects_non_boolean_options():
-    """Ensure constructor explicitly blocks truthy/falsy non-boolean values."""
+    df = pd.DataFrame({"A": [1, 2, 3]})
     invalid_values = ["false", "True", 1, 0, None, [], {}]
     for value in invalid_values:
         with pytest.raises(TypeError, match="copy must be a bool"):
-            ArnioCleaner(copy=value)
+            ArnioCleaner(copy=value).fit(df)
         with pytest.raises(TypeError, match="allow_row_count_change must be a bool"):
-            ArnioCleaner(allow_row_count_change=value)
+            ArnioCleaner(allow_row_count_change=value).fit(df)
+
+
+def test_arniocleaner_set_params_rejects_invalid_runtime_updates_and_rolls_back():
+    cleaner = ArnioCleaner(
+        copy=True, allow_row_count_change=False, allow_schema_changes=False
+    )
+
+    with pytest.raises(TypeError, match="copy must be a bool"):
+        cleaner.set_params(copy="not-a-bool")
+    assert cleaner.copy is True
+
+    with pytest.raises(TypeError, match="allow_row_count_change must be a bool"):
+        cleaner.set_params(allow_row_count_change="not-a-bool")
+    assert cleaner.allow_row_count_change is False
+
+    with pytest.raises(TypeError, match="allow_schema_changes must be a bool"):
+        cleaner.set_params(allow_schema_changes="not-a-bool")
+    assert cleaner.allow_schema_changes is False
+
+
+def test_arniocleaner_set_params_supports_valid_updates():
+    cleaner = ArnioCleaner()
+
+    returned = cleaner.set_params(copy=False, allow_row_count_change=True)
+
+    assert returned is cleaner
+    assert cleaner.copy is False
+    assert cleaner.allow_row_count_change is True
+
+
+def test_arniocleaner_pipeline_set_params_rejects_invalid_updates():
+    df = pd.DataFrame({"A": [1, 2]})
+    pipe = Pipeline([("arnio_prep", ArnioCleaner())])
+
+    with pytest.raises(TypeError, match="copy must be a bool"):
+        pipe.set_params(arnio_prep__copy="bad")
+
+    result = pipe.fit_transform(df)
+
+    assert isinstance(result, pd.DataFrame)
+
+
+def test_arniocleaner_construction_with_invalid_params_does_not_raise():
+    cleaner = ArnioCleaner(copy="yes")
+    assert cleaner.copy == "yes"
+    cleaner2 = ArnioCleaner(allow_row_count_change=1)
+    assert cleaner2.allow_row_count_change == 1
+
+
+def test_arniocleaner_clone_with_invalid_params_does_not_raise():
+    from sklearn.base import clone
+
+    cleaner = ArnioCleaner(copy="yes")
+    cloned = clone(cleaner)
+    assert cloned.copy == "yes"
+
+
+def test_arniocleaner_preserves_index_when_row_count_unchanged():
+    """transform() must preserve the original pandas index when row count is unchanged."""
+    df = pd.DataFrame({"A": [" x ", " y "], "B": [1, 2]}, index=["row-a", "row-b"])
+    cleaner = ArnioCleaner(steps=[("strip_whitespace",)])
+    cleaner.fit(df)
+    result = cleaner.transform(df)
+    assert list(result.index) == ["row-a", "row-b"]
+
+
+def test_arniocleaner_rejects_invalid_params_at_transform():
+    """transform() must raise TypeError if params were mutated to invalid values after fit."""
+    df = pd.DataFrame({"A": [1, 2, 3]})
+    cleaner = ArnioCleaner()
+    cleaner.fit(df)
+    cleaner.copy = "bad"
+    with pytest.raises(TypeError, match="copy must be a bool"):
+        cleaner.transform(df)

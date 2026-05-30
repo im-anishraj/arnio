@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [ "main" ]
 
+permissions:
+  contents: read
+
 jobs:
   lint:
     name: Lint (Black, Ruff, clang-format)
@@ -23,6 +26,9 @@ jobs:
 
       - name: Install lint dependencies
         run: pip install "black>=24.0" "ruff>=0.4.0" "mypy>=1.0" pandas-stubs types-setuptools
+
+      - name: Documentation UTF-8 check
+        run: python scripts/check_docs_utf8.py
 
       - name: Black (check-only)
         run: black --check --diff .
@@ -131,3 +137,31 @@ jobs:
             --ExecutePreprocessor.timeout=300 \
             examples/financial_csv_example.ipynb \
             --output executed_notebook.ipynb
+
+  sklearn_integration:
+    name: scikit-learn Integration Tests
+    needs: build_and_test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: 'pip'
+
+      - name: Install dev + sklearn extras
+        run: pip install -e ".[dev,sklearn]"
+
+      - name: Run sklearn integration tests
+        run: pytest tests/test_sklearn.py -v --cov=arnio --cov-report=xml
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v6
+        with:
+          files: ./coverage.xml
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}

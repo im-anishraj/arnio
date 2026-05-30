@@ -107,7 +107,13 @@ DENSITY_LABELS = {
 }
 
 DRY_RUN = os.getenv("ARNIO_BENCHMARK_DRY_RUN") == "1"
-TMP_DIR = Path("benchmarks")
+TMP_DIR = Path(
+    os.environ.get(
+        "ARNIO_BENCHMARK_OUTPUT_DIR",
+        "benchmarks",
+    )
+)
+TMP_DIR.mkdir(parents=True, exist_ok=True)
 FILL_VALUE = 0
 
 _OPS = ["read_csv", "drop_nulls", "fill_nulls", "keep_rows_with_nulls"]

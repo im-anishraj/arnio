@@ -96,19 +96,62 @@ class TestReadCsv:
         assert frame.dtypes["price"] == "float64"
         assert pdf["zip"].tolist() == ["07001", "08002"]
 
-    def test_read_csv_dtype_parse_failure_becomes_null(self, tmp_path):
-        path = tmp_path / "parse_failure.csv"
-        path.write_text("quantity\nabc\n")
+    def test_read_csv_fully_explicit_dtype_with_usecols(self, tmp_path):
+        path = tmp_path / "usecols_full_dtype.csv"
+        path.write_text("zip,quantity,price\n07001,5,12.5\n08002,10,20.0\n")
 
         frame = ar.read_csv(
             path,
-            dtype={"quantity": "int64"},
+            usecols=["zip", "price"],
+            dtype={"zip": "string", "price": "float64"},
         )
 
         pdf = ar.to_pandas(frame)
 
-        assert frame.dtypes["quantity"] == "int64"
-        assert pdf["quantity"].isna().tolist() == [True]
+        assert list(pdf.columns) == ["zip", "price"]
+        assert frame.dtypes == {"zip": "string", "price": "float64"}
+        assert pdf["zip"].tolist() == ["07001", "08002"]
+        assert pdf["price"].tolist() == [12.5, 20.0]
+
+    def test_read_csv_fully_explicit_dtype_preserves_bad_line_errors(self, tmp_path):
+        path = tmp_path / "full_dtype_bad_line_error.csv"
+        path.write_text("id,name\n1,Alice\n2,Bob,extra\n")
+
+        with pytest.raises(ar.CsvReadError, match="CSV row 3 has 3 fields; expected 2"):
+            ar.read_csv(
+                path,
+                dtype={"id": "int64", "name": "string"},
+            )
+
+    def test_read_csv_fully_explicit_dtype_preserves_bad_line_warnings(self, tmp_path):
+        path = tmp_path / "full_dtype_bad_line_warn.csv"
+        path.write_text("id,name\n1,Alice\n2,Bob,extra\n3,Cara\n")
+
+        with pytest.warns(UserWarning, match="CSV row 3 has 3 fields; expected 2"):
+            frame = ar.read_csv(
+                path,
+                dtype={"id": "int64", "name": "string"},
+                on_bad_lines="warn",
+            )
+
+        pdf = ar.to_pandas(frame)
+
+        assert frame.dtypes == {"id": "int64", "name": "string"}
+        assert pdf["id"].tolist() == [1, 3]
+        assert pdf["name"].tolist() == ["Alice", "Cara"]
+
+    def test_read_csv_dtype_parse_failure_raises(self, tmp_path):
+        path = tmp_path / "parse_failure.csv"
+        path.write_text("quantity\nabc\n")
+
+        with pytest.raises(
+            ar.CsvReadError,
+            match="Invalid token 'abc' for forced int64 column",
+        ):
+            ar.read_csv(
+                path,
+                dtype={"quantity": "int64"},
+            )
 
     def test_read_csv_dtype_non_selected_usecols_column(self, tmp_path):
         path = tmp_path / "dtype_usecols_error.csv"
@@ -984,6 +1027,44 @@ class TestReadCsv:
 
         assert exc.value.__cause__ is None
 
+    def test_preserves_mid_field_quote_characters(self, tmp_path):
+        csv_path = tmp_path / "mid_field_quotes.csv"
+        csv_path.write_text('id,value\n1,ab"cd"\n2,x"y"z\n')
+
+        frame = ar.read_csv(csv_path)
+        df = ar.to_pandas(frame)
+
+        assert df["value"].tolist() == ['ab"cd"', 'x"y"z']
+
+    def test_preserves_leading_quoted_field_with_trailing_text(self, tmp_path):
+        csv_path = tmp_path / "quoted_trailing_text.csv"
+        csv_path.write_text('id,value\n1,"ab"cd\n')
+
+        frame = ar.read_csv(csv_path)
+        df = ar.to_pandas(frame)
+
+        assert df["value"].iloc[0] == "abcd"
+
+    def test_preserves_escaped_quotes_in_quoted_fields(self, tmp_path):
+        csv_path = tmp_path / "escaped_quotes.csv"
+        csv_path.write_text('id,value\n1,"ab""cd"\n')
+
+        frame = ar.read_csv(csv_path)
+        df = ar.to_pandas(frame)
+
+        assert df["value"].iloc[0] == 'ab"cd'
+
+    def test_parses_delimiter_adjacent_quoted_fields(self, tmp_path):
+        csv_path = tmp_path / "delimiter_adjacent_quotes.csv"
+        csv_path.write_text('left,value,right\nA,"b,c",D\n')
+
+        frame = ar.read_csv(csv_path)
+        df = ar.to_pandas(frame)
+
+        assert df.loc[0, "left"] == "A"
+        assert df.loc[0, "value"] == "b,c"
+        assert df.loc[0, "right"] == "D"
+
     def test_empty_file_raises(self, tmp_path):
         csv_path = tmp_path / "empty.csv"
         csv_path.write_text("")
@@ -1179,6 +1260,36 @@ class TestReadCsv:
                 encoding_errors="strict",
             )
 
+    def test_read_csv_bool_dtype_valid_values(self, tmp_path):
+        path = tmp_path / "bool_valid.csv"
+        path.write_text("flag\ntrue\nTrue\nTRUE\nfalse\nFalse\nFALSE\n")
+        frame = ar.read_csv(path, dtype={"flag": "bool"})
+        df = ar.to_pandas(frame)
+        assert frame.dtypes["flag"] == "bool"
+        assert df["flag"].tolist() == [True, True, True, False, False, False]
+
+    def test_read_csv_bool_dtype_invalid_token_raises(self, tmp_path):
+        path = tmp_path / "bool_invalid.csv"
+        path.write_text("flag\ntrue\nmaybe\nfalse\n")
+        with pytest.raises(
+            ar.CsvReadError, match="Invalid token 'maybe' for forced bool column"
+        ):
+            ar.read_csv(path, dtype={"flag": "bool"})
+
+    def test_read_csv_bool_dtype_yes_no_raises(self, tmp_path):
+        path = tmp_path / "bool_yes_no.csv"
+        path.write_text("flag\nyes\nno\n")
+        with pytest.raises(ar.CsvReadError, match="Invalid token"):
+            ar.read_csv(path, dtype={"flag": "bool"})
+
+    def test_read_csv_bool_dtype_null_sentinel_becomes_null(self, tmp_path):
+        path = tmp_path / "bool_nulls.csv"
+        path.write_text("flag\ntrue\nNA\nfalse\n")
+        frame = ar.read_csv(path, dtype={"flag": "bool"}, null_values=["NA"])
+        assert frame["flag"][0]
+        assert frame["flag"][1] is None
+        assert not frame["flag"][2]
+
 
 class TestScanCsv:
     def test_scan_schema(self, sample_csv):
@@ -1275,7 +1386,6 @@ class TestScanCsv:
         assert schema_full["value"] == "string"
 
     def test_scan_sample_size_invalid(self, sample_csv):
-
         with pytest.raises(ValueError, match="sample_size must be a positive integer"):
             ar.scan_csv(sample_csv, sample_size=0)
 
@@ -2200,6 +2310,26 @@ class TestSniffDelimiter:
         )
 
         assert ar.sniff_delimiter(path) == ";"
+
+    def test_sniff_delimiter_multibyte_utf8_characters(self, tmp_path):
+        """Verify sample_size is character-count based, not byte-count.
+
+        This regression test ensures that sample_size parameter counts
+        characters, not bytes. Multi-byte UTF-8 characters (emoji, CJK)
+        take multiple bytes, so if sample_size were byte-based, it would
+        read a different amount of actual characters.
+
+        See #1944 for the documentation clarification issue.
+        """
+        path = tmp_path / "multibyte.csv"
+        # Using emoji (4 bytes in UTF-8) and CJK characters (3 bytes each)
+        # The header line contains the delimiter, so sniff_delimiter should
+        # find it correctly even with multi-byte characters in the data
+        content = "名前,年齢,都市\nAlice,30,🗽\nBob,25,🏴\n"
+        path.write_text(content, encoding="utf-8")
+
+        result = ar.sniff_delimiter(path)
+        assert result == ","
 
 
 class TestArFrameGetItem:
