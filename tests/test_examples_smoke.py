@@ -151,3 +151,23 @@ def test_example_script_runs_successfully(spec: ExampleSpec) -> None:
         f"Stdout:\n{result.stdout}\n"
         f"Stderr:\n{result.stderr}"
     )
+
+
+@pytest.mark.skipif(not HAS_CORE, reason="Arnio C++ extension is not compiled.")
+def test_pytest_example_custom_step_with_tests() -> None:
+    """Run the pytest-oriented custom step example via pytest subprocess."""
+    script = EXAMPLES_DIR / "custom_step_with_tests.py"
+    if not script.exists():
+        pytest.skip("custom_step_with_tests.py not present in examples/.")
+    result = subprocess.run(
+        [sys.executable, "-m", "pytest", str(script), "-q"],
+        capture_output=True,
+        text=True,
+        env=_subprocess_env(),
+        timeout=60,
+    )
+    assert result.returncode == 0, (
+        f"custom_step_with_tests.py failed.\n"
+        f"Stdout:\n{result.stdout}\n"
+        f"Stderr:\n{result.stderr}"
+    )
