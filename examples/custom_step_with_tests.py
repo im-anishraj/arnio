@@ -8,6 +8,7 @@ Run with:
 
 import pandas as pd
 import pytest
+
 import arnio as ar
 
 # ---------------------------------------------------------------------------
@@ -219,29 +220,35 @@ def test_negative_values():
 
 def test_missing_column_raises_value_error():
     frame = make_frame({"revenue": [100, 200]})
-    with pytest.raises(ValueError, match="column 'amount' not found"):
+    with pytest.raises(
+        ar.PipelineStepError, match="column 'amount' not found"
+    ) as exc_info:
         ar.pipeline(
             frame,
             [
                 ("remove_outliers", {"column": "amount", "threshold": 500}),
             ],
         )
+    assert isinstance(exc_info.value.orig_err, ValueError)
 
 
 def test_non_numeric_column_raises_type_error():
     frame = make_frame({"name": ["alice", "bob"]})
-    with pytest.raises(TypeError, match="must be numeric"):
+    with pytest.raises(ar.PipelineStepError, match="must be numeric") as exc_info:
         ar.pipeline(
             frame,
             [
                 ("remove_outliers", {"column": "name", "threshold": 500}),
             ],
         )
+    assert isinstance(exc_info.value.orig_err, TypeError)
 
 
 def test_invalid_keep_value_raises_value_error():
     frame = make_frame({"revenue": [100, 200]})
-    with pytest.raises(ValueError, match="'keep' must be 'below' or 'above'"):
+    with pytest.raises(
+        ar.PipelineStepError, match="'keep' must be 'below' or 'above'"
+    ) as exc_info:
         ar.pipeline(
             frame,
             [
@@ -251,3 +258,4 @@ def test_invalid_keep_value_raises_value_error():
                 ),
             ],
         )
+    assert isinstance(exc_info.value.orig_err, ValueError)

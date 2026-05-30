@@ -64,8 +64,8 @@ Most new features do not require touching C++! You can write a pure Python step 
 ```python
 import arnio as ar
 
-def remove_special_chars(df, columns=None):
-    cols = columns or df.select_dtypes("object").columns
+def remove_special_chars(df, subset=None):
+    cols = subset or df.select_dtypes("object").columns
     for col in cols:
         df[col] = df[col].str.replace(r"[^a-zA-Z0-9\s]", "", regex=True)
     return df
@@ -118,6 +118,7 @@ aligned. See [STUBS_UPDATE.md](../STUBS_UPDATE.md) for the short checklist.
 - Do not edit generated files, build output, cache folders, or local logs.
 - Be patient during review. Maintainers may ask for tests, edge cases, or a narrower scope.
 - If you stop working on an assigned issue, please comment so it can be reassigned.
+- If you need more time, comment within 3 days of assignment.
 
 ### Commit Message Convention
 We use an automated release system that relies on [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/). Your PR title must use one of the following prefixes:

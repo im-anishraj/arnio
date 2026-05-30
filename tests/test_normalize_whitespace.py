@@ -42,6 +42,12 @@ def test_empty_string_stays_empty():
     assert result["name"][0] == ""
 
 
+def test_whitespace_only_string_becomes_empty():
+    frame = ar.from_pandas(pd.DataFrame({"name": ["   \t\n   "]}))
+    result = ar.to_pandas(ar.pipeline(frame, [("normalize_whitespace",)]))
+    assert result["name"][0] == ""
+
+
 def test_skips_non_string_columns_by_default():
     frame = ar.from_pandas(pd.DataFrame({"age": [25, 30]}))
     result = ar.to_pandas(ar.pipeline(frame, [("normalize_whitespace",)]))
@@ -86,3 +92,91 @@ def test_explicit_non_string_column_is_skipped():
     )
     assert list(result["age"]) == [25, 30]
     assert result["name"][0] == "hello world"
+
+
+def test_only_whitespace_becomes_empty():
+    """String with only whitespace becomes empty string."""
+    frame = ar.from_pandas(pd.DataFrame({"name": ["   \t\n   "]}))
+    result = ar.to_pandas(ar.pipeline(frame, [("normalize_whitespace",)]))
+    assert result["name"][0] == ""
+
+
+def test_multiple_whitespace_types_combined():
+    """Multiple whitespace characters (spaces, tabs, newlines) are collapsed."""
+    frame = ar.from_pandas(pd.DataFrame({"text": ["hello  \t\n  world"]}))
+    result = ar.to_pandas(ar.pipeline(frame, [("normalize_whitespace",)]))
+    assert result["text"][0] == "hello world"
+
+
+def test_carriage_return_handled():
+    """Carriage return characters are normalized."""
+    frame = ar.from_pandas(pd.DataFrame({"text": ["hello\rworld"]}))
+    result = ar.to_pandas(ar.pipeline(frame, [("normalize_whitespace",)]))
+    assert result["text"][0] == "hello world"
+
+
+def test_normalize_whitespace_preserves_case():
+    """Whitespace normalization does not change character case."""
+    frame = ar.from_pandas(pd.DataFrame({"name": ["  ALICE  ", "  bob  "]}))
+    result = ar.to_pandas(ar.pipeline(frame, [("normalize_whitespace",)]))
+    assert result["name"][0] == "ALICE"
+    assert result["name"][1] == "bob"
+
+
+def test_normalize_whitespace_multiple_rows():
+    """Normalization works across multiple rows."""
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "name": [
+                    "  alice  ",
+                    "bob\t\t",
+                    "  carol  ",
+                ]
+            }
+        )
+    )
+    result = ar.to_pandas(ar.pipeline(frame, [("normalize_whitespace",)]))
+    assert result["name"].tolist() == ["alice", "bob", "carol"]
+
+
+def test_normalize_whitespace_direct_arframe_call():
+    """normalize_whitespace works as a direct ArFrame method via pipeline."""
+    frame = ar.from_pandas(pd.DataFrame({"text": ["  hello  "]}))
+    result_frame = ar.pipeline(frame, [("normalize_whitespace",)])
+    assert isinstance(result_frame, ar.ArFrame)
+    result_df = ar.to_pandas(result_frame)
+    assert result_df["text"][0] == "hello"
+
+
+def test_normalize_whitespace_preserves_other_columns():
+    """Non-string columns are not affected by normalize_whitespace."""
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "name": ["  alice  "],
+                "age": [30],
+                "score": [95.5],
+                "active": [True],
+            }
+        )
+    )
+    result = ar.to_pandas(ar.pipeline(frame, [("normalize_whitespace",)]))
+    assert result["name"][0] == "alice"
+    assert result["age"][0] == 30
+    assert result["score"][0] == 95.5
+    assert result["active"][0]
+
+
+def test_normalize_whitespace_empty_frame():
+    """normalize_whitespace handles empty frame."""
+    frame = ar.from_pandas(pd.DataFrame({"name": pd.Series([], dtype="string")}))
+    result = ar.to_pandas(ar.pipeline(frame, [("normalize_whitespace",)]))
+    assert len(result) == 0
+
+
+def test_leading_whitespace_only():
+    """String with only leading whitespace is trimmed."""
+    frame = ar.from_pandas(pd.DataFrame({"name": ["   hello"]}))
+    result = ar.to_pandas(ar.pipeline(frame, [("normalize_whitespace",)]))
+    assert result["name"][0] == "hello"

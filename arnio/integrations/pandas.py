@@ -92,6 +92,7 @@ class ArnioPandasAccessor:
         return_report: bool = False,
         dry_run: bool = False,
         allow_lossy_casts: bool = False,
+        confirmed_casts: dict[str, str] | None = None,
         explain: bool = False,
     ) -> (
         pd.DataFrame
@@ -107,6 +108,9 @@ class ArnioPandasAccessor:
         explain : bool, default False
             When ``True``, also return a :class:`~arnio.quality.CleanExplanation`
             audit trail describing which steps ran and why.
+        confirmed_casts : dict[str, str] or None, default None
+            Exact strict-mode ``cast_types`` mapping to confirm after previewing
+            proposed casts with ``dry_run=True`` or ``suggest_cleaning()``.
         """
         result = auto_clean(
             self.to_arframe(),
@@ -114,6 +118,7 @@ class ArnioPandasAccessor:
             return_report=return_report,
             dry_run=dry_run,
             allow_lossy_casts=allow_lossy_casts,
+            confirmed_casts=confirmed_casts,
             explain=explain,
         )
 

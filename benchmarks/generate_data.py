@@ -164,6 +164,18 @@ def generate_sparse_nulls(
 
 
 if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Generate benchmark CSV datasets.")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Generate tiny datasets (equivalent to ARNIO_BENCHMARK_DRY_RUN=1).",
+    )
+    args = parser.parse_args()
+    if args.dry_run:
+        DRY_RUN = True  # override module-level before any generate call
+
     generate()
     generate_wide()
     generate_multiline()

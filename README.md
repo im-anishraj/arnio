@@ -51,9 +51,8 @@ Colab install smoke test: **[COLAB_SMOKE_TEST.md](COLAB_SMOKE_TEST.md)**
 
 ## ⚡ Quickstart
 
-A simple workflow in just a few steps.
-
-> New to Arnio? Start with the pandas workflow example below before exploring advanced pipelines.
+If you're new to Arnio, the example below demonstrates a simple first-run workflow for loading, cleaning, and preparing CSV data before converting it back into a pandas DataFrame.
+The workflow starts by loading a CSV dataset into an Arnio frame for preprocessing and cleaning.
 
 ```python
 import arnio as ar
@@ -66,7 +65,12 @@ frame = ar.read_csv("messy_sales_data.csv", mode="strict")
 
 # Permissive mode fills missing trailing values with nulls
 frame = ar.read_csv("messy_sales_data.csv", mode="permissive")
+```
 
+Each pipeline step applies a specific transformation such as trimming whitespace, normalizing text formatting, handling missing values, and removing duplicate rows.
+
+
+```python
 # Declare what clean data looks like — arnio handles the rest
 clean = ar.pipeline(frame, [
     ("strip_whitespace",),
@@ -75,17 +79,17 @@ clean = ar.pipeline(frame, [
     ("drop_nulls",),
     ("drop_duplicates",),
 ])
+```
 
+After preprocessing is complete, the cleaned result can be converted back into a standard pandas DataFrame for further analysis or integration with existing workflows.
 
-
+```python
 # Out comes a standard pandas DataFrame — use it like you always have
 df = ar.to_pandas(clean)
 
 # Use copy=True when you need defensive pandas-owned buffers
 safe_df = ar.to_pandas(clean, copy=True)
 ```
-
-
 ### Dry Run Validation
 
 Use `dry_run=True` to validate pipeline configuration and
@@ -114,7 +118,6 @@ print(metadata["step_timings"])
 print(metadata["applied_steps"])
 print(metadata["row_counts"])
 ```
-
 ## Quick Example
 
 ```python
@@ -163,9 +166,7 @@ frame = ar.from_dict(data)
 frame = ar.ArFrame.from_dict(data)
 ```
 
-
-Already have a pandas `DataFrame`? Use Arnio in-place in your existing pandas
-workflow:
+Already working with a pandas `DataFrame`? Arnio can also be integrated directly into an existing pandas workflow without changing your current data-processing approach:
 
 ```python
 import pandas as pd
@@ -619,6 +620,8 @@ not to replace it.
 
 Use `ar.register_duckdb(frame, conn, "table_name")` to register an ArFrame directly as a DuckDB relation without writing pandas conversion glue yourself. DuckDB is an optional dependency — install it with `pip install duckdb` when needed.
 
+For development and CI, `pip install -e ".[dev]"` now includes DuckDB so the integration test module in `tests/test_integrations_duckdb.py` runs in the default test job.
+
 ```python
 import duckdb
 import arnio as ar
@@ -629,25 +632,34 @@ ar.register_duckdb(frame, conn, "my_table")
 result = conn.execute("SELECT * FROM my_table").fetchdf()
 ```
 
-### Row-dropping pipeline behavior
+### Row-dropping and schema-change behavior
 
-Some pipeline steps such as `drop_nulls` or `drop_duplicates`
-can change the number of rows returned during `transform`.
+`ArnioCleaner` enforces a strict transformer contract by default:
 
-By default, `ArnioCleaner` raises a `ValueError` if a pipeline
-changes row count during transform because many scikit-learn
-workflows expect input and output sample counts to remain aligned.
+- **Row-count-changing steps** (`drop_nulls`, `drop_duplicates`,
+  `filter_rows`, `keep_rows_with_nulls`) are **rejected by default** with a
+  clear `ValueError`. To allow row-count changes, pass `allow_row_count_change=True`.
 
-If row-dropping behavior is intentional, pass
-`allow_row_count_change=True` when constructing `ArnioCleaner`.
+- **Column schema-changing steps** (`rename_columns`, `drop_columns`,
+  `drop_constant_columns`, `combine_columns`) are **rejected by default**
+  and allowed only when `allow_schema_changes=True` is passed.
 
 ```python
+# Schema-preserving (default strict mode)
 cleaner = ArnioCleaner(
     steps=[
-        ("drop_nulls",),
         ("strip_whitespace",),
+        ("fill_nulls", {"value": 0}),
     ],
-    allow_row_count_change=True,
+)
+
+# Opt-in column schema changes
+cleaner = ArnioCleaner(
+    steps=[
+        ("rename_columns", {"old_name": "new_name"}),
+        ("drop_constant_columns",),
+    ],
+    allow_schema_changes=True,
 )
 ```
 
@@ -952,7 +964,7 @@ Most operations below run natively in C++. Currently, `filter_rows`, `replace_va
 | `standardize_missing_tokens` | Replace common missing-value strings with NaN | `ar.standardize_missing_tokens(frame)` |
 | `normalize_case` | Force lower/upper/title case | `ar.normalize_case(frame, case_type="title")` |
 | `rename_columns` | Rename columns via mapping | `ar.rename_columns(frame, {"old": "new"})` |
-| `cast_types` | Cast column types | `ar.cast_types(frame, {"age": "int64"})` |
+| `cast_types` | Cast column types with `errors="raise"`, `"coerce"`, or `"ignore"` | `ar.cast_types(frame, {"age": "int64"}, errors="raise")` |
 | `round_numeric_columns` | Round numeric columns (non-numeric columns in subset ignored safely) | `ar.round_numeric_columns(frame, decimals=2)` |
 | `replace_values` | Replace values using a mapping (column or whole-frame). Handles `None`/`NaN`. | `ar.replace_values(frame, {"active": "A", "inactive": "I"}, column="status")` |
 | `clean` | Convenience shorthand | `ar.clean(frame, drop_nulls=True)` |
@@ -960,6 +972,7 @@ Most operations below run natively in C++. Currently, `filter_rows`, `replace_va
 | `drop_columns_matching` | Drop columns whose names match a regex pattern | `ar.drop_columns_matching(frame, pattern="^temp_")` |
 | `trim_column_names` | Strip leading/trailing whitespace from column names | `ar.trim_column_names(frame)` |
 | `select_columns` | Return a new frame containing only selected columns | `ar.select_columns(frame, ["id", "name"])` |
+| `slugify_column_names` | Normalise column names to snake_case | `ar.slugify_column_names(frame)` |
 
 #### `ArFrame.select_dtypes` — type-based column selection
 
@@ -1197,7 +1210,7 @@ schema = ar.Schema({
 
     "username": ar.String(min_length=3, max_length=20),
     "user_code": ar.Regex(r"^USR-\d{4}$", nullable=False),
-    "revenue": ar.Custom("positive", nullable=True),
+    "revenue": ar.Custom("positive", nullable=True, required_if=("user_type", "merchant")),
     "signup_date": ar.Date(nullable=False),
     "created_at": ar.DateTime(nullable=False, format="%Y-%m-%d"),
 
@@ -1355,10 +1368,24 @@ clean = ar.pipeline(frame, suggestions)
 For low-risk automatic cleanup in one call:
 
 ```python
-clean, report = ar.auto_clean(frame, mode="strict", return_report=True)
+clean, report = ar.auto_clean(frame, return_report=True)
 ```
 
-This is the layer pandas does not try to own: profiling, data contracts, row-level validation issues, and safe cleaning suggestions for messy incoming datasets.
+For strict automatic cleanup, inspect type casts before applying them:
+
+```python
+report = ar.auto_clean(frame, mode="strict", dry_run=True)
+cast_mapping = dict(report.suggestions).get("cast_types")
+
+clean = ar.auto_clean(
+    frame,
+    mode="strict",
+    allow_lossy_casts=True,
+    confirmed_casts=cast_mapping,
+)
+```
+
+This is the layer pandas does not try to own: profiling, data contracts, row-level validation issues, and preview-gated cleaning suggestions for messy incoming datasets.
 
 <br>
 
@@ -1411,7 +1438,7 @@ Expected cleaned output with `mode="strict"`:
 | 1003 | Pranay | New York |
 | 1004 | Dhruv | Tokyo |
 
-`mode="safe"` only trims whitespace. Use `mode="strict"` when you also want deterministic built-in cleanup such as exact duplicate removal.
+`mode="safe"` only trims whitespace. Use `mode="strict"` when you also want deterministic built-in cleanup such as exact duplicate removal. If strict mode proposes type casts, run `dry_run=True` first and pass the exact proposed mapping as `confirmed_casts` with `allow_lossy_casts=True`.
 
 See [examples/auto_clean_tutorial.py](examples/auto_clean_tutorial.py) for a runnable version of this walkthrough, and [examples/schema_validation.py](examples/schema_validation.py) for a focused validation tutorial.
 
@@ -1452,14 +1479,15 @@ sharing **aggregate statistics only** or **raw/sample cell values**.
 | --- | --- | --- |
 | `row_count`, `column_count`, `duplicate_rows`, `duplicate_ratio`, `quality_score`, `score_components` | Yes | No |
 | `null_count`, `null_ratio`, `unique_count`, `unique_ratio`, whitespace / empty-string counts | Yes | No |
-| Numeric `min` / `max` / `mean` / `std` / `q25`–`q95` | Statistics only | Uncommon on large datasets; small tables can still be identifying |
+| Numeric `min` / `max` / `mean` / `std` / `q25`–`q95` | Yes | Statistics only; small tables can still be identifying |
+| Numeric `iqr`, `outlier_lower_bound`, `outlier_upper_bound`, `outlier_count`, `outlier_ratio` | Yes | Aggregate Tukey-fence summary (thresholds and counts, not which rows are outliers) |
 | `semantic_type`, `suggested_dtype`, `warnings` | Metadata / hints | Can imply PII type (for example email-like), not redaction |
 | `ColumnProfile.sample_values` (in-memory) | No | **Yes** — first *N* non-null values (`sample_size` on `ar.profile()`) |
 | `ColumnProfile.top_values` | Includes counts / ratios | **Yes** — frequent **actual** values (exact or approximate; see below) |
 | `report.to_dict()` | Mixed | **Yes** — includes `sample_values` and `top_values` unless you redact samples |
 | `report.to_dict(redact_sample_values=True)` | Mixed | `sample_values` → `"[REDACTED]"` (same list length); `top_values[*].value` → `"[REDACTED]"` while counts and ratios remain |
 | `report.to_markdown()`, `report.summary()` | Yes | No raw cell values in output |
-| `report.to_html()` / notebook display of `report` | Partial | **Shows `top_values`** chips; does not list `sample_values` |
+| `report.to_html()` / notebook display of `report` | Partial | **Shows `top_values`** chips; does not list `sample_values`. Use `redact_top_values=True` or `exclude_columns` for safer sharing. |
 | `report.to_pandas()` | Partial | Includes **`top_values`**, not `sample_values` |
 | `ProfileComparison.to_dict()` | Nested profiles | **Yes** — embeds `left_profile` / `right_profile` via default `to_dict()` |
 
@@ -1471,7 +1499,7 @@ controls below for safer sharing.
 - **JSON logs and artifacts:** `report.to_dict(redact_sample_values=True)` before writing or uploading.
 - **Collect fewer samples:** `ar.profile(frame, sample_size=0)` skips `sample_values` (defaults still apply to `top_values` counts on string columns).
 - **Text summaries for CI or comments:** prefer `report.to_markdown()` or `report.summary()` when you do not need per-value examples.
-- **Notebooks and HTML exports:** avoid evaluating `report` or saving `report.to_html()` for sensitive data; HTML still shows `top_values`.
+- **Notebooks and HTML exports:** use `report.to_html(redact_top_values=True)` to replace every top-value chip label with `[REDACTED]` while preserving counts and ratios. To drop entire sensitive columns from the table, add `exclude_columns=["ssn", "email"]`. Avoid saving unredacted `report.to_html()` output for sensitive data.
 - **GitHub bug reports and examples:** use synthetic data (`user@example.com`, `ID-001`), a minimal CSV, and redacted `to_dict()` output — not production dumps.
 - **Pandas export:** `ar.to_pandas(frame)` returns full table data; redaction applies to **quality reports**, not the underlying frame.
 - **Profile comparison:** `ProfileComparison.to_dict()` nests full profiles; build shared artifacts with `profile.to_dict(redact_sample_values=True)` if needed.
@@ -1488,6 +1516,11 @@ report = ar.profile(df, sample_size=2)
 
 # Safer JSON for sharing (sample_values and top_values values redacted)
 safe_json = report.to_dict(redact_sample_values=True)
+
+# Safer HTML export (top-value chip labels replaced with [REDACTED])
+safe_html = report.to_html(redact_top_values=True)
+# or exclude an entire column from the HTML table:
+# safe_html = report.to_html(redact_top_values=True, exclude_columns=["email"])
 
 # Safer text summary (no sample_values or top_values in output)
 print(report.to_markdown())
@@ -1524,7 +1557,11 @@ HTML(report.to_html())
 # or: report.to_html(file_path="data_quality_report.html")
 ```
 
-Sample output now includes quantiles for numeric columns:
+Sample output now includes quantiles and IQR outlier summary for numeric columns:
+
+For numeric columns with at least four non-null values, Arnio reports `iqr` (`q75 − q25`), Tukey fences `outlier_lower_bound` (`q25 − 1.5×IQR`) and `outlier_upper_bound` (`q75 + 1.5×IQR`), plus `outlier_count` and `outlier_ratio`. A value is counted as an outlier only if it is **strictly less** than the lower bound or **strictly greater** than the upper bound. With fewer than four non-null values, quantiles may still appear but IQR/outlier fields are `null` in JSON.
+
+Illustrative `age` column (not from the `user_id` / `email` / `score` sample below):
 
 ```json
 {
@@ -1538,6 +1575,11 @@ Sample output now includes quantiles for numeric columns:
     "q50": 35.0,
     "q75": 44.0,
     "q95": 57.0,
+    "iqr": 16.5,
+    "outlier_lower_bound": 2.75,
+    "outlier_upper_bound": 68.75,
+    "outlier_count": 0,
+    "outlier_ratio": 0.0,
     "null_count": 0
   }
 }
@@ -1588,7 +1630,7 @@ DataQualityReport(
     columns={
         'user_id': ColumnProfile(dtype='int64', semantic_type='identifier', unique_count=4),
         'email': ColumnProfile(dtype='string', semantic_type='categorical', null_count=1, unique_ratio=0.666667, min=13, max=13, mean=13.0),
-        'score': ColumnProfile(dtype='float64', semantic_type='numeric', mean=87.9, min=85.5, max=90.0)
+        'score': ColumnProfile(dtype='float64', semantic_type='numeric', null_count=1, mean=87.9, min=85.5, max=90.0, std=1.8493, q25=86.85, q50=88.2, q75=89.1, q95=89.82, iqr=None, outlier_lower_bound=None, outlier_upper_bound=None, outlier_count=None, outlier_ratio=None, warnings=['contains_nulls'])
     }
 )
 ```
@@ -1629,6 +1671,16 @@ DataQualityReport(
       "mean": 87.9,
       "min": 85.5,
       "max": 90.0,
+      "std": 1.8493,
+      "q25": 86.85,
+      "q50": 88.2,
+      "q75": 89.1,
+      "q95": 89.82,
+      "iqr": null,
+      "outlier_lower_bound": null,
+      "outlier_upper_bound": null,
+      "outlier_count": null,
+      "outlier_ratio": null,
       "warnings": ["contains_nulls"],
       "histogram": [
         {"bucket_start": 85.5, "bucket_end": 85.95, "count": 1, "ratio": 0.333333},
@@ -1715,18 +1767,21 @@ null values were observed during profiling.
 
 ## 🗺️ Roadmap
 
-| Version | Focus | Status |
-|:---:|:---|:---:|
-| **v1.0** | Stable release · cross-platform wheels · CI/CD · PyPI publishing · Google Colab support | ✅ Shipped |
-| **v1.1** | Production readiness · release hardening · docs/tooling | ✅ Shipped |
-| **v1.2** | C++ pipeline optimization · speed parity with pandas · hash-based deduplication | 🔨 Active |
-| **v1.3** | Chunked / streaming processing · Parquet & JSON readers | 📋 Planned |
-| **v1.4** | Parallel column processing · SIMD string operations | 💭 Exploring |
+| Phase | Focus | Status |
+|:---|:---|:---:|
+| Stable foundations | Cross-platform wheels · CI/CD · PyPI publishing · Google Colab support · release hardening | ✅ Shipped |
+| Current focus | Reliability · contributor workflow · data-stack integrations · public API stability · benchmark baselines | 🔨 Active |
+| Next focus | Broader streaming workflows · richer file-format coverage · reproducible performance comparisons | 📋 Planned |
+| Later focus | Parallel column processing · SIMD string operations · lower-copy native cleaning paths | 💭 Exploring |
 
 Before expanding the backlog again, maintainers should complete the
 **[Core Stability Sprint](CORE_STABILITY_SPRINT.md)**: install reliability,
 correctness hardening, public API stability, benchmark baselines, and PR queue
 hygiene.
+
+The current release line is tracked in `pyproject.toml` and `CHANGELOG.md`.
+Feature status in this roadmap is phase-based so it does not drift behind the
+package version.
 
 > For CLI command reference and examples, see [CLI_REFERENCE.md](CLI_REFERENCE.md).
 <br>
@@ -1998,7 +2053,6 @@ arnio/
 <br>
 
 <sub>Built with C++ and pybind11 · Licensed under MIT · Maintained by <a href="https://github.com/im-anishraj">@im-anishraj</a></sub>
-
 </div>
 
 ## Security

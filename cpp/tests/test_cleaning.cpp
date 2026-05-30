@@ -2,6 +2,7 @@
 #include <cmath>    // std::isnan
 #include <cstdint>  // uint64_t
 #include <cstring>  // std::memcpy
+#include <limits>
 
 #include "arnio/cleaning.h"
 
@@ -105,6 +106,88 @@ TEST_CASE("fill_nulls replaces nulls in int column", "[cleaning]") {
 
     REQUIRE(result.column("val").is_null(1) == false);
     REQUIRE(result.column("val").at(1) == CellValue(int64_t(99)));
+}
+
+TEST_CASE("fill_nulls rejects double values outside int64 range", "[cleaning][numeric-safety]") {
+    Frame f = make_null_frame();
+
+    REQUIRE_THROWS_AS(fill_nulls(f, CellValue(1e20), std::vector<std::string>{"val"}),
+                      std::invalid_argument);
+    REQUIRE_THROWS_AS(fill_nulls(f, CellValue(-1e20), std::vector<std::string>{"val"}),
+                      std::invalid_argument);
+}
+
+TEST_CASE("fill_nulls rejects non-finite double values for int columns",
+          "[cleaning][numeric-safety]") {
+    Frame f = make_null_frame();
+
+    REQUIRE_THROWS_AS(fill_nulls(f, CellValue(std::numeric_limits<double>::infinity()),
+                                 std::vector<std::string>{"val"}),
+                      std::invalid_argument);
+    REQUIRE_THROWS_AS(fill_nulls(f, CellValue(-std::numeric_limits<double>::infinity()),
+                                 std::vector<std::string>{"val"}),
+                      std::invalid_argument);
+    REQUIRE_THROWS_AS(fill_nulls(f, CellValue(std::numeric_limits<double>::quiet_NaN()),
+                                 std::vector<std::string>{"val"}),
+                      std::invalid_argument);
+}
+
+TEST_CASE("fill_nulls preserves int64 boundary fill values", "[cleaning][numeric-safety]") {
+    Column min_col("v", DType::INT64);
+    min_col.push_null();
+    Frame min_frame;
+    min_frame.add_column(std::move(min_col));
+
+    Frame min_result = fill_nulls(min_frame, CellValue(std::numeric_limits<int64_t>::min()),
+                                  std::vector<std::string>{"v"});
+    REQUIRE(min_result.column("v").at(0) == CellValue(std::numeric_limits<int64_t>::min()));
+
+    Column max_col("v", DType::INT64);
+    max_col.push_null();
+    Frame max_frame;
+    max_frame.add_column(std::move(max_col));
+
+    Frame max_result = fill_nulls(max_frame, CellValue(std::numeric_limits<int64_t>::max()),
+                                  std::vector<std::string>{"v"});
+    REQUIRE(max_result.column("v").at(0) == CellValue(std::numeric_limits<int64_t>::max()));
+}
+
+TEST_CASE("clip_numeric rejects unsafe int64 double bounds", "[cleaning][numeric-safety]") {
+    Column c("v", DType::INT64);
+    c.push_back(int64_t(-5));
+    c.push_back(int64_t(0));
+    c.push_back(int64_t(5));
+
+    Frame f;
+    f.add_column(std::move(c));
+
+    REQUIRE_THROWS_AS(clip_numeric(f, -1e20, std::nullopt, std::vector<std::string>{"v"}),
+                      std::invalid_argument);
+    REQUIRE_THROWS_AS(clip_numeric(f, std::nullopt, 1e20, std::vector<std::string>{"v"}),
+                      std::invalid_argument);
+    REQUIRE_THROWS_AS(clip_numeric(f, std::numeric_limits<double>::quiet_NaN(), std::nullopt,
+                                   std::vector<std::string>{"v"}),
+                      std::invalid_argument);
+    REQUIRE_THROWS_AS(clip_numeric(f, std::nullopt, std::numeric_limits<double>::infinity(),
+                                   std::vector<std::string>{"v"}),
+                      std::invalid_argument);
+}
+
+TEST_CASE("clip_numeric accepts valid int64 boundary bounds", "[cleaning][numeric-safety]") {
+    Column c("v", DType::INT64);
+    c.push_back(std::numeric_limits<int64_t>::min());
+    c.push_back(int64_t(0));
+    c.push_back(int64_t(5));
+
+    Frame f;
+    f.add_column(std::move(c));
+
+    Frame result = clip_numeric(f, static_cast<double>(std::numeric_limits<int64_t>::min()), 5.0,
+                                std::vector<std::string>{"v"});
+
+    REQUIRE(result.column("v").at(0) == CellValue(std::numeric_limits<int64_t>::min()));
+    REQUIRE(result.column("v").at(1) == CellValue(int64_t(0)));
+    REQUIRE(result.column("v").at(2) == CellValue(int64_t(5)));
 }
 
 TEST_CASE("drop_duplicates removes repeated rows", "[cleaning]") {

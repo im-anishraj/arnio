@@ -8,6 +8,7 @@ validation tests always run regardless of whether pyarrow is present.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from unittest.mock import patch
 
@@ -149,6 +150,46 @@ class TestWriteParquetCompression:
 
 
 @skip_without_pyarrow
+class TestWriteParquetZeroColumn:
+    def test_zero_by_zero_frame_round_trips_empty(self, tmp_path):
+        frame = ar.from_pandas(pd.DataFrame())
+        assert frame.shape == (0, 0)
+
+        out = tmp_path / "empty.parquet"
+
+        ar.write_parquet(frame, out)
+        df = pd.read_parquet(out, engine="pyarrow")
+
+        assert df.shape == (0, 0)
+        assert out.exists()
+
+    def test_zero_column_with_row_raises(self, tmp_path):
+        frame = ar.from_pandas(pd.DataFrame(index=range(3)))
+        assert frame.shape == (3, 0)
+
+        out = tmp_path / "zero_cols.parquet"
+        with pytest.raises(
+            ValueError,
+            match="Cannot write a zero-column ArFrame with 3 rows to Parquet: the current export path cannot preserve row count without columns.",
+        ):
+            ar.write_parquet(frame, out)
+
+        assert not out.exists()
+
+    def test_normal_frame_still_round_trips(self, tmp_path):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1, 2, 3], "b": ["x", "y", "z"]}))
+        assert frame.shape == (3, 2)
+
+        out = tmp_path / "normal.parquet"
+        ar.write_parquet(frame, out)
+        df = pd.read_parquet(out, engine="pyarrow")
+        assert df.shape == (3, 2)
+        assert df["a"].tolist() == [1, 2, 3]
+        assert df["b"].tolist() == ["x", "y", "z"]
+        assert out.exists()
+
+
+@skip_without_pyarrow
 class TestWriteParquetRowGroupSize:
     def test_row_group_size_accepted(self, tmp_path):
         frame = ar.from_pandas(pd.DataFrame({"v": list(range(100))}))
@@ -198,9 +239,99 @@ class TestWriteParquetErrors:
         with pytest.raises(ValueError, match="Unknown compression codec"):
             ar.write_parquet(frame, tmp_path / "out.parquet", compression="lz4")
 
+    @pytest.mark.parametrize("compression", [None, 123, True, ["snappy"]])
+    def test_non_string_compression_raises_type_error(self, tmp_path, compression):
+        # Compression type validation happens before codec validation and pyarrow import.
+        frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
+
+        with pytest.raises(TypeError, match="compression must be a string"):
+            ar.write_parquet(
+                frame,
+                tmp_path / "out.parquet",
+                compression=compression,
+            )
+
     def test_missing_pyarrow_raises_import_error(self, tmp_path):
         # This test mocks pyarrow away and must run even without pyarrow.
         frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
         with patch.dict("sys.modules", {"pyarrow": None}):
             with pytest.raises(ImportError, match="pip install arnio\\[parquet\\]"):
                 ar.write_parquet(frame, tmp_path / "out.parquet")
+
+    @pytest.mark.parametrize(
+        "bad_input",
+        [
+            object(),
+            None,
+            pd.DataFrame({"a": [1, 2]}),
+        ],
+    )
+    def test_write_parquet_invalid_frame(self, tmp_path, bad_input):
+        with pytest.raises(TypeError, match="frame must be an ArFrame"):
+            ar.write_parquet(bad_input, tmp_path / "out.parquet")
+
+
+@skip_without_pyarrow
+def test_write_parquet_json_safe_attrs(tmp_path):
+    src = pd.DataFrame({"a": [1]})
+    src.attrs = {"tag": "v1", "count": 42, "flag": True, "meta": {"x": [1, 2]}}
+    ar.write_parquet(ar.from_pandas(src), tmp_path / "out.parquet")
+
+
+@skip_without_pyarrow
+def test_write_parquet_unsupported_attrs_raises(tmp_path):
+    src = pd.DataFrame({"a": [1]})
+    src.attrs = {"bad": object()}
+    with pytest.raises(TypeError, match="JSON-serializable"):
+        ar.write_parquet(ar.from_pandas(src), tmp_path / "out.parquet")
+
+
+@skip_without_pyarrow
+def test_write_parquet_preserve_attrs_false_drops_metadata(tmp_path):
+    src = pd.DataFrame({"a": [1]})
+    src.attrs = {"bad": object()}
+    out = tmp_path / "out.parquet"
+    ar.write_parquet(ar.from_pandas(src), out, preserve_attrs=False)
+    assert pd.read_parquet(out).attrs == {}
+
+
+@skip_without_pyarrow
+def test_write_parquet_empty_attrs_skips_validation(tmp_path):
+    src = pd.DataFrame({"a": [1]})
+    ar.write_parquet(ar.from_pandas(src), tmp_path / "out.parquet")
+
+
+def test_write_parquet_rejects_bool_path(tmp_path):
+    frame = ar.from_pandas(pd.DataFrame({"a": [1, 2, 3]}))
+    with pytest.raises(TypeError, match="path must be a string"):
+        ar.write_parquet(frame, True)
+
+
+def test_write_parquet_rejects_int_path(tmp_path):
+    frame = ar.from_pandas(pd.DataFrame({"a": [1, 2, 3]}))
+    with pytest.raises(TypeError, match="path must be a string"):
+        ar.write_parquet(frame, 42)
+
+
+class _BytesPathLike:
+    def __init__(self, path: bytes) -> None:
+        self._path = path
+
+    def __fspath__(self) -> bytes:
+        return self._path
+
+
+@skip_without_pyarrow
+def test_write_parquet_accepts_bytes_path(tmp_path):
+    frame = ar.from_pandas(pd.DataFrame({"a": [1, 2, 3]}))
+    out = tmp_path / "out.parquet"
+    ar.write_parquet(frame, os.fsencode(out))
+    assert out.exists()
+
+
+@skip_without_pyarrow
+def test_write_parquet_accepts_pathlike_bytes_path(tmp_path):
+    frame = ar.from_pandas(pd.DataFrame({"a": [1, 2, 3]}))
+    out = tmp_path / "out.parquet"
+    ar.write_parquet(frame, _BytesPathLike(os.fsencode(out)))
+    assert out.exists()
