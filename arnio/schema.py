@@ -5,9 +5,11 @@ Production data contracts and validation.
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import math
 import re
+import uuid
 import warnings
 from collections.abc import Sequence
 from dataclasses import dataclass, field
@@ -2223,6 +2225,79 @@ def CurrencyCode(
     )
 
 
+def UUID(
+    *,
+    nullable: bool = True,
+    unique: bool = False,
+    severity: str = "error",
+    version: int | None = None,
+    required_if: tuple[str, Any] | None = None,
+) -> Field:
+    """Create a UUID schema field.
+
+    Args:
+        nullable: Whether null values are allowed.
+        unique: Whether non-null values must be unique.
+        severity: Severity level for validation issues.
+        version: Expected UUID version (e.g. 4). If None, any UUID version is accepted.
+            When version is None, any string format accepted by Python's standard
+            uuid.UUID constructor is accepted (including canonical forms, 32-character
+            hexadecimal strings, UUIDs with braces, and URNs). When a strict version is
+            specified, the Nil UUID (00000000-0000-0000-0000-000000000000) will be
+            rejected as its version attribute is None.
+        required_if: Conditional requirement as a column/value pair.
+
+    Returns:
+        Field: Configured UUID schema field.
+    """
+    if version is not None and version not in {1, 2, 3, 4, 5}:
+        raise ValueError("UUID version must be one of 1, 2, 3, 4, 5")
+
+    semantic = f"uuid:{version}" if version is not None else "uuid"
+    return Field(
+        dtype="string",
+        nullable=nullable,
+        semantic=semantic,
+        unique=unique,
+        required_if=required_if,
+        severity=severity,
+    )
+
+
+def IPAddress(
+    *,
+    nullable: bool = True,
+    unique: bool = False,
+    severity: str = "error",
+    version: int | None = None,
+    required_if: tuple[str, Any] | None = None,
+) -> Field:
+    """Create an IP address schema field.
+
+    Args:
+        nullable: Whether null values are allowed.
+        unique: Whether non-null values must be unique.
+        severity: Severity level for validation issues.
+        version: Expected IP version (4 or 6). If None, both are accepted.
+        required_if: Conditional requirement as a column/value pair.
+
+    Returns:
+        Field: Configured IP address schema field.
+    """
+    if version is not None and version not in {4, 6}:
+        raise ValueError("IPAddress version must be 4 or 6")
+
+    semantic = f"ip_address:{version}" if version is not None else "ip_address"
+    return Field(
+        dtype="string",
+        nullable=nullable,
+        semantic=semantic,
+        unique=unique,
+        required_if=required_if,
+        severity=severity,
+    )
+
+
 def Date(
     *,
     nullable: bool = True,
@@ -2583,11 +2658,21 @@ def _validate_column(
                     )
                 )
         else:
-            pattern = _SEMANTIC_PATTERNS.get(field_def.semantic)
-            if pattern is None and field_def.semantic.startswith("url:"):
-                schemes = field_def.semantic[len("url:") :]
-                pattern = rf"({schemes})://[^\s]+"
-            if pattern is None:
+            is_known = (
+                field_def.semantic in _SEMANTIC_PATTERNS
+                or field_def.semantic.startswith("url:")
+                or field_def.semantic
+                in {
+                    "date",
+                    "country_code",
+                    "language_code",
+                    "timezone",
+                    "currency_code",
+                }
+                or field_def.semantic.startswith("uuid")
+                or field_def.semantic.startswith("ip_address")
+            )
+            if not is_known:
                 issues.append(
                     ValidationIssue(
                         column=name,
@@ -2637,7 +2722,76 @@ def _validate_column(
                         )
                         invalid = non_null[~values.isin(ISO_4217_CURRENCY_CODES)]
 
+                elif field_def.semantic.startswith("uuid"):
+                    version = None
+                    if ":" in field_def.semantic:
+                        parts = field_def.semantic.split(":")
+                        if len(parts) != 2:
+                            raise ValueError(
+                                f"Invalid semantic configuration for UUID: {field_def.semantic}"
+                            )
+                        try:
+                            version = int(parts[1])
+                        except ValueError as e:
+                            raise ValueError(
+                                f"Invalid UUID version suffix in semantic: {field_def.semantic}"
+                            ) from e
+                        if version not in {1, 2, 3, 4, 5}:
+                            raise ValueError(
+                                f"UUID version must be one of 1, 2, 3, 4, 5, got {version}"
+                            )
+
+                    # Optimize per-row UUID validation using unique non-null values
+                    unique_vals = non_null.drop_duplicates()
+                    invalid_unique = []
+                    for value in unique_vals:
+                        try:
+                            u = uuid.UUID(str(value))
+                            if version is not None and u.version != version:
+                                invalid_unique.append(value)
+                        except ValueError:
+                            invalid_unique.append(value)
+
+                    invalid = non_null[non_null.isin(invalid_unique)]
+
+                elif field_def.semantic.startswith("ip_address"):
+                    version = None
+                    if ":" in field_def.semantic:
+                        parts = field_def.semantic.split(":")
+                        if len(parts) != 2:
+                            raise ValueError(
+                                f"Invalid semantic configuration for IPAddress: {field_def.semantic}"
+                            )
+                        try:
+                            version = int(parts[1])
+                        except ValueError as e:
+                            raise ValueError(
+                                f"Invalid IPAddress version suffix in semantic: {field_def.semantic}"
+                            ) from e
+                        if version not in {4, 6}:
+                            raise ValueError(
+                                f"IPAddress version must be 4 or 6, got {version}"
+                            )
+
+                    # Optimize per-row IPAddress validation using unique non-null values
+                    unique_vals = non_null.drop_duplicates()
+                    invalid_unique = []
+                    for value in unique_vals:
+                        try:
+                            ip = ipaddress.ip_address(str(value))
+                            if version is not None and ip.version != version:
+                                invalid_unique.append(value)
+                        except ValueError:
+                            invalid_unique.append(value)
+
+                    invalid = non_null[non_null.isin(invalid_unique)]
+
                 else:
+                    if field_def.semantic.startswith("url:"):
+                        schemes = field_def.semantic[len("url:") :]
+                        pattern = rf"({schemes})://[^\s]+"
+                    else:
+                        pattern = _SEMANTIC_PATTERNS.get(field_def.semantic)
                     invalid = non_null[~text.str.fullmatch(pattern, na=False)]
 
                 issues.extend(

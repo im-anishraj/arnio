@@ -90,6 +90,7 @@ from .quality import (
 )
 from .schema import (
     URL,
+    UUID,
     Bool,
     CountryCode,
     CurrencyCode,
@@ -100,6 +101,7 @@ from .schema import (
     Field,
     Float64,
     Int64,
+    IPAddress,
     LanguageCode,
     PhoneNumber,
     Regex,
@@ -212,6 +214,8 @@ __all__ = [
     "URL",
     "PhoneNumber",
     "DateTime",
+    "UUID",
+    "IPAddress",
     # Exceptions
     "UnknownStepError",
     "ArnioError",
