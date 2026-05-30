@@ -51,12 +51,14 @@ def main():
 
     clean_df = ar.to_pandas(cleaned)
 
-    # cast_types cannot handle non-numeric strings — coerce them to NaN first
+    # Convert values to numeric and drop invalid entries
     clean_df["values"] = pd.to_numeric(clean_df["values"], errors="coerce")
     clean_df = clean_df.dropna()
 
-    # clip is a pandas/NumPy operation, not an Arnio pipeline step
-    clean_df["values"] = clean_df["values"].clip(0, 100)
+    # Use Arnio's built-in clip_numeric helper
+    frame = ar.from_pandas(clean_df)
+    frame = ar.clip_numeric(frame, lower=0, upper=100)
+    clean_df = ar.to_pandas(frame)
 
     print("Cleaned Data:\n", clean_df)
     print("-" * 40)

@@ -367,6 +367,49 @@ class TestFromPandas:
 
         assert "Fix:" in str(exc_info.value)
 
+    def test_from_pandas_object_custom_class_raises_clear_error(self):
+        class Token:
+            def __str__(self):
+                return "TOKEN"
+
+        df = pd.DataFrame({"x": pd.Series([Token()], dtype=object)})
+        with pytest.raises(
+            TypeError, match="Column 'x' contains unsupported scalar value"
+        ) as exc_info:
+            ar.from_pandas(df)
+        assert "Fix:" in str(exc_info.value)
+
+    def test_from_pandas_object_bytes_raises_clear_error(self):
+        df = pd.DataFrame({"x": pd.Series([b"abc"], dtype=object)})
+        with pytest.raises(
+            TypeError, match="Column 'x' contains unsupported scalar value"
+        ) as exc_info:
+            ar.from_pandas(df)
+        assert "Fix:" in str(exc_info.value)
+
+    def test_from_pandas_object_datetime_date_and_time_raise_clear_error(self):
+        import datetime as dt
+
+        df_date = pd.DataFrame({"x": pd.Series([dt.date(2026, 5, 29)], dtype=object)})
+        with pytest.raises(
+            TypeError, match="Column 'x' contains unsupported scalar value"
+        ):
+            ar.from_pandas(df_date)
+
+        df_time = pd.DataFrame({"x": pd.Series([dt.time(12, 30)], dtype=object)})
+        with pytest.raises(
+            TypeError, match="Column 'x' contains unsupported scalar value"
+        ):
+            ar.from_pandas(df_time)
+
+    def test_from_pandas_object_pandas_period_raises_clear_error(self):
+        df = pd.DataFrame({"x": pd.Series([pd.Period("2026-05")], dtype=object)})
+        with pytest.raises(
+            TypeError, match="Column 'x' contains unsupported scalar value"
+        ) as exc_info:
+            ar.from_pandas(df)
+        assert "Fix:" in str(exc_info.value)
+
     def test_from_pandas_native_datetime64_raises_clear_error(self):
         """Native datetime64 columns should raise a clear TypeError with a fix hint."""
         df = pd.DataFrame({"timestamp": pd.date_range("2026-05-20", periods=3)})
@@ -636,7 +679,15 @@ class TestFromPandas:
         result = ar.to_pandas(ar.from_pandas(df))
         assert len(result) == 3
         assert result["score"].isna().all()
-        assert str(result["score"].dtype) == "string"
+        assert str(result["score"].dtype) == "float64"
+
+    def test_from_pandas_mixed_null_float64_extension(self):
+        df = pd.DataFrame({"score": pd.Series([1.5, pd.NA, 3.7], dtype="Float64")})
+        result = ar.to_pandas(ar.from_pandas(df))
+        assert str(result["score"].dtype) == "float64"
+        assert result["score"].iloc[0] == 1.5
+        assert pd.isna(result["score"].iloc[1])
+        assert result["score"].iloc[2] == 3.7
 
     def test_from_pandas_all_null_boolean_extension(self):
         df = pd.DataFrame({"active": pd.Series([pd.NA, pd.NA, pd.NA], dtype="boolean")})
@@ -1090,6 +1141,51 @@ class TestNullableInt64ObjectConversion:
         result = ar.to_pandas(frame)
         assert str(result["col"].dtype) == "Int64"
         assert list(result["col"]) == [1, pd.NA, 3]
+
+
+class TestCastNullableInt:
+    """Tests for casting object series with None/NaN and valid integers."""
+
+    def test_cast_object_series_with_none_and_valid_integers(self):
+        """Casting object column with None and integer strings to int64."""
+        df = pd.DataFrame({"val": [1, None, 3, "4", None]})
+        frame = ar.from_pandas(df)
+        result = ar.cast_types(frame, {"val": "int64"}, errors="coerce")
+        df_result = ar.to_pandas(result)
+        assert result.dtypes["val"] == "int64"
+        assert df_result["val"].iloc[0] == 1
+        assert pd.isna(df_result["val"].iloc[1])  # type: ignore[arg-type]
+        assert df_result["val"].iloc[2] == 3
+        assert df_result["val"].iloc[3] == 4
+        assert pd.isna(df_result["val"].iloc[4])  # type: ignore[arg-type]
+
+    def test_cast_object_series_with_nan_and_valid_integers(self):
+        """Casting object column with float NaN and integer values to int64."""
+        df = pd.DataFrame({"val": pd.Series([1, float("nan"), 3, 4], dtype=object)})
+        frame = ar.from_pandas(df)
+        result = ar.cast_types(frame, {"val": "int64"}, errors="coerce")
+        df_result = ar.to_pandas(result)
+        assert result.dtypes["val"] == "int64"
+        assert df_result["val"].iloc[0] == 1
+        assert pd.isna(df_result["val"].iloc[1])  # type: ignore[arg-type]
+        assert df_result["val"].iloc[2] == 3
+        assert df_result["val"].iloc[3] == 4
+
+    def test_cast_object_series_all_valid_integers_from_object(self):
+        """Casting object column with all valid integers to int64."""
+        df = pd.DataFrame({"val": ["10", "20", "30"]})
+        frame = ar.from_pandas(df)
+        result = ar.cast_types(frame, {"val": "int64"})
+        df_result = ar.to_pandas(result)
+        assert result.dtypes["val"] == "int64"
+        assert list(df_result["val"]) == [10, 20, 30]
+
+    def test_cast_object_series_raises_on_invalid(self):
+        """Casting object column with invalid string raises TypeCastError."""
+        df = pd.DataFrame({"val": [1, 2, "not_a_number"]})
+        frame = ar.from_pandas(df)
+        with pytest.raises(ar.TypeCastError, match="Cannot cast column 'val'"):
+            ar.cast_types(frame, {"val": "int64"})
 
 
 def test_from_records_rejects_string_columns():

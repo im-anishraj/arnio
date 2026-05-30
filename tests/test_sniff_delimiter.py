@@ -99,6 +99,24 @@ class TestSniffDelimiter:
         result = sniff_delimiter(path, encoding="latin-1")
         assert result == ","
 
+    def test_handles_utf16_comma_delimited_file(self, tmp_path):
+        """sniff_delimiter decodes UTF-16 CSV before binary checks."""
+        path = tmp_path / "utf16.csv"
+        path.write_text("name,age\nAlice,30\nBob,25\n", encoding="utf-16")
+
+        result = sniff_delimiter(path, encoding="utf-16")
+
+        assert result == ","
+
+    def test_handles_utf16_tab_delimited_file(self, tmp_path):
+        """sniff_delimiter decodes UTF-16 TSV before binary checks."""
+        path = tmp_path / "utf16.tsv"
+        path.write_text("name\tage\nAlice\t30\nBob\t25\n", encoding="utf-16")
+
+        result = sniff_delimiter(path, encoding="utf-16")
+
+        assert result == "\t"
+
     def test_handles_quoted_fields_with_delimiter(self, tmp_path):
         """sniff_delimiter correctly handles delimiters inside quoted fields."""
         path = tmp_path / "quoted.csv"

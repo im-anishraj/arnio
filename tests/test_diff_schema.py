@@ -3,6 +3,31 @@
 from arnio.schema import Field, Schema, diff_schema
 
 
+def _rule_alpha(df):
+    return []
+
+
+def _rule_beta(df):
+    return []
+
+
+def _make_same_named_rule():
+    def same_rule_name(df):
+        return []
+
+    return same_rule_name
+
+
+class _CallableRule:
+    def __call__(self, df):
+        return []
+
+
+class _OtherCallableRule:
+    def __call__(self, df):
+        return []
+
+
 class TestDiffSchema:
     """Test suite for diff_schema function."""
 
@@ -92,6 +117,106 @@ class TestDiffSchema:
         assert changed[0].expected == ("name",)
         assert changed[0].observed is None
 
+    def test_detects_rules_present_vs_absent(self):
+        """diff_schema detects schema-level rules added or removed."""
+        expected = Schema(fields={"name": Field(dtype="string")}, rules=[_rule_alpha])
+        observed = Schema(fields={"name": Field(dtype="string")})
+
+        diff = diff_schema(expected, observed)
+        changed = [
+            d
+            for d in diff.differences
+            if d.change == "changed_schema" and d.attribute == "rules"
+        ]
+
+        assert len(changed) == 1
+        assert changed[0].column is None
+        assert changed[0].expected == ("_rule_alpha",)
+        assert changed[0].observed is None
+
+    def test_same_named_rules_are_unchanged(self):
+        """diff_schema treats rules with the same visible name as unchanged."""
+        expected = Schema(
+            fields={"name": Field(dtype="string")},
+            rules=[_make_same_named_rule()],
+        )
+        observed = Schema(
+            fields={"name": Field(dtype="string")},
+            rules=[_make_same_named_rule()],
+        )
+
+        diff = diff_schema(expected, observed)
+
+        assert diff.changed is False
+        assert diff.difference_count == 0
+
+    def test_detects_different_rule_names(self):
+        """diff_schema detects changed visible rule identities."""
+        expected = Schema(fields={"name": Field(dtype="string")}, rules=[_rule_alpha])
+        observed = Schema(fields={"name": Field(dtype="string")}, rules=[_rule_beta])
+
+        diff = diff_schema(expected, observed)
+        changed = [
+            d
+            for d in diff.differences
+            if d.change == "changed_schema" and d.attribute == "rules"
+        ]
+
+        assert len(changed) == 1
+        assert changed[0].expected == ("_rule_alpha",)
+        assert changed[0].observed == ("_rule_beta",)
+
+    def test_detects_rule_count_changes(self):
+        """diff_schema detects rule list length changes."""
+        expected = Schema(
+            fields={"name": Field(dtype="string")},
+            rules=[_rule_alpha, _rule_beta],
+        )
+        observed = Schema(fields={"name": Field(dtype="string")}, rules=[_rule_alpha])
+
+        diff = diff_schema(expected, observed)
+        changed = [
+            d
+            for d in diff.differences
+            if d.change == "changed_schema" and d.attribute == "rules"
+        ]
+
+        assert len(changed) == 1
+        assert changed[0].expected == ("_rule_alpha", "_rule_beta")
+        assert changed[0].observed == ("_rule_alpha",)
+
+    def test_rule_callable_object_fallback_uses_type_name(self):
+        """diff_schema names callable rule objects by their callable type."""
+        expected = Schema(
+            fields={"name": Field(dtype="string")},
+            rules=[_CallableRule()],
+        )
+        observed = Schema(
+            fields={"name": Field(dtype="string")},
+            rules=[_OtherCallableRule()],
+        )
+
+        diff = diff_schema(expected, observed)
+        changed = [
+            d
+            for d in diff.differences
+            if d.change == "changed_schema" and d.attribute == "rules"
+        ]
+
+        assert len(changed) == 1
+        assert changed[0].expected == ("_CallableRule",)
+        assert changed[0].observed == ("_OtherCallableRule",)
+
+    def test_rules_difference_renders_in_markdown(self):
+        """diff_schema markdown includes schema-level rules differences."""
+        expected = Schema(fields={"name": Field(dtype="string")}, rules=[_rule_alpha])
+        observed = Schema(fields={"name": Field(dtype="string")})
+
+        markdown = diff_schema(expected, observed).to_markdown()
+
+        assert "|  | changed_schema | rules |" in markdown
+        assert "_rule_alpha" in markdown
+
     def test_accepts_dict_input_for_expected(self):
         """diff_schema accepts dict form of expected schema."""
         expected = {"name": Field(dtype="string")}
@@ -164,3 +289,21 @@ class TestDiffSchema:
         assert len(changed) == 1
         assert changed[0].expected is None
         assert changed[0].observed == "^[A-Z][a-z]+$"
+
+    def test_severity_warning_to_error(self):
+        """diff_schema detects severity change from warning to error."""
+        expected = Schema({"age": Field(dtype="int64", severity="warning")})
+        observed = Schema({"age": Field(dtype="int64", severity="error")})
+        diff = diff_schema(expected, observed)
+        assert diff.changed is True
+        assert diff.difference_count == 1
+        assert diff.differences[0].attribute == "severity"
+
+    def test_severity_error_to_warning(self):
+        """diff_schema detects severity change from error to warning."""
+        expected = Schema({"age": Field(dtype="int64", severity="error")})
+        observed = Schema({"age": Field(dtype="int64", severity="warning")})
+        diff = diff_schema(expected, observed)
+        assert diff.changed is True
+        assert diff.difference_count == 1
+        assert diff.differences[0].attribute == "severity"

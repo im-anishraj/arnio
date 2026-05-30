@@ -1,5 +1,8 @@
 #include "arnio/csv_writer.h"
 
+#ifdef _WIN32
+#include <filesystem>
+#endif
 #include <fstream>
 #include <iomanip>
 #include <limits>
@@ -10,6 +13,16 @@
 #include "arnio/frame.h"
 
 namespace arnio {
+
+namespace {
+inline void open_binary_output(std::ofstream& file, const std::string& path) {
+#ifdef _WIN32
+    file.open(std::filesystem::u8path(path), std::ios::binary);
+#else
+    file.open(path, std::ios::binary);
+#endif
+}
+}  // namespace
 
 CsvWriter::CsvWriter(const CsvWriteConfig& config) : config_(config) {}
 
@@ -63,7 +76,8 @@ void CsvWriter::write(const Frame& frame, const std::string& path) const {
     // text mode would silently expand every '\n' to '\r\n',
     // corrupting any line_terminator that already contains '\r'
     // (e.g. "\r\n" → "\r\r\n").
-    std::ofstream out(path, std::ios::binary);
+    std::ofstream out;
+    open_binary_output(out, path);
     if (!out.is_open()) {
         throw std::runtime_error("Could not open file for writing: " + path);
     }

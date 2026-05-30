@@ -1,6 +1,7 @@
 """Tests for ArFrame.to_dict method - additional coverage."""
 
 import pandas as pd
+import pytest
 
 import arnio as ar
 
@@ -110,3 +111,131 @@ class TestArFrameToDictExtended:
         result = frame.to_dict()
         assert len(result["a"]) == len(frame)
         assert len(result["b"]) == len(frame)
+
+    def test_to_dict_duplicate_column_names_blocked(self):
+        """from_pandas raises error for duplicate column names."""
+        with pytest.raises(
+            ValueError, match="does not support duplicate column labels"
+        ):
+            ar.from_pandas(pd.DataFrame([[1, 2, 3]], columns=["a", "b", "a"]))
+
+    def test_to_dict_records_orient(self):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1, 2], "b": [3, 4]}))
+
+        result = frame.to_dict(orient="records")
+
+        assert result == [
+            {"a": 1, "b": 3},
+            {"a": 2, "b": 4},
+        ]
+
+    def test_to_dict_split_orient(self):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1, 2], "b": [3, 4]}))
+
+        result = frame.to_dict(orient="split")
+
+        assert result == {
+            "columns": ["a", "b"],
+            "data": [
+                [1, 3],
+                [2, 4],
+            ],
+        }
+
+    def test_to_dict_invalid_orient(self):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1, 2]}))
+
+        with pytest.raises(
+            ValueError,
+            match="orient must be one of",
+        ):
+            frame.to_dict(orient="invalid")
+
+    def test_to_dict_split_empty_frame(self):
+        frame = ar.from_pandas(pd.DataFrame(columns=["a", "b"]))
+
+        result = frame.to_dict(orient="split")
+
+        assert result == {
+            "columns": ["a", "b"],
+            "data": [],
+        }
+
+    def test_to_dict_records_preserves_none(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {"name": ["Alice", None]},
+                dtype=object,
+            )
+        )
+
+        result = frame.to_dict(orient="records")
+
+        assert result == [
+            {"name": "Alice"},
+            {"name": None},
+        ]
+
+    def test_to_dict_split_preserves_column_order(self):
+        frame = ar.from_pandas(pd.DataFrame({"z": [1], "a": [2], "m": [3]}))
+
+        result = frame.to_dict(orient="split")
+
+        assert result["columns"] == [
+            "z",
+            "a",
+            "m",
+        ]
+
+    def test_to_dict_empty_frame_zero_rows(self):
+        """to_dict handles a frame with zero rows."""
+        frame = ar.from_pandas(pd.DataFrame({"a": [], "b": []}))
+        result = frame.to_dict()
+        assert result == {"a": [], "b": []}
+
+    def test_to_dict_empty_frame_zero_columns(self):
+        """to_dict handles a frame with zero columns."""
+        frame = ar.from_pandas(pd.DataFrame(index=[0, 1, 2]))
+        result = frame.to_dict()
+        assert result == {}
+
+    def test_to_dict_wide_frame(self):
+        """to_dict handles frames with many columns."""
+        cols = {f"col_{i}": list(range(5)) for i in range(50)}
+        frame = ar.from_pandas(pd.DataFrame(cols))
+        result = frame.to_dict()
+        assert len(result) == 50
+        for i in range(50):
+            assert result[f"col_{i}"] == list(range(5))
+
+    def test_to_dict_special_characters_in_column_names(self):
+        """to_dict handles column names with spaces, underscores, and digits."""
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "user name": ["Alice"],
+                    "user_age": [30],
+                    "col3": [True],
+                    "123": [1.5],
+                }
+            )
+        )
+        result = frame.to_dict()
+        assert "user name" in result
+        assert "user_age" in result
+        assert "col3" in result
+        assert "123" in result
+
+    def test_to_dict_orient_records_style(self):
+        """to_dict result can be used like a column-oriented dict."""
+        frame = ar.from_pandas(pd.DataFrame({"a": [1, 2], "b": ["x", "y"]}))
+        result = frame.to_dict()
+        assert list(result["a"]) == [1, 2]
+        assert list(result["b"]) == ["x", "y"]
+        assert list(result.keys()) == ["a", "b"]
+
+    def test_to_dict_boolean_values_preserved(self):
+        """to_dict correctly preserves True/False boolean values."""
+        frame = ar.from_pandas(pd.DataFrame({"flag": [True, False, True, False]}))
+        result = frame.to_dict()
+        assert result["flag"] == [True, False, True, False]
