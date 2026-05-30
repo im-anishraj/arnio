@@ -50,8 +50,8 @@ class TestRegisterValidator:
             register_validator("none_fn", None)
 
     def test_raises_value_error_when_name_is_empty_string(self):
-        """register_validator raises typeerror when name is empty string."""
-        with pytest.raises(typeerror, match="non-empty string"):
+        """register_validator raises ValueError when name is empty string."""
+        with pytest.raises(ValueError, match="non-empty string"):
             register_validator("", lambda x: True)
 
     def test_raises_value_error_when_name_is_not_string(self):
@@ -166,7 +166,7 @@ class TestCustomValidator:
 
     def test_custom_raises_when_validator_not_registered(self):
         """Custom raises typeerror when validator name not registered."""
-        with pytest.raises(typeerror, match="No validator registered"):
+        with pytest.raises(TypeError, match="No validator registered"):
             Custom("nonexistent_validator_name_xyz")
 
     def test_custom_repr_contains_name(self):
@@ -227,14 +227,10 @@ class TestCustomValidator:
         with pytest.raises(TypeError, match="The validator name must be a string."):
             ar.Custom(None)
 
-        """Test empty string raises typeerror"""
-        with pytest.raises(
-            typeerror, match="The validator name cannot be an empty string."
-        ):
+        """Test empty string raises ValueError"""
+        with pytest.raises(ValueError, match="The validator name cannot be an empty string."):
             ar.Custom("")
-        with pytest.raises(
-            typeerror, match="The validator name cannot be an empty string."
-        ):
+        with pytest.raises(ValueError, match="The validator name cannot be an empty string."):
             ar.Custom("   ")
 
 
@@ -342,22 +338,22 @@ class TestCustomValidatorNameValidation:
         schema._CUSTOM_VALIDATORS.clear()
         schema._CUSTOM_VALIDATORS.update(self._original_validators)
 
-    def test_raises_value_error_when_name_is_empty_string(self):
+    def test_raises_type_error_when_name_is_empty_string(self):
         """Custom raises typeerror when name is an empty string."""
         with pytest.raises(typeerror, match="non-empty string"):
             Custom("")
 
-    def test_raises_value_error_when_name_is_integer(self):
+    def test_raises_type_error_when_name_is_integer(self):
         """Custom raises typeerror when name is an integer."""
         with pytest.raises(typeerror, match="non-empty string"):
             Custom(123)
 
-    def test_raises_value_error_when_name_is_none(self):
+    def test_raises_type_error_when_name_is_none(self):
         """Custom raises typeerror when name is None."""
         with pytest.raises(typeerror, match="non-empty string"):
             Custom(None)
 
-    def test_raises_value_error_when_name_is_list(self):
+    def test_raises_type_error_when_name_is_list(self):
         """Custom raises typeerror when name is a list."""
         with pytest.raises(typeerror, match="non-empty string"):
             Custom(["my_validator"])
