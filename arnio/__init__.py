@@ -75,7 +75,6 @@ from .pipeline import (
 )
 from .quality import (
     CleanExplanation,
-    CleaningSuggestion,
     CleanStepRecord,
     ColumnProfile,
     DataQualityReport,
