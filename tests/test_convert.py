@@ -758,7 +758,6 @@ class TestFromPandas:
         ):
             ar.from_dict({"a": 1})
 
-
     def test_from_dict_rejects_mixed_scalar_and_list(self):
         with pytest.raises(
             TypeError,
@@ -770,7 +769,6 @@ class TestFromPandas:
                     "b": 3,
                 }
             )
-
 
     def test_from_dict_accepts_tuple_values(self):
         frame = ar.from_dict(
@@ -784,14 +782,12 @@ class TestFromPandas:
 
         assert result.shape == (2, 2)
 
-
     def test_from_dict_rejects_string_value(self):
         with pytest.raises(
             TypeError,
             match="Column 'a' must be a sequence of values",
         ):
             ar.from_dict({"a": "abc"})
-
 
     def test_from_dict_rejects_bytes_value(self):
         with pytest.raises(

@@ -457,9 +457,7 @@ def from_dict(data: dict) -> ArFrame:
         unique_lengths = set(lengths.values())
 
         if len(unique_lengths) > 1:
-            details = ", ".join(
-                f"{name}={length}" for name, length in lengths.items()
-            )
+            details = ", ".join(f"{name}={length}" for name, length in lengths.items())
 
             raise ValueError(f"from_dict() column lengths differ: {details}")
 
