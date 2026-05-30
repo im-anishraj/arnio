@@ -1206,14 +1206,22 @@ def read_jsonl(
                 if nrows is not None and len(records) >= nrows:
                     break
                 try:
-                    obj = json.loads(line, object_pairs_hook=_reject_duplicate_keys, parse_constant=_reject_non_finite)
+                    obj = json.loads(
+                        line,
+                        object_pairs_hook=_reject_duplicate_keys,
+                        parse_constant=_reject_non_finite,
+                    )
                 except json.JSONDecodeError as exc:
                     raise JsonlReadError(
                         f"Invalid JSON on line {lineno} of {path!r}: {exc}"
                     ) from exc
                 except ValueError as exc:
                     s = str(exc)
-                    prefix = "Duplicate key" if s.startswith("duplicate key") else "Invalid value"
+                    prefix = (
+                        "Duplicate key"
+                        if s.startswith("duplicate key")
+                        else "Invalid value"
+                    )
                     raise JsonlReadError(
                         f"{prefix} on line {lineno} of {path!r}: {exc}"
                     ) from exc
