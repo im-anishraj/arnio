@@ -5,6 +5,7 @@ Chained cleaning pipeline.
 
 from __future__ import annotations
 
+import copy as copylib
 import inspect
 import logging
 import warnings
@@ -68,6 +69,41 @@ class PipelineContext:
     step_index: int
     total_steps: int
     dry_run: bool
+
+
+class _WritablePipelineSeries(pd.Series):
+    @property
+    def _constructor(self):
+        return _WritablePipelineSeries
+
+    @property
+    def _constructor_expanddim(self):
+        return _WritablePipelineDataFrame
+
+    def to_numpy(self, *args, **kwargs):
+        values = super().to_numpy(*args, **kwargs)
+        try:
+            values.setflags(write=True)
+        except ValueError:
+            pass
+        return values
+
+
+class _WritablePipelineDataFrame(pd.DataFrame):
+    @property
+    def _constructor(self):
+        return _WritablePipelineDataFrame
+
+    @property
+    def _constructor_sliced(self):
+        return _WritablePipelineSeries
+
+
+def _to_writable_pipeline_dataframe(frame: ArFrame) -> pd.DataFrame:
+    base = to_pandas(frame, copy=True)
+    writable = _WritablePipelineDataFrame(base, copy=False)
+    writable.attrs = copylib.deepcopy(base.attrs)
+    return writable
 
 
 def _is_builtin_python_step(name: str, fn: Callable) -> bool:
@@ -473,10 +509,12 @@ def pipeline(
 
             fn = python_step_registry[name]
 
-            df = to_pandas(working_frame)
-
             # Isolate genuine custom steps from internal core library functions
             is_builtin = _is_builtin_python_step(name, fn)
+            if is_builtin:
+                df = to_pandas(working_frame)
+            else:
+                df = _to_writable_pipeline_dataframe(working_frame)
             signature = inspect.signature(fn)
             call_kwargs = dict(kwargs)
             if "context" in signature.parameters and "context" not in call_kwargs:
