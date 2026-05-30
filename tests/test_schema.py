@@ -3451,7 +3451,6 @@ def test_float64_rejects_bool_pair():
         ar.Float64(min=True, max=False)
 
 
-
 def test_string_length_integer_subclass_serialization():
     class MyInt(int):
         pass
@@ -3494,11 +3493,16 @@ def test_string_length_validation_booleans():
 
 
 def test_string_length_validation_negative():
-    with pytest.raises(ValueError, match="min_length must be >= 0"):
+    with pytest.raises(
+        ValueError, match="min_length must be greater than or equal to 0"
+    ):
         ar.String(min_length=-1)
 
-    with pytest.raises(ValueError, match="max_length must be >= 0"):
+    with pytest.raises(
+        ValueError, match="max_length must be greater than or equal to 0"
+    ):
         ar.String(max_length=-1)
+
 
 def test_validation_issue_accepts_valid_severities():
     error_issue = ar.ValidationIssue(

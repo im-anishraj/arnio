@@ -1794,8 +1794,7 @@ def _normalize_length(name: str, val: Any) -> int | None:
     val = int(val)
 
     if val < 0:
-        raise ValueError(f"{name} must be >= 0")
-
+        raise ValueError(f"{name} must be greater than or equal to 0")
     return val
 
 
