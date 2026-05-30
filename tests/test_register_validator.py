@@ -50,13 +50,13 @@ class TestRegisterValidator:
             register_validator("none_fn", None)
 
     def test_raises_value_error_when_name_is_empty_string(self):
-        """register_validator raises ValueError when name is empty string."""
-        with pytest.raises(ValueError, match="non-empty string"):
+        """register_validator raises typeerror when name is empty string."""
+        with pytest.raises(typeerror, match="non-empty string"):
             register_validator("", lambda x: True)
 
     def test_raises_value_error_when_name_is_not_string(self):
-        """register_validator raises ValueError when name is not a string."""
-        with pytest.raises(ValueError, match="non-empty string"):
+        """register_validator raises typeerror when name is not a string."""
+        with pytest.raises(typeerror, match="non-empty string"):
             register_validator(123, lambda x: True)
 
     def test_overwrites_existing_validator(self):
@@ -165,8 +165,8 @@ class TestCustomValidator:
         assert field.severity == "warning"
 
     def test_custom_raises_when_validator_not_registered(self):
-        """Custom raises ValueError when validator name not registered."""
-        with pytest.raises(ValueError, match="No validator registered"):
+        """Custom raises typeerror when validator name not registered."""
+        with pytest.raises(typeerror, match="No validator registered"):
             Custom("nonexistent_validator_name_xyz")
 
     def test_custom_repr_contains_name(self):
@@ -227,13 +227,13 @@ class TestCustomValidator:
         with pytest.raises(TypeError, match="The validator name must be a string."):
             ar.Custom(None)
 
-        """Test empty string raises ValueError"""
+        """Test empty string raises typeerror"""
         with pytest.raises(
-            ValueError, match="The validator name cannot be an empty string."
+            typeerror, match="The validator name cannot be an empty string."
         ):
             ar.Custom("")
         with pytest.raises(
-            ValueError, match="The validator name cannot be an empty string."
+            typeerror, match="The validator name cannot be an empty string."
         ):
             ar.Custom("   ")
 
@@ -343,26 +343,26 @@ class TestCustomValidatorNameValidation:
         schema._CUSTOM_VALIDATORS.update(self._original_validators)
 
     def test_raises_value_error_when_name_is_empty_string(self):
-        """Custom raises ValueError when name is an empty string."""
-        with pytest.raises(ValueError, match="non-empty string"):
+        """Custom raises typeerror when name is an empty string."""
+        with pytest.raises(typeerror, match="non-empty string"):
             Custom("")
 
     def test_raises_value_error_when_name_is_integer(self):
-        """Custom raises ValueError when name is an integer."""
-        with pytest.raises(ValueError, match="non-empty string"):
+        """Custom raises typeerror when name is an integer."""
+        with pytest.raises(typeerror, match="non-empty string"):
             Custom(123)
 
     def test_raises_value_error_when_name_is_none(self):
-        """Custom raises ValueError when name is None."""
-        with pytest.raises(ValueError, match="non-empty string"):
+        """Custom raises typeerror when name is None."""
+        with pytest.raises(typeerror, match="non-empty string"):
             Custom(None)
 
     def test_raises_value_error_when_name_is_list(self):
-        """Custom raises ValueError when name is a list."""
-        with pytest.raises(ValueError, match="non-empty string"):
+        """Custom raises typeerror when name is a list."""
+        with pytest.raises(typeerror, match="non-empty string"):
             Custom(["my_validator"])
 
     def test_valid_name_still_raises_when_unregistered(self):
         """A valid string name that isn't registered raises the registry error, not the name error."""
-        with pytest.raises(ValueError, match="No validator registered"):
+        with pytest.raises(typeerror, match="No validator registered"):
             Custom("unregistered_name_xyz")
