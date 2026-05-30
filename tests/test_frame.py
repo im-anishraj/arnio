@@ -130,6 +130,7 @@ def test_preview_zero_column_frame():
 
     assert result == expected
 
+
 def test_select_columns_valid():
     df = pd.DataFrame(
         {
