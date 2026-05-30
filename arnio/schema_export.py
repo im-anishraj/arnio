@@ -18,6 +18,7 @@ for anything else so the contract stays explicit.
 
 from __future__ import annotations
 
+import os
 import pathlib
 import re
 from typing import Any
@@ -381,7 +382,13 @@ def schema_to_yaml(
     yaml_str = body if body.endswith("\n") else body + "\n"
 
     if path is not None:
+        if not isinstance(path, (str, os.PathLike)):
+            raise TypeError("path must be a string or os.PathLike")
+        if isinstance(path, str) and not path.strip():
+            raise ValueError("path must not be empty")
         target = pathlib.Path(path)
+        if target.is_dir():
+            raise ValueError("path must point to a file, not a directory")
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(yaml_str, encoding="utf-8")
 
