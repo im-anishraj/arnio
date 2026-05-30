@@ -1101,6 +1101,11 @@ def scan_csv(
         raise CsvReadError(str(e)) from None
 
 
+def _reject_non_finite(constant: str) -> None:
+    """Reject non-finite JSON constants (NaN, Infinity, -Infinity)."""
+    raise ValueError(f"Non-finite JSON constant not allowed: {constant!r}")
+
+
 def read_jsonl(
     path: str | os.PathLike[str],
     *,
@@ -1201,14 +1206,16 @@ def read_jsonl(
                 if nrows is not None and len(records) >= nrows:
                     break
                 try:
-                    obj = json.loads(line, object_pairs_hook=_reject_duplicate_keys)
+                    obj = json.loads(line, object_pairs_hook=_reject_duplicate_keys, parse_constant=_reject_non_finite)
                 except json.JSONDecodeError as exc:
                     raise JsonlReadError(
                         f"Invalid JSON on line {lineno} of {path!r}: {exc}"
                     ) from exc
                 except ValueError as exc:
+                    s = str(exc)
+                    prefix = "Duplicate key" if s.startswith("duplicate key") else "Invalid value"
                     raise JsonlReadError(
-                        f"Duplicate key on line {lineno} of {path!r}: {exc}"
+                        f"{prefix} on line {lineno} of {path!r}: {exc}"
                     ) from exc
                 if not isinstance(obj, dict):
                     raise JsonlReadError(

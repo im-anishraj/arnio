@@ -415,3 +415,35 @@ class TestReadJsonlDuplicateKeys:
 
         with pytest.raises(ar.JsonlReadError):
             ar.read_jsonl(p)
+
+
+class TestReadJsonlNonFiniteConstants:
+    def test_nan_raises_jsonl_read_error(self, tmp_path):
+        p = tmp_path / "nan.jsonl"
+        p.write_text('{"x": NaN}\n', encoding="utf-8")
+        with pytest.raises(ar.JsonlReadError, match="line 1"):
+            ar.read_jsonl(p)
+
+    def test_infinity_raises_jsonl_read_error(self, tmp_path):
+        p = tmp_path / "inf.jsonl"
+        p.write_text('{"x": Infinity}\n', encoding="utf-8")
+        with pytest.raises(ar.JsonlReadError, match="line 1"):
+            ar.read_jsonl(p)
+
+    def test_negative_infinity_raises_jsonl_read_error(self, tmp_path):
+        p = tmp_path / "neginf.jsonl"
+        p.write_text('{"x": -Infinity}\n', encoding="utf-8")
+        with pytest.raises(ar.JsonlReadError, match="line 1"):
+            ar.read_jsonl(p)
+
+    def test_non_finite_error_includes_line_number(self, tmp_path):
+        p = tmp_path / "multi.jsonl"
+        p.write_text('{"x": 1}\n{"x": NaN}\n', encoding="utf-8")
+        with pytest.raises(ar.JsonlReadError, match="line 2"):
+            ar.read_jsonl(p)
+
+    def test_valid_jsonl_unaffected(self, tmp_path):
+        p = tmp_path / "valid.jsonl"
+        p.write_text('{"x": 1}\n{"x": 2}\n', encoding="utf-8")
+        frame = ar.read_jsonl(p)
+        assert frame.shape == (2, 1)
