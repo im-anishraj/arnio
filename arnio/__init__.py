@@ -46,6 +46,7 @@ from .exceptions import (
     ArnioError,
     CsvReadError,
     JsonlReadError,
+    PipelineSerializationError,
     PipelineStepError,
     RemoteReadError,
     SchemaValidationError,
@@ -70,9 +71,11 @@ from .pipeline import (
     PipelineContext,
     get_builtin_step_signatures,
     list_steps,
+    load_pipeline,
     pipeline,
     register_step,
     reset_steps,
+    save_pipeline,
     unregister_step,
 )
 from .quality import (
@@ -239,4 +242,7 @@ __all__ = [
     "Date",
     "schema_to_dict",
     "schema_to_yaml",
+    "save_pipeline",
+    "load_pipeline",
+    "PipelineSerializationError",
 ]

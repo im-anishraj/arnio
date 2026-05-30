@@ -81,3 +81,9 @@ class SchemaValidationError(ArnioError):
     def __init__(self, message: str, result: ValidationResult = None):
         self.result = result
         super().__init__(message)
+
+
+class PipelineSerializationError(ArnioError):
+    """Raised when a declarative pipeline cannot be saved or loaded."""
+
+    pass

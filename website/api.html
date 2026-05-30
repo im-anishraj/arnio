@@ -107,7 +107,12 @@
         <div class="api-func"><div class="api-func-header">pipeline(frame, steps, *, verbose=False, track_lineage=False)</div><div class="api-func-body"><p>Run named cleaning steps or registered Python callables. <code>verbose=True</code> enables lightweight diagnostics through the <code>arnio</code> logger and optional <code>PipelineContext</code>. Pass <code>track_lineage=True</code> to receive a <code>(ArFrame, LineageReport)</code> tuple that maps every dropped row back to its original index and the step that removed it.</p></div></div>
         <div class="api-func"><div class="api-func-header">LineageReport</div><div class="api-func-body"><p>Returned by <code>pipeline(..., track_lineage=True)</code>. Attributes: <code>dropped_by_step</code> (dict mapping step name → sorted list of original row indices dropped by that step; steps that dropped no rows have an empty list) and <code>total_dropped</code> (int). Method: <code>to_pandas()</code> returns a flat <code>DataFrame</code> with columns <code>original_index</code> and <code>step</code>.</p></div></div>
         <div class="api-func"><div class="api-func-header">register_step(name, fn, overwrite=False), unregister_step(name), list_steps(), reset_steps(), get_builtin_step_signatures()</div><div class="api-func-body"><p>Manage the step registry and discover available built-in signatures.</p></div></div>
-
+        <h3>Pipeline Serialization</h3>
+<ul>
+    <li><code>save_pipeline(steps, filepath)</code>: Save a list of pipeline steps to a JSON or YAML file for reproducible jobs.</li>
+    <li><code>load_pipeline(filepath)</code>: Load a list of pipeline steps from a JSON or YAML file.</li>
+    <li><code>PipelineSerializationError</code>: Exception raised when a declarative pipeline cannot be saved or loaded.</li>
+</ul>
         <h2 id="quality">Quality</h2>
         <div class="api-func"><div class="api-func-header">profile(frame, *, exclude_columns=None, sample_size=5, approx_top_values=False, approx_top_values_min_unique=1000, approx_top_values_min_ratio=0.2, approx_top_values_sample_size=2000)</div><div class="api-func-body"><p>Return <code>DataQualityReport</code> with row/column counts, duplicate metrics, column profiles, warnings, quality score, score components, and cleaning suggestions.</p></div></div>
         <div class="api-func"><div class="api-func-header">DataQualityReport._repr_html_()</div><div class="api-func-body"><p>Jupyter/IPython automatically calls this to render the report dashboard HTML directly in the notebook output area.</p></div></div>

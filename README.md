@@ -2076,6 +2076,22 @@ arnio/
 <sub>Built with C++ and pybind11 · Licensed under MIT · Maintained by <a href="https://github.com/im-anishraj">@im-anishraj</a></sub>
 </div>
 
+
+### Reproducible Jobs
+You can save pipelines to JSON or YAML so you can reuse them later:
+
+```python
+import arnio as ar
+
+steps = [
+    ("drop_nulls", {"subset": ["age"]}),
+    ("strip_whitespace",)
+]
+
+ar.save_pipeline(steps, "my_pipeline.json")
+loaded_steps = ar.load_pipeline("my_pipeline.json")
+```
+
 ## Security
 
 Please review our [Security Policy](SECURITY.md) for responsible vulnerability reporting guidelines.
