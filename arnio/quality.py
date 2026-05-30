@@ -648,6 +648,8 @@ class DataQualityReport:
                 raise TypeError(
                     f"file_path must be a string, bytes, or os.PathLike object, got {type(file_path).__name__}"
                 )
+            if file_path == "":
+                raise ValueError("file_path must not be empty")
 
         redact_top_values = _validate_bool_option(
             redact_top_values, "redact_top_values"
@@ -677,7 +679,7 @@ class DataQualityReport:
             redact_top_values=redact_top_values,
             exclude_columns=validated_exclude,
         )
-        if file_path:
+        if file_path is not None:
             with open(file_path, "w", encoding="utf-8") as f:
                 f.write(html_out)
 
