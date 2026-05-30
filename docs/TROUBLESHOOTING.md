@@ -24,6 +24,25 @@ Running `pytest` may fail during test collection with:
 
 ```text
 ModuleNotFoundError: No module named 'hypothesis'
+```
+
+### Why it happens
+
+This usually happens when the development dependencies are not installed.
+
+### What to do about it
+
+Install the development dependencies:
+
+```bash
+pip install -e ".[dev]"
+```
+
+Then rerun the tests:
+
+```bash
+pytest
+```
 
 ## MemoryError when reading large CSV files
 
@@ -36,9 +55,10 @@ Some users may encounter a MemoryError when trying to load large CSV files.
 Large datasets may not fully fit into memory, even if the machine appears to have enough resources. In some cases, automatic column type inference can also increase memory usage.
 
 ### What to do about it
-- Use `usecols` in `ar.read_csv(...)` to load only required columns
-- Use `select_columns()` to reduce unnecessary data before processing
-- Avoid unnecessary `cast_types()` operations unless they are required
+
+* Use `usecols` in `ar.read_csv(...)` to load only required columns
+* Use `select_columns()` to reduce unnecessary data before processing
+* Avoid unnecessary `cast_types()` operations unless they are required
 
 ### Quick example
 
@@ -63,8 +83,8 @@ This usually happens when the column contains mixed values, missing entries, or 
 
 ### What to do about it
 
-- Use `cast_types()` to apply explicit Arnio datatypes when needed
-- Check columns for invalid values or unexpected symbols before validation
+* Use `cast_types()` to apply explicit Arnio datatypes when needed
+* Check columns for invalid values or unexpected symbols before validation
 
 ### Quick example
 
@@ -91,10 +111,10 @@ This usually happens because the dataset contains missing values, incorrect data
 
 ### What to do about it
 
-- Review the validation output from `ar.validate(...)` carefully
-- Inspect rows containing null or unexpected values before validation
-- Verify that column names and datatypes match the expected `Schema`
-- Ensure all required fields defined in the schema are present
+* Review the validation output from `ar.validate(...)` carefully
+* Inspect rows containing null or unexpected values before validation
+* Verify that column names and datatypes match the expected `Schema`
+* Ensure all required fields defined in the schema are present
 
 ### Quick example
 
@@ -117,10 +137,10 @@ This usually happens when the custom step is not registered correctly or require
 
 ### What to do about it
 
-- Verify that the custom step is registered using `ar.register_step(...)`
-- Check that the custom step function and imports are available before running the pipeline
-- Restart the environment after adding new custom pipeline steps
-- Ensure the correct step name is referenced inside `ar.pipeline(...)`
+* Verify that the custom step is registered using `ar.register_step(...)`
+* Check that the custom step function and imports are available before running the pipeline
+* Restart the environment after adding new custom pipeline steps
+* Ensure the correct step name is referenced inside `ar.pipeline(...)`
 
 ### Quick example
 
@@ -148,10 +168,10 @@ Performance issues usually occur when unnecessary columns are loaded, datatype i
 
 ### What to do about it
 
-- Use `usecols` in `ar.read_csv(...)` to load only required columns
-- Avoid unnecessary `cast_types()` operations unless they are needed
-- Use `select_columns()` to reduce unnecessary data before processing
-- Remove unused columns with `drop_columns()` when possible
+* Use `usecols` in `ar.read_csv(...)` to load only required columns
+* Avoid unnecessary `cast_types()` operations unless they are needed
+* Use `select_columns()` to reduce unnecessary data before processing
+* Remove unused columns with `drop_columns()` when possible
 
 ### Quick example
 
