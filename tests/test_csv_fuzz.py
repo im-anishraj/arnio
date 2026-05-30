@@ -22,14 +22,13 @@ def test_malformed_unclosed_quotes(tmp_path):
 
 
 def test_malformed_mid_field_quotes(tmp_path):
-    """Test mid-field quotes parses safely or raises defined exception."""
+    """Test mid-field quotes are preserved instead of silently dropped."""
     csv_path = tmp_path / "test.csv"
     csv_path.write_text('id,text\n1,hel"lo\n2,ok')
 
-    try:
-        ar.read_csv(csv_path)
-    except ar.CsvReadError:
-        pass  # If it rejects, that's fine too
+    frame = ar.read_csv(csv_path)
+    df = ar.to_pandas(frame)
+    assert df.loc[0, "text"] == 'hel"lo'
 
 
 def test_malformed_double_quotes_inside_field(tmp_path):
@@ -62,6 +61,18 @@ def test_malformed_quote_followed_by_non_delimiter(tmp_path):
         ar.read_csv(csv_path)
     except ar.CsvReadError:
         pass
+
+
+def test_mid_field_quote_regression_preserves_data(tmp_path):
+    """Issue #1890: mid-field quote characters must not disappear."""
+    csv_path = tmp_path / "test.csv"
+    csv_path.write_text('a,b\nab"cd,2\n')
+
+    frame = ar.read_csv(csv_path)
+    df = ar.to_pandas(frame)
+
+    assert df.loc[0, "a"] == 'ab"cd'
+    assert df.loc[0, "b"] == 2
 
 
 def test_random_delim_tab_separated(tmp_path):

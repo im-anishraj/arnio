@@ -105,8 +105,6 @@ def _normalize_scalar(value: object) -> object:
             )
     if isinstance(value, float):
         return _to_binding_safe(value)
-    if not isinstance(value, (bool, int, str)):
-        return str(value)
     return value
 
 
@@ -123,6 +121,8 @@ def _scalar_kind(value: object) -> str:
 def _series_to_python_values(series: pd.Series, col_name: object) -> list[object]:
     values: list[object] = []
     kinds: set[str] = set()
+
+    _ALLOWED_SCALAR_TYPES = (str, int, float, bool, decimal.Decimal)
 
     for raw in series.tolist():
         if _is_nested(raw):
@@ -154,6 +154,17 @@ def _series_to_python_values(series: pd.Series, col_name: object) -> list[object
                 f'Fix: split df["{col_name}"] into real/imag columns or '
                 "convert it to strings before from_pandas()"
             )
+
+        unpacked_raw = raw.item() if isinstance(raw, np.generic) else raw
+
+        if unpacked_raw is not None and not pd.isna(unpacked_raw):
+            if not isinstance(unpacked_raw, _ALLOWED_SCALAR_TYPES):
+                raise TypeError(
+                    f"Column '{col_name}' contains unsupported scalar value "
+                    f"of type '{type(raw).__name__}' at value {raw!r}. "
+                    f'Fix: convert df["{col_name}"] to strings or supported primitives '
+                    "before running from_pandas()"
+                )
 
         value = _normalize_scalar(raw)
         values.append(value)
@@ -290,6 +301,10 @@ def to_arrow(frame: ArFrame) -> pa.Table:
     arrays: list[pa.Array] = []
     names: list[str] = []
 
+    if cpp_frame.num_cols() == 0:
+        empty = pd.DataFrame(index=pd.RangeIndex(cpp_frame.num_rows()))
+        return pa.Table.from_pandas(empty)
+
     for i in range(cpp_frame.num_cols()):
         col = cpp_frame.column_by_index(i)
         name = col.name()
@@ -318,6 +333,8 @@ def to_arrow(frame: ArFrame) -> pa.Table:
 def _pandas_dtype_to_arnio(dtype: object) -> _DType | None:
     if dtype == pd.Int64Dtype():
         return _DType.INT64
+    if dtype == pd.Float64Dtype():
+        return _DType.FLOAT64
     if str(dtype) == "float64":
         return _DType.FLOAT64
     if dtype == pd.BooleanDtype() or str(dtype) == "bool":
@@ -421,7 +438,7 @@ def from_dict(data: dict) -> ArFrame:
 
     for col_name, value in data.items():
         if isinstance(value, dict):
-            raise ValueError(f"Nested objects are not supported in column {col_name}")
+            raise ValueError(f"Nested objects are not supported in column '{col_name}'")
 
         if hasattr(value, "__len__") and not isinstance(value, (str, bytes)):
             lengths[col_name] = len(value)

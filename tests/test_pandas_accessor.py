@@ -100,6 +100,29 @@ def test_pandas_accessor_auto_clean_dry_run_safe_mode():
     assert list(df["score"]) == ["10", "20", "30"]
 
 
+def test_pandas_accessor_auto_clean_strict_requires_confirmed_casts():
+    df = pd.DataFrame({"active": ["true", "false"]})
+
+    with pytest.raises(ValueError, match="requires confirmed_casts"):
+        df.arnio.auto_clean(mode="strict", allow_lossy_casts=True)
+
+
+def test_pandas_accessor_auto_clean_strict_accepts_confirmed_casts():
+    df = pd.DataFrame({"active": ["true", "false"]})
+    report = df.arnio.auto_clean(mode="strict", dry_run=True)
+    confirmed_casts = dict(report.suggestions)["cast_types"]
+
+    result = df.arnio.auto_clean(
+        mode="strict",
+        allow_lossy_casts=True,
+        confirmed_casts=confirmed_casts,
+    )
+
+    assert list(result["active"]) == [True, False]
+    assert pd.api.types.is_bool_dtype(result["active"])
+    assert list(df["active"]) == ["true", "false"]
+
+
 def test_pandas_accessor_validates_dataframe():
     df = pd.DataFrame({"email": ["alice@example.com", "bad"]})
 

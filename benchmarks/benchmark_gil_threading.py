@@ -58,18 +58,30 @@ def run_multi_threaded(path, n=4):
 
 
 if __name__ == "__main__":
-    path = ensure_or_generate(CSV_FILE, "benchmarks/benchmark_gil_temp.csv")
+    import argparse
 
+    parser = argparse.ArgumentParser(
+        description="GIL release benchmark: single-threaded vs multi-threaded CSV performance."
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Use a tiny dataset (equivalent to ARNIO_BENCHMARK_DRY_RUN=1).",
+    )
+    args = parser.parse_args()
+    if args.dry_run:
+        os.environ["ARNIO_BENCHMARK_DRY_RUN"] = "1"
+        DRY_RUN = True
+        FALLBACK_ROWS = 10
+
+    path = ensure_or_generate(CSV_FILE, "benchmarks/benchmark_gil_temp.csv")
     N = 4
     print(f"\nGIL Release Threading Benchmark ({N} concurrent operations)")
     print("=" * 52)
-
     single = run_single_threaded(path, N)
     print(f"Single-threaded ({N} sequential ops): {single:.2f}s")
-
     multi = run_multi_threaded(path, N)
     print(f"Multi-threaded  ({N} concurrent ops): {multi:.2f}s")
-
     speedup = single / multi
     print(f"\nSpeedup: {speedup:.2f}x")
     if speedup > 1.3:
