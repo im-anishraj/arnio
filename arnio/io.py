@@ -201,7 +201,7 @@ def _validate_delimiter(delimiter: str) -> str:
         raise TypeError("delimiter must be a string")
 
     if len(delimiter) != 1:
-        raise ValueError("delimiter must be a single character")
+        raise ValueError("delimiter must be a single character; delimiter must be exactly one character")
 
     if delimiter in {"\n", "\r"}:
         raise ValueError("delimiter must not be a newline character")
