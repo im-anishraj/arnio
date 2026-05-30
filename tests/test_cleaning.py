@@ -3373,6 +3373,47 @@ class TestSafeDivideColumns:
                 output_column="ratio",
             )
 
+    def test_numerator_must_be_string(self, tmp_path):
+        path = tmp_path / "data.csv"
+        path.write_text("revenue,cost\n100,50\n")
+        frame = ar.read_csv(path)
+
+        with pytest.raises(TypeError, match="numerator must be a string column name"):
+            ar.safe_divide_columns(
+                frame,
+                numerator=123,
+                denominator="cost",
+                output_column="ratio",
+            )
+
+    def test_denominator_must_be_string(self, tmp_path):
+        path = tmp_path / "data.csv"
+        path.write_text("revenue,cost\n100,50\n")
+        frame = ar.read_csv(path)
+
+        with pytest.raises(TypeError, match="denominator must be a string column name"):
+            ar.safe_divide_columns(
+                frame,
+                numerator="revenue",
+                denominator=None,
+                output_column="ratio",
+            )
+
+    def test_valid_string_columns_still_work(self, tmp_path):
+        path = tmp_path / "data.csv"
+        path.write_text("revenue,cost\n100,50\n")
+        frame = ar.read_csv(path)
+
+        result = ar.safe_divide_columns(
+            frame,
+            numerator="revenue",
+            denominator="cost",
+            output_column="ratio",
+        )
+
+        df = ar.to_pandas(result)
+        assert df["ratio"].iloc[0] == 2.0
+
     def test_output_column_already_exists(self, tmp_path):
         import warnings
 
@@ -4001,6 +4042,20 @@ def test_fill_nulls_validation_lossy_and_non_finite():
         ar.pipeline(
             float_frame, [("fill_nulls", {"value": float("inf"), "subset": ["x"]})]
         )
+
+
+def test_fill_nulls_empty_subset_raises():
+    frame = ar.from_pandas(pd.DataFrame({"a": [1, None], "b": [None, 2]}))
+    with pytest.raises(ValueError, match="subset cannot be empty"):
+        ar.fill_nulls(frame, 0, subset=[])
+
+
+def test_fill_nulls_none_subset_fills_all():
+    frame = ar.from_pandas(pd.DataFrame({"a": [1, None], "b": [None, 2]}))
+    result = ar.fill_nulls(frame, 0, subset=None)
+    df = ar.to_pandas(result)
+    assert df["a"].tolist() == [1.0, 0.0]
+    assert df["b"].tolist() == [0.0, 2.0]
 
 
 class TestSelectColumns:

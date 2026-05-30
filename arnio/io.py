@@ -195,23 +195,26 @@ def _validate_decimal_separator(decimal_separator: str) -> str:
     return decimal_separator
 
 
-_INVALID_DELIMITERS: frozenset[str] = frozenset({"\n", "\r", "\0", '"'})
-
-
 def _validate_delimiter(delimiter: str) -> str:
     """Validate CSV delimiter."""
     if not isinstance(delimiter, str):
         raise TypeError("delimiter must be a string")
 
     if len(delimiter) != 1:
-        raise ValueError("delimiter must be exactly one character")
-
-    if delimiter in _INVALID_DELIMITERS:
         raise ValueError(
-            f"delimiter {delimiter!r} is not allowed; the following characters "
-            f"cannot be used as field delimiters: newline (\\n), "
-            f'carriage-return (\\r), NUL (\\0), double-quote (").'
+            "delimiter must be a single character; delimiter must be exactly one character"
         )
+
+    if delimiter in {"\n", "\r"}:
+        raise ValueError("delimiter must not be a newline character")
+
+    if delimiter == '"':
+        raise ValueError("delimiter must not be the CSV quote character")
+
+    cp = ord(delimiter)
+    if (cp <= 0x1F and cp != 0x09) or cp == 0x7F:  # 0x09 = tab, allowed
+        raise ValueError("delimiter must not be a control character")
+
     return delimiter
 
 
@@ -919,18 +922,7 @@ def write_csv(
             f"Unsupported file format: {path}. Only .csv, .txt, and .tsv are supported."
         )
 
-    if not isinstance(delimiter, str):
-        raise TypeError("delimiter must be a string")
-    if len(delimiter) != 1:
-        raise ValueError(f"delimiter must be a single character, got {delimiter!r}")
-    if delimiter in {"\n", "\r"}:
-        raise ValueError("delimiter must not be a newline character")
-    if delimiter == '"':
-        raise ValueError("delimiter must not be the CSV quote character")
-    if (ord(delimiter) < 32 or ord(delimiter) == 127) and delimiter != "\t":
-        raise ValueError(
-            f"delimiter must not be a control character, got {delimiter!r}"
-        )
+    delimiter = _validate_delimiter(delimiter)
     if not isinstance(line_terminator, str):
         raise TypeError("line_terminator must be a string")
     if line_terminator not in {"\n", "\r\n", "\r"}:

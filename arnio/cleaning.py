@@ -416,6 +416,11 @@ def fill_nulls(
     """
     frame, _ = _validate_frame(frame)
     if subset is not None:
+        subset = _validate_column_sequence(subset, argument_name="subset")
+        if len(subset) == 0:
+            raise ValueError(
+                "fill_nulls: subset cannot be empty; pass subset=None to fill all columns"
+            )
         subset = _validate_existing_column_sequence(
             subset,
             available_columns=frame.columns,
@@ -1627,20 +1632,32 @@ def safe_divide_columns(
     frame, is_arframe = _validate_frame(frame, allow_pandas=True)
     columns = frame.columns
 
+    if not isinstance(numerator, str):
+        raise TypeError("numerator must be a string column name")
+
+    if not isinstance(denominator, str):
+        raise TypeError("denominator must be a string column name")
+
     if numerator not in columns:
         raise ValueError(f"Numerator column '{numerator}' not found in frame.")
+
     if denominator not in columns:
         raise ValueError(f"Denominator column '{denominator}' not found in frame.")
+
     if not isinstance(output_column, str) or not output_column.strip():
         raise ValueError("output_column must be a non-empty string.")
+
     if isinstance(fill_value, bool):
         raise TypeError("fill_value must be a finite float, not bool")
+
     if not isinstance(fill_value, (int, float)):
         raise TypeError(
             f"fill_value must be a finite float, got {type(fill_value).__name__!r}"
         )
+
     if not math.isfinite(fill_value):
         raise ValueError(f"fill_value must be finite, got {fill_value}")
+
     if output_column in columns:
         import warnings
 
@@ -1672,16 +1689,9 @@ def safe_divide_columns(
     numerator_series = df[numerator]
     denominator_series = df[denominator]
 
-    # Always coerce through pd.to_numeric so that numeric-looking strings
-    # ("0", "0.0", "2.5") are handled identically to their numeric equivalents.
-    # This fixes the bug where string "0" was not caught as a zero denominator.
     numerator_values = pd.to_numeric(numerator_series, errors="coerce")
     denominator_values = pd.to_numeric(denominator_series, errors="coerce")
 
-    # Distinguish null originals (None / pd.NA → use fill_value) from
-    # invalid non-null strings ("abc" → raise ValueError).
-    # A value is "bad" if pd.to_numeric produced NaN but the original was
-    # not null — i.e. it was a non-null, non-numeric string.
     bad_numerator = numerator_values.isna() & numerator_series.notna()
     bad_denominator = denominator_values.isna() & denominator_series.notna()
 
@@ -1690,17 +1700,17 @@ def safe_divide_columns(
         raise ValueError(
             f"Numerator column '{numerator}' contains non-numeric values: {bad_values}"
         )
+
     if bad_denominator.any():
         bad_values = df.loc[bad_denominator, denominator].head(3).tolist()
         raise ValueError(
             f"Denominator column '{denominator}' contains non-numeric values: {bad_values}"
         )
 
-    # Mask zero and null denominators — both numeric 0 and string "0" / "0.0"
-    # are caught here because denominator_values is already coerced to float.
     is_zero_or_null = denominator_values.isna() | (denominator_values == 0)
     safe_denom = denominator_values.mask(is_zero_or_null)
     result = numerator_values / safe_denom
+
     df = df.copy(deep=False)
     df[output_column] = result.fillna(fill_value)
 

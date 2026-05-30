@@ -305,3 +305,78 @@ def test_valid_step_metadata_recorded(small_frame):
     assert len(metadata["step_timings"]) == 1
     assert metadata["step_timings"][0]["step"] == "meta_good_step"
     assert metadata["step_timings"][0]["seconds"] >= 0
+
+
+# ---------------------------------------------------------------------------
+# Additional return-type validation tests (Fixes #1817)
+# ---------------------------------------------------------------------------
+
+
+def test_pandas_dataframe_return_works(small_frame):
+    """Returning a brand new pandas DataFrame should work."""
+
+    def good_step(df):
+        return pd.DataFrame({"x": [10, 20], "y": ["z", "w"]})
+
+    ar.register_step("pandas_return", good_step)
+    result = ar.pipeline(small_frame, [("pandas_return",)])
+    result_df = ar.to_pandas(result)
+    assert list(result_df["x"]) == [10, 20]
+
+
+def test_boolean_return_raises(small_frame):
+    """Returning a boolean should raise TypeError."""
+
+    def bad_step(df):
+        return True
+
+    ar.register_step("returns_bool", bad_step)
+    with pytest.raises(TypeError, match="'bool'"):
+        ar.pipeline(small_frame, [("returns_bool",)])
+
+
+def test_none_in_list_return_raises(small_frame):
+    """Returning a list containing None should raise TypeError."""
+
+    def bad_step(df):
+        return [None, None]
+
+    ar.register_step("returns_none_list", bad_step)
+    with pytest.raises(TypeError, match="'list'"):
+        ar.pipeline(small_frame, [("returns_none_list",)])
+
+
+def test_pandas_series_return_raises(small_frame):
+    """Returning a pandas Series should raise TypeError."""
+
+    def bad_step(df):
+        return df["x"]
+
+    ar.register_step("returns_series", bad_step)
+    with pytest.raises(TypeError, match="Series"):
+        ar.pipeline(small_frame, [("returns_series",)])
+
+
+def test_set_return_raises(small_frame):
+    """Returning a set should raise TypeError."""
+
+    def bad_step(df):
+        return {1, 2, 3}
+
+    ar.register_step("returns_set", bad_step)
+    with pytest.raises(TypeError, match="'set'"):
+        ar.pipeline(small_frame, [("returns_set",)])
+
+
+def test_custom_object_return_raises(small_frame):
+    """Returning a custom class instance should raise TypeError."""
+
+    class CustomObj:
+        pass
+
+    def bad_step(df):
+        return CustomObj()
+
+    ar.register_step("returns_custom", bad_step)
+    with pytest.raises(TypeError, match="'CustomObj'"):
+        ar.pipeline(small_frame, [("returns_custom",)])

@@ -390,3 +390,38 @@ def test_arniocleaner_rejects_invalid_params_at_transform():
     cleaner.copy = "bad"
     with pytest.raises(TypeError, match="copy must be a bool"):
         cleaner.transform(df)
+
+
+def test_arniocleaner_rejects_bare_string_steps():
+    with pytest.raises(TypeError, match="steps must be a list of step tuples"):
+        ArnioCleaner(steps="strip_whitespace")
+
+
+def test_arniocleaner_rejects_dict_steps():
+    with pytest.raises(TypeError, match="steps must be a list of step tuples"):
+        ArnioCleaner(steps={"strip_whitespace": {}})
+
+
+def test_arniocleaner_rejects_non_tuple_items_in_steps():
+    with pytest.raises(TypeError, match="Each step must be a tuple"):
+        ArnioCleaner(steps=["strip_whitespace"])
+
+
+def test_arniocleaner_valid_steps_still_work():
+    df = pd.DataFrame({"a": [" x ", " y "]})
+    cleaner = ArnioCleaner(steps=[("strip_whitespace",)])
+    result = cleaner.fit_transform(df)
+    assert result["a"].tolist() == ["x", "y"]
+
+
+def test_arniocleaner_rejects_scalar_steps():
+    with pytest.raises(TypeError, match="steps must be a list of step tuples"):
+        ArnioCleaner(steps=1)
+
+
+def test_arniocleaner_validates_steps_set_via_set_params():
+    cleaner = ArnioCleaner(steps=[("strip_whitespace",)])
+    cleaner.set_params(steps="strip_whitespace")
+    df = pd.DataFrame({"a": [" x "]})
+    with pytest.raises(TypeError, match="steps must be a list of step tuples"):
+        cleaner.fit(df)

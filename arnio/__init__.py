@@ -75,6 +75,7 @@ from .pipeline import (
 )
 from .quality import (
     CleanExplanation,
+    CleaningSuggestion,
     CleanStepRecord,
     ColumnProfile,
     DataQualityReport,
@@ -159,6 +160,7 @@ __all__ = [
     "slugify_column_names",
     "trim_column_names",
     "standardize_missing_tokens",
+    "CleaningSuggestion",
     # Conversion
     "to_pandas",
     "to_arrow",

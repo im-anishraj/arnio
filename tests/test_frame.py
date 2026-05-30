@@ -184,14 +184,18 @@ def test_nested_dict_values_ArFrame():
 def test_nested_dictvalues():
     data = {"info": {"city": "NY", "age": 25}}
 
-    with pytest.raises(ValueError):
+    with pytest.raises(
+        ValueError, match="Nested objects are not supported in column 'info'"
+    ):
         ar.from_dict(data)
 
 
-def test_nested_dictvalues_ArrFrame():
+def test_nested_dictvalues_ArFrame():
     data = {"info": {"city": "NY", "age": 25}}
 
-    with pytest.raises(ValueError):
+    with pytest.raises(
+        ValueError, match="Nested objects are not supported in column 'info'"
+    ):
         ar.ArFrame.from_dict(data)
 
 
@@ -1354,6 +1358,18 @@ def test_repr_html_empty_frame_no_crash(tmp_path):
     out = frame._repr_html_()
     assert isinstance(out, str)
     assert len(out) > 0
+
+
+def test_repr_html_zero_columns_preserves_row_count():
+    frame = ar.from_pandas(pd.DataFrame({"a": [None, None]}))
+    zero = ar.drop_empty_columns(frame)
+
+    out = zero._repr_html_()
+
+    assert zero.shape == (2, 0)
+    assert "ArFrame [2 rows × 0 cols]" in out
+    assert "(no columns to display)" in out
+    assert "(empty)" not in out
 
 
 def test_repr_html_with_nulls_no_crash(csv_with_nulls):
