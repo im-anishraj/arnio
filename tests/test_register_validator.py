@@ -59,8 +59,8 @@ class TestRegisterValidator:
         with pytest.raises(ValueError, match="non-empty string"):
             register_validator(123, lambda x: True)
 
-    def test_overwrites_existing_validator(self):
-        """register_validator allows overwriting an existing validator."""
+    def test_duplicate_validator_requires_explicit_overwrite(self):
+        """register_validator blocks accidental duplicate validator names."""
 
         def validator_a(value):
             return value > 0
@@ -71,8 +71,44 @@ class TestRegisterValidator:
         register_validator("my_validator", validator_a)
         assert schema._CUSTOM_VALIDATORS["my_validator"] is validator_a
 
-        register_validator("my_validator", validator_b)
+        with pytest.raises(ValueError, match="already registered"):
+            register_validator("my_validator", validator_b)
+
+        assert schema._CUSTOM_VALIDATORS["my_validator"] is validator_a
+
+    def test_overwrite_true_replaces_existing_validator(self):
+        """register_validator allows deliberate replacement with overwrite=True."""
+
+        def validator_a(value):
+            return value > 0
+
+        def validator_b(value):
+            return value < 0
+
+        register_validator("my_validator", validator_a)
+        register_validator("my_validator", validator_b, overwrite=True)
+
         assert schema._CUSTOM_VALIDATORS["my_validator"] is validator_b
+
+    def test_duplicate_registration_does_not_mutate_existing_custom_schema(self):
+        """A blocked duplicate registration leaves existing Custom schemas stable."""
+
+        def positive(value):
+            return value > 0
+
+        def negative(value):
+            return value < 0
+
+        register_validator("sign_check", positive)
+        custom_schema = {"score": Custom("sign_check")}
+        frame = ar.from_pandas(pd.DataFrame({"score": [1]}))
+
+        assert ar.validate(frame, custom_schema).passed
+
+        with pytest.raises(ValueError, match="already registered"):
+            register_validator("sign_check", negative)
+
+        assert ar.validate(frame, custom_schema).passed
 
 
 class TestCustomValidator:
@@ -315,24 +351,26 @@ class TestCustomValidatorNameValidation:
         schema._CUSTOM_VALIDATORS.clear()
         schema._CUSTOM_VALIDATORS.update(self._original_validators)
 
-    def test_raises_value_error_when_name_is_empty_string(self):
+    def test_raises_type_error_when_name_is_empty_string(self):
         """Custom raises ValueError when name is an empty string."""
-        with pytest.raises(ValueError, match="non-empty string"):
+        with pytest.raises(
+            ValueError, match="The validator name cannot be an empty string."
+        ):
             Custom("")
 
-    def test_raises_value_error_when_name_is_integer(self):
-        """Custom raises ValueError when name is an integer."""
-        with pytest.raises(ValueError, match="non-empty string"):
+    def test_raises_type_error_when_name_is_integer(self):
+        """Custom raises TypeError when name is an integer."""
+        with pytest.raises(TypeError, match="The validator name must be a string."):
             Custom(123)
 
-    def test_raises_value_error_when_name_is_none(self):
-        """Custom raises ValueError when name is None."""
-        with pytest.raises(ValueError, match="non-empty string"):
+    def test_raises_type_error_when_name_is_none(self):
+        """Custom raises TypeError when name is None."""
+        with pytest.raises(TypeError, match="The validator name must be a string."):
             Custom(None)
 
-    def test_raises_value_error_when_name_is_list(self):
-        """Custom raises ValueError when name is a list."""
-        with pytest.raises(ValueError, match="non-empty string"):
+    def test_raises_type_error_when_name_is_list(self):
+        """Custom raises TypeError when name is a list."""
+        with pytest.raises(TypeError, match="The validator name must be a string."):
             Custom(["my_validator"])
 
     def test_valid_name_still_raises_when_unregistered(self):

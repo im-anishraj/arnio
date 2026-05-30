@@ -964,7 +964,7 @@ Most operations below run natively in C++. Currently, `filter_rows`, `replace_va
 | `standardize_missing_tokens` | Replace common missing-value strings with NaN | `ar.standardize_missing_tokens(frame)` |
 | `normalize_case` | Force lower/upper/title case | `ar.normalize_case(frame, case_type="title")` |
 | `rename_columns` | Rename columns via mapping | `ar.rename_columns(frame, {"old": "new"})` |
-| `cast_types` | Cast column types | `ar.cast_types(frame, {"age": "int64"})` |
+| `cast_types` | Cast column types with `errors="raise"`, `"coerce"`, or `"ignore"` | `ar.cast_types(frame, {"age": "int64"}, errors="raise")` |
 | `round_numeric_columns` | Round numeric columns (non-numeric columns in subset ignored safely) | `ar.round_numeric_columns(frame, decimals=2)` |
 | `replace_values` | Replace values using a mapping (column or whole-frame). Handles `None`/`NaN`. | `ar.replace_values(frame, {"active": "A", "inactive": "I"}, column="status")` |
 | `clean` | Convenience shorthand | `ar.clean(frame, drop_nulls=True)` |
@@ -1368,10 +1368,24 @@ clean = ar.pipeline(frame, suggestions)
 For low-risk automatic cleanup in one call:
 
 ```python
-clean, report = ar.auto_clean(frame, mode="strict", return_report=True)
+clean, report = ar.auto_clean(frame, return_report=True)
 ```
 
-This is the layer pandas does not try to own: profiling, data contracts, row-level validation issues, and safe cleaning suggestions for messy incoming datasets.
+For strict automatic cleanup, inspect type casts before applying them:
+
+```python
+report = ar.auto_clean(frame, mode="strict", dry_run=True)
+cast_mapping = dict(report.suggestions).get("cast_types")
+
+clean = ar.auto_clean(
+    frame,
+    mode="strict",
+    allow_lossy_casts=True,
+    confirmed_casts=cast_mapping,
+)
+```
+
+This is the layer pandas does not try to own: profiling, data contracts, row-level validation issues, and preview-gated cleaning suggestions for messy incoming datasets.
 
 <br>
 
@@ -1424,7 +1438,7 @@ Expected cleaned output with `mode="strict"`:
 | 1003 | Pranay | New York |
 | 1004 | Dhruv | Tokyo |
 
-`mode="safe"` only trims whitespace. Use `mode="strict"` when you also want deterministic built-in cleanup such as exact duplicate removal.
+`mode="safe"` only trims whitespace. Use `mode="strict"` when you also want deterministic built-in cleanup such as exact duplicate removal. If strict mode proposes type casts, run `dry_run=True` first and pass the exact proposed mapping as `confirmed_casts` with `allow_lossy_casts=True`.
 
 See [examples/auto_clean_tutorial.py](examples/auto_clean_tutorial.py) for a runnable version of this walkthrough, and [examples/schema_validation.py](examples/schema_validation.py) for a focused validation tutorial.
 

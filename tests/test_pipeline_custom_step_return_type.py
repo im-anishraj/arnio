@@ -245,6 +245,25 @@ def test_valid_step_with_kwargs_passes(small_frame):
     assert list(result_df["tag"]) == ["hello", "hello"]
 
 
+def test_custom_step_receives_writable_numeric_array():
+    frame = ar.from_pandas(pd.DataFrame({"x": [1.0, 2.0]}))
+    writeable_flags = []
+
+    def mutate_numpy_in_place(df):
+        values = df["x"].to_numpy()
+        writeable_flags.append(values.flags.writeable)
+        values[0] = 99.0
+        return df
+
+    ar.register_step("mutate_numpy_in_place", mutate_numpy_in_place)
+
+    result = ar.pipeline(frame, [("mutate_numpy_in_place",)])
+    result_df = ar.to_pandas(result)
+
+    assert writeable_flags == [True]
+    assert list(result_df["x"]) == [99.0, 2.0]
+
+
 # ---------------------------------------------------------------------------
 # return_metadata=True compatibility
 # ---------------------------------------------------------------------------

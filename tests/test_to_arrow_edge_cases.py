@@ -17,6 +17,19 @@ class TestToArrowEdgeCases:
         frame = ar.from_pandas(pd.DataFrame())
         table = to_arrow(frame)
         assert table.num_columns == 0
+        assert table.num_rows == 0
+
+    def test_zero_column_frame_preserves_row_count(self):
+        """to_arrow preserves rows when all columns are dropped."""
+        frame = ar.from_pandas(pd.DataFrame({"a": [None, None], "b": ["", ""]}))
+        zero_column_frame = ar.drop_empty_columns(frame)
+
+        assert zero_column_frame.shape == (2, 0)
+
+        table = to_arrow(zero_column_frame)
+
+        assert table.num_columns == 0
+        assert table.num_rows == 2
 
     def test_all_null_column(self):
         """to_arrow handles column with all null values."""

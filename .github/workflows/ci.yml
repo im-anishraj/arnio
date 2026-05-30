@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [ "main" ]
 
+permissions:
+  contents: read
+
 jobs:
   lint:
     name: Lint (Black, Ruff, clang-format)
@@ -106,30 +109,12 @@ jobs:
           fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}
 
-  sklearn_integration:
-    name: scikit-learn Integration Tests
-    needs: build_and_test
+  notebook_smoke:
+    name: Notebook Smoke Test
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-          cache: 'pip'
-
-      - name: Install dev + sklearn extras
-        run: pip install -e ".[dev,sklearn]"
-
-      - name: Run sklearn integration tests
-        run: pytest tests/test_sklearn.py -v --cov=arnio --cov-report=xml
-
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v6
-        with:
-          files: ./coverage.xml
-          fail_ci_if_error: false
-          token: ${{ secrets.CODECOV_TOKEN }}
+      - name: Set up

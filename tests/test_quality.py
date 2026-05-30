@@ -592,6 +592,41 @@ def test_auto_clean_strict_casts_require_explicit_opt_in():
         ar.auto_clean(frame, mode="strict")
 
 
+def test_auto_clean_strict_casts_require_preview_confirmation():
+    frame = ar.from_pandas(pd.DataFrame({"active": ["true", "false"]}))
+
+    with pytest.raises(ValueError, match="requires confirmed_casts"):
+        ar.auto_clean(frame, mode="strict", allow_lossy_casts=True)
+
+
+def test_auto_clean_strict_rejects_mismatched_cast_confirmation():
+    frame = ar.from_pandas(pd.DataFrame({"active": ["true", "false"]}))
+
+    with pytest.raises(ValueError, match="must match the proposed cast mapping"):
+        ar.auto_clean(
+            frame,
+            mode="strict",
+            allow_lossy_casts=True,
+            confirmed_casts={"active": "int64"},
+        )
+
+
+@pytest.mark.parametrize(
+    "confirmed_casts",
+    [
+        [("active", "bool")],
+        {1: "bool"},
+        {"active": 1},
+    ],
+    ids=["list", "non-string-key", "non-string-value"],
+)
+def test_auto_clean_rejects_invalid_confirmed_casts(confirmed_casts):
+    frame = ar.from_pandas(pd.DataFrame({"active": ["true", "false"]}))
+
+    with pytest.raises(TypeError, match="confirmed_casts"):
+        ar.auto_clean(frame, mode="strict", confirmed_casts=confirmed_casts)
+
+
 def test_exclude_columns_prevents_leakage_in_json():
     import json
 
@@ -612,6 +647,23 @@ def test_auto_clean_dry_run_returns_report_without_mutating():
     assert isinstance(report, ar.DataQualityReport)
     assert ("cast_types", {"active": "bool"}) in report.suggestions
     assert frame.dtypes["active"] == "string"
+
+
+def test_auto_clean_strict_casts_after_explicit_preview_confirmation():
+    frame = ar.from_pandas(pd.DataFrame({"active": ["true", "false"]}))
+    report = ar.auto_clean(frame, mode="strict", dry_run=True)
+    confirmed_casts = dict(report.suggestions)["cast_types"]
+
+    clean = ar.auto_clean(
+        frame,
+        mode="strict",
+        allow_lossy_casts=True,
+        confirmed_casts=confirmed_casts,
+    )
+    result = ar.to_pandas(clean)
+
+    assert list(result["active"]) == [True, False]
+    assert pd.api.types.is_bool_dtype(result["active"])
 
 
 def test_auto_clean_dry_run_with_return_report_raises():
@@ -678,8 +730,14 @@ def test_auto_clean_strict_casts_ambiguous_numeric_strings():
     with pytest.raises(ValueError, match="would apply type casts"):
         ar.auto_clean(frame, mode="strict")
 
-    # Apply strict mode with allow_lossy_casts
-    clean = ar.auto_clean(frame, mode="strict", allow_lossy_casts=True)
+    # Apply strict mode after explicitly confirming the previewed cast mapping.
+    report = ar.auto_clean(frame, mode="strict", dry_run=True)
+    clean = ar.auto_clean(
+        frame,
+        mode="strict",
+        allow_lossy_casts=True,
+        confirmed_casts=dict(report.suggestions)["cast_types"],
+    )
     result = ar.to_pandas(clean)
 
     # "code" is cast to int64, losing leading zeros
@@ -1066,7 +1124,13 @@ def test_identifier_numeric_cast_prevention():
     assert "customer_id" not in suggestions
     assert "zip_code" not in suggestions
 
-    cleaned = ar.auto_clean(frame, mode="strict", allow_lossy_casts=True)
+    report = ar.auto_clean(frame, mode="strict", dry_run=True)
+    cleaned = ar.auto_clean(
+        frame,
+        mode="strict",
+        allow_lossy_casts=True,
+        confirmed_casts=dict(report.suggestions)["cast_types"],
+    )
     result = ar.to_pandas(cleaned)
     assert list(result["id"]) == ["001", "002", "003"]
     assert list(result["customer_id"]) == ["00123", "00456", "00789"]
@@ -1308,6 +1372,47 @@ def test_decimal_looking_strings_suggest_float64_not_int64():
             suggestions.update(kwargs)
 
     assert suggestions["price"] == "float64"
+
+
+def test_finite_numeric_strings_suggest_float64():
+    frame = ar.from_pandas(pd.DataFrame({"x": ["1.5", "2.0", "3.14"]}))
+
+    report = ar.profile(frame)
+
+    assert report.columns["x"].suggested_dtype == "float64"
+
+
+@pytest.mark.parametrize(
+    "values",
+    [
+        ["inf", "2.0"],
+        ["-inf", "2.0"],
+        ["Infinity", "2.0"],
+    ],
+)
+def test_non_finite_numeric_strings_do_not_suggest_float64(values):
+    frame = ar.from_pandas(pd.DataFrame({"x": values}))
+
+    report = ar.profile(frame)
+
+    assert report.columns["x"].suggested_dtype is None
+
+
+def test_auto_clean_strict_float64_suggestions_are_executable():
+    frame = ar.from_pandas(pd.DataFrame({"x": ["1.5", "2.0"]}))
+    report = ar.auto_clean(frame, mode="strict", dry_run=True)
+
+    clean = ar.auto_clean(
+        frame,
+        mode="strict",
+        allow_lossy_casts=True,
+        confirmed_casts=dict(report.suggestions)["cast_types"],
+    )
+
+    result = ar.to_pandas(clean)
+
+    assert pd.api.types.is_float_dtype(result["x"])
+    assert list(result["x"]) == [1.5, 2.0]
 
 
 def test_profile_string_metrics():
@@ -3908,3 +4013,107 @@ class TestCleanExplanationValidation:
         exp = self._valid_explanation()
         text = str(exp)
         assert "(none)" in text
+
+
+class TestQualityGateResultConstructorValidation:
+    """Tests for QualityGateIssue and QualityGateResult constructor field validation."""
+
+    def test_quality_gate_issue_valid(self):
+        issue = ar.QualityGateIssue(
+            metric="null_ratio",
+            message="Column has too many nulls",
+            column="age",
+            baseline=0.05,
+            current=0.10,
+            threshold=0.08,
+            delta=0.05,
+        )
+        assert issue.metric == "null_ratio"
+        assert issue.message == "Column has too many nulls"
+        assert issue.column == "age"
+        assert issue.delta == 0.05
+        assert issue.to_dict()["metric"] == "null_ratio"
+
+    def test_quality_gate_issue_invalid_metric(self):
+        with pytest.raises(TypeError, match="metric must be a str"):
+            ar.QualityGateIssue(metric=123, message="msg")
+        with pytest.raises(ValueError, match="metric must be a non-empty string"):
+            ar.QualityGateIssue(metric="   ", message="msg")
+
+    def test_quality_gate_issue_invalid_message(self):
+        with pytest.raises(TypeError, match="message must be a str"):
+            ar.QualityGateIssue(metric="null_ratio", message=42)
+        with pytest.raises(ValueError, match="message must be a non-empty string"):
+            ar.QualityGateIssue(metric="null_ratio", message="")
+
+    def test_quality_gate_issue_invalid_column(self):
+        with pytest.raises(TypeError, match="column must be a str or None"):
+            ar.QualityGateIssue(metric="null_ratio", message="msg", column=123)
+
+    def test_quality_gate_issue_invalid_delta(self):
+        with pytest.raises(TypeError, match="delta must be a float, integer, or None"):
+            ar.QualityGateIssue(metric="null_ratio", message="msg", delta="0.5")
+        with pytest.raises(TypeError, match="delta must be a float, integer, or None"):
+            ar.QualityGateIssue(metric="null_ratio", message="msg", delta=True)
+
+    def test_quality_gate_result_valid(self):
+        df = pd.DataFrame({"x": [1, 2, 3]})
+        report = ar.profile(ar.from_pandas(df))
+
+        issue = ar.QualityGateIssue(metric="null_ratio", message="msg")
+        res = ar.QualityGateResult(
+            baseline_profile=report,
+            current_profile=report,
+            issues=[issue],
+            thresholds={"null_ratio": 0.05},
+        )
+        assert res.passed is False
+        assert len(res.issues) == 1
+        assert res.thresholds == {"null_ratio": 0.05}
+
+    def test_quality_gate_result_invalid_profiles(self):
+        issue = ar.QualityGateIssue(metric="null_ratio", message="msg")
+        with pytest.raises(
+            TypeError, match="baseline_profile must be a DataQualityReport instance"
+        ):
+            ar.QualityGateResult(
+                baseline_profile="not a report",
+                current_profile="not a report",
+                issues=[issue],
+                thresholds={},
+            )
+
+    def test_quality_gate_result_invalid_issues(self):
+        df = pd.DataFrame({"x": [1, 2, 3]})
+        report = ar.profile(ar.from_pandas(df))
+
+        with pytest.raises(TypeError, match="issues must be a list"):
+            ar.QualityGateResult(
+                baseline_profile=report,
+                current_profile=report,
+                issues="not a list",
+                thresholds={},
+            )
+
+        with pytest.raises(
+            TypeError, match="issues\\[0\\] must be a QualityGateIssue instance"
+        ):
+            ar.QualityGateResult(
+                baseline_profile=report,
+                current_profile=report,
+                issues=["not an issue"],
+                thresholds={},
+            )
+
+    def test_quality_gate_result_invalid_thresholds(self):
+        df = pd.DataFrame({"x": [1, 2, 3]})
+        report = ar.profile(ar.from_pandas(df))
+        issue = ar.QualityGateIssue(metric="null_ratio", message="msg")
+
+        with pytest.raises(TypeError, match="thresholds must be a dict"):
+            ar.QualityGateResult(
+                baseline_profile=report,
+                current_profile=report,
+                issues=[issue],
+                thresholds="not a dict",
+            )

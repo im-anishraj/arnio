@@ -17,6 +17,24 @@ except ImportError:
 from arnio.convert import from_pandas, to_pandas
 from arnio.pipeline import pipeline as run_pipeline
 
+
+def _validate_steps(steps):
+    if isinstance(steps, str):
+        raise TypeError(
+            "ArnioCleaner steps must be a list of step tuples, not a bare string. "
+            f"Did you mean steps=[('{steps}',)]?"
+        )
+    if not isinstance(steps, (list, tuple)):
+        raise TypeError(
+            f"ArnioCleaner steps must be a list of step tuples, got {type(steps).__name__!r}"
+        )
+    for item in steps:
+        if not isinstance(item, tuple):
+            raise TypeError(
+                f"Each step must be a tuple, got {type(item).__name__!r}: {item!r}"
+            )
+
+
 _ROW_COUNT_CHANGING_STEPS = frozenset(
     {"drop_nulls", "drop_duplicates", "keep_rows_with_nulls", "filter_rows"}
 )
@@ -46,6 +64,7 @@ class ArnioCleaner(BaseEstimator, TransformerMixin):
         self.copy = copy
         self.allow_row_count_change = allow_row_count_change
         self.allow_schema_changes = allow_schema_changes
+        _validate_steps(self.steps)
 
     def _validate_params(self):
         if not isinstance(self.copy, bool):
@@ -54,6 +73,19 @@ class ArnioCleaner(BaseEstimator, TransformerMixin):
             raise TypeError("allow_row_count_change must be a bool")
         if not isinstance(self.allow_schema_changes, bool):
             raise TypeError("allow_schema_changes must be a bool")
+
+    def set_params(self, **params):
+        snapshot = self.get_params(deep=False)
+
+        try:
+            super().set_params(**params)
+            self._validate_params()
+        except Exception:
+            for key, value in snapshot.items():
+                setattr(self, key, value)
+            raise
+
+        return self
 
     def _validate_steps_contract(self):
         for step in self.steps:
@@ -70,6 +102,7 @@ class ArnioCleaner(BaseEstimator, TransformerMixin):
 
     def fit(self, X, y=None):
         self._validate_params()
+        _validate_steps(self.steps)
 
         if not isinstance(X, pd.DataFrame):
             raise TypeError(f"ArnioCleaner requires a pandas DataFrame, got {type(X)}")

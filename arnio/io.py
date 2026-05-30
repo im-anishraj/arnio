@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import codecs
 import io
+import json
 import os
 import shutil
 import tempfile
@@ -714,8 +715,6 @@ def read_csv_chunked(
     null_values : list[str], optional
         Strings treated as null values.
 
-
-
     mode : {"strict", "permissive"}, default "strict"
         Controls malformed row handling.
         Both modes reject extra fields; permissive mode only allows missing
@@ -1114,6 +1113,7 @@ def read_jsonl(
     path: str | os.PathLike[str],
     *,
     encoding: str = "utf-8",
+    encoding_errors: str = "strict",
     nrows: int | None = None,
 ) -> ArFrame:
     """Read a JSON Lines file into an ArFrame.
@@ -1166,6 +1166,8 @@ def read_jsonl(
 
     path = os.fspath(path)
 
+    encoding_errors = _validate_encoding_errors(encoding_errors)
+
     if nrows is not None:
         if isinstance(nrows, bool) or not isinstance(nrows, int):
             raise TypeError("nrows must be an integer")
@@ -1199,7 +1201,7 @@ def read_jsonl(
         return result
 
     try:
-        with open(path, encoding=encoding) as fh:
+        with open(path, encoding=encoding, errors=encoding_errors) as fh:
             for lineno, raw_line in enumerate(fh, start=1):
                 line = raw_line.rstrip("\r\n")
                 if not line.strip():
@@ -1294,10 +1296,11 @@ def sniff_delimiter(
     except FileNotFoundError as e:
         raise FileNotFoundError(f"File not found: {path!r}") from e
 
-    try:
-        _reject_utf8_nul_bytes(path)
-    except FileNotFoundError:
-        pass
+    if _is_utf8_encoding(encoding):
+        try:
+            _reject_utf8_nul_bytes(path)
+        except FileNotFoundError:
+            pass
 
     # 3. Read Sample
     try:
@@ -1397,6 +1400,7 @@ def write_parquet(
     *,
     compression: str = "snappy",
     row_group_size: int | None = None,
+    preserve_attrs: bool = True,
 ) -> None:
     """Write an ArFrame to a Parquet file via pyarrow.
 
@@ -1421,11 +1425,19 @@ def write_parquet(
         Number of rows per Parquet row group.  If ``None``, pyarrow
         chooses the default (typically 128 MB per group).  Must be a
         positive integer when provided.
+    preserve_attrs : bool, default ``True``
+        When ``True``, ``DataFrame.attrs`` are written into Parquet
+        metadata; all attr values must be JSON-serializable or a
+        ``TypeError`` is raised with a clear message.  Set to ``False``
+        to silently drop attrs on export.
 
     Raises
     ------
     ImportError
         If ``pyarrow`` is not installed.
+    TypeError
+        If ``preserve_attrs`` is ``True`` and ``DataFrame.attrs``
+        contains non-JSON-serializable values.
     ValueError
         If the file extension is not ``.parquet`` or ``.pq``, if
         ``compression`` is not a recognised codec, or if
@@ -1436,6 +1448,7 @@ def write_parquet(
     >>> ar.write_parquet(frame, "output.parquet")
     >>> ar.write_parquet(frame, "output.pq", compression="zstd")
     >>> ar.write_parquet(frame, "output.parquet", row_group_size=50_000)
+    >>> ar.write_parquet(frame, "output.parquet", preserve_attrs=False)
     """
     if not isinstance(frame, ArFrame):
         raise TypeError("frame must be an ArFrame")
@@ -1485,6 +1498,20 @@ def write_parquet(
         )
 
     df = to_pandas(frame)
+
+    if df.attrs:
+        if preserve_attrs:
+            try:
+                json.dumps(df.attrs)
+            except (TypeError, ValueError) as exc:
+                raise TypeError(
+                    "write_parquet() requires that DataFrame.attrs contain only "
+                    "JSON-serializable values (str, int, float, bool, list, dict, None). "
+                    f"Serialization failed: {exc}. "
+                    "To export without metadata, pass preserve_attrs=False."
+                ) from exc
+        else:
+            df.attrs = {}
 
     kwargs: dict = {
         "engine": "pyarrow",

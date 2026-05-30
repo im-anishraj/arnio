@@ -863,6 +863,21 @@ class TestPipeline:
         assert row_counts[0]["after"] == 3
         assert row_counts[0]["dry_run"] is True
 
+    def test_pipeline_filter_rows_non_string_column_raises_type_error(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+        with pytest.raises(TypeError, match="column must be a non-empty string"):
+            ar.pipeline(
+                frame, [("filter_rows", {"column": 123, "op": "==", "value": 1})]
+            )
+
+    def test_pipeline_filter_rows_non_string_op_raises_type_error(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+
+        with pytest.raises(TypeError, match="op must be a string"):
+            ar.pipeline(
+                frame, [("filter_rows", {"column": "x", "op": ["=="], "value": 1})]
+            )
+
 
 class TestPipelineDryRunIntermediateFrame:
     """Regression tests for dry_run validating against intermediate frame."""

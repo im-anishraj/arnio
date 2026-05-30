@@ -18,6 +18,9 @@ on:
     - cron: "0 5 * * 1"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   macos-arm64-wheel-smoke:
     name: Build arm64 wheel and smoke test (macOS)

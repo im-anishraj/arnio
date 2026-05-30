@@ -1154,6 +1154,25 @@ class QualityGateIssue:
     threshold: Any = None
     delta: float | None = None
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.metric, str):
+            raise TypeError(f"metric must be a str, got {type(self.metric).__name__}")
+        if not self.metric.strip():
+            raise ValueError("metric must be a non-empty string")
+        if not isinstance(self.message, str):
+            raise TypeError(f"message must be a str, got {type(self.message).__name__}")
+        if not self.message.strip():
+            raise ValueError("message must be a non-empty string")
+        if self.column is not None and not isinstance(self.column, str):
+            raise TypeError(
+                f"column must be a str or None, got {type(self.column).__name__}"
+            )
+        if self.delta is not None:
+            if isinstance(self.delta, bool) or not isinstance(self.delta, (int, float)):
+                raise TypeError(
+                    f"delta must be a float, integer, or None, got {type(self.delta).__name__}"
+                )
+
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-friendly dictionary representation."""
         return {
@@ -1175,6 +1194,29 @@ class QualityGateResult:
     current_profile: DataQualityReport
     issues: list[QualityGateIssue]
     thresholds: dict[str, Any]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.baseline_profile, DataQualityReport):
+            raise TypeError(
+                f"baseline_profile must be a DataQualityReport instance, got {type(self.baseline_profile).__name__}"
+            )
+        if not isinstance(self.current_profile, DataQualityReport):
+            raise TypeError(
+                f"current_profile must be a DataQualityReport instance, got {type(self.current_profile).__name__}"
+            )
+        if not isinstance(self.issues, list):
+            raise TypeError(
+                f"issues must be a list of QualityGateIssue instances, got {type(self.issues).__name__}"
+            )
+        for i, issue in enumerate(self.issues):
+            if not isinstance(issue, QualityGateIssue):
+                raise TypeError(
+                    f"issues[{i}] must be a QualityGateIssue instance, got {type(issue).__name__}"
+                )
+        if not isinstance(self.thresholds, dict):
+            raise TypeError(
+                f"thresholds must be a dict, got {type(self.thresholds).__name__}"
+            )
 
     @property
     def passed(self) -> bool:
@@ -2177,6 +2219,31 @@ class CleanExplanation:
         return "\n".join(lines)
 
 
+def _validate_confirmed_casts(
+    confirmed_casts: dict[str, str] | None,
+) -> dict[str, str] | None:
+    """Validate and copy an explicit auto_clean cast confirmation mapping."""
+    if confirmed_casts is None:
+        return None
+    if not isinstance(confirmed_casts, dict):
+        raise TypeError("confirmed_casts must be a dict[str, str] or None")
+
+    normalized: dict[str, str] = {}
+    for column, dtype in confirmed_casts.items():
+        if not isinstance(column, str):
+            raise TypeError(
+                "confirmed_casts keys must be str column names, "
+                f"got {type(column).__name__}"
+            )
+        if not isinstance(dtype, str):
+            raise TypeError(
+                "confirmed_casts values must be str dtype names, "
+                f"got {type(dtype).__name__}"
+            )
+        normalized[column] = dtype
+    return normalized
+
+
 def auto_clean(
     frame: ArFrame,
     *,
@@ -2184,6 +2251,7 @@ def auto_clean(
     return_report: bool = False,
     dry_run: bool = False,
     allow_lossy_casts: bool = False,
+    confirmed_casts: dict[str, str] | None = None,
     explain: bool = False,
 ) -> (
     ArFrame
@@ -2206,7 +2274,13 @@ def auto_clean(
     dry_run : bool, default False
         Return the proposed pre-cleaning report without mutating the frame.
     allow_lossy_casts : bool, default False
-        Required before strict mode applies suggested type casts.
+        Required before strict mode applies suggested type casts. Type casts
+        also require *confirmed_casts* so callers explicitly confirm the exact
+        mapping they previewed.
+    confirmed_casts : dict[str, str] or None, default None
+        Exact cast mapping to apply in strict mode. Use ``dry_run=True`` or
+        ``suggest_cleaning()`` to inspect the proposed ``cast_types`` mapping,
+        then pass the same mapping here with ``allow_lossy_casts=True``.
     explain : bool, default False
         When ``True``, return a :class:`CleanExplanation` object that records
         which steps ran, before/after row counts for each step, and why each
@@ -2230,7 +2304,8 @@ def auto_clean(
     --------
     >>> clean = ar.auto_clean(frame)
     >>> report = ar.auto_clean(frame, mode="strict", dry_run=True)
-    >>> clean = ar.auto_clean(frame, mode="strict", allow_lossy_casts=True)
+    >>> casts = dict(report.suggestions)["cast_types"]
+    >>> clean = ar.auto_clean(frame, mode="strict", allow_lossy_casts=True, confirmed_casts=casts)
     >>> clean, report = ar.auto_clean(frame, mode="strict", return_report=True)
     >>> clean, explanation = ar.auto_clean(frame, explain=True)
     >>> print(explanation)
@@ -2249,6 +2324,7 @@ def auto_clean(
         raise TypeError("dry_run must be a bool")
     if not isinstance(allow_lossy_casts, bool):
         raise TypeError("allow_lossy_casts must be a bool")
+    confirmed_casts_map = _validate_confirmed_casts(confirmed_casts)
     if not isinstance(explain, bool):
         raise TypeError("explain must be a bool")
 
@@ -2286,7 +2362,20 @@ def auto_clean(
                 raise ValueError(
                     "auto_clean(mode='strict') would apply type casts. "
                     f"Proposed mapping: {kwargs}. Run with dry_run=True to inspect "
-                    "the report, or pass allow_lossy_casts=True to apply them."
+                    "the report, then pass allow_lossy_casts=True and "
+                    "confirmed_casts=<proposed mapping> to apply them."
+                )
+            if confirmed_casts_map is None:
+                raise ValueError(
+                    "auto_clean(mode='strict') requires confirmed_casts before "
+                    "applying type casts. Run with dry_run=True to inspect the "
+                    f"proposed mapping, then pass confirmed_casts={kwargs!r}."
+                )
+            if confirmed_casts_map != kwargs:
+                raise ValueError(
+                    "confirmed_casts must match the proposed cast mapping exactly. "
+                    f"Proposed mapping: {kwargs}. Confirmed mapping: "
+                    f"{confirmed_casts_map}."
                 )
             result = cast_types(result, kwargs)
         elif step == "drop_duplicates":
@@ -2555,10 +2644,13 @@ def _suggest_column_dtype(series: pd.Series, dtype: str) -> str | None:
         return "bool"
 
     numeric = pd.to_numeric(values, errors="coerce")
+
     if numeric.notna().all():
         if values.str.fullmatch(r"[+-]?\d+").all():
             return "int64"
-        return "float64"
+
+        if np.isfinite(numeric).all():
+            return "float64"
     return None
 
 

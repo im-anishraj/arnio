@@ -202,6 +202,21 @@ def benchmark_auto_clean(
 
     frame = ar.read_csv(csv_path)
 
+    if mode == "strict":
+        report = ar.auto_clean(
+            frame,
+            mode="strict",
+            dry_run=True,
+        )
+        cast_mapping = dict(report.suggestions).get("cast_types")
+        if cast_mapping:
+            return ar.auto_clean(
+                frame,
+                mode="strict",
+                allow_lossy_casts=True,
+                confirmed_casts=cast_mapping,
+            )
+
     return ar.auto_clean(
         frame,
         mode=mode,

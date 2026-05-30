@@ -400,7 +400,9 @@ class ArFrame:
 
         actual_n = min(n, len(self))
 
-        return ArFrame(self._frame.select_rows(0, actual_n))
+        return ArFrame(
+            self._frame.select_rows(0, actual_n), attrs=copy.deepcopy(self._attrs)
+        )
 
     def tail(self, n: int = 5) -> ArFrame:
         """Return the last n rows as an ArFrame.
@@ -421,15 +423,26 @@ class ArFrame:
         actual_n = min(n, len(self))
         start = max(0, len(self) - actual_n)
 
-        return ArFrame(self._frame.select_rows(start, actual_n))
+        return ArFrame(
+            self._frame.select_rows(start, actual_n), attrs=copy.deepcopy(self._attrs)
+        )
 
-    def to_dict(self) -> dict[str, list]:
+    def to_dict(
+        self,
+        orient: str = "list",
+    ):
         """Export the frame as a Python dictionary.
+
+        Parameters
+        ----------
+        orient : str, default "list"
+            Output format. Supported values are
+            "list", "records", and "split".
 
         Returns
         -------
-        dict[str, list]
-            A dictionary mapping column names to lists of values.
+        dict | list
+            Frame data in the requested orientation.
 
         Examples
         --------
@@ -439,12 +452,37 @@ class ArFrame:
         """
         col_names = self.columns
         num_cols = self.shape[1]
-        return {
+        data = {
             col_names[i]: [
                 self._frame.column_by_index(i).at(r) for r in range(len(self))
             ]
             for i in range(num_cols)
         }
+        supported = {"list", "records", "split"}
+        if orient not in supported:
+            raise ValueError("orient must be one of: list, records, split")
+
+        if orient == "list":
+            return data
+
+        if orient == "records":
+            row_count = len(self)
+
+            return [
+                {column: data[column][row] for column in col_names}
+                for row in range(row_count)
+            ]
+
+        if orient == "split":
+            row_count = len(self)
+
+            return {
+                "columns": list(col_names),
+                "data": [
+                    [data[column][row] for column in col_names]
+                    for row in range(row_count)
+                ],
+            }
 
     def select_columns(self, columns: list[str]) -> ArFrame:
         """Return a new ArFrame with only the selected columns.
