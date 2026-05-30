@@ -4049,6 +4049,7 @@ def test_validate_max_errors_zero_valid_data():
     with pytest.raises(ValueError, match="max_errors must be >= 1"):
         ar.validate(frame, schema, max_errors=0)
 
+
 def test_normalize_sequence_homogeneous_strings():
     schema = ar.Schema({"status": ar.String(allowed={"active", "inactive", "pending"})})
     payload = json.loads(schema.to_json())
