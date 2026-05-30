@@ -184,14 +184,18 @@ def test_nested_dict_values_ArFrame():
 def test_nested_dictvalues():
     data = {"info": {"city": "NY", "age": 25}}
 
-    with pytest.raises(ValueError, match="Nested objects are not supported in column 'info'"):
+    with pytest.raises(
+        ValueError, match="Nested objects are not supported in column 'info'"
+    ):
         ar.from_dict(data)
 
 
 def test_nested_dictvalues_ArFrame():
     data = {"info": {"city": "NY", "age": 25}}
 
-    with pytest.raises(ValueError, match="Nested objects are not supported in column 'info'"):
+    with pytest.raises(
+        ValueError, match="Nested objects are not supported in column 'info'"
+    ):
         ar.ArFrame.from_dict(data)
 
 
@@ -1442,6 +1446,3 @@ def test_selection_methods_preserve_attrs():
     # Deep copy isolation check
     res_dtypes._attrs["metadata"]["version"] = 2
     assert frame._attrs["metadata"]["version"] == 1
-
-
-
