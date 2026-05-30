@@ -1975,6 +1975,39 @@ def test_report_to_html_rejects_invalid_filepath_types():
             report.to_html(file_path=invalid_path)
 
 
+def test_report_to_html_rejects_empty_filepath():
+    report = ar.DataQualityReport(
+        row_count=0,
+        column_count=0,
+        memory_usage=0,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+        suggestions=[],
+    )
+
+    with pytest.raises(ValueError, match="file_path must not be empty"):
+        report.to_html(file_path="")
+
+
+def test_report_to_html_writes_valid_pathlike_filepath(tmp_path):
+    report = ar.DataQualityReport(
+        row_count=0,
+        column_count=0,
+        memory_usage=0,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+        suggestions=[],
+    )
+    out_path = tmp_path / "report.html"
+
+    result = report.to_html(file_path=out_path)
+
+    assert result == out_path.read_text(encoding="utf-8")
+    assert result.startswith("<!DOCTYPE html>")
+
+
 def test_report_to_html_limits_suggestions():
     report = ar.DataQualityReport(
         row_count=2,
