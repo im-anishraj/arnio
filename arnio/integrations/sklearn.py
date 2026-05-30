@@ -55,6 +55,19 @@ class ArnioCleaner(BaseEstimator, TransformerMixin):
         if not isinstance(self.allow_schema_changes, bool):
             raise TypeError("allow_schema_changes must be a bool")
 
+    def set_params(self, **params):
+        snapshot = self.get_params(deep=False)
+
+        try:
+            super().set_params(**params)
+            self._validate_params()
+        except Exception:
+            for key, value in snapshot.items():
+                setattr(self, key, value)
+            raise
+
+        return self
+
     def _validate_steps_contract(self):
         for step in self.steps:
             name = step[0] if isinstance(step, tuple) else step
