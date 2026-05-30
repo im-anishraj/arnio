@@ -212,6 +212,7 @@ class TestCustomValidator:
 
     def test_custom_validator_name_validation(self):
         import pytest
+
         import arnio as ar
 
         """Test unhashable type raises TypeError"""
@@ -227,9 +228,13 @@ class TestCustomValidator:
             ar.Custom(None)
 
         """Test empty string raises ValueError"""
-        with pytest.raises(ValueError, match="The validator name cannot be an empty string."):
+        with pytest.raises(
+            ValueError, match="The validator name cannot be an empty string."
+        ):
             ar.Custom("")
-        with pytest.raises(ValueError, match="The validator name cannot be an empty string."):
+        with pytest.raises(
+            ValueError, match="The validator name cannot be an empty string."
+        ):
             ar.Custom("   ")
 
 
