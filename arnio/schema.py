@@ -1109,6 +1109,7 @@ class SchemaDiffEntry:
 
         if not isinstance(self.change, str):
             raise TypeError("change must be a string")
+
         if not self.change.strip():
             raise ValueError("change cannot be an empty string")
 
