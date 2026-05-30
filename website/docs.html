@@ -180,6 +180,15 @@ yaml_text = ar.schema_to_yaml(schema)</code></pre></div>
 frame = df.arnio.to_arframe()
 profile = df.arnio.profile()
 
+suggestions = df.arnio.suggest_cleaning()
+clean = df.arnio.to_arframe()
+for step, params in suggestions:
+    clean = ar.pipeline(clean, [(step, params)])
+
+clean_df = df.arnio.auto_clean()
+
+result = df.arnio.validate({"email": ar.Email(nullable=False), "age": ar.Int64(min=0)})
+
 arrow_table = ar.to_arrow(frame)
 ar.register_duckdb(frame, conn, "clean_sales")</code></pre></div>
       </article>
