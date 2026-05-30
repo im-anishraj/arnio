@@ -2,6 +2,7 @@ name: Compatibility Matrix
 
 on:
   pull_request:
+    # Run compatibility checks for runtime and test changes.
     paths:
     - '.github/workflows/compat-matrix.yml'
     - 'pyproject.toml'
