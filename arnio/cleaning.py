@@ -468,6 +468,9 @@ def drop_duplicates(
     >>> unique = ar.drop_duplicates(frame, subset=["name"], keep="first")
     """
     frame, _ = _validate_frame(frame)
+    if frame.shape[1] == 0:
+        return from_pandas(to_pandas(frame))
+
     if subset is not None:
         subset = _validate_column_sequence(subset, argument_name="subset")
         if len(subset) == 0:

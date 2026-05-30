@@ -304,6 +304,9 @@ Frame drop_duplicates(const Frame& frame, const std::optional<std::vector<std::s
     if (subset.has_value() && subset->empty()) {
         throw std::invalid_argument("drop_duplicates subset cannot be empty");
     }
+    if (frame.num_cols() == 0) {
+    return frame.clone();
+    }
 
     auto col_indices = resolve_subset(frame, subset);
     RowContext ctx{&frame, &col_indices};

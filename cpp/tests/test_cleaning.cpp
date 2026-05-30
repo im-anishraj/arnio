@@ -431,3 +431,39 @@ TEST_CASE("drop_duplicates NaN payloads treated as equal (keep=none)", "[cleanin
     REQUIRE(result.num_rows() == 1);
     REQUIRE(result.column("v").at(0) == CellValue(double(3.0)));
 }
+
+static Frame make_zero_col_frame(size_t num_rows) {
+    return Frame(num_rows);
+}
+
+TEST_CASE("drop_duplicates zero-col frame keep=first preserves row count",
+          "[cleaning][dedup][zero-col]") {
+    Frame f = make_zero_col_frame(3);
+    Frame result = drop_duplicates(f, std::nullopt, "first");
+    REQUIRE(result.num_rows() == 3);
+    REQUIRE(result.num_cols() == 0);
+}
+
+TEST_CASE("drop_duplicates zero-col frame keep=last preserves row count",
+          "[cleaning][dedup][zero-col]") {
+    Frame f = make_zero_col_frame(3);
+    Frame result = drop_duplicates(f, std::nullopt, "last");
+    REQUIRE(result.num_rows() == 3);
+    REQUIRE(result.num_cols() == 0);
+}
+
+TEST_CASE("drop_duplicates zero-col frame keep=none preserves row count",
+          "[cleaning][dedup][zero-col]") {
+    Frame f = make_zero_col_frame(3);
+    Frame result = drop_duplicates(f, std::nullopt, "none");
+    REQUIRE(result.num_rows() == 3);
+    REQUIRE(result.num_cols() == 0);
+}
+
+TEST_CASE("drop_duplicates zero-col zero-row frame stays empty",
+          "[cleaning][dedup][zero-col]") {
+    Frame f = make_zero_col_frame(0);
+    Frame result = drop_duplicates(f, std::nullopt, "first");
+    REQUIRE(result.num_rows() == 0);
+    REQUIRE(result.num_cols() == 0);
+}
