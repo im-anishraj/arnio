@@ -55,8 +55,8 @@ class TestRegisterValidator:
             register_validator("", lambda x: True)
 
     def test_raises_value_error_when_name_is_not_string(self):
-        """register_validator raises typeerror when name is not a string."""
-        with pytest.raises(typeerror, match="non-empty string"):
+        """register_validator raises ValueError when name is not a string."""
+        with pytest.raises(ValueError, match="non-empty string"):
             register_validator(123, lambda x: True)
 
     def test_overwrites_existing_validator(self):
@@ -344,25 +344,25 @@ class TestCustomValidatorNameValidation:
 
     def test_raises_type_error_when_name_is_empty_string(self):
         """Custom raises typeerror when name is an empty string."""
-        with pytest.raises(typeerror, match="non-empty string"):
+        with pytest.raises(TypeError, match="non-empty string"):
             Custom("")
 
     def test_raises_type_error_when_name_is_integer(self):
         """Custom raises typeerror when name is an integer."""
-        with pytest.raises(typeerror, match="non-empty string"):
+        with pytest.raises(TypeError, match="non-empty string"):
             Custom(123)
 
     def test_raises_type_error_when_name_is_none(self):
         """Custom raises typeerror when name is None."""
-        with pytest.raises(typeerror, match="non-empty string"):
+        with pytest.raises(TypeError, match="non-empty string"):
             Custom(None)
 
     def test_raises_type_error_when_name_is_list(self):
         """Custom raises typeerror when name is a list."""
-        with pytest.raises(typeerror, match="non-empty string"):
+        with pytest.raises(TypeError, match="non-empty string"):
             Custom(["my_validator"])
 
     def test_valid_name_still_raises_when_unregistered(self):
         """A valid string name that isn't registered raises the registry error, not the name error."""
-        with pytest.raises(typeerror, match="No validator registered"):
+        with pytest.raises(TypeError, match="No validator registered"):
             Custom("unregistered_name_xyz")
