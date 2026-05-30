@@ -1044,6 +1044,9 @@ class ProfileComparison:
         exclude_columns : list, set, or tuple of str, optional
             Column names to omit from both nested profile exports.
         """
+        # Convert exclude_columns to a set for O(1) lookups
+        exclude_set = set(exclude_columns) if exclude_columns is not None else set()
+
         return {
             "left_profile": self.left_profile.to_dict(
                 redact_sample_values=redact_sample_values,
@@ -1055,9 +1058,10 @@ class ProfileComparison:
             ),
             "status_counts": dict(self.status_counts),
             "drift_report": {
-                name: _clean_drift_entry(entry)
-                for name, entry in self.drift_report.items()
-            },
+                    name: _clean_drift_entry(entry)
+                    for name, entry in self.drift_report.items()
+                    if name not in exclude_set
+                },
         }
 
     def to_json(

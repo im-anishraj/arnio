@@ -2931,6 +2931,7 @@ def test_profile_numeric_histogram_to_pandas():
     assert pdf.loc[pdf["name"] == "nums", "histogram"].values[0] is not None
 
 
+@pytest.mark.filterwarnings("ignore:invalid value encountered")
 def test_profile_numeric_histogram_non_finite_values():
     # Test handling of infinite values in histogram calculation
     from arnio._core import _DType, _Frame
@@ -4131,3 +4132,32 @@ class TestQualityGateResultConstructorValidation:
                 issues=[issue],
                 thresholds="not a dict",
             )
+
+
+def test_profile_comparison_drift_report_exclude_columns():
+    """Regression test ensuring exclude_columns drops keys from drift_report."""
+    import arnio as ar
+    import pandas as pd
+
+    # Create dummy frame with a sensitive column
+    df = pd.DataFrame(
+        {
+            "name": ["Alice", "Bob"],
+            "secret_key": ["abc123", "xyz789"],
+        }
+    )
+    frame = ar.from_pandas(df)
+
+    # Generate profile comparison
+    p1 = ar.profile(frame)
+    comparison = ar.compare_profiles(p1, p1)
+
+    # Export dictionary while excluding 'secret_key'
+    exported_dict = comparison.to_dict(exclude_columns=["secret_key"])
+
+    # Assertions to satisfy the code review
+    assert "secret_key" not in exported_dict["left_profile"]["columns"]
+    assert "secret_key" not in exported_dict["right_profile"]["columns"]
+    assert (
+        "secret_key" not in exported_dict["drift_report"]
+    ), "Privacy leak: secret_key still present in drift_report keys!"
