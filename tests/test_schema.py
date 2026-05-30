@@ -3675,6 +3675,7 @@ def test_float64_rejects_bool_pair():
     with pytest.raises(TypeError, match="min must be numeric or None"):
         ar.Float64(min=True, max=False)
 
+
 def test_string_length_integer_subclass_serialization():
     class MyInt(int):
         pass
@@ -3726,7 +3727,8 @@ def test_string_length_validation_negative():
         ValueError, match="max_length must be greater than or equal to 0"
     ):
         ar.String(max_length=-1)
-        
+
+
 def test_int64_rejects_nan_min():
     with pytest.raises(ValueError, match="finite"):
         ar.Int64(min=float("nan"))
@@ -3773,6 +3775,7 @@ def test_int64_finite_bounds_still_pass():
 
 def test_float64_finite_bounds_still_pass():
     assert ar.Float64(min=-1.5, max=1.5) is not None
+
 
 def test_validation_issue_accepts_valid_severities():
     error_issue = ar.ValidationIssue(

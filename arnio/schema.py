@@ -6,9 +6,8 @@ Production data contracts and validation.
 from __future__ import annotations
 
 import json
-
-import numbers
 import math
+import numbers
 import re
 import warnings
 from collections.abc import Sequence
