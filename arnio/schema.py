@@ -6,6 +6,7 @@ Production data contracts and validation.
 from __future__ import annotations
 
 import json
+import math
 import re
 import warnings
 from collections.abc import Sequence
@@ -66,6 +67,12 @@ def _validate_severity(severity: str) -> None:
     """Raise ValueError if severity is not 'error' or 'warning'."""
     if severity not in _VALID_SEVERITIES:
         raise ValueError("severity must be 'error' or 'warning'")
+
+
+def _validate_numeric_bound(value: float | int, name: str) -> None:
+    """Raise ValueError if value is not a finite number."""
+    if not math.isfinite(value):
+        raise ValueError(f"{name} must be a finite number, got {value!r}")
 
 
 _DTYPE_MAP = {
@@ -1798,9 +1805,11 @@ def Int64(
     if min is not None:
         if isinstance(min, bool) or not isinstance(min, (int, float)):
             raise TypeError("min must be numeric or None")
+        _validate_numeric_bound(min, "min")
     if max is not None:
         if isinstance(max, bool) or not isinstance(max, (int, float)):
             raise TypeError("max must be numeric or None")
+        _validate_numeric_bound(max, "max")
     if min is not None and max is not None and min > max:
         raise ValueError("min must be less than or equal to max")
 
@@ -1841,9 +1850,11 @@ def Float64(
     if min is not None:
         if isinstance(min, bool) or not isinstance(min, (int, float)):
             raise TypeError("min must be numeric or None")
+        _validate_numeric_bound(min, "min")
     if max is not None:
         if isinstance(max, bool) or not isinstance(max, (int, float)):
             raise TypeError("max must be numeric or None")
+        _validate_numeric_bound(max, "max")
     if min is not None and max is not None and min > max:
         raise ValueError("min must be less than or equal to max")
 
