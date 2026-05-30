@@ -1100,7 +1100,6 @@ class SchemaDiffEntry:
     observed: Any = None
 
     def __post_init__(self):
-
         if self.column is not None and not isinstance(self.column, str):
             raise TypeError("column must be a string or None")
 
@@ -1108,7 +1107,7 @@ class SchemaDiffEntry:
             raise TypeError("attribute must be a string or None")
 
         if not isinstance(self.change, str):
-            raise TypeError("change must be a string ")
+            raise TypeError("change must be a string")
 
         if not self.change.strip():
             raise ValueError("change cannot be an empty string")
