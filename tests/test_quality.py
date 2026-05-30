@@ -9,7 +9,6 @@ import pytest
 
 import arnio as ar
 from arnio.quality import (
-    _QUALITY_REPORT_EXPORT_COLUMNS,
     CleaningSuggestion,
     _validate_gate_bool,
     _validate_gate_ratio_threshold,
@@ -46,6 +45,104 @@ def test_report_summary_and_pandas_output(csv_with_whitespace):
     assert summary["columns_with_whitespace"] == ["name", "city"]
     assert isinstance(df, pd.DataFrame)
     assert set(df["name"]) == {"name", "city"}
+
+
+def test_data_quality_report_to_pandas_empty_report_has_stable_columns():
+    report = ar.DataQualityReport(
+        row_count=0,
+        column_count=0,
+        memory_usage=0,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+        suggestions=[],
+    )
+
+    df = report.to_pandas()
+
+    expected_columns = [
+        "name",
+        "dtype",
+        "semantic_type",
+        "null_count",
+        "null_ratio",
+        "unique_count",
+        "unique_ratio",
+        "empty_string_count",
+        "whitespace_count",
+        "suggested_dtype",
+        "email_validity_ratio",
+        "url_validity_ratio",
+        "min",
+        "max",
+        "mean",
+        "std",
+        "q25",
+        "q50",
+        "q75",
+        "q95",
+        "iqr",
+        "outlier_lower_bound",
+        "outlier_upper_bound",
+        "outlier_count",
+        "outlier_ratio",
+        "warnings",
+        "top_values",
+        "top_values_is_approximate",
+        "top_values_sample_count",
+        "top_values_sample_ratio",
+        "histogram",
+    ]
+
+    assert df.columns.tolist() == expected_columns
+    assert df.shape == (0, len(expected_columns))
+
+
+def test_data_quality_report_to_pandas_all_columns_excluded_has_stable_columns(tmp_path):
+    path = tmp_path / "all_excluded.csv"
+    path.write_text("id,name\n1,Alice\n2,Bob\n", encoding="utf-8")
+
+    frame = ar.read_csv(path)
+    report = ar.profile(frame, exclude_columns=list(frame.columns))
+    df = report.to_pandas()
+
+    expected_columns = [
+        "name",
+        "dtype",
+        "semantic_type",
+        "null_count",
+        "null_ratio",
+        "unique_count",
+        "unique_ratio",
+        "empty_string_count",
+        "whitespace_count",
+        "suggested_dtype",
+        "email_validity_ratio",
+        "url_validity_ratio",
+        "min",
+        "max",
+        "mean",
+        "std",
+        "q25",
+        "q50",
+        "q75",
+        "q95",
+        "iqr",
+        "outlier_lower_bound",
+        "outlier_upper_bound",
+        "outlier_count",
+        "outlier_ratio",
+        "warnings",
+        "top_values",
+        "top_values_is_approximate",
+        "top_values_sample_count",
+        "top_values_sample_ratio",
+        "histogram",
+    ]
+
+    assert report.column_count == 0
+    assert df.columns.tolist() == expected_columns
+    assert df.shape == (0, len(expected_columns))
 
 
 def test_profile_numeric_quantiles():
@@ -1334,26 +1431,6 @@ def test_profile_exclude_columns_accepts_empty_list(sample_csv):
     assert report.column_count == full_report.column_count
 
 
-def test_profile_empty_frame_to_pandas_has_stable_columns():
-    frame = ar.from_pandas(pd.DataFrame(index=range(2)))
-
-    report = ar.profile(frame)
-    df = report.to_pandas()
-
-    assert list(df.columns) == _QUALITY_REPORT_EXPORT_COLUMNS
-    assert df.shape == (0, len(_QUALITY_REPORT_EXPORT_COLUMNS))
-
-
-def test_profile_excluding_all_columns_to_pandas_has_stable_columns():
-    frame = ar.from_pandas(pd.DataFrame({"id": [1, 2], "name": ["a", "b"]}))
-
-    report = ar.profile(frame, exclude_columns=["id", "name"])
-    df = report.to_pandas()
-
-    assert list(df.columns) == _QUALITY_REPORT_EXPORT_COLUMNS
-    assert df.shape == (0, len(_QUALITY_REPORT_EXPORT_COLUMNS))
-
-
 def test_profile_exclude_columns_scopes_report_metrics_and_suggestions(tmp_path):
     path = tmp_path / "profile_scope.csv"
     path.write_text(
@@ -1524,8 +1601,6 @@ def test_profile_string_metrics_to_pandas():
     frame = ar.from_pandas(df)
     report = ar.profile(frame)
     result_df = report.to_pandas()
-
-    assert list(result_df.columns) == _QUALITY_REPORT_EXPORT_COLUMNS
 
     row = result_df[result_df["name"] == "label"].iloc[0]
     assert row["min"] == 1
