@@ -62,21 +62,21 @@
     // ── Smooth scroll for anchor links ───────────────────────
     document.querySelectorAll('a[href^="#"]').forEach(function (anchor) {
       anchor.addEventListener('click', function (e) {
-  const target = document.querySelector(this.getAttribute('href'));
+        const target = document.querySelector(this.getAttribute('href'));
 
-  if (target) {
-    e.preventDefault();
+        if (target) {
+          e.preventDefault();
 
-    const prefersReducedMotion =
-      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+          const prefersReducedMotion =
+            window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-    target.scrollIntoView({
-      behavior: prefersReducedMotion ? 'auto' : 'smooth'
-    });
+          target.scrollIntoView({
+            behavior: prefersReducedMotion ? 'auto' : 'smooth'
+          });
 
-    history.pushState(null, '', this.getAttribute('href'));
-  }
-});
+          history.pushState(null, '', this.getAttribute('href'));
+        }
+      });
     });
 
     // ── Sidebar active section tracking (docs pages) ─────────
