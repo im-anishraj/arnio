@@ -7,6 +7,7 @@ must still run so the temp file is not leaked on disk.
 
 import io
 import os
+import tempfile
 from unittest.mock import patch
 
 import pytest
@@ -87,6 +88,52 @@ class TestMaterializeCsvCleanup:
         with patch("arnio.io.os.unlink", side_effect=OSError("unlink error")):
             with pytest.raises(OSError, match="simulated read failure"):
                 _materialize_csv_input(source)
+
+    def test_unlink_runs_when_close_raises_on_cleanup(self):
+        """
+        Core regression for #2194: if tmp.close() raises during exception
+        cleanup, os.unlink() must still be called so the file is not leaked.
+        """
+        real_unlink = os.unlink
+        unlinked = []
+
+        def tracking_unlink(path):
+            unlinked.append(path)
+            try:
+                real_unlink(path)
+            except OSError:
+                pass
+
+        class _FakeTmp:
+            """Lightweight fake NamedTemporaryFile with a close() that raises."""
+
+            name = None
+
+            def __init__(self):
+                # Use a real temp file so the name is a valid path on disk.
+                self._real = tempfile.NamedTemporaryFile(delete=False, suffix=".csv")
+                self.name = self._real.name
+
+            def write(self, data):
+                self._real.write(data)
+
+            def close(self):
+                self._real.close()
+                raise OSError("simulated flush error on close")
+
+        def fake_ntf(**kwargs):
+            return _FakeTmp()
+
+        source = _FailOnReadStream()
+
+        with (
+            patch("arnio.io.tempfile.NamedTemporaryFile", side_effect=fake_ntf),
+            patch("arnio.io.os.unlink", side_effect=tracking_unlink),
+        ):
+            with pytest.raises(OSError, match="simulated read failure"):
+                _materialize_csv_input(source)
+
+        assert unlinked, "os.unlink was never called — temp file was leaked"
 
     def test_normal_path_still_works(self):
         """Regression: the happy path must still return a valid temp file path."""
