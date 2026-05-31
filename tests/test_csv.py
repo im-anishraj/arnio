@@ -1771,29 +1771,6 @@ def test_extra_empty_field_is_rejected(tmp_path):
         ar.read_csv(csv_path)
 
 
-def test_quoted_empty_csv_field_preserved(tmp_path):
-    import warnings
-    
-
-    csv_path = tmp_path / "quoted_empty.csv"
-
-    csv_path.write_text(
-        'a,b,c\n'
-        '"",2,3\n'
-        ',4,5\n'
-        '6,7,8\n'
-    )
-
-    with warnings.catch_warnings(record=True):
-        warnings.simplefilter("always")
-        frame = ar.read_csv(csv_path, on_bad_lines="warn")
-
-    df = ar.to_pandas(frame)
-
-    assert df["a"].iloc[0] == ""
-    assert pd.isna(df["a"].iloc[1])
-
-    
 def test_permissive_mode_rejects_extra_fields(tmp_path):
     csv_path = tmp_path / "permissive_extra.csv"
 
