@@ -7,7 +7,6 @@ must still run so the temp file is not leaked on disk.
 
 import io
 import os
-import tempfile
 from unittest.mock import patch
 
 import pytest
@@ -22,29 +21,23 @@ class _FailOnReadStream:
         raise OSError("simulated read failure")
 
 
-def _ntf_with_flaky_close(**kwargs):
-    """Return a real NamedTemporaryFile whose close() raises on first call."""
-    handle = tempfile.NamedTemporaryFile(**kwargs)
-    real_close = handle.close
-    call_count = [0]
+class _FailAfterFirstChunkStream:
+    """A file-like that returns one chunk then raises, so write() is called."""
 
-    def flaky_close():
-        call_count[0] += 1
-        if call_count[0] == 1:
-            raise OSError("simulated flush error on close")
-        real_close()
+    def __init__(self):
+        self._calls = 0
 
-    handle.close = flaky_close
-    return handle
+    def read(self, size=-1):
+        self._calls += 1
+        if self._calls == 1:
+            return "col1,col2\n"
+        raise OSError("simulated mid-read failure")
 
 
 class TestMaterializeCsvCleanup:
-    def test_unlink_runs_even_when_close_raises(self):
-        """
-        If tmp.close() raises in the cleanup path, os.unlink must still be
-        called so the temp file is not leaked.
-        """
-        real_unlink = os.unlink  # capture before patching to avoid recursion
+    def test_unlink_called_on_read_failure(self):
+        """os.unlink must be called when read() raises, so no temp file is leaked."""
+        real_unlink = os.unlink
         unlinked = []
 
         def tracking_unlink(path):
@@ -56,43 +49,42 @@ class TestMaterializeCsvCleanup:
 
         source = _FailOnReadStream()
 
-        with (
-            patch(
-                "arnio.io.tempfile.NamedTemporaryFile",
-                side_effect=_ntf_with_flaky_close,
-            ),
-            patch("arnio.io.os.unlink", side_effect=tracking_unlink),
-        ):
+        with patch("arnio.io.os.unlink", side_effect=tracking_unlink):
             with pytest.raises(OSError, match="simulated read failure"):
                 _materialize_csv_input(source)
 
         assert unlinked, "os.unlink was never called — temp file was leaked"
 
+    def test_unlink_called_on_mid_read_failure(self):
+        """os.unlink must be called even when failure occurs after partial write."""
+        real_unlink = os.unlink
+        unlinked = []
+
+        def tracking_unlink(path):
+            unlinked.append(path)
+            try:
+                real_unlink(path)
+            except OSError:
+                pass
+
+        source = _FailAfterFirstChunkStream()
+
+        with patch("arnio.io.os.unlink", side_effect=tracking_unlink):
+            with pytest.raises(OSError, match="simulated mid-read failure"):
+                _materialize_csv_input(source)
+
+        assert unlinked, "os.unlink was never called — temp file was leaked"
+
     def test_original_exception_is_reraised(self):
-        """The cleanup path must re-raise the original exception."""
+        """The cleanup path must re-raise the original exception, not swallow it."""
         source = _FailOnReadStream()
         with pytest.raises(OSError, match="simulated read failure"):
             _materialize_csv_input(source)
 
-    def test_unlink_failure_does_not_mask_original_exception(self):
+    def test_original_exception_reraised_even_when_unlink_fails(self):
         """If unlink() also raises during cleanup, the original exception propagates."""
-
-        def close_raising_ntf(**kwargs):
-            handle = tempfile.NamedTemporaryFile(**kwargs)
-            handle.close = lambda: (_ for _ in ()).throw(
-                OSError("simulated close error")
-            )
-            return handle
-
         source = _FailOnReadStream()
-
-        with (
-            patch(
-                "arnio.io.tempfile.NamedTemporaryFile",
-                side_effect=close_raising_ntf,
-            ),
-            patch("arnio.io.os.unlink", side_effect=OSError("unlink error")),
-        ):
+        with patch("arnio.io.os.unlink", side_effect=OSError("unlink error")):
             with pytest.raises(OSError, match="simulated read failure"):
                 _materialize_csv_input(source)
 
