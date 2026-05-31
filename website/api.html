@@ -93,7 +93,7 @@
         <div class="api-func"><div class="api-func-header">profile(frame, *, exclude_columns=None, sample_size=5, approx_top_values=False, approx_top_values_min_unique=1000, approx_top_values_min_ratio=0.2, approx_top_values_sample_size=2000)</div><div class="api-func-body"><p>Return <code>DataQualityReport</code> with row/column counts, duplicate metrics, column profiles, warnings, quality score, score components, and cleaning suggestions.</p></div></div>
         <div class="api-func"><div class="api-func-header">DataQualityReport._repr_html_()</div><div class="api-func-body"><p>Jupyter/IPython automatically calls this to render the report dashboard HTML directly in the notebook output area.</p></div></div>
         <div class="api-func"><div class="api-func-header">DataQualityReport.to_dict(redact_sample_values=False, exclude_columns=None), to_json(), to_markdown(), to_html(), summary(), to_pandas()</div><div class="api-func-body"><p>Export reports for notebooks, CI, docs, and automation.</p></div></div>
-        <div class="api-func"><div class="api-func-header">compare_profiles(left, right), check_quality_gates(baseline, current), suggest_cleaning(frame_or_report), auto_clean(frame, *, mode="safe", return_report=False, dry_run=False, allow_lossy_casts=False, confirmed_casts=None, explain=False)</div><div class="api-func-body"><p>Compare quality over time, fail CI on drift, generate pipeline-compatible steps, or run automatic cleaning with optional reports and audit output.</p><p><strong>Additional options:</strong></p><ul><li><code>return_report</code> – return the pre-cleaning quality report alongside cleaned output.</li><li><code>allow_lossy_casts</code> – opt in to strict-mode casts that may lose information.</li><li><code>confirmed_casts</code> – explicit column-to-dtype confirmations required before strict-mode casts are applied.</li></ul><p><strong>Return values:</strong></p><ul><li><code>auto_clean(...)</code> → <code>ArFrame</code></li><li><code>auto_clean(..., return_report=True)</code> → <code>(ArFrame, DataQualityReport)</code></li><li><code>auto_clean(..., dry_run=True)</code> → <code>DataQualityReport</code></li><li><code>auto_clean(..., explain=True)</code> → <code>(ArFrame, CleanExplanation)</code></li><li><code>auto_clean(..., return_report=True, explain=True)</code> → <code>(ArFrame, DataQualityReport, CleanExplanation)</code></li></ul><pre><code># Preview proposed changes
+        <div class="api-func"><div class="api-func-header">compare_profiles(left, right), suggest_cleaning(frame_or_report), auto_clean(frame, *, mode="safe", return_report=False, dry_run=False, allow_lossy_casts=False, confirmed_casts=None, explain=False)</div><div class="api-func-body"><p>Compare quality over time, generate pipeline-compatible steps, or run automatic cleaning with optional reports and audit output.</p><p><strong>Additional options:</strong></p><ul><li><code>return_report</code> – return the pre-cleaning quality report alongside cleaned output.</li><li><code>allow_lossy_casts</code> – opt in to strict-mode casts that may lose information.</li><li><code>confirmed_casts</code> – explicit column-to-dtype confirmations required before strict-mode casts are applied.</li></ul><p><strong>Return values:</strong></p><ul><li><code>auto_clean(...)</code> → <code>ArFrame</code></li><li><code>auto_clean(..., return_report=True)</code> → <code>(ArFrame, DataQualityReport)</code></li><li><code>auto_clean(..., dry_run=True)</code> → <code>DataQualityReport</code></li><li><code>auto_clean(..., explain=True)</code> → <code>(ArFrame, CleanExplanation)</code></li><li><code>auto_clean(..., return_report=True, explain=True)</code> → <code>(ArFrame, DataQualityReport, CleanExplanation)</code></li></ul><pre><code># Preview proposed changes
 report = ar.auto_clean(frame, mode="strict", dry_run=True)
 
 # Clean and return report
@@ -107,6 +107,36 @@ cleaned, explanation = ar.auto_clean(
     frame,
     explain=True,
 )
+</code></pre></div></div>
+        <div class="api-func"><div class="api-func-header">check_quality_gates(baseline_profile, current_profile, *, max_row_count_delta_ratio=0.1, max_duplicate_ratio_delta=0.05, max_null_ratio_delta=0.05, max_numeric_mean_delta_ratio=0.1, max_numeric_std_delta_ratio=0.2, allow_new_columns=False, allow_missing_columns=False, fail_on_dtype_change=True)</div><div class="api-func-body"><p>Compare two <code>DataQualityReport</code> objects and return a <code>QualityGateResult</code> suitable for CI and release checks.</p>
+          <table class="param-table">
+            <thead>
+              <tr><th>Option</th><th>Default</th><th>Gate behavior</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>max_row_count_delta_ratio</code></td><td><code>0.1</code></td><td>Maximum relative row-count drift. Set to <code>None</code> to disable.</td></tr>
+              <tr><td><code>max_duplicate_ratio_delta</code></td><td><code>0.05</code></td><td>Maximum absolute duplicate-ratio drift. Set to <code>None</code> to disable.</td></tr>
+              <tr><td><code>max_null_ratio_delta</code></td><td><code>0.05</code></td><td>Maximum absolute per-column null-ratio drift. Set to <code>None</code> to disable.</td></tr>
+              <tr><td><code>max_numeric_mean_delta_ratio</code></td><td><code>0.1</code></td><td>Maximum relative per-column numeric mean drift. Set to <code>None</code> to disable.</td></tr>
+              <tr><td><code>max_numeric_std_delta_ratio</code></td><td><code>0.2</code></td><td>Maximum relative per-column numeric standard-deviation drift. Set to <code>None</code> to disable.</td></tr>
+              <tr><td><code>allow_new_columns</code></td><td><code>False</code></td><td>Allow columns that appear only in the current profile.</td></tr>
+              <tr><td><code>allow_missing_columns</code></td><td><code>False</code></td><td>Allow baseline columns that are absent from the current profile.</td></tr>
+              <tr><td><code>fail_on_dtype_change</code></td><td><code>True</code></td><td>Fail when shared columns change dtype.</td></tr>
+            </tbody>
+          </table>
+<pre><code>baseline = ar.profile(ar.read_csv("baseline.csv"))
+current = ar.profile(ar.read_csv("current.csv"))
+
+result = ar.check_quality_gates(
+    baseline,
+    current,
+    max_null_ratio_delta=0.02,
+    allow_new_columns=True,
+)
+
+if not result.passed:
+    print(result.to_markdown())
+    result.raise_for_failures()
 </code></pre></div></div>
         <div class="api-func"><div class="api-func-header">Quality result classes</div><div class="api-func-body"><p><code>ColumnProfile</code>, <code>CleaningSuggestion</code>, <code>CleanStepRecord</code>, <code>CleanExplanation</code>, <code>ProfileComparison</code>, <code>QualityGateIssue</code>, and <code>QualityGateResult</code> describe structured profiling, cleaning, comparison, and gate output.</p></div></div>
 
