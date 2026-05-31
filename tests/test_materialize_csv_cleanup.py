@@ -8,7 +8,7 @@ must still run so the temp file is not leaked on disk.
 import io
 import os
 import tempfile
-from unittest.mock import patch, call
+from unittest.mock import patch
 
 import pytest
 
@@ -17,57 +17,35 @@ from arnio.io import _materialize_csv_input
 
 class _FailOnReadStream:
     """A file-like that raises on read() to trigger the except path."""
+
     def read(self, size=-1):
         raise OSError("simulated read failure")
 
 
 class TestMaterializeCsvCleanup:
-
     def test_unlink_runs_even_when_close_raises(self):
         """
         If tmp.close() raises in the cleanup path, os.unlink must still be
         called so the temp file is not leaked.
         """
+        real_unlink = os.unlink  # capture before patching to avoid recursion
         unlinked = []
-
-        # Track which temp file gets created so we can assert unlink was called on it
-        created_tmp_name = []
-        real_ntf = tempfile.NamedTemporaryFile
-
-        def patched_ntf(**kwargs):
-            handle = real_ntf(**kwargs)
-            created_tmp_name.append(handle.name)
-            return handle
-
-        close_call_count = [0]
-        real_close = None
-
-        def patched_close(self_handle):
-            close_call_count[0] += 1
-            if close_call_count[0] == 1:
-                # First call is the cleanup call — raise to simulate flush error
-                raise OSError("simulated flush error on close")
-            # Subsequent calls (if any) succeed
-            real_close(self_handle)
 
         def tracking_unlink(path):
             unlinked.append(path)
-            # Actually delete so we don't leave files behind
             try:
-                os.unlink(path)
+                real_unlink(path)
             except OSError:
                 pass
 
         source = _FailOnReadStream()
 
         with (
-            patch("arnio.io.tempfile.NamedTemporaryFile", side_effect=patched_ntf),
-            patch("arnio.io.os.unlink", side_effect=tracking_unlink),
             patch(
                 "arnio.io.tempfile.NamedTemporaryFile.close",
                 side_effect=OSError("simulated flush error on close"),
-                autospec=False,
             ),
+            patch("arnio.io.os.unlink", side_effect=tracking_unlink),
         ):
             with pytest.raises(OSError, match="simulated read failure"):
                 _materialize_csv_input(source)
@@ -84,12 +62,11 @@ class TestMaterializeCsvCleanup:
         """If unlink() also raises during cleanup, the original exception propagates."""
         source = _FailOnReadStream()
         with (
-            patch("arnio.io.os.unlink", side_effect=OSError("unlink error")),
             patch(
                 "arnio.io.tempfile.NamedTemporaryFile.close",
                 side_effect=OSError("close error"),
-                autospec=False,
             ),
+            patch("arnio.io.os.unlink", side_effect=OSError("unlink error")),
         ):
             with pytest.raises(OSError, match="simulated read failure"):
                 _materialize_csv_input(source)
