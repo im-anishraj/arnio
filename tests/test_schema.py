@@ -96,7 +96,7 @@ def test_dtype_validation_does_not_report_safe_conversion_for_invalid_numeric_st
 
 def test_validate_rejects_chunked_iterators(tmp_path):
     path = tmp_path / "data.csv"
-    path.write_text("email\n" "a@example.com\n")
+    path.write_text("email\na@example.com\n")
 
     chunks = ar.read_csv_chunked(path, chunksize=1)
 
@@ -232,10 +232,7 @@ def test_schema_validation_stops_after_max_errors(tmp_path):
     path = tmp_path / "bad.csv"
 
     path.write_text(
-        "name,age,email\n"
-        ",150,invalid-email\n"
-        ",200,another-invalid\n"
-        ",300,bad-email\n"
+        "name,age,email\n,150,invalid-email\n,200,another-invalid\n,300,bad-email\n"
     )
 
     frame = ar.read_csv(path)
@@ -1411,10 +1408,48 @@ def test_compare_schema_method(sample_csv, tmp_path):
     shuffled_path.write_text("age,name,email,active\n" "30,Alice,alice@test.com,True\n")
     df_shuffled = ar.read_csv(shuffled_path)
 
-    # 3. Setup Wrong Data Type Frame
-    wrong_dtype_path = tmp_path / "wrong_dtype.csv"
-    wrong_dtype_path.write_text(
-        "name,age,email,active\n" "Alice,30.5,alice@test.com,True\n"
+    assert result.passed
+    assert result.raise_for_errors() is None
+
+
+def test_raise_for_errors_single_issue(tmp_path):
+    path = tmp_path / "single.csv"
+    path.write_text("a,b\n1,2\n")
+
+    frame = ar.read_csv(path)
+    schema = ar.Schema({"c": ar.String()})
+
+    result = ar.validate(frame, schema)
+
+    with pytest.raises(ar.ArnioError) as exc:
+        result.raise_for_errors()
+
+    assert "Missing required column" in str(exc.value)
+
+
+def test_raise_for_errors_multiple_issues(tmp_path):
+    path = tmp_path / "ages.csv"
+    path.write_text("age\n1\n2\n")
+
+    frame = ar.read_csv(path)
+    schema = ar.Schema({"age": ar.Int64(min=3)})
+
+    result = ar.validate(frame, schema)
+
+    assert result.issue_count == 2
+
+    with pytest.raises(ar.ArnioError) as exc:
+        result.raise_for_errors()
+
+    msg = str(exc.value)
+    assert "below 3" in msg
+    assert "row 1" in msg and "row 2" in msg
+
+
+def test_schema_bootstrap_from_report_infers_dtype_and_nullable(tmp_path):
+    path = tmp_path / "quality.csv"
+    path.write_text(
+        "id,name,score,active\n1,Alice,9.5,true\n2,Bob,,false\n3,Carol,7.25,true\n"
     )
     df_wrong_dtype = ar.read_csv(wrong_dtype_path)
 
@@ -1440,9 +1475,547 @@ def test_compare_schema_method(sample_csv, tmp_path):
     # Requirement D: Column naming structural mismatch validation
     assert df_base.compare_schema(df_wrong_cols, strict=False) is False
 
-    # Requirement E: Invalid object class input safe rejection handling
-    with pytest.raises(TypeError):
-        df_base.compare_schema(["not", "an", "ArFrame", "object"])
+def test_email_validation_requires_string():
+    for value in (["light"], {"light"}, None):
+        with pytest.raises(
+            TypeError,
+            match="Email validation must be a string",
+        ):
+            ar.Email(validation=value)
+
+
+def test_email_default_validation_mode_is_backward_compatible(tmp_path):
+    path = tmp_path / "emails.csv"
+    path.write_text("email\nsimple@test.com\n")
+
+    frame = ar.read_csv(path)
+
+    result = ar.validate(
+        frame,
+        {"email": ar.Email(nullable=False)},
+    )
+
+    assert result.passed
+
+
+def test_email_strict_validation_rejects_invalid_emails(tmp_path):
+    path = tmp_path / "invalid_emails.csv"
+    path.write_text("email\nbad@@test.com\nuser@localhost\nuser@.com\n")
+
+    frame = ar.read_csv(path)
+
+    result = ar.validate(
+        frame,
+        {
+            "email": ar.Email(
+                nullable=False,
+                validation="strict",
+            )
+        },
+    )
+
+    assert not result.passed
+    assert result.issue_count == 3
+    assert all(issue.rule == "email:strict" for issue in result.issues)
+
+
+def test_email_strict_validation_accepts_valid_emails(tmp_path):
+    path = tmp_path / "valid_emails.csv"
+    path.write_text(
+        "email\nuser@example.com\nfirst.last@test.co.uk\nhello+tag@gmail.com\n"
+    )
+
+    frame = ar.read_csv(path)
+
+    result = ar.validate(
+        frame,
+        {
+            "email": ar.Email(
+                nullable=False,
+                validation="strict",
+            )
+        },
+    )
+
+    assert result.passed
+
+
+def test_phone_number_validation_passes():
+    import pandas as pd
+
+    schema = ar.Schema(
+        {
+            "phone": ar.PhoneNumber(),
+        }
+    )
+
+    df = pd.DataFrame(
+        {
+            "phone": [
+                "+1-555-123-4567",
+                "+1 (555) 123-4567",
+                "+91 9876543210",
+                "5551234567",
+            ]
+        }
+    )
+
+    frame = ar.from_pandas(df)
+    result = ar.validate(frame, schema)
+
+    assert result.passed
+
+
+def test_phone_number_validation_fails():
+    import pandas as pd
+
+    schema = ar.Schema(
+        {
+            "phone": ar.PhoneNumber(),
+        }
+    )
+
+    df = pd.DataFrame(
+        {
+            "phone": [
+                "abc123",
+                "12",
+                "++123456",
+                "phone-number",
+            ]
+        }
+    )
+
+    frame = ar.from_pandas(df)
+    result = ar.validate(frame, schema)
+
+    assert not result.passed
+
+
+def test_phone_number_nullable_true_accepts_nulls():
+    import pandas as pd
+
+    schema = ar.Schema(
+        {
+            "phone": ar.PhoneNumber(nullable=True),
+        }
+    )
+
+    df = pd.DataFrame(
+        {
+            "phone": [
+                "+1-555-123-4567",
+                None,
+                pd.NA,
+            ]
+        }
+    )
+
+    frame = ar.from_pandas(df)
+
+    result = ar.validate(frame, schema)
+
+    assert result.passed
+
+
+def test_phone_number_nullable_false_rejects_nulls():
+    import pandas as pd
+
+    schema = ar.Schema(
+        {
+            "phone": ar.PhoneNumber(nullable=False),
+        }
+    )
+
+    df = pd.DataFrame(
+        {
+            "phone": [
+                "+1-555-123-4567",
+                None,
+            ]
+        }
+    )
+
+    frame = ar.from_pandas(df)
+
+    result = ar.validate(frame, schema)
+
+    assert not result.passed
+
+    assert any(issue.rule == "nullable" for issue in result.issues)
+
+
+def test_phone_number_unique_constraint():
+    import pandas as pd
+
+    schema = ar.Schema(
+        {
+            "phone": ar.PhoneNumber(unique=True),
+        }
+    )
+
+    df = pd.DataFrame(
+        {
+            "phone": [
+                "555-123-4567",
+                "555-123-4567",
+            ]
+        }
+    )
+
+    frame = ar.from_pandas(df)
+
+    result = ar.validate(frame, schema)
+
+    assert not result.passed
+
+    assert any(issue.rule == "unique" for issue in result.issues)
+
+
+def test_phone_number_formatted_and_invalid_edge_cases():
+    import pandas as pd
+
+    schema = ar.Schema(
+        {
+            "phone": ar.PhoneNumber(),
+        }
+    )
+
+    df = pd.DataFrame(
+        {
+            "phone": [
+                "+1 (555) 123-4567",
+                "555-123-4567",
+                "++1-555-123-4567",
+                "123",
+            ]
+        }
+    )
+
+    frame = ar.from_pandas(df)
+
+    result = ar.validate(frame, schema)
+
+    assert not result.passed
+
+    invalid_values = {issue.value for issue in result.issues}
+
+    assert "++1-555-123-4567" in invalid_values
+    assert "123" in invalid_values
+
+
+def test_phone_number_mixed_object_column_behavior():
+    import pandas as pd
+
+    schema = ar.Schema(
+        {
+            "phone": ar.PhoneNumber(nullable=True),
+        }
+    )
+
+    df = pd.DataFrame(
+        {
+            "phone": [
+                "+1-555-123-4567",
+                1234567890,
+                True,
+                None,
+                "invalid",
+            ]
+        },
+        dtype=object,
+    )
+
+    frame = ar.from_pandas(df)
+
+    result = ar.validate(frame, schema)
+
+    assert not result.passed
+
+    invalid_values = {str(issue.value) for issue in result.issues}
+
+    assert "True" in invalid_values
+    assert "invalid" in invalid_values
+
+
+def test_phone_number_warning_severity_does_not_fail_validation():
+    import pandas as pd
+
+    schema = ar.Schema(
+        {
+            "phone": ar.PhoneNumber(severity="warning"),
+        }
+    )
+
+    df = pd.DataFrame(
+        {
+            "phone": ["invalid-phone"],
+        }
+    )
+
+    frame = ar.from_pandas(df)
+
+    result = ar.validate(frame, schema)
+
+    assert result.passed
+
+    assert result.issue_count == 1
+
+    assert result.issues[0].severity == "warning"
+
+
+def test_country_code_validation_accepts_iso_alpha_2_codes(tmp_path):
+    path = tmp_path / "countries.csv"
+    path.write_text("country\nIN\nUS\nGB\nFR\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"country": ar.CountryCode(nullable=False)},
+    )
+
+    assert result.passed
+    assert result.issue_count == 0
+
+
+def test_country_code_validation_rejects_invalid_codes(tmp_path):
+    path = tmp_path / "bad_countries.csv"
+    path.write_text("country\nIND\n1A\nA\nUSA\ngb\nFr\nQQ\nZZ\nAA\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"country": ar.CountryCode(nullable=False)},
+    )
+
+    assert not result.passed
+    assert result.issue_count == 9
+
+    assert [issue.row_index for issue in result.issues] == [1, 2, 3, 4, 5, 6, 7, 8, 9]
+    assert all(issue.rule == "country_code" for issue in result.issues)
+
+
+def test_country_code_validation_respects_case_insensitive_field(tmp_path):
+    path = tmp_path / "mixed_case_countries.csv"
+    path.write_text("country\nus\nGb\nfr\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {
+            "country": ar.Field(
+                dtype="string",
+                semantic="country_code",
+                case_sensitive=False,
+                nullable=False,
+            )
+        },
+    )
+
+    assert result.passed
+    assert result.issue_count == 0
+
+
+def test_language_code_validation_accepts_iso_639_1_codes(tmp_path):
+    path = tmp_path / "languages.csv"
+    path.write_text("language\nen\nhi\nfr\nde\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"language": ar.LanguageCode(nullable=False)},
+    )
+
+    assert result.passed
+    assert result.issue_count == 0
+
+
+def test_language_code_validation_rejects_invalid_codes(tmp_path):
+    path = tmp_path / "bad_languages.csv"
+    path.write_text("language\nenglish\neng\nEN\nEN-US\nzz\n123\n\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"language": ar.LanguageCode(nullable=False)},
+    )
+
+    assert not result.passed
+    assert result.issue_count == 6
+
+    assert [issue.row_index for issue in result.issues] == [1, 2, 3, 4, 5, 6]
+    assert all(issue.rule == "language_code" for issue in result.issues)
+
+
+def test_timezone_validation_accepts_iana_timezones(tmp_path):
+    path = tmp_path / "timezones.csv"
+    path.write_text("timezone\nAsia/Kolkata\nAmerica/New_York\nEurope/Paris\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"timezone": ar.TimeZone(nullable=False)},
+    )
+
+    assert result.passed
+    assert result.issue_count == 0
+
+
+def test_language_code_validation_respects_case_insensitive_field(tmp_path):
+    path = tmp_path / "mixed_case_languages.csv"
+    path.write_text("language\nEN\nFr\nHI\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {
+            "language": ar.Field(
+                dtype="string",
+                semantic="language_code",
+                case_sensitive=False,
+                nullable=False,
+            )
+        },
+    )
+
+    assert result.passed
+    assert result.issue_count == 0
+
+
+def test_timezone_validation_rejects_invalid_values(tmp_path):
+    path = tmp_path / "bad_timezones.csv"
+    path.write_text("timezone\nIST\nGMT+5:30\nIndia\nAsia\\Kolkata\nrandom_text\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"timezone": ar.TimeZone(nullable=False)},
+    )
+
+    assert not result.passed
+    assert result.issue_count == 5
+    assert all(issue.rule == "timezone" for issue in result.issues)
+
+
+def test_language_code_validation_accepts_extended_iso_codes(tmp_path):
+    path = tmp_path / "extended_languages.csv"
+    path.write_text("language\nzu\nxh\nvo\nwa\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"language": ar.LanguageCode(nullable=False)},
+    )
+
+    assert result.passed
+    assert result.issue_count == 0
+
+
+def test_language_code_validation_nullable_behavior(tmp_path):
+    path = tmp_path / "nullable_languages.csv"
+    path.write_text('language\nen\n""\nfr\n')
+
+    result_nullable = ar.validate(
+        ar.read_csv(path),
+        {"language": ar.LanguageCode(nullable=True)},
+    )
+
+    assert result_nullable.passed
+    assert result_nullable.issue_count == 0
+
+    result_non_nullable = ar.validate(
+        ar.read_csv(path),
+        {"language": ar.LanguageCode(nullable=False)},
+    )
+
+    assert not result_non_nullable.passed
+    assert result_non_nullable.issue_count == 1
+
+
+def test_language_code_validation_rejects_mixed_case_codes(tmp_path):
+    path = tmp_path / "mixed_case_languages.csv"
+    path.write_text("language\nEn\nHI\nFr\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"language": ar.LanguageCode(nullable=False)},
+    )
+
+    assert not result.passed
+    assert result.issue_count == 3
+
+
+def test_language_code_validation_rejects_non_string_values(tmp_path):
+    path = tmp_path / "numeric_languages.csv"
+    path.write_text("language\n123\n456\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"language": ar.LanguageCode(nullable=False)},
+    )
+
+    assert not result.passed
+    assert result.issue_count == 3
+    assert any(issue.rule == "dtype" for issue in result.issues)
+    assert sum(issue.rule == "language_code" for issue in result.issues) == 2
+
+
+def test_country_code_enforces_uniqueness(tmp_path):
+    path = tmp_path / "duplicate_countries.csv"
+    path.write_text("country\nIN\nUS\nIN\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"country": ar.CountryCode(unique=True)},
+    )
+
+    assert not result.passed
+    assert result.issue_count == 2
+    assert all(issue.rule == "unique" for issue in result.issues)
+    assert [issue.row_index for issue in result.issues] == [1, 3]
+    assert [issue.value for issue in result.issues] == ["IN", "IN"]
+
+
+def test_country_code_unique_ignores_multiple_nulls(tmp_path):
+    path = tmp_path / "nullable_duplicate_countries.csv"
+    path.write_text('country\nIN\n""\n""\nUS\n')
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"country": ar.CountryCode(nullable=True, unique=True)},
+    )
+
+    assert result.passed
+    assert result.issue_count == 0
+
+
+def test_country_code_rejects_unassigned_alpha_2_codes(tmp_path):
+    path = tmp_path / "unassigned_countries.csv"
+    path.write_text("country\nAA\nQM\nQZ\nXA\nZZ\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"country": ar.CountryCode(nullable=False)},
+    )
+
+    assert not result.passed
+    assert result.issue_count == 5
+    assert all(issue.rule == "country_code" for issue in result.issues)
+    assert [issue.row_index for issue in result.issues] == [1, 2, 3, 4, 5]
+    assert [issue.value for issue in result.issues] == ["AA", "QM", "QZ", "XA", "ZZ"]
+
+
+def test_country_code_nullable_behavior(tmp_path):
+    path = tmp_path / "nullable_countries.csv"
+    path.write_text('country\nIN\n""\nUS\n')
+
+    # nullable=True should pass
+    result_nullable = ar.validate(
+        ar.read_csv(path),
+        {"country": ar.CountryCode(nullable=True)},
+    )
+    assert result_nullable.passed
+
+    # nullable=False should fail on row 2
+    result_not_nullable = ar.validate(
+        ar.read_csv(path),
+        {"country": ar.CountryCode(nullable=False)},
+    )
+    assert not result_not_nullable.passed
+    assert result_not_nullable.issue_count == 1
+    assert result_not_nullable.issues[0].rule == "nullable"
+    assert result_not_nullable.issues[0].row_index == 2
 
 
 def test_string_min_length_boundary(tmp_path):
@@ -1472,7 +2045,33 @@ def test_string_max_length_boundary(tmp_path):
     assert not result.passed
     assert result.issue_count == 1
     assert result.issues[0].rule == "max_length"
-    assert result.issues[0].row_index == 1
+    assert result.issues[0].row_index == 2
+
+
+def test_string_allowed_rejects_bare_string():
+    with pytest.raises(
+        TypeError,
+        match="allowed must be an iterable of hashable scalar values, not a bare string",
+    ):
+        ar.String(allowed="active")
+
+
+def test_string_allowed_rejects_bare_bytes():
+    with pytest.raises(
+        TypeError,
+        match="allowed must be an iterable of hashable scalar values, not a bare string",
+    ):
+        ar.String(allowed=b"active")
+
+
+def test_string_allowed_accepts_list_tuple_and_set():
+    list_field = ar.String(allowed=["active"])
+    tuple_field = ar.String(allowed=("active",))
+    set_field = ar.String(allowed={"active"})
+
+    assert list_field.allowed == {"active"}
+    assert tuple_field.allowed == {"active"}
+    assert set_field.allowed == {"active"}
 
 
 def test_null_values_skip_length_validation(tmp_path):
@@ -1547,15 +2146,467 @@ def test_compare_schema_invalid_input(sample_csv):
         ar.Date(max=45.6)
 
 
-def test_date_bounds_only_applied_after_format_check(tmp_path):
-    """Invalid date strings should report format errors, not spurious bound errors."""
-    path = tmp_path / "bad_and_oob.csv"
-    path.write_text("dt\n2024-06-15\nnot-a-date\n2023-01-01\n")
+def test_safe_regex_pattern_is_not_rejected():
+    field = ar.String(pattern=r"^[A-Z]{2}\d{3}$")
+
+    assert field.pattern == r"^[A-Z]{2}\d{3}$"
+
+
+def test_safe_named_group_regex_pattern_is_not_rejected():
+    field = ar.String(pattern=r"^(?P<word>[A-Z])+$")
+
+    assert field.pattern == r"^(?P<word>[A-Z])+$"
+
+
+def test_string_rejects_negative_min_length():
+    with pytest.raises(
+        ValueError,
+        match="min_length must be greater than or equal to 0",
+    ):
+        ar.String(min_length=-1)
+
+
+def test_string_rejects_negative_max_length():
+    with pytest.raises(
+        ValueError,
+        match="max_length must be greater than or equal to 0",
+    ):
+        ar.String(max_length=-1)
+
+
+def test_equal_numeric_bounds_are_valid():
+    field = ar.Int64(min=5, max=5)
+
+    assert field.min == 5
+    assert field.max == 5
+
+
+def test_equal_string_length_bounds_are_valid():
+    field = ar.String(min_length=3, max_length=3)
+
+    assert field.min_length == 3
+    assert field.max_length == 3
+
+
+def test_schema_composite_unique_passes(tmp_path):
+    path = tmp_path / "composite.csv"
+    path.write_text("user_id,course_id\n1,101\n1,102\n2,101\n")
+    frame = ar.read_csv(path)
+    schema = ar.Schema(
+        {
+            "user_id": ar.Int64(),
+            "course_id": ar.Int64(),
+        },
+        unique=["user_id", "course_id"],
+    )
+    result = schema.validate(frame)
+    assert result.passed
+    assert result.issue_count == 0
+
+
+def test_schema_composite_unique_fails(tmp_path):
+    path = tmp_path / "composite_bad.csv"
+    path.write_text("user_id,course_id\n1,101\n1,102\n1,101\n")
+    frame = ar.read_csv(path)
+    schema = ar.Schema(
+        {
+            "user_id": ar.Int64(),
+            "course_id": ar.Int64(),
+        },
+        unique=["user_id", "course_id"],
+    )
+    result = schema.validate(frame)
+    assert not result.passed
+    issues = [i for i in result.issues if i.rule == "composite_unique"]
+    assert len(issues) == 2
+    assert issues[0].row_index == 1
+    assert issues[1].row_index == 3
+    assert "['user_id', 'course_id']" in issues[0].message
+
+
+def test_schema_composite_unique_invalid_column(tmp_path):
+    path = tmp_path / "composite_invalid.csv"
+    path.write_text("user_id,course_id\n1,101\n")
+    frame = ar.read_csv(path)
+    schema = ar.Schema(
+        {
+            "user_id": ar.Int64(),
+            "course_id": ar.Int64(),
+        },
+        unique=["user_id", "bad_column"],
+    )
+    result = schema.validate(frame)
+    assert not result.passed
+    issues = [i for i in result.issues if i.rule == "missing_column"]
+    assert len(issues) == 1
+    assert issues[0].column == "bad_column"
+
+
+def test_schema_composite_unique_empty_columns(tmp_path):
+    path = tmp_path / "composite_empty.csv"
+    path.write_text("user_id,course_id\n1,101\n")
+    frame = ar.read_csv(path)
+    schema = ar.Schema(
+        {
+            "user_id": ar.Int64(),
+            "course_id": ar.Int64(),
+        },
+        unique=[],
+    )
+    result = schema.validate(frame)
+    assert not result.passed
+    issues = [i for i in result.issues if i.rule == "composite_unique"]
+    assert len(issues) == 1
+    assert "cannot be empty" in issues[0].message
+
+
+def test_schema_unique_rejects_string():
+    with pytest.raises(TypeError) as exc:
+        ar.Schema(
+            {
+                "user_id": ar.Int64(),
+            },
+            unique="user_id",
+        )
+    assert "bare string" in str(exc.value)
+
+
+def test_schema_unique_rejects_invalid_type():
+    with pytest.raises(TypeError) as exc:
+        ar.Schema(
+            {
+                "user_id": ar.Int64(),
+            },
+            unique=123,  # type: ignore[arg-type]
+        )
+    assert "must be a list or tuple" in str(exc.value)
+
+
+def test_schema_unique_rejects_non_string_members():
+    with pytest.raises(TypeError) as exc:
+        ar.Schema(
+            {
+                "user_id": ar.Int64(),
+            },
+            unique=["col1", None],  # type: ignore[list-item]
+        )
+    assert "members must be strings" in str(exc.value)
+
+    with pytest.raises(TypeError) as exc:
+        ar.Schema(
+            {
+                "user_id": ar.Int64(),
+            },
+            unique=["col1", 123],  # type: ignore[list-item]
+        )
+    assert "members must be strings" in str(exc.value)
+
+
+def test_schema_unique_accepts_valid_types():
+    # Verify list of strings initializes successfully
+    schema_list = ar.Schema(
+        {
+            "user_id": ar.Int64(),
+            "course_id": ar.Int64(),
+        },
+        unique=["user_id", "course_id"],
+    )
+    assert schema_list.unique == ["user_id", "course_id"]
+
+    # Verify tuple of strings initializes successfully
+    schema_tuple = ar.Schema(
+        {
+            "user_id": ar.Int64(),
+            "course_id": ar.Int64(),
+        },
+        unique=("user_id", "course_id"),
+    )
+    assert schema_tuple.unique == ("user_id", "course_id")
+
+
+def test_schema_unique_rejects_duplicate_columns():
+    with pytest.raises(
+        ValueError,
+        match="Schema 'unique' must not contain duplicate column names",
+    ):
+        ar.Schema(
+            {
+                "user_id": ar.Int64(),
+            },
+            unique=["user_id", "user_id"],
+        )
+
+
+def test_schema_from_json_rejects_duplicate_unique_columns():
+    payload = {
+        "fields": {
+            "user_id": {
+                "dtype": "int64",
+                "nullable": True,
+                "unique": False,
+            }
+        },
+        "strict": False,
+        "unique": ["user_id", "user_id"],
+    }
+
+    with pytest.raises(
+        ValueError,
+        match="Schema 'unique' must not contain duplicate column names",
+    ):
+        ar.Schema.from_json(json.dumps(payload))
+
+
+@pytest.mark.parametrize("value", ["false", 1, None])
+def test_field_nullable_rejects_non_bool_values(value):
+    with pytest.raises(TypeError, match="nullable must be a bool"):
+        ar.String(nullable=value)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("value", ["yes", 1, None])
+def test_field_unique_rejects_non_bool_values(value):
+    with pytest.raises(TypeError, match="unique must be a bool"):
+        ar.Int64(unique=value)  # type: ignore[arg-type]
+
+
+def test_field_nullable_and_unique_accept_valid_bools():
+    field = ar.String(nullable=False, unique=True)
+
+    assert field.nullable is False
+    assert field.unique is True
+
+
+@pytest.mark.parametrize("value", ["status", 123])
+def test_required_if_rejects_non_tuple_shapes(value):
+    with pytest.raises(TypeError, match="required_if must be a tuple or None"):
+        ar.String(required_if=value)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("value", [("status",), ("status", "active", "extra")])
+def test_required_if_rejects_wrong_tuple_lengths(value):
+    with pytest.raises(
+        TypeError, match=r"required_if must be a \(column_name, expected_value\) tuple"
+    ):
+        ar.String(required_if=value)  # type: ignore[arg-type]
+
+
+def test_required_if_rejects_non_string_column_name():
+    with pytest.raises(TypeError, match="required_if column name must be a string"):
+        ar.String(required_if=(123, "active"))  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        ["yes"],
+        ("yes",),
+        {"value": "yes"},
+    ],
+)
+def test_required_if_rejects_non_scalar_expected_value(value):
+    with pytest.raises(TypeError, match="required_if expected value must be a scalar"):
+        ar.String(required_if=("flag", value))
+
+
+@pytest.mark.parametrize("value", ["yes", 1, 1.5, True, None])
+def test_required_if_accepts_scalar_expected_value(value):
+    field = ar.String(required_if=("flag", value))
+
+    assert field.required_if == ("flag", value)
+
+
+def test_required_if_valid_conditional_validation(tmp_path):
+    path = tmp_path / "conditional_req.csv"
+    path.write_text("status,notes\nactive,has notes\ninactive,\nactive,\n")
+    frame = ar.read_csv(path)
+    schema = ar.Schema(
+        {"notes": ar.String(required_if=("status", "active"), nullable=True)}
+    )
+
+    result = ar.validate(frame, schema)
+    rules = [issue.rule for issue in result.issues]
+
+    assert not result.passed
+    assert result.issue_count == 1
+    assert "required_if" in rules
+    assert result.bad_rows == [3]
+
+
+def test_email_default_keeps_backward_compatibility(sample_csv):
+    frame = ar.read_csv(sample_csv)
+
+    result = ar.validate(
+        frame,
+        {"email": ar.Email(nullable=False)},
+    )
+
+    assert all(
+        issue.rule == "email" for issue in result.issues if "email" in issue.rule
+    )
+
+
+def test_datetime_validation_passes_for_valid_column(tmp_path):
+    path = tmp_path / "valid_datetimes.csv"
+    path.write_text(
+        "ts\n2026-01-01T12:00:00\n2026-06-15T08:30:00\n2026-12-31T23:59:59\n"
+    )
 
     result = ar.validate(
         ar.read_csv(path),
         {"dt": ar.Date(min="2024-01-01")},
     )
+
+    assert result.passed
+    assert result.issue_count == 0
+    assert result.bad_rows == []
+
+
+def test_datetime_rejects_invalid_format_type():
+    with pytest.raises(TypeError, match="format must be a string or None"):
+        ar.DateTime(format=123)
+
+
+def test_datetime_rejects_invalid_boundary_values():
+    with pytest.raises(ValueError, match="min must be a parseable datetime scalar"):
+        ar.DateTime(min="not-a-date")
+
+    with pytest.raises(ValueError, match="max must be a parseable datetime scalar"):
+        ar.DateTime(max=["2026-01-01", "2026-01-02"])
+
+
+def test_datetime_rejects_min_greater_than_max():
+    with pytest.raises(ValueError, match="min must be less than or equal to max"):
+        ar.DateTime(min="2026-12-31", max="2026-01-01")
+
+
+def test_datetime_validation(tmp_path):
+    path = tmp_path / "datetimes.csv"
+    path.write_text(
+        "ts,note\n"
+        "2026-01-01T12:00:00,start\n"
+        "2026-12-31T23:59:59,end\n"
+        ",missing\n"
+        "invalid-date,bad\n"
+    )
+    frame = ar.read_csv(path)
+    schema = ar.Schema(
+        {
+            "ts": ar.DateTime(
+                nullable=False,
+                format="%Y-%m-%dT%H:%M:%S",
+                min="2026-01-01",
+                max="2026-12-31T23:59:59",
+            )
+        }
+    )
+
+    result = ar.validate(frame, schema)
+    rules = [issue.rule for issue in result.issues]
+
+    assert not result.passed
+    assert "format" in rules
+    assert "nullable" in rules
+
+    path2 = tmp_path / "boundary.csv"
+    path2.write_text("ts\n2025-12-31T23:59:59\n2027-01-01T00:00:00\n")
+    frame2 = ar.read_csv(path2)
+    result2 = ar.validate(frame2, schema)
+    rules2 = [issue.rule for issue in result2.issues]
+
+    assert "min" in rules2
+    assert "max" in rules2
+
+
+def test_row_index_is_one_based_for_middle_row(tmp_path):
+    path = tmp_path / "codes.csv"
+    path.write_text("age\n30\n-5\n25\n")
+    frame = ar.read_csv(path)
+    result = ar.validate(frame, {"age": ar.Int64(min=0)})
+
+    assert not result.passed
+    assert len(result.issues) == 1
+    assert result.issues[0].row_index == 2
+
+
+def test_row_index_is_one_based_for_last_row(tmp_path):
+    path = tmp_path / "codes.csv"
+    path.write_text("age\n30\n25\n-1\n")
+    frame = ar.read_csv(path)
+    result = ar.validate(frame, {"age": ar.Int64(min=0)})
+
+    assert not result.passed
+    assert len(result.issues) == 1
+    assert result.issues[0].row_index == 3
+
+
+def test_row_index_multiple_invalid_rows(tmp_path):
+    path = tmp_path / "codes.csv"
+    path.write_text("age\n-1\n30\n-5\n25\n-9\n")
+    frame = ar.read_csv(path)
+    result = ar.validate(frame, {"age": ar.Int64(min=0)})
+
+    assert not result.passed
+    row_indexes = [issue.row_index for issue in result.issues]
+    assert row_indexes == [1, 3, 5]
+
+
+def test_bad_rows_reflects_one_based_indexes(tmp_path):
+    """bad_rows should contain 1-based row numbers."""
+    path = tmp_path / "codes.csv"
+    path.write_text("age\n-1\n30\n-5\n")
+    frame = ar.read_csv(path)
+    result = ar.validate(frame, {"age": ar.Int64(min=0)})
+
+    assert result.bad_rows == [1, 3]
+    assert result.issues[0].row_index == 1
+
+
+def test_regex_valid_match(tmp_path):
+    path = tmp_path / "ids.csv"
+    path.write_text("user_id\nUSR-1234\nUSR-5678\n")
+    result = ar.validate(
+        ar.read_csv(path),
+        {"user_id": ar.Regex(r"^USR-\d{4}$", nullable=False)},
+    )
+
+    assert result.passed
+    assert result.issue_count == 0
+
+
+def test_regex_mismatch_reports_pattern_rule(tmp_path):
+    path = tmp_path / "ids.csv"
+    path.write_text("user_id\nUSR-1234\nbadvalue\n")
+    result = ar.validate(
+        ar.read_csv(path),
+        {"user_id": ar.Regex(r"^USR-\d{4}$", nullable=False)},
+    )
+
+    assert not result.passed
+    assert result.issues[0].rule == "pattern"
+    assert result.issues[0].row_index == 2
+
+
+def test_regex_null_allowed(tmp_path):
+    path = tmp_path / "ids.csv"
+    path.write_text("user_id\nUSR-1234\n\n")
+    result = ar.validate(
+        ar.read_csv(path),
+        {"user_id": ar.Regex(r"^USR-\d{4}$", nullable=True)},
+    )
+    assert result.passed
+
+
+def test_date_validation_rejects_invalid_dates(tmp_path):
+    path = tmp_path / "bad_dates.csv"
+    path.write_text("created_at\n2026-99-99\nhello\n15/05/2026\n2026-02-30\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"created_at": ar.Date(nullable=False)},
+    )
+
+    assert not result.passed
+    assert result.issue_count == 4
 
     rules = {issue.rule for issue in result.issues}
     assert "date" in rules  # format error for "not-a-date"
@@ -1577,9 +2628,87 @@ def test_date_nullable_values_skip_bounds_check(tmp_path):
     assert result.passed
 
 
+def test_regex_null_not_allowed(tmp_path):
+    path = tmp_path / "ids.csv"
+    path.write_text("user_id,other\nUSR-1234,a\n,b\n")
+    result = ar.validate(
+        ar.read_csv(path),
+        {"user_id": ar.Regex(r"^USR-\d{4}$", nullable=False)},
+    )
+
+    assert not result.passed
+    assert result.issues[0].rule == "nullable"
+
+
+def test_regex_invalid_pattern_raises_at_construction():
+    try:
+        ar.Regex(r"[invalid")
+        assert False, "Expected re.error"
+    except Exception as exc:
+        assert (
+            "unterminated" in str(exc).lower() or "error" in type(exc).__name__.lower()
+        )
+
+
+def test_regex_numeric_column_coerces_to_string(tmp_path):
+    path = tmp_path / "codes.csv"
+    path.write_text("code\n123\n456\n")
+    result = ar.validate(
+        ar.read_csv(path),
+        {"code": ar.Regex(r"^\d+$")},
+    )
+
+    assert result.issues[0].rule == "dtype"
+
+
+def test_regex_fullmatch_not_partial(tmp_path):
+    path = tmp_path / "ids.csv"
+    path.write_text("user_id\nUSR-1234-EXTRA\n")
+    result = ar.validate(
+        ar.read_csv(path),
+        {"user_id": ar.Regex(r"^USR-\d{4}$")},
+    )
+
+    assert not result.passed
+    assert result.issues[0].rule == "pattern"
+
+
+def test_date_validation_rejects_non_zero_padded_dates(tmp_path):
+    path = tmp_path / "non_padded_dates.csv"
+    path.write_text("created_at\n2026-5-15\n2026-05-5\n2026-5-5\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"created_at": ar.Date(nullable=False)},
+    )
+
+    assert not result.passed
+    assert result.issue_count == 3
+
+    rules = {issue.rule for issue in result.issues}
+    assert "date" in rules
+
+
+def test_date_validation_reports_only_invalid_vectorized_values(tmp_path):
+    path = tmp_path / "mixed_dates.csv"
+    path.write_text("created_at\n2026-05-15\n2026-02-30\n2026-5-15\n2024-02-29\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"created_at": ar.Date(nullable=False)},
+    )
+
+    assert not result.passed
+    assert [(issue.row_index, issue.value) for issue in result.issues] == [
+        (2, "2026-02-30"),
+        (3, "2026-5-15"),
+    ]
+    assert {issue.rule for issue in result.issues} == {"date"}
+
+
 def test_required_if_validation_passes_when_condition_matches(tmp_path):
     path = tmp_path / "conditional_pass.csv"
-    path.write_text("user_type,country\n" "international,IN\n" "local,\n")
+    path.write_text("user_type,country\ninternational,IN\nlocal,\n")
 
     frame = ar.read_csv(path)
 
@@ -1602,7 +2731,7 @@ def test_required_if_validation_passes_when_condition_matches(tmp_path):
 
 def test_required_if_validation_fails_when_condition_matches(tmp_path):
     path = tmp_path / "conditional_fail.csv"
-    path.write_text("user_type,country\n" "international,\n" "local,IN\n")
+    path.write_text("user_type,country\ninternational,\nlocal,IN\n")
 
     frame = ar.read_csv(path)
 
@@ -1677,7 +2806,7 @@ def test_schema_rules_fails_when_end_date_before_start_date(tmp_path):
 
 def test_required_if_validation_ignores_non_matching_conditions(tmp_path):
     path = tmp_path / "conditional_ignore.csv"
-    path.write_text("user_type,country\n" "local,\n" "guest,\n")
+    path.write_text("user_type,country\nlocal,\nguest,\n")
 
     frame = ar.read_csv(path)
 
@@ -1714,7 +2843,7 @@ def test_schema_rules_equal_boundary_passes(tmp_path):
 
 def test_required_if_validation_reports_missing_trigger_column(tmp_path):
     path = tmp_path / "missing_trigger.csv"
-    path.write_text("country\n" "IN\n")
+    path.write_text("country\nIN\n")
     frame = ar.read_csv(path)
     schema = ar.Schema(
         {
@@ -1814,7 +2943,7 @@ def test_schema_rules_missing_column_returns_validation_issue(tmp_path):
 
 def test_required_if_validation_handles_null_trigger_values(tmp_path):
     path = tmp_path / "null_trigger.csv"
-    path.write_text("user_type,country\n" ",\n" "international,IN\n")
+    path.write_text("user_type,country\n,\ninternational,IN\n")
     frame = ar.read_csv(path)
     schema = ar.Schema(
         {
@@ -2805,7 +3934,7 @@ def test_custom_field_required_if_validation_passes_when_condition_matches(tmp_p
     ar.register_validator("positive_req", lambda v: v > 0)
 
     path = tmp_path / "custom_conditional_pass.csv"
-    path.write_text("status,score\n" "active,10\n" "inactive,\n")
+    path.write_text("status,score\nactive,10\ninactive,\n")
     frame = ar.read_csv(path)
 
     schema = ar.Schema(
@@ -2826,7 +3955,7 @@ def test_custom_field_required_if_validation_fails_when_condition_matches(tmp_pa
     ar.register_validator("positive_req", lambda v: v > 0)
 
     path = tmp_path / "custom_conditional_fail.csv"
-    path.write_text("status,score\n" "active,\n" "inactive,5\n")
+    path.write_text("status,score\nactive,\ninactive,5\n")
     frame = ar.read_csv(path)
 
     schema = ar.Schema(
@@ -2850,7 +3979,7 @@ def test_custom_field_required_if_validation_ignores_non_matching_conditions(tmp
     ar.register_validator("positive_req", lambda v: v > 0)
 
     path = tmp_path / "custom_conditional_ignore.csv"
-    path.write_text("status,score\n" "pending,\n" "inactive,\n")
+    path.write_text("status,score\npending,\ninactive,\n")
     frame = ar.read_csv(path)
 
     schema = ar.Schema(
@@ -2871,7 +4000,7 @@ def test_custom_field_required_if_enforces_rule_logic_when_matched(tmp_path):
     ar.register_validator("positive_req", lambda v: v > 0)
 
     path = tmp_path / "custom_conditional_rule_fail.csv"
-    path.write_text("status,score\n" "active,-5\n")
+    path.write_text("status,score\nactive,-5\n")
     frame = ar.read_csv(path)
 
     schema = ar.Schema(
@@ -3194,4 +4323,64 @@ def test_from_json_round_trip_is_accepted():
     recovered = ar.Schema.from_json(original.to_json())
     assert recovered.fields["email"].nullable is False
     assert recovered.unique == ["email"]
->>>>>>> upstream/main
+
+
+class TestValidateAllowedCollection:
+    """Regression tests for issue #1676 - validate allowed-value collections."""
+
+    # --- String ---
+
+    def test_string_valid_list(self):
+        f = ar.String(allowed=["a", "b", "c"])
+        assert f.allowed == {"a", "b", "c"}
+
+    def test_string_valid_tuple(self):
+        f = ar.String(allowed=("x", "y"))
+        assert f.allowed == {"x", "y"}
+
+    def test_string_valid_set(self):
+        f = ar.String(allowed={"foo", "bar"})
+        assert f.allowed == {"foo", "bar"}
+
+    def test_string_rejects_bare_string(self):
+        with pytest.raises(TypeError, match="bare string"):
+            ar.String(allowed="abc")
+
+    def test_string_rejects_bare_bytes(self):
+        with pytest.raises(TypeError):
+            ar.String(allowed=b"abc")
+
+    def test_string_rejects_non_iterable(self):
+        with pytest.raises(TypeError, match="iterable"):
+            ar.String(allowed=123)
+
+    def test_string_rejects_unhashable_nested_list(self):
+        with pytest.raises(TypeError, match="unhashable"):
+            ar.String(allowed=[["x"]])
+
+    def test_string_rejects_unhashable_dict_value(self):
+        with pytest.raises(TypeError, match="unhashable"):
+            ar.String(allowed=[{"a": 1}])
+
+    # --- CurrencyCode ---
+
+    def test_currency_code_valid_list(self):
+        f = ar.CurrencyCode(allowed=["USD", "EUR", "INR"])
+        assert f.allowed == {"USD", "EUR", "INR"}
+
+    def test_currency_code_rejects_bare_string(self):
+        with pytest.raises(TypeError, match="bare string"):
+            ar.CurrencyCode(allowed="USD")
+
+    def test_currency_code_rejects_unhashable(self):
+        with pytest.raises(TypeError, match="unhashable"):
+            ar.CurrencyCode(allowed=[["USD"]])
+
+    def test_currency_code_none_allowed(self):
+        f = ar.CurrencyCode(allowed=None)
+        assert f.allowed is None
+
+
+def test_currency_code_accepts_generator_iterable():
+    f = ar.CurrencyCode(allowed=(x for x in ["USD", "EUR"]))
+    assert f.allowed == {"USD", "EUR"}
