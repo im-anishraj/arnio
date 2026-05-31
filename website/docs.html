@@ -174,6 +174,33 @@ schema = ar.Schema({
 result = schema.validate(frame, max_errors=100)
 yaml_text = ar.schema_to_yaml(schema)</code></pre></div>
 
+        <h3>Schema-level uniqueness and cross-field rules</h3>
+        <p>For production data contracts, use <code>unique</code> to enforce uniqueness across columns and <code>rules</code> for custom cross-field validation.</p>
+        <div class="code-block"><div class="code-block-header">Python</div><pre><code class="language-python">schema = ar.Schema(
+    fields={
+        "customer_id": ar.Int64(nullable=False),
+        "account_balance": ar.Float64(nullable=False),
+        "credit_limit": ar.Float64(nullable=False),
+    },
+    # Ensure customer_id is unique across the dataset
+    unique=["customer_id"],
+    # Cross-field rule: balance cannot exceed credit limit
+    rules=[
+        lambda df: [
+            ar.ValidationIssue(
+                column="account_balance",
+                rule="balance_exceeds_limit",
+                message="Account balance exceeds credit limit",
+                row_index=int(idx) + 1,
+            )
+            for idx in df[df["account_balance"] > df["credit_limit"]].index
+        ],
+    ],
+)
+
+result = ar.validate(frame, schema)
+result.passed</code></pre></div>
+
         <h2 id="integrations">Integrations</h2>
         <p>Arnio is designed to sit beside pandas, not replace it. Use the pandas accessor, Arrow export, DuckDB registration, Parquet output, and scikit-learn transformer where they fit your workflow.</p>
         <div class="code-block"><div class="code-block-header">Python</div><pre><code class="language-python">df = ar.to_pandas(frame, copy=True)
