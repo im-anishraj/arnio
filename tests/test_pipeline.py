@@ -863,8 +863,10 @@ class TestPipeline:
         assert row_counts[0]["dry_run"] is True
 
     def test_register_step_invalid_name_type(self):
-        """Raise TypeError when name is not a string."""
-        with pytest.raises(TypeError, match="parameter 'name' must be a string"):
+        """Raise ValueError when name is not a string."""
+        with pytest.raises(
+            ValueError, match="parameter 'name' must be a non-empty string"
+        ):
             ar.register_step(123, lambda df: df)
 
     def test_register_step_empty_name(self):
@@ -876,7 +878,7 @@ class TestPipeline:
 
     def test_register_step_non_callable_fn(self):
         """Raise TypeError when fn is not callable."""
-        with pytest.raises(TypeError, match="parameter 'fn' must be callable"):
+        with pytest.raises(TypeError, match="parameter 'fn' must be a callable object"):
             ar.register_step("bad_step", 123)
 
     def test_register_step_non_bool_overwrite(self):
