@@ -6,6 +6,7 @@ on:
   pull_request:
     paths:
       - "arnio/**"
+      - "bindings/**"
       - "cpp/**"
       - "benchmarks/**"
       - ".github/workflows/benchmark.yml"
