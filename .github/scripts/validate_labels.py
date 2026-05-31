@@ -9,8 +9,14 @@ LABELS_FILE = ".github/labels.yml"
 
 def get_live_labels():
     with open(LABELS_FILE) as f:
-        labels = yaml.safe_load(f)
-    return {label["name"] for label in labels}
+        data = yaml.safe_load(f)
+    labels = set()
+    for group in data.values():
+        if isinstance(group, list):
+            for item in group:
+                if isinstance(item, str):
+                    labels.add(item)
+    return labels
 
 
 def get_template_labels():
