@@ -2088,7 +2088,7 @@ def test_drop_columns_matching_all_columns():
     df = pd.DataFrame({"a": [1, 2], "b": [3, 4]})
     with pytest.raises(ValueError, match="Pattern matches all columns"):
         ar.drop_columns_matching(df, ".*")
-        
+
 
 def test_fill_nulls_validation_lossy_and_non_finite():
     """
@@ -2170,42 +2170,19 @@ def test_fill_nulls_validation_lossy_and_non_finite():
             float_frame, [("fill_nulls", {"value": float("inf"), "subset": ["x"]})]
         )
 
+
 def test_parse_numeric_strings():
-    # 1. Create a messy dataset
     raw_data = {
         "price": ["$1,234.50", "€500", "£10.25", "invalid_number"],
         "rate": ["15%", " 45.5% ", "0.5%", "none"],
-        "normal_text": ["apple", "banana", "cherry", "date"]
-    }
-    
-    # 2. Initialize frame using public API
-    frame = ar.from_pandas(pd.DataFrame(raw_data))
-
-    # 3. Run the function under 'coerce' mode
-    cleaned = ar.parse_numeric_strings(frame, subset=["price", "rate"], errors="coerce")
-    df = ar.to_pandas(cleaned)
-
-    # 4. Assertions
-    assert df["price"].iloc[0] == 1234.50
-    assert df["price"].iloc[1] == 500.0
-    assert df["price"].iloc[2] == 10.25
-    assert pd.isna(df["price"].iloc[3])
-
-def test_parse_numeric_strings():
-
-    # 1. Create a messy dataset
-    raw_data = {
-        "price": ["$1,234.50", "€500", "£10.25", "invalid_number"],
-        "rate": ["15%", " 45.5% ", "0.5%", "none"],
-        "normal_text": ["apple", "banana", "cherry", "date"]
+        "normal_text": ["apple", "banana", "cherry", "date"],
     }
     frame = ar.from_pandas(pd.DataFrame(raw_data))
 
-    # 2. Run the function under 'coerce' mode
+    # coerce mode
     cleaned = ar.parse_numeric_strings(frame, subset=["price", "rate"], errors="coerce")
     df = ar.to_pandas(cleaned)
 
-    # 3. Assertions
     assert df["price"].iloc[0] == 1234.50
     assert df["price"].iloc[1] == 500.0
     assert df["price"].iloc[2] == 10.25
@@ -2216,140 +2193,9 @@ def test_parse_numeric_strings():
     assert df["rate"].iloc[2] == 0.005
     assert pd.isna(df["rate"].iloc[3])
 
+    # untargeted column left untouched
     assert df["normal_text"].iloc[0] == "apple"
 
-    
-    with pytest.raises(ValueError):
-        ar.parse_numeric_strings(frame, subset=["price"], errors="raise")
-
-def test_fill_nulls_validation_lossy_and_non_finite():
-    """
-    Ensure that fill_nulls rejects non-finite values and lossy float-to-int conversions
-    with strict user-facing error contracts, while allowing compatible type-safe or
-    int-to-float conversions to work.
-    """
-    import pandas as pd
-    import pytest
-
-    import arnio as ar
-
-    # --- 1. VALID FILL COVERAGE (Happy Paths & New Compatible Paths) ---
-    # Valid Int-to-Int fill
-    valid_int = ar.from_pandas(pd.DataFrame({"x": pd.Series([1, None], dtype="Int64")}))
-    res_int = ar.fill_nulls(valid_int, 5, subset=["x"])
-    assert ar.to_pandas(res_int)["x"].iloc[1] == 5
-
-    # Valid Float-to-Float finite fill
-    valid_float = ar.from_pandas(pd.DataFrame({"x": [1.0, None]}))
-    res_float = ar.fill_nulls(valid_float, 3.5, subset=["x"])
-    assert ar.to_pandas(res_float)["x"].iloc[1] == 3.5
-
-    # Compatible Int-to-Float fill (Filling a float column with an integer value)
-    res_compatible = ar.fill_nulls(valid_float, 5, subset=["x"])
-    assert ar.to_pandas(res_compatible)["x"].iloc[1] == 5.0
-
-    # --- 2. INVALID DIRECT USAGE TESTS (Strict Error Message Contracts) ---
-    int_frame = ar.from_pandas(pd.DataFrame({"x": pd.Series([1, None], dtype="Int64")}))
-
-    # Reject lossy float values for integer target columns
-    with pytest.raises(
-        ValueError,
-        match="Lossy or non-finite numeric fill values are not permitted for integer columns.",
-    ):
-        ar.fill_nulls(int_frame, 1.9, subset=["x"])
-
-    # Reject Infinity for integer target columns
-    with pytest.raises(
-        ValueError,
-        match="Lossy or non-finite numeric fill values are not permitted for integer columns.",
-    ):
-        ar.fill_nulls(int_frame, float("inf"), subset=["x"])
-
-    # New Coverage Reject NaN for integer target columns
-    with pytest.raises(
-        ValueError,
-        match="Lossy or non-finite numeric fill values are not permitted for integer columns.",
-    ):
-        ar.fill_nulls(int_frame, float("nan"), subset=["x"])
-
-    float_frame = ar.from_pandas(pd.DataFrame({"x": [1.0, None]}))
-
-    # Reject Infinity and NaN for float target columns
-    with pytest.raises(
-        ValueError,
-        match="Non-finite numeric fill values are not permitted for float columns.",
-    ):
-        ar.fill_nulls(float_frame, float("inf"), subset=["x"])
-
-    with pytest.raises(
-        ValueError,
-        match="Non-finite numeric fill values are not permitted for float columns.",
-    ):
-        ar.fill_nulls(float_frame, float("nan"), subset=["x"])
-
-    # --- 3. PIPELINE USAGE TESTS ---
-    with pytest.raises(
-        ValueError,
-        match="Lossy or non-finite numeric fill values are not permitted for integer columns.",
-    ):
-        ar.pipeline(int_frame, [("fill_nulls", {"value": 1.9, "subset": ["x"]})])
-
-    with pytest.raises(
-        ValueError,
-        match="Non-finite numeric fill values are not permitted for float columns.",
-    ):
-        ar.pipeline(
-            float_frame, [("fill_nulls", {"value": float("inf"), "subset": ["x"]})]
-        )
-
-def test_parse_numeric_strings():
-    # 1. Create a messy dataset
-    raw_data = {
-        "price": ["$1,234.50", "€500", "£10.25", "invalid_number"],
-        "rate": ["15%", " 45.5% ", "0.5%", "none"],
-        "normal_text": ["apple", "banana", "cherry", "date"]
-    }
-    
-    # 2. Initialize frame using public API
-    frame = ar.from_pandas(pd.DataFrame(raw_data))
-
-    # 3. Run the function under 'coerce' mode
-    cleaned = ar.parse_numeric_strings(frame, subset=["price", "rate"], errors="coerce")
-    df = ar.to_pandas(cleaned)
-
-    # 4. Assertions
-    assert df["price"].iloc[0] == 1234.50
-    assert df["price"].iloc[1] == 500.0
-    assert df["price"].iloc[2] == 10.25
-    assert pd.isna(df["price"].iloc[3])
-
-def test_parse_numeric_strings():
-
-    # 1. Create a messy dataset
-    raw_data = {
-        "price": ["$1,234.50", "€500", "£10.25", "invalid_number"],
-        "rate": ["15%", " 45.5% ", "0.5%", "none"],
-        "normal_text": ["apple", "banana", "cherry", "date"]
-    }
-    frame = ar.from_pandas(pd.DataFrame(raw_data))
-
-    # 2. Run the function under 'coerce' mode
-    cleaned = ar.parse_numeric_strings(frame, subset=["price", "rate"], errors="coerce")
-    df = ar.to_pandas(cleaned)
-
-    # 3. Assertions
-    assert df["price"].iloc[0] == 1234.50
-    assert df["price"].iloc[1] == 500.0
-    assert df["price"].iloc[2] == 10.25
-    assert pd.isna(df["price"].iloc[3])
-
-    assert df["rate"].iloc[0] == 0.15
-    assert df["rate"].iloc[1] == 0.455
-    assert df["rate"].iloc[2] == 0.005
-    assert pd.isna(df["rate"].iloc[3])
-
-    assert df["normal_text"].iloc[0] == "apple"
-
-    
+    # raise mode should error on invalid values
     with pytest.raises(ValueError):
         ar.parse_numeric_strings(frame, subset=["price"], errors="raise")
