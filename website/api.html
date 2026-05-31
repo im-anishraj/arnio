@@ -88,47 +88,7 @@
         <h2 id="quality">Quality</h2>
         <div class="api-func"><div class="api-func-header">profile(frame, *, exclude_columns=None, sample_size=5, approx_top_values=False, approx_top_values_min_unique=1000, approx_top_values_min_ratio=0.2, approx_top_values_sample_size=2000)</div><div class="api-func-body"><p>Return <code>DataQualityReport</code> with row/column counts, duplicate metrics, column profiles, warnings, quality score, score components, and cleaning suggestions.</p></div></div>
         <div class="api-func"><div class="api-func-header">DataQualityReport._repr_html_()</div><div class="api-func-body"><p>Jupyter/IPython automatically calls this to render the report dashboard HTML directly in the notebook output area.</p></div></div>
-        <div class="api-func">
-  <div class="api-func-header">
-    DataQualityReport.to_dict(redact_sample_values=False, exclude_columns=None),
-    to_json(indent=None, redact_sample_values=False, exclude_columns=None, output=None),
-    to_markdown(output=None, max_suggestions=None),
-    to_html(file_path=None, output=None, max_suggestions=None, redact_top_values=False, exclude_columns=None),
-    summary(),
-    to_pandas()
-  </div>
-
-  <div class="api-func-body">
-    <p>
-      Export reports for notebooks, CI, docs, and automation.
-    </p>
-
-    <p>
-      Privacy controls include
-      <code>redact_sample_values</code>,
-      <code>redact_top_values</code>,
-      and <code>exclude_columns</code>
-      for removing sensitive values from exported reports.
-    </p>
-
-    <p>
-      <code>output</code> and <code>file_path</code>
-      can write exports directly to a stream or file.
-      <code>max_suggestions</code> limits the number of cleaning
-      suggestions included in Markdown and HTML exports.
-    </p>
-
-    <pre><code>report.to_json(
-    redact_sample_values=True,
-)
-
-report.to_html(
-    file_path="report.html",
-    max_suggestions=10,
-)
-</code></pre>
-  </div>
-</div>
+        <div class="api-func"><div class="api-func-header">DataQualityReport.to_dict(redact_sample_values=False, exclude_columns=None), to_json(), to_markdown(), to_html(), summary(), to_pandas()</div><div class="api-func-body"><p>Export reports for notebooks, CI, docs, and automation.</p></div></div>
         <div class="api-func"><div class="api-func-header">compare_profiles(left, right), check_quality_gates(baseline, current), suggest_cleaning(frame_or_report), auto_clean(frame, *, mode="safe", dry_run=False, explain=False)</div><div class="api-func-body"><p>Compare quality over time, fail CI on drift, generate pipeline-compatible steps, or run automatic cleaning with optional audit output.</p></div></div>
         <div class="api-func"><div class="api-func-header">Quality result classes</div><div class="api-func-body"><p><code>ColumnProfile</code>, <code>CleaningSuggestion</code>, <code>CleanStepRecord</code>, <code>CleanExplanation</code>, <code>ProfileComparison</code>, <code>QualityGateIssue</code>, and <code>QualityGateResult</code> describe structured profiling, cleaning, comparison, and gate output.</p></div></div>
 
