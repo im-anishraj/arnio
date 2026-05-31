@@ -682,6 +682,11 @@ def test_profile_approx_top_values_validation(tmp_path):
     ):
         ar.profile(frame, approx_top_values_sample_size=0)
 
+    with pytest.raises(
+        ValueError, match="approx_top_values_min_ratio must be between 0 and 1"
+    ):
+        ar.profile(frame, approx_top_values_min_ratio=float("nan"))
+
 
 # ── top_values tests ──────────────────────────────────────────────────────────
 

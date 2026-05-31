@@ -736,7 +736,11 @@ def profile(
         approx_top_values_min_ratio, bool
     ):
         raise TypeError("approx_top_values_min_ratio must be a float")
-    if approx_top_values_min_ratio < 0 or approx_top_values_min_ratio > 1:
+    if (
+        not math.isfinite(approx_top_values_min_ratio)
+        or approx_top_values_min_ratio < 0
+        or approx_top_values_min_ratio > 1
+    ):
         raise ValueError("approx_top_values_min_ratio must be between 0 and 1")
     if not isinstance(approx_top_values_sample_size, int) or isinstance(
         approx_top_values_sample_size, bool
