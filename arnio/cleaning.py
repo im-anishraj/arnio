@@ -1884,9 +1884,12 @@ def replace_values(
         ):
             normalized_mapping[k] = v
         else:
-            # pandas replace does not support non-scalar mapping keys like tuples
-            # and lists. Ignore those keys rather than raising a user-facing error.
-            continue
+            raise TypeError(
+                f"replace_values() does not support non-scalar mapping keys. "
+                f"Got key {k!r} of type '{type(k).__name__}'. "
+                f"Only scalar values (str, int, float, bool) and null-like keys "
+                f"(None, float('nan'), pd.NA, pd.NaT) are supported."
+            )
 
     if column:
         s = df[column]

@@ -2935,31 +2935,65 @@ class TestReplaceValues:
     def test_replace_values_tuple_mapping_key_does_not_crash(self):
         frame = ar.from_pandas(pd.DataFrame({"col": ["A", "B", "C"]}))
 
-        result = ar.replace_values(
-            frame,
-            {("A", "B"): "X"},
-            column="col",
-        )
-
-        df = ar.to_pandas(result)
-
-        assert list(df["col"]) == ["A", "B", "C"]
+        with pytest.raises(TypeError, match="non-scalar mapping keys"):
+            ar.replace_values(
+                frame,
+                {("A", "B"): "X"},
+                column="col",
+            )
 
     def test_replace_values_mixed_tuple_and_null_keys(self):
         frame = ar.from_pandas(pd.DataFrame({"col": ["A", np.nan, "C"]}))
 
-        result = ar.replace_values(
-            frame,
-            {
-                ("A", "B"): "X",
-                np.nan: "missing",
-            },
-            column="col",
-        )
+        with pytest.raises(TypeError, match="non-scalar mapping keys"):
+            ar.replace_values(
+                frame,
+                {
+                    ("A", "B"): "X",
+                    np.nan: "missing",
+                },
+                column="col",
+            )
 
+    def test_replace_values_list_key_raises_typeerror(self):
+        frame = ar.from_pandas(pd.DataFrame({"col": ["A", "B"]}))
+
+        with pytest.raises(TypeError, match="non-scalar mapping keys"):
+            ar.replace_values(frame, {["A", "B"]: "X"})
+
+    def test_replace_values_numpy_array_key_raises_typeerror(self):
+        frame = ar.from_pandas(pd.DataFrame({"col": [1, 2, 3]}))
+
+        with pytest.raises(TypeError, match="non-scalar mapping keys"):
+            ar.replace_values(frame, {np.array([1, 2]): "X"})
+
+    def test_replace_values_pandas_series_key_raises_typeerror(self):
+        frame = ar.from_pandas(pd.DataFrame({"col": [1, 2, 3]}))
+
+        with pytest.raises(TypeError, match="non-scalar mapping keys"):
+            ar.replace_values(frame, {pd.Series([1, 2]): "X"})
+
+    def test_replace_values_pandas_index_key_raises_typeerror(self):
+        frame = ar.from_pandas(pd.DataFrame({"col": [1, 2, 3]}))
+
+        with pytest.raises(TypeError, match="non-scalar mapping keys"):
+            ar.replace_values(frame, {pd.Index([1, 2]): "X"})
+
+    def test_replace_values_error_message_includes_key_type(self):
+        """TypeError message must name the offending key type."""
+        frame = ar.from_pandas(pd.DataFrame({"col": ["A"]}))
+
+        with pytest.raises(TypeError, match="tuple"):
+            ar.replace_values(frame, {(1, 2): "X"})
+
+    def test_replace_values_scalar_keys_still_work_after_validation(self):
+        """Valid scalar mappings must be completely unaffected by the new check."""
+        frame = ar.from_pandas(pd.DataFrame({"col": ["A", "B", "C"]}))
+
+        result = ar.replace_values(frame, {"A": "Z"}, column="col")
         df = ar.to_pandas(result)
 
-        assert list(df["col"]) == ["A", "missing", "C"]
+        assert list(df["col"]) == ["Z", "B", "C"]
 
     def test_replace_values_pandas_dataframe_input_returns_dataframe(self):
         df = pd.DataFrame({"status": ["active", "inactive"], "flag": ["ok", "ok"]})
