@@ -36,6 +36,10 @@ pip install arnio
 ```
 
 Colab install smoke test: **[COLAB_SMOKE_TEST.md](COLAB_SMOKE_TEST.md)**
+**Interactive Notebooks:**
+[![Basic Usage](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/im-anishraj/arnio/blob/main/examples/basic_usage.ipynb)
+[![Pandas Interop](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/im-anishraj/arnio/blob/main/examples/arnio_with_pandas.ipynb)
+[![Schema Validation](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/im-anishraj/arnio/blob/main/examples/schema_validation.ipynb)
 
 <br>
 
