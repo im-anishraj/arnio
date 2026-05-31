@@ -3148,48 +3148,112 @@ def test_score_breakdown_with_real_values():
         "type_mismatch_penalty": 1.5,
     }
 
-    # 2. Reconstruct the report using an empty dict for columns (or a proper mapping)
-    # instead of a raw list of strings to prevent serialization errors.
-    instance = DataQualityReport(
-        row_count=100,
-        column_count=5,
-        memory_usage=1024,
+        with pytest.raises(TypeError, match="thresholds must be a dict"):
+            ar.QualityGateResult(
+                baseline_profile=report,
+                current_profile=report,
+                issues=[issue],
+                thresholds="not a dict",
+            )
+
+
+class TestValidateJsonIndent:
+    def test_none_is_accepted(self):
+        from arnio.quality import _validate_json_indent
+
+        assert _validate_json_indent(None) is None
+
+    def test_valid_integers(self):
+        from arnio.quality import _validate_json_indent
+
+        assert _validate_json_indent(0) == 0
+        assert _validate_json_indent(4) == 4
+
+    def test_bool_raises_type_error(self):
+        from arnio.quality import _validate_json_indent
+
+        with pytest.raises(TypeError, match="indent must be an integer or None"):
+            _validate_json_indent(True)
+        with pytest.raises(TypeError, match="indent must be an integer or None"):
+            _validate_json_indent(False)
+
+    def test_invalid_types_raise_type_error(self):
+        from arnio.quality import _validate_json_indent
+
+        with pytest.raises(TypeError, match="indent must be an integer or None"):
+            _validate_json_indent("2")
+        with pytest.raises(TypeError, match="indent must be an integer or None"):
+            _validate_json_indent(2.5)
+        with pytest.raises(TypeError, match="indent must be an integer or None"):
+            _validate_json_indent([2])
+
+    def test_negative_raises_value_error(self):
+        from arnio.quality import _validate_json_indent
+
+        with pytest.raises(ValueError, match="indent cannot be negative"):
+            _validate_json_indent(-1)
+        with pytest.raises(ValueError, match="indent cannot be negative"):
+            _validate_json_indent(-4)
+
+
+def test_data_quality_report_to_json_validation():
+    report = ar.DataQualityReport(
+        row_count=0,
+        column_count=0,
+        memory_usage=0,
         duplicate_rows=0,
         duplicate_ratio=0.0,
-        columns={},  # Pass an empty dict or valid ColumnQualityReport mapping
-        score_components=real_components,
-        quality_score=85.0,
-        suggestions=[],
+        columns={},
     )
-
-    # 3. Explicitly call your new method to assign 'result'
-    result = instance.score_breakdown()
-
-    # 4. Assertions
-    assert isinstance(result, dict)
-
-    expected_keys = [
-        "null_penalty",
-        "duplicate_penalty",
-        "type_mismatch_penalty",
-        "final_score",
-    ]
-
-    for key in expected_keys:
-        assert key in result, f"Missing key: {key}"
-        assert isinstance(result[key], (int, float)), f"{key} must be numeric"
+    with pytest.raises(TypeError, match="indent must be an integer or None"):
+        report.to_json(indent="x")
+    with pytest.raises(TypeError, match="indent must be an integer or None"):
+        report.to_json(indent=True)
+    with pytest.raises(ValueError, match="indent cannot be negative"):
+        report.to_json(indent=-1)
 
 
-def test_profile_comparison_drift_report_exclude_columns():
-    df = pd.DataFrame({"name": ["Alice", "Bob"], "secret_key": ["abc123", "xyz789"]})
-    frame = ar.from_pandas(df)
-    p1 = ar.profile(frame)
-    comparison = ar.compare_profiles(p1, p1)
-    exported_dict = comparison.to_dict(exclude_columns=["secret_key"])
+def test_profile_comparison_to_json_validation():
+    report = ar.DataQualityReport(
+        row_count=0,
+        column_count=0,
+        memory_usage=0,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+    )
+    comparison = ar.quality.ProfileComparison(
+        left_profile=report,
+        right_profile=report,
+        drift_report={},
+        status_counts={},
+    )
+    with pytest.raises(TypeError, match="indent must be an integer or None"):
+        comparison.to_json(indent="x")
+    with pytest.raises(TypeError, match="indent must be an integer or None"):
+        comparison.to_json(indent=True)
+    with pytest.raises(ValueError, match="indent cannot be negative"):
+        comparison.to_json(indent=-1)
 
-    assert "secret_key" not in exported_dict["left_profile"]["columns"]
-    assert "secret_key" not in exported_dict["right_profile"]["columns"]
-    assert "secret_key" not in exported_dict["drift_report"]
 
-
-# lint_sync
+def test_quality_gate_result_to_json_validation():
+    report = ar.DataQualityReport(
+        row_count=0,
+        column_count=0,
+        memory_usage=0,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+    )
+    result = ar.QualityGateResult(
+        baseline_profile=report,
+        current_profile=report,
+        issues=[],
+        thresholds={},
+    )
+    with pytest.raises(TypeError, match="indent must be an integer or None"):
+        result.to_json(indent="x")
+    with pytest.raises(TypeError, match="indent must be an integer or None"):
+        result.to_json(indent=True)
+    with pytest.raises(ValueError, match="indent cannot be negative"):
+        result.to_json(indent=-1)

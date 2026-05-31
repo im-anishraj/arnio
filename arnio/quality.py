@@ -491,6 +491,7 @@ class DataQualityReport:
         Example:
         report.to_json(indent=2)
         """
+        indent = _validate_json_indent(indent)
 
         json_out = json.dumps(
             self.to_dict(
@@ -1192,6 +1193,89 @@ class ProfileComparison:
             },
         }
 
+    def to_json(
+        self,
+        *,
+        indent: int | None = None,
+        redact_sample_values: bool = False,
+        exclude_columns: list[str] | set[str] | tuple[str, ...] | None = None,
+        output: Any | None = None,
+    ) -> str | None:
+        """Return the comparison as a JSON string.
+
+        Parameters
+        ----------
+        indent : int or None, default None
+            JSON indentation level.
+        redact_sample_values : bool, default False
+            When True, sample values are replaced with ``[REDACTED]`` in
+            both nested profile exports.
+        exclude_columns : list, set, or tuple of str, optional
+            Column names to omit from both nested profile exports.
+        output : writable text stream, optional
+            If provided, the JSON is written to this stream and None is
+            returned instead of a string.
+
+        Example:
+        comparison.to_json(indent=2)
+        """
+        indent = _validate_json_indent(indent)
+        json_out = json.dumps(
+            self.to_dict(
+                redact_sample_values=redact_sample_values,
+                exclude_columns=exclude_columns,
+            ),
+            indent=indent,
+        )
+
+        if output is None:
+            return json_out
+
+        if not hasattr(output, "write"):
+            raise TypeError("output must be a writable text stream")
+
+        output.write(json_out)
+        return None
+
+    def to_markdown(self, output: Any | None = None) -> str | None:
+        """Return a GitHub-friendly Markdown drift report."""
+        lines: list[str] = ["# Profile Comparison Report", ""]
+
+        status_summary = ", ".join(
+            f"{count} {status}" for status, count in sorted(self.status_counts.items())
+        )
+        lines.append(f"**Status summary:** {status_summary}")
+        lines.append("")
+
+        if self.drift_report:
+            lines.append("## Column Drift")
+            lines.append("")
+            lines.append("| Column | Status | Changes | Reasons |")
+            lines.append("|---|---|---|---|")
+            for name, entry in sorted(self.drift_report.items()):
+                status = entry.get("status", "-")
+                changes = ", ".join(entry.get("changes", {}).keys()) or "-"
+                reasons = "; ".join(entry.get("reasons", [])) or "-"
+                lines.append(
+                    f"| {_markdown_cell(name)} "
+                    f"| {_markdown_cell(status)} "
+                    f"| {_markdown_cell(changes)} "
+                    f"| {_markdown_cell(reasons)} |"
+                )
+            lines.append("")
+
+        markdown = "\n".join(lines)
+
+        if output is None:
+            return markdown
+
+        if not hasattr(output, "write"):
+            raise TypeError("output must be a writable text stream")
+
+        output.write(markdown)
+        return None
+
+
 @dataclass(frozen=True)
 class QualityGateIssue:
     """One failed data-quality gate."""
@@ -1367,6 +1451,7 @@ class QualityGateResult:
         Example:
         result.to_json(indent=2)
         """
+        indent = _validate_json_indent(indent)
         json_out = json.dumps(self.to_dict(), indent=indent)
 
         if output is None:
@@ -2108,6 +2193,17 @@ def _validate_bool_option(value: bool, name: str) -> bool:
     if not isinstance(value, bool):
         raise TypeError(f"{name} must be a bool")
     return value
+
+
+def _validate_json_indent(indent: int | None) -> int | None:
+    """Validate that JSON indent is either None or a non-boolean non-negative integer."""
+    if indent is None:
+        return None
+    if not isinstance(indent, int) or isinstance(indent, bool):
+        raise TypeError("indent must be an integer or None")
+    if indent < 0:
+        raise ValueError("indent cannot be negative")
+    return indent
 
 
 def _relative_delta(baseline: Any, current: Any) -> float | None:
