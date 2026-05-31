@@ -30,6 +30,9 @@ jobs:
       - name: Documentation UTF-8 check
         run: python scripts/check_docs_utf8.py
 
+      - name: API reference anchor check
+        run: python scripts/check_api_reference_anchors.py API_REFERENCE.md
+
       - name: Black (check-only)
         run: black --check --diff .
 
