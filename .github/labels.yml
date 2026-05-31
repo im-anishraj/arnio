@@ -10,7 +10,7 @@ types:
   - "type:performance"
   - "type:security"
   - "type:design"
-  - "type:ci"
+  - "type:devops"
   - "type:discussion"
 
 areas:
