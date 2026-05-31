@@ -2286,6 +2286,39 @@ def _validate_confirmed_casts(
     return normalized
 
 
+def _has_duplicate_rows(frame: ArFrame) -> bool:
+    """Return whether a frame contains any full-row duplicates."""
+    if frame.shape[0] <= 1:
+        return False
+    return bool(to_pandas(frame).duplicated().any())
+
+
+def _drop_strict_duplicates_introduced_by_cleaning(
+    result: ArFrame,
+    step_records: list[CleanStepRecord],
+) -> ArFrame:
+    if any(record.step == "drop_duplicates" for record in step_records):
+        return result
+    if not _has_duplicate_rows(result):
+        return result
+
+    rows_before_step = result.shape[0]
+    kwargs = {"keep": "first"}
+    result = drop_duplicates(result, **kwargs)
+    rows_after_step = result.shape[0]
+    step_records.append(
+        CleanStepRecord(
+            step="drop_duplicates",
+            kwargs=kwargs,
+            rows_before=rows_before_step,
+            rows_after=rows_after_step,
+            rows_removed=rows_before_step - rows_after_step,
+            reason="Remove duplicate rows introduced by earlier strict-mode normalization steps.",
+        )
+    )
+    return result
+
+
 def auto_clean(
     frame: ArFrame,
     *,
@@ -2435,6 +2468,12 @@ def auto_clean(
                 rows_removed=rows_before_step - rows_after_step,
                 reason=reason,
             )
+        )
+
+    if mode == "strict":
+        result = _drop_strict_duplicates_introduced_by_cleaning(
+            result,
+            step_records,
         )
 
     rows_after_all = result.shape[0]

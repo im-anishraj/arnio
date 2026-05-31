@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Arnio — Production Data Preparation for Python</title>
   <meta name="description" content="Arnio is a C++ accelerated Python library for CSV parsing, data cleaning, quality profiling, schema validation, and pandas/Arrow/DuckDB workflows.">
-  <link rel="icon" type="image/svg+xml" href="updated-icon.svg">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="stylesheet" href="css/variables.css?v=20260522">
   <link rel="stylesheet" href="css/base.css?v=20260522">
   <link rel="stylesheet" href="css/layout.css?v=20260522">
@@ -16,17 +16,17 @@
   <meta property="og:url" content="https://arnio.vercel.app/">
   <meta property="og:title" content="Arnio — Production Data Preparation for Python">
   <meta property="og:description" content="Arnio combines a native C++ CSV engine with Python APIs for cleaning, quality profiling, and schema validation.">
-  <meta property="og:image" content="https://arnio.vercel.app/arnio-transparent-logo.svg">
+  <meta property="og:image" content="https://arnio.vercel.app/arnio-social-card.svg">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Arnio — Production Data Preparation for Python">
   <meta name="twitter:description" content="Arnio combines a native C++ CSV engine with Python APIs for cleaning, quality profiling, and schema validation.">
-  <meta name="twitter:image" content="https://arnio.vercel.app/arnio-transparent-logo.svg">
+  <meta name="twitter:image" content="https://arnio.vercel.app/arnio-social-card.svg">
 </head>
 <body>
   <a href="#main-content" class="skip-link">Skip to content</a>
   <nav class="top-nav" aria-label="Main navigation">
     <div class="container container--wide">
-      <a href="index.html" class="nav-brand" aria-label="Arnio home"><img src="arnio-transparent-logo.svg" alt="Arnio" height="32"></a>
+      <a href="index.html" class="nav-brand" aria-label="Arnio home"><img src="arnio-logo.svg" alt="Arnio" height="32"></a>
       <ul class="nav-links">
         <li><a href="docs.html">Docs</a></li>
         <li><a href="api.html">API</a></li>
@@ -52,13 +52,13 @@
   <main id="main-content">
     <section class="hero">
       <div class="container">
-        <img src="updated-icon.svg" alt="" width="92" height="92">
+        <img src="arnio-icon.svg" alt="" width="92" height="92">
         <h1>Production data preparation before pandas does the analysis</h1>
         <p class="hero-subtitle">Arnio combines a native C++ CSV engine with Python APIs for cleaning, quality profiling, schema validation, and data-stack interop.</p>
         <div class="hero-actions">
           <a href="docs.html" class="btn btn-primary btn-lg">Read the docs</a>
           <a href="api.html" class="btn btn-secondary btn-lg">View API</a>
-          <a href="https://pypi.org/project/arnio/" class="btn btn-secondary btn-lg" target="_blank" rel="noopener">PyPI v1.18.0</a>
+          <a href="https://pypi.org/project/arnio/" class="btn btn-secondary btn-lg" target="_blank" rel="noopener">PyPI v1.19.0</a>
         </div>
         <div class="hero-install" data-cmd="pip install arnio" role="button" tabindex="0" aria-label="Copy install command">
           <span class="dollar">$</span><span>pip install arnio</span><span class="copy-hint">click to copy</span>
@@ -74,13 +74,13 @@
     <section class="section">
       <div class="container">
         <div class="release-strip">
-          <div><span class="release-kicker">Latest release</span><span class="release-value">v1.18.0</span></div>
+          <div><span class="release-kicker">Latest release</span><span class="release-value">v1.19.0</span></div>
           <div><span class="release-kicker">Runtime</span><span class="release-value">Python 3.9+</span></div>
           <div><span class="release-kicker">Core</span><span class="release-value">C++ + pybind11</span></div>
           <div><span class="release-kicker">Current main</span><span class="release-value">Unreleased updates</span></div>
         </div>
         <h2>What Arnio ships today</h2>
-        <p class="section-lede">The website now reflects the release train through v1.18.0 and the merged work currently on main after that release.</p>
+        <p class="section-lede">The website now reflects the release train through v1.19.0 and the merged work currently on main after that release.</p>
         <div class="feature-list">
           <article class="card">
             <h3>Hardened CSV I/O</h3>
@@ -135,7 +135,7 @@ ar.write_parquet(clean, "sales.parquet", compression="zstd")</code></pre>
     <section class="section">
       <div class="container">
         <h2>Current main / unreleased</h2>
-        <p class="section-lede">These changes are already merged after v1.18.0 and should be treated as upcoming release notes.</p>
+        <p class="section-lede">These changes are already merged after v1.19.0 and should be treated as upcoming release notes.</p>
         <div class="grid grid-3">
           <div class="card"><h3>Frame ergonomics</h3><p><code>ArFrame.__getitem__</code> column selection, <code>ArFrame.drop_columns</code>, and stronger tuple-key replacement handling.</p></div>
           <div class="card"><h3>Quality exports</h3><p><code>profile(exclude_columns=...)</code>, <code>DataQualityReport.to_dict(exclude_columns=...)</code>, and <code>DataQualityReport.to_json()</code>.</p></div>
@@ -151,7 +151,7 @@ ar.write_parquet(clean, "sales.parquet", compression="zstd")</code></pre>
           <a href="docs.html" class="quick-link-card"><div><h4 class="card-title">Documentation</h4><p class="card-desc">Install, read, clean, validate, export, and integrate.</p></div></a>
           <a href="api.html" class="quick-link-card"><div><h4 class="card-title">API Reference</h4><p class="card-desc">Current public functions, classes, and options.</p></div></a>
           <a href="benchmarks.html" class="quick-link-card"><div><h4 class="card-title">Benchmarks</h4><p class="card-desc">Reproducible benchmark commands and CI checks.</p></div></a>
-          <a href="changelog.html" class="quick-link-card"><div><h4 class="card-title">Changelog</h4><p class="card-desc">v1.18.0 plus current-main changes.</p></div></a>
+          <a href="changelog.html" class="quick-link-card"><div><h4 class="card-title">Changelog</h4><p class="card-desc">v1.19.0 plus current-main changes.</p></div></a>
         </div>
       </div>
     </section>
@@ -160,7 +160,7 @@ ar.write_parquet(clean, "sales.parquet", compression="zstd")</code></pre>
   <footer class="site-footer">
     <div class="container">
       <div class="footer-grid">
-        <div class="footer-brand"><img src="arnio-transparent-logo.svg" alt="Arnio" height="32"><p>C++ accelerated data preparation for pandas and the Python data stack.</p></div>
+        <div class="footer-brand"><img src="arnio-logo.svg" alt="Arnio" height="32" loading="lazy" decoding="async"><p>C++ accelerated data preparation for pandas and the Python data stack.</p></div>
         <div><h4 class="footer-heading">Project</h4><ul class="footer-links"><li><a href="docs.html">Docs</a></li><li><a href="api.html">API</a></li><li><a href="changelog.html">Changelog</a></li></ul></div>
         <div><h4 class="footer-heading">Engineering</h4><ul class="footer-links"><li><a href="architecture.html">Architecture</a></li><li><a href="benchmarks.html">Benchmarks</a></li><li><a href="roadmap.html">Roadmap</a></li></ul></div>
         <div><h4 class="footer-heading">Community</h4><ul class="footer-links"><li><a href="contributing.html">Contributing</a></li><li><a href="community.html">Community</a></li>
@@ -178,11 +178,11 @@ ar.write_parquet(clean, "sales.parquet", compression="zstd")</code></pre>
             </a>
           </li></ul></div>
       </div>
-      <div class="footer-bottom"><span>© 2026 Anish Raj. MIT License.</span><span>Latest release: v1.18.0</span></div>
+      <div class="footer-bottom"><span>© 2026 Anish Raj. MIT License.</span><span>Latest release: v1.19.0</span></div>
     </div>
   </footer>
-  <script src="js/main.js"></script>
-  <script src="js/code.js"></script>
-  <script src="js/github.js"></script>
+  <script src="js/main.js" defer></script>
+  <script src="js/code.js" defer></script>
+  <script src="js/github.js" defer></script>
 </body>
 </html>

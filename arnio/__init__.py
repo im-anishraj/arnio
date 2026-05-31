@@ -4,13 +4,7 @@ arnio — Fast CSV processing and data cleaning companion for pandas.
 import arnio as ar
 """
 
-try:
-    from importlib.metadata import version
-
-    __version__ = version("arnio")
-except Exception:
-    __version__ = "unknown"
-
+from ._version import __version__ as __version__
 from .cleaning import (
     cast_types,
     clean,

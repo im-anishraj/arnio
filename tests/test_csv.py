@@ -2,6 +2,7 @@
 
 import builtins
 import io
+import os
 import re
 from pathlib import Path
 
@@ -864,6 +865,42 @@ class TestReadCsv:
         assert stream.read_sizes
         assert -1 not in stream.read_sizes
 
+    def test_read_csv_chunked_utf8_path_skips_python_nul_prescan(
+        self, tmp_path, monkeypatch
+    ):
+        csv_path = tmp_path / "streaming.csv"
+        csv_path.write_text("name,age\nAlice,30\nBob,25\n", encoding="utf-8")
+        real_open = builtins.open
+
+        def blocked_binary_open(*args, **kwargs):
+            mode = args[1] if len(args) > 1 else kwargs.get("mode", "r")
+            if Path(args[0]) == csv_path and mode == "rb":
+                raise AssertionError(
+                    "read_csv_chunked should not pre-scan the whole UTF-8 file"
+                )
+            return real_open(*args, **kwargs)
+
+        monkeypatch.setattr(builtins, "open", blocked_binary_open)
+
+        chunks = ar.read_csv_chunked(str(csv_path), chunksize=1)
+        first = next(chunks)
+
+        assert ar.to_pandas(first)["name"].tolist() == ["Alice"]
+
+    def test_read_csv_chunked_late_nul_rejected_by_streaming_reader(self, tmp_path):
+        csv_path = tmp_path / "late-nul.csv"
+        csv_path.write_bytes(b"name,age\nAlice,30\n\0binary,99\n")
+
+        chunks = ar.read_csv_chunked(csv_path, chunksize=1)
+        first = next(chunks)
+
+        assert ar.to_pandas(first)["name"].tolist() == ["Alice"]
+        with pytest.raises(
+            ar.CsvReadError,
+            match="CSV input contains NUL bytes and appears to be binary or corrupted",
+        ):
+            next(chunks)
+
     def test_file_like_input_rejects_bytes(self):
         with pytest.raises(TypeError, match="file-like objects must return text"):
             ar.read_csv(io.BytesIO(b"name,age\nAlice,30\n"))
@@ -1315,6 +1352,25 @@ class TestScanCsv:
 
         assert schema == {"name": "string", "age": "int64"}
 
+    def test_scan_csv_utf8_path_skips_python_nul_prescan(self, tmp_path, monkeypatch):
+        csv_path = tmp_path / "scan-streaming.csv"
+        csv_path.write_text("name,age\nAlice,30\nBob,25\n", encoding="utf-8")
+        real_open = builtins.open
+
+        def blocked_binary_open(*args, **kwargs):
+            mode = args[1] if len(args) > 1 else kwargs.get("mode", "r")
+            if Path(args[0]) == csv_path and mode == "rb":
+                raise AssertionError(
+                    "scan_csv should not pre-scan the whole UTF-8 file"
+                )
+            return real_open(*args, **kwargs)
+
+        monkeypatch.setattr(builtins, "open", blocked_binary_open)
+
+        schema = ar.scan_csv(str(csv_path), sample_size=1)
+
+        assert schema == {"name": "string", "age": "int64"}
+
     def test_scan_csv_with_thousands_separator(self, tmp_path):
         csv_path = tmp_path / "scan_thousands.csv"
         csv_path.write_text('value\n"1,234"\n')
@@ -1341,7 +1397,7 @@ class TestScanCsv:
         ):
             ar.scan_csv(file_path)
 
-    def test_scan_late_binary_file_outside_sample(self, tmp_path):
+    def test_scan_late_binary_file_outside_sample_uses_sample_only(self, tmp_path):
         file_path = str(tmp_path / "data.csv")
 
         with open(file_path, "wb") as f:
@@ -1349,11 +1405,7 @@ class TestScanCsv:
             f.write(b"a,b\n" * 400)
             f.write(b"\0binary,data\n")
 
-        with pytest.raises(
-            ar.CsvReadError,
-            match="CSV input contains NUL bytes and appears to be binary or corrupted",
-        ):
-            ar.scan_csv(file_path)
+        assert ar.scan_csv(file_path) == {"col1": "string", "col2": "string"}
 
     def test_scan_late_binary_file_rejection_with_larger_sample(self, tmp_path):
         file_path = str(tmp_path / "data.csv")
@@ -1362,12 +1414,6 @@ class TestScanCsv:
             f.write(b"col1,col2\n")
             f.write(b"a,b\n" * 400)
             f.write(b"\0binary,data\n")
-
-        with pytest.raises(
-            ar.CsvReadError,
-            match="CSV input contains NUL bytes and appears to be binary or corrupted",
-        ):
-            ar.scan_csv(file_path)
 
         with pytest.raises(
             ar.CsvReadError,
@@ -1481,14 +1527,15 @@ class TestScanCsv:
         csv_path = tmp_path / "scan-permission.csv"
         csv_path.write_text("a,b\n1,2\n")
         csv_path_str = str(csv_path)
-        real_open = builtins.open
 
-        def blocked_open(*args, **kwargs):
-            if args[0] == csv_path_str and args[1] == "rb":
+        real_getsize = os.path.getsize
+
+        def blocked_getsize(path):
+            if path == csv_path_str:
                 raise PermissionError(13, "Access is denied")
-            return real_open(*args, **kwargs)
+            return real_getsize(path)
 
-        monkeypatch.setattr(builtins, "open", blocked_open)
+        monkeypatch.setattr(os.path, "getsize", blocked_getsize)
 
         with pytest.raises(
             CsvReadError,

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>API Reference — Arnio</title>
   <meta name="description" content="Current public API reference for Arnio v1.19.0 and current main.">
-  <link rel="icon" type="image/svg+xml" href="updated-icon.svg">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="stylesheet" href="css/variables.css?v=20260522">
   <link rel="stylesheet" href="css/base.css?v=20260522">
   <link rel="stylesheet" href="css/layout.css?v=20260522">
@@ -16,17 +16,17 @@
   <meta property="og:url" content="https://arnio.vercel.app/">
   <meta property="og:title" content="Arnio — Production Data Preparation for Python">
   <meta property="og:description" content="Arnio combines a native C++ CSV engine with Python APIs for cleaning, quality profiling, and schema validation.">
-  <meta property="og:image" content="https://arnio.vercel.app/arnio-transparent-logo.svg">
+  <meta property="og:image" content="https://arnio.vercel.app/arnio-social-card.svg">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Arnio — Production Data Preparation for Python">
   <meta name="twitter:description" content="Arnio combines a native C++ CSV engine with Python APIs for cleaning, quality profiling, and schema validation.">
-  <meta name="twitter:image" content="https://arnio.vercel.app/arnio-transparent-logo.svg">
+  <meta name="twitter:image" content="https://arnio.vercel.app/arnio-social-card.svg">
 </head>
 <body>
   <a href="#main-content" class="skip-link">Skip to content</a>
   <nav class="top-nav" aria-label="Main navigation">
     <div class="container container--wide">
-      <a href="index.html" class="nav-brand" aria-label="Arnio home"><img src="arnio-transparent-logo.svg" alt="Arnio" height="32"></a>
+      <a href="index.html" class="nav-brand" aria-label="Arnio home"><img src="arnio-logo.svg" alt="Arnio" height="32"></a>
       <ul class="nav-links"><li><a href="docs.html">Docs</a></li><li><a href="api.html">API</a></li><li><a href="benchmarks.html">Benchmarks</a></li><li><a href="contributing.html">Contributing</a></li><li><a href="architecture.html">Architecture</a></li><li><a href="roadmap.html">Roadmap</a></li><li><a href="community.html">Community</a></li><li><a href="changelog.html">Changelog</a></li></ul>
       <div class="nav-actions"><a href="https://discord.gg/xsEw7r78M" class="nav-discord" target="_blank" rel="noopener">Discord</a><a href="https://github.com/im-anishraj/arnio" class="nav-github" target="_blank" rel="noopener">GitHub</a><button class="theme-toggle" aria-label="Toggle theme">Theme</button><button class="nav-hamburger" aria-label="Open menu" aria-expanded="false">☰</button></div>
     </div>
@@ -47,19 +47,23 @@
         <div class="notice"><strong>Scope:</strong> This page documents the public Python API exposed from <code>arnio.__all__</code> on current <code>origin/main</code>.</div>
 
         <h2 id="io">I/O</h2>
-        <div class="api-func"><div class="api-func-header">read_csv(path, *, delimiter=None, has_header=True, usecols=None, nrows=None, skiprows=None, encoding="utf-8", trim_headers=True, decimal_separator=".", thousands_separator=None, null_values=None, dtype=None, mode="strict", encoding_errors="strict", on_bad_lines="error")</div><div class="api-func-body"><p>Read CSV-like input into an <code>ArFrame</code>. Supports extension-flexible paths, TSV delimiter inference, explicit dtypes, decoding policy, and configurable malformed-row handling.</p><p><strong>Returns:</strong> <code>ArFrame</code>. Raises <code>CsvReadError</code> for read and parse failures.</p></div></div>
-        <div class="api-func"><div class="api-func-header">read_csv_chunked(path, *, chunksize=10000, dtype=None, delimiter=None, has_header=True, usecols=None, nrows=None, skip_rows=0, skiprows=None, encoding="utf-8", trim_headers=True, decimal_separator=".", thousands_separator=None, null_values=None, mode="strict", on_bad_lines="error")</div><div class="api-func-body"><p>Yield <code>ArFrame</code> chunks from large files. <code>delimiter=None</code> infers tab delimiters for <code>.tsv</code> paths and comma otherwise. <code>on_bad_lines</code> may error, warn, or skip malformed row-width records.</p></div></div>
-        <div class="api-func"><div class="api-func-header">scan_csv(path, *, delimiter=None, encoding="utf-8", trim_headers=True, decimal_separator=".", thousands_separator=None, sample_size=None, null_values=None, has_header=True, encoding_errors="strict", mode="strict", on_bad_lines="error")</div><div class="api-func-body"><p>Infer column names and dtypes without loading the full file. Like <code>read_csv</code>, omitted delimiters use tab for <code>.tsv</code> paths and comma otherwise.</p></div></div>
-        <div class="api-func"><div class="api-func-header">read_jsonl(path, *, encoding="utf-8", encoding_errors="strict", nrows=None)</div><div class="api-func-body"><p>Read JSON Lines or NDJSON into an <code>ArFrame</code>; mixed object columns are coerced to strings.</p></div></div>
+        <div class="api-func"><div class="api-func-header">read_csv(path, *, delimiter=None, has_header=True, usecols=None, nrows=None, skiprows=None, encoding="utf-8", trim_headers=True, decimal_separator=".", thousands_separator=None, null_values=None, dtype=None, mode="strict", encoding_errors="strict", on_bad_lines="error")</div><div class="api-func-body"><p>Read CSV-like input into an <code>ArFrame</code>. Supports extension-flexible paths, TSV delimiter inference, explicit dtypes, decoding policy, and configurable malformed-row handling. Key options: <code>trim_headers</code> strips whitespace from column names; <code>null_values</code> specifies additional tokens to treat as null; <code>thousands_separator</code> enables numeric parsing with grouping separators; <code>mode</code> controls parser strictness (<code>"strict"</code> or <code>"lax"</code>).</p><p><strong>Returns:</strong> <code>ArFrame</code>. Raises <code>CsvReadError</code> for read and parse failures.</p></div></div>
+        <div class="api-func"><div class="api-func-header">read_csv_chunked(path, *, chunksize=10000, dtype=None, delimiter=None, has_header=True, usecols=None, nrows=None, skip_rows=0, skiprows=None, encoding="utf-8", trim_headers=True, decimal_separator=".", thousands_separator=None, null_values=None, mode="strict", on_bad_lines="error")</div><div class="api-func-body"><p>Yield <code>ArFrame</code> chunks from large files. <code>delimiter=None</code> infers tab delimiters for <code>.tsv</code> paths and comma otherwise. <code>on_bad_lines</code> may error, warn, or skip malformed row-width records. Supports the same parser controls as <code>read_csv()</code>, including <code>dtype</code>, <code>usecols</code>, <code>null_values</code>, <code>thousands_separator</code>, <code>trim_headers</code>, and <code>mode</code>.</p></div></div>
+        <div class="api-func"><div class="api-func-header">scan_csv(path, *, delimiter=None, encoding="utf-8", trim_headers=True, decimal_separator=".", thousands_separator=None, sample_size=None, null_values=None, has_header=True, encoding_errors="strict", mode="strict", on_bad_lines="error")</div><div class="api-func-body"><p>Infer column names and dtypes without loading the full file. Like <code>read_csv</code>, omitted delimiters use tab for <code>.tsv</code> paths and comma otherwise.</p><p><strong>Example:</strong> <code>ar.scan_csv("raw.csv", sample_size=500, null_values=["NA", "MISSING"])</code> keeps sampling and null-token handling aligned with a later <code>read_csv()</code> call.</p></div></div>
+        <div class="api-func"><div class="api-func-header">read_jsonl(path, *, encoding="utf-8", encoding_errors="strict", nrows=None)</div><div class="api-func-body"><p>Read JSON Lines or NDJSON into an <code>ArFrame</code>; mixed object columns are coerced to strings. The <code>encoding</code> and <code>encoding_errors</code> parameters control how file bytes are decoded into text.</p></div></div>
         <div class="api-func"><div class="api-func-header">write_csv(frame, path, *, delimiter=",", write_header=True, line_terminator="\n")</div><div class="api-func-body"><p>Write an <code>ArFrame</code> to CSV or TSV with delimiter and line terminator validation.</p></div></div>
-        <div class="api-func"><div class="api-func-header">write_parquet(frame, path, *, compression="snappy", row_group_size=None, preserve_attrs=True)</div><div class="api-func-body"><p>Write an <code>ArFrame</code> to Parquet via the optional <code>pyarrow</code> dependency. Install with <code>pip install "arnio[parquet]"</code>.</p></div></div>
-        <div class="api-func"><div class="api-func-header">sniff_delimiter(path, *, encoding="utf-8", sample_size=2048)</div><div class="api-func-body"><p>Detect a likely delimiter for CSV-like input before reading or scanning.</p></div></div>
+        <div class="api-func"><div class="api-func-header">write_parquet(frame, path, *, compression="snappy", row_group_size=None, preserve_attrs=True)</div><div class="api-func-body"><p>Write an <code>ArFrame</code> to Parquet via the optional <code>pyarrow</code> dependency. Install with <code>pip install "arnio[parquet]"</code>. <code>preserve_attrs=True</code> writes JSON-serializable <code>DataFrame.attrs</code> into Parquet metadata; set to <code>False</code> to skip that export. Accepted compression values: <code>"snappy"</code> (default), <code>"gzip"</code>, <code>"brotli"</code>, <code>"zstd"</code>, and <code>"none"</code>.</p></div></div>
+        <div class="api-func"><div class="api-func-header">sniff_delimiter(path, *, encoding="utf-8", sample_size=2048)</div><div class="api-func-body"><p>Detect a likely delimiter for CSV-like input before reading or scanning. <code>sample_size</code> controls how many characters are read from the start of the file for detection; the default of <code>2048</code> is sufficient for most files. Increase it when the file has an unusual delimiter that only appears further into the content.</p></div></div>
 
         <h2 id="frame">Frame API</h2>
         <div class="api-func"><div class="api-func-header">class ArFrame</div><div class="api-func-body"><p>Python wrapper over the native C++ frame. Core properties include <code>shape</code>, <code>columns</code>, <code>dtypes</code>, <code>is_empty</code>, <code>memory_usage()</code>, <code>head()</code>, <code>tail()</code>, and <code>preview()</code>.</p></div></div>
         <div class="api-func"><div class="api-func-header">ArFrame.from_records(records, *, columns=None) / ar.from_records(...)</div><div class="api-func-body"><p>Build an <code>ArFrame</code> from record dictionaries or row-like records. Added in v1.17.0.</p></div></div>
         <div class="api-func"><div class="api-func-header">ArFrame._repr_html_()</div><div class="api-func-body"><p>Jupyter/IPython automatically calls this to render a bounded HTML table preview showing up to 10 rows, column names, dtypes, and shape summary.</p></div></div>
         <div class="api-func"><div class="api-func-header">frame["column"] / frame[["a", "b"]]</div><div class="api-func-body"><p>Select one column as a Python list or multiple columns as an <code>ArFrame</code>.</p></div></div>
+        <div class="api-func"><div class="api-func-header">item in frame / frame.__contains__(item)</div><div class="api-func-body"><p>Return <code>True</code> when the item is a valid column name in the frame.</p></div></div>
+        <div class="api-func"><div class="api-func-header">frame.select_columns(columns)</div><div class="api-func-body"><p>Return a new <code>ArFrame</code> containing only the requested columns in original order.</p></div></div>
+        <div class="api-func"><div class="api-func-header">frame.select_dtypes(include=..., exclude=...)</div><div class="api-func-body"><p>Return a new <code>ArFrame</code> filtered by dtype names like <code>int64</code>, <code>float64</code>, <code>string</code>, <code>bool</code>, or <code>null</code>.</p></div></div>
+        <div class="api-func"><div class="api-func-header">frame.astype(dtype)</div><div class="api-func-body"><p>Cast one or more columns to a specified dtype or per-column type mapping and return a new <code>ArFrame</code>.</p></div></div>
         <div class="api-func"><div class="api-func-header">frame.to_dict()</div><div class="api-func-body"><p>Return a <code>dict[str, list]</code> representation for serialization or tests.</p></div></div>
         <div class="api-func"><div class="api-func-header">frame.drop_columns(columns)</div><div class="api-func-body"><p>Current-main method equivalent to the top-level <code>drop_columns</code> helper.</p></div></div>
         <div class="api-func"><div class="api-func-header">frame.describe() / frame.schema_summary</div><div class="api-func-body"><p>Summary statistics and column summaries. <code>schema_summary</code> returns <code>ColumnSummary</code> objects with name, dtype, and nullability.</p></div></div>
@@ -88,12 +92,52 @@
         <h2 id="quality">Quality</h2>
         <div class="api-func"><div class="api-func-header">profile(frame, *, exclude_columns=None, sample_size=5, approx_top_values=False, approx_top_values_min_unique=1000, approx_top_values_min_ratio=0.2, approx_top_values_sample_size=2000)</div><div class="api-func-body"><p>Return <code>DataQualityReport</code> with row/column counts, duplicate metrics, column profiles, warnings, quality score, score components, and cleaning suggestions.</p></div></div>
         <div class="api-func"><div class="api-func-header">DataQualityReport._repr_html_()</div><div class="api-func-body"><p>Jupyter/IPython automatically calls this to render the report dashboard HTML directly in the notebook output area.</p></div></div>
-        <div class="api-func"><div class="api-func-header">DataQualityReport.to_dict(*, redact_sample_values=False, exclude_columns=None)</div><div class="api-func-body"><p>Return the report as a plain Python dictionary. Set <code>redact_sample_values=True</code> to replace sampled cell values with <code>[REDACTED]</code> before sharing output that may contain sensitive data. Pass a list, set, or tuple of column names to <code>exclude_columns</code> to omit those columns from the exported dict entirely.</p></div></div>
-        <div class="api-func"><div class="api-func-header">DataQualityReport.to_json(*, indent=None, redact_sample_values=False, exclude_columns=None, output=None)</div><div class="api-func-body"><p>Return the report as a JSON string. <code>indent</code> controls pretty-printing (e.g. <code>indent=2</code>). <code>redact_sample_values</code> and <code>exclude_columns</code> work the same as in <code>to_dict()</code>. Pass a writable text stream to <code>output</code> to write directly to a file instead of returning the string: <code>report.to_json(indent=2, output=f)</code>.</p></div></div>
-        <div class="api-func"><div class="api-func-header">DataQualityReport.to_markdown(output=None, max_suggestions=None)</div><div class="api-func-body"><p>Return a GitHub-flavoured Markdown report string. <code>max_suggestions</code> limits the number of cleaning suggestions included (must be a positive integer). Pass a writable text stream to <code>output</code> to write directly to a file instead of returning the string.</p></div></div>
-        <div class="api-func"><div class="api-func-header">DataQualityReport.to_html(file_path=None, output=None, max_suggestions=None, *, redact_top_values=False, exclude_columns=None)</div><div class="api-func-body"><p>Return a self-contained HTML report string. <code>file_path</code> writes the HTML to disk in addition to returning it. <code>output</code> writes to a text stream and returns <code>None</code>. <code>max_suggestions</code> caps the number of cleaning suggestions rendered. Set <code>redact_top_values=True</code> to replace top-value chip labels with <code>[REDACTED]</code> while preserving counts and ratios — use this before sharing reports that include sensitive string columns. <code>exclude_columns</code> omits named columns from the HTML column table entirely.</p></div></div>
-        <div class="api-func"><div class="api-func-header">DataQualityReport.summary(), to_pandas()</div><div class="api-func-body"><p>Export reports for notebooks, CI, docs, and automation.</p></div></div>
-        <div class="api-func"><div class="api-func-header">compare_profiles(left, right), check_quality_gates(baseline, current), suggest_cleaning(frame_or_report), auto_clean(frame, *, mode="safe", dry_run=False, explain=False)</div><div class="api-func-body"><p>Compare quality over time, fail CI on drift, generate pipeline-compatible steps, or run automatic cleaning with optional audit output.</p></div></div>
+        <div class="api-func"><div class="api-func-header">DataQualityReport.to_dict(redact_sample_values=False, exclude_columns=None), to_json(), to_markdown(), to_html(), summary(), to_pandas()</div><div class="api-func-body"><p>Export reports for notebooks, CI, docs, and automation.</p></div></div>
+        <div class="api-func"><div class="api-func-header">compare_profiles(left, right), suggest_cleaning(frame_or_report), auto_clean(frame, *, mode="safe", return_report=False, dry_run=False, allow_lossy_casts=False, confirmed_casts=None, explain=False)</div><div class="api-func-body"><p>Compare quality over time, generate pipeline-compatible steps, or run automatic cleaning with optional reports and audit output.</p><p><strong>Additional options:</strong></p><ul><li><code>return_report</code> – return the pre-cleaning quality report alongside cleaned output.</li><li><code>allow_lossy_casts</code> – opt in to strict-mode casts that may lose information.</li><li><code>confirmed_casts</code> – explicit column-to-dtype confirmations required before strict-mode casts are applied.</li></ul><p><strong>Return values:</strong></p><ul><li><code>auto_clean(...)</code> → <code>ArFrame</code></li><li><code>auto_clean(..., return_report=True)</code> → <code>(ArFrame, DataQualityReport)</code></li><li><code>auto_clean(..., dry_run=True)</code> → <code>DataQualityReport</code></li><li><code>auto_clean(..., explain=True)</code> → <code>(ArFrame, CleanExplanation)</code></li><li><code>auto_clean(..., return_report=True, explain=True)</code> → <code>(ArFrame, DataQualityReport, CleanExplanation)</code></li></ul><pre><code># Preview proposed changes
+report = ar.auto_clean(frame, mode="strict", dry_run=True)
+
+# Clean and return report
+cleaned, report = ar.auto_clean(
+    frame,
+    return_report=True,
+)
+
+# Clean with explanation
+cleaned, explanation = ar.auto_clean(
+    frame,
+    explain=True,
+)
+</code></pre></div></div>
+        <div class="api-func"><div class="api-func-header">check_quality_gates(baseline_profile, current_profile, *, max_row_count_delta_ratio=0.1, max_duplicate_ratio_delta=0.05, max_null_ratio_delta=0.05, max_numeric_mean_delta_ratio=0.1, max_numeric_std_delta_ratio=0.2, allow_new_columns=False, allow_missing_columns=False, fail_on_dtype_change=True)</div><div class="api-func-body"><p>Compare two <code>DataQualityReport</code> objects and return a <code>QualityGateResult</code> suitable for CI and release checks.</p>
+          <table class="param-table">
+            <thead>
+              <tr><th>Option</th><th>Default</th><th>Gate behavior</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>max_row_count_delta_ratio</code></td><td><code>0.1</code></td><td>Maximum relative row-count drift. Set to <code>None</code> to disable.</td></tr>
+              <tr><td><code>max_duplicate_ratio_delta</code></td><td><code>0.05</code></td><td>Maximum absolute duplicate-ratio drift. Set to <code>None</code> to disable.</td></tr>
+              <tr><td><code>max_null_ratio_delta</code></td><td><code>0.05</code></td><td>Maximum absolute per-column null-ratio drift. Set to <code>None</code> to disable.</td></tr>
+              <tr><td><code>max_numeric_mean_delta_ratio</code></td><td><code>0.1</code></td><td>Maximum relative per-column numeric mean drift. Set to <code>None</code> to disable.</td></tr>
+              <tr><td><code>max_numeric_std_delta_ratio</code></td><td><code>0.2</code></td><td>Maximum relative per-column numeric standard-deviation drift. Set to <code>None</code> to disable.</td></tr>
+              <tr><td><code>allow_new_columns</code></td><td><code>False</code></td><td>Allow columns that appear only in the current profile.</td></tr>
+              <tr><td><code>allow_missing_columns</code></td><td><code>False</code></td><td>Allow baseline columns that are absent from the current profile.</td></tr>
+              <tr><td><code>fail_on_dtype_change</code></td><td><code>True</code></td><td>Fail when shared columns change dtype.</td></tr>
+            </tbody>
+          </table>
+<pre><code>baseline = ar.profile(ar.read_csv("baseline.csv"))
+current = ar.profile(ar.read_csv("current.csv"))
+
+result = ar.check_quality_gates(
+    baseline,
+    current,
+    max_null_ratio_delta=0.02,
+    allow_new_columns=True,
+)
+
+if not result.passed:
+    print(result.to_markdown())
+    result.raise_for_failures()
+</code></pre></div></div>
         <div class="api-func"><div class="api-func-header">Quality result classes</div><div class="api-func-body"><p><code>ColumnProfile</code>, <code>CleaningSuggestion</code>, <code>CleanStepRecord</code>, <code>CleanExplanation</code>, <code>ProfileComparison</code>, <code>QualityGateIssue</code>, and <code>QualityGateResult</code> describe structured profiling, cleaning, comparison, and gate output.</p></div></div>
 
         <h2 id="schema">Schema</h2>
@@ -102,7 +146,112 @@
     unique=["email"],
 )
 result = schema.validate(frame)</code></pre></div></div>
-        <div class="api-func"><div class="api-func-header">Field builders</div><div class="api-func-body"><p><code>Int64</code>, <code>Float64</code>, <code>String</code>, <code>Bool</code>, <code>Email</code>, <code>URL(allowed_schemes=...)</code>, <code>PhoneNumber</code>, <code>CountryCode</code>, <code>CurrencyCode</code>, <code>LanguageCode</code>, <code>TimeZone</code>, <code>Date</code>, <code>DateTime</code>, <code>Regex</code>, and <code>Custom</code>.</p></div></div>
+        <div class="api-func"><div class="api-func-header">Field builders</div><div class="api-func-body">
+          <p>Each builder returns a <code>Field</code> for use in <code>Schema(fields={...})</code>. All builders accept keyword-only arguments unless noted otherwise.</p>
+          <table class="param-table">
+            <thead>
+              <tr>
+                <th>Builder</th>
+                <th>Group</th>
+                <th>Key parameters</th>
+                <th>Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>Int64(...)</code></td>
+                <td>Numeric</td>
+                <td><code>nullable=True</code>, <code>min=None</code>, <code>max=None</code>, <code>unique=False</code>, <code>severity="error"</code>, <code>required_if=None</code></td>
+                <td>Integer range bounds are inclusive. <code>min</code> and <code>max</code> must be numeric.</td>
+              </tr>
+              <tr>
+                <td><code>Float64(...)</code></td>
+                <td>Numeric</td>
+                <td><code>nullable=True</code>, <code>min=None</code>, <code>max=None</code>, <code>unique=False</code>, <code>severity="error"</code>, <code>required_if=None</code></td>
+                <td>Floating-point range bounds. Same constraints as <code>Int64</code>.</td>
+              </tr>
+              <tr>
+                <td><code>String(...)</code></td>
+                <td>String</td>
+                <td><code>nullable=True</code>, <code>pattern=None</code>, <code>allowed=None</code>, <code>case_sensitive=True</code>, <code>min_length=None</code>, <code>max_length=None</code>, <code>unique=False</code>, <code>severity="error"</code>, <code>required_if=None</code></td>
+                <td><code>pattern</code> is a regex applied to every non-null value. <code>allowed</code> accepts a set, list, or tuple — not a bare string.</td>
+              </tr>
+              <tr>
+                <td><code>Bool(...)</code></td>
+                <td>Boolean</td>
+                <td><code>nullable=True</code>, <code>severity="error"</code>, <code>required_if=None</code></td>
+                <td>No range or uniqueness constraints; dtype must be boolean.</td>
+              </tr>
+              <tr>
+                <td><code>Email(...)</code></td>
+                <td>Semantic</td>
+                <td><code>nullable=True</code>, <code>unique=False</code>, <code>validation="light"</code>, <code>severity="error"</code>, <code>required_if=None</code></td>
+                <td><code>validation</code> is <code>"light"</code> (format check) or <code>"strict"</code> (RFC 5322 conformant).</td>
+              </tr>
+              <tr>
+                <td><code>URL(...)</code></td>
+                <td>Semantic</td>
+                <td><code>nullable=True</code>, <code>unique=False</code>, <code>allowed_schemes=None</code>, <code>severity="error"</code>, <code>required_if=None</code></td>
+                <td>Omit to allow the default http/https URL validator; pass <code>allowed_schemes=[...]</code> to permit a custom set such as <code>["https", "ftp"]</code>.</td>
+              </tr>
+              <tr>
+                <td><code>PhoneNumber(...)</code></td>
+                <td>Semantic</td>
+                <td><code>nullable=True</code>, <code>unique=False</code>, <code>severity="error"</code>, <code>required_if=None</code></td>
+                <td>Validates E.164-style phone numbers.</td>
+              </tr>
+              <tr>
+                <td><code>CountryCode(...)</code></td>
+                <td>Semantic</td>
+                <td><code>nullable=True</code>, <code>unique=False</code>, <code>severity="error"</code>, <code>required_if=None</code></td>
+                <td>Expects uppercase ISO 3166-1 alpha-2 codes (e.g. <code>"US"</code>, <code>"IN"</code>).</td>
+              </tr>
+              <tr>
+                <td><code>CurrencyCode(...)</code></td>
+                <td>Semantic</td>
+                <td><code>nullable=True</code>, <code>unique=False</code>, <code>allowed=None</code>, <code>severity="error"</code>, <code>required_if=None</code></td>
+                <td>Validates 3-letter uppercase ISO 4217 codes. <code>allowed</code> narrows to a custom subset of valid codes.</td>
+              </tr>
+              <tr>
+                <td><code>LanguageCode(...)</code></td>
+                <td>Semantic</td>
+                <td><code>nullable=True</code>, <code>unique=False</code>, <code>severity="error"</code>, <code>required_if=None</code></td>
+                <td>Expects lowercase ISO 639-1 two-letter codes (e.g. <code>"en"</code>, <code>"fr"</code>).</td>
+              </tr>
+              <tr>
+                <td><code>TimeZone(...)</code></td>
+                <td>Semantic</td>
+                <td><code>nullable=True</code>, <code>unique=False</code>, <code>severity="error"</code>, <code>required_if=None</code></td>
+                <td>Validates IANA timezone identifiers (e.g. <code>"America/New_York"</code>).</td>
+              </tr>
+              <tr>
+                <td><code>Date(...)</code></td>
+                <td>Date / Time</td>
+                <td><code>nullable=True</code>, <code>unique=False</code>, <code>severity="error"</code>, <code>required_if=None</code></td>
+                <td>Validates ISO 8601 date strings (<code>YYYY-MM-DD</code>).</td>
+              </tr>
+              <tr>
+                <td><code>DateTime(...)</code></td>
+                <td>Date / Time</td>
+                <td><code>nullable=True</code>, <code>min=None</code>, <code>max=None</code>, <code>format=None</code>, <code>unique=False</code>, <code>severity="error"</code>, <code>required_if=None</code></td>
+                <td><code>format</code> is a <code>strptime</code> format string. <code>min</code> / <code>max</code> accept ISO strings or <code>datetime</code> objects.</td>
+              </tr>
+              <tr>
+                <td><code>Regex(pattern, ...)</code></td>
+                <td>Regex</td>
+                <td><code>pattern</code> (positional, required), <code>nullable=True</code>, <code>unique=False</code>, <code>severity="error"</code>, <code>required_if=None</code></td>
+                <td>Pattern is compiled at call time — invalid expressions raise <code>re.error</code> immediately, not at validation time.</td>
+              </tr>
+              <tr>
+                <td><code>Custom(name, ...)</code></td>
+                <td>Custom</td>
+                <td><code>name</code> (positional, required), <code>nullable=True</code>, <code>unique=False</code>, <code>severity="error"</code>, <code>required_if=None</code></td>
+                <td><code>name</code> must match a validator registered via <code>register_validator()</code>. Raises <code>ValueError</code> if the name is not found.</td>
+              </tr>
+            </tbody>
+          </table>
+          <p style="margin-top:1rem"><strong>Common parameters:</strong> <code>nullable</code> — allow null values; <code>unique</code> — require all non-null values to be distinct; <code>severity</code> — <code>"error"</code> (default) or <code>"warning"</code>; <code>required_if</code> — a <code>(column, value)</code> tuple that makes the field mandatory when another column equals a given value.</p>
+        </div></div>
         <div class="api-func"><div class="api-func-header">diff_schema, schema_to_dict, schema_to_yaml, register_validator</div><div class="api-func-body"><p>Compare schema contracts, export schema definitions, and register custom semantic validators. Structured results include <code>SchemaDiff</code>, <code>SchemaDiffEntry</code>, <code>ValidationIssue</code>, and <code>ValidationResult</code>.</p></div></div>
 
         <h2 id="integrations">Integrations</h2>
@@ -119,7 +268,7 @@ result = schema.validate(frame)</code></pre></div></div>
  <footer class="site-footer">
     <div class="container">
       <div class="footer-grid">
-        <div class="footer-brand"><img src="arnio-transparent-logo.svg" alt="Arnio" height="32"><p>C++ accelerated data preparation for pandas and the Python data stack.</p></div>
+        <div class="footer-brand"><img src="arnio-logo.svg" alt="Arnio" height="32" loading="lazy" decoding="async"><p>C++ accelerated data preparation for pandas and the Python data stack.</p></div>
         <div><h4 class="footer-heading">Project</h4><ul class="footer-links"><li><a href="docs.html">Docs</a></li><li><a href="api.html">API</a></li><li><a href="changelog.html">Changelog</a></li></ul></div>
         <div><h4 class="footer-heading">Engineering</h4><ul class="footer-links"><li><a href="architecture.html">Architecture</a></li><li><a href="benchmarks.html">Benchmarks</a></li><li><a href="roadmap.html">Roadmap</a></li></ul></div>
         <div><h4 class="footer-heading">Community</h4><ul class="footer-links"><li><a href="contributing.html">Contributing</a></li><li><a href="community.html">Community</a></li>
@@ -140,7 +289,7 @@ result = schema.validate(frame)</code></pre></div></div>
       <div class="footer-bottom"><span>© 2026 Anish Raj. MIT License.</span><span>Latest release: v1.19.0</span></div>
     </div>
   </footer>
-  <script src="js/main.js"></script>
-  <script src="js/code.js"></script>
+  <script src="js/main.js" defer></script>
+  <script src="js/code.js" defer></script>
 </body>
 </html>

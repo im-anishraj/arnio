@@ -640,6 +640,33 @@ def test_auto_clean_strict_applies_exact_deduplication(tmp_path):
     assert clean.shape == (1, 1)
 
 
+def test_auto_clean_strict_drops_duplicates_created_by_whitespace():
+    frame = ar.from_pandas(pd.DataFrame({"name": ["Alice", " Alice "]}))
+
+    clean = ar.auto_clean(frame, mode="strict")
+    result = ar.to_pandas(clean)
+
+    assert clean.shape == (1, 1)
+    assert list(result["name"]) == ["Alice"]
+
+
+def test_auto_clean_strict_drops_duplicates_created_by_casts():
+    frame = ar.from_pandas(pd.DataFrame({"amount": ["1", "1.0"]}))
+    report = ar.auto_clean(frame, mode="strict", dry_run=True)
+
+    clean = ar.auto_clean(
+        frame,
+        mode="strict",
+        allow_lossy_casts=True,
+        confirmed_casts=dict(report.suggestions)["cast_types"],
+    )
+    result = ar.to_pandas(clean)
+
+    assert clean.shape == (1, 1)
+    assert list(result["amount"]) == [1.0]
+    assert pd.api.types.is_float_dtype(result["amount"])
+
+
 def test_auto_clean_strict_casts_require_explicit_opt_in():
     frame = ar.from_pandas(pd.DataFrame({"active": ["true", "false"]}))
 
@@ -1190,6 +1217,17 @@ def test_identifier_numeric_cast_prevention():
     assert list(result["id"]) == ["001", "002", "003"]
     assert list(result["customer_id"]) == ["00123", "00456", "00789"]
     assert list(result["zip_code"]) == ["01234", "02345", "03456"]
+
+
+def test_auto_clean_strict_keeps_protected_identifier_values_distinct():
+    frame = ar.from_pandas(pd.DataFrame({"user_id": ["001", "1"]}))
+
+    clean = ar.auto_clean(frame, mode="strict", allow_lossy_casts=True)
+    result = ar.to_pandas(clean)
+
+    assert clean.shape == (2, 1)
+    assert list(result["user_id"]) == ["001", "1"]
+    assert pd.api.types.is_string_dtype(result["user_id"])
 
 
 def test_profile_detects_near_constant_column():
@@ -2596,6 +2634,28 @@ def test_auto_clean_explain_steps_recorded(tmp_path):
     assert len(step.reason) > 0
 
 
+def test_auto_clean_explain_records_post_normalization_dedup():
+    frame = ar.from_pandas(pd.DataFrame({"name": ["Alice", " Alice "]}))
+
+    cleaned, explanation = ar.auto_clean(
+        frame,
+        mode="strict",
+        explain=True,
+        allow_lossy_casts=True,
+    )
+
+    drop_steps = [
+        record for record in explanation.steps if record.step == "drop_duplicates"
+    ]
+    assert cleaned.shape == (1, 1)
+    assert len(drop_steps) == 1
+    assert drop_steps[0].kwargs == {"keep": "first"}
+    assert drop_steps[0].rows_before == 2
+    assert drop_steps[0].rows_after == 1
+    assert drop_steps[0].rows_removed == 1
+    assert "strict-mode normalization" in drop_steps[0].reason
+
+
 def test_auto_clean_explain_with_return_report(tmp_path):
     """explain=True and return_report=True should return (ArFrame, DataQualityReport, CleanExplanation)."""
     path = tmp_path / "data.csv"
@@ -2630,6 +2690,7 @@ def test_auto_clean_explain_no_steps_clean_data(tmp_path):
 
     assert explanation.rows_removed == 0
     assert explanation.rows_before == explanation.rows_after
+    assert explanation.steps == []
 
 
 def test_auto_clean_explain_str_representation(tmp_path):

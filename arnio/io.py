@@ -412,10 +412,13 @@ def _reject_utf8_nul_bytes(path: str) -> None:
         _raise_csv_path_os_error(path, e)
 
 
-def _validate_csv_path(path: str, encoding: str) -> None:
+def _validate_csv_path(
+    path: str, encoding: str, *, reject_utf8_nul_bytes: bool = True
+) -> None:
     """Shared validation for CSV-style file inputs."""
 
-    if _is_utf8_encoding(encoding):
+    is_utf8 = _is_utf8_encoding(encoding)
+    if reject_utf8_nul_bytes and is_utf8:
         _reject_utf8_nul_bytes(path)
 
     try:
@@ -770,7 +773,7 @@ def read_csv_chunked(
                     "Only .csv, .txt, and .tsv are supported."
                 )
 
-        _validate_csv_path(path, encoding)
+        _validate_csv_path(path, encoding, reject_utf8_nul_bytes=False)
 
         # Resolve the sentinel: auto-detect tab for .tsv only when the caller
         # truly omitted delimiter (None).  An explicit delimiter="," is always
@@ -1040,7 +1043,7 @@ def scan_csv(
 
     path = os.fspath(path)
 
-    _validate_csv_path(path, encoding)
+    _validate_csv_path(path, encoding, reject_utf8_nul_bytes=False)
 
     path_lower = path.lower()
 

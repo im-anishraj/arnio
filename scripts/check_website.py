@@ -7,7 +7,7 @@ Checks
 1. Every ``website/*.html`` file is parseable as UTF-8 HTML.
 2. Every local ``href`` and ``src`` attribute resolves to an existing file.
 3. Every fragment link (``#id``) resolves to a real ``id=`` on the target page.
-4. Required shared assets (CSS, JS, SVG logos) are present on disk.
+4. Required shared assets (CSS, JS, SVG logo assets) are present on disk.
 
 External links are skipped by default.  Pass ``--warn-external`` to emit
 a WARNING line for each one (CI stays green; useful for local audits).
@@ -44,8 +44,10 @@ REQUIRED_ASSETS: list[str] = [
     "js/code.js",
     "js/github.js",
     "js/theme.js",
-    "arnio-transparent-logo.svg",
-    "updated-icon.svg",
+    "favicon.svg",
+    "arnio-icon.svg",
+    "arnio-logo.svg",
+    "arnio-social-card.svg",
 ]
 
 # URL schemes that belong to external resources — skip file-existence checks.

@@ -44,6 +44,37 @@ class TestDropNulls:
 
 
 class TestKeepRowsWithNulls:
+    def test_pandas_input_empty_subset_raises(self):
+        df = pd.DataFrame({"name": ["Alice", None]})
+
+        with pytest.raises(ValueError, match="subset"):
+            ar.keep_rows_with_nulls(df, subset=[])
+
+    def test_pandas_input_empty_tuple_subset_raises(self):
+        df = pd.DataFrame({"name": ["Alice", None]})
+
+        with pytest.raises(ValueError, match="subset"):
+            ar.keep_rows_with_nulls(df, subset=())
+
+    def test_empty_subset_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"name": ["Alice", None]}))
+
+        with pytest.raises(ValueError, match="subset"):
+            ar.keep_rows_with_nulls(frame, subset=[])
+
+    def test_empty_tuple_subset_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"name": ["Alice", None]}))
+
+        with pytest.raises(ValueError, match="subset"):
+            ar.keep_rows_with_nulls(frame, subset=())
+
+    def test_subset_none_still_works(self):
+        frame = ar.from_pandas(pd.DataFrame({"name": ["Alice", None]}))
+
+        result = ar.keep_rows_with_nulls(frame)
+
+        assert result.shape[0] == 1
+
     def test_keeps_only_null_rows(self, csv_with_nulls):
         # full frame has 4 rows, 2 have nulls (row1: null name+score, row2: null age)
         frame = ar.read_csv(csv_with_nulls)
@@ -3955,6 +3986,20 @@ def test_drop_columns_matching_all_columns():
     df = pd.DataFrame({"a": [1, 2], "b": [3, 4]})
     with pytest.raises(ValueError, match="Pattern matches all columns"):
         ar.drop_columns_matching(df, ".*")
+
+
+def test_drop_columns_matching_zero_column_pandas():
+    df = pd.DataFrame(index=range(2))
+    result = ar.drop_columns_matching(df, "^tmp")
+    assert isinstance(result, pd.DataFrame)
+    assert result.shape == (2, 0)
+
+
+def test_drop_columns_matching_zero_column_arframe():
+    frame = ar.from_pandas(pd.DataFrame(index=range(2)))
+    result = ar.drop_columns_matching(frame, "^tmp")
+    assert isinstance(result, ar.ArFrame)
+    assert result.shape == (2, 0)
 
 
 def test_fill_nulls_validation_lossy_and_non_finite():
