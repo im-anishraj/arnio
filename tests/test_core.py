@@ -1,4 +1,6 @@
 import importlib
+import importlib.util
+import pathlib
 import sys
 
 import pytest
@@ -9,10 +11,8 @@ def test_missing_cpp_extension_error_message(monkeypatch):
     try:
         import arnio  # noqa: F401
     except ImportError as e:
-        # If arnio is already failing to import due to missing extension (like in local tests)
         error_msg = str(e)
     else:
-        # If it is installed, we force it to fail
         monkeypatch.setitem(sys.modules, "arnio._arnio_cpp", None)
         monkeypatch.delitem(sys.modules, "arnio._core", raising=False)
         with pytest.raises(ImportError) as exc_info:
@@ -48,30 +48,35 @@ def test_version_not_unknown_on_installed_package():
     ), "__version__ fell through to 'unknown' even though arnio is installed"
 
 
-def test_version_reads_pyproject_in_source_checkout(tmp_path):
-    """When pyproject.toml sits next to the package dir, its version is used."""
-    import importlib.util
-    import pathlib
+def _load_version_module(tmp_path: pathlib.Path) -> object:
+    """Copy arnio/_version.py into tmp_path/arnio/ and load it as a standalone module.
 
-    # Copy the version-resolution block from the real __init__.py into a tmp package.
-    real_init = pathlib.Path(__file__).parent.parent / "arnio" / "__init__.py"
-    src = real_init.read_text(encoding="utf-8")
-    version_block = src[: src.index("from .")]
-
+    _version.py uses Path(__file__).resolve().parent.parent to locate pyproject.toml,
+    so the file must sit one level below tmp_path (tmp_path/arnio/_version.py) so
+    that _here.parent == tmp_path, matching where the test places pyproject.toml.
+    """
+    real_version = pathlib.Path(__file__).parent.parent / "arnio" / "_version.py"
+    src = real_version.read_text(encoding="utf-8")
     pkg_dir = tmp_path / "arnio"
     pkg_dir.mkdir()
-    (pkg_dir / "__init__.py").write_text(version_block, encoding="utf-8")
+    version_file = pkg_dir / "_version.py"
+    version_file.write_text(src, encoding="utf-8")
 
-    # Place a pyproject.toml with a sentinel version next to the package dir.
+    spec = importlib.util.spec_from_file_location(
+        "_arnio_version_isolated", version_file
+    )
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_version_reads_pyproject_in_source_checkout(tmp_path):
+    """When pyproject.toml sits next to the package dir, its version is used."""
     (tmp_path / "pyproject.toml").write_text(
         '[project]\nname = "arnio"\nversion = "9.9.9"\n', encoding="utf-8"
     )
 
-    spec = importlib.util.spec_from_file_location(
-        "arnio_checkout", pkg_dir / "__init__.py"
-    )
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
+    mod = _load_version_module(tmp_path)
 
     assert (
         mod.__version__ == "9.9.9"
@@ -83,17 +88,6 @@ def test_version_fallback_unknown_when_no_pyproject_and_no_metadata(
 ):
     """When neither pyproject.toml nor metadata is available, fall back to 'unknown'."""
     import importlib.metadata
-    import importlib.util
-    import pathlib
-
-    real_init = pathlib.Path(__file__).parent.parent / "arnio" / "__init__.py"
-    src = real_init.read_text(encoding="utf-8")
-    version_block = src[: src.index("from .")]
-
-    pkg_dir = tmp_path / "arnio"
-    pkg_dir.mkdir()
-    (pkg_dir / "__init__.py").write_text(version_block, encoding="utf-8")
-    # No pyproject.toml — simulates an install without source tree.
 
     monkeypatch.setattr(
         importlib.metadata,
@@ -103,10 +97,6 @@ def test_version_fallback_unknown_when_no_pyproject_and_no_metadata(
         ),
     )
 
-    spec = importlib.util.spec_from_file_location(
-        "arnio_isolated", pkg_dir / "__init__.py"
-    )
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
+    mod = _load_version_module(tmp_path)
 
     assert mod.__version__ == "unknown", f"Expected 'unknown', got {mod.__version__!r}"
