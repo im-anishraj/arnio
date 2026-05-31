@@ -76,7 +76,7 @@ pip install "arnio[sklearn]"</code></pre></div>
         <p>Use Arnio at the boundary where raw files enter analysis or automation. It keeps parsing, cleaning, profiling, and validation explicit.</p>
         <div class="code-block"><div class="code-block-header">Python</div><pre><code class="language-python">import arnio as ar
 
-frame = ar.read_csv("customers.csv", on_bad_lines="warn")
+frame = ar.read_csv("customers.csv")
 report = ar.profile(frame)
 suggestions = ar.suggest_cleaning(report)
 clean = ar.pipeline(frame, suggestions)
@@ -86,6 +86,7 @@ schema = ar.Schema({
     "email": ar.Email(nullable=True),
 })
 result = ar.validate(clean, schema, max_errors=50)</code></pre></div>
+<div class="callout callout-info"><p class="callout-title">Note</p><p>The <code>on_bad_lines</code> parameter defaults to <code>"error"</code>. Use <code>"warn"</code> to log malformed rows without failing, or <code>"skip"</code> to silently skip them.</p></div>
 
         <h2 id="csv">CSV Reading</h2>
         <p>Current CSV reading covers the production edge cases that were added across v1.17.0, v1.18.0, and current main.</p>
@@ -106,8 +107,8 @@ result = ar.validate(clean, schema, max_errors=50)</code></pre></div>
     decimal_separator=".",
     dtype={"order_id": "string"},
     encoding_errors="replace",
-    on_bad_lines="warn",
 )</code></pre></div>
+<div class="callout callout-info"><p class="callout-title">Note</p><p><code>on_bad_lines</code> defaults to <code>"error"</code> for malformed rows. Use <code>"warn"</code> to log issues without failing, or <code>"skip"</code> to skip them silently.</p></div>
 
         <h2 id="chunked">Chunked CSV</h2>
         <p><code>read_csv_chunked</code> streams a CSV into ArFrame chunks. Chunked reads support malformed-row handling, but schema validation itself remains a whole-frame operation after you materialize the data you want to validate.</p>
