@@ -144,7 +144,7 @@ result = schema.validate(frame)</code></pre></div></div>
                 <td><code>URL(...)</code></td>
                 <td>Semantic</td>
                 <td><code>nullable=True</code>, <code>unique=False</code>, <code>allowed_schemes=None</code>, <code>severity="error"</code>, <code>required_if=None</code></td>
-                <td><code>allowed_schemes</code> restricts to specific schemes (e.g. <code>["https", "http"]</code>). Omit to allow any valid URL scheme.</td>
+                <td>Omit to allow the default http/https URL validator; pass <code>allowed_schemes=[...]</code> to permit a custom set such as <code>["https", "ftp"]</code>.</td>
               </tr>
               <tr>
                 <td><code>PhoneNumber(...)</code></td>
