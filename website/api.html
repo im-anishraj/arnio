@@ -256,6 +256,12 @@ result = schema.validate(frame)</code></pre></div></div>
 
         <h2 id="integrations">Integrations</h2>
         <div class="api-func"><div class="api-func-header">ArnioPandasAccessor / pandas accessor: df.arnio.to_arframe(), pipeline(), clean(), profile(), suggest_cleaning(), auto_clean(), validate()</div><div class="api-func-body"><p>Run Arnio workflows directly from pandas DataFrames.</p></div></div>
+        <div class="api-func"><div class="api-func-header">df.arnio.clean(steps=None, *, strip_whitespace=True, drop_nulls=False, drop_duplicates=False)</div><div class="api-func-body"><p>Clean a DataFrame with Arnio and return a <code>pandas.DataFrame</code>.</p><p>When <code>steps</code> is provided, it is passed directly to <code>ar.pipeline()</code> and the keyword flags are ignored. When <code>steps</code> is omitted, the convenience-clean path runs with the keyword flags controlling which operations apply.</p><ul><li><code>strip_whitespace</code> – strip leading and trailing whitespace from string columns (default <code>True</code>).</li><li><code>drop_nulls</code> – drop rows that contain any null value (default <code>False</code>).</li><li><code>drop_duplicates</code> – drop duplicate rows (default <code>False</code>).</li></ul><pre><code>import pandas as pd
+import arnio as ar
+
+df = pd.DataFrame({"name": [" Alice ", " Alice "], "score": [10, 10]})
+cleaned = df.arnio.clean(drop_duplicates=True)
+# cleaned: one row, name stripped to "Alice"</code></pre><p><strong>Returns:</strong> <code>pandas.DataFrame</code></p></div></div>
         <div class="api-func"><div class="api-func-header">register_duckdb(frame, conn, name)</div><div class="api-func-body"><p>Register an <code>ArFrame</code> as a DuckDB relation through pandas interop.</p></div></div>
         <div class="api-func"><div class="api-func-header">ArnioCleaner</div><div class="api-func-body"><p>Optional scikit-learn transformer for pipeline-safe data preparation. Install with <code>pip install "arnio[sklearn]"</code>.</p></div></div>
 
