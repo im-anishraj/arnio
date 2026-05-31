@@ -17,6 +17,7 @@ from arnio.io import _materialize_csv_input
 # Capture the real os.unlink once at module level so no test can accidentally
 # capture a patched version via a delayed assignment.
 _REAL_UNLINK = os.unlink
+_REAL_NAMED_TEMPORARY_FILE = tempfile.NamedTemporaryFile
 
 
 class _FailOnReadStream:
@@ -46,7 +47,7 @@ class _FakeTmp:
     """
 
     def __init__(self, suffix=".csv", **kwargs):
-        self._real = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+        self._real = _REAL_NAMED_TEMPORARY_FILE(delete=False, suffix=suffix)
         self.name = self._real.name
 
     def write(self, data):
