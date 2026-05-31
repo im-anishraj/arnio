@@ -17,6 +17,7 @@ from arnio.io import _materialize_csv_input
 
 class _FailOnReadStream:
     """A file-like that raises on read() to trigger the except path."""
+
     def read(self, size=-1):
         raise OSError("simulated read failure")
 
@@ -47,8 +48,10 @@ class TestMaterializeCsvCleanup:
 
         source = _FailOnReadStream()
 
-        with patch("arnio.io.tempfile.NamedTemporaryFile", side_effect=patched_ntf), \
-             patch("arnio.io.os.unlink", side_effect=tracking_unlink):
+        with (
+            patch("arnio.io.tempfile.NamedTemporaryFile", side_effect=patched_ntf),
+            patch("arnio.io.os.unlink", side_effect=tracking_unlink),
+        ):
             with pytest.raises(OSError, match="simulated read failure"):
                 _materialize_csv_input(source)
 
@@ -69,8 +72,10 @@ class TestMaterializeCsvCleanup:
 
         source = _FailOnReadStream()
 
-        with patch("arnio.io.tempfile.NamedTemporaryFile", side_effect=patched_ntf), \
-             patch("arnio.io.os.unlink", side_effect=OSError("unlink error")):
+        with (
+            patch("arnio.io.tempfile.NamedTemporaryFile", side_effect=patched_ntf),
+            patch("arnio.io.os.unlink", side_effect=OSError("unlink error")),
+        ):
             with pytest.raises(OSError, match="simulated read failure"):
                 _materialize_csv_input(source)
 
