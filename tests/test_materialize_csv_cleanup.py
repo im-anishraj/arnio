@@ -7,6 +7,7 @@ must still run so the temp file is not leaked on disk.
 
 import io
 import os
+import tempfile
 from unittest.mock import patch
 
 import pytest
@@ -19,6 +20,22 @@ class _FailOnReadStream:
 
     def read(self, size=-1):
         raise OSError("simulated read failure")
+
+
+def _ntf_with_flaky_close(**kwargs):
+    """Return a real NamedTemporaryFile whose close() raises on first call."""
+    handle = tempfile.NamedTemporaryFile(**kwargs)
+    real_close = handle.close
+    call_count = [0]
+
+    def flaky_close():
+        call_count[0] += 1
+        if call_count[0] == 1:
+            raise OSError("simulated flush error on close")
+        real_close()
+
+    handle.close = flaky_close
+    return handle
 
 
 class TestMaterializeCsvCleanup:
@@ -41,8 +58,8 @@ class TestMaterializeCsvCleanup:
 
         with (
             patch(
-                "arnio.io.tempfile.NamedTemporaryFile.close",
-                side_effect=OSError("simulated flush error on close"),
+                "arnio.io.tempfile.NamedTemporaryFile",
+                side_effect=_ntf_with_flaky_close,
             ),
             patch("arnio.io.os.unlink", side_effect=tracking_unlink),
         ):
@@ -59,11 +76,21 @@ class TestMaterializeCsvCleanup:
 
     def test_unlink_failure_does_not_mask_original_exception(self):
         """If unlink() also raises during cleanup, the original exception propagates."""
+        real_unlink = os.unlink
+
+        def close_raising_ntf(**kwargs):
+            handle = tempfile.NamedTemporaryFile(**kwargs)
+            handle.close = lambda: (_ for _ in ()).throw(
+                OSError("simulated close error")
+            )
+            return handle
+
         source = _FailOnReadStream()
+
         with (
             patch(
-                "arnio.io.tempfile.NamedTemporaryFile.close",
-                side_effect=OSError("close error"),
+                "arnio.io.tempfile.NamedTemporaryFile",
+                side_effect=close_raising_ntf,
             ),
             patch("arnio.io.os.unlink", side_effect=OSError("unlink error")),
         ):
