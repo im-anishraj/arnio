@@ -877,7 +877,7 @@ class TestDropEmptyColumns:
         )
         assert "empty_num" not in result.columns
         assert "empty_text" not in result.columns
-    
+
     def test_drop_empty_columns_empty_frame(self):
         frame = ar.from_pandas(pd.DataFrame(columns=["a", "b", "c"]))
         result = ar.drop_empty_columns(frame)
