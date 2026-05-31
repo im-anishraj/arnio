@@ -1925,7 +1925,7 @@ def String(
 
     if isinstance(allowed, (str, bytes)):
         raise TypeError(
-            "allowed must be a sequence of allowed values, not a bare string"
+            "allowed must be an iterable of hashable scalar values, not a bare string"
         )
 
     if pattern is not None:

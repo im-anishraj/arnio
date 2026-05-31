@@ -1892,7 +1892,7 @@ def test_string_max_length_boundary(tmp_path):
 def test_string_allowed_rejects_bare_string():
     with pytest.raises(
         TypeError,
-        match="allowed must be a sequence of allowed values, not a bare string",
+        match="allowed must be an iterable of hashable scalar values, not a bare string",
     ):
         ar.String(allowed="active")
 
@@ -1900,7 +1900,7 @@ def test_string_allowed_rejects_bare_string():
 def test_string_allowed_rejects_bare_bytes():
     with pytest.raises(
         TypeError,
-        match="allowed must be a sequence of allowed values, not a bare string",
+        match="allowed must be an iterable of hashable scalar values, not a bare string",
     ):
         ar.String(allowed=b"active")
 
