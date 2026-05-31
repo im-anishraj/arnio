@@ -75,10 +75,7 @@ ar.register_step("remove_special_chars", remove_special_chars)
 
 ### Calling a step with custom parameters
 
-If your step accepts parameters, pass them as a tuple `("step_name", {"param": value})`
-when calling `pipeline()`. The no-params string form `"step_name"` remains valid when
-no configuration is needed.
-
+Every step must use tuple syntax — always wrap the step name in a tuple, even when no parameters are needed.
 ```python
 import arnio as ar
 
