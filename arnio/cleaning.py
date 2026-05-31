@@ -490,7 +490,9 @@ def drop_duplicates(
     if keep_arg not in {"first", "last", "none"}:
         raise ValueError("keep must be one of 'first', 'last', 'none', or False")
     if frame.shape[1] == 0:
-        return from_pandas(to_pandas(frame))
+        import copy
+
+        return copy.deepcopy(frame)
     result = _drop_duplicates(frame._frame, subset=subset, keep=keep_arg)
     return ArFrame(result)
 
