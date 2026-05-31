@@ -1313,12 +1313,30 @@ def cast_types(
     return ArFrame(result)
 
 
+def _append_clean_step(
+    steps: list[tuple],
+    name: str,
+    option: bool | dict,
+) -> None:
+    if option is False:
+        return
+
+    if option is True:
+        steps.append((name,))
+        return
+
+    if isinstance(option, Mapping):
+        steps.append((name, dict(option)))
+        return
+    raise TypeError(f"{name} must be bool or dict, got {type(option).__name__}")
+
+
 def clean(
     frame: ArFrame,
     *,
-    strip_whitespace: bool = True,
-    drop_nulls: bool = False,
-    drop_duplicates: bool = False,
+    strip_whitespace: bool | dict = True,
+    drop_nulls: bool | dict = False,
+    drop_duplicates: bool | dict = False,
 ) -> ArFrame:
     """Convenience function to apply common cleaning operations.
 
@@ -1331,12 +1349,15 @@ def clean(
     ----------
     frame : ArFrame
         Input data frame.
-    strip_whitespace : bool, default True
+    strip_whitespace : bool or dict, default True
         Whether to trim leading/trailing whitespace from string columns.
-    drop_nulls : bool, default False
+        Pass a dict to specify kwargs (e.g., {"subset": ["col1"]}).
+    drop_nulls : bool or dict, default False
         Whether to remove rows containing null/empty values.
-    drop_duplicates : bool, default False
+        Pass a dict to specify kwargs (e.g., {"subset": ["col2"]}).
+    drop_duplicates : bool or dict, default False
         Whether to remove duplicate rows.
+        Pass a dict to specify kwargs (e.g., {"keep": "last"}).
 
     Returns
     -------
@@ -1346,28 +1367,18 @@ def clean(
     Examples
     --------
     >>> frame = ar.read_csv("data.csv")
+    >>> # Basic boolean usage
     >>> cleaned = ar.clean(frame, strip_whitespace=True, drop_nulls=True)
+    >>> # Advanced dict configuration usage
+    >>> cleaned = ar.clean(frame, drop_duplicates={"keep": "last"})
     """
-    frame, _ = _validate_frame(frame)
-    if not isinstance(strip_whitespace, bool):
-        raise TypeError("strip_whitespace must be a bool")
-    if not isinstance(drop_nulls, bool):
-        raise TypeError("drop_nulls must be a bool")
-    if not isinstance(drop_duplicates, bool):
-        raise TypeError("drop_duplicates must be a bool")
-
     from .pipeline import pipeline
 
     steps = []
-    if strip_whitespace:
-        steps.append(("strip_whitespace",))
-    if drop_nulls:
-        steps.append(("drop_nulls",))
-    if drop_duplicates:
-        steps.append(("drop_duplicates",))
 
-    if not steps:
-        return frame
+    _append_clean_step(steps, "strip_whitespace", strip_whitespace)
+    _append_clean_step(steps, "drop_nulls", drop_nulls)
+    _append_clean_step(steps, "drop_duplicates", drop_duplicates)
 
     return pipeline(frame, steps)
 

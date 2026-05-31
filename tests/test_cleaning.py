@@ -2723,47 +2723,115 @@ class TestCleanAPI:
         frame = ar.read_csv(csv_with_whitespace)
         result = ar.clean(frame)
         df = ar.to_pandas(result)
+
         # strip_whitespace is True by default
         assert df["name"].iloc[0] == "Alice"
         assert df["city"].iloc[1] == "London"
+
         # drop_nulls and drop_duplicates are False by default
         assert len(frame) == len(result)
 
     def test_clean_all(self, csv_with_nulls):
-        # reuse csv_with_nulls as it has a null row (Bob missing name)
+
         frame = ar.read_csv(csv_with_nulls)
-        # Drop nulls
-        result = ar.clean(frame, strip_whitespace=False, drop_nulls=True)
+
+        result = ar.clean(
+            frame,
+            strip_whitespace=False,
+            drop_nulls=True,
+        )
+
         assert len(result) < len(frame)
 
     @pytest.mark.parametrize("invalid_val", ["yes", 1, None, []])
     def test_clean_invalid_strip_whitespace(self, csv_with_whitespace, invalid_val):
         frame = ar.read_csv(csv_with_whitespace)
-        with pytest.raises(TypeError, match="strip_whitespace must be a bool"):
+        with pytest.raises(TypeError, match="strip_whitespace must be bool or dict"):
             ar.clean(frame, strip_whitespace=invalid_val)
 
     @pytest.mark.parametrize("invalid_val", ["yes", 1, None, []])
     def test_clean_invalid_drop_nulls(self, csv_with_whitespace, invalid_val):
         frame = ar.read_csv(csv_with_whitespace)
-        with pytest.raises(TypeError, match="drop_nulls must be a bool"):
+        with pytest.raises(TypeError, match="drop_nulls must be bool or dict"):
             ar.clean(frame, drop_nulls=invalid_val)
 
     @pytest.mark.parametrize("invalid_val", ["yes", 1, None, []])
     def test_clean_invalid_drop_duplicates(self, csv_with_whitespace, invalid_val):
         frame = ar.read_csv(csv_with_whitespace)
-        with pytest.raises(TypeError, match="drop_duplicates must be a bool"):
+        with pytest.raises(TypeError, match="drop_duplicates must be bool or dict"):
             ar.clean(frame, drop_duplicates=invalid_val)
 
-    def test_clean_valid_booleans(self, csv_with_whitespace):
-        frame = ar.read_csv(csv_with_whitespace)
-        # Should not raise
+    def test_clean_drop_nulls_with_subset(self):
+        frame = ar.from_dict(
+            {
+                "name": ["Alice", None, "Charlie"],
+                "age": [25, 30, None],
+            }
+        )
+
         result = ar.clean(
             frame,
-            strip_whitespace=True,
-            drop_nulls=False,
-            drop_duplicates=True,
+            drop_nulls={"subset": ["name"]},
         )
-        assert len(ar.to_pandas(result)) > 0
+
+        data = result.to_dict()
+
+        assert data["name"] == ["Alice", "Charlie"]
+        assert data["age"] == [25, None]
+
+    def test_clean_drop_duplicates_keep_last(self):
+        frame = ar.from_dict(
+            {
+                "id": [1, 1, 2],
+                "value": ["first", "last", "unique"],
+            }
+        )
+
+        result = ar.clean(
+            frame,
+            drop_duplicates={
+                "subset": ["id"],
+                "keep": "last",
+            },
+        )
+
+        data = result.to_dict()
+
+        assert data["id"] == [1, 2]
+        assert data["value"] == ["last", "unique"]
+
+    def test_clean_strip_whitespace_subset(self):
+        frame = ar.from_dict(
+            {
+                "name": ["  Alice  ", "  Bob  "],
+                "city": ["  NYC  ", "  LA  "],
+            }
+        )
+
+        result = ar.clean(
+            frame,
+            strip_whitespace={"subset": ["name"]},
+        )
+
+        data = result.to_dict()
+
+        assert data["name"] == ["Alice", "Bob"]
+
+        # city should remain untouched
+        assert data["city"] == ["  NYC  ", "  LA  "]
+
+    def test_clean_invalid_option_type(self):
+        frame = ar.from_dict(
+            {
+                "name": ["Alice"],
+            }
+        )
+
+        with pytest.raises(TypeError):
+            ar.clean(
+                frame,
+                drop_nulls="invalid",
+            )
 
 
 class TestFilterRows:
