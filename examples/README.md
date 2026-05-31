@@ -52,3 +52,21 @@ ar.Int64(nullable=True, min=0, max=120)
 ar.Float64(nullable=False, min=0.0)
 ar.Email(nullable=False, unique=True)
 ```
+
+## Integration & Tutorial Scripts
+
+Ready-to-run scripts in the `examples/` directory for common integrations and workflows.
+
+| Script | Description | Run |
+|---|---|---|
+| [basic_usage.py](./basic_usage.py) | Quickstart: load, clean, and validate a CSV | `python basic_usage.py` |
+| [arnio_with_pandas.py](./arnio_with_pandas.py) | Clean messy data with Arnio, analyse with pandas | `python arnio_with_pandas.py` |
+| [arnio_with_numpy.py](./arnio_with_numpy.py) | Clean numeric data with Arnio, compute with NumPy | `python arnio_with_numpy.py` |
+| [arnio_with_arrow.py](./arnio_with_arrow.py) | Clean data with Arnio, export to PyArrow Table | `python arnio_with_arrow.py` |
+| [arnio_with_duckdb.py](./arnio_with_duckdb.py) | Clean data with Arnio, query with DuckDB SQL | `python arnio_with_duckdb.py` |
+| [arnio_with_jsonl.py](./arnio_with_jsonl.py) | Load a JSONL file and run a cleaning pipeline | `python arnio_with_jsonl.py` |
+| [arnio_with_sklearn.py](./arnio_with_sklearn.py) | Prepare data with Arnio, train a scikit-learn model | `python arnio_with_sklearn.py` |
+| [sklearn_pipeline.py](./sklearn_pipeline.py) | Full scikit-learn pipeline with Arnio preprocessing | `python sklearn_pipeline.py` |
+| [schema_validation.py](./schema_validation.py) | Define a Schema and validate typed fields end-to-end | `python schema_validation.py` |
+| [custom_step.py](./custom_step.py) | Register a custom Python cleaning step in a pipeline | `python custom_step.py` |
+| [arnio_chunk_reading.py](./arnio_chunk_reading.py) | Read and process large files in chunks | `python arnio_chunk_reading.py` |
