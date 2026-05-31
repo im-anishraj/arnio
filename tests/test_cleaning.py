@@ -3957,6 +3957,20 @@ def test_drop_columns_matching_all_columns():
         ar.drop_columns_matching(df, ".*")
 
 
+def test_drop_columns_matching_zero_column_pandas():
+    df = pd.DataFrame(index=range(2))
+    result = ar.drop_columns_matching(df, "^tmp")
+    assert isinstance(result, pd.DataFrame)
+    assert result.shape == (2, 0)
+
+
+def test_drop_columns_matching_zero_column_arframe():
+    frame = ar.from_pandas(pd.DataFrame(index=range(2)))
+    result = ar.drop_columns_matching(frame, "^tmp")
+    assert isinstance(result, ar.ArFrame)
+    assert result.shape == (2, 0)
+
+
 def test_fill_nulls_validation_lossy_and_non_finite():
     """
     Ensure that fill_nulls rejects non-finite values and lossy float-to-int conversions

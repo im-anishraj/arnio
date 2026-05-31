@@ -1764,6 +1764,9 @@ def drop_columns_matching(frame, pattern):
 
     cols_to_drop = [col for col in df.columns if re.search(pattern, str(col))]
 
+    if len(df.columns) == 0:
+        return frame if is_arframe else df
+
     if len(cols_to_drop) == len(df.columns):
         raise ValueError(
             "Pattern matches all columns. At least one column must remain."
