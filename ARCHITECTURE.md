@@ -51,11 +51,51 @@ A Column represents a single 1D array of homogeneous data.
 
 - **Variant Storage:** Data is stored using `std::variant` over strongly-typed `std::vector`s (e.g., `std::vector<int64_t>`, `std::vector<std::string>`).
 
+## 4. Pandas Dtype Compatibility
+
+Arnio supports a focused set of pandas dtypes directly through its native C++ columnar model. Some advanced pandas dtypes are currently handled through conversion, have limited support, or are planned for future improvements.
+This section helps users understand which dtype workflows are fully supported, partially supported, unsupported, or planned.
+
+### Fully Supported
+The following dtypes are natively supported and map efficiently to strongly typed C++ vectors:
+- `int64`
+- `float64`
+- `bool`
+- `string`
+These allow efficient parsing, cleaning operations, and zero-copy or near zero-copy conversion back to pandas where possible.
+
+### Limited / Converted Support
+The following dtypes are not natively supported but may work through conversion or preprocessing depending on the workflow:
+- `datetime64[ns]`
+- `category`
+- mixed `object` columns
+These may require conversion before pipeline execution. Mixed object columns can reduce type inference reliability, and categorical workflows may require normalization before cleaning operations.
+
+### Planned Support
+The following pandas-specific nullable dtypes require additional handling for null semantics and conversion consistency:
+- nullable integer types such as `Int64`
+- nullable boolean dtype such as `boolean`
+Support improvements for these dtypes are planned for future releases.
+
+### Currently Unsupported
+The following dtype is currently unsupported:
+- `timedelta64[ns]`
+
+This requires additional parsing and inference support in the C++ runtime and is not yet available.
+
+### User-facing Behavior
+When unsupported or partially supported dtypes are encountered, Arnio should provide clear user-facing errors instead of silent failures.
+For best performance and compatibility, users are encouraged to prefer strongly typed columns such as `int64`, `float64`, `bool`, and `string`.
+
+## 5. Pipeline Execution
+
 - **Null Handling:** Nulls are tracked via a separate boolean mask (`std::vector<bool>`), allowing the underlying data vectors to remain dense and cache-friendly.
 
 ### Frame
 
 A Frame is an ordered collection of Column objects, representing a 2D dataset.
+
+## 6. Converting to Pandas
 
 The Frame maintains an index mapping column names to their respective Column objects for O(1) access.
 
