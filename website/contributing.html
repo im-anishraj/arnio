@@ -52,10 +52,11 @@ pre-commit install</code></pre></div>
             <tr><td>Benchmarks</td><td>Dry-run mode and smoke tests so benchmark scripts remain CI-safe.</td></tr>
           </tbody>
         </table>
-        <div class="code-block"><div class="code-block-header">Shell</div><pre><code class="language-bash">pytest
-ruff check .
+        <p>Before opening a PR, run the same major checks enforced by CI locally:</p>
+        <div class="code-block"><div class="code-block-header">Shell</div><pre><code class="language-bash">pre-commit run --all-files
+mypy --config-file mypy.ini
+pytest
 python benchmarks/benchmark_vs_pandas.py --dry-run</code></pre></div>
-
         <h2 id="pr">Pull request process</h2>
         <ul>
           <li>Branch from current <code>origin/main</code>.</li>
