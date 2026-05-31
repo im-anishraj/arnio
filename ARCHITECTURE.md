@@ -51,47 +51,52 @@ A Column represents a single 1D array of homogeneous data.
 
 - **Variant Storage:** Data is stored using `std::variant` over strongly-typed `std::vector`s (e.g., `std::vector<int64_t>`, `std::vector<std::string>`).
 
-- **Null Handling:** Nulls are tracked via a separate boolean mask (`std::vector<bool>`), allowing the underlying data vectors to remain dense and cache-friendly.
-
-### Frame
-
-A Frame is an ordered collection of Column objects, representing a 2D dataset.
-
-The Frame maintains an index mapping column names to their respective Column objects for O(1) access.
-
----
-
 ## 4. Pandas Dtype Compatibility
-
-Arnio supports a focused set of pandas dtypes directly through its native C++ columnar model.
+Arnio supports a focused set of pandas dtypes directly through its native C++ columnar model. This section reflects the current implementation behavior and indicates which dtype workflows are supported versus rejected during validation.
 
 ### Fully Supported
 
-- `int64`
+The following dtypes are natively supported and map efficiently to strongly typed C++ vectors:
 
-- `float64`
+* `int64`
+* `float64`
+* `bool`
+* `string`
 
-- `bool`
+These allow efficient parsing, cleaning operations, and zero-copy or near zero-copy conversion back to pandas where possible.
 
-- `string`
+### Currently Unsupported
 
-These allow efficient parsing and cleaning operations within the C++ core.
+The following dtypes are currently rejected by `from_pandas()` validation and will raise a user-facing `TypeError` with guidance on how to preprocess the column:
 
-### Limited/Unsupported Support
+* `datetime64[ns]`
+* `category`
+* mixed `object` columns
+* `timedelta64[ns]`
+* `complex64`
+* `complex128`
 
-- `category`
+These dtypes require conversion to supported representations before processing.
 
-- Mixed `object` columns
+### Nullable Dtype Behavior
 
-- Nullable pandas dtypes (e.g., `Int64`)
+When converting Arnio data back to pandas, null-mask information is preserved where supported and may be represented using pandas nullable extension dtypes such as:
 
-These may require conversion.
+* `Int64`
+* `BooleanDtype`
+* `StringDtype`
 
-`datetime64[ns]` and `timedelta64[ns]` are currently unsupported in the native runtime.
+This outbound conversion behavior should not be interpreted as full inbound support for nullable pandas extension dtypes in `from_pandas()`.
 
----
+### User-facing Behavior
+
+When unsupported dtypes are encountered, Arnio provides clear user-facing errors instead of silent failures.
+
+For best performance and compatibility, users are encouraged to prefer strongly typed columns such as `int64`, `float64`, `bool`, and `string`.
 
 ## 5. Pipeline Execution & Dispatch Flow
+
+- **Null Handling:** Nulls are tracked via a separate boolean mask (`std::vector<bool>`), allowing the underlying data vectors to remain dense and cache-friendly.
 
 The `pipeline()` function orchestrates data flow by prioritizing C++ efficiency while allowing Python extensibility.
 
@@ -109,6 +114,15 @@ This built-in registry routes operations to highly optimized C++-backed steps (e
 
 If the name is absent from the built-in registries, it searches `_PYTHON_STEP_REGISTRY` for custom, user-defined Python fallbacks.
 
+### Frame
+
+A Frame is an ordered collection of Column objects, representing a 2D dataset.
+
+## 6. Converting to Pandas
+
+The Frame maintains an index mapping column names to their respective Column objects for O(1) access.
+
+---
 ### The Conversion Penalty
 
 Because Python-based steps expect a `pandas.DataFrame`, the system performs a roundtrip:
