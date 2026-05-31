@@ -53,6 +53,8 @@ Discord = "https://discord.gg/xsEw7r78M"
 
 [project.optional-dependencies]
 arrow = ["pyarrow>=6.0"]
+duckdb = ["duckdb>=1.0"]
+
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",

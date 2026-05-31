@@ -618,7 +618,7 @@ not to replace it.
 
 ### DuckDB registration
 
-Use `ar.register_duckdb(frame, conn, "table_name")` to register an ArFrame directly as a DuckDB relation without writing pandas conversion glue yourself. DuckDB is an optional dependency — install it with `pip install duckdb` when needed.
+Use `ar.register_duckdb(frame, conn, "table_name")` to register an ArFrame directly as a DuckDB relation without writing pandas conversion glue yourself. DuckDB is an optional dependency — install it with `pip install "arnio[duckdb]"` when needed. You can also install DuckDB directly with `pip install duckdb`.
 
 For development and CI, `pip install -e ".[dev]"` now includes DuckDB so the integration test module in `tests/test_integrations_duckdb.py` runs in the default test job.
 
