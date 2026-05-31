@@ -1024,6 +1024,8 @@ CsvParseResult CsvReader::read(const std::string& path, const std::string& on_ba
                         }
                         bad_rows.push_back(BadRow{record_number2, expected, actual});
                     }
+                    // Already recorded in pass 1 when it ran; either way count to
+                    // skip and enforce nrows properly.
                     ++bad_row_count2;
                     continue;
                 }
@@ -1054,7 +1056,6 @@ CsvParseResult CsvReader::read(const std::string& path, const std::string& on_ba
                 row_count2 % config.progress_interval_rows == 0) {
                 std::streampos pos = file2.tellg();
                 size_t bytes_read = (pos == std::streampos(-1)) ? 0 : static_cast<size_t>(pos);
-
                 config.progress_hook(row_count2, bytes_read, std::nullopt, false);
             }
         }
@@ -1063,11 +1064,10 @@ CsvParseResult CsvReader::read(const std::string& path, const std::string& on_ba
         if (config.progress_hook != nullptr) {
             std::streampos pos = file2.tellg();
             size_t bytes_read = (pos == std::streampos(-1)) ? 0 : static_cast<size_t>(pos);
-
             config.progress_hook(row_count2, bytes_read, std::nullopt, true);
         }
     }
-
+    
     return CsvParseResult{Frame(std::move(columns)), std::move(bad_rows)};
 }
 
