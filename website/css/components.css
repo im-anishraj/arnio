@@ -300,17 +300,6 @@
   color: #ffffff;
 }
 
-.btn-warning {
-  background: #f59e0b;
-  color: #0f172a;
-  border-color: #f59e0b;
-}
-
-.btn-warning:hover {
-  background: #d97706;
-  border-color: #d97706;
-  color: #0f172a;
-}
 
 
 .btn-icon {
