@@ -489,6 +489,7 @@ class DataQualityReport:
         Example:
         report.to_json(indent=2)
         """
+        indent = _validate_json_indent(indent)
 
         json_out = json.dumps(
             self.to_dict(
@@ -1128,6 +1129,7 @@ class ProfileComparison:
         Example:
         comparison.to_json(indent=2)
         """
+        indent = _validate_json_indent(indent)
         json_out = json.dumps(
             self.to_dict(
                 redact_sample_values=redact_sample_values,
@@ -1343,6 +1345,7 @@ class QualityGateResult:
         Example:
         result.to_json(indent=2)
         """
+        indent = _validate_json_indent(indent)
         json_out = json.dumps(self.to_dict(), indent=indent)
 
         if output is None:
@@ -1855,6 +1858,17 @@ def _validate_bool_option(value: bool, name: str) -> bool:
     if not isinstance(value, bool):
         raise TypeError(f"{name} must be a bool")
     return value
+
+
+def _validate_json_indent(indent: int | None) -> int | None:
+    """Validate that JSON indent is either None or a non-boolean non-negative integer."""
+    if indent is None:
+        return None
+    if not isinstance(indent, int) or isinstance(indent, bool):
+        raise TypeError("indent must be an integer or None")
+    if indent < 0:
+        raise ValueError("indent cannot be negative")
+    return indent
 
 
 def _relative_delta(baseline: Any, current: Any) -> float | None:
