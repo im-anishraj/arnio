@@ -3018,3 +3018,61 @@ def test_read_csv_chunked_text_stream_encoding_override():
     chunks = list(ar.read_csv_chunked(stream, encoding="utf-16"))
     pandas_df = ar.to_pandas(chunks[0])
     assert pandas_df["col2"][0] == "café"
+
+
+# --- Tests for scan_csv file-like input support (issue #1842) ---
+
+
+def test_scan_csv_stringio_basic():
+    """scan_csv should accept an io.StringIO and return a schema dict."""
+    stream = io.StringIO("name,age\nAlice,30\nBob,25\n")
+    schema = ar.scan_csv(stream)
+    assert isinstance(schema, dict)
+    assert "name" in schema
+    assert "age" in schema
+
+
+def test_scan_csv_stringio_schema_matches_path(tmp_path):
+    """scan_csv on a StringIO should return the same schema as a file path."""
+    csv_text = "id,value,label\n1,3.14,hello\n2,2.72,world\n"
+    csv_file = tmp_path / "test.csv"
+    csv_file.write_text(csv_text)
+
+    schema_from_path = ar.scan_csv(csv_file)
+    schema_from_stream = ar.scan_csv(io.StringIO(csv_text))
+    assert schema_from_path == schema_from_stream
+
+
+def test_scan_csv_stringio_cleans_up_temp_file():
+    """Temp file created from StringIO should be cleaned up after scan."""
+    import glob
+    import tempfile
+
+    before = set(glob.glob(os.path.join(tempfile.gettempdir(), "*.csv")))
+    ar.scan_csv(io.StringIO("a,b\n1,2\n"))
+    after = set(glob.glob(os.path.join(tempfile.gettempdir(), "*.csv")))
+    # No new temp CSV files should remain
+    assert after - before == set()
+
+
+def test_scan_csv_stringio_cleans_up_on_error():
+    """Temp file should be cleaned up even when scan_csv raises an error."""
+    import glob
+    import tempfile
+
+    before = set(glob.glob(os.path.join(tempfile.gettempdir(), "*.csv")))
+    # Empty stream should trigger CsvReadError (empty file)
+    with pytest.raises(CsvReadError):
+        ar.scan_csv(io.StringIO(""))
+    after = set(glob.glob(os.path.join(tempfile.gettempdir(), "*.csv")))
+    assert after - before == set()
+
+
+def test_scan_csv_file_like_object():
+    """scan_csv should work with any object that has a read() method."""
+    stream = ChunkTrackingTextStream(["x,y\n", "1,2\n", "3,4\n"])
+    schema = ar.scan_csv(stream)
+    assert "x" in schema
+    assert "y" in schema
+    assert stream.read_sizes
+    assert -1 not in stream.read_sizes

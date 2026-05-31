@@ -946,7 +946,7 @@ def write_csv(
 
 
 def scan_csv(
-    path: str | os.PathLike[str],
+    path: str | os.PathLike[str] | io.TextIOBase,
     *,
     delimiter: str | None = None,
     encoding: str = "utf-8",
@@ -964,10 +964,10 @@ def scan_csv(
 
     Parameters
     ----------
-    path : str
-        Path to the CSV file. Any file extension is accepted. For ``.tsv``
-        files, the delimiter is automatically set to ``'\t'`` when
-        ``delimiter`` is omitted.
+    path : str or file-like object
+        Filesystem path or text file-like object containing CSV data.
+        Any file extension is accepted. For ``.tsv`` files, the delimiter
+        is automatically set to ``'\t'`` when ``delimiter`` is omitted.
     delimiter : str or None, default None
         Field delimiter character.  When ``None`` (the default) the
         delimiter is inferred from the file extension: ``'\t'`` for
@@ -1041,46 +1041,48 @@ def scan_csv(
     >>> schema = ar.scan_csv("data.dat")              # non-standard extension accepted
     """
 
-    path = os.fspath(path)
+    path, should_cleanup, _ = _materialize_csv_input(path)
 
-    _validate_csv_path(path, encoding, reject_utf8_nul_bytes=False)
-
-    path_lower = path.lower()
-
-    # Resolve the sentinel: auto-detect tab for .tsv only when the caller
-    # truly omitted delimiter (None).  An explicit delimiter="," is always
-    # honoured, even for .tsv paths.
-    if delimiter is None:
-        delimiter = "\t" if path_lower.endswith(".tsv") else ","
-
-    decimal_separator = _validate_decimal_separator(decimal_separator)
-    _validate_thousands_separator(thousands_separator, decimal_separator)
-    delimiter = _validate_delimiter(delimiter)
-    encoding_errors = _validate_encoding_errors(encoding_errors)
-    mode = _validate_parser_mode(mode)
-    on_bad_lines = _validate_on_bad_lines(on_bad_lines)
-    config = _CsvConfig()
-    config.delimiter = delimiter
-    config.encoding = encoding
-    config.trim_headers = _validate_bool_option(trim_headers, "trim_headers")
-    config.decimal_separator = decimal_separator
-    config.thousands_separator = thousands_separator
-    config.has_header = _validate_bool_option(has_header, "has_header")
-    config.encoding_errors = encoding_errors
-    config.mode = mode
-
-    if null_values is not None:
-        config.null_values = _validate_null_values(null_values)
-
-    if sample_size is not None:
-        if not isinstance(sample_size, int) or isinstance(sample_size, bool):
-            raise TypeError("sample_size must be an integer.")
-        if sample_size <= 0:
-            raise ValueError("sample_size must be a positive integer greater than 0.")
-        config.sample_size = sample_size
-
-    reader = _CsvReader(config)
     try:
+        _validate_csv_path(path, encoding, reject_utf8_nul_bytes=False)
+
+        path_lower = path.lower()
+
+        # Resolve the sentinel: auto-detect tab for .tsv only when the caller
+        # truly omitted delimiter (None).  An explicit delimiter="," is always
+        # honoured, even for .tsv paths.
+        if delimiter is None:
+            delimiter = "\t" if path_lower.endswith(".tsv") else ","
+
+        decimal_separator = _validate_decimal_separator(decimal_separator)
+        _validate_thousands_separator(thousands_separator, decimal_separator)
+        delimiter = _validate_delimiter(delimiter)
+        encoding_errors = _validate_encoding_errors(encoding_errors)
+        mode = _validate_parser_mode(mode)
+        on_bad_lines = _validate_on_bad_lines(on_bad_lines)
+        config = _CsvConfig()
+        config.delimiter = delimiter
+        config.encoding = encoding
+        config.trim_headers = _validate_bool_option(trim_headers, "trim_headers")
+        config.decimal_separator = decimal_separator
+        config.thousands_separator = thousands_separator
+        config.has_header = _validate_bool_option(has_header, "has_header")
+        config.encoding_errors = encoding_errors
+        config.mode = mode
+
+        if null_values is not None:
+            config.null_values = _validate_null_values(null_values)
+
+        if sample_size is not None:
+            if not isinstance(sample_size, int) or isinstance(sample_size, bool):
+                raise TypeError("sample_size must be an integer.")
+            if sample_size <= 0:
+                raise ValueError(
+                    "sample_size must be a positive integer greater than 0."
+                )
+            config.sample_size = sample_size
+
+        reader = _CsvReader(config)
         # Schema inference only needs a sample, avoiding full-file transcode.
         # sample_rows is passed so _utf8_csv_path uses record-aware sampling
         # without rewriting decoded CSV text before native parsing.
@@ -1102,6 +1104,12 @@ def scan_csv(
             return cast(dict[str, str], schema)
     except RuntimeError as e:
         raise CsvReadError(str(e)) from None
+    finally:
+        if should_cleanup and os.path.exists(path):
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
 
 
 def _reject_non_finite(constant: str) -> None:
