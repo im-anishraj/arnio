@@ -11,7 +11,6 @@ import re
 import warnings
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from datetime import datetime
 from typing import Any, Callable
 from zoneinfo import available_timezones
 
@@ -2599,19 +2598,16 @@ def _validate_column(
                 )
             else:
                 if field_def.semantic == "date":
-                    invalid_values = []
-                    for index, value in non_null.items():
-                        value_str = str(value)
-                        if DATE_PATTERN.fullmatch(value_str) is None:
-                            invalid_values.append((index, value))
-                            continue
-                        try:
-                            datetime.strptime(value_str, "%Y-%m-%d")
-                        except ValueError:
-                            invalid_values.append((index, value))
-                    invalid = pd.Series(
-                        {index: value for index, value in invalid_values}
+                    values_as_text = non_null.astype("string")
+                    format_valid = values_as_text.str.fullmatch(
+                        DATE_PATTERN.pattern, na=False
                     )
+                    parsed = pd.to_datetime(
+                        values_as_text.where(format_valid),
+                        format="%Y-%m-%d",
+                        errors="coerce",
+                    )
+                    invalid = non_null[~(format_valid & parsed.notna())]
                 elif field_def.semantic == "country_code":
                     values = (
                         non_null.str.upper()

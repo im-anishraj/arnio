@@ -2555,6 +2555,25 @@ def test_date_validation_rejects_non_zero_padded_dates(tmp_path):
     assert "date" in rules
 
 
+def test_date_validation_reports_only_invalid_vectorized_values(tmp_path):
+    path = tmp_path / "mixed_dates.csv"
+    path.write_text(
+        "created_at\n" "2026-05-15\n" "2026-02-30\n" "2026-5-15\n" "2024-02-29\n"
+    )
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"created_at": ar.Date(nullable=False)},
+    )
+
+    assert not result.passed
+    assert [(issue.row_index, issue.value) for issue in result.issues] == [
+        (2, "2026-02-30"),
+        (3, "2026-5-15"),
+    ]
+    assert {issue.rule for issue in result.issues} == {"date"}
+
+
 def test_required_if_validation_passes_when_condition_matches(tmp_path):
     path = tmp_path / "conditional_pass.csv"
     path.write_text("user_type,country\n" "international,IN\n" "local,\n")
