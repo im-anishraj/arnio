@@ -13,14 +13,14 @@
   <link rel="stylesheet" href="css/pages.css?v=20260522">
   <script src="js/theme.js"></script>
   <meta property="og:type" content="website">
-  <meta property="og:url" content="https://arnio.vercel.app/">
+  <meta property="og:url" content="https://arniolib.vercel.app/">
   <meta property="og:title" content="Arnio — Production Data Preparation for Python">
   <meta property="og:description" content="Arnio combines a native C++ CSV engine with Python APIs for cleaning, quality profiling, and schema validation.">
-  <meta property="og:image" content="https://arnio.vercel.app/arnio-social-card.svg">
+  <meta property="og:image" content="https://arniolib.vercel.app/arnio-social-card.svg">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Arnio — Production Data Preparation for Python">
   <meta name="twitter:description" content="Arnio combines a native C++ CSV engine with Python APIs for cleaning, quality profiling, and schema validation.">
-  <meta name="twitter:image" content="https://arnio.vercel.app/arnio-social-card.svg">
+  <meta name="twitter:image" content="https://arniolib.vercel.app/arnio-social-card.svg">
 </head>
 <body>
   <a href="#main-content" class="skip-link">Skip to content</a>
@@ -47,6 +47,7 @@
           <div class="sidebar-nav-title">Start</div>
           <a href="#install" class="sidebar-nav-link">Install</a>
           <a href="#quickstart" class="sidebar-nav-link">Quickstart</a>
+          <a href="#troubleshooting" class="sidebar-nav-link">Troubleshooting</a>
         </div>
         <div class="sidebar-nav-group">
           <div class="sidebar-nav-title">Data I/O</div>
@@ -90,6 +91,71 @@ schema = ar.Schema({
     "email": ar.Email(nullable=True),
 })
 result = ar.validate(clean, schema, max_errors=50)</code></pre></div>
+
+<h2 id="troubleshooting">Troubleshooting & Common Issues</h2>
+
+        <p>
+          These are common setup, import, CSV parsing, and pipeline issues that new Arnio users may encounter while
+          getting started.
+        </p>
+
+        <div class="feature-list">
+
+          <div class="card">
+            <h3>ImportError or missing optional dependencies</h3>
+            <p>
+              Some workflows require optional extras such as Arrow, Parquet, or scikit-learn integrations.
+            </p>
+
+            <div class="code-block">
+              <div class="code-block-header">Shell</div>
+              <pre><code class="language-bash">pip install "arnio[arrow]"
+pip install "arnio[parquet]"
+pip install "arnio[sklearn]"</code></pre>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>Windows build or compiler errors</h3>
+            <p>
+              If installation fails on Windows with C++ compiler or Visual Studio errors, install Visual Studio Build
+              Tools with the Desktop development with C++ workload enabled.
+            </p>
+          </div>
+
+          <div class="card">
+            <h3>CSV encoding issues</h3>
+            <p>
+              Use the <code>encoding_errors</code> option when reading files that contain invalid or inconsistent UTF-8
+              characters.
+            </p>
+
+            <div class="code-block">
+              <div class="code-block-header">Python</div>
+              <pre><code class="language-python">frame = ar.read_csv(
+    "data.csv",
+    encoding_errors="replace",
+)</code></pre>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>Unknown pipeline step errors</h3>
+            <p>
+              Pipeline step names are validated before execution begins. Make sure all step names are valid and
+              correctly spelled.
+            </p>
+          </div>
+
+          <div class="card">
+            <h3>DataFrame conversion confusion</h3>
+            <p>
+              Use <code>ar.to_pandas(frame)</code> when you want to continue analysis using pandas after cleaning or
+              validation workflows.
+            </p>
+          </div>
+
+        </div>
 
         <h2 id="csv">CSV Reading</h2>
         <p>Current CSV reading covers the production edge cases that were added across v1.17.0, v1.18.0, and current main.</p>
