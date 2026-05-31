@@ -76,7 +76,6 @@ class TestMaterializeCsvCleanup:
 
     def test_unlink_failure_does_not_mask_original_exception(self):
         """If unlink() also raises during cleanup, the original exception propagates."""
-        real_unlink = os.unlink
 
         def close_raising_ntf(**kwargs):
             handle = tempfile.NamedTemporaryFile(**kwargs)
