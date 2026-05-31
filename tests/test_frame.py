@@ -775,7 +775,7 @@ class TestArFrame:
         copied = copy.copy(frame)
         assert copied == frame
         assert copied is not frame
-        assert copied._frame is frame._frame
+        assert copied._frame is not frame._frame
 
     def test_arframe_deep_copy(self):
         frame = ar.ArFrame.from_records([{"a": 1}])
@@ -1657,3 +1657,18 @@ def test_selection_methods_preserve_attrs():
     # Deep copy isolation check
     res_dtypes._attrs["metadata"]["version"] = 2
     assert frame._attrs["metadata"]["version"] == 1
+
+
+def test_shallow_copy_independent_frame():
+    import copy
+
+    import pandas as pd
+
+    import arnio as ar
+
+    original = ar.from_pandas(pd.DataFrame({"a": [1, 2, 3]}))
+    shallow = copy.copy(original)
+
+    assert shallow._frame is not original._frame
+    ar.rename_columns(original, {"a": "b"})
+    assert "a" in shallow.columns  # mutation must not leak

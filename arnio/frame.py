@@ -876,7 +876,7 @@ class ArFrame:
         return True
 
     def __copy__(self) -> ArFrame:
-        return ArFrame(self._frame, attrs=self._attrs.copy())
+        return ArFrame(self._frame.clone(), attrs=self._attrs.copy())
 
     def __deepcopy__(self, memo: dict) -> ArFrame:
         if id(self) in memo:
