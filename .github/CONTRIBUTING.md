@@ -89,9 +89,9 @@ ar.register_step("remove_special_chars", remove_special_chars)
 
 frame = ar.read_csv("data.csv")
 
-# Without parameters — cleans all string columns
+# Without parameters — wrap step name in a single-element tuple
 result = ar.pipeline(frame, [
-    "remove_special_chars"
+    ("remove_special_chars",)
 ])
 
 # With custom parameters — cleans only specified columns
