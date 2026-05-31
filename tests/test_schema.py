@@ -3845,9 +3845,23 @@ def test_custom_rule_with_invalid_severity_fails_validation_execution():
         schema.validate(frame)
 
 
-def test_field_dtype_rejects_non_string():
-    with pytest.raises(TypeError, match="dtype must be a str or None"):
-        ar.Field(dtype=123)
+@pytest.mark.parametrize("dtype", [123, True, []])
+def test_field_dtype_rejects_non_string(dtype):
+    with pytest.raises(TypeError, match="dtype must be a string or None"):
+        ar.Field(dtype=dtype)
+
+
+def test_field_dtype_accepts_supported_public_dtypes():
+    for dtype in ("int64", "float64", "string", "bool", "datetime", None):
+        field = ar.Field(dtype=dtype)
+
+        assert field.dtype == dtype
+
+
+@pytest.mark.parametrize("dtype", ["", "uuid", "int", "FLOAT64"])
+def test_field_dtype_rejects_unsupported_strings(dtype):
+    with pytest.raises(ValueError, match="dtype must be one of"):
+        ar.Field(dtype=dtype)
 
 
 def test_field_pattern_rejects_non_string():
