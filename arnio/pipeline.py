@@ -5,11 +5,6 @@ Chained cleaning pipeline.
 
 from __future__ import annotations
 
-import copy as copylib
-import inspect
-import logging
-import warnings
-from dataclasses import dataclass
 from threading import Lock
 from time import perf_counter
 from typing import Any, Callable
@@ -21,23 +16,16 @@ from .convert import from_pandas, to_pandas
 from .exceptions import PipelineStepError, UnknownStepError
 from .frame import ArFrame
 
-logger = logging.getLogger("arnio")
-_BUILTIN_STEP_NAMESPACE = "builtin"
-_STEP_NAMESPACE_SEPARATOR = ":"
-
 # Map step names to cleaning functions
 _STEP_REGISTRY: dict[str, Callable] = {
     "drop_nulls": cleaning.drop_nulls,
     "drop_columns": cleaning.drop_columns,
-    "select_columns": cleaning.select_columns,
     "keep_rows_with_nulls": cleaning.keep_rows_with_nulls,
     "fill_nulls": cleaning.fill_nulls,
     "validate_columns_exist": cleaning.validate_columns_exist,
     "drop_duplicates": cleaning.drop_duplicates,
     "drop_constant_columns": cleaning.drop_constant_columns,
-    "drop_empty_columns": cleaning.drop_empty_columns,
     "clip_numeric": cleaning.clip_numeric,
-    "winsorize_outliers": cleaning.winsorize_outliers,
     "strip_whitespace": cleaning.strip_whitespace,
     "parse_bool_strings": cleaning.parse_bool_strings,
     "normalize_case": cleaning.normalize_case,
@@ -46,96 +34,13 @@ _STEP_REGISTRY: dict[str, Callable] = {
     "cast_types": cleaning.cast_types,
     "round_numeric_columns": cleaning.round_numeric_columns,
     "combine_columns": cleaning.combine_columns,
-    "slugify_column_names": cleaning.slugify_column_names,
     "trim_column_names": cleaning.trim_column_names,
-    "clean_column_names": cleaning.clean_column_names,
 }
 
 _REGISTRY_LOCK = Lock()
-_DEPRECATED_STEP_ALIASES: dict[str, str] = {}
 _PYTHON_STEP_REGISTRY: dict[str, Callable] = {
-    "standardize_missing_tokens": cleaning.standardize_missing_tokens,
-    "coalesce_columns": cleaning.coalesce_columns,
-    "normalize_whitespace": cleaning.normalize_whitespace,
+    "standardize_missing_tokens": cleaning.standardize_missing_tokens
 }
-_BUILTIN_PYTHON_STEP_REGISTRY: dict[str, Callable] = {}
-
-
-@dataclass(frozen=True)
-class PipelineContext:
-    """Execution context passed to opt-in Python pipeline steps."""
-
-    step_name: str
-    step_index: int
-    total_steps: int
-    dry_run: bool
-
-
-class _WritablePipelineSeries(pd.Series):
-    @property
-    def _constructor(self):
-        return _WritablePipelineSeries
-
-    @property
-    def _constructor_expanddim(self):
-        return _WritablePipelineDataFrame
-
-    def to_numpy(self, *args, **kwargs):
-        values = super().to_numpy(*args, **kwargs)
-        try:
-            values.setflags(write=True)
-        except ValueError:
-            pass
-        return values
-
-
-class _WritablePipelineDataFrame(pd.DataFrame):
-    @property
-    def _constructor(self):
-        return _WritablePipelineDataFrame
-
-    @property
-    def _constructor_sliced(self):
-        return _WritablePipelineSeries
-
-
-def _to_writable_pipeline_dataframe(frame: ArFrame) -> pd.DataFrame:
-    base = to_pandas(frame, copy=True)
-    writable = _WritablePipelineDataFrame(base, copy=False)
-    writable.attrs = copylib.deepcopy(base.attrs)
-    return writable
-
-
-def _is_builtin_python_step(name: str, fn: Callable) -> bool:
-    """Return True when a Python-registered step is part of Arnio core."""
-    return getattr(fn, "__module__", "").startswith("arnio.cleaning") or (
-        name == "standardize_missing_tokens"
-    )
-
-
-def _get_builtin_step_registry(
-    python_step_registry: dict[str, Callable],
-) -> dict[str, Callable]:
-    """Return all built-in pipeline steps, including Python-backed ones."""
-    builtin_steps = dict(_STEP_REGISTRY)
-    builtin_steps.update(
-        {
-            name: fn
-            for name, fn in python_step_registry.items()
-            if _is_builtin_python_step(name, fn)
-        }
-    )
-    return builtin_steps
-
-
-def _get_namespaced_builtin_steps(
-    python_step_registry: dict[str, Callable],
-) -> dict[str, str]:
-    """Map namespaced built-in step names to canonical step names."""
-    return {
-        f"{_BUILTIN_STEP_NAMESPACE}{_STEP_NAMESPACE_SEPARATOR}{name}": name
-        for name in _get_builtin_step_registry(python_step_registry)
-    }
 
 
 def register_step(name: str, fn: Callable, overwrite: bool = False):
@@ -168,36 +73,10 @@ def register_step(name: str, fn: Callable, overwrite: bool = False):
     >>> ar.register_step("custom_clean", new_custom_clean, overwrite=True)
     """
     with _REGISTRY_LOCK:
-
-        if not isinstance(name, str) or not name or not name.strip():
-            raise ValueError("parameter 'name' must be a non-empty string")
-        if not callable(fn):
-            raise TypeError("parameter 'fn' must be a callable object")
-        if not isinstance(overwrite, bool):
-            raise TypeError(
-                f"parameter 'overwrite' must be a bool, not {type(overwrite).__name__}"
-            )
-
-        if name.startswith(f"{_BUILTIN_STEP_NAMESPACE}{_STEP_NAMESPACE_SEPARATOR}"):
-            raise ValueError(
-                f"Cannot register '{name}': "
-                f"'{_BUILTIN_STEP_NAMESPACE}{_STEP_NAMESPACE_SEPARATOR}' "
-                "is reserved for built-in pipeline steps."
-            )
         if name in _STEP_REGISTRY:
             raise ValueError(
                 f"Cannot register '{name}': conflicts with built-in C++ step. "
                 f"Use a different name."
-            )
-        if name in _BUILTIN_PYTHON_STEP_REGISTRY:
-            raise ValueError(
-                f"Cannot register '{name}': conflicts with built-in Python step. "
-                f"Use a different name."
-            )
-        if name in _DEPRECATED_STEP_ALIASES:
-            raise ValueError(
-                f"Cannot register '{name}': that name is reserved as a deprecated "
-                "pipeline step alias."
             )
         if name in _PYTHON_STEP_REGISTRY and not overwrite:
             raise ValueError(
@@ -207,117 +86,13 @@ def register_step(name: str, fn: Callable, overwrite: bool = False):
         _PYTHON_STEP_REGISTRY[name] = fn
 
 
-def unregister_step(name: str) -> None:
-    """Unregister a custom Python pipeline step."""
-    with _REGISTRY_LOCK:
-
-        if not isinstance(name, str):
-            raise TypeError(
-                f"parameter 'name' must be a string, not {type(name).__name__}"
-            )
-        if not name:
-            raise ValueError("parameter 'name' must be a non-empty string")
-
-        if name not in _PYTHON_STEP_REGISTRY:
-            available_steps = sorted(set(_STEP_REGISTRY) | set(_PYTHON_STEP_REGISTRY))
-            raise UnknownStepError(name, available_steps)
-
-        # Protect only names that were registered as built-ins at module load
-        # time (i.e. present in _BUILTIN_PYTHON_STEP_REGISTRY).  Do NOT use
-        # _is_builtin_python_step here: that helper checks the function's
-        # __module__, which would wrongly block user-defined aliases whose
-        # underlying callable happens to live in arnio.cleaning.
-        if name in _BUILTIN_PYTHON_STEP_REGISTRY:
-            available_steps = sorted(set(_STEP_REGISTRY) | set(_PYTHON_STEP_REGISTRY))
-            raise UnknownStepError(name, available_steps)
-        del _PYTHON_STEP_REGISTRY[name]
-
-
-def get_builtin_step_signatures() -> dict[str, inspect.Signature]:
-    """Return normalized signatures for built-in pipeline steps.
-
-    The returned signatures exclude the leading frame/dataframe positional
-    argument so callers can inspect the kwargs they are expected to pass in
-    pipeline step specs.
-    """
-    with _REGISTRY_LOCK:
-        python_step_registry = dict(_PYTHON_STEP_REGISTRY)
-
-    builtin_steps = dict(_STEP_REGISTRY)
-    builtin_steps.update(
-        {
-            name: fn
-            for name, fn in python_step_registry.items()
-            if getattr(fn, "__module__", "").startswith("arnio.cleaning")
-            or name == "standardize_missing_tokens"
-        }
-    )
-
-    signatures: dict[str, inspect.Signature] = {}
-    for name, fn in builtin_steps.items():
-        signature = inspect.signature(fn)
-        parameters = tuple(list(signature.parameters.values())[1:])
-        signatures[name] = signature.replace(parameters=parameters)
-
-    return dict(sorted(signatures.items()))
-
-
-def list_steps() -> list[str]:
-    """Return available pipeline step names in deterministic order."""
-    with _REGISTRY_LOCK:
-        python_step_names = list(_PYTHON_STEP_REGISTRY)
-
-    return sorted(set(_STEP_REGISTRY) | set(python_step_names))
-
-
-def _register_deprecated_step_alias(old_name: str, new_name: str) -> None:
-    """Register a deprecated step alias that warns and forwards to `new_name`."""
-    with _REGISTRY_LOCK:
-        available_steps = set(_STEP_REGISTRY) | set(_PYTHON_STEP_REGISTRY)
-
-        if new_name not in available_steps:
-            raise UnknownStepError(new_name, sorted(available_steps))
-        if old_name in available_steps:
-            raise ValueError(
-                f"Cannot deprecate '{old_name}': that step name is already registered."
-            )
-
-        existing_target = _DEPRECATED_STEP_ALIASES.get(old_name)
-        if existing_target is not None and existing_target != new_name:
-            raise ValueError(
-                f"Deprecated alias '{old_name}' already points to '{existing_target}'."
-            )
-
-        _DEPRECATED_STEP_ALIASES[old_name] = new_name
-
-
-def _resolve_step_name(name: str, deprecated_step_aliases: dict[str, str]) -> str:
-    """Resolve deprecated step aliases to their canonical names."""
-    canonical_name = deprecated_step_aliases.get(name)
-    if canonical_name is None:
-        return name
-
-    warnings.warn(
-        f"Pipeline step '{name}' is deprecated; use '{canonical_name}' instead.",
-        DeprecationWarning,
-        stacklevel=3,
-    )
-    return canonical_name
-
-
 def _validate_pipeline_steps(
     steps: list[tuple],
     python_step_registry: dict[str, Callable],
-    deprecated_step_aliases: dict[str, str],
 ) -> None:
     """Validate pipeline steps before execution begins."""
 
-    available_steps = (
-        set(_STEP_REGISTRY)
-        | set(python_step_registry)
-        | set(deprecated_step_aliases)
-        | set(_get_namespaced_builtin_steps(python_step_registry))
-    )
+    available_steps = set(_STEP_REGISTRY) | set(python_step_registry)
 
     for step in steps:
         if not isinstance(step, tuple) or not (1 <= len(step) <= 2):
@@ -350,7 +125,6 @@ def pipeline(
     *,
     return_metadata: bool = False,
     dry_run: bool = False,
-    verbose: bool = False,
 ) -> ArFrame | tuple[ArFrame, dict[str, Any]]:
     """Apply a list of cleaning steps sequentially.
 
@@ -367,11 +141,6 @@ def pipeline(
     return_metadata : bool, default False
         When True, also return a metadata dictionary with per-step timing
         information in execution order.
-
-    verbose : bool, default False
-        Enable lightweight diagnostic logging through the ``arnio`` logger.
-        Logs step index, step name, execution path, elapsed execution
-        time, and row-count changes for each pipeline step.
 
     dry_run : bool, default False
         Validates pipeline structure and step execution without
@@ -398,35 +167,18 @@ def pipeline(
     ...     ("drop_duplicates", {"keep": "first"}),
     ... ])
     """
-    if not isinstance(frame, ArFrame):
-        raise TypeError("frame must be an ArFrame")
-    if not isinstance(return_metadata, bool):
-        raise TypeError(
-            f"return_metadata must be a bool, got {type(return_metadata).__name__!r}"
-        )
-    if not isinstance(dry_run, bool):
-        raise TypeError(f"dry_run must be a bool, got {type(dry_run).__name__!r}")
-    if not isinstance(verbose, bool):
-        raise TypeError(f"verbose must be a bool, got {type(verbose).__name__!r}")
     with _REGISTRY_LOCK:
         python_step_registry = dict(_PYTHON_STEP_REGISTRY)
-        namespaced_builtin_steps = _get_namespaced_builtin_steps(python_step_registry)
-        deprecated_step_aliases = dict(_DEPRECATED_STEP_ALIASES)
 
     _validate_pipeline_steps(
         steps,
         python_step_registry,
-        deprecated_step_aliases,
     )
 
     result = frame
-    working_frame = frame
 
     step_timings: list[dict[str, Any]] = []
-    applied_steps: list[str] = []
-    row_counts: list[dict[str, int | str]] = []
-    total_steps = len(steps)
-    for step_index, step in enumerate(steps):
+    for step in steps:
         if len(step) == 1:
             name = step[0]
             kwargs = {}
@@ -441,101 +193,54 @@ def pipeline(
                 f"Invalid step format: {step}. Expected (name,) or (name, kwargs)"
             )
 
-        name = _resolve_step_name(name, deprecated_step_aliases)
-        name = namespaced_builtin_steps.get(name, name)
-
         if name in _STEP_REGISTRY:
             # C++ backed step - fast path
             fn = _STEP_REGISTRY[name]
-            rows_before = result.shape[0]
 
             started_at = perf_counter()
-            if name == "rename_columns" and (
-                "mapping" not in kwargs or not isinstance(kwargs["mapping"], dict)
-            ):
-                step_result = fn(working_frame, mapping=kwargs)
+            if name == "rename_columns" and "mapping" not in kwargs:
+                step_result = fn(result, mapping=kwargs)
 
                 if not dry_run:
                     result = step_result
-                working_frame = step_result
 
-            elif name == "cast_types" and (
-                "mapping" not in kwargs or not isinstance(kwargs["mapping"], dict)
-            ):
-                step_result = fn(working_frame, kwargs)
+            elif name == "cast_types" and "mapping" not in kwargs:
+                step_result = fn(result, kwargs)
 
                 if not dry_run:
                     result = step_result
-                working_frame = step_result
 
             else:
-                target_frame = working_frame
+                target_frame = result
 
                 step_result = fn(target_frame, **kwargs)
 
                 if not dry_run:
                     result = step_result
-                working_frame = step_result
-
-            elapsed_sec = perf_counter() - started_at
-            elapsed_ms = elapsed_sec * 1000
-
-            if verbose:
-                execution_path = f"{fn.__module__}.{fn.__name__}"
-
-                logger.info(
-                    "[%s/%s] %s | path=%s | rows: %s -> %s | %.2fms",
-                    step_index + 1,
-                    total_steps,
-                    name,
-                    execution_path,
-                    rows_before,
-                    step_result.shape[0],
-                    elapsed_ms,
-                )
 
             if return_metadata:
-                applied_steps.append(name)
-                row_counts.append(
-                    {
-                        "step": name,
-                        "before": rows_before,
-                        "after": rows_before if dry_run else step_result.shape[0],
-                        "dry_run": dry_run,
-                    }
-                )
                 step_timings.append(
                     {
                         "step": name,
-                        "seconds": round(elapsed_sec, 9),
-                        "dry_run": dry_run,
+                        "seconds": round(perf_counter() - started_at, 9),
                     }
                 )
         elif name in python_step_registry:
             # Pure Python step - slower but contributor-friendly
             started_at = perf_counter()
-            rows_before = result.shape[0]
 
             fn = python_step_registry[name]
 
+            df = to_pandas(result)
+
             # Isolate genuine custom steps from internal core library functions
-            is_builtin = _is_builtin_python_step(name, fn)
-            if is_builtin:
-                df = to_pandas(working_frame)
-            else:
-                df = _to_writable_pipeline_dataframe(working_frame)
-            signature = inspect.signature(fn)
-            call_kwargs = dict(kwargs)
-            if "context" in signature.parameters and "context" not in call_kwargs:
-                call_kwargs["context"] = PipelineContext(
-                    step_name=name,
-                    step_index=step_index,
-                    total_steps=total_steps,
-                    dry_run=dry_run,
-                )
+            is_builtin = (
+                getattr(fn, "__module__", "").startswith("arnio.cleaning")
+                or name == "standardize_missing_tokens"
+            )
 
             try:
-                returned = fn(df, **call_kwargs)
+                returned = fn(df, **kwargs)
             except Exception as e:
                 if is_builtin:
                     raise
@@ -555,41 +260,12 @@ def pipeline(
             step_result = from_pandas(returned)
             if not dry_run:
                 result = step_result
-            working_frame = step_result
-
-            elapsed_sec = perf_counter() - started_at
-            elapsed_ms = elapsed_sec * 1000
-
-            if verbose:
-                step_name = getattr(fn, "__name__", name)
-                execution_path = f"{fn.__module__}.{step_name}"
-
-                logger.info(
-                    "[%s/%s] %s | path=%s | rows: %s -> %s | %.2fms",
-                    step_index + 1,
-                    total_steps,
-                    name,
-                    execution_path,
-                    rows_before,
-                    step_result.shape[0],
-                    elapsed_ms,
-                )
 
             if return_metadata:
-                applied_steps.append(name)
-                row_counts.append(
-                    {
-                        "step": name,
-                        "before": rows_before,
-                        "after": rows_before if dry_run else step_result.shape[0],
-                        "dry_run": dry_run,
-                    }
-                )
                 step_timings.append(
                     {
                         "step": name,
-                        "seconds": round(elapsed_sec, 9),
-                        "dry_run": dry_run,
+                        "seconds": round(perf_counter() - started_at, 9),
                     }
                 )
         else:
@@ -597,11 +273,7 @@ def pipeline(
             raise UnknownStepError(name, available)
 
     if return_metadata:
-        return result, {
-            "applied_steps": applied_steps,
-            "row_counts": row_counts,
-            "step_timings": step_timings,
-        }
+        return result, {"step_timings": step_timings}
     return result
 
 
@@ -609,11 +281,4 @@ register_step("filter_rows", cleaning.filter_rows)
 register_step("drop_columns_matching", cleaning.drop_columns_matching)
 register_step("safe_divide_columns", cleaning.safe_divide_columns)
 register_step("replace_values", cleaning.replace_values)
-_BUILTIN_PYTHON_STEP_REGISTRY.update(_PYTHON_STEP_REGISTRY)
-
-
-def reset_steps() -> None:
-    """Restore the Python pipeline registry to built-in steps only."""
-    with _REGISTRY_LOCK:
-        _PYTHON_STEP_REGISTRY.clear()
-        _PYTHON_STEP_REGISTRY.update(_BUILTIN_PYTHON_STEP_REGISTRY)
+register_step("parse_numeric_strings", cleaning.parse_numeric_strings)
