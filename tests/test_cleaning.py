@@ -855,7 +855,7 @@ class TestDropEmptyColumns:
         assert "empty_text" not in result.columns
         assert "name" in result.columns
         assert "age" in result.columns
-    
+
     def test_drop_empty_columns_no_empty(self, sample_csv):
         frame = ar.read_csv(sample_csv)
         result = ar.drop_empty_columns(frame)
@@ -871,9 +871,18 @@ class TestDropEmptyColumns:
 
     def test_drop_empty_columns_pipeline(self, csv_with_empty_columns):
         frame = ar.read_csv(csv_with_empty_columns)
-        result = ar.pipeline(frame,[("drop_empty_columns",)],)
+        result = ar.pipeline(
+            frame,
+            [("drop_empty_columns",)],
+        )
         assert "empty_num" not in result.columns
         assert "empty_text" not in result.columns
+    
+    def test_drop_empty_columns_empty_frame(self):
+        frame = ar.from_pandas(pd.DataFrame(columns=["a", "b", "c"]))
+        result = ar.drop_empty_columns(frame)
+        assert result.columns == ["a", "b", "c"]
+        assert result.shape == frame.shape
 
 
 class TestDropConstantColumns:
