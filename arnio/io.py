@@ -390,8 +390,14 @@ def _materialize_csv_input(
             tmp.close()
             return tmp.name, True, True
         except Exception:
-            tmp.close()
-            os.unlink(tmp.name)
+            try:
+                tmp.close()
+            except OSError:
+                pass
+            try:
+                os.unlink(tmp.name)
+            except OSError:
+                pass
             raise
 
     raise TypeError("read_csv expected a filesystem path or text file-like object")
