@@ -14,7 +14,8 @@ import tempfile
 import warnings
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
-from typing import cast
+from dataclasses import dataclass
+from typing import Callable, cast
 
 from ._core import (
     _CsvChunkReader,
@@ -439,9 +440,6 @@ def _validate_encoding_errors(value: str) -> str:
     return value
 
 
-from dataclasses import dataclass
-from typing import Callable
-
 
 @dataclass(frozen=True)
 class CSVProgress:
@@ -630,7 +628,7 @@ def read_csv(
             if progress_interval_rows <= 0:
                 raise ValueError("progress_interval_rows must be a positive integer")
 
-            def wrapper(rows: int, bytes_read: int, total_bytes: int, is_done: bool):
+            def wrapper(rows: int, bytes_read: int, total_bytes: int | None, is_done: bool):
                 box = CSVProgress(
                     rows_read=rows,
                     bytes_read=bytes_read,
@@ -869,7 +867,7 @@ def read_csv_chunked(
             last_bytes = 0
             last_total = 0
 
-            def wrapper(rows: int, bytes_read: int, total_bytes: int, is_done: bool):
+            def wrapper(rows: int, bytes_read: int, total_bytes: int | None, is_done: bool):
                 nonlocal last_rows, last_bytes, last_total
                 last_rows = rows
                 last_bytes = bytes_read
@@ -929,7 +927,6 @@ def read_csv_chunked(
                     if yielded_nonempty_chunk:
                         continue
 
-                yield ArFrame(cpp_frame)
 
                 yielded_nonempty_chunk = yielded_nonempty_chunk or frame.shape[0] > 0
 
