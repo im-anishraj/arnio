@@ -20,16 +20,19 @@ on:
       - "cpp/**"
       - ".github/workflows/windows-msvc-wheel-smoke.yml"
 
+permissions:
+  contents: read
+
 jobs:
   windows_msvc_wheel_smoke:
     name: Windows MSVC Wheel Smoke Test
     runs-on: windows-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Python 3.12
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: 'pip'

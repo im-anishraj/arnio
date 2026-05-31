@@ -15,8 +15,9 @@ from generate_data import generate
 
 import arnio as ar
 
-ROWS = 100_000
-RUNS = 3
+DRY_RUN = os.getenv("ARNIO_BENCHMARK_DRY_RUN") == "1"
+ROWS = 10 if DRY_RUN else 100_000
+RUNS = 1 if DRY_RUN else 3
 
 
 def benchmark_strip_whitespace(frame):

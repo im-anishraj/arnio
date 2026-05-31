@@ -9,7 +9,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "arnio"
-version = "1.14.0"
+version = "1.19.0"
 description = "C++ accelerated data preparation for pandas and the Python data stack"
 readme = "README.md"
 license = { text = "MIT" }
@@ -22,6 +22,7 @@ classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
+    "Intended Audience :: Information Technology",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.9",
@@ -29,9 +30,13 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Programming Language :: C++",
     "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Information Analysis",
     "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Utilities",
+    "Typing :: Typed",
 ]
 dependencies = [
     "pandas>=1.5",
@@ -47,6 +52,7 @@ Changelog = "https://github.com/im-anishraj/arnio/blob/main/CHANGELOG.md"
 Discord = "https://discord.gg/xsEw7r78M"
 
 [project.optional-dependencies]
+arrow = ["pyarrow>=6.0"]
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
@@ -54,9 +60,18 @@ dev = [
     "ruff>=0.4.0",
     "pre-commit>=3.0",
     "hypothesis>=6.0",
+    "PyYAML>=6.0",
+    "duckdb>=1.0",
+    "tomli; python_version < '3.11'",
+    "mypy>=1.0",
+    "pandas-stubs",
+    "types-setuptools",
 ]
 sklearn = [
     "scikit-learn>=1.0",
+]
+parquet = [
+    "pyarrow>=8.0",
 ]
 
 [tool.setuptools.package-data]
@@ -66,6 +81,14 @@ arnio = ["py.typed"]
 wheel.packages = ["arnio"]
 cmake.build-type = "Release"
 wheel.expand-macos-universal-tags = false
+sdist.exclude = [
+    ".venv*",
+    "venv/",
+    ".tox/",
+    ".pytest_cache/",
+    ".mypy_cache/",
+    "dist/",
+]
 
 [tool.black]
 line-length = 88
@@ -87,8 +110,8 @@ testpaths = ["tests"]
 addopts = "-v --tb=short"
 
 [tool.cibuildwheel]
-build = "cp39-* cp310-* cp311-* cp312-* cp313-*"
+build = "cp39-* cp310-* cp311-* cp312-* cp313-* cp314-*"
 skip = "*-win32 *-manylinux_i686 *-musllinux*"
-test-requires = ["pytest", "pandas>=1.5", "numpy>=1.23", "hypothesis>=6.0"]
-test-command = "pytest {project}/tests/ -v --tb=short -x"
+test-requires = ["pytest", "pandas>=1.5", "numpy>=1.23", "hypothesis>=6.0", "PyYAML>=6.0"]
+test-command = "python -c \"import os, pathlib, tempfile; os.chdir(tempfile.mkdtemp()); import arnio as ar; print('arnio wheel:', ar.__file__); assert hasattr(ar, 'read_csv'); csv = pathlib.Path('smoke.csv'); csv.write_text('name,age\\nAlice,30\\n'); frame = ar.read_csv(str(csv)); assert frame.shape == (1, 2)\""
 build-verbosity = 1

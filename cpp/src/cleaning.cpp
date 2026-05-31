@@ -2,12 +2,14 @@
 
 #include <algorithm>
 #include <cctype>
+#include <charconv>
 #include <cmath>
 #include <cstdio>
 #include <functional>
 #include <limits>
 #include <sstream>
 #include <stdexcept>
+#include <system_error>
 #include <unordered_set>
 
 namespace arnio {
@@ -26,27 +28,6 @@ static std::vector<size_t> resolve_subset(const Frame& frame,
         }
     }
     return indices;
-}
-
-// Helper: build a row hash for deduplication
-static std::string row_key(const Frame& frame, size_t row, const std::vector<size_t>& cols) {
-    std::ostringstream oss;
-    for (size_t ci : cols) {
-        auto cell = frame.column(ci).at(row);
-        if (std::holds_alternative<std::monostate>(cell)) {
-            oss << "\x00";
-        } else if (std::holds_alternative<std::string>(cell)) {
-            oss << std::get<std::string>(cell);
-        } else if (std::holds_alternative<int64_t>(cell)) {
-            oss << std::get<int64_t>(cell);
-        } else if (std::holds_alternative<double>(cell)) {
-            oss << std::get<double>(cell);
-        } else if (std::holds_alternative<bool>(cell)) {
-            oss << (std::get<bool>(cell) ? "T" : "F");
-        }
-        oss << "\x1F";  // unit separator
-    }
-    return oss.str();
 }
 
 static std::string cell_to_string(const CellValue& cell) {
@@ -93,6 +74,83 @@ static std::string combine_cell_to_string(const CellValue& cell) {
     return "";
 }
 
+struct RowContext {
+    const Frame* frame;
+    const std::vector<size_t>* cols;
+};
+
+struct RowHash {
+    const RowContext& ctx;
+    RowHash(const RowContext& c) : ctx(c) {}
+
+    std::size_t operator()(size_t row) const {
+        std::size_t seed = 0;
+        for (size_t ci : *ctx.cols) {
+            const auto& col = ctx.frame->column(ci);
+            if (col.is_null(row)) {
+                seed ^= std::hash<int>{}(0) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+            } else {
+                auto cell = col.at(row);
+                std::size_t h = 0;
+                if (std::holds_alternative<std::string>(cell)) {
+                    h = std::hash<std::string>{}(std::get<std::string>(cell));
+                } else if (std::holds_alternative<int64_t>(cell)) {
+                    h = std::hash<int64_t>{}(std::get<int64_t>(cell));
+                } else if (std::holds_alternative<double>(cell)) {
+                    double d = std::get<double>(cell);
+                    if (std::isnan(d)) {
+                        h = std::hash<int>{}(0xDEADBEEF);
+                    } else {
+                        h = std::hash<double>{}(d);
+                    }
+                } else if (std::holds_alternative<bool>(cell)) {
+                    h = std::hash<bool>{}(std::get<bool>(cell));
+                }
+                seed ^= h + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+            }
+        }
+        return seed;
+    }
+};
+
+struct RowEqual {
+    const RowContext& ctx;
+    RowEqual(const RowContext& c) : ctx(c) {}
+
+    bool operator()(size_t lhs, size_t rhs) const {
+        for (size_t ci : *ctx.cols) {
+            const auto& col = ctx.frame->column(ci);
+            if (col.is_null(lhs) != col.is_null(rhs)) return false;
+            if (col.is_null(lhs)) continue;
+            auto cell_l = col.at(lhs);
+            auto cell_r = col.at(rhs);
+            if (cell_l != cell_r) {
+                if (std::holds_alternative<double>(cell_l) &&
+                    std::holds_alternative<double>(cell_r)) {
+                    if (std::isnan(std::get<double>(cell_l)) &&
+                        std::isnan(std::get<double>(cell_r))) {
+                        continue;
+                    }
+                }
+                return false;
+            }
+        }
+        return true;
+    }
+};
+
+static int64_t checked_double_to_int64(double value, const char* context) {
+    constexpr double int64_min = static_cast<double>(std::numeric_limits<int64_t>::min());
+    constexpr double int64_max_exclusive = 9223372036854775808.0;  // 2^63
+
+    if (!std::isfinite(value) || value != std::floor(value) || value < int64_min ||
+        value >= int64_max_exclusive) {
+        throw std::invalid_argument(std::string(context) +
+                                    " must be a finite integral value within int64 range.");
+    }
+    return static_cast<int64_t>(value);
+}
+
 static CellValue coerce_value(const CellValue& value, DType target) {
     if (std::holds_alternative<std::monostate>(value)) {
         return std::monostate{};
@@ -109,20 +167,24 @@ static CellValue coerce_value(const CellValue& value, DType target) {
         }
         if (std::holds_alternative<double>(value)) {
             double d = std::get<double>(value);
-            if (std::isnan(d) || std::isinf(d) || d != std::floor(d)) {
+            try {
+                return checked_double_to_int64(d, "Numeric fill value");
+            } catch (const std::invalid_argument&) {
                 throw std::invalid_argument(
                     "Lossy or non-finite numeric fill values are not permitted for integer "
                     "columns.");
             }
-            return static_cast<int64_t>(d);
         }
         if (std::holds_alternative<std::string>(value)) {
             const auto& s = std::get<std::string>(value);
-            try {
-                size_t pos = 0;
-                int64_t parsed = std::stoll(s, &pos);
-                if (pos == s.size()) return parsed;
-            } catch (...) {
+            int64_t parsed = 0;
+            const char* start = s.data();
+            const char* end = s.data() + s.size();
+            while (start < end && std::isspace(static_cast<unsigned char>(*start))) ++start;
+            if (start < end && *start == '+') ++start;
+            if (start < end) {
+                auto [ptr, ec] = std::from_chars(start, end, parsed);
+                if (ec == std::errc() && ptr == end) return parsed;
             }
         }
     }
@@ -187,10 +249,14 @@ static Frame select_rows(const Frame& frame, const std::vector<size_t>& row_indi
         }
         new_cols.push_back(std::move(col));
     }
-    return Frame(std::move(new_cols));
+    return Frame(row_indices.size(), std::move(new_cols));
 }
 
 Frame drop_nulls(const Frame& frame, const std::optional<std::vector<std::string>>& subset) {
+    if (subset.has_value() && subset->empty()) {
+        throw std::invalid_argument("drop_nulls subset cannot be empty");
+    }
+
     auto col_indices = resolve_subset(frame, subset);
     std::vector<size_t> keep_rows;
     for (size_t r = 0; r < frame.num_rows(); ++r) {
@@ -230,27 +296,33 @@ Frame fill_nulls(const Frame& frame, const CellValue& value,
             new_cols.push_back(src.clone());
         }
     }
-    return Frame(std::move(new_cols));
+    return Frame(frame.num_rows(), std::move(new_cols));
 }
 
 Frame drop_duplicates(const Frame& frame, const std::optional<std::vector<std::string>>& subset,
                       const std::string& keep) {
+    if (subset.has_value() && subset->empty()) {
+        throw std::invalid_argument("drop_duplicates subset cannot be empty");
+    }
+
     auto col_indices = resolve_subset(frame, subset);
+    RowContext ctx{&frame, &col_indices};
+    RowHash hash(ctx);
+    RowEqual eq(ctx);
 
     if (keep == "first") {
-        std::unordered_set<std::string> seen;
+        std::unordered_set<size_t, RowHash, RowEqual> seen(0, hash, eq);
         std::vector<size_t> keep_rows;
         for (size_t r = 0; r < frame.num_rows(); ++r) {
-            std::string key = row_key(frame, r, col_indices);
-            if (seen.insert(key).second) {
+            if (seen.insert(r).second) {
                 keep_rows.push_back(r);
             }
         }
         return select_rows(frame, keep_rows);
     } else if (keep == "last") {
-        std::unordered_map<std::string, size_t> last_seen;
+        std::unordered_map<size_t, size_t, RowHash, RowEqual> last_seen(0, hash, eq);
         for (size_t r = 0; r < frame.num_rows(); ++r) {
-            last_seen[row_key(frame, r, col_indices)] = r;
+            last_seen[r] = r;
         }
         std::vector<size_t> keep_rows;
         for (auto& [_, ri] : last_seen) {
@@ -259,9 +331,9 @@ Frame drop_duplicates(const Frame& frame, const std::optional<std::vector<std::s
         std::sort(keep_rows.begin(), keep_rows.end());
         return select_rows(frame, keep_rows);
     } else if (keep == "none") {
-        std::unordered_map<std::string, std::vector<size_t>> groups;
+        std::unordered_map<size_t, std::vector<size_t>, RowHash, RowEqual> groups(0, hash, eq);
         for (size_t r = 0; r < frame.num_rows(); ++r) {
-            groups[row_key(frame, r, col_indices)].push_back(r);
+            groups[r].push_back(r);
         }
         std::vector<size_t> keep_rows;
         for (auto& [_, rows] : groups) {
@@ -279,10 +351,16 @@ Frame strip_whitespace(const Frame& frame, const std::optional<std::vector<std::
     auto target_indices_set = resolve_subset(frame, subset);
     std::unordered_set<size_t> targets(target_indices_set.begin(), target_indices_set.end());
 
+    // Clone the frame once so we can move unmodified columns out of it
+    // (move_clone is O(1) vs clone which is O(n)).  Modified columns are
+    // rebuilt from scratch as before.
+    Frame src_frame = frame.clone();
+
     std::vector<Column> new_cols;
-    new_cols.reserve(frame.num_cols());
-    for (size_t ci = 0; ci < frame.num_cols(); ++ci) {
-        const auto& src = frame.column(ci);
+    new_cols.reserve(src_frame.num_cols());
+
+    for (size_t ci = 0; ci < src_frame.num_cols(); ++ci) {
+        auto& src = src_frame.column_mut(ci);
         if (targets.count(ci) && src.dtype() == DType::STRING) {
             Column col(src.name(), src.dtype());
             for (size_t r = 0; r < src.size(); ++r) {
@@ -290,23 +368,23 @@ Frame strip_whitespace(const Frame& frame, const std::optional<std::vector<std::
                     col.push_null();
                 } else {
                     std::string val = std::get<std::string>(src.at(r));
-                    // Trim leading
-                    size_t start = val.find_first_not_of(" \t\n\r");
-                    // Trim trailing
-                    size_t end = val.find_last_not_of(" \t\n\r");
-                    if (start == std::string::npos) {
-                        col.push_back(std::string(""));
-                    } else {
-                        col.push_back(val.substr(start, end - start + 1));
-                    }
+                    val.erase(val.begin(),
+                              std::find_if(val.begin(), val.end(),
+                                           [](unsigned char c) { return !std::isspace(c); }));
+                    val.erase(std::find_if(val.rbegin(), val.rend(),
+                                           [](unsigned char c) { return !std::isspace(c); })
+                                  .base(),
+                              val.end());
+                    col.push_back(std::move(val));
                 }
             }
             new_cols.push_back(std::move(col));
         } else {
-            new_cols.push_back(src.clone());
+            // O(1) move instead of O(n) clone for unmodified columns.
+            new_cols.push_back(src.move_clone());
         }
     }
-    return Frame(std::move(new_cols));
+    return Frame(frame.num_rows(), std::move(new_cols));
 }
 
 Frame normalize_case(const Frame& frame, const std::optional<std::vector<std::string>>& subset,
@@ -384,8 +462,12 @@ Frame normalize_case(const Frame& frame, const std::optional<std::vector<std::st
 
     std::vector<Column> new_cols;
     new_cols.reserve(frame.num_cols());
-    for (size_t ci = 0; ci < frame.num_cols(); ++ci) {
-        const auto& src = frame.column(ci);
+
+    // Clone the frame once so we can move unmodified columns out of it.
+    Frame src_frame = frame.clone();
+
+    for (size_t ci = 0; ci < src_frame.num_cols(); ++ci) {
+        auto& src = src_frame.column_mut(ci);
         if (targets.count(ci) && src.dtype() == DType::STRING) {
             Column col(src.name(), src.dtype());
             for (size_t r = 0; r < src.size(); ++r) {
@@ -397,10 +479,11 @@ Frame normalize_case(const Frame& frame, const std::optional<std::vector<std::st
             }
             new_cols.push_back(std::move(col));
         } else {
-            new_cols.push_back(src.clone());
+            // O(1) move instead of O(n) clone for unmodified columns.
+            new_cols.push_back(src.move_clone());
         }
     }
-    return Frame(std::move(new_cols));
+    return Frame(frame.num_rows(), std::move(new_cols));
 }
 
 Frame rename_columns(const Frame& frame,
@@ -415,7 +498,7 @@ Frame rename_columns(const Frame& frame,
         }
         new_cols.push_back(std::move(col));
     }
-    return Frame(std::move(new_cols));
+    return Frame(frame.num_rows(), std::move(new_cols));
 }
 
 Frame cast_types(const Frame& frame, const std::unordered_map<std::string, std::string>& mapping,
@@ -460,22 +543,26 @@ Frame cast_types(const Frame& frame, const std::unordered_map<std::string, std::
                 case DType::STRING:
                     col.push_back(str_val);
                     break;
-                case DType::INT64:
-                    try {
-                        size_t pos = 0;
-                        int64_t parsed = std::stoll(str_val, &pos);
-                        if (pos != str_val.size()) {
-                            throw cast_error(src.name(), str_val, it->second, r);
-                        }
+                case DType::INT64: {
+                    int64_t parsed = 0;
+                    const char* st = str_val.data();
+                    const char* en = str_val.data() + str_val.size();
+                    while (st < en && std::isspace(static_cast<unsigned char>(*st))) ++st;
+                    if (st < en && *st == '+') ++st;
+                    bool ok = false;
+                    if (st < en) {
+                        auto [ptr, ec] = std::from_chars(st, en, parsed);
+                        ok = (ec == std::errc() && ptr == en);
+                    }
+                    if (ok) {
                         col.push_back(parsed);
-                    } catch (...) {
-                        if (coerce_invalid) {
-                            col.push_null();
-                        } else {
-                            throw cast_error(src.name(), str_val, it->second, r);
-                        }
+                    } else if (coerce_invalid) {
+                        col.push_null();
+                    } else {
+                        throw cast_error(src.name(), str_val, it->second, r);
                     }
                     break;
+                }
                 case DType::FLOAT64:
                     try {
                         size_t pos = 0;
@@ -513,7 +600,7 @@ Frame cast_types(const Frame& frame, const std::unordered_map<std::string, std::
         }
         new_cols.push_back(std::move(col));
     }
-    return Frame(std::move(new_cols));
+    return Frame(frame.num_rows(), std::move(new_cols));
 }
 
 Frame clip_numeric(const Frame& frame, std::optional<double> lower, std::optional<double> upper,
@@ -547,9 +634,9 @@ Frame clip_numeric(const Frame& frame, std::optional<double> lower, std::optiona
         if (src.dtype() == DType::INT64) {
             const auto& vec = std::get<std::vector<int64_t>>(src.data());
             Column col(src.name(), DType::INT64);
-            const int64_t lo = lower.has_value() ? static_cast<int64_t>(lower.value())
+            const int64_t lo = lower.has_value() ? checked_double_to_int64(lower.value(), "lower")
                                                  : std::numeric_limits<int64_t>::min();
-            const int64_t hi = upper.has_value() ? static_cast<int64_t>(upper.value())
+            const int64_t hi = upper.has_value() ? checked_double_to_int64(upper.value(), "upper")
                                                  : std::numeric_limits<int64_t>::max();
             for (size_t r = 0; r < src.size(); ++r) {
                 if (src.is_null(r)) {
