@@ -895,6 +895,7 @@ class TestPipeline:
             ValueError, match="parameter 'name' must be a non-empty string"
         ):
             ar.unregister_step("")
+
     def test_pipeline_filter_rows_non_string_column_raises_type_error(self):
         frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
         with pytest.raises(TypeError, match="column must be a non-empty string"):
