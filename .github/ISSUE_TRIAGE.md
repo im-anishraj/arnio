@@ -74,7 +74,7 @@ What kind of change is this?
 | `type:performance` | Speed or memory improvements |
 | `type:security` | Security fix or hardening |
 | `type:design` | Visual, docs-layout, logo, or product design work |
-| `type:devops` | GitHub Actions, build pipeline, release tooling |
+| `type:ci` | GitHub Actions, build pipeline, release tooling |
 | `type:discussion` | Needs community input before implementation |
 
 ---
