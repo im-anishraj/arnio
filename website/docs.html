@@ -97,6 +97,13 @@ result = ar.validate(clean, schema, max_errors=50)</code></pre></div>
           <thead><tr><th>Option</th><th>Use</th></tr></thead>
           <tbody>
             <tr><td><code>skiprows</code></td><td>Skip leading rows before header or data parsing.</td></tr>
+            <tr><td><code>has_header</code></td><td>Control whether the first row is treated as column headers.</td></tr>
+            <tr><td><code>usecols</code></td><td>Read only a selected subset of columns.</td></tr>
+            <tr><td><code>nrows</code></td><td>Limit the number of rows read from the file.</td></tr>
+            <tr><td><code>trim_headers</code></td><td>Remove leading and trailing whitespace from column names.</td></tr>
+            <tr><td><code>thousands_separator</code></td><td>Parse numbers containing thousands separators such as commas.</td></tr>
+            <tr><td><code>null_values</code></td><td>Treat specified values as null or missing data.</td></tr>
+            <tr><td><code>mode</code></td><td>Control CSV parsing behavior for strict or relaxed ingestion workflows.</td></tr>
             <tr><td><code>decimal_separator</code></td><td>Parse locale-specific decimal characters such as comma decimals.</td></tr>
             <tr><td><code>dtype</code></td><td>Force selected columns to supported Arnio dtypes.</td></tr>
             <tr><td><code>encoding_errors</code></td><td>Choose <code>strict</code>, <code>replace</code>, or <code>ignore</code> for decode failures.</td></tr>
@@ -105,10 +112,16 @@ result = ar.validate(clean, schema, max_errors=50)</code></pre></div>
         </table>
         <div class="code-block"><div class="code-block-header">Python</div><pre><code class="language-python">frame = ar.read_csv(
     "orders.csv",
-    delimiter=",",
+    has_header=True,
+    usecols=["order_id", "amount", "customer"],
+    nrows=50_000,
     skiprows=2,
+    trim_headers=True,
+    thousands_separator=",",
+    null_values=["", "N/A", "NULL"],
     decimal_separator=".",
     dtype={"order_id": "string"},
+    mode="strict",
     encoding_errors="replace",
     on_bad_lines="warn",
 )</code></pre></div>
