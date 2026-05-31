@@ -442,12 +442,15 @@ def _validate_encoding_errors(value: str) -> str:
 from dataclasses import dataclass
 from typing import Callable
 
+
 @dataclass(frozen=True)
 class CSVProgress:
     rows_read: int
     bytes_read: int
     total_bytes: int | None
     done: bool
+
+
 def read_csv(
     path: str | os.PathLike[str] | io.TextIOBase,
     *,
@@ -620,7 +623,9 @@ def read_csv(
             config.skip_rows = _validate_skip_rows(skiprows)
 
         if progress_hook is not None:
-            if isinstance(progress_interval_rows, bool) or not isinstance(progress_interval_rows, int):
+            if isinstance(progress_interval_rows, bool) or not isinstance(
+                progress_interval_rows, int
+            ):
                 raise TypeError("progress_interval_rows must be an integer")
             if progress_interval_rows <= 0:
                 raise ValueError("progress_interval_rows must be a positive integer")
@@ -630,7 +635,7 @@ def read_csv(
                     rows_read=rows,
                     bytes_read=bytes_read,
                     total_bytes=total_bytes,
-                    done=is_done
+                    done=is_done,
                 )
                 progress_hook(box)
 
@@ -853,7 +858,9 @@ def read_csv_chunked(
             config.nrows = _validate_nrows(nrows)
 
         if progress_hook is not None:
-            if isinstance(progress_interval_rows, bool) or not isinstance(progress_interval_rows, int):
+            if isinstance(progress_interval_rows, bool) or not isinstance(
+                progress_interval_rows, int
+            ):
                 raise TypeError("progress_interval_rows must be an integer")
             if progress_interval_rows <= 0:
                 raise ValueError("progress_interval_rows must be a positive integer")
@@ -872,7 +879,7 @@ def read_csv_chunked(
                     rows_read=rows,
                     bytes_read=bytes_read,
                     total_bytes=total_bytes,
-                    done=is_done
+                    done=is_done,
                 )
                 progress_hook(box)
 
@@ -884,7 +891,7 @@ def read_csv_chunked(
         if should_cleanup and os.path.exists(path):
             os.unlink(path)
         raise
-        
+
     try:
         effective_encoding = "utf-8" if is_materialized_text else encoding
         with _utf8_csv_path(
@@ -906,7 +913,7 @@ def read_csv_chunked(
                             rows_read=final_rows,
                             bytes_read=last_bytes,
                             total_bytes=last_total,
-                            done=True
+                            done=True,
                         )
                         progress_hook(final_box)
                     break

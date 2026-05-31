@@ -2826,40 +2826,41 @@ class TestArFrameToDict:
         for col in frame.columns:
             assert result[col] == frame[col]
 
+
 def test_csv_chunked_progress_hook_fires(tmp_path):
-        import arnio as ar
+    import arnio as ar
 
-        test_file = tmp_path / "test_chunked_progress.csv"
-        test_file.write_text("a,b\n1,2\n3,4\n5,6\n")
+    test_file = tmp_path / "test_chunked_progress.csv"
+    test_file.write_text("a,b\n1,2\n3,4\n5,6\n")
 
-        captured_payloads = []
+    captured_payloads = []
 
-        def dummy_hook(progress):
-            captured_payloads.append(progress)
+    def dummy_hook(progress):
+        captured_payloads.append(progress)
 
-        reader = ar.read_csv_chunked(
-            str(test_file),
-            chunksize=2,
-            progress_hook=dummy_hook,
-            progress_interval_rows=1,
-        )
+    reader = ar.read_csv_chunked(
+        str(test_file),
+        chunksize=2,
+        progress_hook=dummy_hook,
+        progress_interval_rows=1,
+    )
 
-        all_rows = 0
+    all_rows = 0
 
-        for chunk in reader:
-            all_rows += len(chunk)
+    for chunk in reader:
+        all_rows += len(chunk)
 
-        assert len(captured_payloads) > 0
+    assert len(captured_payloads) > 0
 
-        last_payload = captured_payloads[-1]
+    last_payload = captured_payloads[-1]
 
-        assert hasattr(last_payload, "rows_read")
-        assert hasattr(last_payload, "bytes_read")
-        assert hasattr(last_payload, "total_bytes")
-        assert hasattr(last_payload, "done")
+    assert hasattr(last_payload, "rows_read")
+    assert hasattr(last_payload, "bytes_read")
+    assert hasattr(last_payload, "total_bytes")
+    assert hasattr(last_payload, "done")
 
-        assert last_payload.done is True
-        assert last_payload.rows_read == all_rows
+    assert last_payload.done is True
+    assert last_payload.rows_read == all_rows
 
 
 class TestArFrameStr:
