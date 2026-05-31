@@ -2221,15 +2221,14 @@ def CurrencyCode(
     Returns:
         Field: Configured 3-letter uppercase currency-code schema field.
     """
-
     if allowed is not None:
-        _validate_allowed_collection(allowed)
-        for value in allowed:
+        allowed_set = _validate_allowed_collection(allowed)
+        for value in allowed_set:
             if not isinstance(value, str):
                 raise TypeError(
                     f"allowed values for CurrencyCode must be strings, got {type(value).__name__!r}"
                 )
-        allowed_set = set(allowed)
+
     else:
         allowed_set = None
 

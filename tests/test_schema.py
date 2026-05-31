@@ -4302,3 +4302,8 @@ class TestValidateAllowedCollection:
     def test_currency_code_none_allowed(self):
         f = ar.CurrencyCode(allowed=None)
         assert f.allowed is None
+
+
+def test_currency_code_accepts_generator_iterable():
+    f = ar.CurrencyCode(allowed=(x for x in ["USD", "EUR"]))
+    assert f.allowed == {"USD", "EUR"}
