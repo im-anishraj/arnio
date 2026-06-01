@@ -1828,8 +1828,8 @@ Most new features are pure Python pipeline steps:
 
 ```python
 # 1. Write a function that takes a DataFrame and returns a DataFrame
-def remove_special_chars(df, columns=None):
-    cols = columns or df.select_dtypes("object").columns
+def remove_special_chars(df, subset=None):
+    cols = subset or df.select_dtypes("object").columns
     for col in cols:
         df[col] = df[col].str.replace(r"[^a-zA-Z0-9\s]", "", regex=True)
     return df
