@@ -4305,28 +4305,20 @@ def test_auto_clean_rejects_invalid_string_mode():
         ar.auto_clean(frame, mode="SAFE")
 
 
-def test_winsorize_outliers_multi_column_integer_preservation():
-    import numpy as np
-    import pandas as pd
+def test_winsorize_outliers_preserves_integer_dtype():
+    # Test with two target integer columns to ensure the loop processes all columns
+    data = {"a": [1, 2, 3, 4, 100], "b": [10, 20, 30, 40, 1000]}
+    frame = ar.from_pandas(pd.DataFrame(data))
 
-    frame = ar.from_pandas(
-        pd.DataFrame({"a": [1, 2, 3, 4, 100], "b": [10, 20, 30, 40, 1000]})
+    result_frame = ar.cleaning.winsorize_outliers(
+        frame, lower=0.25, upper=0.75, subset=["a", "b"]
     )
+    result_df = ar.to_pandas(result_frame)
 
-    # Run the winsorize outliers utility over multiple integer columns
-    result = ar.winsorize_outliers(frame, lower=0.25, upper=0.75, subset=["a", "b"])
-    result_df = ar.to_pandas(result)
-
-    # Regression Check 1: Ensure both columns are processed and clipped correctly
-    assert result_df["a"].tolist() == [2, 2, 3, 4, 4] or result_df["a"].tolist() == [
-        1,
-        2,
-        3,
-        4,
-        100,
-    ]  # depending on exact internal quantile definition
+    # 1. Assert both columns were successfully processed and clipped
+    assert result_df["a"].tolist() == [2, 2, 3, 4, 4]
     assert result_df["b"].tolist() == [20, 20, 30, 40, 40]
 
-    # Regression Check 2: Core type-stability bug check (No silent mutation to float64)
-    assert result_df["a"].dtype == np.int64
-    assert result_df["b"].dtype == np.int64
+    # 2. Assert both columns perfectly preserved their integer data types
+    assert pd.api.types.is_integer_dtype(result_df["a"].dtype)
+    assert pd.api.types.is_integer_dtype(result_df["b"].dtype)
