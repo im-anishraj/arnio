@@ -2390,7 +2390,7 @@ def auto_clean(
             f"auto_clean() expects an ArFrame, got {type(frame).__name__}. Use arnio.from_pandas() first."
         )
 
-    if mode not in {"safe", "strict"}:
+    if not isinstance(mode, str) or mode not in {"safe", "strict"}:
         raise ValueError("mode must be 'safe' or 'strict'")
 
     if not isinstance(return_report, bool):
