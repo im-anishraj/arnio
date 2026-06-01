@@ -4306,8 +4306,8 @@ def test_auto_clean_rejects_invalid_string_mode():
 
 
 def test_winsorize_outliers_multi_column_integer_preservation():
-    import pandas as pd
     import numpy as np
+    import pandas as pd
 
     frame = ar.from_pandas(
         pd.DataFrame({"a": [1, 2, 3, 4, 100], "b": [10, 20, 30, 40, 1000]})
