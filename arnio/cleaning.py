@@ -808,15 +808,25 @@ def winsorize_outliers(
     df = to_pandas(frame).copy(deep=False)
 
     for column in target_columns:
+        # 1. Track the original data type before any mutation happens
+        orig_dtype = df[column].dtype
+
         lower_bound = df[column].quantile(lower)
         upper_bound = df[column].quantile(upper)
 
         series = df[column].astype("float64")
 
-        df[column] = series.clip(
+        clipped_series = series.clip(
             lower=lower_bound,
             upper=upper_bound,
         )
+
+        # 2. Check if the original column type was an integer or an Arnio integer type helper
+        if pd.api.types.is_integer_dtype(orig_dtype):
+            # Round values carefully to avoid truncation errors and cast back
+            df[column] = clipped_series.round().astype(orig_dtype)
+        else:
+            df[column] = clipped_series
 
     return from_pandas(df)
 
