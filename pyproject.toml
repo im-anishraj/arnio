@@ -91,6 +91,7 @@ sdist.exclude = [
     ".mypy_cache/",
     "dist/",
 ]
+build-dir = ""
 
 [tool.black]
 line-length = 88
