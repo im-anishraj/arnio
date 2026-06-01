@@ -15,6 +15,12 @@ from dataclasses import dataclass
 from importlib.machinery import EXTENSION_SUFFIXES
 from pathlib import Path
 
+try:
+    from .example_registry import check_env_examples
+except ImportError:
+    # Support direct script execution: `python examples/check_env.py`.
+    from example_registry import check_env_examples
+
 # Map import name to (install package name, description)
 DEPENDENCIES = {
     "numpy": (
@@ -33,6 +39,10 @@ DEPENDENCIES = {
         "scikit-learn",
         "Required for scikit-learn pipeline integration examples.",
     ),
+    "pyarrow": (
+        "pyarrow",
+        "Required for Arrow export examples (pip install arnio[arrow]).",
+    ),
     "pytest": ("pytest", "Required for running the integration and unit test suites."),
 }
 
@@ -48,18 +58,8 @@ class BuildToolCheck:
     required: bool = True
 
 
-# Map example script name to its list of optional dependency keys
-EXAMPLES = {
-    "basic_usage.py": [],
-    "custom_step.py": ["pandas"],
-    "arnio_with_numpy.py": ["numpy"],
-    "arnio_with_pandas.py": ["pandas"],
-    "arnio_with_duckdb.py": ["duckdb", "pandas"],
-    "arnio_with_sklearn.py": ["sklearn", "pandas"],
-    "sklearn_pipeline.py": ["sklearn", "pandas"],
-    "auto_clean_tutorial.py": ["pandas"],
-    "arnio_with_jsonl.py": ["pandas"],
-}
+# Map example script name to its list of optional dependency keys.
+EXAMPLES = check_env_examples()
 
 
 def check_dependencies():

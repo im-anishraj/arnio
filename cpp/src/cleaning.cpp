@@ -74,41 +74,81 @@ static std::string combine_cell_to_string(const CellValue& cell) {
     return "";
 }
 
-// Serialize one CellValue with a type tag and length prefix so that
-// different types with the same string representation (e.g. int 1 vs
-// string "1") and values containing the unit separator (\x1F) never
-// collide in row_key().  Format:
-//   null   -> N
-//   string -> S<len>:<bytes>
-//   int64  -> I<len>:<digits>
-//   double -> F<len>:<digits>  (using combine_cell_to_string for portability)
-//   bool   -> BT or BF
-static void serialize_cell(std::ostream& os, const CellValue& cell) {
-    if (std::holds_alternative<std::monostate>(cell)) {
-        os << "N";
-    } else if (std::holds_alternative<std::string>(cell)) {
-        const std::string& s = std::get<std::string>(cell);
-        os << "S" << s.size() << ":" << s;
-    } else if (std::holds_alternative<int64_t>(cell)) {
-        std::string s = std::to_string(std::get<int64_t>(cell));
-        os << "I" << s.size() << ":" << s;
-    } else if (std::holds_alternative<double>(cell)) {
-        std::string s = combine_cell_to_string(cell);
-        os << "F" << s.size() << ":" << s;
-    } else if (std::holds_alternative<bool>(cell)) {
-        os << (std::get<bool>(cell) ? "BT" : "BF");
-    }
-}
+struct RowContext {
+    const Frame* frame;
+    const std::vector<size_t>* cols;
+};
 
-// Helper: build a row hash for deduplication
-static std::string row_key(const Frame& frame, size_t row, const std::vector<size_t>& cols) {
-    std::ostringstream oss;
-    for (size_t ci : cols) {
-        auto cell = frame.column(ci).at(row);
-        serialize_cell(oss, cell);
-        oss << "\x1F";  // unit separator
+struct RowHash {
+    const RowContext& ctx;
+    RowHash(const RowContext& c) : ctx(c) {}
+
+    std::size_t operator()(size_t row) const {
+        std::size_t seed = 0;
+        for (size_t ci : *ctx.cols) {
+            const auto& col = ctx.frame->column(ci);
+            if (col.is_null(row)) {
+                seed ^= std::hash<int>{}(0) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+            } else {
+                auto cell = col.at(row);
+                std::size_t h = 0;
+                if (std::holds_alternative<std::string>(cell)) {
+                    h = std::hash<std::string>{}(std::get<std::string>(cell));
+                } else if (std::holds_alternative<int64_t>(cell)) {
+                    h = std::hash<int64_t>{}(std::get<int64_t>(cell));
+                } else if (std::holds_alternative<double>(cell)) {
+                    double d = std::get<double>(cell);
+                    if (std::isnan(d)) {
+                        h = std::hash<int>{}(0xDEADBEEF);
+                    } else {
+                        h = std::hash<double>{}(d);
+                    }
+                } else if (std::holds_alternative<bool>(cell)) {
+                    h = std::hash<bool>{}(std::get<bool>(cell));
+                }
+                seed ^= h + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+            }
+        }
+        return seed;
     }
-    return oss.str();
+};
+
+struct RowEqual {
+    const RowContext& ctx;
+    RowEqual(const RowContext& c) : ctx(c) {}
+
+    bool operator()(size_t lhs, size_t rhs) const {
+        for (size_t ci : *ctx.cols) {
+            const auto& col = ctx.frame->column(ci);
+            if (col.is_null(lhs) != col.is_null(rhs)) return false;
+            if (col.is_null(lhs)) continue;
+            auto cell_l = col.at(lhs);
+            auto cell_r = col.at(rhs);
+            if (cell_l != cell_r) {
+                if (std::holds_alternative<double>(cell_l) &&
+                    std::holds_alternative<double>(cell_r)) {
+                    if (std::isnan(std::get<double>(cell_l)) &&
+                        std::isnan(std::get<double>(cell_r))) {
+                        continue;
+                    }
+                }
+                return false;
+            }
+        }
+        return true;
+    }
+};
+
+static int64_t checked_double_to_int64(double value, const char* context) {
+    constexpr double int64_min = static_cast<double>(std::numeric_limits<int64_t>::min());
+    constexpr double int64_max_exclusive = 9223372036854775808.0;  // 2^63
+
+    if (!std::isfinite(value) || value != std::floor(value) || value < int64_min ||
+        value >= int64_max_exclusive) {
+        throw std::invalid_argument(std::string(context) +
+                                    " must be a finite integral value within int64 range.");
+    }
+    return static_cast<int64_t>(value);
 }
 
 static CellValue coerce_value(const CellValue& value, DType target) {
@@ -127,12 +167,13 @@ static CellValue coerce_value(const CellValue& value, DType target) {
         }
         if (std::holds_alternative<double>(value)) {
             double d = std::get<double>(value);
-            if (std::isnan(d) || std::isinf(d) || d != std::floor(d)) {
+            try {
+                return checked_double_to_int64(d, "Numeric fill value");
+            } catch (const std::invalid_argument&) {
                 throw std::invalid_argument(
                     "Lossy or non-finite numeric fill values are not permitted for integer "
                     "columns.");
             }
-            return static_cast<int64_t>(d);
         }
         if (std::holds_alternative<std::string>(value)) {
             const auto& s = std::get<std::string>(value);
@@ -265,21 +306,29 @@ Frame drop_duplicates(const Frame& frame, const std::optional<std::vector<std::s
     }
 
     auto col_indices = resolve_subset(frame, subset);
+    if (keep != "first" && keep != "last" && keep != "none") {
+        throw std::invalid_argument("keep must be 'first', 'last', or 'none'");
+    }
+    if (frame.num_cols() == 0) {
+        return frame.clone();
+    }
+    RowContext ctx{&frame, &col_indices};
+    RowHash hash(ctx);
+    RowEqual eq(ctx);
 
     if (keep == "first") {
-        std::unordered_set<std::string> seen;
+        std::unordered_set<size_t, RowHash, RowEqual> seen(0, hash, eq);
         std::vector<size_t> keep_rows;
         for (size_t r = 0; r < frame.num_rows(); ++r) {
-            std::string key = row_key(frame, r, col_indices);
-            if (seen.insert(key).second) {
+            if (seen.insert(r).second) {
                 keep_rows.push_back(r);
             }
         }
         return select_rows(frame, keep_rows);
     } else if (keep == "last") {
-        std::unordered_map<std::string, size_t> last_seen;
+        std::unordered_map<size_t, size_t, RowHash, RowEqual> last_seen(0, hash, eq);
         for (size_t r = 0; r < frame.num_rows(); ++r) {
-            last_seen[row_key(frame, r, col_indices)] = r;
+            last_seen[r] = r;
         }
         std::vector<size_t> keep_rows;
         for (auto& [_, ri] : last_seen) {
@@ -288,9 +337,9 @@ Frame drop_duplicates(const Frame& frame, const std::optional<std::vector<std::s
         std::sort(keep_rows.begin(), keep_rows.end());
         return select_rows(frame, keep_rows);
     } else if (keep == "none") {
-        std::unordered_map<std::string, std::vector<size_t>> groups;
+        std::unordered_map<size_t, std::vector<size_t>, RowHash, RowEqual> groups(0, hash, eq);
         for (size_t r = 0; r < frame.num_rows(); ++r) {
-            groups[row_key(frame, r, col_indices)].push_back(r);
+            groups[r].push_back(r);
         }
         std::vector<size_t> keep_rows;
         for (auto& [_, rows] : groups) {
@@ -591,9 +640,9 @@ Frame clip_numeric(const Frame& frame, std::optional<double> lower, std::optiona
         if (src.dtype() == DType::INT64) {
             const auto& vec = std::get<std::vector<int64_t>>(src.data());
             Column col(src.name(), DType::INT64);
-            const int64_t lo = lower.has_value() ? static_cast<int64_t>(lower.value())
+            const int64_t lo = lower.has_value() ? checked_double_to_int64(lower.value(), "lower")
                                                  : std::numeric_limits<int64_t>::min();
-            const int64_t hi = upper.has_value() ? static_cast<int64_t>(upper.value())
+            const int64_t hi = upper.has_value() ? checked_double_to_int64(upper.value(), "upper")
                                                  : std::numeric_limits<int64_t>::max();
             for (size_t r = 0; r < src.size(); ++r) {
                 if (src.is_null(r)) {

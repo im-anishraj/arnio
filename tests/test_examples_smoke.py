@@ -1,11 +1,16 @@
 """Integration tests to ensure all Python example scripts run successfully."""
 
+from __future__ import annotations
+
 import importlib.util
+import os
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
+
+from examples.example_registry import EXAMPLE_ENTRIES, EXCLUDED_EXAMPLES, ExampleEntry
 
 # Check if the C++ extension is compiled
 try:
@@ -15,36 +20,39 @@ try:
 except ImportError:
     HAS_CORE = False
 
-EXAMPLES_DIR = Path(__file__).parent.parent / "examples"
-
-# Explicit allowlist of CI-safe examples and their optional dependencies
-CI_SAFE_EXAMPLES = {
-    "basic_usage.py": ["pandas"],
-    "custom_step.py": ["pandas"],
-    "auto_clean_tutorial.py": ["pandas"],
-    "arnio_with_pandas.py": ["pandas"],
-    "arnio_with_numpy.py": ["numpy", "pandas"],
-    "arnio_with_duckdb.py": ["duckdb", "pandas"],
-    "arnio_with_sklearn.py": ["sklearn", "pandas"],
-    "sklearn_pipeline.py": ["sklearn", "pandas"],
-    "arnio_with_jsonl.py": ["pandas"],
-}
+REPO_ROOT = Path(__file__).parent.parent
+EXAMPLES_DIR = REPO_ROOT / "examples"
 
 
-def get_example_scripts():
-    """Locate all runnable python files in the examples directory that are CI-safe."""
+def _discover_example_scripts() -> set[str]:
+    """Return relative paths of all .py files under examples/."""
     if not EXAMPLES_DIR.exists():
-        return []
-
-    scripts = []
-    for name in sorted(CI_SAFE_EXAMPLES.keys()):
-        script_path = EXAMPLES_DIR / name
-        if script_path.exists():
-            scripts.append(script_path)
-    return scripts
+        return set()
+    return {
+        path.relative_to(EXAMPLES_DIR).as_posix() for path in EXAMPLES_DIR.rglob("*.py")
+    }
 
 
-def has_dependencies(deps):
+def get_example_specs() -> list[ExampleEntry]:
+    """Return allowlisted specs whose script files exist."""
+    specs: list[ExampleEntry] = []
+    for spec in EXAMPLE_ENTRIES:
+        if (EXAMPLES_DIR / spec.path).exists():
+            specs.append(spec)
+    return specs
+
+
+def _subprocess_env() -> dict[str, str]:
+    """Ensure subprocesses can import the in-tree arnio package (editable or not)."""
+    env = os.environ.copy()
+    existing = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = (
+        str(REPO_ROOT) if not existing else f"{REPO_ROOT}{os.pathsep}{existing}"
+    )
+    return env
+
+
+def has_dependencies(deps: tuple[str, ...]) -> bool:
     """Check if all required dependencies are installed."""
     for dep in deps:
         try:
@@ -55,33 +63,61 @@ def has_dependencies(deps):
     return True
 
 
+def test_example_entries_preserve_smoke_dependency_overrides() -> None:
+    by_path = {entry.path: entry for entry in EXAMPLE_ENTRIES}
+    assert by_path["basic_usage.py"].deps_for_smoke == ("pandas",)
+    assert by_path["basic_usage.py"].deps == ()
+    assert by_path["arnio_with_numpy.py"].deps_for_smoke == ("numpy", "pandas")
+    assert by_path["arnio_with_numpy.py"].deps == ("numpy",)
+
+
+def test_all_example_scripts_are_accounted_for() -> None:
+    """Fail when a new examples/**/*.py is not allowlisted or explicitly excluded."""
+    if not EXAMPLES_DIR.exists():
+        pytest.skip("examples/ directory is not present in this test environment.")
+
+    discovered = _discover_example_scripts()
+    allowlisted = {spec.path for spec in EXAMPLE_ENTRIES}
+    excluded = set(EXCLUDED_EXAMPLES)
+    missing = discovered - allowlisted - excluded
+    extra = allowlisted - discovered
+    assert not missing, (
+        "New example script(s) missing from EXAMPLE_ENTRIES or EXCLUDED_EXAMPLES: "
+        f"{sorted(missing)}"
+    )
+    assert not extra, (
+        "EXAMPLE_ENTRIES lists script(s) that do not exist: " f"{sorted(extra)}"
+    )
+
+
 @pytest.mark.skipif(not HAS_CORE, reason="Arnio C++ extension is not compiled.")
-@pytest.mark.parametrize("script_path", get_example_scripts(), ids=lambda p: p.name)
-def test_example_script_runs_successfully(script_path):
+@pytest.mark.parametrize("spec", get_example_specs(), ids=lambda s: s.path)
+def test_example_script_runs_successfully(spec: ExampleEntry) -> None:
     """Run an example python script and verify that it exits with code 0."""
-    # Check if optional dependencies are missing
-    required_deps = CI_SAFE_EXAMPLES.get(script_path.name, [])
-    if not has_dependencies(required_deps):
+    script_path = EXAMPLES_DIR / spec.path
+    deps = spec.deps_for_smoke
+    if not has_dependencies(deps):
         pytest.skip(
-            f"Skipping {script_path.name} due to missing optional dependencies: {required_deps}"
+            f"Skipping {spec.path} due to missing optional dependencies: {list(deps)}"
         )
 
-    # Run the script in a subprocess using the same python interpreter with a timeout
+    run_cwd = REPO_ROOT / spec.cwd
     try:
         result = subprocess.run(
             [sys.executable, str(script_path)],
             capture_output=True,
             text=True,
-            cwd=str(EXAMPLES_DIR.parent),
-            timeout=30,  # Keep smoke tests bounded while allowing slow imports on Windows.
+            cwd=str(run_cwd),
+            env=_subprocess_env(),
+            timeout=30,
         )
     except subprocess.TimeoutExpired as e:
         pytest.fail(
-            f"Example {script_path.name} timed out after 30 seconds.\nOutput so far:\n{e.stdout}"
+            f"Example {spec.path} timed out after 30 seconds.\nOutput so far:\n{e.stdout}"
         )
 
     assert result.returncode == 0, (
-        f"Example {script_path.name} failed with return code {result.returncode}.\n"
+        f"Example {spec.path} failed with return code {result.returncode}.\n"
         f"Stdout:\n{result.stdout}\n"
         f"Stderr:\n{result.stderr}"
     )

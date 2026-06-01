@@ -9,16 +9,36 @@
   const DARK = 'dark';
   const LIGHT = 'light';
 
+  function safeGet(key) {
+    try {
+      return localStorage.getItem(key);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function safeSet(key, value) {
+    try {
+      localStorage.setItem(key, value);
+    } catch (e) {
+      // Ignore quota or access errors
+    }
+  }
+
   function getPreferred() {
-    const stored = localStorage.getItem(STORAGE_KEY);
+    const stored = safeGet(STORAGE_KEY);
     if (stored === DARK || stored === LIGHT) return stored;
-    // Default to light — only use dark if user explicitly toggles
-    return LIGHT;
+    // Fall back to system preference
+    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? DARK : LIGHT;
+  }
+  function applyWithoutSaving(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    updateToggleIcon(theme);
   }
 
   function apply(theme) {
     document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem(STORAGE_KEY, theme);
+    safeSet(STORAGE_KEY, theme);
     updateToggleIcon(theme);
   }
 
@@ -35,13 +55,13 @@
   }
 
   // Apply immediately to prevent flash
-  apply(getPreferred());
+  applyWithoutSaving(getPreferred());
 
   // Listen for system preference changes
   if (window.matchMedia) {
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function (e) {
-      if (!localStorage.getItem(STORAGE_KEY)) {
-        apply(e.matches ? DARK : LIGHT);
+      if (!safeGet(STORAGE_KEY)) {
+        applyWithoutSaving(e.matches ? DARK : LIGHT);
       }
     });
   }
