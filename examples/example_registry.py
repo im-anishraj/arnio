@@ -51,6 +51,9 @@ EXAMPLE_ENTRIES: tuple[ExampleEntry, ...] = (
 EXCLUDED_EXAMPLES: dict[str, str] = {
     "check_env.py": "Dashboard utility; behavior covered by tests/test_check_env.py.",
     "example_registry.py": "Shared metadata module consumed by check_env and tests.",
+    "custom_step_with_tests.py": (
+        "Pytest example module; intended to be run via pytest, not subprocess smoke."
+    ),
 }
 
 
