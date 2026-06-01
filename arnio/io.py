@@ -545,6 +545,11 @@ def read_csv(
         not reach this dispatch; only wide rows do. Dropped rows count
         toward ``nrows``.
 
+    progress_hook : Callable[[CSVProgress], None], optional
+        Callback function to report parsing progress. Receives a CSVProgress payload containing rows_read, bytes_read, total_bytes, and done.
+    progress_interval_rows : int, default 10000
+        Number of rows to process before firing the progress hook.
+
     Returns
     -------
     ArFrame
@@ -761,6 +766,11 @@ def read_csv_chunked(
         In permissive mode, narrow rows are still padded silently and do
         not reach this dispatch; only wide rows do. Dropped rows count
         toward ``nrows``.
+
+    progress_hook : Callable[[CSVProgress], None], optional
+        Callback function to report parsing progress. Receives a CSVProgress payload containing rows_read, bytes_read, total_bytes, and done.
+    progress_interval_rows : int, default 10000
+        Number of rows to process before firing the progress hook.
 
     Yields
     ------

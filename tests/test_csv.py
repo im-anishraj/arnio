@@ -3007,3 +3007,21 @@ def test_read_csv_chunked_text_stream_encoding_override():
     chunks = list(ar.read_csv_chunked(stream, encoding="utf-16"))
     pandas_df = ar.to_pandas(chunks[0])
     assert pandas_df["col2"][0] == "café"
+
+
+def test_read_csv_progress_hook_payload_and_done(tmp_path):
+    import arnio as ar
+    from arnio.io import CSVProgress
+
+    csv_file = tmp_path / "test.csv"
+    csv_file.write_text("a,b\n1,2\n3,4\n5,6")
+    payloads = []
+
+    def hook(progress: CSVProgress):
+        payloads.append(progress)
+
+    ar.read_csv(str(csv_file), progress_hook=hook, progress_interval_rows=2)
+    assert len(payloads) > 0
+    assert isinstance(payloads[0], CSVProgress)
+    assert payloads[-1].done is True
+    assert payloads[-1].rows_read == 3
