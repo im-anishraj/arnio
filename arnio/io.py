@@ -684,10 +684,11 @@ def read_csv_chunked(
     Parameters
     ----------
     path : str or file-like object
-        Path to the CSV file. Supports .csv, .txt, and .tsv extensions.
+        Filesystem path or text file-like object containing CSV data.
+        Any file extension is accepted. For ``.tsv`` files, the delimiter is
         Text file-like objects are copied to a temporary file in bounded
-        chunks before native parsing.  For ``.tsv`` paths the delimiter is
-        automatically set to ``'\\t'`` when ``delimiter`` is omitted.
+        chunks before native parsing.
+        automatically set to `'\t'` when `delimiter` is omitted.
     chunksize : int, default 10_000
         Maximum number of data rows per yielded chunk.
     delimiter : str or None, default None
@@ -764,21 +765,9 @@ def read_csv_chunked(
     >>> for chunk in ar.read_csv_chunked("data.tsv", delimiter=",", chunksize=10_000):
     ...     process(chunk)
     """
-    is_path_input = isinstance(path, (str, os.PathLike))
     path, should_cleanup, is_materialized_text = _materialize_csv_input(path)
     try:
         path_lower = path.lower()
-        if is_path_input:
-            if not (
-                path_lower.endswith(".csv")
-                or path_lower.endswith(".txt")
-                or path_lower.endswith(".tsv")
-            ):
-                raise ValueError(
-                    f"Unsupported file format: {path}. "
-                    "Only .csv, .txt, and .tsv are supported."
-                )
-
         _validate_csv_path(path, encoding, reject_utf8_nul_bytes=False)
 
         # Resolve the sentinel: auto-detect tab for .tsv only when the caller
@@ -1546,3 +1535,4 @@ def write_parquet(
         kwargs["row_group_size"] = row_group_size
 
     df.to_parquet(path, **kwargs)
+

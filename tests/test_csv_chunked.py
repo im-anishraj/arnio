@@ -488,6 +488,18 @@ class TestReadCsvChunkedCoverage:
         with pytest.raises(CsvReadError, match="Cannot open file"):
             list(ar.read_csv_chunked("nonexistent_file.csv"))
 
+    def test_read_csv_chunked_accepts_nonstandard_extensions(self, tmp_path):
+        path = tmp_path / "sample.dat"
+        path.write_text("id,value\n1,2\n3,4\n")
+
+        chunked_df = pd.concat(
+            [ar.to_pandas(c) for c in ar.read_csv_chunked(str(path), chunksize=2)],
+            ignore_index=True,
+        )
+        full_df = ar.to_pandas(ar.read_csv(str(path)))
+
+        pd.testing.assert_frame_equal(chunked_df, full_df)
+
     def test_unsupported_encoding_raises_value_error(self, tmp_path):
         path = tmp_path / "encoding_test.csv"
         path.write_text("a,b\n1,2\n")
