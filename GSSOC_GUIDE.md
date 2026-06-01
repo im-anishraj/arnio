@@ -16,6 +16,13 @@ features.
 4. Wait for maintainer assignment before starting scored GSSoC work.
 5. Keep one issue to one PR unless a maintainer asks otherwise.
 
+## After the assignment of an issue
+
+1. Timeline: Assigned contributors should post a progress update or open a draft/regular PR within 3 days of being assigned an issue.
+2. Time extension request: If contributors need more time, they should comment within those 3 days.
+3. Inactivity: If the assigned contributors remain inactive without posting a progress update, requesting a time extension, or opening a draft/regular PR, maintainers may unassign or reassign that issue after 5 days.
+4. GitHub issue comments: All the conversation regarding an issue must remain in the GitHub issue comments section of that particular issue as it remains the source of truth.
+
 ## GSSoC FAQ
 
 **How do I set up the project locally?**
@@ -54,10 +61,10 @@ Share what you tried, the exact command or code, the error output, and your oper
 ## Good First Contributions
 
 Start with issues labeled:
-- `gssoc: good first issue`
+- `gssoc:good-first-issue`
 - `level:beginner`
-- `size: xs` or `size: s`
-- `status: ready`
+- `size:xs` or `size:s`
+- `status:ready`
 
 Good first tasks usually involve tests, docs, examples, small API validation, or focused Python wrappers.
 
@@ -103,7 +110,8 @@ On Windows, install Visual Studio Build Tools with the "Desktop development with
 - Unassigned GSSoC PRs for claimed issues.
 - Huge refactors mixed with a small fix.
 - AI-generated bulk changes without understanding or tests.
-- Editing unrelated files.
+- **Editing unrelated files or modifying sensitive workflows:** Do not touch files in `.github/workflows/` unless your issue explicitly requires it and a maintainer has approved.
+- **Stray root files:** Always check `git status` before committing. Do not accidentally commit generated artifacts, temporary files (like `=`), or unrelated files at the repository root. Keep your PR strictly scoped to your issue.
 - Adding dependencies without maintainer approval.
 
 ## Asking for Help

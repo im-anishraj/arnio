@@ -76,3 +76,57 @@ def test_register_duckdb_noncallable_register_attribute():
         match="conn must be a DuckDB connection with a callable register\\(\\) method",
     ):
         ar.register_duckdb(frame, FakeConnection(), "tbl")
+
+
+def test_register_duckdb_whitespace_only_name_space():
+    import pandas as pd
+
+    class FakeConnection:
+        def register(self, name, df):
+            pass
+
+    frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
+
+    with pytest.raises(ValueError, match="whitespace-only"):
+        ar.register_duckdb(frame, FakeConnection(), " ")
+
+
+def test_register_duckdb_whitespace_only_name_tab():
+    import pandas as pd
+
+    class FakeConnection:
+        def register(self, name, df):
+            pass
+
+    frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
+
+    with pytest.raises(ValueError, match="whitespace-only"):
+        ar.register_duckdb(frame, FakeConnection(), "\t")
+
+
+def test_register_duckdb_whitespace_only_name_newline():
+    import pandas as pd
+
+    class FakeConnection:
+        def register(self, name, df):
+            pass
+
+    frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
+
+    with pytest.raises(ValueError, match="whitespace-only"):
+        ar.register_duckdb(frame, FakeConnection(), "\n")
+
+
+def test_register_duckdb_valid_name_passes():
+    import pandas as pd
+
+    registered = {}
+
+    class FakeConnection:
+        def register(self, name, df):
+            registered["name"] = name
+
+    frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
+    ar.register_duckdb(frame, FakeConnection(), "my_table")
+
+    assert registered["name"] == "my_table"

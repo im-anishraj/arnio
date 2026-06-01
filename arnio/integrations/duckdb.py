@@ -35,7 +35,7 @@ def register_duckdb(
     TypeError
         If frame is not an ArFrame or name is not a string.
     ValueError
-        If name is empty.
+        If name is empty or whitespace-only.
 
     Examples
     --------
@@ -50,8 +50,8 @@ def register_duckdb(
         raise TypeError("frame must be an ArFrame")
     if not isinstance(name, str):
         raise TypeError("name must be a string")
-    if not name:
-        raise ValueError("name must not be empty")
+    if not name or not name.strip():
+        raise ValueError("name must not be empty or whitespace-only")
 
     register = getattr(conn, "register", None)
 

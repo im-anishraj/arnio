@@ -487,6 +487,12 @@ class TestScanCsvOnBadLines:
         with pytest.raises(ValueError):
             ar.scan_csv(csv_path, on_bad_lines="invalid")
 
+    def test_invalid_mode_raises(self, tmp_path):
+        csv_path = tmp_path / "good.csv"
+        csv_path.write_text("a,b\n1,2\n")
+        with pytest.raises(ValueError, match="mode must be either"):
+            ar.scan_csv(csv_path, mode="loose")
+
     def test_warn_emits_user_warning(self, tmp_path):
         csv_path = tmp_path / "bad.csv"
         csv_path.write_text("a,b\n1,2\nbad_row\n3,4\n")
@@ -562,3 +568,36 @@ class TestScanCsvOnBadLines:
         with pytest.warns(UserWarning) as caught:
             ar.scan_csv(csv_path, on_bad_lines="warn", has_header=False)
         assert "CSV row 2 has 1 fields; expected 2" in str(caught[0].message)
+
+    def test_permissive_mode_pads_narrow_rows(self, tmp_path):
+        csv_path = tmp_path / "narrow.csv"
+        csv_path.write_text("a,b,c\n1,2,3\n4,5\n6,7,8\n")
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            schema = ar.scan_csv(csv_path, mode="permissive", on_bad_lines="warn")
+
+        assert schema == {"a": "int64", "b": "int64", "c": "int64"}
+        assert [w for w in caught if w.category is UserWarning] == []
+
+    def test_permissive_scan_matches_read_csv_dtypes_for_narrow_rows(self, tmp_path):
+        csv_path = tmp_path / "scan_read_parity.csv"
+        csv_path.write_text("id,name,score\n1,Alice,10\n2,Bob\n3,Cara,12\n")
+
+        schema = ar.scan_csv(csv_path, mode="permissive")
+        frame = ar.read_csv(csv_path, mode="permissive")
+
+        assert schema == frame.dtypes
+
+    def test_permissive_mode_keeps_wide_rows_on_bad_lines(self, tmp_path):
+        csv_path = tmp_path / "wide.csv"
+        csv_path.write_text("a,b\n1,2,extra\n3,4\n")
+
+        with pytest.warns(UserWarning, match="CSV row 2 has 3 fields; expected 2"):
+            schema = ar.scan_csv(
+                csv_path,
+                mode="permissive",
+                on_bad_lines="warn",
+            )
+
+        assert schema == {"a": "int64", "b": "int64"}
