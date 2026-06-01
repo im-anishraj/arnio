@@ -823,8 +823,7 @@ def winsorize_outliers(
 
         # 2. Check if the original column type was an integer or an Arnio integer type helper
         if pd.api.types.is_integer_dtype(orig_dtype):
-            # Round values carefully to avoid truncation errors and cast back
-            df[column] = clipped_series.round().astype(orig_dtype)
+            df[column] = clipped_series.astype(orig_dtype)
         else:
             df[column] = clipped_series
 
