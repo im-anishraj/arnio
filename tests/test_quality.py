@@ -4307,7 +4307,10 @@ def test_auto_clean_rejects_invalid_string_mode():
 
 def test_winsorize_outliers_preserves_integer_dtype():
     # Test with two target integer columns to ensure the loop processes all columns
-    data = {"a": [1, 2, 3, 4, 100], "b": [10, 20, 30, 40, 1000]}
+    data = {
+        "a": [10, 20, 30, 40, 50, 60, 70, 80],
+        "b": [100, 200, 300, 400, 500, 600, 700, 800],
+    }
     frame = ar.from_pandas(pd.DataFrame(data))
 
     result_frame = ar.cleaning.winsorize_outliers(
@@ -4316,8 +4319,8 @@ def test_winsorize_outliers_preserves_integer_dtype():
     result_df = ar.to_pandas(result_frame)
 
     # 1. Assert both columns were successfully processed and clipped
-    assert result_df["a"].tolist() == [2, 2, 3, 4, 4]
-    assert result_df["b"].tolist() == [20, 20, 30, 40, 40]
+    assert result_df["a"].tolist() == [27, 27, 30, 40, 50, 60, 62, 62]
+    assert result_df["b"].tolist() == [275, 275, 300, 400, 500, 600, 625, 625]
 
     # 2. Assert both columns perfectly preserved their integer data types
     assert pd.api.types.is_integer_dtype(result_df["a"].dtype)
