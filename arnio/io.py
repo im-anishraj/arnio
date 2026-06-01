@@ -791,10 +791,13 @@ def read_csv_chunked(
     Parameters
     ----------
     path : str or file-like object
-        Path to the CSV file. Supports .csv, .txt, .tsv, and compressed .csv.gz extensions.
+        Filesystem path or text file-like object containing CSV data.
+        Any file extension is accepted.
         Text file-like objects are copied to a temporary file in bounded
-        chunks before native parsing.  For ``.tsv`` paths the delimiter is
-        automatically set to ``'\\t'`` when ``delimiter`` is omitted.
+        chunks before native parsing.
+        For ``.tsv`` files, the delimiter is automatically set to ``'\t'``
+        when ``delimiter`` is omitted.
+
     chunksize : int, default 10_000
         Maximum number of data rows per yielded chunk.
     delimiter : str or None, default None
@@ -878,64 +881,12 @@ def read_csv_chunked(
     >>> for chunk in ar.read_csv_chunked("data.tsv", delimiter=",", chunksize=10_000):
     ...     process(chunk)
     """
-    is_path_input = isinstance(path, (str, os.PathLike))
-    native_path, should_cleanup, is_materialized_text = _materialize_csv_input(
+    path, should_cleanup, is_materialized_text = _materialize_csv_input(
         path, caller="read_csv_chunked"
     )
     try:
-        path_lower = native_path.lower()
-        if is_path_input:
-            # We check the original path extension if it was passed as a path
-            if isinstance(path, str):
-                orig_path_lower = path.lower()
-            elif isinstance(path, os.PathLike):
-                orig_path_lower = os.fspath(path).lower()
-            else:
-                orig_path_lower = ""
-
-    # Handle skip_rows → skiprows deprecation shim
-    if skip_rows is not None:
-        import warnings
-
-        warnings.warn(
-            "skip_rows is deprecated and will be removed in a future release. "
-            "Use skiprows instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        if skiprows is not None:
-            raise TypeError(
-                "Cannot pass both skip_rows and skiprows. Use skiprows only."
-            )
-        skiprows = skip_rows
-
-    # Delimiter auto-inference (matches read_csv behaviour)
-    if delimiter is None:
-        delimiter = "\t" if path.lower().endswith(".tsv") else ","
-
-    decimal_separator = _validate_decimal_separator(decimal_separator)
-    _validate_thousands_separator(thousands_separator, decimal_separator)
-    delimiter = _validate_delimiter(delimiter)
-    mode = _validate_parser_mode(mode)
-    chunksize = _validate_chunksize(chunksize)
-    encoding_errors = _validate_encoding_errors(encoding_errors)
-    on_bad_lines = _validate_on_bad_lines(on_bad_lines)
-
-    resolved_skiprows = _validate_skiprows(skiprows)
-
-    config = _CsvConfig()
-    config.delimiter = delimiter
-    config.has_header = has_header
-    config.on_bad_lines = on_bad_lines
-    config.encoding = encoding
-    config.trim_headers = trim_headers
-    config.thousands_separator = thousands_separator
-    config.mode = mode
-    config.encoding_errors = encoding_errors
-    if resolved_skiprows is not None:
-        config.skip_rows = resolved_skiprows
-    if dtype is not None:
-        config.dtype = _validate_dtype_mapping(dtype)
+        path_lower = path.lower()
+        _validate_csv_path(path, encoding, reject_utf8_nul_bytes=False)
 
         # Resolve the sentinel: auto-detect tab for .tsv only when the caller
         # truly omitted delimiter (None).  An explicit delimiter="," is always
