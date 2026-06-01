@@ -6,11 +6,11 @@ Production data contracts and validation.
 from __future__ import annotations
 
 import json
+import math
 import re
 import warnings
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from datetime import datetime
 from typing import Any, Callable
 from zoneinfo import available_timezones
 
@@ -34,12 +34,56 @@ DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 URL_SCHEME_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*$")
 
 _VALID_SEVERITIES = {"error", "warning"}
+_VALID_FIELD_DTYPES = frozenset({"int64", "float64", "string", "bool", "datetime"})
+_FIELD_DTYPE_OPTIONS = "int64, float64, string, bool, datetime, or None"
+
+_ALLOWED_FIELD_KEYS = {
+    "dtype",
+    "nullable",
+    "min",
+    "max",
+    "pattern",
+    "semantic",
+    "allowed",
+    "case_sensitive",
+    "unique",
+    "min_length",
+    "max_length",
+    "format",
+    "datetime_min",
+    "datetime_max",
+    "required_if",
+    "severity",
+}
+
+_ALLOWED_SCHEMA_KEYS = {
+    "fields",
+    "strict",
+    "unique",
+    "rules_omitted",
+}
 
 
 def _validate_severity(severity: str) -> None:
     """Raise ValueError if severity is not 'error' or 'warning'."""
     if severity not in _VALID_SEVERITIES:
         raise ValueError("severity must be 'error' or 'warning'")
+
+
+def _validate_numeric_bound(value: float | int, name: str) -> None:
+    """Raise ValueError if value is not a finite number."""
+    if not math.isfinite(value):
+        raise ValueError(f"{name} must be a finite number, got {value!r}")
+
+
+def _validate_field_dtype(dtype: str | None) -> None:
+    """Raise if a Field dtype is not a supported public dtype."""
+    if dtype is None:
+        return
+    if not isinstance(dtype, str):
+        raise TypeError(f"dtype must be a string or None, got {type(dtype).__name__}")
+    if dtype not in _VALID_FIELD_DTYPES:
+        raise ValueError(f"dtype must be one of {_FIELD_DTYPE_OPTIONS}, got {dtype!r}")
 
 
 _DTYPE_MAP = {
@@ -702,6 +746,8 @@ class Field:
     severity: str = "error"
 
     def __post_init__(self) -> None:
+        _validate_field_dtype(self.dtype)
+
         if not isinstance(self.nullable, bool):
             raise TypeError("nullable must be a bool")
         if not isinstance(self.unique, bool):
@@ -730,10 +776,6 @@ class Field:
             if self.min is not None and self.max is not None:
                 if self.min > self.max:
                     raise ValueError("min must be less than or equal to max")
-        if self.dtype is not None and not isinstance(self.dtype, str):
-            raise TypeError(
-                f"dtype must be a str or None, got {type(self.dtype).__name__}"
-            )
 
         if self.pattern is not None:
             if not isinstance(self.pattern, str):
@@ -891,6 +933,13 @@ class Schema:
                 "Schema JSON must decode to an object with 'fields', 'strict', and optional 'unique'."
             )
 
+        unknown = set(payload.keys()) - _ALLOWED_SCHEMA_KEYS
+        if unknown:
+            raise ValueError(
+                f"Schema JSON contains unknown key(s): {sorted(unknown)}. "
+                f"Allowed keys: {sorted(_ALLOWED_SCHEMA_KEYS)}"
+            )
+
         fields_payload = payload.get("fields")
         if not isinstance(fields_payload, dict):
             raise TypeError(
@@ -1020,6 +1069,57 @@ class ValidationResult:
     issue_count: int
     issues: list[ValidationIssue]
     bad_rows: list[int] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        if isinstance(self.row_count, bool) or not isinstance(self.row_count, int):
+            raise TypeError(
+                f"ValidationResult 'row_count' must be a non-negative int, "
+                f"got {type(self.row_count).__name__}"
+            )
+        if self.row_count < 0:
+            raise ValueError(
+                f"ValidationResult 'row_count' must be >= 0, got {self.row_count}"
+            )
+        if isinstance(self.issue_count, bool) or not isinstance(self.issue_count, int):
+            raise TypeError(
+                f"ValidationResult 'issue_count' must be a non-negative int, "
+                f"got {type(self.issue_count).__name__}"
+            )
+        if self.issue_count < 0:
+            raise ValueError(
+                f"ValidationResult 'issue_count' must be >= 0, got {self.issue_count}"
+            )
+        if not isinstance(self.issues, list):
+            raise TypeError(
+                f"ValidationResult 'issues' must be a list of ValidationIssue instances, "
+                f"got {type(self.issues).__name__}"
+            )
+        for i, item in enumerate(self.issues):
+            if not isinstance(item, ValidationIssue):
+                raise TypeError(
+                    f"ValidationResult 'issues[{i}]' must be a ValidationIssue instance, "
+                    f"got {type(item).__name__}"
+                )
+        if not isinstance(self.bad_rows, list):
+            raise TypeError(
+                f"ValidationResult 'bad_rows' must be a list of non-negative ints, "
+                f"got {type(self.bad_rows).__name__}"
+            )
+        for i, item in enumerate(self.bad_rows):
+            if isinstance(item, bool) or not isinstance(item, int):
+                raise TypeError(
+                    f"ValidationResult 'bad_rows[{i}]' must be an int, "
+                    f"got {type(item).__name__}"
+                )
+            if item < 0:
+                raise ValueError(
+                    f"ValidationResult 'bad_rows[{i}]' must be >= 0, got {item}"
+                )
+        if self.issue_count != len(self.issues):
+            raise ValueError(
+                f"ValidationResult 'issue_count' ({self.issue_count}) does not match "
+                f"len(issues) ({len(self.issues)})"
+            )
 
     @property
     def passed(self) -> bool:
@@ -1714,9 +1814,11 @@ def Int64(
     if min is not None:
         if isinstance(min, bool) or not isinstance(min, (int, float)):
             raise TypeError("min must be numeric or None")
+        _validate_numeric_bound(min, "min")
     if max is not None:
         if isinstance(max, bool) or not isinstance(max, (int, float)):
             raise TypeError("max must be numeric or None")
+        _validate_numeric_bound(max, "max")
     if min is not None and max is not None and min > max:
         raise ValueError("min must be less than or equal to max")
 
@@ -1757,9 +1859,11 @@ def Float64(
     if min is not None:
         if isinstance(min, bool) or not isinstance(min, (int, float)):
             raise TypeError("min must be numeric or None")
+        _validate_numeric_bound(min, "min")
     if max is not None:
         if isinstance(max, bool) or not isinstance(max, (int, float)):
             raise TypeError("max must be numeric or None")
+        _validate_numeric_bound(max, "max")
     if min is not None and max is not None and min > max:
         raise ValueError("min must be less than or equal to max")
 
@@ -2468,7 +2572,12 @@ def _validate_column(
             else:
                 invalid = non_null[
                     ~non_null.map(
-                        lambda v: _normalize_validator_result(fn(v), validator_name)
+                        lambda v: _run_custom_validator(
+                            fn,
+                            v,
+                            column=name,
+                            validator_name=validator_name,
+                        )
                     )
                 ]
                 issues.extend(
@@ -2499,19 +2608,16 @@ def _validate_column(
                 )
             else:
                 if field_def.semantic == "date":
-                    invalid_values = []
-                    for index, value in non_null.items():
-                        value_str = str(value)
-                        if DATE_PATTERN.fullmatch(value_str) is None:
-                            invalid_values.append((index, value))
-                            continue
-                        try:
-                            datetime.strptime(value_str, "%Y-%m-%d")
-                        except ValueError:
-                            invalid_values.append((index, value))
-                    invalid = pd.Series(
-                        {index: value for index, value in invalid_values}
+                    values_as_text = non_null.astype("string")
+                    format_valid = values_as_text.str.fullmatch(
+                        DATE_PATTERN.pattern, na=False
                     )
+                    parsed = pd.to_datetime(
+                        values_as_text.where(format_valid),
+                        format="%Y-%m-%d",
+                        errors="coerce",
+                    )
+                    invalid = non_null[~(format_valid & parsed.notna())]
                 elif field_def.semantic == "country_code":
                     values = (
                         non_null.str.upper()
@@ -2712,6 +2818,13 @@ def _field_from_json_dict(name: str, payload: Any) -> Field:
             f"Schema JSON field for column {name!r} must be an object, got {type(payload).__name__}."
         )
 
+    unknown = set(payload.keys()) - _ALLOWED_FIELD_KEYS
+    if unknown:
+        raise ValueError(
+            f"Schema JSON field {name!r} contains unknown key(s): {sorted(unknown)}. "
+            f"Allowed keys: {sorted(_ALLOWED_FIELD_KEYS)}"
+        )
+
     allowed = payload.get("allowed")
     if allowed is not None:
         if not isinstance(allowed, list):
@@ -2865,8 +2978,8 @@ def register_validator(
     """
     if not callable(fn):
         raise TypeError("fn must be callable")
-    if not isinstance(name, str) or not name:
-        raise ValueError("name must be a non-empty string")
+    if not isinstance(name, str) or not name.strip():
+        raise ValueError("Validator name must be a non-empty, non-whitespace string")
     if name in _CUSTOM_VALIDATORS and not overwrite:
         raise ValueError(
             f"Validator {name!r} is already registered. "
@@ -2908,6 +3021,24 @@ def _normalize_validator_result(result: object, validator_name: str) -> bool:
     )
 
 
+def _run_custom_validator(
+    fn: Callable[[Any], object],
+    value: Any,
+    *,
+    column: str,
+    validator_name: str,
+) -> bool:
+    """Run a registered custom validator and add schema context on failure."""
+    try:
+        result = fn(value)
+    except Exception as exc:
+        raise ArnioError(
+            f"Custom validator {validator_name!r} failed for column "
+            f"{column!r} with value {value!r}: {exc}"
+        ) from exc
+    return _normalize_validator_result(result, validator_name)
+
+
 def Custom(
     name: str,
     *,
@@ -2932,10 +3063,10 @@ def Custom(
     >>> ar.register_validator("positive", lambda v: v > 0)
     >>> schema = ar.Schema({"score": ar.Custom("positive", nullable=False)})
     """
-
-    if not isinstance(name, str) or not name:
-        raise ValueError("name must be a non-empty string")
-
+    if not isinstance(name, str):
+        raise TypeError("The validator name must be a string.")
+    if not name.strip():
+        raise ValueError("The validator name cannot be an empty string.")
     if name not in _CUSTOM_VALIDATORS:
         raise ValueError(
             f"No validator registered under {name!r}. "

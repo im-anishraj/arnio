@@ -391,6 +391,87 @@ def test_schema_reports_missing_and_unexpected_columns(sample_csv):
     assert "unexpected_column" in rules
 
 
+# --- ValidationResult constructor validation (regression for #1684) ---
+
+
+def test_validation_result_rejects_string_row_count():
+    with pytest.raises(TypeError, match="row_count"):
+        ar.ValidationResult(row_count="1", issue_count=0, issues=[])
+
+
+def test_validation_result_rejects_negative_row_count():
+    with pytest.raises(ValueError, match="row_count"):
+        ar.ValidationResult(row_count=-1, issue_count=0, issues=[])
+
+
+def test_validation_result_rejects_bool_row_count():
+    with pytest.raises(TypeError, match="row_count"):
+        ar.ValidationResult(row_count=True, issue_count=0, issues=[])
+
+
+def test_validation_result_rejects_string_issue_count():
+    with pytest.raises(TypeError, match="issue_count"):
+        ar.ValidationResult(row_count=1, issue_count="0", issues=[])
+
+
+def test_validation_result_rejects_negative_issue_count():
+    with pytest.raises(ValueError, match="issue_count"):
+        ar.ValidationResult(row_count=1, issue_count=-1, issues=[])
+
+
+def test_validation_result_rejects_bool_issue_count():
+    with pytest.raises(TypeError, match="issue_count"):
+        ar.ValidationResult(row_count=1, issue_count=False, issues=[])
+
+
+def test_validation_result_rejects_non_list_issues():
+    with pytest.raises(TypeError, match="issues"):
+        ar.ValidationResult(row_count=1, issue_count=0, issues=None)
+
+
+def test_validation_result_rejects_string_item_in_issues():
+    with pytest.raises(TypeError, match="issues"):
+        ar.ValidationResult(row_count=1, issue_count=1, issues=["bad"])
+
+
+def test_validation_result_rejects_string_bad_rows():
+    with pytest.raises(TypeError, match="bad_rows"):
+        ar.ValidationResult(row_count=1, issue_count=0, issues=[], bad_rows="abc")
+
+
+def test_validation_result_rejects_negative_bad_rows_entry():
+    with pytest.raises(ValueError, match="bad_rows"):
+        ar.ValidationResult(row_count=1, issue_count=0, issues=[], bad_rows=[-1])
+
+
+def test_validation_result_rejects_non_int_bad_rows_entry():
+    with pytest.raises(TypeError, match="bad_rows"):
+        ar.ValidationResult(row_count=1, issue_count=0, issues=[], bad_rows=["1"])
+
+
+def test_validation_result_rejects_mismatched_issue_count():
+    issue = ar.ValidationIssue(column="x", rule="dtype", message="bad type")
+    with pytest.raises(ValueError, match="issue_count"):
+        ar.ValidationResult(row_count=1, issue_count=2, issues=[issue])
+
+
+def test_validation_result_valid_construction():
+    issue = ar.ValidationIssue(column="x", rule="dtype", message="bad type")
+    result = ar.ValidationResult(
+        row_count=5,
+        issue_count=1,
+        issues=[issue],
+        bad_rows=[0],
+    )
+    assert result.row_count == 5
+    assert result.issue_count == 1
+    assert len(result.issues) == 1
+    assert result.bad_rows == [0]
+
+
+# --- end ValidationResult constructor validation ---
+
+
 def test_validation_result_to_pandas_empty_has_stable_columns():
     result = ar.ValidationResult(
         row_count=3,
@@ -647,6 +728,150 @@ def test_validation_result_summary_counts_no_issue_result():
     assert summary["issues_by_rule"] == {}
     assert summary["issues_by_column"] == {}
     assert summary["issues_by_column_and_rule"] == {}
+
+
+def test_validation_result_summary_severity_counts_error():
+    """severity_counts must be populated for issues with default 'error' severity."""
+    result = ar.ValidationResult(
+        row_count=3,
+        issue_count=2,
+        issues=[
+            ar.ValidationIssue(
+                column="age", rule="min", message="too small", row_index=0
+            ),
+            ar.ValidationIssue(
+                column="name", rule="max", message="too long", row_index=1
+            ),
+        ],
+        bad_rows=[0, 1],
+    )
+    summary = result.summary()
+    assert summary["severity_counts"] == {"error": 2}
+
+
+def test_validation_result_summary_severity_counts_mixed():
+    """severity_counts must track different severity levels."""
+    result = ar.ValidationResult(
+        row_count=5,
+        issue_count=4,
+        issues=[
+            ar.ValidationIssue(
+                column="x", rule="min", message="small", row_index=0, severity="error"
+            ),
+            ar.ValidationIssue(
+                column="x", rule="max", message="large", row_index=1, severity="warning"
+            ),
+            ar.ValidationIssue(
+                column="x",
+                rule="required",
+                message="missing",
+                row_index=2,
+                severity="error",
+            ),
+            ar.ValidationIssue(
+                column="x",
+                rule="nullable",
+                message="null",
+                row_index=3,
+                severity="warning",
+            ),
+        ],
+        bad_rows=[0, 1, 2, 3],
+    )
+    summary = result.summary()
+    assert summary["severity_counts"] == {"error": 2, "warning": 2}
+
+
+def test_validation_result_summary_issue_count_field():
+    """summary issue_count must match the result's issue_count field."""
+    result = ar.ValidationResult(
+        row_count=10,
+        issue_count=5,
+        issues=[
+            ar.ValidationIssue(column="a", rule="min", message="bad", row_index=i)
+            for i in range(5)
+        ],
+        bad_rows=list(range(5)),
+    )
+    summary = result.summary()
+    assert summary["issue_count"] == 5
+    assert summary["passed"] is False
+
+
+def test_validation_result_summary_bad_row_count():
+    """summary bad_row_count must equal len(bad_rows)."""
+    result = ar.ValidationResult(
+        row_count=7,
+        issue_count=3,
+        issues=[
+            ar.ValidationIssue(column="a", rule="min", message="bad", row_index=i)
+            for i in [1, 3, 5]
+        ],
+        bad_rows=[1, 3, 5],
+    )
+    summary = result.summary()
+    assert summary["bad_row_count"] == 3
+
+
+def test_validation_result_summary_no_issues_severity_counts_empty():
+    """When there are no issues, severity_counts must be an empty dict."""
+    result = ar.ValidationResult(row_count=3, issue_count=0, issues=[], bad_rows=[])
+    summary = result.summary()
+    assert summary["severity_counts"] == {}
+
+
+def test_schema_diff_summary_differences_by_change():
+    """SchemaDiff.summary() differences_by_change must aggregate by change kind."""
+    diff = ar.SchemaDiff(
+        [
+            ar.SchemaDiffEntry(
+                change="added_column",
+                column="new_col",
+            ),
+            ar.SchemaDiffEntry(
+                change="changed_field",
+                column="id",
+            ),
+            ar.SchemaDiffEntry(
+                change="added_column",
+                column="another_col",
+            ),
+        ],
+    )
+    summary = diff.summary()
+    assert summary["differences_by_change"] == {"added_column": 2, "changed_field": 1}
+
+
+def test_schema_diff_summary_differences_by_column():
+    """SchemaDiff.summary() differences_by_column must aggregate by column name."""
+    diff = ar.SchemaDiff(
+        [
+            ar.SchemaDiffEntry(
+                change="removed_column",
+                column="x",
+            ),
+            ar.SchemaDiffEntry(
+                change="changed_type",
+                column="x",
+            ),
+            ar.SchemaDiffEntry(
+                change="added_column",
+                column="y",
+            ),
+        ],
+    )
+    summary = diff.summary()
+    assert summary["differences_by_column"] == {"x": 2, "y": 1}
+
+
+def test_schema_diff_summary_no_differences():
+    """SchemaDiff.summary() with no differences must return empty aggregations."""
+    diff = ar.SchemaDiff([])
+    summary = diff.summary()
+    assert summary["changed"] is False
+    assert summary["difference_count"] == 0
+    assert summary["differences_by_change"] == {}
+    assert summary["differences_by_column"] == {}
 
 
 def test_validation_result_to_pandas(sample_csv):
@@ -2330,6 +2555,25 @@ def test_date_validation_rejects_non_zero_padded_dates(tmp_path):
     assert "date" in rules
 
 
+def test_date_validation_reports_only_invalid_vectorized_values(tmp_path):
+    path = tmp_path / "mixed_dates.csv"
+    path.write_text(
+        "created_at\n" "2026-05-15\n" "2026-02-30\n" "2026-5-15\n" "2024-02-29\n"
+    )
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"created_at": ar.Date(nullable=False)},
+    )
+
+    assert not result.passed
+    assert [(issue.row_index, issue.value) for issue in result.issues] == [
+        (2, "2026-02-30"),
+        (3, "2026-5-15"),
+    ]
+    assert {issue.rule for issue in result.issues} == {"date"}
+
+
 def test_required_if_validation_passes_when_condition_matches(tmp_path):
     path = tmp_path / "conditional_pass.csv"
     path.write_text("user_type,country\n" "international,IN\n" "local,\n")
@@ -2641,7 +2885,7 @@ def test_register_validator_raises_for_empty_name():
         raise AssertionError("Expected ValueError for empty name")
 
 
-def test_custom_validator_exceptions_propagate(tmp_path):
+def test_custom_validator_exceptions_include_schema_context(tmp_path):
     def broken_validator(value):
         raise RuntimeError("validator exploded")
 
@@ -2650,13 +2894,17 @@ def test_custom_validator_exceptions_propagate(tmp_path):
     path = tmp_path / "scores.csv"
     path.write_text("score\n1\n")
 
-    with pytest.raises(RuntimeError) as exc:
+    with pytest.raises(ar.ArnioError) as exc:
         ar.validate(
             ar.read_csv(path),
             {"score": ar.Custom("broken")},
         )
 
-    assert "validator exploded" in str(exc.value)
+    message = str(exc.value)
+    assert "broken" in message
+    assert "score" in message
+    assert "validator exploded" in message
+    assert isinstance(exc.value.__cause__, RuntimeError)
 
 
 def test_schema_rules_multiple_rules_all_run(tmp_path):
@@ -3451,6 +3699,54 @@ def test_float64_rejects_bool_pair():
         ar.Float64(min=True, max=False)
 
 
+def test_int64_rejects_nan_min():
+    with pytest.raises(ValueError, match="finite"):
+        ar.Int64(min=float("nan"))
+
+
+def test_int64_rejects_nan_max():
+    with pytest.raises(ValueError, match="finite"):
+        ar.Int64(max=float("nan"))
+
+
+def test_int64_rejects_inf_min():
+    with pytest.raises(ValueError, match="finite"):
+        ar.Int64(min=float("inf"))
+
+
+def test_int64_rejects_neg_inf_max():
+    with pytest.raises(ValueError, match="finite"):
+        ar.Int64(max=float("-inf"))
+
+
+def test_float64_rejects_nan_min():
+    with pytest.raises(ValueError, match="finite"):
+        ar.Float64(min=float("nan"))
+
+
+def test_float64_rejects_nan_max():
+    with pytest.raises(ValueError, match="finite"):
+        ar.Float64(max=float("nan"))
+
+
+def test_float64_rejects_inf_min():
+    with pytest.raises(ValueError, match="finite"):
+        ar.Float64(min=float("inf"))
+
+
+def test_float64_rejects_neg_inf_max():
+    with pytest.raises(ValueError, match="finite"):
+        ar.Float64(max=float("-inf"))
+
+
+def test_int64_finite_bounds_still_pass():
+    assert ar.Int64(min=-100, max=100) is not None
+
+
+def test_float64_finite_bounds_still_pass():
+    assert ar.Float64(min=-1.5, max=1.5) is not None
+
+
 def test_validation_issue_accepts_valid_severities():
     error_issue = ar.ValidationIssue(
         column="age", rule="min", message="Too small", severity="error"
@@ -3549,9 +3845,23 @@ def test_custom_rule_with_invalid_severity_fails_validation_execution():
         schema.validate(frame)
 
 
-def test_field_dtype_rejects_non_string():
-    with pytest.raises(TypeError, match="dtype must be a str or None"):
-        ar.Field(dtype=123)
+@pytest.mark.parametrize("dtype", [123, True, []])
+def test_field_dtype_rejects_non_string(dtype):
+    with pytest.raises(TypeError, match="dtype must be a string or None"):
+        ar.Field(dtype=dtype)
+
+
+def test_field_dtype_accepts_supported_public_dtypes():
+    for dtype in ("int64", "float64", "string", "bool", "datetime", None):
+        field = ar.Field(dtype=dtype)
+
+        assert field.dtype == dtype
+
+
+@pytest.mark.parametrize("dtype", ["", "uuid", "int", "FLOAT64"])
+def test_field_dtype_rejects_unsupported_strings(dtype):
+    with pytest.raises(ValueError, match="dtype must be one of"):
+        ar.Field(dtype=dtype)
 
 
 def test_field_pattern_rejects_non_string():
@@ -3913,3 +4223,40 @@ def test_custom_rule_returning_malformed_issue_raises_early(tmp_path):
 
     with pytest.raises((TypeError, ValueError)):
         schema.validate(frame)
+
+
+def test_from_json_rejects_unknown_top_level_key():
+    payload = json.dumps(
+        {
+            "fields": {"email": {"dtype": "string"}},
+            "uniqe": ["email"],
+        }
+    )
+    with pytest.raises(ValueError, match="uniqe"):
+        ar.Schema.from_json(payload)
+
+
+def test_from_json_rejects_unknown_field_key():
+    payload = json.dumps(
+        {
+            "fields": {
+                "email": {
+                    "dtype": "string",
+                    "nulllable": False,
+                }
+            }
+        }
+    )
+    with pytest.raises(ValueError, match="nulllable"):
+        ar.Schema.from_json(payload)
+
+
+def test_from_json_round_trip_is_accepted():
+    original = ar.Schema(
+        fields={"email": ar.String(nullable=False)},
+        strict=True,
+        unique=["email"],
+    )
+    recovered = ar.Schema.from_json(original.to_json())
+    assert recovered.fields["email"].nullable is False
+    assert recovered.unique == ["email"]

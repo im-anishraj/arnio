@@ -4,6 +4,16 @@ Ready-to-run cleaning recipes for common messy CSV formats.
 
 Each folder contains a small synthetic CSV with realistic data quality issues and a `recipe.py` that cleans, profiles, and validates it using the arnio API.
 
+## Interactive Notebooks (1-Click Colab)
+
+Run these notebooks instantly in your browser — no local setup needed!
+
+| Notebook | Description | Open |
+|---|---|---|
+| Basic Usage | Core Arnio functionality: read, profile, and clean a CSV | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/im-anishraj/arnio/blob/main/examples/basic_usage.ipynb) |
+| Arnio + Pandas | Pandas interoperability: clean with Arnio, analyse with pandas | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/im-anishraj/arnio/blob/main/examples/arnio_with_pandas.ipynb) |
+| Schema Validation | End-to-end schema validation with typed fields | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/im-anishraj/arnio/blob/main/examples/schema_validation.ipynb) |
+
 ## Recipes
 
 | Dataset | CSV | Issues Covered | arnio Features Used |

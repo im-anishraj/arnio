@@ -164,10 +164,19 @@ df = ar.cast_types(df, {"id": "float64"})
 
 ### clean
 
-A high-level wrapper that applies `strip_whitespace`, `drop_nulls`, and `drop_duplicates` in a single call.
+A high-level convenience shorthand that applies `strip_whitespace`, `drop_nulls`, and `drop_duplicates` in a single call. It accepts either a boolean to toggle the step, or a configuration dictionary to pass custom arguments to that step.
 
 ```python
+# Default usage (applies strip_whitespace with default settings)
 df = ar.clean(df)
+
+# Advanced usage (passing configuration dictionaries to specific steps)
+df = ar.clean(
+    df,
+    strip_whitespace={"subset": ["customer_name"]},
+    drop_nulls=True,
+    drop_duplicates={"keep": "last"}
+)
 ```
 
 ### clip_numeric

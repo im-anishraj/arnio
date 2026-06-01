@@ -30,9 +30,13 @@ benchmark-sparse-nulls: ## Run sparse-null benchmark
 
 clean: ## Remove build artifacts
 ifeq ($(OS),Windows_NT)
-	python -c "import shutil, os, glob; [shutil.rmtree(p, ignore_errors=True) for p in ['dist', 'build', '.pytest_cache'] + glob.glob('*.egg-info') + glob.glob('**/__pycache__', recursive=True)]; [os.remove(f) for f in glob.glob('**/*.pyc', recursive=True)]"
+	python -c "import shutil, os, glob; [shutil.rmtree(p, ignore_errors=True) for p in ['dist', 'build', '.pytest_cache'] + glob.glob('*.egg-info') + glob.glob('**/__pycache__', recursive=True)]; [os.remove(f) for f in glob.glob('**/*.pyc', recursive=True) + glob.glob('arnio/_arnio_cpp*.pyd') + glob.glob('arnio/_arnio_cpp*.dll')]"
 else
 	find . -type d -name "__pycache__" -exec rm -rf {} +
 	find . -name "*.pyc" -delete
 	rm -rf .pytest_cache dist build *.egg-info
+	find arnio -name "_arnio_cpp*.so" -delete
+	find arnio -name "_arnio_cpp*.dylib" -delete
+	find arnio -name "_arnio_cpp*.pyd" -delete
+	find arnio -name "_arnio_cpp*.dll" -delete
 endif

@@ -751,6 +751,51 @@ class TestFromPandas:
         assert result.shape == (2, 2)
         assert list(result.columns) == ["id", "name"]
 
+    def test_from_dict_rejects_scalar_value(self):
+        with pytest.raises(
+            TypeError,
+            match="Column 'a' must be a sequence of values",
+        ):
+            ar.from_dict({"a": 1})
+
+    def test_from_dict_rejects_mixed_scalar_and_list(self):
+        with pytest.raises(
+            TypeError,
+            match="Column 'b' must be a sequence of values",
+        ):
+            ar.from_dict(
+                {
+                    "a": [1, 2],
+                    "b": 3,
+                }
+            )
+
+    def test_from_dict_accepts_tuple_values(self):
+        frame = ar.from_dict(
+            {
+                "a": (1, 2),
+                "b": ("x", "y"),
+            }
+        )
+
+        result = ar.to_pandas(frame)
+
+        assert result.shape == (2, 2)
+
+    def test_from_dict_rejects_string_value(self):
+        with pytest.raises(
+            TypeError,
+            match="Column 'a' must be a sequence of values",
+        ):
+            ar.from_dict({"a": "abc"})
+
+    def test_from_dict_rejects_bytes_value(self):
+        with pytest.raises(
+            TypeError,
+            match="Column 'a' must be a sequence of values",
+        ):
+            ar.from_dict({"a": b"abc"})
+
 
 class TestAttrsPreservation:
     def test_attrs_roundtrip(self):
@@ -1141,6 +1186,51 @@ class TestNullableInt64ObjectConversion:
         result = ar.to_pandas(frame)
         assert str(result["col"].dtype) == "Int64"
         assert list(result["col"]) == [1, pd.NA, 3]
+
+
+class TestCastNullableInt:
+    """Tests for casting object series with None/NaN and valid integers."""
+
+    def test_cast_object_series_with_none_and_valid_integers(self):
+        """Casting object column with None and integer strings to int64."""
+        df = pd.DataFrame({"val": [1, None, 3, "4", None]})
+        frame = ar.from_pandas(df)
+        result = ar.cast_types(frame, {"val": "int64"}, errors="coerce")
+        df_result = ar.to_pandas(result)
+        assert result.dtypes["val"] == "int64"
+        assert df_result["val"].iloc[0] == 1
+        assert pd.isna(df_result["val"].iloc[1])  # type: ignore[arg-type]
+        assert df_result["val"].iloc[2] == 3
+        assert df_result["val"].iloc[3] == 4
+        assert pd.isna(df_result["val"].iloc[4])  # type: ignore[arg-type]
+
+    def test_cast_object_series_with_nan_and_valid_integers(self):
+        """Casting object column with float NaN and integer values to int64."""
+        df = pd.DataFrame({"val": pd.Series([1, float("nan"), 3, 4], dtype=object)})
+        frame = ar.from_pandas(df)
+        result = ar.cast_types(frame, {"val": "int64"}, errors="coerce")
+        df_result = ar.to_pandas(result)
+        assert result.dtypes["val"] == "int64"
+        assert df_result["val"].iloc[0] == 1
+        assert pd.isna(df_result["val"].iloc[1])  # type: ignore[arg-type]
+        assert df_result["val"].iloc[2] == 3
+        assert df_result["val"].iloc[3] == 4
+
+    def test_cast_object_series_all_valid_integers_from_object(self):
+        """Casting object column with all valid integers to int64."""
+        df = pd.DataFrame({"val": ["10", "20", "30"]})
+        frame = ar.from_pandas(df)
+        result = ar.cast_types(frame, {"val": "int64"})
+        df_result = ar.to_pandas(result)
+        assert result.dtypes["val"] == "int64"
+        assert list(df_result["val"]) == [10, 20, 30]
+
+    def test_cast_object_series_raises_on_invalid(self):
+        """Casting object column with invalid string raises TypeCastError."""
+        df = pd.DataFrame({"val": [1, 2, "not_a_number"]})
+        frame = ar.from_pandas(df)
+        with pytest.raises(ar.TypeCastError, match="Cannot cast column 'val'"):
+            ar.cast_types(frame, {"val": "int64"})
 
 
 def test_from_records_rejects_string_columns():

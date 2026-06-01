@@ -11,6 +11,8 @@ from pathlib import Path
 DOC_SUFFIXES = {".md", ".rst"}
 DOC_TEXT_SUFFIXES = {".txt"}
 DOC_DIRECTORIES = {"docs"}
+WEBSITE_TEXT_SUFFIXES = {".html", ".css", ".js"}
+WEBSITE_DIRECTORY = "website"
 SKIP_PARTS = {
     ".git",
     ".mypy_cache",
@@ -46,7 +48,11 @@ def _is_doc_file(path: Path) -> bool:
         return False
     if path.suffix.lower() in DOC_SUFFIXES:
         return True
-    return path.suffix.lower() in DOC_TEXT_SUFFIXES and path.parts[0] in DOC_DIRECTORIES
+    if path.suffix.lower() in DOC_TEXT_SUFFIXES and path.parts[0] in DOC_DIRECTORIES:
+        return True
+    return (
+        path.suffix.lower() in WEBSITE_TEXT_SUFFIXES and WEBSITE_DIRECTORY in path.parts
+    )
 
 
 def _candidate_files(paths: Iterable[Path]) -> list[Path]:

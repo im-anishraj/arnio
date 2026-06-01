@@ -109,20 +109,19 @@ class TestWriteCsv:
         with pytest.raises(TypeError, match="delimiter must be a string"):
             ar.write_csv(frame, str(tmp_path / "out.csv"), delimiter=1)
 
-    @pytest.mark.parametrize("delimiter", ["\n", "\r"])
-    def test_newline_delimiters_rejected(self, tmp_path, delimiter):
+    @pytest.mark.parametrize(
+        "delimiter",
+        [
+            pytest.param("\n", id="newline"),
+            pytest.param("\r", id="carriage-return"),
+            pytest.param("\0", id="NUL"),
+            pytest.param('"', id="double-quote"),
+        ],
+    )
+    def test_unsafe_delimiters_rejected(self, tmp_path, delimiter):
         frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
-        with pytest.raises(
-            ValueError, match="delimiter must not be a newline character"
-        ):
+        with pytest.raises(ValueError, match="delimiter"):
             ar.write_csv(frame, str(tmp_path / "out.csv"), delimiter=delimiter)
-
-    def test_quote_character_delimiter_rejected(self, tmp_path):
-        frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
-        with pytest.raises(
-            ValueError, match="delimiter must not be the CSV quote character"
-        ):
-            ar.write_csv(frame, str(tmp_path / "out.csv"), delimiter='"')
 
 
 class TestWriteCsvLineTerminatorBytes:

@@ -196,23 +196,26 @@ def _validate_decimal_separator(decimal_separator: str) -> str:
     return decimal_separator
 
 
-_INVALID_DELIMITERS: frozenset[str] = frozenset({"\n", "\r", "\0", '"'})
-
-
 def _validate_delimiter(delimiter: str) -> str:
     """Validate CSV delimiter."""
     if not isinstance(delimiter, str):
         raise TypeError("delimiter must be a string")
 
     if len(delimiter) != 1:
-        raise ValueError("delimiter must be exactly one character")
-
-    if delimiter in _INVALID_DELIMITERS:
         raise ValueError(
-            f"delimiter {delimiter!r} is not allowed; the following characters "
-            f"cannot be used as field delimiters: newline (\\n), "
-            f'carriage-return (\\r), NUL (\\0), double-quote (").'
+            "delimiter must be a single character; delimiter must be exactly one character"
         )
+
+    if delimiter in {"\n", "\r"}:
+        raise ValueError("delimiter must not be a newline character")
+
+    if delimiter == '"':
+        raise ValueError("delimiter must not be the CSV quote character")
+
+    cp = ord(delimiter)
+    if (cp <= 0x1F and cp != 0x09) or cp == 0x7F:  # 0x09 = tab, allowed
+        raise ValueError("delimiter must not be a control character")
+
     return delimiter
 
 
@@ -388,8 +391,14 @@ def _materialize_csv_input(
             tmp.close()
             return tmp.name, True, True
         except Exception:
-            tmp.close()
-            os.unlink(tmp.name)
+            try:
+                tmp.close()
+            except OSError:
+                pass
+            try:
+                os.unlink(tmp.name)
+            except OSError:
+                pass
             raise
 
     raise TypeError("read_csv expected a filesystem path or text file-like object")
@@ -410,10 +419,13 @@ def _reject_utf8_nul_bytes(path: str) -> None:
         _raise_csv_path_os_error(path, e)
 
 
-def _validate_csv_path(path: str, encoding: str) -> None:
+def _validate_csv_path(
+    path: str, encoding: str, *, reject_utf8_nul_bytes: bool = True
+) -> None:
     """Shared validation for CSV-style file inputs."""
 
-    if _is_utf8_encoding(encoding):
+    is_utf8 = _is_utf8_encoding(encoding)
+    if reject_utf8_nul_bytes and is_utf8:
         _reject_utf8_nul_bytes(path)
 
     try:
@@ -809,7 +821,7 @@ def read_csv_chunked(
                     "Only .csv, .txt, and .tsv are supported."
                 )
 
-        _validate_csv_path(path, encoding)
+        _validate_csv_path(path, encoding, reject_utf8_nul_bytes=False)
 
         # Resolve the sentinel: auto-detect tab for .tsv only when the caller
         # truly omitted delimiter (None).  An explicit delimiter="," is always
@@ -1008,18 +1020,7 @@ def write_csv(
             f"Unsupported file format: {path}. Only .csv, .txt, and .tsv are supported."
         )
 
-    if not isinstance(delimiter, str):
-        raise TypeError("delimiter must be a string")
-    if len(delimiter) != 1:
-        raise ValueError(f"delimiter must be a single character, got {delimiter!r}")
-    if delimiter in {"\n", "\r"}:
-        raise ValueError("delimiter must not be a newline character")
-    if delimiter == '"':
-        raise ValueError("delimiter must not be the CSV quote character")
-    if (ord(delimiter) < 32 or ord(delimiter) == 127) and delimiter != "\t":
-        raise ValueError(
-            f"delimiter must not be a control character, got {delimiter!r}"
-        )
+    delimiter = _validate_delimiter(delimiter)
     if not isinstance(line_terminator, str):
         raise TypeError("line_terminator must be a string")
     if line_terminator not in {"\n", "\r\n", "\r"}:
@@ -1040,7 +1041,7 @@ def write_csv(
 
 
 def scan_csv(
-    path: str | os.PathLike[str],
+    path: str | os.PathLike[str] | io.TextIOBase,
     *,
     delimiter: str | None = None,
     encoding: str = "utf-8",
@@ -1058,10 +1059,10 @@ def scan_csv(
 
     Parameters
     ----------
-    path : str
-        Path to the CSV file. Any file extension is accepted. For ``.tsv``
-        files, the delimiter is automatically set to ``'\t'`` when
-        ``delimiter`` is omitted.
+    path : str or file-like object
+        Filesystem path or text file-like object containing CSV data.
+        Any file extension is accepted. For ``.tsv`` files, the delimiter
+        is automatically set to ``'\t'`` when ``delimiter`` is omitted.
     delimiter : str or None, default None
         Field delimiter character.  When ``None`` (the default) the
         delimiter is inferred from the file extension: ``'\t'`` for
@@ -1135,46 +1136,48 @@ def scan_csv(
     >>> schema = ar.scan_csv("data.dat")              # non-standard extension accepted
     """
 
-    path = os.fspath(path)
+    path, should_cleanup, _ = _materialize_csv_input(path)
 
-    _validate_csv_path(path, encoding)
-
-    path_lower = path.lower()
-
-    # Resolve the sentinel: auto-detect tab for .tsv only when the caller
-    # truly omitted delimiter (None).  An explicit delimiter="," is always
-    # honoured, even for .tsv paths.
-    if delimiter is None:
-        delimiter = "\t" if path_lower.endswith(".tsv") else ","
-
-    decimal_separator = _validate_decimal_separator(decimal_separator)
-    _validate_thousands_separator(thousands_separator, decimal_separator)
-    delimiter = _validate_delimiter(delimiter)
-    encoding_errors = _validate_encoding_errors(encoding_errors)
-    mode = _validate_parser_mode(mode)
-    on_bad_lines = _validate_on_bad_lines(on_bad_lines)
-    config = _CsvConfig()
-    config.delimiter = delimiter
-    config.encoding = encoding
-    config.trim_headers = _validate_bool_option(trim_headers, "trim_headers")
-    config.decimal_separator = decimal_separator
-    config.thousands_separator = thousands_separator
-    config.has_header = _validate_bool_option(has_header, "has_header")
-    config.encoding_errors = encoding_errors
-    config.mode = mode
-
-    if null_values is not None:
-        config.null_values = _validate_null_values(null_values)
-
-    if sample_size is not None:
-        if not isinstance(sample_size, int) or isinstance(sample_size, bool):
-            raise TypeError("sample_size must be an integer.")
-        if sample_size <= 0:
-            raise ValueError("sample_size must be a positive integer greater than 0.")
-        config.sample_size = sample_size
-
-    reader = _CsvReader(config)
     try:
+        _validate_csv_path(path, encoding, reject_utf8_nul_bytes=False)
+
+        path_lower = path.lower()
+
+        # Resolve the sentinel: auto-detect tab for .tsv only when the caller
+        # truly omitted delimiter (None).  An explicit delimiter="," is always
+        # honoured, even for .tsv paths.
+        if delimiter is None:
+            delimiter = "\t" if path_lower.endswith(".tsv") else ","
+
+        decimal_separator = _validate_decimal_separator(decimal_separator)
+        _validate_thousands_separator(thousands_separator, decimal_separator)
+        delimiter = _validate_delimiter(delimiter)
+        encoding_errors = _validate_encoding_errors(encoding_errors)
+        mode = _validate_parser_mode(mode)
+        on_bad_lines = _validate_on_bad_lines(on_bad_lines)
+        config = _CsvConfig()
+        config.delimiter = delimiter
+        config.encoding = encoding
+        config.trim_headers = _validate_bool_option(trim_headers, "trim_headers")
+        config.decimal_separator = decimal_separator
+        config.thousands_separator = thousands_separator
+        config.has_header = _validate_bool_option(has_header, "has_header")
+        config.encoding_errors = encoding_errors
+        config.mode = mode
+
+        if null_values is not None:
+            config.null_values = _validate_null_values(null_values)
+
+        if sample_size is not None:
+            if not isinstance(sample_size, int) or isinstance(sample_size, bool):
+                raise TypeError("sample_size must be an integer.")
+            if sample_size <= 0:
+                raise ValueError(
+                    "sample_size must be a positive integer greater than 0."
+                )
+            config.sample_size = sample_size
+
+        reader = _CsvReader(config)
         # Schema inference only needs a sample, avoiding full-file transcode.
         # sample_rows is passed so _utf8_csv_path uses record-aware sampling
         # without rewriting decoded CSV text before native parsing.
@@ -1196,6 +1199,17 @@ def scan_csv(
             return cast(dict[str, str], schema)
     except RuntimeError as e:
         raise CsvReadError(str(e)) from None
+    finally:
+        if should_cleanup and os.path.exists(path):
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
+
+
+def _reject_non_finite(constant: str) -> None:
+    """Reject non-finite JSON constants (NaN, Infinity, -Infinity)."""
+    raise ValueError(f"Non-finite JSON constant not allowed: {constant!r}")
 
 
 def read_jsonl(
@@ -1298,14 +1312,24 @@ def read_jsonl(
                 if nrows is not None and len(records) >= nrows:
                     break
                 try:
-                    obj = json.loads(line, object_pairs_hook=_reject_duplicate_keys)
+                    obj = json.loads(
+                        line,
+                        object_pairs_hook=_reject_duplicate_keys,
+                        parse_constant=_reject_non_finite,
+                    )
                 except json.JSONDecodeError as exc:
                     raise JsonlReadError(
                         f"Invalid JSON on line {lineno} of {path!r}: {exc}"
                     ) from exc
                 except ValueError as exc:
+                    s = str(exc)
+                    prefix = (
+                        "Duplicate key"
+                        if s.startswith("duplicate key")
+                        else "Invalid value"
+                    )
                     raise JsonlReadError(
-                        f"Duplicate key on line {lineno} of {path!r}: {exc}"
+                        f"{prefix} on line {lineno} of {path!r}: {exc}"
                     ) from exc
                 if not isinstance(obj, dict):
                     raise JsonlReadError(

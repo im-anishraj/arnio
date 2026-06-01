@@ -338,6 +338,13 @@ def keep_rows_with_nulls(
     df = to_pandas(frame) if is_arframe else frame
 
     if subset is not None:
+        subset = _validate_column_sequence(subset, argument_name="subset")
+
+        if len(subset) == 0:
+            raise ValueError(
+                "keep_rows_with_nulls: subset cannot be empty; "
+                "pass subset=None to check all columns"
+            )
         cols = _validate_existing_column_sequence(
             subset,
             available_columns=df.columns,
@@ -416,6 +423,11 @@ def fill_nulls(
     """
     frame, _ = _validate_frame(frame)
     if subset is not None:
+        subset = _validate_column_sequence(subset, argument_name="subset")
+        if len(subset) == 0:
+            raise ValueError(
+                "fill_nulls: subset cannot be empty; pass subset=None to fill all columns"
+            )
         subset = _validate_existing_column_sequence(
             subset,
             available_columns=frame.columns,
@@ -463,6 +475,7 @@ def drop_duplicates(
     >>> unique = ar.drop_duplicates(frame, subset=["name"], keep="first")
     """
     frame, _ = _validate_frame(frame)
+
     if subset is not None:
         subset = _validate_column_sequence(subset, argument_name="subset")
         if len(subset) == 0:
@@ -483,6 +496,10 @@ def drop_duplicates(
     keep_arg = "none" if keep is False else keep
     if keep_arg not in {"first", "last", "none"}:
         raise ValueError("keep must be one of 'first', 'last', 'none', or False")
+    if frame.shape[1] == 0:
+        from ._core import _Frame
+
+        return ArFrame(_Frame.from_dict({}, {}, frame.shape[0]))
     result = _drop_duplicates(frame._frame, subset=subset, keep=keep_arg)
     return ArFrame(result)
 
@@ -868,14 +885,16 @@ def normalize_whitespace(frame, columns=None):
     df = to_pandas(frame) if is_arframe else frame.copy(deep=False)
 
     if columns is not None:
-        cols = list(columns)
-        missing = [c for c in cols if c not in df.columns]
-        if missing:
-            available = list(df.columns)
-            raise ValueError(
+        cols = _validate_existing_column_sequence(
+            columns,
+            available_columns=df.columns,
+            argument_name="columns",
+            missing_error=ValueError,
+            missing_message=lambda missing, available: (
                 f"Missing columns for normalize_whitespace: {missing}. "
                 f"Available columns: {available}"
-            )
+            ),
+        )
         cols = [c for c in cols if df[c].dtype in ("object", "string")]
     else:
         cols = list(df.select_dtypes(include=["object", "string"]).columns)
@@ -1301,12 +1320,30 @@ def cast_types(
     return ArFrame(result)
 
 
+def _append_clean_step(
+    steps: list[tuple],
+    name: str,
+    option: bool | dict,
+) -> None:
+    if option is False:
+        return
+
+    if option is True:
+        steps.append((name,))
+        return
+
+    if isinstance(option, Mapping):
+        steps.append((name, dict(option)))
+        return
+    raise TypeError(f"{name} must be bool or dict, got {type(option).__name__}")
+
+
 def clean(
     frame: ArFrame,
     *,
-    strip_whitespace: bool = True,
-    drop_nulls: bool = False,
-    drop_duplicates: bool = False,
+    strip_whitespace: bool | dict = True,
+    drop_nulls: bool | dict = False,
+    drop_duplicates: bool | dict = False,
 ) -> ArFrame:
     """Convenience function to apply common cleaning operations.
 
@@ -1319,12 +1356,15 @@ def clean(
     ----------
     frame : ArFrame
         Input data frame.
-    strip_whitespace : bool, default True
+    strip_whitespace : bool or dict, default True
         Whether to trim leading/trailing whitespace from string columns.
-    drop_nulls : bool, default False
+        Pass a dict to specify kwargs (e.g., {"subset": ["col1"]}).
+    drop_nulls : bool or dict, default False
         Whether to remove rows containing null/empty values.
-    drop_duplicates : bool, default False
+        Pass a dict to specify kwargs (e.g., {"subset": ["col2"]}).
+    drop_duplicates : bool or dict, default False
         Whether to remove duplicate rows.
+        Pass a dict to specify kwargs (e.g., {"keep": "last"}).
 
     Returns
     -------
@@ -1334,28 +1374,18 @@ def clean(
     Examples
     --------
     >>> frame = ar.read_csv("data.csv")
+    >>> # Basic boolean usage
     >>> cleaned = ar.clean(frame, strip_whitespace=True, drop_nulls=True)
+    >>> # Advanced dict configuration usage
+    >>> cleaned = ar.clean(frame, drop_duplicates={"keep": "last"})
     """
-    frame, _ = _validate_frame(frame)
-    if not isinstance(strip_whitespace, bool):
-        raise TypeError("strip_whitespace must be a bool")
-    if not isinstance(drop_nulls, bool):
-        raise TypeError("drop_nulls must be a bool")
-    if not isinstance(drop_duplicates, bool):
-        raise TypeError("drop_duplicates must be a bool")
-
     from .pipeline import pipeline
 
     steps = []
-    if strip_whitespace:
-        steps.append(("strip_whitespace",))
-    if drop_nulls:
-        steps.append(("drop_nulls",))
-    if drop_duplicates:
-        steps.append(("drop_duplicates",))
 
-    if not steps:
-        return frame
+    _append_clean_step(steps, "strip_whitespace", strip_whitespace)
+    _append_clean_step(steps, "drop_nulls", drop_nulls)
+    _append_clean_step(steps, "drop_duplicates", drop_duplicates)
 
     return pipeline(frame, steps)
 
@@ -1627,20 +1657,32 @@ def safe_divide_columns(
     frame, is_arframe = _validate_frame(frame, allow_pandas=True)
     columns = frame.columns
 
+    if not isinstance(numerator, str):
+        raise TypeError("numerator must be a string column name")
+
+    if not isinstance(denominator, str):
+        raise TypeError("denominator must be a string column name")
+
     if numerator not in columns:
         raise ValueError(f"Numerator column '{numerator}' not found in frame.")
+
     if denominator not in columns:
         raise ValueError(f"Denominator column '{denominator}' not found in frame.")
+
     if not isinstance(output_column, str) or not output_column.strip():
         raise ValueError("output_column must be a non-empty string.")
+
     if isinstance(fill_value, bool):
         raise TypeError("fill_value must be a finite float, not bool")
+
     if not isinstance(fill_value, (int, float)):
         raise TypeError(
             f"fill_value must be a finite float, got {type(fill_value).__name__!r}"
         )
+
     if not math.isfinite(fill_value):
         raise ValueError(f"fill_value must be finite, got {fill_value}")
+
     if output_column in columns:
         import warnings
 
@@ -1672,16 +1714,9 @@ def safe_divide_columns(
     numerator_series = df[numerator]
     denominator_series = df[denominator]
 
-    # Always coerce through pd.to_numeric so that numeric-looking strings
-    # ("0", "0.0", "2.5") are handled identically to their numeric equivalents.
-    # This fixes the bug where string "0" was not caught as a zero denominator.
     numerator_values = pd.to_numeric(numerator_series, errors="coerce")
     denominator_values = pd.to_numeric(denominator_series, errors="coerce")
 
-    # Distinguish null originals (None / pd.NA → use fill_value) from
-    # invalid non-null strings ("abc" → raise ValueError).
-    # A value is "bad" if pd.to_numeric produced NaN but the original was
-    # not null — i.e. it was a non-null, non-numeric string.
     bad_numerator = numerator_values.isna() & numerator_series.notna()
     bad_denominator = denominator_values.isna() & denominator_series.notna()
 
@@ -1690,17 +1725,17 @@ def safe_divide_columns(
         raise ValueError(
             f"Numerator column '{numerator}' contains non-numeric values: {bad_values}"
         )
+
     if bad_denominator.any():
         bad_values = df.loc[bad_denominator, denominator].head(3).tolist()
         raise ValueError(
             f"Denominator column '{denominator}' contains non-numeric values: {bad_values}"
         )
 
-    # Mask zero and null denominators — both numeric 0 and string "0" / "0.0"
-    # are caught here because denominator_values is already coerced to float.
     is_zero_or_null = denominator_values.isna() | (denominator_values == 0)
     safe_denom = denominator_values.mask(is_zero_or_null)
     result = numerator_values / safe_denom
+
     df = df.copy(deep=False)
     df[output_column] = result.fillna(fill_value)
 
@@ -1753,6 +1788,9 @@ def drop_columns_matching(frame, pattern):
     df = to_pandas(frame) if is_arframe else frame
 
     cols_to_drop = [col for col in df.columns if re.search(pattern, str(col))]
+
+    if len(df.columns) == 0:
+        return frame if is_arframe else df
 
     if len(cols_to_drop) == len(df.columns):
         raise ValueError(
@@ -1864,9 +1902,12 @@ def replace_values(
         ):
             normalized_mapping[k] = v
         else:
-            # pandas replace does not support non-scalar mapping keys like tuples
-            # and lists. Ignore those keys rather than raising a user-facing error.
-            continue
+            raise TypeError(
+                f"replace_values() does not support non-scalar mapping keys. "
+                f"Got key {k!r} of type '{type(k).__name__}'. "
+                f"Only scalar values (str, int, float, bool) and null-like keys "
+                f"(None, float('nan'), pd.NA, pd.NaT) are supported."
+            )
 
     if column:
         s = df[column]

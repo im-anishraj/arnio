@@ -50,22 +50,44 @@ jobs:
             | xargs clang-format-17 --dry-run --Werror
 
   cpp_tests:
-    name: C++ Native Tests (CMake + Catch2)
-    runs-on: ubuntu-latest
+    name: C++ Native Tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            shell: bash
+          - os: windows-latest
+            shell: bash
+          - os: macos-latest
+            shell: bash
+    defaults:
+      run:
+        shell: ${{ matrix.shell }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
-      - name: Install dependencies
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install native build dependencies
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq cmake ninja-build python3-dev
-          pip install pybind11
+          python -m pip install --upgrade pip
+          pip install pybind11 ninja
+
+      - name: Set up MSVC
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
       - name: Configure CMake
         run: |
-          cmake -S . -B build \
+          cmake -S . -B build -GNinja \
             -DCMAKE_BUILD_TYPE=Debug \
             -DARNIO_BUILD_CPP_TESTS=ON \
-            -DCMAKE_PREFIX_PATH=$(python3 -c "import pybind11; print(pybind11.get_cmake_dir())")
+            -DCMAKE_PREFIX_PATH="$(python -c 'import pybind11; print(pybind11.get_cmake_dir())')"
       - name: Build
         run: cmake --build build --parallel
       - name: Run C++ tests
@@ -129,14 +151,20 @@ jobs:
           pip install -e .[dev]
           pip install jupyter nbconvert ipykernel
 
-      - name: Execute notebook
+      - name: Execute notebooks
         run: |
           jupyter nbconvert \
             --to notebook \
             --execute \
             --ExecutePreprocessor.timeout=300 \
             examples/financial_csv_example.ipynb \
-            --output executed_notebook.ipynb
+            --output financial_csv_example.executed.ipynb
+          jupyter nbconvert \
+            --to notebook \
+            --execute \
+            --ExecutePreprocessor.timeout=300 \
+            examples/ignite_arnio_cleaning.ipynb \
+            --output ignite_arnio_cleaning.executed.ipynb
 
   sklearn_integration:
     name: scikit-learn Integration Tests

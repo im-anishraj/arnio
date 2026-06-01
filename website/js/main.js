@@ -31,22 +31,40 @@
     const mobileMenu = document.querySelector('.mobile-menu');
 
     if (hamburger && mobileMenu) {
+
+      function closeMobileMenu() {
+        mobileMenu.classList.remove('open');
+        hamburger.setAttribute('aria-expanded', 'false');
+        hamburger.setAttribute('aria-label', 'Open menu');
+        hamburger.innerHTML = '☰';
+        document.body.style.overflow = '';
+      }
+
       hamburger.addEventListener('click', function () {
         const isOpen = mobileMenu.classList.contains('open');
-        mobileMenu.classList.toggle('open');
-        hamburger.setAttribute('aria-expanded', !isOpen);
-        hamburger.innerHTML = isOpen ? '☰' : '✕';
-        document.body.style.overflow = isOpen ? '' : 'hidden';
+        if (isOpen) {
+          closeMobileMenu();
+        } else {
+          mobileMenu.classList.add('open');
+          hamburger.setAttribute('aria-expanded', 'true');
+          hamburger.setAttribute('aria-label', 'Close menu');
+          hamburger.innerHTML = '✕';
+          document.body.style.overflow = 'hidden';
+        }
       });
 
       // Close menu when clicking a link
       mobileMenu.querySelectorAll('a').forEach(function (link) {
         link.addEventListener('click', function () {
-          mobileMenu.classList.remove('open');
-          hamburger.setAttribute('aria-expanded', 'false');
-          hamburger.innerHTML = '☰';
-          document.body.style.overflow = '';
+          closeMobileMenu();
         });
+      });
+
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && mobileMenu.classList.contains('open')) {
+          closeMobileMenu();
+          hamburger.focus();
+        }
       });
     }
 
@@ -63,10 +81,17 @@
     document.querySelectorAll('a[href^="#"]').forEach(function (anchor) {
       anchor.addEventListener('click', function (e) {
         const target = document.querySelector(this.getAttribute('href'));
+
         if (target) {
           e.preventDefault();
-          target.scrollIntoView({ behavior: 'smooth' });
-          // Update URL without triggering scroll
+
+          const prefersReducedMotion =
+            window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+          target.scrollIntoView({
+            behavior: prefersReducedMotion ? 'auto' : 'smooth'
+          });
+
           history.pushState(null, '', this.getAttribute('href'));
         }
       });

@@ -44,6 +44,37 @@ class TestDropNulls:
 
 
 class TestKeepRowsWithNulls:
+    def test_pandas_input_empty_subset_raises(self):
+        df = pd.DataFrame({"name": ["Alice", None]})
+
+        with pytest.raises(ValueError, match="subset"):
+            ar.keep_rows_with_nulls(df, subset=[])
+
+    def test_pandas_input_empty_tuple_subset_raises(self):
+        df = pd.DataFrame({"name": ["Alice", None]})
+
+        with pytest.raises(ValueError, match="subset"):
+            ar.keep_rows_with_nulls(df, subset=())
+
+    def test_empty_subset_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"name": ["Alice", None]}))
+
+        with pytest.raises(ValueError, match="subset"):
+            ar.keep_rows_with_nulls(frame, subset=[])
+
+    def test_empty_tuple_subset_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"name": ["Alice", None]}))
+
+        with pytest.raises(ValueError, match="subset"):
+            ar.keep_rows_with_nulls(frame, subset=())
+
+    def test_subset_none_still_works(self):
+        frame = ar.from_pandas(pd.DataFrame({"name": ["Alice", None]}))
+
+        result = ar.keep_rows_with_nulls(frame)
+
+        assert result.shape[0] == 1
+
     def test_keeps_only_null_rows(self, csv_with_nulls):
         # full frame has 4 rows, 2 have nulls (row1: null name+score, row2: null age)
         frame = ar.read_csv(csv_with_nulls)
@@ -733,6 +764,21 @@ class TestDropDuplicates:
         # subset with NaN
         res_subset = ar.to_pandas(ar.drop_duplicates(frame, subset=["val1"]))
         assert len(res_subset) == 2
+
+    def test_drop_duplicates_zero_col_subset_none_preserves_rows(self):
+        frame = ar.from_pandas(pd.DataFrame(index=range(3)))
+        result = ar.drop_duplicates(frame)
+        assert result.shape == (3, 0)
+
+    def test_drop_duplicates_zero_col_empty_subset_raises(self):
+        frame = ar.from_pandas(pd.DataFrame(index=range(3)))
+        with pytest.raises(ValueError, match="subset cannot be empty"):
+            ar.drop_duplicates(frame, subset=[])
+
+    def test_drop_duplicates_zero_col_missing_column_raises(self):
+        frame = ar.from_pandas(pd.DataFrame(index=range(3)))
+        with pytest.raises(KeyError):
+            ar.drop_duplicates(frame, subset=["missing"])
 
 
 class TestDropColumns:
@@ -2692,47 +2738,115 @@ class TestCleanAPI:
         frame = ar.read_csv(csv_with_whitespace)
         result = ar.clean(frame)
         df = ar.to_pandas(result)
+
         # strip_whitespace is True by default
         assert df["name"].iloc[0] == "Alice"
         assert df["city"].iloc[1] == "London"
+
         # drop_nulls and drop_duplicates are False by default
         assert len(frame) == len(result)
 
     def test_clean_all(self, csv_with_nulls):
-        # reuse csv_with_nulls as it has a null row (Bob missing name)
+
         frame = ar.read_csv(csv_with_nulls)
-        # Drop nulls
-        result = ar.clean(frame, strip_whitespace=False, drop_nulls=True)
+
+        result = ar.clean(
+            frame,
+            strip_whitespace=False,
+            drop_nulls=True,
+        )
+
         assert len(result) < len(frame)
 
     @pytest.mark.parametrize("invalid_val", ["yes", 1, None, []])
     def test_clean_invalid_strip_whitespace(self, csv_with_whitespace, invalid_val):
         frame = ar.read_csv(csv_with_whitespace)
-        with pytest.raises(TypeError, match="strip_whitespace must be a bool"):
+        with pytest.raises(TypeError, match="strip_whitespace must be bool or dict"):
             ar.clean(frame, strip_whitespace=invalid_val)
 
     @pytest.mark.parametrize("invalid_val", ["yes", 1, None, []])
     def test_clean_invalid_drop_nulls(self, csv_with_whitespace, invalid_val):
         frame = ar.read_csv(csv_with_whitespace)
-        with pytest.raises(TypeError, match="drop_nulls must be a bool"):
+        with pytest.raises(TypeError, match="drop_nulls must be bool or dict"):
             ar.clean(frame, drop_nulls=invalid_val)
 
     @pytest.mark.parametrize("invalid_val", ["yes", 1, None, []])
     def test_clean_invalid_drop_duplicates(self, csv_with_whitespace, invalid_val):
         frame = ar.read_csv(csv_with_whitespace)
-        with pytest.raises(TypeError, match="drop_duplicates must be a bool"):
+        with pytest.raises(TypeError, match="drop_duplicates must be bool or dict"):
             ar.clean(frame, drop_duplicates=invalid_val)
 
-    def test_clean_valid_booleans(self, csv_with_whitespace):
-        frame = ar.read_csv(csv_with_whitespace)
-        # Should not raise
+    def test_clean_drop_nulls_with_subset(self):
+        frame = ar.from_dict(
+            {
+                "name": ["Alice", None, "Charlie"],
+                "age": [25, 30, None],
+            }
+        )
+
         result = ar.clean(
             frame,
-            strip_whitespace=True,
-            drop_nulls=False,
-            drop_duplicates=True,
+            drop_nulls={"subset": ["name"]},
         )
-        assert len(ar.to_pandas(result)) > 0
+
+        data = result.to_dict()
+
+        assert data["name"] == ["Alice", "Charlie"]
+        assert data["age"] == [25, None]
+
+    def test_clean_drop_duplicates_keep_last(self):
+        frame = ar.from_dict(
+            {
+                "id": [1, 1, 2],
+                "value": ["first", "last", "unique"],
+            }
+        )
+
+        result = ar.clean(
+            frame,
+            drop_duplicates={
+                "subset": ["id"],
+                "keep": "last",
+            },
+        )
+
+        data = result.to_dict()
+
+        assert data["id"] == [1, 2]
+        assert data["value"] == ["last", "unique"]
+
+    def test_clean_strip_whitespace_subset(self):
+        frame = ar.from_dict(
+            {
+                "name": ["  Alice  ", "  Bob  "],
+                "city": ["  NYC  ", "  LA  "],
+            }
+        )
+
+        result = ar.clean(
+            frame,
+            strip_whitespace={"subset": ["name"]},
+        )
+
+        data = result.to_dict()
+
+        assert data["name"] == ["Alice", "Bob"]
+
+        # city should remain untouched
+        assert data["city"] == ["  NYC  ", "  LA  "]
+
+    def test_clean_invalid_option_type(self):
+        frame = ar.from_dict(
+            {
+                "name": ["Alice"],
+            }
+        )
+
+        with pytest.raises(TypeError):
+            ar.clean(
+                frame,
+                drop_nulls="invalid",
+            )
 
 
 class TestFilterRows:
@@ -2904,31 +3018,41 @@ class TestReplaceValues:
     def test_replace_values_tuple_mapping_key_does_not_crash(self):
         frame = ar.from_pandas(pd.DataFrame({"col": ["A", "B", "C"]}))
 
-        result = ar.replace_values(
-            frame,
-            {("A", "B"): "X"},
-            column="col",
-        )
-
-        df = ar.to_pandas(result)
-
-        assert list(df["col"]) == ["A", "B", "C"]
+        with pytest.raises(TypeError, match="non-scalar mapping keys"):
+            ar.replace_values(
+                frame,
+                {("A", "B"): "X"},
+                column="col",
+            )
 
     def test_replace_values_mixed_tuple_and_null_keys(self):
         frame = ar.from_pandas(pd.DataFrame({"col": ["A", np.nan, "C"]}))
 
-        result = ar.replace_values(
-            frame,
-            {
-                ("A", "B"): "X",
-                np.nan: "missing",
-            },
-            column="col",
-        )
+        with pytest.raises(TypeError, match="non-scalar mapping keys"):
+            ar.replace_values(
+                frame,
+                {
+                    ("A", "B"): "X",
+                    np.nan: "missing",
+                },
+                column="col",
+            )
 
+    def test_replace_values_error_message_includes_key_type(self):
+        """TypeError message must name the offending key type."""
+        frame = ar.from_pandas(pd.DataFrame({"col": ["A"]}))
+
+        with pytest.raises(TypeError, match="tuple"):
+            ar.replace_values(frame, {(1, 2): "X"})
+
+    def test_replace_values_scalar_keys_still_work_after_validation(self):
+        """Valid scalar mappings must be completely unaffected by the new check."""
+        frame = ar.from_pandas(pd.DataFrame({"col": ["A", "B", "C"]}))
+
+        result = ar.replace_values(frame, {"A": "Z"}, column="col")
         df = ar.to_pandas(result)
 
-        assert list(df["col"]) == ["A", "missing", "C"]
+        assert list(df["col"]) == ["Z", "B", "C"]
 
     def test_replace_values_pandas_dataframe_input_returns_dataframe(self):
         df = pd.DataFrame({"status": ["active", "inactive"], "flag": ["ok", "ok"]})
@@ -3372,6 +3496,47 @@ class TestSafeDivideColumns:
                 denominator="nonexistent",
                 output_column="ratio",
             )
+
+    def test_numerator_must_be_string(self, tmp_path):
+        path = tmp_path / "data.csv"
+        path.write_text("revenue,cost\n100,50\n")
+        frame = ar.read_csv(path)
+
+        with pytest.raises(TypeError, match="numerator must be a string column name"):
+            ar.safe_divide_columns(
+                frame,
+                numerator=123,
+                denominator="cost",
+                output_column="ratio",
+            )
+
+    def test_denominator_must_be_string(self, tmp_path):
+        path = tmp_path / "data.csv"
+        path.write_text("revenue,cost\n100,50\n")
+        frame = ar.read_csv(path)
+
+        with pytest.raises(TypeError, match="denominator must be a string column name"):
+            ar.safe_divide_columns(
+                frame,
+                numerator="revenue",
+                denominator=None,
+                output_column="ratio",
+            )
+
+    def test_valid_string_columns_still_work(self, tmp_path):
+        path = tmp_path / "data.csv"
+        path.write_text("revenue,cost\n100,50\n")
+        frame = ar.read_csv(path)
+
+        result = ar.safe_divide_columns(
+            frame,
+            numerator="revenue",
+            denominator="cost",
+            output_column="ratio",
+        )
+
+        df = ar.to_pandas(result)
+        assert df["ratio"].iloc[0] == 2.0
 
     def test_output_column_already_exists(self, tmp_path):
         import warnings
@@ -3916,6 +4081,20 @@ def test_drop_columns_matching_all_columns():
         ar.drop_columns_matching(df, ".*")
 
 
+def test_drop_columns_matching_zero_column_pandas():
+    df = pd.DataFrame(index=range(2))
+    result = ar.drop_columns_matching(df, "^tmp")
+    assert isinstance(result, pd.DataFrame)
+    assert result.shape == (2, 0)
+
+
+def test_drop_columns_matching_zero_column_arframe():
+    frame = ar.from_pandas(pd.DataFrame(index=range(2)))
+    result = ar.drop_columns_matching(frame, "^tmp")
+    assert isinstance(result, ar.ArFrame)
+    assert result.shape == (2, 0)
+
+
 def test_fill_nulls_validation_lossy_and_non_finite():
     """
     Ensure that fill_nulls rejects non-finite values and lossy float-to-int conversions
@@ -4001,6 +4180,20 @@ def test_fill_nulls_validation_lossy_and_non_finite():
         ar.pipeline(
             float_frame, [("fill_nulls", {"value": float("inf"), "subset": ["x"]})]
         )
+
+
+def test_fill_nulls_empty_subset_raises():
+    frame = ar.from_pandas(pd.DataFrame({"a": [1, None], "b": [None, 2]}))
+    with pytest.raises(ValueError, match="subset cannot be empty"):
+        ar.fill_nulls(frame, 0, subset=[])
+
+
+def test_fill_nulls_none_subset_fills_all():
+    frame = ar.from_pandas(pd.DataFrame({"a": [1, None], "b": [None, 2]}))
+    result = ar.fill_nulls(frame, 0, subset=None)
+    df = ar.to_pandas(result)
+    assert df["a"].tolist() == [1.0, 0.0]
+    assert df["b"].tolist() == [0.0, 2.0]
 
 
 class TestSelectColumns:

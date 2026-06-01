@@ -263,21 +263,21 @@ def test_set_valued_allowed_normalized():
 
 
 def test_real_schema_field_dtype():
-    schema = ar.Schema({"price": ar.Field(dtype="FLOAT64", nullable=False)})
+    schema = ar.Schema({"price": ar.Field(dtype="float64", nullable=False)})
     result = schema_to_dict(schema)
-    assert result["fields"]["price"]["dtype"] == "FLOAT64"
+    assert result["fields"]["price"]["dtype"] == "float64"
     assert result["fields"]["price"]["nullable"] is False
 
 
 def test_real_schema_field_allowed_set_normalized():
-    schema = ar.Schema({"status": ar.Field(dtype="STRING", allowed={"a", "b", "c"})})
+    schema = ar.Schema({"status": ar.Field(dtype="string", allowed={"a", "b", "c"})})
     result = schema_to_dict(schema)
     assert result["fields"]["status"]["allowed"] == ["a", "b", "c"]
 
 
 def test_real_schema_field_required_if_tuple_normalized():
     schema = ar.Schema(
-        {"col": ar.Field(dtype="STRING", required_if=("other_col", "yes"))}
+        {"col": ar.Field(dtype="string", required_if=("other_col", "yes"))}
     )
     result = schema_to_dict(schema)
     assert isinstance(result["fields"]["col"]["required_if"], list)
@@ -286,7 +286,7 @@ def test_real_schema_field_required_if_tuple_normalized():
 
 def test_real_schema_field_datetime_bounds():
     schema = ar.Schema(
-        {"ts": ar.Field(dtype="DATETIME", min="2020-01-01", max="2025-12-31")}
+        {"ts": ar.Field(dtype="datetime", min="2020-01-01", max="2025-12-31")}
     )
     result = schema_to_dict(schema)
     assert "datetime_min" in result["fields"]["ts"]
@@ -296,7 +296,7 @@ def test_real_schema_field_datetime_bounds():
 
 
 def test_real_schema_with_rules_raises():
-    schema = ar.Schema({"col": ar.Field(dtype="STRING")}, rules=[lambda df: []])
+    schema = ar.Schema({"col": ar.Field(dtype="string")}, rules=[lambda df: []])
     with pytest.raises(ValueError, match="rules"):
         schema_to_dict(schema)
 
@@ -346,9 +346,9 @@ def test_schema_object_fields_named_strict_and_unique_not_dropped():
     """Schema object: fields named strict/unique survive alongside schema metadata."""
     schema = ar.Schema(
         {
-            "strict": ar.Field(dtype="INT64"),
-            "unique": ar.Field(dtype="STRING"),
-            "name": ar.Field(dtype="STRING"),
+            "strict": ar.Field(dtype="int64"),
+            "unique": ar.Field(dtype="string"),
+            "name": ar.Field(dtype="string"),
         },
         strict=True,
         unique=["name"],

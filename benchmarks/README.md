@@ -57,7 +57,7 @@ Reviewers can compare the printed outputs directly across three key categories:
 
 1. **Correctness Verification**: The benchmark script automatically runs a strict correctness check (`assert_frame_equal`) ensuring that both pandas and Arnio pipelines produce identical values for each dataset.
 2. **Speed Parity**: Compare the average elapsed time (seconds) for each step (e.g., `read_csv`, `clean_strings`, `drop_nulls`, `drop_duplicates`).
-3. **Memory Footprint**: Compare the **Peak RSS** (Resident Set Size) and **Peak Traced Memory** (MB). Because Arnio uses columnar storage, it maintains a highly optimized memory footprint compared to pandas.
+3. **Memory Footprint**: Compare the **Peak RSS** (Resident Set Size) and **Peak Traced Memory** (MB). Memory usage can vary depending on workload, environment, and dataset characteristics. Use these measurements to compare behavior on your own system and validate results against reproducible benchmark runs.
 
 ### System Information Log
 When sharing benchmark results in an issue or PR comment, please copy the complete terminal log and include:

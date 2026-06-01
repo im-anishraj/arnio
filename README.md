@@ -36,6 +36,10 @@ pip install arnio
 ```
 
 Colab install smoke test: **[COLAB_SMOKE_TEST.md](COLAB_SMOKE_TEST.md)**
+**Interactive Notebooks:**
+[![Basic Usage](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/im-anishraj/arnio/blob/main/examples/basic_usage.ipynb)
+[![Pandas Interop](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/im-anishraj/arnio/blob/main/examples/arnio_with_pandas.ipynb)
+[![Schema Validation](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/im-anishraj/arnio/blob/main/examples/schema_validation.ipynb)
 
 <br>
 
@@ -618,7 +622,7 @@ not to replace it.
 
 ### DuckDB registration
 
-Use `ar.register_duckdb(frame, conn, "table_name")` to register an ArFrame directly as a DuckDB relation without writing pandas conversion glue yourself. DuckDB is an optional dependency — install it with `pip install duckdb` when needed.
+Use `ar.register_duckdb(frame, conn, "table_name")` to register an ArFrame directly as a DuckDB relation without writing pandas conversion glue yourself. DuckDB is an optional dependency — install it with `pip install "arnio[duckdb]"` when needed. You can also install DuckDB directly with `pip install duckdb`.
 
 For development and CI, `pip install -e ".[dev]"` now includes DuckDB so the integration test module in `tests/test_integrations_duckdb.py` runs in the default test job.
 
@@ -967,7 +971,7 @@ Most operations below run natively in C++. Currently, `filter_rows`, `replace_va
 | `cast_types` | Cast column types with `errors="raise"`, `"coerce"`, or `"ignore"` | `ar.cast_types(frame, {"age": "int64"}, errors="raise")` |
 | `round_numeric_columns` | Round numeric columns (non-numeric columns in subset ignored safely) | `ar.round_numeric_columns(frame, decimals=2)` |
 | `replace_values` | Replace values using a mapping (column or whole-frame). Handles `None`/`NaN`. | `ar.replace_values(frame, {"active": "A", "inactive": "I"}, column="status")` |
-| `clean` | Convenience shorthand | `ar.clean(frame, drop_nulls=True)` |
+| `clean` | Convenience shorthand supporting config dicts | `ar.clean(frame, strip_whitespace={"subset": ["name"]}, drop_nulls=True)` |
 | `safe_divide_columns` | Divide one column by another, handling zero/null denominators | `ar.safe_divide_columns(frame, numerator="revenue", denominator="cost", output_column="ratio")` |
 | `drop_columns_matching` | Drop columns whose names match a regex pattern | `ar.drop_columns_matching(frame, pattern="^temp_")` |
 | `trim_column_names` | Strip leading/trailing whitespace from column names | `ar.trim_column_names(frame)` |
@@ -1824,8 +1828,8 @@ Most new features are pure Python pipeline steps:
 
 ```python
 # 1. Write a function that takes a DataFrame and returns a DataFrame
-def remove_special_chars(df, columns=None):
-    cols = columns or df.select_dtypes("object").columns
+def remove_special_chars(df, subset=None):
+    cols = subset or df.select_dtypes("object").columns
     for col in cols:
         df[col] = df[col].str.replace(r"[^a-zA-Z0-9\s]", "", regex=True)
     return df
@@ -2022,7 +2026,7 @@ arnio/
 ├── tests/                   # pytest suite — CSV, cleaning, pipeline, conversions
 ├── benchmarks/              # Reproducible arnio vs pandas benchmark
 ├── examples/                # basic_usage.py, auto_clean_tutorial.py, custom_step.py and ready to run recipes for sales, customers, survey, logs, finance
-└── website/                 # Project website — arniolib.vercel.app
+└── website/                 # Project website — arnio.vercel.app
 ```
 
 <br>
@@ -2047,7 +2051,7 @@ arnio/
 <a href="https://pypi.org/project/arnio/"><img src="https://img.shields.io/pypi/dm/arnio?style=flat-square&logo=pypi&logoColor=white&labelColor=0d1117&color=3572A5&label=installs" alt="Downloads"></a>&ensp;
 <a href="https://github.com/im-anishraj/arnio/stargazers"><img src="https://img.shields.io/github/stars/im-anishraj/arnio?style=flat-square&logo=github&labelColor=0d1117&color=e3b341&label=stars" alt="Stars"></a>&ensp;
 <a href="https://github.com/im-anishraj/arnio/network/members"><img src="https://img.shields.io/github/forks/im-anishraj/arnio?style=flat-square&logo=github&labelColor=0d1117&color=8b949e&label=forks" alt="Forks"></a>&ensp;
-<a href="https://arniolib.vercel.app/"><img src="https://img.shields.io/badge/website-arniolib.vercel.app-blue?style=flat-square&labelColor=0d1117" alt="Website"></a>&ensp;
+<a href="https://arnio.vercel.app/"><img src="https://img.shields.io/badge/website-arnio.vercel.app-blue?style=flat-square&labelColor=0d1117" alt="Website"></a>&ensp;
 <a href="https://discord.gg/xsEw7r78M"><img src="https://img.shields.io/badge/community-Discord-5865F2?style=flat-square&logo=discord&logoColor=white&labelColor=0d1117" alt="Discord"></a>
 
 <br>

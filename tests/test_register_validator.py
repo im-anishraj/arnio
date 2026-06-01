@@ -51,12 +51,12 @@ class TestRegisterValidator:
 
     def test_raises_value_error_when_name_is_empty_string(self):
         """register_validator raises ValueError when name is empty string."""
-        with pytest.raises(ValueError, match="non-empty string"):
+        with pytest.raises(ValueError, match="non-empty, non-whitespace string"):
             register_validator("", lambda x: True)
 
     def test_raises_value_error_when_name_is_not_string(self):
         """register_validator raises ValueError when name is not a string."""
-        with pytest.raises(ValueError, match="non-empty string"):
+        with pytest.raises(ValueError, match="non-empty, non-whitespace string"):
             register_validator(123, lambda x: True)
 
     def test_duplicate_validator_requires_explicit_overwrite(self):
@@ -318,6 +318,25 @@ class TestCustomValidatorReturnNormalization:
         with pytest.raises(TypeError, match="returns_str"):
             ar.validate(frame, {"x": ar.Custom("returns_str")})
 
+    def test_validator_exception_includes_schema_context(self):
+        """A validator exception is wrapped with column and validator context."""
+
+        def raises_for_value(value):
+            raise RuntimeError(f"bad value: {value}")
+
+        register_validator("raises_for_value", raises_for_value)
+        frame = ar.from_pandas(pd.DataFrame({"score": [42]}))
+
+        with pytest.raises(ar.ArnioError) as exc_info:
+            ar.validate(frame, {"score": ar.Custom("raises_for_value")})
+
+        message = str(exc_info.value)
+        assert "raises_for_value" in message
+        assert "score" in message
+        assert "42" in message
+        assert isinstance(exc_info.value.__cause__, RuntimeError)
+        assert str(exc_info.value.__cause__) == "bad value: 42"
+
     def test_mixed_true_false_none_pd_na(self):
         """Mixed True/False/None/pd.NA: only True rows pass, others fail."""
 
@@ -351,27 +370,57 @@ class TestCustomValidatorNameValidation:
         schema._CUSTOM_VALIDATORS.clear()
         schema._CUSTOM_VALIDATORS.update(self._original_validators)
 
-    def test_raises_value_error_when_name_is_empty_string(self):
+    def test_raises_type_error_when_name_is_empty_string(self):
         """Custom raises ValueError when name is an empty string."""
-        with pytest.raises(ValueError, match="non-empty string"):
+        with pytest.raises(
+            ValueError, match="The validator name cannot be an empty string."
+        ):
             Custom("")
 
-    def test_raises_value_error_when_name_is_integer(self):
-        """Custom raises ValueError when name is an integer."""
-        with pytest.raises(ValueError, match="non-empty string"):
+    def test_raises_type_error_when_name_is_integer(self):
+        """Custom raises TypeError when name is an integer."""
+        with pytest.raises(TypeError, match="The validator name must be a string."):
             Custom(123)
 
-    def test_raises_value_error_when_name_is_none(self):
-        """Custom raises ValueError when name is None."""
-        with pytest.raises(ValueError, match="non-empty string"):
+    def test_raises_type_error_when_name_is_none(self):
+        """Custom raises TypeError when name is None."""
+        with pytest.raises(TypeError, match="The validator name must be a string."):
             Custom(None)
 
-    def test_raises_value_error_when_name_is_list(self):
-        """Custom raises ValueError when name is a list."""
-        with pytest.raises(ValueError, match="non-empty string"):
+    def test_raises_type_error_when_name_is_list(self):
+        """Custom raises TypeError when name is a list."""
+        with pytest.raises(TypeError, match="The validator name must be a string."):
             Custom(["my_validator"])
 
     def test_valid_name_still_raises_when_unregistered(self):
         """A valid string name that isn't registered raises the registry error, not the name error."""
         with pytest.raises(ValueError, match="No validator registered"):
             Custom("unregistered_name_xyz")
+
+
+class TestRegisterValidatorNameValidation:
+    """Input-validation tests for register_validator() name parameter."""
+
+    def test_rejects_empty_string(self):
+        with pytest.raises(ValueError, match="non-empty, non-whitespace"):
+            ar.register_validator("", lambda v: True)
+
+    def test_rejects_space_only(self):
+        with pytest.raises(ValueError, match="non-empty, non-whitespace"):
+            ar.register_validator(" ", lambda v: True)
+
+    def test_rejects_tab_only(self):
+        with pytest.raises(ValueError, match="non-empty, non-whitespace"):
+            ar.register_validator("\t", lambda v: True)
+
+    def test_rejects_mixed_whitespace(self):
+        with pytest.raises(ValueError, match="non-empty, non-whitespace"):
+            ar.register_validator("  \t  \n  ", lambda v: True)
+
+    def test_rejects_non_string(self):
+        with pytest.raises((ValueError, TypeError)):
+            ar.register_validator(123, lambda v: True)
+
+    def test_accepts_valid_name(self):
+        # Should not raise
+        ar.register_validator("positive", lambda v: v > 0)
