@@ -820,12 +820,16 @@ def winsorize_outliers(
         )
 
         # 2. Check if the original column type was an integer format
+
         orig_dtype_str = str(df[column].dtype)
         is_integer_type = orig_dtype_str.startswith(("int", "uint"))
 
-        if is_integer_type and lower_bound.is_integer() and upper_bound.is_integer():
-            # Safely cast back to the exact original integer format when bounds are exact integers
-            df[column] = clipped_series.astype(orig_dtype_str)
+        if (
+            is_integer_type
+            and np.isclose(lower_bound, round(lower_bound))
+            and np.isclose(upper_bound, round(upper_bound))
+        ):
+            df[column] = clipped_series.round().astype(orig_dtype_str)
         else:
             df[column] = clipped_series
 
