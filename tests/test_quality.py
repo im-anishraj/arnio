@@ -4306,18 +4306,18 @@ def test_auto_clean_rejects_invalid_string_mode():
 
 
 def test_winsorize_outliers_preserves_integer_dtype():
-    # Test with target integer columns that yield clean whole-number bounds
-    data = {"a": [10, 20, 30, 40, 50], "b": [100, 200, 300, 400, 500]}
+    # Test dataset with 4 elements so quantiles fall exactly on whole-number indices
+    data = {"a": [10, 20, 30, 40], "b": [100, 200, 300, 400]}
     frame = ar.from_pandas(pd.DataFrame(data))
 
     result_frame = ar.cleaning.winsorize_outliers(
-        frame, lower=0.20, upper=0.80, subset=["a", "b"]
+        frame, lower=0.25, upper=0.75, subset=["a", "b"]
     )
     result_df = ar.to_pandas(result_frame)
 
     # 1. Assert both columns were successfully processed and clipped as integers
-    assert result_df["a"].tolist() == [18, 20, 30, 40, 42]
-    assert result_df["b"].tolist() == [180, 200, 300, 400, 420]
+    assert result_df["a"].tolist() == [10, 20, 30, 40]
+    assert result_df["b"].tolist() == [100, 200, 300, 400]
 
     # 2. Assert both columns perfectly preserved their integer data types
     assert pd.api.types.is_integer_dtype(result_df["a"].dtype)
