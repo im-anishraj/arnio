@@ -440,7 +440,6 @@ def _validate_encoding_errors(value: str) -> str:
     return value
 
 
-
 @dataclass(frozen=True)
 class CSVProgress:
     rows_read: int
@@ -628,7 +627,9 @@ def read_csv(
             if progress_interval_rows <= 0:
                 raise ValueError("progress_interval_rows must be a positive integer")
 
-            def wrapper(rows: int, bytes_read: int, total_bytes: int | None, is_done: bool):
+            def wrapper(
+                rows: int, bytes_read: int, total_bytes: int | None, is_done: bool
+            ):
                 box = CSVProgress(
                     rows_read=rows,
                     bytes_read=bytes_read,
@@ -867,7 +868,9 @@ def read_csv_chunked(
             last_bytes = 0
             last_total = 0
 
-            def wrapper(rows: int, bytes_read: int, total_bytes: int | None, is_done: bool):
+            def wrapper(
+                rows: int, bytes_read: int, total_bytes: int | None, is_done: bool
+            ):
                 nonlocal last_rows, last_bytes, last_total
                 last_rows = rows
                 last_bytes = bytes_read
@@ -926,7 +929,6 @@ def read_csv_chunked(
                 if frame.shape[0] == 0 and bad_rows:
                     if yielded_nonempty_chunk:
                         continue
-
 
                 yielded_nonempty_chunk = yielded_nonempty_chunk or frame.shape[0] > 0
 
