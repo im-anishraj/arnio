@@ -821,9 +821,11 @@ def winsorize_outliers(
             upper=upper_bound,
         )
 
-        # 2. Check if the original column type was an integer or an Arnio integer type helper
         if pd.api.types.is_integer_dtype(orig_dtype):
-            df[column] = clipped_series.astype(orig_dtype)
+            # Convert values via the underlying numpy array to bypass the pandas 'safe' rule check
+            df[column] = pd.Series(
+                clipped_series.to_numpy(), dtype=orig_dtype, index=df.index
+            )
         else:
             df[column] = clipped_series
 
