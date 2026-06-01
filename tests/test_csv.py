@@ -3072,6 +3072,8 @@ def test_read_csv_progress_hook_payload_and_done(tmp_path):
     assert isinstance(payloads[0], CSVProgress)
     assert payloads[-1].done is True
     assert payloads[-1].rows_read == 3
+
+
 # --- Tests for scan_csv file-like input support (issue #1842) ---
 
 
