@@ -71,6 +71,7 @@ allowed_root_names = {
     "setup.py",
     ".gitignore",
     ".clang-format",
+    ".editorconfig",
     ".pre-commit-config.yaml",
 }
 
