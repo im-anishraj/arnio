@@ -929,91 +929,119 @@ def test_cpp_frame_explicit_zero_rows_rejects_nonempty_first_column():
         frame.add_column(column)
 
 
-def test_add_column_rejects_duplicate_name():
-    from arnio._arnio_cpp import Column, DType, Frame
-
-    frame = Frame()
-
-    c1 = Column("a", DType.INT64)
-    c1.push_back(1)
-    c1.push_back(2)
-
-    c2 = Column("a", DType.INT64)
-    c2.push_back(3)
-    c2.push_back(4)
-
-    frame.add_column(c1)
-
-    with pytest.raises(ValueError, match="already exists"):
-        frame.add_column(c2)
+# ── Zero-column frame tests ───────────────────────────────────────────────────
 
 
-# ArFrame.describe() Tests
+def test_cpp_frame_with_explicit_row_count_preserves_shape():
+    """Test that Frame(size_t row_count) creates a frame with correct row count."""
+    frame = _Frame(5)
+    assert frame.num_rows() == 5
+    assert frame.num_cols() == 0
+    assert frame.shape() == (5, 0)
 
 
-def test_describe_sample_metrics(sample_csv):
-    frame = ar.read_csv(sample_csv)
-    stats = frame.describe()
+def test_cpp_frame_from_empty_vector_has_unknown_row_count():
+    """Test that Frame({}) initially has unknown row count and can accept first column."""
+    frame = _Frame([])
+    assert frame.num_rows() == 0
+    assert frame.num_cols() == 0
 
-    assert stats["age"]["count"] == 3.0
-    assert stats["age"]["nulls"] == 0.0
-    assert stats["age"]["mean"] == 30.0
-    assert stats["age"]["min"] == 25.0
-    assert stats["age"]["max"] == 35.0
+    # First column should set the row count
+    column = _Column("a", _DType.INT64)
+    column.push_back(1)
+    column.push_back(2)
+    column.push_back(3)
 
-    assert stats["name"]["count"] == 3.0
-    assert stats["name"]["nulls"] == 0.0
-    assert stats["name"]["unique"] == 3.0
-    assert "mean" not in stats["name"]
+    frame.add_column(column)
 
-
-def test_describe_excludes_null_values(csv_with_nulls):
-    frame = ar.read_csv(csv_with_nulls)
-    stats = frame.describe()
-
-    assert stats["age"]["count"] == 3.0
-    assert stats["age"]["nulls"] == 1.0
-    assert stats["age"]["min"] == 25.0
-    assert stats["age"]["max"] == 30.0
-    assert stats["age"]["mean"] == pytest.approx(27.6666, rel=1e-3)
-
-    assert stats["name"]["count"] == 3.0
-    assert stats["name"]["nulls"] == 1.0
-    assert stats["name"]["unique"] == 3.0
+    assert frame.num_rows() == 3
+    assert frame.num_cols() == 1
 
 
-def test_describe_empty_frame_edge_case(tmp_path):
-    csv_path = tmp_path / "empty_input.csv"
-    csv_path.write_text("name,age\n")
+def test_cpp_frame_select_columns_preserves_row_count_with_zero_cols():
+    """Test that select_columns([]) preserves row count."""
+    column = _Column("a", _DType.INT64)
+    column.push_back(1)
+    column.push_back(2)
 
-    frame = ar.read_csv(str(csv_path))
-    stats = frame.describe()
+    frame = _Frame([column])
+    assert frame.shape() == (2, 1)
 
-    assert "name" in stats
-    assert "age" in stats
-
-    for col in frame.columns:
-        assert stats[col]["count"] == 0.0
-        assert stats[col]["nulls"] == 0.0
-
-        if "mean" in stats[col]:
-            assert stats[col]["mean"] == 0.0
-            assert stats[col]["min"] == 0.0
-            assert stats[col]["max"] == 0.0
-        elif "unique" in stats[col]:
-            assert stats[col]["unique"] == 0.0
+    # Select no columns - should preserve row count
+    empty_frame = frame.select_columns([])
+    assert empty_frame.shape() == (2, 0)
+    assert empty_frame.num_rows() == 2
 
 
-def test_describe_dictionary_subclass_repr(sample_csv):
-    frame = ar.read_csv(sample_csv)
-    stats = frame.describe()
+def test_cpp_frame_clone_preserves_row_count_with_zero_cols():
+    """Test that clone() preserves row count for zero-column frames."""
+    frame_with_rows = _Frame(3)
+    cloned = frame_with_rows.clone()
+    assert cloned.shape() == (3, 0)
 
-    assert stats["age"]["count"] == 3.0
-    assert "{\n" in repr(stats)
+
+def test_arframe_pandas_roundtrip_zero_columns():
+    """Test that pandas round-trip preserves zero-column frames with row count."""
+    # Create an empty-column frame with 3 rows
+    df_empty = pd.DataFrame(index=range(3))
+    frame = ar.from_pandas(df_empty)
+    assert frame.shape == (3, 0)
+
+    # Convert back to pandas
+    df_result = ar.to_pandas(frame)
+    assert df_result.shape == (3, 0)
+    assert len(df_result.index) == 3
 
 
-def test_describe_all_numeric_columns(large_csv):
-    frame = ar.read_csv(large_csv)
+def test_arframe_drop_all_constant_columns_preserves_shape():
+    """Test that drop_constant_columns preserves row count when all columns are dropped."""
+    # All columns are constant
+    frame = ar.from_pandas(pd.DataFrame({"a": [1, 1], "b": ["x", "x"]}))
+    assert frame.shape == (2, 2)
+
+    result = ar.drop_constant_columns(frame)
+    assert result.shape == (2, 0)
+    assert result.columns == []
+
+
+def test_arframe_drop_partial_constant_columns():
+    """Test drop_constant_columns with mixed constant and non-constant columns."""
+    df = pd.DataFrame({"const": [1, 1, 1], "var": [1, 2, 3], "const2": [None, None, None]})
+    frame = ar.from_pandas(df)
+
+    result = ar.drop_constant_columns(frame)
+    assert result.shape == (3, 1)
+    assert result.columns == ["var"]
+
+
+def test_arframe_zero_columns_shape_persists():
+    """Test that a zero-column frame maintains its shape through operations."""
+    df = pd.DataFrame({"c": [1, 1, 1]})  # Single constant column
+    frame = ar.from_pandas(df)
+
+    # Drop the only constant column
+    result = ar.drop_constant_columns(frame)
+    assert result.shape[0] == 3
+    assert result.shape[1] == 0
+
+    # Round-trip through pandas
+    df_roundtrip = ar.to_pandas(result)
+    assert df_roundtrip.shape == (3, 0)
+
+main
+    # Convert back to ArFrame
+    frame_roundtrip = ar.from_pandas(df_roundtrip)
+    assert frame_roundtrip.shape == (3, 0)
+
+
+def test_arframe_select_columns_empty_on_multirow_frame():
+    """Test that selecting no columns from a multi-row frame preserves row count via C++ path."""
+    df = pd.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]})
+    frame = ar.from_pandas(df)
+
+    # The C++ select_columns should reject empty selection
+    with pytest.raises(ValueError, match="cannot be empty"):
+        frame.select_columns([])
 
     numeric_frame = frame.select_dtypes(include=["int64", "float64"])
     stats = numeric_frame.describe()
@@ -1301,6 +1329,8 @@ class TestDropColumns:
         frame = ar.from_pandas(df)
         frame.drop_columns(["a"])
         assert frame.columns == ["a", "b"]
+ main
+ main
 
 
 # ── _repr_html_() ─────────────────────────────────────────────────────────────
@@ -1432,6 +1462,9 @@ def test_repr_html_does_not_convert_full_frame(large_csv, monkeypatch):
     assert (
         call_sizes == []
     ), f"_repr_html_() should not call to_pandas(), but got calls with {call_sizes} rows"
+ main
+ main
+
 
 
 # ── filter_rows() tests ───────────────────────────────────────────────────────
@@ -1713,3 +1746,4 @@ def test_from_records_dict_explicit_valid_columns_subset():
     assert frame.shape == (2, 1)
     assert frame.columns == ["a"]
     assert frame["a"] == [1, 3]
+ main

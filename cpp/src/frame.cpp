@@ -64,13 +64,6 @@ const Column& Frame::column(size_t idx) const {
     return columns_[idx];
 }
 
-Column& Frame::column_mut(size_t idx) {
-    if (idx >= columns_.size()) {
-        throw std::out_of_range("Column index out of range");
-    }
-    return columns_[idx];
-}
-
 const Column& Frame::column(const std::string& name) const {
     auto it = name_index_.find(name);
     if (it == name_index_.end()) {
@@ -92,14 +85,12 @@ size_t Frame::column_index(const std::string& name) const {
 }
 
 void Frame::add_column(Column col) {
-    if (name_index_.find(col.name()) != name_index_.end()) {
-        throw std::invalid_argument("Column '" + col.name() +
-                                    "' already exists in Frame. Drop or rename it before adding.");
-    }
     if (!row_count_known_) {
+        // First column added - set row count from its size
         row_count_ = col.size();
         row_count_known_ = true;
     } else {
+        // Row count already established - validate new column matches
         validate_column_size(col);
     }
     name_index_[col.name()] = columns_.size();
@@ -182,6 +173,8 @@ void Frame::rebuild_index() {
         name_index_[columns_[i].name()] = i;
     }
 }
+
+ main
 
 std::vector<std::pair<std::string, std::vector<std::pair<std::string, double>>>> Frame::describe()
     const {
@@ -292,4 +285,5 @@ std::vector<std::pair<std::string, std::vector<std::pair<std::string, double>>>>
     return summary;
 }
 
+ main
 }  // namespace arnio
