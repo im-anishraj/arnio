@@ -808,8 +808,6 @@ def winsorize_outliers(
     df = to_pandas(frame).copy(deep=False)
 
     for column in target_columns:
-        # 1. Track the original data type before any mutation happens
-        orig_dtype = df[column].dtype
 
         lower_bound = df[column].quantile(lower)
         upper_bound = df[column].quantile(upper)
