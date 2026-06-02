@@ -1620,8 +1620,7 @@ def safe_divide_columns(
         Column name to use as the denominator.
     output_column : str
         Name of the new column to store the division result. Must be a
-        non-empty string. If the column already exists, it will be
-        overwritten and a ``UserWarning`` is raised.
+        non-empty string. If the column already exists, a ``ValueError`` is raised.
     fill_value : float, optional
         Value to use when denominator is zero or null. Defaults to 0.0.
 
@@ -1666,13 +1665,7 @@ def safe_divide_columns(
         raise ValueError(f"fill_value must be finite, got {fill_value}")
 
     if output_column in columns:
-        import warnings
-
-        warnings.warn(
-            f"Output column '{output_column}' already exists and will be overwritten.",
-            UserWarning,
-            stacklevel=2,
-        )
+        raise ValueError(f"Output column '{output_column}' already exists.")
 
     if is_arframe:
         numerator_dtype = frame.dtypes.get(numerator)
