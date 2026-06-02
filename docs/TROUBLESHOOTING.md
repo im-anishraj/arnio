@@ -16,6 +16,26 @@ On Windows, `[BUILD BLOCKED]` usually means PowerShell cannot see Visual Studio
 Build Tools commands such as `cl` or `nmake`. Install the `Desktop development
 with C++` workload, then retry from an x64 Developer Command Prompt.
 
+## Error taxonomy and deterministic recovery
+
+Most production failures in Arnio fall into three buckets:
+
+- **Pipeline step dispatch failures**: `arnio.exceptions.UnknownStepError`
+- **Type casting failures**: `arnio.exceptions.TypeCastError`
+- **Schema validation failures**: `ValidationResult` / `ValidationIssue` returned by `ar.validate(...)`
+
+Use the full copy/paste playbook here:
+
+- **[docs/error_recovery_playbook.md](./error_recovery_playbook.md)**
+
+It includes recovery recipes for:
+
+1. `UnknownStepError`
+2. `TypeCastError`
+3. `ValidationResult` triage (including `row_index` semantics)
+
+---
+
 ## MemoryError when reading large CSV files
 
 ### Problem
@@ -127,6 +147,9 @@ ops = [
 frame = ar.pipeline(frame, ops)
 ```
 
+> For deterministic recovery and a typo vs missing-registration checklist, see:
+> **[docs/error_recovery_playbook.md](./error_recovery_playbook.md)**
+
 ## Slow CSV parsing and performance issues
 
 ### Problem
@@ -154,3 +177,4 @@ frame = ar.read_csv(
     usecols=["id", "name"]
 )
 ```
+
