@@ -49,6 +49,7 @@ _STEP_REGISTRY: dict[str, Callable] = {
     "slugify_column_names": cleaning.slugify_column_names,
     "trim_column_names": cleaning.trim_column_names,
     "clean_column_names": cleaning.clean_column_names,
+    "parse_numeric_strings": cleaning.parse_numeric_strings,
 }
 
 _REGISTRY_LOCK = Lock()

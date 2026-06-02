@@ -4588,3 +4588,28 @@ class TestSlugifyColumnNames:
         frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
         with pytest.raises(ValueError):
             ar.slugify_column_names(frame, on_duplicates="ignore")
+
+def test_parse_numeric_strings():
+    frame = ar.from_pandas(pd.DataFrame({
+        "price": ["1234.50", "500", "10.25", "bad"],
+        "rate": ["15%", "45.5%", "0.5%", "none"],
+        "normal_text": ["apple", "banana", "cherry", "date"],
+    }))
+
+    cleaned = ar.parse_numeric_strings(frame, subset=["price", "rate"], errors="coerce")
+    df = ar.to_pandas(cleaned)
+
+    assert df["price"].iloc[0] == 1234.50
+    assert df["price"].iloc[1] == 500.0
+    assert df["price"].iloc[2] == 10.25
+    assert pd.isna(df["price"].iloc[3])
+
+    assert df["rate"].iloc[0] == 0.15
+    assert df["rate"].iloc[1] == 0.455
+    assert df["rate"].iloc[2] == 0.005
+    assert pd.isna(df["rate"].iloc[3])
+
+    assert df["normal_text"].iloc[0] == "apple"
+
+    with pytest.raises(ValueError):
+        ar.parse_numeric_strings(frame, subset=["price"], errors="raise")
