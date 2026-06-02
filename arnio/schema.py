@@ -1009,7 +1009,7 @@ class Schema:
         return cls(fields=fields)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ValidationIssue:
     """One validation failure."""
 
