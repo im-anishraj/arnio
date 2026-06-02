@@ -885,6 +885,7 @@ def write_csv(
     delimiter: str = ",",
     write_header: bool = True,
     line_terminator: str = "\n",
+    escape_formulas: bool = False,
 ) -> None:
     """Write an ArFrame to a CSV file via C++ backend.
 
@@ -900,6 +901,10 @@ def write_csv(
         Whether to write the column header row.
     line_terminator : str, default "\\n"
         Line terminator to use between rows.
+    escape_formulas : bool, default False
+        If True, prefix string cell values that begin with spreadsheet formula
+        trigger characters (``=``, ``+``, ``-``, ``@``, tab, or carriage return)
+        with a single quote before CSV quoting. Numeric columns are not changed.
 
     Raises
     ------
@@ -943,6 +948,7 @@ def write_csv(
     config.delimiter = delimiter
     config.write_header = _validate_bool_option(write_header, "write_header")
     config.line_terminator = line_terminator
+    config.escape_formulas = _validate_bool_option(escape_formulas, "escape_formulas")
 
     writer = _CsvWriter(config)
     try:
