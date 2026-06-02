@@ -16,6 +16,9 @@ test: ## Run tests with coverage
 test-quick: ## Run tests without coverage (fast, pass/fail only)
 	pytest tests/ -v
 
+coverage: ## Generate HTML coverage report
+	pytest tests/ -v --cov=arnio --cov-report=html --cov-report=term
+
 lint: ## Check linting
 	python scripts/check_docs_utf8.py
 	black --check --diff .
