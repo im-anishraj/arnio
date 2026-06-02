@@ -95,7 +95,7 @@ def _cmd_scan(args: argparse.Namespace) -> int:
             col_w = max(len(c) for c in ordered) + 2
             header = f"{'column':<{col_w}}type"
             print(header)
-            print("\u2500" * len(header))
+            print("-" * len(header))
             for col, dtype in ordered.items():
                 print(f"{col:<{col_w}}{dtype}")
 

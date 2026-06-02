@@ -102,7 +102,7 @@ class TestScan:
         result = _run(["scan", "--input", str(csv), "--format", "text"])
 
         assert result.returncode == 0, result.stderr
-        assert "\u2500" in result.stdout
+        assert "-" * 5 in result.stdout
 
     def test_scan_missing_file_exits_1(self, tmp_path: Path):
         result = _run(["scan", "--input", str(tmp_path / "nonexistent.csv")])
