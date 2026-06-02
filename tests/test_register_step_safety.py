@@ -157,4 +157,4 @@ class TestUnregisterStepBuiltinAlias:
 
         for step_name in list(_BUILTIN_PYTHON_STEP_REGISTRY):
             with pytest.raises(ValueError):
-              unregister_step(step_name)
+                unregister_step(step_name)

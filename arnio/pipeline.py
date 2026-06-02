@@ -168,7 +168,6 @@ def register_step(name: str, fn: Callable, overwrite: bool = False):
     >>> ar.register_step("custom_clean", new_custom_clean, overwrite=True)
     """
     with _REGISTRY_LOCK:
-
         if not isinstance(name, str) or not name or not name.strip():
             raise ValueError("parameter 'name' must be a non-empty string")
         if not callable(fn):
@@ -210,7 +209,6 @@ def register_step(name: str, fn: Callable, overwrite: bool = False):
 def unregister_step(name: str) -> None:
     """Unregister a custom Python pipeline step."""
     with _REGISTRY_LOCK:
-
         if not isinstance(name, str):
             raise TypeError(
                 f"parameter 'name' must be a string, not {type(name).__name__}"
@@ -324,19 +322,17 @@ def _validate_pipeline_steps(
     for step in steps:
         if not isinstance(step, tuple) or not (1 <= len(step) <= 2):
             raise ValueError(
-                f"Invalid step format: {step!r}. " "Expected (name,) or (name, kwargs)"
+                f"Invalid step format: {step!r}. Expected (name,) or (name, kwargs)"
             )
 
         name = step[0]
 
         if not isinstance(name, str):
-            raise ValueError(
-                f"Invalid pipeline step name: {name!r}. " "Expected a string"
-            )
+            raise ValueError(f"Invalid pipeline step name: {name!r}. Expected a string")
 
         if len(step) == 2 and not isinstance(step[1], dict):
             raise ValueError(
-                f"Invalid step kwargs for '{name}': " f"{step[1]!r}. Expected a dict"
+                f"Invalid step kwargs for '{name}': {step[1]!r}. Expected a dict"
             )
 
         if name not in available_steps:
