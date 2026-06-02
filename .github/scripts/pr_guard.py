@@ -67,6 +67,7 @@ allowed_root_exts = {
 }
 allowed_root_names = {
     "Makefile",
+    "Dockerfile",
     "LICENSE",
     "setup.py",
     ".gitignore",
