@@ -3315,6 +3315,129 @@ def test_data_quality_report_invariant_invalid_metrics():
         DataQualityReport(10, 2, 512, 0, 0.0, {}, quality_score=float("nan"))
 
 
+def test_data_quality_report_invariant_invalid_columns():
+    """DataQualityReport.columns must be dict[str, ColumnProfile] — bug #1688."""
+    from arnio.quality import ColumnProfile, DataQualityReport
+
+    valid_profile = ColumnProfile(
+        name="x",
+        dtype="int64",
+        semantic_type="numeric",
+        row_count=1,
+        null_count=0,
+        null_ratio=0.0,
+        unique_count=1,
+        unique_ratio=1.0,
+    )
+
+    with pytest.raises(TypeError, match="columns must be a dictionary"):
+        DataQualityReport(1, 1, 0, 0, 0.0, columns="bad")
+
+    with pytest.raises(TypeError, match="column names must be strings"):
+        DataQualityReport(1, 1, 0, 0, 0.0, columns={1: valid_profile})
+
+    with pytest.raises(
+        TypeError, match="columns values must be ColumnProfile instances"
+    ):
+        DataQualityReport(1, 1, 0, 0, 0.0, columns={"x": "not_a_profile"})
+
+
+def test_column_profile_invariant_invalid_sample_values():
+    """ColumnProfile.sample_values must be a list — bug #1688."""
+    from arnio.quality import ColumnProfile
+
+    with pytest.raises(TypeError, match="sample_values must be a list, not a string"):
+        ColumnProfile("x", "int64", "numeric", 1, 0, 0.0, 1, 1.0, sample_values="bad")
+
+    with pytest.raises(TypeError, match="sample_values must be a list"):
+        ColumnProfile("x", "int64", "numeric", 1, 0, 0.0, 1, 1.0, sample_values=(1, 2))
+
+
+def test_column_profile_invariant_invalid_warnings():
+    """ColumnProfile.warnings must be list[str] — bug #1688."""
+    from arnio.quality import ColumnProfile
+
+    with pytest.raises(
+        TypeError, match="warnings must be a list of strings, not a string"
+    ):
+        ColumnProfile("x", "int64", "numeric", 1, 0, 0.0, 1, 1.0, warnings="bad")
+
+    with pytest.raises(TypeError, match="warnings must be a list"):
+        ColumnProfile("x", "int64", "numeric", 1, 0, 0.0, 1, 1.0, warnings=("w1",))
+
+    with pytest.raises(TypeError, match="warnings must contain only strings"):
+        ColumnProfile("x", "int64", "numeric", 1, 0, 0.0, 1, 1.0, warnings=[1, 2])
+
+
+def test_column_profile_invariant_invalid_top_values():
+    """ColumnProfile.top_values shape is validated — bug #1688."""
+    from arnio.quality import ColumnProfile
+
+    with pytest.raises(TypeError, match="top_values must be a list"):
+        ColumnProfile("x", "string", "text", 1, 0, 0.0, 1, 1.0, top_values="bad")
+
+    with pytest.raises(TypeError, match="top_values entries must be tuples"):
+        ColumnProfile(
+            "x", "string", "text", 1, 0, 0.0, 1, 1.0, top_values=[["a", 1, 0.5]]
+        )
+
+    with pytest.raises(ValueError, match="top_values entries must contain"):
+        ColumnProfile("x", "string", "text", 1, 0, 0.0, 1, 1.0, top_values=[("a", 1)])
+
+    with pytest.raises(TypeError, match="top_values count must be an integer"):
+        ColumnProfile(
+            "x", "string", "text", 1, 0, 0.0, 1, 1.0, top_values=[("a", 1.0, 0.5)]
+        )
+
+    with pytest.raises(ValueError, match="top_values count cannot be negative"):
+        ColumnProfile(
+            "x", "string", "text", 1, 0, 0.0, 1, 1.0, top_values=[("a", -1, 0.5)]
+        )
+
+    with pytest.raises(TypeError, match="top_values ratio must be numeric"):
+        ColumnProfile(
+            "x", "string", "text", 1, 0, 0.0, 1, 1.0, top_values=[("a", 1, "bad")]
+        )
+
+    with pytest.raises(ValueError, match="top_values ratio must be finite"):
+        ColumnProfile(
+            "x",
+            "string",
+            "text",
+            1,
+            0,
+            0.0,
+            1,
+            1.0,
+            top_values=[("a", 1, float("inf"))],
+        )
+
+    with pytest.raises(
+        ValueError, match="top_values ratio must be between 0.0 and 1.0"
+    ):
+        ColumnProfile(
+            "x", "string", "text", 1, 0, 0.0, 1, 1.0, top_values=[("a", 1, 1.5)]
+        )
+
+
+def test_column_profile_invariant_optional_ratios():
+    """Optional ratio fields are validated when provided — bug #1688."""
+    from arnio.quality import ColumnProfile
+
+    with pytest.raises(ValueError, match="url_validity_ratio must be a finite ratio"):
+        ColumnProfile("x", "string", "url", 1, 0, 0.0, 1, 1.0, url_validity_ratio=1.5)
+
+    with pytest.raises(TypeError, match="url_validity_ratio must be a number"):
+        ColumnProfile("x", "string", "url", 1, 0, 0.0, 1, 1.0, url_validity_ratio="bad")
+
+    with pytest.raises(
+        ValueError, match="top_values_sample_ratio must be a finite ratio"
+    ):
+        ColumnProfile(
+            "x", "string", "text", 1, 0, 0.0, 1, 1.0, top_values_sample_ratio=-0.1
+        )
+
+
 # ── CleanStepRecord and CleanExplanation validation tests (Fixes #1687) ──────
 
 
