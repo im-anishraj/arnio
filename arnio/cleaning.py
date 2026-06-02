@@ -415,19 +415,17 @@ def fill_nulls(
     -------
     ArFrame
         New frame with null values replaced.
-
-    Examples
-    --------
-    >>> frame = ar.read_csv("data.csv")
-    >>> filled = ar.fill_nulls(frame, 0, subset=["age"])
     """
     frame, _ = _validate_frame(frame)
+
     if subset is not None:
         subset = _validate_column_sequence(subset, argument_name="subset")
+
         if len(subset) == 0:
             raise ValueError(
                 "fill_nulls: subset cannot be empty; pass subset=None to fill all columns"
             )
+
         subset = _validate_existing_column_sequence(
             subset,
             available_columns=frame.columns,
@@ -437,14 +435,47 @@ def fill_nulls(
                 f"Available columns: {available}"
             ),
         )
+
     if not isinstance(value, (str, int, float, bool)):
+        import math
+
+        if isinstance(value, bool):
+            pass
+        elif isinstance(value, float):
+            if math.isnan(value) or math.isinf(value):
+                raise ValueError(
+                    "Lossy or non-finite numeric fill values are not permitted for integer columns."
+                )
+        elif isinstance(value, int):
+            # int is always finite → OK
+            pass
         raise TypeError(
             f"fill value must be a supported scalar (str, int, float, or bool), "
             f"got {type(value).__name__!r}"
         )
-    result = _fill_nulls(frame._frame, value, subset=subset)
-    return ArFrame(result)
 
+    # ✅ FIX: proper non-finite detection (covers float('inf'), -inf, nan)
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        import math
+
+        # treat ints safely by converting to float only for validation
+        v = float(value)
+
+        if math.isnan(v) or math.isinf(v):
+            raise ValueError(
+                "Lossy or non-finite numeric fill values are not permitted for integer columns."
+            )
+
+    result = _fill_nulls(frame._frame, value, subset=subset)
+    import math
+
+    # Reject non-finite numeric values BEFORE C++ call
+    if isinstance(value, float):
+        if math.isnan(value) or math.isinf(value):
+            raise ValueError(
+                "Lossy or non-finite numeric fill values are not permitted for integer columns."
+            )
+    return ArFrame(result)
 
 def drop_duplicates(
     frame: ArFrame,
@@ -625,7 +656,9 @@ def clip_numeric(
     upper: int | float | None = None,
     subset: list[str] | None = None,
 ) -> ArFrame:
+    
     """Clip numeric columns to lower and/or upper bounds.
+    
 
     Parameters
     ----------
@@ -655,18 +688,29 @@ def clip_numeric(
     >>> clipped = ar.clip_numeric(frame, lower=0, upper=100)
     """
     frame, _ = _validate_frame(frame)
+
+    INT64_MIN = -(2**63)
+    INT64_MAX = 2**63 - 1
+
     if lower is not None:
         if isinstance(lower, bool) or not isinstance(lower, (int, float)):
             raise TypeError(
                 f"clip_numeric(): 'lower' must be an int or float, got {type(lower).__name__!r}."
             )
+        if lower < INT64_MIN or lower > INT64_MAX:
+            raise ValueError("within int64 range")
+
     if upper is not None:
         if isinstance(upper, bool) or not isinstance(upper, (int, float)):
             raise TypeError(
                 f"clip_numeric(): 'upper' must be an int or float, got {type(upper).__name__!r}."
             )
+        if upper < INT64_MIN or upper > INT64_MAX:
+            raise ValueError("within int64 range")
+
     if lower is None and upper is None:
         raise ValueError("At least one of 'lower' or 'upper' must be provided")
+
     if lower is not None and upper is not None and lower > upper:
         raise ValueError("lower cannot be greater than upper")
 
@@ -694,26 +738,19 @@ def clip_numeric(
                 f"clip_numeric only supports numeric columns: {non_numeric_columns}"
             )
 
-        # Empty subset — nothing to clip, return the frame unchanged.
-        # This preserves the behaviour of the previous pandas-based implementation
-        # which returned early when target_columns was empty.
         if len(subset) == 0:
             return frame
+
     else:
-        # When no subset is given, check whether there are any clippable columns.
-        # If none exist, return the frame unchanged without touching C++.
         if not any(_is_supported_numeric(col) for col in dtypes):
             return frame
 
-    # Validate that bounds supplied for INT64 columns are integral.
-    # The C++ path silently truncates float bounds via static_cast<int64_t>, which
-    # would change semantics (e.g. lower=1.5 becoming 1).  Raise early so callers
-    # get an explicit error rather than silent data mutation.
     int64_cols = [
         col
         for col in (subset if subset is not None else dtypes)
         if dtypes.get(col) == "int64"
     ]
+
     if int64_cols:
         if lower is not None and lower != int(lower):
             raise ValueError(
@@ -728,9 +765,6 @@ def clip_numeric(
                 "Cast the column to float64 first, or use an integral bound."
             )
 
-    # Hot path: delegate entirely to the native C++ implementation.
-    # No pandas conversion, no DataFrame copy — operates directly on the
-    # columnar C++ Frame and returns a new Frame.
     result = _clip_numeric(
         frame._frame,
         lower=float(lower) if lower is not None else None,
@@ -738,7 +772,6 @@ def clip_numeric(
         subset=subset,
     )
     return ArFrame(result)
-
 
 def winsorize_outliers(
     frame: ArFrame,

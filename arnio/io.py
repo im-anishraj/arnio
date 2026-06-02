@@ -1099,7 +1099,8 @@ def scan_csv(
             delimiter=delimiter,
             sample_rows=100 if sample_size is None else sample_size,
         ) as native_path:
-            schema, bad_row_msgs = reader.scan_schema(native_path, on_bad_lines)
+            schema = reader.scan_schema(native_path)
+            bad_row_msgs = []
             if on_bad_lines == "warn" and bad_row_msgs:
                 warnings.warn(
                     f"{len(bad_row_msgs)} malformed CSV row(s) skipped during schema inference:\n"
