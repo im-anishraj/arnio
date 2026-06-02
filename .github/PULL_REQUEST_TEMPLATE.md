@@ -52,6 +52,8 @@
 - [ ] I kept the PR focused on one issue or one logical change.
 - [ ] I added or updated tests for behavior changes.
 - [ ] I added or updated docs/examples for public API changes.
+- [ ] I checked that the Arnio CI signal is visible, or requested maintainer
+      approval if fork workflows are pending.
 - [ ] I checked that generated files, logs, and local build artifacts are not committed.
 - [ ] My PR title uses Conventional Commits (`feat:`, `fix:`, `docs:`, `test:`, `refactor:`, `chore:`).
 

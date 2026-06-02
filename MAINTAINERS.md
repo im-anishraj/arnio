@@ -37,6 +37,17 @@ Before merging, check:
 - GSSoC PR labels use the exact official strings where applicable:
   `gssoc:approved`, `level:*`, `quality:*`, and `type:*`.
 
+## CI visibility
+
+Use [.github/CI_VISIBILITY.md](.github/CI_VISIBILITY.md) when a contributor PR,
+especially a fork PR, shows only Vercel or other external checks. Code-changing
+PRs need a visible Arnio CI signal before review or merge. If GitHub Actions are
+waiting for maintainer approval, inspect the diff first, approve the run when it
+is safe, and wait for the expected Arnio checks to finish.
+
+Do not merge code-changing PRs that lack the relevant Arnio-owned checks, and do
+not add `pull_request_target` to workflows that run untrusted contributor code.
+
 ## Release Notes
 
 Release-worthy changes should be easy to describe in one sentence:

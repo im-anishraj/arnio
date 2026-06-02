@@ -4,6 +4,9 @@ on:
   pull_request:
     branches: [ "main" ]
 
+permissions:
+  contents: read
+
 jobs:
   guard-sensitive-paths:
     name: Guard Sensitive Paths and Root Files

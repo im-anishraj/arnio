@@ -132,6 +132,18 @@ def test_remove_special_chars(sample_csv):
 8. Open the pull request and link the issue with `Fixes #issue-number` when complete.
 9. Ensure your PR title follows **Conventional Commits**.
 
+### CI visibility for fork PRs
+
+GitHub may hold Actions runs from forks or first-time contributors until a
+maintainer approves them. If your PR shows only Vercel or other external checks,
+do not assume Arnio CI has been skipped; ask a maintainer to review and approve
+the pending GitHub Actions run.
+
+Arnio's maintainer policy for this path is documented in
+[CI_VISIBILITY.md](CI_VISIBILITY.md). Keep workflow changes scoped to issues
+that explicitly request them, and do not add `pull_request_target` to workflows
+that check out, build, lint, or test contributor code.
+
 ## C++ extension stubs
 
 If you change the C++ pybind11 API, update the stub file at
