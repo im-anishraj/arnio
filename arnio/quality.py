@@ -191,6 +191,54 @@ class ColumnProfile:
                         f"{field_name} must be a finite ratio between 0.0 and 1.0: {value}"
                     )
 
+        # Validate sample_values
+        if isinstance(self.sample_values, str):
+            raise TypeError("sample_values must be a list, not a string")
+
+        if not isinstance(self.sample_values, list):
+            raise TypeError("sample_values must be a list")
+
+        # Validate warnings
+        if isinstance(self.warnings, str):
+            raise TypeError("warnings must be a list of strings, not a string")
+
+        if not isinstance(self.warnings, list):
+            raise TypeError("warnings must be a list")
+
+        if not all(isinstance(warning, str) for warning in self.warnings):
+            raise TypeError("warnings must contain only strings")
+
+        # Validate top_values
+        if self.top_values is not None:
+            if not isinstance(self.top_values, list):
+                raise TypeError("top_values must be a list")
+
+            for item in self.top_values:
+                if not isinstance(item, tuple):
+                    raise TypeError("top_values entries must be tuples")
+
+                if len(item) != 3:
+                    raise ValueError(
+                        "top_values entries must contain (value, count, ratio)"
+                    )
+
+                _value, count, ratio = item
+
+                if not isinstance(count, int) or isinstance(count, bool):
+                    raise TypeError("top_values count must be an integer")
+
+                if count < 0:
+                    raise ValueError("top_values count cannot be negative")
+
+                if isinstance(ratio, bool) or not isinstance(ratio, (int, float)):
+                    raise TypeError("top_values ratio must be numeric")
+
+                if not math.isfinite(ratio):
+                    raise ValueError("top_values ratio must be finite")
+
+                if ratio < 0.0 or ratio > 1.0:
+                    raise ValueError("top_values ratio must be between 0.0 and 1.0")
+
     def to_dict(self, *, redact_sample_values: bool = False) -> dict[str, Any]:
         """Return a JSON-friendly dictionary."""
         redact_sample_values = _validate_bool_option(
@@ -337,7 +385,8 @@ class DataQualityReport:
                 raise ValueError(f"{field_name} cannot be negative: {value}")
 
         if isinstance(self.duplicate_ratio, bool) or not isinstance(
-            self.duplicate_ratio, (int, float)
+            self.duplicate_ratio,
+            (int, float),
         ):
             raise TypeError(
                 f"duplicate_ratio must be a number, got {type(self.duplicate_ratio).__name__}"
@@ -352,7 +401,8 @@ class DataQualityReport:
             )
 
         if isinstance(self.quality_score, bool) or not isinstance(
-            self.quality_score, (int, float)
+            self.quality_score,
+            (int, float),
         ):
             raise TypeError(
                 f"quality_score must be a number, got {type(self.quality_score).__name__}"
@@ -365,6 +415,14 @@ class DataQualityReport:
             raise ValueError(
                 f"quality_score must be a finite value between 0.0 and 100.0: {self.quality_score}"
             )
+
+        if not isinstance(self.columns, dict):
+            raise TypeError("columns must be a dictionary")
+        for column_name, profile in self.columns.items():
+            if not isinstance(column_name, str):
+                raise TypeError("column names must be strings")
+            if not isinstance(profile, ColumnProfile):
+                raise TypeError("columns values must be ColumnProfile instances")
 
     def to_dict(
         self,
