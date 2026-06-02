@@ -258,7 +258,14 @@ def to_pandas(frame: ArFrame, *, copy: bool = False) -> pd.DataFrame:
     else:
         result = pd.DataFrame(data)
     if frame._attrs:
-        result.attrs = copylib.deepcopy(frame._attrs)
+        attrs = copylib.deepcopy(frame._attrs)
+        
+        if "_arnio_index" in attrs:
+            result.attrs = copylib.deepcopy(frame._attrs)
+
+            if "_arnio_index" in frame._attrs:
+                result.index = frame._attrs["_arnio_index"].copy()
+
     return result
 
 
@@ -417,7 +424,10 @@ def from_pandas(df: pd.DataFrame) -> ArFrame:
             dtype_hints[name] = dtype_hint
 
     cpp_frame = _Frame.from_dict(columns, dtype_hints, len(df))
-    return ArFrame(cpp_frame, attrs=copylib.deepcopy(df.attrs))
+    attrs = copylib.deepcopy(df.attrs)
+    attrs["_arnio_index"] = df.index.copy()
+
+    return ArFrame(cpp_frame, attrs=attrs)
 
 
 def from_dict(data: dict) -> ArFrame:
@@ -467,3 +477,4 @@ def from_dict(data: dict) -> ArFrame:
         _check_unsupported_dtype(col_name, df[col_name])
 
     return from_pandas(df)
+    
