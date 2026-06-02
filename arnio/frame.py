@@ -155,6 +155,11 @@ class ArFrame:
                             f"nested values are not supported; "
                             f"column {col!r} at row {i} contains a {type(val).__name__!r}"
                         )
+            if columns is not None and len(columns) == 0:
+                raise ValueError(
+                    "columns must not be empty when records are dicts; "
+                    "pass columns=None to infer column names from the record keys"
+                )
             df = pd.DataFrame.from_records(records, columns=columns)
 
         elif isinstance(first, (list, tuple)):
@@ -876,7 +881,7 @@ class ArFrame:
         return True
 
     def __copy__(self) -> ArFrame:
-        return ArFrame(self._frame, attrs=self._attrs.copy())
+        return ArFrame(self._frame.clone(), attrs=self._attrs.copy())
 
     def __deepcopy__(self, memo: dict) -> ArFrame:
         if id(self) in memo:
@@ -919,6 +924,11 @@ class ArFrame:
             raise ValueError(f"`n` must be a positive integer, got {n!r}")
 
         num_rows, num_cols = self.shape
+        if num_rows > 0 and num_cols == 0:
+            return (
+                f"ArFrame preview: {num_rows} rows x 0 columns "
+                "(no columns to display)"
+            )
 
         if num_rows == 0:
             return "ArFrame preview: (empty frame)"

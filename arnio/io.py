@@ -390,8 +390,14 @@ def _materialize_csv_input(
             tmp.close()
             return tmp.name, True, True
         except Exception:
-            tmp.close()
-            os.unlink(tmp.name)
+            try:
+                tmp.close()
+            except OSError:
+                pass
+            try:
+                os.unlink(tmp.name)
+            except OSError:
+                pass
             raise
 
     raise TypeError("read_csv expected a filesystem path or text file-like object")
@@ -1054,6 +1060,22 @@ def scan_csv(
         if delimiter is None:
             delimiter = "\t" if path_lower.endswith(".tsv") else ","
 
+    if not isinstance(path, (str, bytes, os.PathLike)) and not hasattr(path, "read"):
+        raise TypeError("scan_csv expected a filesystem path")
+
+    path, should_cleanup, _ = _materialize_csv_input(path)
+
+    try:
+        _validate_csv_path(path, encoding, reject_utf8_nul_bytes=False)
+
+        path_lower = path.lower()
+
+        # Resolve the sentinel: auto-detect tab for .tsv only when the caller
+        # truly omitted delimiter (None).  An explicit delimiter="," is always
+        # honoured, even for .tsv paths.
+        if delimiter is None:
+            delimiter = "\t" if path_lower.endswith(".tsv") else ","
+
         decimal_separator = _validate_decimal_separator(decimal_separator)
         _validate_thousands_separator(thousands_separator, decimal_separator)
         delimiter = _validate_delimiter(delimiter)
@@ -1117,6 +1139,115 @@ def _reject_non_finite(constant: str) -> None:
     raise ValueError(f"Non-finite JSON constant not allowed: {constant!r}")
 
 
+def _reject_duplicate_json_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    seen = set()
+    result = {}
+    for key, value in pairs:
+        if key in seen:
+            raise ValueError(f"duplicate key {key!r}")
+        seen.add(key)
+        result[key] = value
+    return result
+
+
+def _validate_jsonl_encoding(encoding: str) -> None:
+    if not isinstance(encoding, str):
+        raise TypeError(f"encoding must be a string, got {type(encoding).__name__!r}")
+    try:
+        codecs.lookup(encoding)
+    except LookupError:
+        raise ValueError(f"Unknown encoding: {encoding!r}")
+
+
+def _validate_jsonl_nrows(nrows: int | None) -> int | None:
+    if nrows is not None:
+        if isinstance(nrows, bool) or not isinstance(nrows, int):
+            raise TypeError("nrows must be an integer")
+        if nrows < 0:
+            raise ValueError("nrows must be non-negative")
+    return nrows
+
+
+def _validate_jsonl_path(path: str) -> None:
+    path_lower = path.lower()
+    if not (path_lower.endswith(".jsonl") or path_lower.endswith(".ndjson")):
+        raise ValueError(
+            f"Unsupported file format: {path}. "
+            "read_jsonl only supports .jsonl and .ndjson files."
+        )
+
+
+def _parse_jsonl_record(line: str, lineno: int, path: str) -> dict:
+    from .convert import _is_nested
+
+    try:
+        obj = json.loads(
+            line,
+            object_pairs_hook=_reject_duplicate_json_keys,
+            parse_constant=_reject_non_finite,
+        )
+    except json.JSONDecodeError as exc:
+        raise JsonlReadError(
+            f"Invalid JSON on line {lineno} of {path!r}: {exc}"
+        ) from exc
+    except ValueError as exc:
+        message = str(exc)
+        prefix = (
+            "Duplicate key" if message.startswith("duplicate key") else "Invalid value"
+        )
+        raise JsonlReadError(f"{prefix} on line {lineno} of {path!r}: {exc}") from exc
+
+    if not isinstance(obj, dict):
+        raise JsonlReadError(
+            f"Expected a JSON object on line {lineno} of {path!r}, "
+            f"got {type(obj).__name__}"
+        )
+
+    for key, value in obj.items():
+        if _is_nested(value):
+            raise JsonlReadError(
+                f"Column {key!r} contains unsupported nested value "
+                f"of type {type(value).__name__!r} on line {lineno} of {path!r}. "
+                "Convert nested objects to strings or flatten them first."
+            )
+
+    return obj
+
+
+def _iter_jsonl_records(
+    path: str,
+    *,
+    encoding: str,
+    encoding_errors: str,
+    nrows: int | None,
+) -> Iterator[dict]:
+    records_read = 0
+    try:
+        with open(path, encoding=encoding, errors=encoding_errors) as fh:
+            for lineno, raw_line in enumerate(fh, start=1):
+                line = raw_line.rstrip("\r\n")
+                if not line.strip():
+                    continue
+                if nrows is not None and records_read >= nrows:
+                    break
+                yield _parse_jsonl_record(line, lineno, path)
+                records_read += 1
+    except OSError as exc:
+        raise JsonlReadError(str(exc)) from exc
+    except UnicodeDecodeError as exc:
+        raise JsonlReadError(
+            f"Could not decode {path!r} using encoding {encoding!r}: {exc}"
+        ) from exc
+
+
+def _records_to_arframe(records: list[dict]) -> ArFrame:
+    import pandas as pd
+
+    from .convert import from_pandas
+
+    return from_pandas(pd.DataFrame(records))
+
+
 def read_jsonl(
     path: str | os.PathLike[str],
     *,
@@ -1161,108 +1292,114 @@ def read_jsonl(
     >>> frame = ar.read_jsonl("events.jsonl")
     >>> frame = ar.read_jsonl("data.ndjson", nrows=1000)
     """
-    import json
+    _validate_jsonl_encoding(encoding)
 
-    from .convert import _is_nested, from_pandas
-
-    if not isinstance(encoding, str):
-        raise TypeError(f"encoding must be a string, got {type(encoding).__name__!r}")
-    try:
-        codecs.lookup(encoding)
-    except LookupError:
-        raise ValueError(f"Unknown encoding: {encoding!r}")
+    if not isinstance(path, (str, bytes, os.PathLike)):
+        raise TypeError("read_jsonl expected a filesystem path")
 
     path = os.fspath(path)
-
     encoding_errors = _validate_encoding_errors(encoding_errors)
+    nrows = _validate_jsonl_nrows(nrows)
 
-    if nrows is not None:
-        if isinstance(nrows, bool) or not isinstance(nrows, int):
-            raise TypeError("nrows must be an integer")
-        if nrows < 0:
-            raise ValueError("nrows must be non-negative")
-        if nrows == 0:
-            # Short-circuit: caller explicitly requested zero rows.
-            # Do not open or inspect the file at all — even malformed content
-            # must not raise when nrows=0.
-            import pandas as pd
+    if nrows == 0:
+        # Short-circuit: caller explicitly requested zero rows.
+        # Do not open or inspect the file at all; even malformed content or an
+        # unsupported extension must not raise when nrows=0.
+        return _records_to_arframe([])
 
-            return from_pandas(pd.DataFrame())
-
-    path_lower = path.lower()
-    if not (path_lower.endswith(".jsonl") or path_lower.endswith(".ndjson")):
-        raise ValueError(
-            f"Unsupported file format: {path}. "
-            "read_jsonl only supports .jsonl and .ndjson files."
+    _validate_jsonl_path(path)
+    records = list(
+        _iter_jsonl_records(
+            path,
+            encoding=encoding,
+            encoding_errors=encoding_errors,
+            nrows=nrows,
         )
-
-    records: list[dict] = []
-
-    def _reject_duplicate_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
-        seen = set()
-        result = {}
-        for k, v in pairs:
-            if k in seen:
-                raise ValueError(f"duplicate key {k!r}")
-            seen.add(k)
-            result[k] = v
-        return result
-
-    try:
-        with open(path, encoding=encoding, errors=encoding_errors) as fh:
-            for lineno, raw_line in enumerate(fh, start=1):
-                line = raw_line.rstrip("\r\n")
-                if not line.strip():
-                    continue  # skip blank / whitespace-only lines
-                if nrows is not None and len(records) >= nrows:
-                    break
-                try:
-                    obj = json.loads(
-                        line,
-                        object_pairs_hook=_reject_duplicate_keys,
-                        parse_constant=_reject_non_finite,
-                    )
-                except json.JSONDecodeError as exc:
-                    raise JsonlReadError(
-                        f"Invalid JSON on line {lineno} of {path!r}: {exc}"
-                    ) from exc
-                except ValueError as exc:
-                    s = str(exc)
-                    prefix = (
-                        "Duplicate key"
-                        if s.startswith("duplicate key")
-                        else "Invalid value"
-                    )
-                    raise JsonlReadError(
-                        f"{prefix} on line {lineno} of {path!r}: {exc}"
-                    ) from exc
-                if not isinstance(obj, dict):
-                    raise JsonlReadError(
-                        f"Expected a JSON object on line {lineno} of {path!r}, "
-                        f"got {type(obj).__name__}"
-                    )
-                for key, val in obj.items():
-                    if _is_nested(val):
-                        raise JsonlReadError(
-                            f"Column {key!r} contains unsupported nested value "
-                            f"of type {type(val).__name__!r} on line {lineno} of {path!r}. "
-                            "Convert nested objects to strings or flatten them first."
-                        )
-                records.append(obj)
-    except OSError as exc:
-        raise JsonlReadError(str(exc)) from exc
-    except UnicodeDecodeError as exc:
-        raise JsonlReadError(
-            f"Could not decode {path!r} using encoding {encoding!r}: {exc}"
-        ) from exc
-
+    )
     if not records:
         raise JsonlReadError(f"JSON Lines file is empty (no data rows): {path!r}")
 
-    import pandas as pd
+    return _records_to_arframe(records)
 
-    df = pd.DataFrame(records)
-    return from_pandas(df)
+
+def read_jsonl_chunked(
+    path: str | os.PathLike[str],
+    *,
+    chunksize: int = 10000,
+    encoding: str = "utf-8",
+    encoding_errors: str = "strict",
+    nrows: int | None = None,
+) -> Iterator[ArFrame]:
+    """Yield JSON Lines records as ``ArFrame`` chunks.
+
+    This is the streaming counterpart to :func:`read_jsonl`.  It preserves the
+    same parsing and validation rules while materializing at most one chunk of
+    decoded records at a time.
+
+    Parameters
+    ----------
+    path : str or path-like
+        Path to the ``.jsonl`` or ``.ndjson`` file.
+    chunksize : int, default ``10000``
+        Maximum number of data rows per yielded chunk.
+    encoding : str, default ``"utf-8"``
+        File encoding.
+    encoding_errors : str, default ``"strict"``
+        Error policy used while decoding file bytes.
+    nrows : int, optional
+        Maximum number of data rows to read. If ``None``, all rows are read.
+
+    Yields
+    ------
+    ArFrame
+        Parsed records in chunks of at most ``chunksize`` rows.
+
+    Raises
+    ------
+    ValueError
+        If the file extension is not ``.jsonl`` or ``.ndjson``, if
+        ``chunksize`` is not positive, or if ``nrows`` is not non-negative.
+    JsonlReadError
+        If the file is empty (no data rows), or if a line contains invalid
+        JSON or unsupported nested values. The error message includes the
+        1-based line number.
+    """
+    _validate_jsonl_encoding(encoding)
+
+    path = os.fspath(path)
+    encoding_errors = _validate_encoding_errors(encoding_errors)
+    nrows = _validate_jsonl_nrows(nrows)
+
+    if isinstance(chunksize, bool) or not isinstance(chunksize, int):
+        raise TypeError("chunksize must be an integer")
+    if chunksize <= 0:
+        raise ValueError("chunksize must be a positive integer")
+
+    if nrows == 0:
+        return
+
+    _validate_jsonl_path(path)
+
+    chunk: list[dict] = []
+    yielded_any = False
+    for record in _iter_jsonl_records(
+        path,
+        encoding=encoding,
+        encoding_errors=encoding_errors,
+        nrows=nrows,
+    ):
+        chunk.append(record)
+        if len(chunk) == chunksize:
+            yielded_any = True
+            yield _records_to_arframe(chunk)
+            chunk = []
+
+    if chunk:
+        yielded_any = True
+        yield _records_to_arframe(chunk)
+
+    if not yielded_any:
+        raise JsonlReadError(f"JSON Lines file is empty (no data rows): {path!r}")
 
 
 def sniff_delimiter(
@@ -1297,6 +1434,9 @@ def sniff_delimiter(
     ValueError
         If the sample size is invalid or the delimiter is ambiguous.
     """
+    if not isinstance(path, (str, bytes, os.PathLike)):
+        raise TypeError("sniff_delimiter expected a filesystem path")
+
     path = os.fspath(path)
 
     # 1. Parameter Validation

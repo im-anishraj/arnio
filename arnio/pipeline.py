@@ -305,6 +305,27 @@ def _resolve_step_name(name: str, deprecated_step_aliases: dict[str, str]) -> st
     return canonical_name
 
 
+def _validate_pipeline_step_container(steps: Any) -> None:
+    if steps is None:
+        raise TypeError("steps must be a list of step tuples, got None")
+
+    if isinstance(steps, (str, bytes)):
+        raise TypeError(
+            f"steps must be a list of step tuples, got {type(steps).__name__}. "
+            "Each step must be (name,) or (name, kwargs), for example "
+            '[("drop_nulls",)].'
+        )
+    if isinstance(steps, tuple):
+        raise TypeError(
+            f"steps must be a list of step tuples, got bare step tuple {steps!r}. "
+            f"Use [{steps!r}] instead."
+        )
+    if not isinstance(steps, list):
+        raise TypeError(
+            f"steps must be a list of step tuples, got {type(steps).__name__}. "
+        )
+
+
 def _validate_pipeline_steps(
     steps: list[tuple],
     python_step_registry: dict[str, Callable],
@@ -412,6 +433,8 @@ def pipeline(
         python_step_registry = dict(_PYTHON_STEP_REGISTRY)
         namespaced_builtin_steps = _get_namespaced_builtin_steps(python_step_registry)
         deprecated_step_aliases = dict(_DEPRECATED_STEP_ALIASES)
+
+    _validate_pipeline_step_container(steps)
 
     _validate_pipeline_steps(
         steps,
@@ -607,6 +630,7 @@ def pipeline(
 
 register_step("filter_rows", cleaning.filter_rows)
 register_step("drop_columns_matching", cleaning.drop_columns_matching)
+register_step("rename_columns_matching", cleaning.rename_columns_matching)
 register_step("safe_divide_columns", cleaning.safe_divide_columns)
 register_step("replace_values", cleaning.replace_values)
 _BUILTIN_PYTHON_STEP_REGISTRY.update(_PYTHON_STEP_REGISTRY)

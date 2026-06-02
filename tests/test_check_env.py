@@ -5,7 +5,13 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from examples.check_env import BuildToolCheck, check_dependencies, print_dashboard
+from examples.check_env import (
+    EXAMPLES,
+    BuildToolCheck,
+    check_dependencies,
+    print_dashboard,
+)
+from examples.example_registry import check_env_examples
 
 READY_BUILD_TOOLS = [
     BuildToolCheck("CMake", "cmake", True, "ok"),
@@ -16,6 +22,13 @@ MISSING_BUILD_TOOLS = [
     BuildToolCheck("CMake", "cmake", True, "ok"),
     BuildToolCheck("MSVC compiler", "cl", False, "install build tools"),
 ]
+
+
+def test_check_env_uses_shared_example_registry() -> None:
+    assert EXAMPLES == check_env_examples()
+    assert "check_env.py" not in EXAMPLES
+    assert EXAMPLES["basic_usage.py"] == []
+    assert EXAMPLES["arnio_with_numpy.py"] == ["numpy"]
 
 
 def test_check_env_core_missing(capsys: pytest.CaptureFixture[str]) -> None:

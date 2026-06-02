@@ -306,6 +306,12 @@ Frame drop_duplicates(const Frame& frame, const std::optional<std::vector<std::s
     }
 
     auto col_indices = resolve_subset(frame, subset);
+    if (keep != "first" && keep != "last" && keep != "none") {
+        throw std::invalid_argument("keep must be 'first', 'last', or 'none'");
+    }
+    if (frame.num_cols() == 0) {
+        return frame.clone();
+    }
     RowContext ctx{&frame, &col_indices};
     RowHash hash(ctx);
     RowEqual eq(ctx);
