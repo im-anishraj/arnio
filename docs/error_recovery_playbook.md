@@ -183,7 +183,9 @@ bad = set(result.bad_rows)
 # (This is only for triage/inspection; you can avoid pandas in hot paths.)
 pdf = ar.to_pandas(frame, copy=False)
 
-triage_rows = pdf.iloc[sorted(bad)].copy()  # NOTE: row_index 1..N => iloc uses 0..N-1
+# `bad_rows` / `row_index` are 1-based; pandas `.iloc` is 0-based
+# Convert to 0-based positions before slicing.
+triage_rows = pdf.iloc[[i - 1 for i in sorted(bad)]].copy()  # NOTE: 1..N => 0..N-1
 print(triage_rows.head())
 ```
 
