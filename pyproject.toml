@@ -43,6 +43,9 @@ dependencies = [
     "numpy>=1.23",
 ]
 
+[project.scripts]
+arnio = "arnio.cli:main"
+
 [project.urls]
 Homepage = "https://github.com/im-anishraj/arnio"
 Documentation = "https://github.com/im-anishraj/arnio#readme"
