@@ -18,6 +18,7 @@ for anything else so the contract stays explicit.
 
 from __future__ import annotations
 
+import os
 import pathlib
 import re
 from typing import Any
@@ -142,9 +143,15 @@ def _normalize_serializable(value: Any) -> Any:
 
     - dict keys are sorted deterministically
     - sets are converted into sorted lists
+    - tuples are converted into lists
     - lists are normalized recursively
     - unsupported values raise TypeError
     """
+    # Normalize tuples to lists before validation so that tuple fields
+    # (e.g. required_if=("col", "val"), unique=("id",)) survive export.
+    if isinstance(value, tuple):
+        return [_normalize_serializable(v) for v in value]
+
     _validate_serializable(value)
 
     if isinstance(value, dict):
@@ -319,7 +326,15 @@ def schema_to_dict(schema: dict | Any) -> dict:
                 normalised[field_name] = _normalize_serializable(value)
 
         result = {"fields": normalised}
-        result.update(metadata)
+
+        # Validate and normalize structured metadata before merging.
+        # Keys must be strings; values must be serialization-safe.
+        for meta_key, meta_val in metadata.items():
+            if not isinstance(meta_key, str):
+                raise TypeError(
+                    f"schema metadata keys must be strings, got {type(meta_key)!r}"
+                )
+            result[meta_key] = _normalize_serializable(meta_val)
 
         return result
 
@@ -367,7 +382,13 @@ def schema_to_yaml(
     yaml_str = body if body.endswith("\n") else body + "\n"
 
     if path is not None:
+        if not isinstance(path, (str, os.PathLike)):
+            raise TypeError("path must be a string or os.PathLike")
+        if isinstance(path, str) and not path.strip():
+            raise ValueError("path must not be empty")
         target = pathlib.Path(path)
+        if target.is_dir():
+            raise ValueError("path must point to a file, not a directory")
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(yaml_str, encoding="utf-8")
 

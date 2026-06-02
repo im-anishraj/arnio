@@ -74,104 +74,81 @@ static std::string combine_cell_to_string(const CellValue& cell) {
     return "";
 }
 
-// Serialize one CellValue with a type tag and length prefix so that
-// different types with the same string representation (e.g. int 1 vs
-// string "1") and values containing the unit separator (\x1F) never
-// collide in row_key().  Format:
-//   null   -> N
-//   string -> S<len>:<bytes>
-//   int64  -> I<len>:<digits>
-//   double -> F<len>:<digits>  (using combine_cell_to_string for portability)
-//   bool   -> BT or BF
-static void serialize_cell(std::ostream& os, const CellValue& cell) {
-    if (std::holds_alternative<std::monostate>(cell)) {
-        os << "N";
-    } else if (std::holds_alternative<std::string>(cell)) {
-        const std::string& s = std::get<std::string>(cell);
-        os << "S" << s.size() << ":" << s;
-    } else if (std::holds_alternative<int64_t>(cell)) {
-        std::string s = std::to_string(std::get<int64_t>(cell));
-        os << "I" << s.size() << ":" << s;
-    } else if (std::holds_alternative<double>(cell)) {
-        std::string s = combine_cell_to_string(cell);
-        os << "F" << s.size() << ":" << s;
-    } else if (std::holds_alternative<bool>(cell)) {
-        os << (std::get<bool>(cell) ? "BT" : "BF");
-    }
-}
+struct RowContext {
+    const Frame* frame;
+    const std::vector<size_t>* cols;
+};
 
-// Serialize a row to a collision-proof string key.
-// Used as the equality fallback inside drop_duplicates: when two rows share
-// the same uint64_t hash we compare their full row_key strings to confirm
-// they are true duplicates and not hash collisions.  The tagged, length-
-// prefixed encoding in serialize_cell() guarantees that different types
-// with the same surface representation (e.g. INT64(1) vs STRING("1")) and
-// values that contain the unit separator never produce the same key.
-static std::string row_key(const Frame& frame, size_t row, const std::vector<size_t>& cols) {
-    std::ostringstream oss;
-    for (size_t ci : cols) {
-        auto cell = frame.column(ci).at(row);
-        serialize_cell(oss, cell);
-        oss << "\x1F";  // unit separator
-    }
-    return oss.str();
-}
+struct RowHash {
+    const RowContext& ctx;
+    RowHash(const RowContext& c) : ctx(c) {}
 
-// --- Fast typed hashing for drop_duplicates ---
-// FNV-1a 64-bit hash over raw bytes.  No heap allocation.
-static uint64_t fnv1a(const char* data, size_t len, uint64_t h = 14695981039346656037ULL) noexcept {
-    for (size_t i = 0; i < len; ++i) {
-        h ^= static_cast<uint8_t>(data[i]);
-        h *= 1099511628211ULL;
-    }
-    return h;
-}
-
-// Hash a single CellValue directly from its typed storage — zero heap allocation.
-// Each variant uses a distinct seed so INT64(1) != STRING("1") != BOOL(true) != NULL.
-static uint64_t hash_cell(const CellValue& cell) noexcept {
-    if (std::holds_alternative<std::monostate>(cell)) return 14695981039346656037ULL ^ 0x00ULL;
-    if (std::holds_alternative<int64_t>(cell)) {
-        int64_t v = std::get<int64_t>(cell);
-        return fnv1a(reinterpret_cast<const char*>(&v), sizeof(v),
-                     14695981039346656037ULL ^ 0x01ULL);
-    }
-    if (std::holds_alternative<double>(cell)) {
-        double v = std::get<double>(cell);
-        // combine_cell_to_string() (used by serialize_cell / row_key) formats
-        // doubles with %.17g, which renders *every* NaN bit-pattern as the same
-        // string ("nan").  Hashing raw bytes would give different hashes for
-        // NaNs with different payloads, so a hash miss would skip the row_key()
-        // equality check and incorrectly keep both rows as distinct.
-        // Normalise to a single canonical quiet-NaN bit pattern so that
-        // hash(x) == hash(y) whenever row_key(x) == row_key(y) for all FLOAT64.
-        if (std::isnan(v)) {
-            const uint64_t canonical_nan_bits = 0x7FF8000000000000ULL;
-            return fnv1a(reinterpret_cast<const char*>(&canonical_nan_bits),
-                         sizeof(canonical_nan_bits), 14695981039346656037ULL ^ 0x02ULL);
+    std::size_t operator()(size_t row) const {
+        std::size_t seed = 0;
+        for (size_t ci : *ctx.cols) {
+            const auto& col = ctx.frame->column(ci);
+            if (col.is_null(row)) {
+                seed ^= std::hash<int>{}(0) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+            } else {
+                auto cell = col.at(row);
+                std::size_t h = 0;
+                if (std::holds_alternative<std::string>(cell)) {
+                    h = std::hash<std::string>{}(std::get<std::string>(cell));
+                } else if (std::holds_alternative<int64_t>(cell)) {
+                    h = std::hash<int64_t>{}(std::get<int64_t>(cell));
+                } else if (std::holds_alternative<double>(cell)) {
+                    double d = std::get<double>(cell);
+                    if (std::isnan(d)) {
+                        h = std::hash<int>{}(0xDEADBEEF);
+                    } else {
+                        h = std::hash<double>{}(d);
+                    }
+                } else if (std::holds_alternative<bool>(cell)) {
+                    h = std::hash<bool>{}(std::get<bool>(cell));
+                }
+                seed ^= h + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+            }
         }
-        return fnv1a(reinterpret_cast<const char*>(&v), sizeof(v),
-                     14695981039346656037ULL ^ 0x02ULL);
+        return seed;
     }
-    if (std::holds_alternative<bool>(cell)) {
-        uint8_t v = std::get<bool>(cell) ? 1u : 0u;
-        return fnv1a(reinterpret_cast<const char*>(&v), sizeof(v),
-                     14695981039346656037ULL ^ 0x03ULL);
-    }
-    const std::string& s = std::get<std::string>(cell);
-    return fnv1a(s.data(), s.size(), 14695981039346656037ULL ^ 0x04ULL);
-}
+};
 
-// Combine per-column hashes into a single 64-bit row hash.
-// FNV multiply-xor chaining makes column order significant so
-// row(A,B) != row(B,A) for distinct A and B.
-static uint64_t hash_row(const Frame& frame, size_t row, const std::vector<size_t>& cols) noexcept {
-    uint64_t h = 14695981039346656037ULL;
-    for (size_t ci : cols) {
-        h ^= hash_cell(frame.column(ci).at(row));
-        h *= 1099511628211ULL;
+struct RowEqual {
+    const RowContext& ctx;
+    RowEqual(const RowContext& c) : ctx(c) {}
+
+    bool operator()(size_t lhs, size_t rhs) const {
+        for (size_t ci : *ctx.cols) {
+            const auto& col = ctx.frame->column(ci);
+            if (col.is_null(lhs) != col.is_null(rhs)) return false;
+            if (col.is_null(lhs)) continue;
+            auto cell_l = col.at(lhs);
+            auto cell_r = col.at(rhs);
+            if (cell_l != cell_r) {
+                if (std::holds_alternative<double>(cell_l) &&
+                    std::holds_alternative<double>(cell_r)) {
+                    if (std::isnan(std::get<double>(cell_l)) &&
+                        std::isnan(std::get<double>(cell_r))) {
+                        continue;
+                    }
+                }
+                return false;
+            }
+        }
+        return true;
     }
-    return h;
+};
+
+static int64_t checked_double_to_int64(double value, const char* context) {
+    constexpr double int64_min = static_cast<double>(std::numeric_limits<int64_t>::min());
+    constexpr double int64_max_exclusive = 9223372036854775808.0;  // 2^63
+
+    if (!std::isfinite(value) || value != std::floor(value) || value < int64_min ||
+        value >= int64_max_exclusive) {
+        throw std::invalid_argument(std::string(context) +
+                                    " must be a finite integral value within int64 range.");
+    }
+    return static_cast<int64_t>(value);
 }
 
 static CellValue coerce_value(const CellValue& value, DType target) {
@@ -190,12 +167,13 @@ static CellValue coerce_value(const CellValue& value, DType target) {
         }
         if (std::holds_alternative<double>(value)) {
             double d = std::get<double>(value);
-            if (std::isnan(d) || std::isinf(d) || d != std::floor(d)) {
+            try {
+                return checked_double_to_int64(d, "Numeric fill value");
+            } catch (const std::invalid_argument&) {
                 throw std::invalid_argument(
                     "Lossy or non-finite numeric fill values are not permitted for integer "
                     "columns.");
             }
-            return static_cast<int64_t>(d);
         }
         if (std::holds_alternative<std::string>(value)) {
             const auto& s = std::get<std::string>(value);
@@ -328,135 +306,45 @@ Frame drop_duplicates(const Frame& frame, const std::optional<std::vector<std::s
     }
 
     auto col_indices = resolve_subset(frame, subset);
-
-    // Design: hash_row() is a fast O(1) first-pass filter.
-    //   hash miss  → row is definitely unique; no row_key() call needed.
-    //   hash hit   → row_key() is called lazily to confirm true equality
-    //                and guard against the (astronomically rare) FNV-1a collision.
-    //
-    // Each hash bucket stores a vector of (serialized_key, metadata) pairs.
-    // The vector has exactly one entry in the normal case (no collision);
-    // a second entry is added only on a genuine hash collision.
-    // row_key() for a stored entry is computed lazily the first time a hit
-    // arrives so that truly unique rows never pay the serialization cost.
+    if (keep != "first" && keep != "last" && keep != "none") {
+        throw std::invalid_argument("keep must be 'first', 'last', or 'none'");
+    }
+    if (frame.num_cols() == 0) {
+        return frame.clone();
+    }
+    RowContext ctx{&frame, &col_indices};
+    RowHash hash(ctx);
+    RowEqual eq(ctx);
 
     if (keep == "first") {
-        // bucket: vector of (row_key, first_row_index)
-        // row_key string is empty until the bucket's first hash hit forces it.
-        std::unordered_map<uint64_t, std::vector<std::pair<std::string, size_t>>> seen;
-        seen.reserve(frame.num_rows());
+        std::unordered_set<size_t, RowHash, RowEqual> seen(0, hash, eq);
         std::vector<size_t> keep_rows;
-
         for (size_t r = 0; r < frame.num_rows(); ++r) {
-            uint64_t h = hash_row(frame, r, col_indices);
-            auto it = seen.find(h);
-            if (it == seen.end()) {
-                // Fast path: hash miss — unique row, no serialization needed yet.
-                seen.emplace(h, std::vector<std::pair<std::string, size_t>>{{"", r}});
+            if (seen.insert(r).second) {
                 keep_rows.push_back(r);
-            } else {
-                // Hash hit: verify with full key equality to rule out collision.
-                std::string cur = row_key(frame, r, col_indices);
-                auto& bucket = it->second;
-                bool is_dup = false;
-                for (auto& [stored_key, stored_idx] : bucket) {
-                    if (stored_key.empty()) {
-                        // Lazy: compute the stored entry's key on first hit.
-                        stored_key = row_key(frame, stored_idx, col_indices);
-                    }
-                    if (stored_key == cur) {
-                        is_dup = true;
-                        break;
-                    }
-                }
-                if (!is_dup) {
-                    // Hash collision (not a duplicate) — keep this row too.
-                    bucket.emplace_back(cur, r);
-                    keep_rows.push_back(r);
-                }
             }
         }
         return select_rows(frame, keep_rows);
-
     } else if (keep == "last") {
-        // bucket: vector of (row_key, last_row_index)
-        std::unordered_map<uint64_t, std::vector<std::pair<std::string, size_t>>> last_seen;
-        last_seen.reserve(frame.num_rows());
-
+        std::unordered_map<size_t, size_t, RowHash, RowEqual> last_seen(0, hash, eq);
         for (size_t r = 0; r < frame.num_rows(); ++r) {
-            uint64_t h = hash_row(frame, r, col_indices);
-            auto it = last_seen.find(h);
-            if (it == last_seen.end()) {
-                last_seen.emplace(h, std::vector<std::pair<std::string, size_t>>{{"", r}});
-            } else {
-                std::string cur = row_key(frame, r, col_indices);
-                auto& bucket = it->second;
-                bool found = false;
-                for (auto& [stored_key, stored_idx] : bucket) {
-                    if (stored_key.empty()) {
-                        stored_key = row_key(frame, stored_idx, col_indices);
-                    }
-                    if (stored_key == cur) {
-                        stored_idx = r;  // update to last occurrence
-                        found = true;
-                        break;
-                    }
-                }
-                if (!found) {
-                    // Hash collision — separate unique key in this bucket.
-                    bucket.emplace_back(cur, r);
-                }
-            }
+            last_seen[r] = r;
         }
-
         std::vector<size_t> keep_rows;
-        for (auto& [_, bucket] : last_seen) {
-            for (auto& [_, idx] : bucket) {
-                keep_rows.push_back(idx);
-            }
+        for (auto& [_, ri] : last_seen) {
+            keep_rows.push_back(ri);
         }
         std::sort(keep_rows.begin(), keep_rows.end());
         return select_rows(frame, keep_rows);
-
     } else if (keep == "none") {
-        // bucket: vector of (row_key, vector_of_row_indices)
-        std::unordered_map<uint64_t, std::vector<std::pair<std::string, std::vector<size_t>>>>
-            groups;
-        groups.reserve(frame.num_rows());
-
+        std::unordered_map<size_t, std::vector<size_t>, RowHash, RowEqual> groups(0, hash, eq);
         for (size_t r = 0; r < frame.num_rows(); ++r) {
-            uint64_t h = hash_row(frame, r, col_indices);
-            auto it = groups.find(h);
-            if (it == groups.end()) {
-                groups.emplace(h, std::vector<std::pair<std::string, std::vector<size_t>>>{
-                                      {"", std::vector<size_t>{r}}});
-            } else {
-                std::string cur = row_key(frame, r, col_indices);
-                auto& bucket = it->second;
-                bool found = false;
-                for (auto& [stored_key, rows] : bucket) {
-                    if (stored_key.empty()) {
-                        stored_key = row_key(frame, rows[0], col_indices);
-                    }
-                    if (stored_key == cur) {
-                        rows.push_back(r);
-                        found = true;
-                        break;
-                    }
-                }
-                if (!found) {
-                    // Hash collision — new distinct key in same bucket.
-                    bucket.emplace_back(cur, std::vector<size_t>{r});
-                }
-            }
+            groups[r].push_back(r);
         }
-
         std::vector<size_t> keep_rows;
-        for (auto& [_, bucket] : groups) {
-            for (auto& [_, rows] : bucket) {
-                if (rows.size() == 1) {
-                    keep_rows.push_back(rows[0]);
-                }
+        for (auto& [_, rows] : groups) {
+            if (rows.size() == 1) {
+                keep_rows.push_back(rows[0]);
             }
         }
         std::sort(keep_rows.begin(), keep_rows.end());
@@ -752,9 +640,9 @@ Frame clip_numeric(const Frame& frame, std::optional<double> lower, std::optiona
         if (src.dtype() == DType::INT64) {
             const auto& vec = std::get<std::vector<int64_t>>(src.data());
             Column col(src.name(), DType::INT64);
-            const int64_t lo = lower.has_value() ? static_cast<int64_t>(lower.value())
+            const int64_t lo = lower.has_value() ? checked_double_to_int64(lower.value(), "lower")
                                                  : std::numeric_limits<int64_t>::min();
-            const int64_t hi = upper.has_value() ? static_cast<int64_t>(upper.value())
+            const int64_t hi = upper.has_value() ? checked_double_to_int64(upper.value(), "upper")
                                                  : std::numeric_limits<int64_t>::max();
             for (size_t r = 0; r < src.size(); ++r) {
                 if (src.is_null(r)) {

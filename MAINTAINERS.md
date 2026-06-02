@@ -10,7 +10,7 @@ Every issue should have:
 - One `priority:*` label when impact is clear.
 - One `level:*` label for GSSoC-scored or contributor-ready work.
 - One `size:*` label for estimated PR scope.
-- One workflow label such as `status: needs triage`, `status: ready`, `status: claimed`, or `status: blocked`.
+- One workflow label such as `status:needs-triage`, `status:ready`, `status:claimed`, or `status:blocked`.
 
 Before opening another large issue batch, use
 [CORE_STABILITY_SPRINT.md](CORE_STABILITY_SPRINT.md) as the maintainer checklist

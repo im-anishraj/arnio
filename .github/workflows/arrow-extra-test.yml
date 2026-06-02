@@ -8,6 +8,10 @@ on:
   pull_request:
     paths:
       - ".github/workflows/arrow-extra-test.yml"
+      - "cpp/**"
+      - "bindings/**"
+      - "arnio/_core.py"
+      - "arnio/_arnio_cpp.pyi"
       - "arnio/convert.py"
       - "tests/test_to_arrow_edge_cases.py"
       - "tests/test_convert.py"
@@ -15,6 +19,9 @@ on:
   schedule:
     - cron: "0 6 * * 1"
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   arrow-extra-test:

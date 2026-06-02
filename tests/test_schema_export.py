@@ -263,21 +263,21 @@ def test_set_valued_allowed_normalized():
 
 
 def test_real_schema_field_dtype():
-    schema = ar.Schema({"price": ar.Field(dtype="FLOAT64", nullable=False)})
+    schema = ar.Schema({"price": ar.Field(dtype="float64", nullable=False)})
     result = schema_to_dict(schema)
-    assert result["fields"]["price"]["dtype"] == "FLOAT64"
+    assert result["fields"]["price"]["dtype"] == "float64"
     assert result["fields"]["price"]["nullable"] is False
 
 
 def test_real_schema_field_allowed_set_normalized():
-    schema = ar.Schema({"status": ar.Field(dtype="STRING", allowed={"a", "b", "c"})})
+    schema = ar.Schema({"status": ar.Field(dtype="string", allowed={"a", "b", "c"})})
     result = schema_to_dict(schema)
     assert result["fields"]["status"]["allowed"] == ["a", "b", "c"]
 
 
 def test_real_schema_field_required_if_tuple_normalized():
     schema = ar.Schema(
-        {"col": ar.Field(dtype="STRING", required_if=("other_col", "yes"))}
+        {"col": ar.Field(dtype="string", required_if=("other_col", "yes"))}
     )
     result = schema_to_dict(schema)
     assert isinstance(result["fields"]["col"]["required_if"], list)
@@ -286,7 +286,7 @@ def test_real_schema_field_required_if_tuple_normalized():
 
 def test_real_schema_field_datetime_bounds():
     schema = ar.Schema(
-        {"ts": ar.Field(dtype="DATETIME", min="2020-01-01", max="2025-12-31")}
+        {"ts": ar.Field(dtype="datetime", min="2020-01-01", max="2025-12-31")}
     )
     result = schema_to_dict(schema)
     assert "datetime_min" in result["fields"]["ts"]
@@ -296,7 +296,7 @@ def test_real_schema_field_datetime_bounds():
 
 
 def test_real_schema_with_rules_raises():
-    schema = ar.Schema({"col": ar.Field(dtype="STRING")}, rules=[lambda df: []])
+    schema = ar.Schema({"col": ar.Field(dtype="string")}, rules=[lambda df: []])
     with pytest.raises(ValueError, match="rules"):
         schema_to_dict(schema)
 
@@ -346,9 +346,9 @@ def test_schema_object_fields_named_strict_and_unique_not_dropped():
     """Schema object: fields named strict/unique survive alongside schema metadata."""
     schema = ar.Schema(
         {
-            "strict": ar.Field(dtype="INT64"),
-            "unique": ar.Field(dtype="STRING"),
-            "name": ar.Field(dtype="STRING"),
+            "strict": ar.Field(dtype="int64"),
+            "unique": ar.Field(dtype="string"),
+            "name": ar.Field(dtype="string"),
         },
         strict=True,
         unique=["name"],
@@ -413,3 +413,59 @@ class TestDateLikeStringQuoting:
         raw = {"field": {"type": "string", "default": "2026-05-28T10:30:00+05:30"}}
         out = schema_to_yaml(raw)
         assert '"2026-05-28T10:30:00+05:30"' in out
+
+
+# ── Regression tests for issue #1797 ────────────────────────────────────────
+
+
+class TestStructuredMetadataValidation:
+    """schema_to_dict() must validate and normalize structured raw-dict metadata.
+
+    Covers the path where the input is {"fields": {...}, "strict": ..., ...}.
+    Previously, metadata was merged without any validation, which allowed
+    non-serializable values and non-string keys to leak into the result and
+    cause delayed failures in schema_to_yaml() or downstream serializers.
+    """
+
+    def test_non_string_metadata_key_raises(self):
+        """Integer metadata keys must be rejected immediately."""
+        with pytest.raises(TypeError, match="metadata keys must be strings"):
+            schema_to_dict({"fields": {"a": "int64"}, 123: "bad"})
+
+    def test_unsupported_metadata_value_raises(self):
+        """Non-serializable metadata values (e.g. object()) must be rejected."""
+        with pytest.raises(TypeError):
+            schema_to_dict({"fields": {"a": "int64"}, "strict": object()})
+
+    def test_tuple_metadata_value_normalized_to_list(self):
+        """Tuple metadata values (e.g. unique=('id',)) must be converted to list."""
+        result = schema_to_dict({"fields": {"a": "int64"}, "unique": ("id", "name")})
+        assert result["unique"] == ["id", "name"]
+        assert isinstance(result["unique"], list)
+
+    def test_valid_strict_metadata_preserved(self):
+        """strict=True metadata must survive schema_to_dict() unchanged."""
+        result = schema_to_dict({"fields": {"a": "int64"}, "strict": True})
+        assert result["strict"] is True
+
+    def test_valid_unique_list_metadata_preserved(self):
+        """unique=['id'] metadata must survive schema_to_dict() unchanged."""
+        result = schema_to_dict({"fields": {"a": "int64"}, "unique": ["id"]})
+        assert result["unique"] == ["id"]
+
+    def test_schema_to_yaml_end_to_end_valid_metadata(self):
+        """schema_to_yaml() must not raise for valid structured metadata."""
+        raw = {"fields": {"a": "int64"}, "strict": True, "unique": ["a"]}
+        out = schema_to_yaml(raw)
+        assert "strict: true" in out
+        assert "- a" in out
+
+    def test_schema_to_yaml_raises_for_non_string_key(self):
+        """schema_to_yaml() must surface the TypeError from non-string metadata keys."""
+        with pytest.raises(TypeError, match="metadata keys must be strings"):
+            schema_to_yaml({"fields": {"a": "int64"}, 123: "bad"})
+
+    def test_schema_to_yaml_raises_for_unsupported_metadata_value(self):
+        """schema_to_yaml() must surface the TypeError from object() metadata values."""
+        with pytest.raises(TypeError):
+            schema_to_yaml({"fields": {"a": "int64"}, "strict": object()})

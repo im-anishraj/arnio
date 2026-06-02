@@ -4,13 +4,7 @@ arnio — Fast CSV processing and data cleaning companion for pandas.
 import arnio as ar
 """
 
-try:
-    from importlib.metadata import version
-
-    __version__ = version("arnio")
-except Exception:
-    __version__ = "unknown"
-
+from ._version import __version__ as __version__
 from .cleaning import (
     cast_types,
     clean,
@@ -36,6 +30,7 @@ from .cleaning import (
     round_numeric_columns,
     safe_divide_columns,
     select_columns,
+    slugify_column_names,
     standardize_missing_tokens,
     strip_whitespace,
     trim_column_names,
@@ -74,6 +69,7 @@ from .pipeline import (
 )
 from .quality import (
     CleanExplanation,
+    CleaningSuggestion,
     CleanStepRecord,
     ColumnProfile,
     DataQualityReport,
@@ -155,8 +151,10 @@ __all__ = [
     "cast_types",
     "clean",
     "safe_divide_columns",
+    "slugify_column_names",
     "trim_column_names",
     "standardize_missing_tokens",
+    "CleaningSuggestion",
     # Conversion
     "to_pandas",
     "to_arrow",

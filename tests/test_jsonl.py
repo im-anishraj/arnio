@@ -260,6 +260,54 @@ class TestReadJsonlEncoding:
         with pytest.raises(ar.JsonlReadError, match="decode"):
             ar.read_jsonl(path, encoding="utf-8")
 
+    def test_encoding_errors_replace(self, tmp_path):
+        path = tmp_path / "bad.jsonl"
+
+        # Invalid UTF-8 byte inside JSON string
+        path.write_bytes(b'{"text": "hello \xff world"}\n')
+
+        frame = ar.read_jsonl(
+            path,
+            encoding="utf-8",
+            encoding_errors="replace",
+        )
+
+        assert frame.shape == (1, 1)
+
+    def test_encoding_errors_ignore(self, tmp_path):
+        path = tmp_path / "bad.jsonl"
+
+        # Invalid UTF-8 byte inside JSON string
+        path.write_bytes(b'{"text": "hello \xff world"}\n')
+
+        frame = ar.read_jsonl(
+            path,
+            encoding="utf-8",
+            encoding_errors="ignore",
+        )
+
+        assert frame.shape == (1, 1)
+
+    def test_encoding_errors_invalid_value(self, tmp_path):
+        path = tmp_path / "data.jsonl"
+        path.write_text('{"a": 1}\n', encoding="utf-8")
+
+        with pytest.raises(ValueError, match="encoding_errors"):
+            ar.read_jsonl(
+                path,
+                encoding_errors="bad",
+            )
+
+    def test_encoding_errors_invalid_type(self, tmp_path):
+        path = tmp_path / "data.jsonl"
+        path.write_text('{"a": 1}\n', encoding="utf-8")
+
+        with pytest.raises(TypeError, match="encoding_errors"):
+            ar.read_jsonl(
+                path,
+                encoding_errors=123,
+            )
+
 
 class TestReadJsonlPipelineCompat:
     def test_result_is_pipeline_compatible(self, tmp_path):
@@ -367,3 +415,35 @@ class TestReadJsonlDuplicateKeys:
 
         with pytest.raises(ar.JsonlReadError):
             ar.read_jsonl(p)
+
+
+class TestReadJsonlNonFiniteConstants:
+    def test_nan_raises_jsonl_read_error(self, tmp_path):
+        p = tmp_path / "nan.jsonl"
+        p.write_text('{"x": NaN}\n', encoding="utf-8")
+        with pytest.raises(ar.JsonlReadError, match="line 1"):
+            ar.read_jsonl(p)
+
+    def test_infinity_raises_jsonl_read_error(self, tmp_path):
+        p = tmp_path / "inf.jsonl"
+        p.write_text('{"x": Infinity}\n', encoding="utf-8")
+        with pytest.raises(ar.JsonlReadError, match="line 1"):
+            ar.read_jsonl(p)
+
+    def test_negative_infinity_raises_jsonl_read_error(self, tmp_path):
+        p = tmp_path / "neginf.jsonl"
+        p.write_text('{"x": -Infinity}\n', encoding="utf-8")
+        with pytest.raises(ar.JsonlReadError, match="line 1"):
+            ar.read_jsonl(p)
+
+    def test_non_finite_error_includes_line_number(self, tmp_path):
+        p = tmp_path / "multi.jsonl"
+        p.write_text('{"x": 1}\n{"x": NaN}\n', encoding="utf-8")
+        with pytest.raises(ar.JsonlReadError, match="line 2"):
+            ar.read_jsonl(p)
+
+    def test_valid_jsonl_unaffected(self, tmp_path):
+        p = tmp_path / "valid.jsonl"
+        p.write_text('{"x": 1}\n{"x": 2}\n', encoding="utf-8")
+        frame = ar.read_jsonl(p)
+        assert frame.shape == (2, 1)

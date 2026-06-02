@@ -138,7 +138,6 @@ class TestPipeline:
                 }
             )
         )
-
         result = ar.pipeline(
             frame,
             [
@@ -862,6 +861,57 @@ class TestPipeline:
         assert row_counts[0]["before"] == 3
         assert row_counts[0]["after"] == 3
         assert row_counts[0]["dry_run"] is True
+
+    def test_register_step_invalid_name_type(self):
+        """Raise ValueError when name is not a string."""
+        with pytest.raises(
+            ValueError, match="parameter 'name' must be a non-empty string"
+        ):
+            ar.register_step(123, lambda df: df)
+
+    def test_register_step_empty_name(self):
+        """Raise ValueError when name is empty string."""
+        with pytest.raises(
+            ValueError, match="parameter 'name' must be a non-empty string"
+        ):
+            ar.register_step("", lambda df: df)
+
+    def test_register_step_non_callable_fn(self):
+        """Raise TypeError when fn is not callable."""
+        with pytest.raises(TypeError, match="parameter 'fn' must be a callable object"):
+            ar.register_step("bad_step", 123)
+
+    def test_register_step_non_bool_overwrite(self):
+        """Raise TypeError when overwrite is not a bool."""
+        with pytest.raises(TypeError, match="parameter 'overwrite' must be a bool"):
+            ar.register_step("some_step", lambda df: df, overwrite="yes")
+
+    def test_unregister_step_invalid_name_type(self):
+        """Raise TypeError when name is not a string."""
+        with pytest.raises(TypeError, match="parameter 'name' must be a string"):
+            ar.unregister_step(["bad_step"])
+
+    def test_unregister_step_empty_name(self):
+        """Raise ValueError when name is empty string."""
+        with pytest.raises(
+            ValueError, match="parameter 'name' must be a non-empty string"
+        ):
+            ar.unregister_step("")
+
+    def test_pipeline_filter_rows_non_string_column_raises_type_error(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+        with pytest.raises(TypeError, match="column must be a non-empty string"):
+            ar.pipeline(
+                frame, [("filter_rows", {"column": 123, "op": "==", "value": 1})]
+            )
+
+    def test_pipeline_filter_rows_non_string_op_raises_type_error(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
+
+        with pytest.raises(TypeError, match="op must be a string"):
+            ar.pipeline(
+                frame, [("filter_rows", {"column": "x", "op": ["=="], "value": 1})]
+            )
 
 
 class TestPipelineDryRunIntermediateFrame:
@@ -1895,3 +1945,98 @@ def test_pipeline_bool_flags_valid():
         verbose=True,
     )
     assert isinstance(result, tuple)
+
+
+class TestRegisterStepValidation:
+    @pytest.fixture(autouse=True)
+    def cleanup_registry(self):
+        """Ensure the global custom step registry resets after every single test in this class."""
+        yield
+        from arnio.pipeline import reset_steps
+
+        reset_steps()
+
+    # --- Happy Path ---
+    def test_registers_valid_callable(self):
+        from arnio.pipeline import list_steps, register_step
+
+        def dummy_clean(df):
+            return df
+
+        register_step("custom_dummy_step", dummy_clean)
+        assert "custom_dummy_step" in list_steps()
+
+    def test_allows_intentional_overwrite(self):
+        from arnio.pipeline import register_step
+
+        def first_step(df):
+            return df
+
+        def second_step(df):
+            return df
+
+        register_step("overwrite_step", first_step)
+        register_step("overwrite_step", second_step, overwrite=True)
+
+    # --- Edge Cases & Parameter Boundaries ---
+    def test_rejects_non_callable_objects(self):
+        from arnio.pipeline import register_step
+
+        """Verify TypeError is raised immediately for numbers, strings, and instances."""
+        with pytest.raises(TypeError, match="must be a callable object"):
+            register_step("bad_int", 123)
+        with pytest.raises(TypeError, match="must be a callable object"):
+            register_step("bad_str", "not_a_callable_function")
+        with pytest.raises(TypeError, match="must be a callable object"):
+            register_step("bad_dict", {"a": 1})
+
+    def test_rejects_empty_string_names(self):
+        from arnio.pipeline import register_step
+
+        def dummy_clean(df):
+            return df
+
+        with pytest.raises(ValueError, match="must be a non-empty string"):
+            register_step("", dummy_clean)
+
+    def test_rejects_whitespace_only_names(self):
+        from arnio.pipeline import register_step
+
+        def dummy_clean(df):
+            return df
+
+        with pytest.raises(ValueError, match="must be a non-empty string"):
+            register_step("    ", dummy_clean)
+
+    def test_rejects_invalid_name_types(self):
+        from arnio.pipeline import register_step
+
+        def dummy_clean(df):
+            return df
+
+        with pytest.raises(ValueError, match="must be a non-empty string"):
+            register_step(None, dummy_clean)  # type: ignore
+        with pytest.raises(ValueError, match="must be a non-empty string"):
+            register_step(42, dummy_clean)  # type: ignore
+
+
+class TestPipelineStepContainerValidation:
+    @pytest.fixture
+    def frame(self, sample_csv):
+        return ar.read_csv(sample_csv)
+
+    @pytest.mark.parametrize(
+        "invalid_steps",
+        [None, "drop_nulls", b"drop_nulls", {"drop_nulls": {}}, ("drop_nulls",)],
+    )
+    def test_pipeline_rejects_invalid_step_containers(self, frame, invalid_steps):
+        with pytest.raises(TypeError):
+            ar.pipeline(frame, invalid_steps)
+
+    def test_pipeline_rejects_bare_step_tuple_with_helpful_message(self, frame):
+        with pytest.raises(TypeError, match=r"\[\(\'drop_nulls\',\)\]"):
+            ar.pipeline(frame, ("drop_nulls",))
+
+    def test_pipeline_accepts_valid_step_container(self, frame):
+        result = ar.pipeline(frame, [("strip_whitespace",)])
+        assert isinstance(result, ar.ArFrame)
