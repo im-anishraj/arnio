@@ -218,4 +218,3 @@ Log these fields to correlate failures deterministically:
 - For `UnknownStepError`: the missing name and `ar.list_steps()` snapshot.
 - For `TypeCastError`: the mapping attempted and the chosen `errors` mode.
 - For `ValidationResult`: `result.passed`, `result.issue_count`, and a capped list of `(column, rule, row_index, message)`.
-
