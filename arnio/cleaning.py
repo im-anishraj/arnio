@@ -1839,8 +1839,8 @@ def filter_rows(
 
     try:
         mask = getattr(df[column], ops[op])(value)
-    except TypeError as exc:
-        raise TypeError(
+    except (TypeError, ValueError) as exc:
+        raise TypeCastError(
             f"filter_rows: cannot compare column {column!r} with value "
             f"{value!r} using operator {op!r}: {exc}"
         ) from exc
