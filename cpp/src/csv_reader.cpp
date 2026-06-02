@@ -1373,7 +1373,6 @@ void CsvChunkReader::open(const std::string& path) {
             auto dtype_result = apply_explicit_dtypes(config, header_, col_indices_, col_types_);
             explicit_dtype_columns_ = std::move(dtype_result.explicit_columns);
         }
-
     }
 
     const size_t skip_target = config.skip_rows.value_or(0);

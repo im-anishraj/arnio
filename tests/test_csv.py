@@ -3244,4 +3244,3 @@ def test_scan_csv_file_like_object():
     assert "y" in schema
     assert stream.read_sizes
     assert -1 not in stream.read_sizes
-
