@@ -1,4 +1,4 @@
-.PHONY: install test test-quick lint format benchmark doctor clean help
+.PHONY: install test test-quick lint format benchmark benchmark-sparse-nulls doctor clean help docker-dev docker-test
 
 help:  ## Show this help message
 	@python -c "import re; [print(f'\033[36m{m[0]:<15}\033[0m {m[1]}') for m in sorted([re.match(r'^([a-zA-Z_-]+):.*?## (.*)$$', line).groups() for line in open('$(MAKEFILE_LIST)') if re.match(r'^[a-zA-Z_-]+:.*?## .*$$', line)])]"
@@ -46,3 +46,10 @@ else
 	find arnio -name "_arnio_cpp*.pyd" -delete
 	find arnio -name "_arnio_cpp*.dll" -delete
 endif
+
+docker-dev: ## Build and open a shell in the dev container
+	docker compose up -d dev
+	docker compose exec dev bash
+
+docker-test: ## Run test suite inside the dev container
+	docker compose run --rm dev make test

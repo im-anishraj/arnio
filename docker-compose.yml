@@ -1,0 +1,10 @@
+services:
+  dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+    command: >
+      bash -lc "pip install -e '.[dev]' && pre-commit install && tail -f /dev/null"
