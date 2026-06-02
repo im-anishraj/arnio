@@ -815,6 +815,7 @@ class Field:
 
 @dataclass(frozen=True)
 class Schema:
+    __slots__ = ("fields", "strict", "unique", "rules")
     """Named column validation contract."""
 
     fields: dict[str, Field]
