@@ -89,6 +89,7 @@
         <div class="api-func"><div class="api-func-header">from_pandas(df)</div><div class="api-func-body"><p>Convert a pandas DataFrame to <code>ArFrame</code> with dtype validation, duplicate-column checks, attrs preservation, and zero-column row-count preservation.</p></div></div>
         <div class="api-func"><div class="api-func-header">from_dict(data)</div><div class="api-func-body"><p>Build an <code>ArFrame</code> from a mapping of column names to column values.</p></div></div>
         <div class="api-func"><div class="api-func-header">to_arrow(frame)</div><div class="api-func-body"><p>Export to <code>pyarrow.Table</code>. Install with <code>pip install "arnio[arrow]"</code>. Added in v1.18.0.</p></div></div>
+        <div class="api-func"><div class="api-func-header">from_arrow(table)</div><div class="api-func-body"><p>Convert a PyArrow Table to an <code>ArFrame</code>. Install with <code>pip install "arnio[arrow]"</code>.</p></div></div>
         <div class="api-func"><div class="api-func-header">to_polars(frame)</div><div class="api-func-body"><p>Convert an <code>ArFrame</code> to a Polars DataFrame via Arrow. Requires optional Polars dependency; install with <code>pip install "arnio[polars]"</code>.</p></div></div>
         <div class="api-func"><div class="api-func-header">from_polars(df)</div><div class="api-func-body"><p>Convert a Polars DataFrame to <code>ArFrame</code> with inferred types and null values preserved. Requires optional Polars dependency; install with <code>pip install "arnio[polars]"</code>.</p></div></div>
 

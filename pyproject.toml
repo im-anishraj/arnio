@@ -115,6 +115,9 @@ known-first-party = ["arnio"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-v --tb=short"
+markers = [
+    "arrow: tests requiring pyarrow",
+]
 
 [tool.cibuildwheel]
 build = "cp39-* cp310-* cp311-* cp312-* cp313-* cp314-*"

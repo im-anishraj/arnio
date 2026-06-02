@@ -547,6 +547,41 @@ def _from_arrow_table(table: pa.Table) -> ArFrame:
     return ArFrame(cpp_frame)
 
 
+def from_arrow(table: pa.Table) -> ArFrame:
+    """Convert a PyArrow Table to an ArFrame.
+
+    This function provides a direct, pandas-free Arrow import path.
+
+    Parameters
+    ----------
+    table : pyarrow.Table
+        Input PyArrow table.
+
+    Returns
+    -------
+    ArFrame
+        Equivalent ArFrame with inferred types and null values preserved.
+
+    Raises
+    ------
+    ImportError
+        If pyarrow is not installed.
+    TypeError
+        If the input is not a PyArrow Table.
+    """
+    try:
+        import pyarrow as pa
+    except ImportError as exc:
+        raise ImportError(
+            "pyarrow is not installed. Please install it with 'pip install arnio[arrow]'"
+        ) from exc
+
+    if not isinstance(table, pa.Table):
+        raise TypeError(f"Expected a PyArrow Table, but got {type(table).__name__}")
+
+    return _from_arrow_table(table)
+
+
 def from_polars(df: object) -> ArFrame:
     """Convert a Polars DataFrame to ArFrame.
 
