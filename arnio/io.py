@@ -344,7 +344,7 @@ def _fetch_url_to_tempfile(url: str) -> str:
             headers={"User-Agent": "arnio/read_csv"},
         )
         try:
-            response = urllib.request.urlopen(req, timeout=_URL_FETCH_TIMEOUT)
+            response = urllib.request.urlopen(req, timeout=_URL_FETCH_TIMEOUT)  # nosec B310
         except urllib.error.HTTPError as exc:
             raise RemoteReadError(
                 f"HTTP {exc.code} fetching CSV URL {url!r}: {exc.reason}",

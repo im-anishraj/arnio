@@ -1,28 +1,4 @@
 ### Bandit Configuration File
 
-# target: ['arnio']
-# recurse: true
-
-# Exclude directories from scanning
-exclude_dirs:
-  - 'tests'
-  - 'benchmarks'
-  - 'examples'
-  - 'scripts'
-  - '.github'
-  - 'venv'
-  - '.venv'
-  - 'build'
-  - 'dist'
-
 # Aggregate results by file
-aggregate: 'file'
-
-# Only report high severity issues
-# severity: 'high'
-
-# Only report high confidence issues
-# confidence: 'high'
-
-# Number of lines of context to show
-# lines: 3
+aggregate: file
