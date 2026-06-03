@@ -631,8 +631,13 @@ class TestPipeline:
             ar.unregister_step("missing_step")
 
     def test_unregister_builtin_python_step(self):
-        with pytest.raises(ar.UnknownStepError):
-            ar.unregister_step("standardize_missing_tokens")
+        for step_name in [
+            "standardize_missing_tokens",
+            "filter_rows",
+            "replace_values",
+        ]:
+            with pytest.raises(ValueError):
+                ar.unregister_step(step_name)
 
     def test_unregister_custom_step(self):
         def custom_step(df):

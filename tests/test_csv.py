@@ -3130,3 +3130,18 @@ def test_scan_csv_file_like_object():
     assert "y" in schema
     assert stream.read_sizes
     assert -1 not in stream.read_sizes
+
+
+# clear path type errors in path-only readers
+
+
+@pytest.mark.parametrize(
+    "bad_input",
+    [123, 3.14, None, object(), ["a.csv"]],
+)
+def test_scan_csv_invalid_path_type(bad_input):
+    with pytest.raises(
+        TypeError,
+        match="scan_csv expected a filesystem path",
+    ):
+        ar.scan_csv(bad_input)
