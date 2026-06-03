@@ -52,40 +52,46 @@ A Column represents a single 1D array of homogeneous data.
 - **Variant Storage:** Data is stored using `std::variant` over strongly-typed `std::vector`s (e.g., `std::vector<int64_t>`, `std::vector<std::string>`).
 
 ## 4. Pandas Dtype Compatibility
-
-Arnio supports a focused set of pandas dtypes directly through its native C++ columnar model. Some advanced pandas dtypes are currently handled through conversion, have limited support, or are planned for future improvements.
-This section helps users understand which dtype workflows are fully supported, partially supported, unsupported, or planned.
+Arnio supports a focused set of pandas dtypes directly through its native C++ columnar model. This section reflects the current implementation behavior and indicates which dtype workflows are supported versus rejected during validation.
 
 ### Fully Supported
+
 The following dtypes are natively supported and map efficiently to strongly typed C++ vectors:
-- `int64`
-- `float64`
-- `bool`
-- `string`
+
+* `int64`
+* `float64`
+* `bool`
+* `string`
+
 These allow efficient parsing, cleaning operations, and zero-copy or near zero-copy conversion back to pandas where possible.
 
-### Limited / Converted Support
-The following dtypes are not natively supported but may work through conversion or preprocessing depending on the workflow:
-- `datetime64[ns]`
-- `category`
-- mixed `object` columns
-These may require conversion before pipeline execution. Mixed object columns can reduce type inference reliability, and categorical workflows may require normalization before cleaning operations.
-
-### Planned Support
-The following pandas-specific nullable dtypes require additional handling for null semantics and conversion consistency:
-- nullable integer types such as `Int64`
-- nullable boolean dtype such as `boolean`
-Support improvements for these dtypes are planned for future releases.
-
 ### Currently Unsupported
-The following dtype is currently unsupported:
-- `timedelta64[ns]`
-- `complex64`
 
-This requires additional parsing and inference support in the C++ runtime and is not yet available.
+The following dtypes are currently rejected by `from_pandas()` validation and will raise a user-facing `TypeError` with guidance on how to preprocess the column:
+
+* `datetime64[ns]`
+* `category`
+* mixed `object` columns
+* `timedelta64[ns]`
+* `complex64`
+* `complex128`
+
+These dtypes require conversion to supported representations before processing.
+
+### Nullable Dtype Behavior
+
+When converting Arnio data back to pandas, null-mask information is preserved where supported and may be represented using pandas nullable extension dtypes such as:
+
+* `Int64`
+* `BooleanDtype`
+* `StringDtype`
+
+This outbound conversion behavior should not be interpreted as full inbound support for nullable pandas extension dtypes in `from_pandas()`.
 
 ### User-facing Behavior
-When unsupported or partially supported dtypes are encountered, Arnio should provide clear user-facing errors instead of silent failures.
+
+When unsupported dtypes are encountered, Arnio provides clear user-facing errors instead of silent failures.
+
 For best performance and compatibility, users are encouraged to prefer strongly typed columns such as `int64`, `float64`, `bool`, and `string`.
 
 ## 5. Pipeline Execution & Dispatch Flow

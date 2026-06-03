@@ -1147,9 +1147,9 @@ If a dtype is partially supported, users may need conversion before processing. 
 | `bool` / `boolean` | ✅ Supported | Native booleans supported with C++ backing. Nulls mapped to `pd.NA`. |
 | `string` / `string[python]` | ✅ Supported | Native string extension type. Recommended for text. Nulls mapped to `pd.NA`. |
 | `object` (strings / scalars) | ✅ Supported | Handled as text or coerced to common type if mixed. |
-| `object` (mixed columns) | ⚠️ Limited | Mixed object columns may reduce type inference reliability and may require preprocessing. |
-| `category` | ⚠️ Limited | May require conversion before processing. |
-| `datetime64[ns]` / timezone-aware | ⚠️ Limited | May require conversion or preprocessing before pipeline execution. |
+| `object` (mixed columns) | ❌ Unsupported | Raises `TypeError` with fix hint. Convert to a supported dtype before processing. |
+| `category` | ❌ Unsupported | Raises `TypeError` with fix hint. Convert using `astype("string")` or another supported dtype. |
+| `datetime64[ns]` / timezone-aware | ❌ Unsupported | Raises `TypeError` with fix hint. Convert to string or numeric representation before processing. |
 | `timedelta64[ns]` | ❌ Unsupported | Raises `TypeError` with fix hint. Use `df["col"].dt.total_seconds()`. |
 | `complex64` / `complex128` | ❌ Unsupported | Raises `TypeError` with fix hint. Split into real/imag columns or convert to strings. |
 
@@ -1158,7 +1158,8 @@ If a dtype is partially supported, users may need conversion before processing. 
 - **Zero-copy Optimization**: Numeric columns (`int64`, `float64`) are optimized for fast zero-copy conversion between C++ and pandas where supported.
 - **Defensive Buffers**: Pass `copy=True` to `to_pandas()` when downstream pandas code needs defensive pandas-owned column buffers.
 - **Boolean Buffers**: Boolean conversion is copied because `std::vector<bool>` cannot be exposed as a zero-copy NumPy buffer.
-- **Null Handling**: Null-mask information is preserved during pandas conversion where supported. Nullable pandas extension dtypes may require conversion and are not yet fully supported across all workflows.- **Index Drop**: pandas DataFrame indexes are currently not preserved during `from_pandas()` conversion; converted frames receive a default `RangeIndex` when converted back via `to_pandas()`.
+- **Null Handling**: Null-mask information is preserved during pandas conversion where supported. Nullable pandas extension dtypes may require conversion and are not yet fully supported across all workflows.
+- **Index Drop**: pandas DataFrame indexes are currently not preserved during `from_pandas()` conversion; converted frames receive a default `RangeIndex` when converted back via `to_pandas()`.
 - **Validation**: Attempting to convert any unsupported type will raise a clear, user-friendly `TypeError` detailing the column name and how to fix/preprocess it.
 
 <br>
