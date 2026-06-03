@@ -2097,21 +2097,30 @@ class TestExecutionSummary:
         assert isinstance(step["columns_before"], int)
         assert isinstance(step["columns_after"], int)
 
-    def test_execution_summary_failed_step_recorded(self):
+    def test_execution_summary_only_contains_successful_steps(self):
         def bad_step(df):
             raise ValueError("boom")
 
         ar.register_step("bad_step_summary", bad_step)
-        try:
+        frame = ar.from_pandas(pd.DataFrame({"a": [1, 2]}))
+        with pytest.raises(Exception):
             ar.pipeline(
-                ar.from_pandas(pd.DataFrame({"a": [1, 2]})),
-                [("bad_step_summary",)],
+                frame,
+                [("drop_nulls",), ("bad_step_summary",)],
                 return_metadata=True,
             )
-        except Exception:
-            pass
-        finally:
-            ar.unregister_step("bad_step_summary")
+        ar.unregister_step("bad_step_summary")
+
+        frame2 = ar.from_pandas(pd.DataFrame({"a": [1, None, 2]}))
+        _, metadata = ar.pipeline(
+            frame2,
+            [("drop_nulls",), ("strip_whitespace",)],
+            return_metadata=True,
+        )
+        assert all(
+            s["status"] == "success" for s in metadata["execution_summary"]["steps"]
+        )
+        assert len(metadata["execution_summary"]["steps"]) == 2
 
     def test_execution_summary_dry_run_rows_unchanged(self, sample_csv):
         frame = ar.read_csv(sample_csv)

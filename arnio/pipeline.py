@@ -656,7 +656,7 @@ def pipeline(
                 else:
                     step_result = fn(working_frame, **kwargs)
 
-            except Exception as e:
+            except Exception:
                 elapsed_sec = perf_counter() - started_at
                 if return_metadata:
                     step_timings.append(
@@ -674,14 +674,7 @@ def pipeline(
                             "dry_run": dry_run,
                         }
                     )
-                    _step_diagnostics.append(
-                        {
-                            "name": name,
-                            "status": "failed",
-                            "error_type": type(e).__name__,
-                            "error_message": str(e),
-                        }
-                    )
+
                 raise
 
             columns_after = step_result.shape[1]
@@ -781,14 +774,7 @@ def pipeline(
                             "dry_run": dry_run,
                         }
                     )
-                    _step_diagnostics.append(
-                        {
-                            "name": name,
-                            "status": "failed",
-                            "error_type": type(e).__name__,
-                            "error_message": str(e),
-                        }
-                    )
+
                 if is_builtin:
                     raise
                 raise PipelineStepError(name, e) from e
