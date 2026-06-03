@@ -521,9 +521,34 @@ class DataQualityReport:
         self,
         output: Any | None = None,
         max_suggestions: int | None = None,
+        exclude_columns: list[str] | set[str] | tuple[str, ...] | None = None,
     ) -> str | None:
         """Return a GitHub-friendly Markdown report."""
         max_suggestions = self._validate_max_suggestions(max_suggestions)
+
+        if exclude_columns is None:
+            exclude_columns = set()
+        elif not isinstance(exclude_columns, (list, tuple, set)):
+            raise TypeError("exclude_columns must be a list, tuple, set, or None")
+        else:
+            if not all(isinstance(column, str) for column in exclude_columns):
+                raise TypeError("exclude_columns must contain only string column names")
+            exclude_columns = set(exclude_columns)
+
+        unknown_exclude_columns = sorted(exclude_columns - set(self.columns))
+        if unknown_exclude_columns:
+            available_columns = ", ".join(self.columns) or "<none>"
+            raise KeyError(
+                "Unknown exclude_columns: "
+                f"{unknown_exclude_columns}. Available columns: {available_columns}"
+            )
+
+        def _redact_reason(reason: str | None) -> str | None:
+            if not reason or not exclude_columns:
+                return reason
+            for col in exclude_columns:
+                reason = reason.replace(f"'{col}'", "'[REDACTED]'")
+            return reason
 
         lines: list[str] = []
 
@@ -552,6 +577,8 @@ class DataQualityReport:
             lines.append("|---|---|---|---|---|---|---|")
 
             for name in sorted(self.columns):
+                if name in exclude_columns:
+                    continue
                 column = self.columns[name]
 
                 warnings = ", ".join(column.warnings) if column.warnings else "-"
@@ -580,9 +607,30 @@ class DataQualityReport:
                 rendered_suggestions = self.suggestions[:max_suggestions]
 
             for step in rendered_suggestions:
-                kwargs_str = json.dumps(step[1], sort_keys=True, default=str)
+                filtered_kwargs: dict[str, Any] = {}
+                for key, value in sorted(dict(step[1]).items()):
+                    if key in exclude_columns:
+                        continue
+                    if key in {"subset", "columns"} and isinstance(value, list):
+                        filtered_kwargs[key] = [
+                            item for item in value if item not in exclude_columns
+                        ]
+                    elif key == "cast_types" and isinstance(value, dict):
+                        filtered_kwargs[key] = {
+                            col_name: col_type
+                            for col_name, col_type in value.items()
+                            if col_name not in exclude_columns
+                        }
+                    else:
+                        filtered_kwargs[key] = value
+
+                kwargs_str = json.dumps(
+                    filtered_kwargs, sort_keys=True, default=str
+                )
                 conf_score = getattr(step, "confidence_score", None)
-                conf_reason = getattr(step, "confidence_reason", None)
+                conf_reason = _redact_reason(
+                    getattr(step, "confidence_reason", None)
+                )
                 if conf_score is not None and conf_reason is not None:
                     lines.append(
                         f"- `{step[0]}`: `{kwargs_str}` "
