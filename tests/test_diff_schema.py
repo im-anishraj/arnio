@@ -180,6 +180,8 @@ class TestDiffSchema:
         with pytest.raises(TypeError, match="attribute must be a string or None"):
             SchemaDiffEntry(column="test_col", change="modified", attribute=123)
 
-        entry = SchemaDiffEntry(column="test_col", change="modified", attribute="type")
-        diff = SchemaDiff(differences=[entry])
-        assert len(diff.differences) == 1
+        # Test valid instantiation creates entry successfully
+        entry = SchemaDiffEntry(column="test_col", change="modified", attribute="dtype")
+        assert entry.column == "test_col"
+        assert entry.change == "modified"
+        assert entry.attribute == "dtype"
