@@ -114,6 +114,7 @@ from .schema import (
     validate,
 )
 from .schema_export import schema_to_dict, schema_to_yaml
+from .diff import ColumnDiff, DataFrameDiffReport, diff_dataframes
 
 from_records = ArFrame.from_records
 
@@ -205,6 +206,9 @@ __all__ = [
     "ValidationResult",
     "validate",
     "diff_schema",
+    "ColumnDiff",
+    "DataFrameDiffReport",
+    "diff_dataframes",
     "Int64",
     "Float64",
     "String",
