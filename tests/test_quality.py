@@ -1741,6 +1741,105 @@ def test_report_to_markdown_exclude_columns_invalid_type_raises_typeerror():
         report.to_markdown(exclude_columns=123)
 
 
+def test_report_to_markdown_exclude_columns_preserves_kwarg_named_columns():
+    report = ar.DataQualityReport(
+        row_count=3,
+        column_count=3,
+        memory_usage=256,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        quality_score=100.0,
+        score_components={},
+        columns={
+            "columns": ar.ColumnProfile(
+                name="columns",
+                dtype="string",
+                semantic_type="identifier",
+                row_count=3,
+                null_count=0,
+                null_ratio=0.0,
+                unique_count=3,
+                unique_ratio=1.0,
+                warnings=[],
+            ),
+            "visible": ar.ColumnProfile(
+                name="visible",
+                dtype="string",
+                semantic_type="text",
+                row_count=3,
+                null_count=0,
+                null_ratio=0.0,
+                unique_count=3,
+                unique_ratio=1.0,
+                warnings=[],
+            ),
+            "secret": ar.ColumnProfile(
+                name="secret",
+                dtype="string",
+                semantic_type="identifier",
+                row_count=3,
+                null_count=0,
+                null_ratio=0.0,
+                unique_count=3,
+                unique_ratio=1.0,
+                warnings=[],
+            ),
+        },
+        suggestions=[
+            ar.CleaningSuggestion(
+                "example",
+                {"columns": ["secret", "visible"], "subset": ["columns", "secret"]},
+                0.90,
+                "Example suggestion for secret and columns",
+            )
+        ],
+    )
+
+    md = report.to_markdown(exclude_columns=["secret"])
+
+    assert "secret" not in md
+    assert "visible" in md
+    assert '"columns"' in md
+
+
+def test_report_to_markdown_redacts_unquoted_confidence_reason():
+    report = ar.DataQualityReport(
+        row_count=1,
+        column_count=1,
+        memory_usage=64,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        quality_score=100.0,
+        score_components={},
+        columns={
+            "ssn": ar.ColumnProfile(
+                name="ssn",
+                dtype="string",
+                semantic_type="identifier",
+                row_count=1,
+                null_count=0,
+                null_ratio=0.0,
+                unique_count=1,
+                unique_ratio=1.0,
+                warnings=[],
+            ),
+        },
+        suggestions=[
+            ar.CleaningSuggestion(
+                "example",
+                {},
+                0.90,
+                "Column ssn contains whitespace",
+            )
+        ],
+    )
+
+    md = report.to_markdown(exclude_columns=["ssn"])
+
+    assert "ssn" not in md
+    assert "[REDACTED]" in md
+
+
 def test_unique_ratio_empty_column(tmp_path):
     path = tmp_path / "empty_unique.csv"
 

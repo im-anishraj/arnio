@@ -9,6 +9,7 @@ import html
 import json
 import math
 import os
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
@@ -547,7 +548,8 @@ class DataQualityReport:
             if not reason or not exclude_columns:
                 return reason
             for col in exclude_columns:
-                reason = reason.replace(f"'{col}'", "'[REDACTED]'")
+                pattern = rf"\b{re.escape(col)}\b"
+                reason = re.sub(pattern, "[REDACTED]", reason)
             return reason
 
         lines: list[str] = []
@@ -609,8 +611,6 @@ class DataQualityReport:
             for step in rendered_suggestions:
                 filtered_kwargs: dict[str, Any] = {}
                 for key, value in sorted(dict(step[1]).items()):
-                    if key in exclude_columns:
-                        continue
                     if key in {"subset", "columns"} and isinstance(value, list):
                         filtered_kwargs[key] = [
                             item for item in value if item not in exclude_columns
@@ -621,6 +621,8 @@ class DataQualityReport:
                             for col_name, col_type in value.items()
                             if col_name not in exclude_columns
                         }
+                    elif isinstance(value, str) and value in exclude_columns:
+                        filtered_kwargs[key] = "[REDACTED]"
                     else:
                         filtered_kwargs[key] = value
 
