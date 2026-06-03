@@ -318,6 +318,25 @@ class TestCustomValidatorReturnNormalization:
         with pytest.raises(TypeError, match="returns_str"):
             ar.validate(frame, {"x": ar.Custom("returns_str")})
 
+    def test_validator_exception_includes_schema_context(self):
+        """A validator exception is wrapped with column and validator context."""
+
+        def raises_for_value(value):
+            raise RuntimeError(f"bad value: {value}")
+
+        register_validator("raises_for_value", raises_for_value)
+        frame = ar.from_pandas(pd.DataFrame({"score": [42]}))
+
+        with pytest.raises(ar.ArnioError) as exc_info:
+            ar.validate(frame, {"score": ar.Custom("raises_for_value")})
+
+        message = str(exc_info.value)
+        assert "raises_for_value" in message
+        assert "score" in message
+        assert "42" in message
+        assert isinstance(exc_info.value.__cause__, RuntimeError)
+        assert str(exc_info.value.__cause__) == "bad value: 42"
+
     def test_mixed_true_false_none_pd_na(self):
         """Mixed True/False/None/pd.NA: only True rows pass, others fail."""
 

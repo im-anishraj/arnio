@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Architecture — Arnio</title>
   <meta name="description" content="Current Arnio architecture: C++ core, pybind11 bindings, Python API, quality engine, schema engine, and integrations.">
-  <link rel="icon" type="image/svg+xml" href="updated-icon.svg">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="stylesheet" href="css/variables.css?v=20260522">
   <link rel="stylesheet" href="css/base.css?v=20260522">
   <link rel="stylesheet" href="css/layout.css?v=20260522">
@@ -16,15 +16,15 @@
   <meta property="og:url" content="https://arnio.vercel.app/">
   <meta property="og:title" content="Arnio — Production Data Preparation for Python">
   <meta property="og:description" content="Arnio combines a native C++ CSV engine with Python APIs for cleaning, quality profiling, and schema validation.">
-  <meta property="og:image" content="https://arnio.vercel.app/arnio-transparent-logo.svg">
+  <meta property="og:image" content="https://arnio.vercel.app/arnio-social-card.svg">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Arnio — Production Data Preparation for Python">
   <meta name="twitter:description" content="Arnio combines a native C++ CSV engine with Python APIs for cleaning, quality profiling, and schema validation.">
-  <meta name="twitter:image" content="https://arnio.vercel.app/arnio-transparent-logo.svg">
+  <meta name="twitter:image" content="https://arnio.vercel.app/arnio-social-card.svg">
 </head>
 <body>
   <a href="#main-content" class="skip-link">Skip to content</a>
-  <nav class="top-nav" aria-label="Main navigation"><div class="container container--wide"><a href="index.html" class="nav-brand"><img src="arnio-transparent-logo.svg" alt="Arnio" height="32"></a><ul class="nav-links"><li><a href="docs.html">Docs</a></li><li><a href="api.html">API</a></li><li><a href="benchmarks.html">Benchmarks</a></li><li><a href="contributing.html">Contributing</a></li><li><a href="architecture.html">Architecture</a></li><li><a href="roadmap.html">Roadmap</a></li><li><a href="community.html">Community</a></li><li><a href="changelog.html">Changelog</a></li></ul><div class="nav-actions"><a href="https://discord.gg/xsEw7r78M" class="nav-discord" target="_blank" rel="noopener">Discord</a><a href="https://github.com/im-anishraj/arnio" class="nav-github" target="_blank" rel="noopener">GitHub</a><button class="theme-toggle" aria-label="Toggle theme">Theme</button><button class="nav-hamburger" aria-label="Open menu" aria-expanded="false">☰</button></div></div></nav>
+  <nav class="top-nav" aria-label="Main navigation"><div class="container container--wide"><a href="index.html" class="nav-brand" aria-label="Arnio home"><img src="arnio-logo.svg" alt="Arnio" height="32"></a><ul class="nav-links"><li><a href="docs.html">Docs</a></li><li><a href="api.html">API</a></li><li><a href="benchmarks.html">Benchmarks</a></li><li><a href="contributing.html">Contributing</a></li><li><a href="architecture.html">Architecture</a></li><li><a href="roadmap.html">Roadmap</a></li><li><a href="community.html">Community</a></li><li><a href="changelog.html">Changelog</a></li></ul><div class="nav-actions"><a href="https://discord.gg/xsEw7r78M" class="nav-discord" target="_blank" rel="noopener" aria-label="Join Discord">Discord</a><a href="https://github.com/im-anishraj/arnio" class="nav-github" target="_blank" rel="noopener" aria-label="View on GitHub">GitHub</a><button class="theme-toggle" aria-label="Toggle theme">Theme</button><button class="nav-hamburger" aria-label="Open menu" aria-expanded="false">☰</button></div></div></nav>
   <div class="mobile-menu" aria-label="Mobile navigation"><a href="index.html">Home</a><a href="docs.html">Documentation</a><a href="api.html">API Reference</a><a href="benchmarks.html">Benchmarks</a><a href="contributing.html">Contributing</a><a href="architecture.html">Architecture</a><a href="roadmap.html">Roadmap</a><a href="community.html">Community</a><a href="https://discord.gg/xsEw7r78M" target="_blank" rel="noopener">Discord</a><a href="changelog.html">Changelog</a></div>
 
   <header class="page-hero"><div class="container"><h1>Architecture</h1><p>Arnio is a small native core wrapped by Python APIs for data preparation, validation, reporting, and interop with pandas-first workflows.</p></div></header>
@@ -85,14 +85,20 @@ Python ArFrame wrapper
       </div>
 
       <h2>Production hardening</h2>
-      <p>Recent releases fixed duplicate-header behavior, malformed CSV row handling, zero-column row-count preservation, duplicate column guards, JSONL <code>nrows</code> parsing, Windows clean targets, and clearer validation errors. These are reflected in the API and changelog pages.</p>
+      <p>
+Recent releases improved malformed CSV row handling, zero-column row-count
+preservation, duplicate column guards, JSONL <code>nrows</code> parsing,
+Windows clean targets, and validation error reporting. Duplicate CSV header
+handling remains an active area of improvement and is still being tracked
+through open issues and testing efforts.
+</p>
     </div>
   </main>
 
   <footer class="site-footer">
     <div class="container">
       <div class="footer-grid">
-        <div class="footer-brand"><img src="arnio-transparent-logo.svg" alt="Arnio" height="32"><p>C++ accelerated data preparation for pandas and the Python data stack.</p></div>
+        <div class="footer-brand"><img src="arnio-logo.svg" alt="Arnio" height="32"><p>C++ accelerated data preparation for pandas and the Python data stack.</p></div>
         <div><h4 class="footer-heading">Project</h4><ul class="footer-links"><li><a href="docs.html">Docs</a></li><li><a href="api.html">API</a></li><li><a href="changelog.html">Changelog</a></li></ul></div>
         <div><h4 class="footer-heading">Engineering</h4><ul class="footer-links"><li><a href="architecture.html">Architecture</a></li><li><a href="benchmarks.html">Benchmarks</a></li><li><a href="roadmap.html">Roadmap</a></li></ul></div>
         <div><h4 class="footer-heading">Community</h4><ul class="footer-links"><li><a href="contributing.html">Contributing</a></li><li><a href="community.html">Community</a></li>
@@ -110,7 +116,7 @@ Python ArFrame wrapper
             </a>
           </li></ul></div>
       </div>
-      <div class="footer-bottom"><span>© 2026 Anish Raj. MIT License.</span><span>Latest release: v1.18.0</span></div>
+      <div class="footer-bottom"><span>© 2026 Anish Raj. MIT License.</span><span>Latest release: v1.19.0</span></div>
     </div>
   </footer>
   <script src="js/main.js"></script>

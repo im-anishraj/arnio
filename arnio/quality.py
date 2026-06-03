@@ -271,6 +271,41 @@ class ColumnProfile:
         }
 
 
+QUALITY_REPORT_COLUMNS = [
+    "name",
+    "dtype",
+    "semantic_type",
+    "null_count",
+    "null_ratio",
+    "unique_count",
+    "unique_ratio",
+    "empty_string_count",
+    "whitespace_count",
+    "suggested_dtype",
+    "email_validity_ratio",
+    "url_validity_ratio",
+    "min",
+    "max",
+    "mean",
+    "std",
+    "warnings",
+    "top_values",
+    "top_values_is_approximate",
+    "top_values_sample_count",
+    "top_values_sample_ratio",
+    "histogram",
+    "q25",
+    "q50",
+    "q75",
+    "q95",
+    "iqr",
+    "outlier_lower_bound",
+    "outlier_upper_bound",
+    "outlier_count",
+    "outlier_ratio",
+]
+
+
 @dataclass(frozen=True)
 class DataQualityReport:
     """Whole-frame data quality report."""
@@ -613,6 +648,8 @@ class DataQualityReport:
                 raise TypeError(
                     f"file_path must be a string, bytes, or os.PathLike object, got {type(file_path).__name__}"
                 )
+            if file_path == "":
+                raise ValueError("file_path must not be empty")
 
         redact_top_values = _validate_bool_option(
             redact_top_values, "redact_top_values"
@@ -642,7 +679,7 @@ class DataQualityReport:
             redact_top_values=redact_top_values,
             exclude_columns=validated_exclude,
         )
-        if file_path:
+        if file_path is not None:
             with open(file_path, "w", encoding="utf-8") as f:
                 f.write(html_out)
 
@@ -936,6 +973,10 @@ class DataQualityReport:
 
     def to_pandas(self) -> pd.DataFrame:
         """Return one row per column as a pandas DataFrame."""
+        expected_columns = QUALITY_REPORT_COLUMNS
+        if not self.columns:
+            return pd.DataFrame(columns=expected_columns)
+
         return pd.DataFrame(
             [
                 {
@@ -982,7 +1023,8 @@ class DataQualityReport:
                     "histogram": column.histogram,
                 }
                 for column in self.columns.values()
-            ]
+            ],
+            columns=expected_columns,
         )
 
 
@@ -1048,6 +1090,7 @@ class ProfileComparison:
         dict
             A structured dictionary containing the metric profiles and comparisons.
         """
+        # Convert exclude_columns to a set for strict, exact-name lookup performance
         exclude_set = set(exclude_columns) if exclude_columns is not None else set()
 
         return {
@@ -1061,7 +1104,7 @@ class ProfileComparison:
             ),
             "status_counts": dict(self.status_counts),
             "drift_report": {
-                name: _clean_drift_entry(entry)
+                name: entry
                 for name, entry in self.drift_report.items()
                 if name not in exclude_set
             },
@@ -1098,7 +1141,6 @@ class ProfileComparison:
         --------
         >>> comparison.to_json(exclude_columns=["password", "ssn"], indent=2)
         """
-        # Validate output stream type if provided
         if output is not None and not hasattr(output, "write"):
             raise TypeError("output must be a writable text stream")
 
@@ -2257,6 +2299,39 @@ def _validate_confirmed_casts(
     return normalized
 
 
+def _has_duplicate_rows(frame: ArFrame) -> bool:
+    """Return whether a frame contains any full-row duplicates."""
+    if frame.shape[0] <= 1:
+        return False
+    return bool(to_pandas(frame).duplicated().any())
+
+
+def _drop_strict_duplicates_introduced_by_cleaning(
+    result: ArFrame,
+    step_records: list[CleanStepRecord],
+) -> ArFrame:
+    if any(record.step == "drop_duplicates" for record in step_records):
+        return result
+    if not _has_duplicate_rows(result):
+        return result
+
+    rows_before_step = result.shape[0]
+    kwargs = {"keep": "first"}
+    result = drop_duplicates(result, **kwargs)
+    rows_after_step = result.shape[0]
+    step_records.append(
+        CleanStepRecord(
+            step="drop_duplicates",
+            kwargs=kwargs,
+            rows_before=rows_before_step,
+            rows_after=rows_after_step,
+            rows_removed=rows_before_step - rows_after_step,
+            reason="Remove duplicate rows introduced by earlier strict-mode normalization steps.",
+        )
+    )
+    return result
+
+
 def auto_clean(
     frame: ArFrame,
     *,
@@ -2328,7 +2403,7 @@ def auto_clean(
             f"auto_clean() expects an ArFrame, got {type(frame).__name__}. Use arnio.from_pandas() first."
         )
 
-    if mode not in {"safe", "strict"}:
+    if not isinstance(mode, str) or mode not in {"safe", "strict"}:
         raise ValueError("mode must be 'safe' or 'strict'")
 
     if not isinstance(return_report, bool):
@@ -2406,6 +2481,12 @@ def auto_clean(
                 rows_removed=rows_before_step - rows_after_step,
                 reason=reason,
             )
+        )
+
+    if mode == "strict":
+        result = _drop_strict_duplicates_introduced_by_cleaning(
+            result,
+            step_records,
         )
 
     rows_after_all = result.shape[0]

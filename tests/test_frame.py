@@ -212,16 +212,22 @@ def test_length_mismatch_ArFrame():
 
 
 def test_scalar_dict():
-    # Pandas pd.DataFrame({"a": 1}) fails because it requires an index.
     data = {"name": "Alice", "age": 25}
-    with pytest.raises(ValueError):
+
+    with pytest.raises(
+        TypeError,
+        match="Column 'name' must be a sequence of values",
+    ):
         ar.from_dict(data)
 
 
 def test_scalar_dict_ArFrame():
-    # Pandas pd.DataFrame({"a": 1}) fails because it requires an index.
     data = {"name": "Alice", "age": 25}
-    with pytest.raises(ValueError):
+
+    with pytest.raises(
+        TypeError,
+        match="Column 'name' must be a sequence of values",
+    ):
         ar.ArFrame.from_dict(data)
 
 
@@ -259,6 +265,17 @@ def test_preview_invalid_n_none(sample_csv):
     frame = ar.read_csv(sample_csv)
     with pytest.raises(ValueError):
         frame.preview(n=None)
+
+
+def test_preview_zero_column_frame():
+    df = pd.DataFrame(index=range(3))
+
+    frame = ar.from_pandas(df)
+    result = frame.preview()
+
+    expected = "ArFrame preview: 3 rows x 0 columns (no columns to display)"
+
+    assert result == expected
 
 
 def test_select_columns_valid():
@@ -769,7 +786,7 @@ class TestArFrame:
         copied = copy.copy(frame)
         assert copied == frame
         assert copied is not frame
-        assert copied._frame is frame._frame
+        assert copied._frame is not frame._frame
 
     def test_arframe_deep_copy(self):
         frame = ar.ArFrame.from_records([{"a": 1}])
@@ -1651,3 +1668,48 @@ def test_selection_methods_preserve_attrs():
     # Deep copy isolation check
     res_dtypes._attrs["metadata"]["version"] = 2
     assert frame._attrs["metadata"]["version"] == 1
+
+
+def test_shallow_copy_independent_frame():
+    import copy
+
+    import pandas as pd
+
+    import arnio as ar
+
+    original = ar.from_pandas(pd.DataFrame({"a": [1, 2, 3]}))
+    shallow = copy.copy(original)
+
+    assert shallow._frame is not original._frame
+    ar.rename_columns(original, {"a": "b"})
+    assert "a" in shallow.columns  # mutation must not leak
+
+
+# ── from_records empty-columns guard ─────────────────────────────────────────
+
+
+def test_from_records_dict_empty_columns_raises():
+    """columns=[] with dict records must raise ValueError, not silently lose rows."""
+    with pytest.raises(ValueError, match="columns must not be empty"):
+        ar.ArFrame.from_records([{"a": 1}, {"a": 2}], columns=[])
+
+
+def test_from_records_dict_empty_columns_message_is_helpful():
+    """The error message should mention passing columns=None."""
+    with pytest.raises(ValueError, match="columns=None"):
+        ar.ArFrame.from_records([{"a": 1}], columns=[])
+
+
+def test_from_records_dict_columns_none_infers_from_keys():
+    """columns=None (default) should infer column names from dict keys."""
+    frame = ar.ArFrame.from_records([{"a": 1}, {"a": 2}])
+    assert frame.shape == (2, 1)
+    assert frame.columns == ["a"]
+
+
+def test_from_records_dict_explicit_valid_columns_subset():
+    """A non-empty explicit columns list should select only those columns."""
+    frame = ar.ArFrame.from_records([{"a": 1, "b": 2}, {"a": 3, "b": 4}], columns=["a"])
+    assert frame.shape == (2, 1)
+    assert frame.columns == ["a"]
+    assert frame["a"] == [1, 3]

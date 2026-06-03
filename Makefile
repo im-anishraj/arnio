@@ -1,4 +1,4 @@
-.PHONY: install test lint format benchmark doctor clean help
+.PHONY: install test test-quick lint format benchmark doctor clean help
 
 help:  ## Show this help message
 	@python -c "import re; [print(f'\033[36m{m[0]:<15}\033[0m {m[1]}') for m in sorted([re.match(r'^([a-zA-Z_-]+):.*?## (.*)$$', line).groups() for line in open('$(MAKEFILE_LIST)') if re.match(r'^[a-zA-Z_-]+:.*?## .*$$', line)])]"
@@ -12,6 +12,9 @@ doctor: ## Check Python dependencies, native core, and local build tools
 
 test: ## Run tests with coverage
 	pytest tests/ -v --cov=arnio --cov-report=term-missing
+
+test-quick: ## Run tests without coverage (fast, pass/fail only)
+	pytest tests/ -v
 
 lint: ## Check linting
 	ruff check .

@@ -4,6 +4,12 @@ import pandas as pd
 import pytest
 
 import arnio as ar
+from arnio._core import _Frame
+from arnio.frame import ArFrame
+
+
+def _make_frame(columns: dict[str, list[object]]) -> ArFrame:
+    return ArFrame(_Frame.from_dict(columns, {}))
 
 
 def test_collapses_multiple_internal_spaces():
@@ -81,6 +87,33 @@ def test_missing_column_raises_value_error():
     frame = ar.from_pandas(pd.DataFrame({"name": ["hello world"]}))
     with pytest.raises(ValueError, match="Missing columns for normalize_whitespace"):
         ar.pipeline(frame, [("normalize_whitespace", {"columns": ["nonexistent"]})])
+
+
+def test_columns_string_raises_type_error():
+    frame = _make_frame({"name": ["hello world"]})
+    with pytest.raises(
+        TypeError,
+        match="columns must be a sequence of column names, not a string",
+    ):
+        ar.normalize_whitespace(frame, columns="name")
+
+
+def test_columns_with_non_string_item_raises_type_error():
+    frame = _make_frame({"name": ["hello world"]})
+    with pytest.raises(
+        TypeError,
+        match="columns must contain only string column names",
+    ):
+        ar.normalize_whitespace(frame, columns=[123])
+
+
+def test_pipeline_columns_string_raises_type_error():
+    frame = _make_frame({"name": ["hello world"]})
+    with pytest.raises(
+        TypeError,
+        match="columns must be a sequence of column names, not a string",
+    ):
+        ar.pipeline(frame, [("normalize_whitespace", {"columns": "name"})])
 
 
 def test_explicit_non_string_column_is_skipped():
@@ -180,3 +213,35 @@ def test_leading_whitespace_only():
     frame = ar.from_pandas(pd.DataFrame({"name": ["   hello"]}))
     result = ar.to_pandas(ar.pipeline(frame, [("normalize_whitespace",)]))
     assert result["name"][0] == "hello"
+
+
+# --- Mixed-type object column tests (regression for silent NaN data loss) ---
+
+
+def test_mixed_type_object_column_preserves_integers():
+    df = pd.DataFrame({"col": ["hello  world", 42, 0]})
+    result = ar.normalize_whitespace(df)  # raw DataFrame, bypasses from_pandas coercion
+    values = result["col"].tolist()
+    assert values[0] == "hello world"
+    assert values[1] == 42
+    assert values[2] == 0
+
+
+def test_mixed_type_object_column_preserves_booleans():
+    df = pd.DataFrame({"col": ["  yes  ", True, False]})
+    result = ar.normalize_whitespace(df)
+    values = result["col"].tolist()
+    assert values[0] == "yes"
+    assert values[1] is True
+    assert values[2] is False
+
+
+def test_mixed_type_object_column_full_variety():
+    df = pd.DataFrame({"col": ["hello  world", 42, True, 3.14, None]})
+    result = ar.normalize_whitespace(df)
+    values = result["col"].tolist()
+    assert values[0] == "hello world"
+    assert values[1] == 42
+    assert values[2] is True
+    assert values[3] == 3.14
+    assert values[4] is None  # None must NOT become NaN

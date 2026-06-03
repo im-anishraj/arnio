@@ -9,6 +9,7 @@ import pytest
 
 import arnio as ar
 from arnio.quality import (
+    QUALITY_REPORT_COLUMNS,
     CleaningSuggestion,
     _validate_gate_bool,
     _validate_gate_ratio_threshold,
@@ -44,7 +45,60 @@ def test_report_summary_and_pandas_output(csv_with_whitespace):
     assert summary["rows"] == 3
     assert summary["columns_with_whitespace"] == ["name", "city"]
     assert isinstance(df, pd.DataFrame)
+    assert df.columns.tolist() == QUALITY_REPORT_COLUMNS
     assert set(df["name"]) == {"name", "city"}
+
+
+def test_report_to_pandas_uses_stable_columns_for_empty_report():
+    report = ar.DataQualityReport(
+        row_count=0,
+        column_count=0,
+        memory_usage=0,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+        suggestions=[],
+    )
+
+    df = report.to_pandas()
+
+    assert df.columns.tolist() == QUALITY_REPORT_COLUMNS
+    assert df.shape == (0, len(QUALITY_REPORT_COLUMNS))
+
+
+def test_report_to_pandas_uses_stable_columns_when_all_columns_are_excluded():
+    frame = ar.from_pandas(pd.DataFrame({"id": [1, 2], "name": ["Alice", "Bob"]}))
+
+    report = ar.profile(frame, exclude_columns=["id", "name"])
+    df = report.to_pandas()
+
+    assert report.column_count == 0
+    assert report.columns == {}
+    assert df.columns.tolist() == QUALITY_REPORT_COLUMNS
+    assert df.shape == (0, len(QUALITY_REPORT_COLUMNS))
+
+
+def test_report_to_pandas_preserves_columns_and_values_for_normal_reports():
+    report = ar.profile(
+        ar.from_pandas(pd.DataFrame({"name": ["Alice", "Bob"], "score": [1.0, 2.0]}))
+    )
+
+    df = report.to_pandas()
+
+    assert df.columns.tolist() == QUALITY_REPORT_COLUMNS
+    assert df["name"].tolist() == ["name", "score"]
+
+    name_row = df.loc[df["name"] == "name"].iloc[0]
+    score_row = df.loc[df["name"] == "score"].iloc[0]
+
+    assert name_row["name"] == "name"
+    assert name_row["null_count"] == 0
+    assert pd.isna(name_row["q25"])
+    assert score_row["name"] == "score"
+    assert score_row["null_count"] == 0
+    assert score_row["min"] == 1.0
+    assert score_row["max"] == 2.0
+    assert pd.notna(score_row["q25"])
 
 
 def test_profile_numeric_quantiles():
@@ -584,6 +638,33 @@ def test_auto_clean_strict_applies_exact_deduplication(tmp_path):
     clean = ar.auto_clean(ar.read_csv(path), mode="strict")
 
     assert clean.shape == (1, 1)
+
+
+def test_auto_clean_strict_drops_duplicates_created_by_whitespace():
+    frame = ar.from_pandas(pd.DataFrame({"name": ["Alice", " Alice "]}))
+
+    clean = ar.auto_clean(frame, mode="strict")
+    result = ar.to_pandas(clean)
+
+    assert clean.shape == (1, 1)
+    assert list(result["name"]) == ["Alice"]
+
+
+def test_auto_clean_strict_drops_duplicates_created_by_casts():
+    frame = ar.from_pandas(pd.DataFrame({"amount": ["1", "1.0"]}))
+    report = ar.auto_clean(frame, mode="strict", dry_run=True)
+
+    clean = ar.auto_clean(
+        frame,
+        mode="strict",
+        allow_lossy_casts=True,
+        confirmed_casts=dict(report.suggestions)["cast_types"],
+    )
+    result = ar.to_pandas(clean)
+
+    assert clean.shape == (1, 1)
+    assert list(result["amount"]) == [1.0]
+    assert pd.api.types.is_float_dtype(result["amount"])
 
 
 def test_auto_clean_strict_casts_require_explicit_opt_in():
@@ -1136,6 +1217,17 @@ def test_identifier_numeric_cast_prevention():
     assert list(result["id"]) == ["001", "002", "003"]
     assert list(result["customer_id"]) == ["00123", "00456", "00789"]
     assert list(result["zip_code"]) == ["01234", "02345", "03456"]
+
+
+def test_auto_clean_strict_keeps_protected_identifier_values_distinct():
+    frame = ar.from_pandas(pd.DataFrame({"user_id": ["001", "1"]}))
+
+    clean = ar.auto_clean(frame, mode="strict", allow_lossy_casts=True)
+    result = ar.to_pandas(clean)
+
+    assert clean.shape == (2, 1)
+    assert list(result["user_id"]) == ["001", "1"]
+    assert pd.api.types.is_string_dtype(result["user_id"])
 
 
 def test_profile_detects_near_constant_column():
@@ -1921,6 +2013,39 @@ def test_report_to_html_rejects_invalid_filepath_types():
             report.to_html(file_path=invalid_path)
 
 
+def test_report_to_html_rejects_empty_filepath():
+    report = ar.DataQualityReport(
+        row_count=0,
+        column_count=0,
+        memory_usage=0,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+        suggestions=[],
+    )
+
+    with pytest.raises(ValueError, match="file_path must not be empty"):
+        report.to_html(file_path="")
+
+
+def test_report_to_html_writes_valid_pathlike_filepath(tmp_path):
+    report = ar.DataQualityReport(
+        row_count=0,
+        column_count=0,
+        memory_usage=0,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+        suggestions=[],
+    )
+    out_path = tmp_path / "report.html"
+
+    result = report.to_html(file_path=out_path)
+
+    assert result == out_path.read_text(encoding="utf-8")
+    assert result.startswith("<!DOCTYPE html>")
+
+
 def test_report_to_html_limits_suggestions():
     report = ar.DataQualityReport(
         row_count=2,
@@ -2509,6 +2634,28 @@ def test_auto_clean_explain_steps_recorded(tmp_path):
     assert len(step.reason) > 0
 
 
+def test_auto_clean_explain_records_post_normalization_dedup():
+    frame = ar.from_pandas(pd.DataFrame({"name": ["Alice", " Alice "]}))
+
+    cleaned, explanation = ar.auto_clean(
+        frame,
+        mode="strict",
+        explain=True,
+        allow_lossy_casts=True,
+    )
+
+    drop_steps = [
+        record for record in explanation.steps if record.step == "drop_duplicates"
+    ]
+    assert cleaned.shape == (1, 1)
+    assert len(drop_steps) == 1
+    assert drop_steps[0].kwargs == {"keep": "first"}
+    assert drop_steps[0].rows_before == 2
+    assert drop_steps[0].rows_after == 1
+    assert drop_steps[0].rows_removed == 1
+    assert "strict-mode normalization" in drop_steps[0].reason
+
+
 def test_auto_clean_explain_with_return_report(tmp_path):
     """explain=True and return_report=True should return (ArFrame, DataQualityReport, CleanExplanation)."""
     path = tmp_path / "data.csv"
@@ -2543,6 +2690,7 @@ def test_auto_clean_explain_no_steps_clean_data(tmp_path):
 
     assert explanation.rows_removed == 0
     assert explanation.rows_before == explanation.rows_after
+    assert explanation.steps == []
 
 
 def test_auto_clean_explain_str_representation(tmp_path):
@@ -4162,3 +4310,27 @@ def test_profile_comparison_drift_report_exclude_columns():
     assert (
         "secret_key" not in exported_dict["drift_report"]
     ), "Privacy leak: secret_key still present in drift_report keys!"
+
+
+def test_auto_clean_rejects_list_mode():
+    frame = ar.from_dict({"name": [" Alice "], "age": ["1"]})
+    with pytest.raises(ValueError, match="mode must be 'safe' or 'strict'"):
+        ar.auto_clean(frame, mode=["safe"])
+
+
+def test_auto_clean_rejects_none_mode():
+    frame = ar.from_dict({"name": [" Alice "]})
+    with pytest.raises(ValueError, match="mode must be 'safe' or 'strict'"):
+        ar.auto_clean(frame, mode=None)
+
+
+def test_auto_clean_rejects_integer_mode():
+    frame = ar.from_dict({"name": [" Alice "]})
+    with pytest.raises(ValueError, match="mode must be 'safe' or 'strict'"):
+        ar.auto_clean(frame, mode=1)
+
+
+def test_auto_clean_rejects_invalid_string_mode():
+    frame = ar.from_dict({"name": [" Alice "]})
+    with pytest.raises(ValueError, match="mode must be 'safe' or 'strict'"):
+        ar.auto_clean(frame, mode="SAFE")
