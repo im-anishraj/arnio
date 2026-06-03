@@ -595,6 +595,8 @@ def pipeline(
     applied_steps: list[str] = []
     row_counts: list[dict[str, int | str]] = []
     total_steps = len(steps)
+    total_pipeline_start = perf_counter()
+    _step_diagnostics: list[dict] = []
     for step_index, step in enumerate(steps):
         if len(step) == 1:
             name = step[0]
@@ -637,34 +639,55 @@ def pipeline(
             # C++ backed step - fast path
             fn = _STEP_REGISTRY[name]
             rows_before = result.shape[0]
+            columns_before = working_frame.shape[1]
 
             started_at = perf_counter()
-            if name == "rename_columns" and (
-                "mapping" not in kwargs or not isinstance(kwargs["mapping"], dict)
-            ):
-                step_result = fn(working_frame, mapping=kwargs)
+            try:
+                if name == "rename_columns" and (
+                    "mapping" not in kwargs or not isinstance(kwargs["mapping"], dict)
+                ):
+                    step_result = fn(working_frame, mapping=kwargs)
 
-                if not dry_run:
-                    result = step_result
-                working_frame = step_result
+                elif name == "cast_types" and (
+                    "mapping" not in kwargs or not isinstance(kwargs["mapping"], dict)
+                ):
+                    step_result = fn(working_frame, kwargs)
 
-            elif name == "cast_types" and (
-                "mapping" not in kwargs or not isinstance(kwargs["mapping"], dict)
-            ):
-                step_result = fn(working_frame, kwargs)
+                else:
+                    step_result = fn(working_frame, **kwargs)
 
-                if not dry_run:
-                    result = step_result
-                working_frame = step_result
+            except Exception as e:
+                elapsed_sec = perf_counter() - started_at
+                if return_metadata:
+                    step_timings.append(
+                        {
+                            "step": name,
+                            "seconds": round(elapsed_sec, 9),
+                            "dry_run": dry_run,
+                        }
+                    )
+                    row_counts.append(
+                        {
+                            "step": name,
+                            "before": rows_before,
+                            "after": rows_before,
+                            "dry_run": dry_run,
+                        }
+                    )
+                    _step_diagnostics.append(
+                        {
+                            "name": name,
+                            "status": "failed",
+                            "error_type": type(e).__name__,
+                            "error_message": str(e),
+                        }
+                    )
+                raise
 
-            else:
-                target_frame = working_frame
-
-                step_result = fn(target_frame, **kwargs)
-
-                if not dry_run:
-                    result = step_result
-                working_frame = step_result
+            columns_after = step_result.shape[1]
+            if not dry_run:
+                result = step_result
+            working_frame = step_result
 
             elapsed_sec = perf_counter() - started_at
             elapsed_ms = elapsed_sec * 1000
@@ -700,6 +723,20 @@ def pipeline(
                         "dry_run": dry_run,
                     }
                 )
+                _step_diagnostics.append(
+                    {
+                        "name": name,
+                        "status": "success",
+                        "runtime_ms": round(elapsed_ms, 3),
+                        "rows_before": rows_before,
+                        "rows_after": rows_before if dry_run else step_result.shape[0],
+                        "rows_affected": (
+                            0 if dry_run else rows_before - step_result.shape[0]
+                        ),
+                        "columns_before": columns_before,
+                        "columns_after": columns_after,
+                    }
+                )
         elif name in python_step_registry:
             # Pure Python step - slower but contributor-friendly
             started_at = perf_counter()
@@ -723,9 +760,35 @@ def pipeline(
                     dry_run=dry_run,
                 )
 
+            columns_before = working_frame.shape[1]
             try:
                 returned = fn(df, **call_kwargs)
             except Exception as e:
+                elapsed_sec = perf_counter() - started_at
+                if return_metadata:
+                    step_timings.append(
+                        {
+                            "step": name,
+                            "seconds": round(elapsed_sec, 9),
+                            "dry_run": dry_run,
+                        }
+                    )
+                    row_counts.append(
+                        {
+                            "step": name,
+                            "before": rows_before,
+                            "after": rows_before,
+                            "dry_run": dry_run,
+                        }
+                    )
+                    _step_diagnostics.append(
+                        {
+                            "name": name,
+                            "status": "failed",
+                            "error_type": type(e).__name__,
+                            "error_message": str(e),
+                        }
+                    )
                 if is_builtin:
                     raise
                 raise PipelineStepError(name, e) from e
@@ -742,6 +805,7 @@ def pipeline(
                     "Steps must return a pandas DataFrame."
                 )
             step_result = from_pandas(returned)
+            columns_after = step_result.shape[1]
             if not dry_run:
                 result = step_result
             working_frame = step_result
@@ -779,6 +843,20 @@ def pipeline(
                         "step": name,
                         "seconds": round(elapsed_sec, 9),
                         "dry_run": dry_run,
+                    }
+                )
+                _step_diagnostics.append(
+                    {
+                        "name": name,
+                        "status": "success",
+                        "runtime_ms": round(elapsed_ms, 3),
+                        "rows_before": rows_before,
+                        "rows_after": rows_before if dry_run else step_result.shape[0],
+                        "rows_affected": (
+                            0 if dry_run else rows_before - step_result.shape[0]
+                        ),
+                        "columns_before": columns_before,
+                        "columns_after": columns_after,
                     }
                 )
         else:
@@ -838,6 +916,12 @@ def pipeline(
             "applied_steps": applied_steps,
             "row_counts": row_counts,
             "step_timings": step_timings,
+            "execution_summary": {
+                "total_runtime_ms": round(
+                    (perf_counter() - total_pipeline_start) * 1000, 3
+                ),
+                "steps": _step_diagnostics,
+            },
         }
     return result
 

@@ -121,6 +121,7 @@ clean, metadata = ar.pipeline(
 print(metadata["step_timings"])
 print(metadata["applied_steps"])
 print(metadata["row_counts"])
+print(metadata["execution_summary"])
 ```
 ## Quick Example
 
