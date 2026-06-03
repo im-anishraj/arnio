@@ -458,7 +458,7 @@ class DataQualityReport:
         return {
             "null_penalty": self.score_components.get("null_penalty", 0.0),
             "duplicate_penalty": self.score_components.get("duplicate_penalty", 0.0),
-            "dtype_mismatch_penalty": self.score_components.get(
+            "type_mismatch_penalty": self.score_components.get(
                 "type_mismatch_penalty", 0.0
             ),
             "final_score": self.quality_score,
