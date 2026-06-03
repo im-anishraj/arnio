@@ -38,6 +38,42 @@ from .cleaning import (
     safe_divide_columns,
     strip_whitespace,
     validate_columns_exist,
+    winsorize_outliers,
+)
+from .convert import from_dict, from_pandas, from_polars, to_arrow, to_pandas, to_polars
+from .diff import ColumnDiff, DataFrameDiffReport, diff_dataframes
+from .exceptions import (
+    ArnioError,
+    CsvReadError,
+    JsonlReadError,
+    PipelineStepError,
+    RemoteReadError,
+    SchemaValidationError,
+    TypeCastError,
+    UnknownStepError,
+)
+from .frame import ArFrame, ColumnSummary
+from .integrations import ArnioPandasAccessor, register_duckdb
+from .io import (
+    read_csv,
+    read_csv_chunked,
+    read_jsonl,
+    read_jsonl_chunked,
+    read_parquet,
+    scan_csv,
+    sniff_delimiter,
+    write_csv,
+    write_parquet,
+)
+from .pipeline import (
+    LineageReport,
+    PipelineContext,
+    get_builtin_step_signatures,
+    list_steps,
+    pipeline,
+    register_step,
+    reset_steps,
+    unregister_step,
 )
 from .convert import from_pandas, to_numpy, to_pandas
 from .exceptions import ArnioError, CsvReadError, TypeCastError, UnknownStepError
@@ -156,6 +192,9 @@ __all__ = [
     "ValidationResult",
     "validate",
     "diff_schema",
+    "ColumnDiff",
+    "DataFrameDiffReport",
+    "diff_dataframes",
     "Int64",
     "Float64",
     "String",
