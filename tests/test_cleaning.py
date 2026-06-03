@@ -1,5 +1,7 @@
 """Tests for data cleaning functions."""
 
+import re
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -764,6 +766,21 @@ class TestDropDuplicates:
         # subset with NaN
         res_subset = ar.to_pandas(ar.drop_duplicates(frame, subset=["val1"]))
         assert len(res_subset) == 2
+
+    def test_drop_duplicates_zero_col_subset_none_preserves_rows(self):
+        frame = ar.from_pandas(pd.DataFrame(index=range(3)))
+        result = ar.drop_duplicates(frame)
+        assert result.shape == (3, 0)
+
+    def test_drop_duplicates_zero_col_empty_subset_raises(self):
+        frame = ar.from_pandas(pd.DataFrame(index=range(3)))
+        with pytest.raises(ValueError, match="subset cannot be empty"):
+            ar.drop_duplicates(frame, subset=[])
+
+    def test_drop_duplicates_zero_col_missing_column_raises(self):
+        frame = ar.from_pandas(pd.DataFrame(index=range(3)))
+        with pytest.raises(KeyError):
+            ar.drop_duplicates(frame, subset=["missing"])
 
 
 class TestDropColumns:
@@ -2723,47 +2740,115 @@ class TestCleanAPI:
         frame = ar.read_csv(csv_with_whitespace)
         result = ar.clean(frame)
         df = ar.to_pandas(result)
+
         # strip_whitespace is True by default
         assert df["name"].iloc[0] == "Alice"
         assert df["city"].iloc[1] == "London"
+
         # drop_nulls and drop_duplicates are False by default
         assert len(frame) == len(result)
 
     def test_clean_all(self, csv_with_nulls):
-        # reuse csv_with_nulls as it has a null row (Bob missing name)
+
         frame = ar.read_csv(csv_with_nulls)
-        # Drop nulls
-        result = ar.clean(frame, strip_whitespace=False, drop_nulls=True)
+
+        result = ar.clean(
+            frame,
+            strip_whitespace=False,
+            drop_nulls=True,
+        )
+
         assert len(result) < len(frame)
 
     @pytest.mark.parametrize("invalid_val", ["yes", 1, None, []])
     def test_clean_invalid_strip_whitespace(self, csv_with_whitespace, invalid_val):
         frame = ar.read_csv(csv_with_whitespace)
-        with pytest.raises(TypeError, match="strip_whitespace must be a bool"):
+        with pytest.raises(TypeError, match="strip_whitespace must be bool or dict"):
             ar.clean(frame, strip_whitespace=invalid_val)
 
     @pytest.mark.parametrize("invalid_val", ["yes", 1, None, []])
     def test_clean_invalid_drop_nulls(self, csv_with_whitespace, invalid_val):
         frame = ar.read_csv(csv_with_whitespace)
-        with pytest.raises(TypeError, match="drop_nulls must be a bool"):
+        with pytest.raises(TypeError, match="drop_nulls must be bool or dict"):
             ar.clean(frame, drop_nulls=invalid_val)
 
     @pytest.mark.parametrize("invalid_val", ["yes", 1, None, []])
     def test_clean_invalid_drop_duplicates(self, csv_with_whitespace, invalid_val):
         frame = ar.read_csv(csv_with_whitespace)
-        with pytest.raises(TypeError, match="drop_duplicates must be a bool"):
+        with pytest.raises(TypeError, match="drop_duplicates must be bool or dict"):
             ar.clean(frame, drop_duplicates=invalid_val)
 
-    def test_clean_valid_booleans(self, csv_with_whitespace):
-        frame = ar.read_csv(csv_with_whitespace)
-        # Should not raise
+    def test_clean_drop_nulls_with_subset(self):
+        frame = ar.from_dict(
+            {
+                "name": ["Alice", None, "Charlie"],
+                "age": [25, 30, None],
+            }
+        )
+
         result = ar.clean(
             frame,
-            strip_whitespace=True,
-            drop_nulls=False,
-            drop_duplicates=True,
+            drop_nulls={"subset": ["name"]},
         )
-        assert len(ar.to_pandas(result)) > 0
+
+        data = result.to_dict()
+
+        assert data["name"] == ["Alice", "Charlie"]
+        assert data["age"] == [25, None]
+
+    def test_clean_drop_duplicates_keep_last(self):
+        frame = ar.from_dict(
+            {
+                "id": [1, 1, 2],
+                "value": ["first", "last", "unique"],
+            }
+        )
+
+        result = ar.clean(
+            frame,
+            drop_duplicates={
+                "subset": ["id"],
+                "keep": "last",
+            },
+        )
+
+        data = result.to_dict()
+
+        assert data["id"] == [1, 2]
+        assert data["value"] == ["last", "unique"]
+
+    def test_clean_strip_whitespace_subset(self):
+        frame = ar.from_dict(
+            {
+                "name": ["  Alice  ", "  Bob  "],
+                "city": ["  NYC  ", "  LA  "],
+            }
+        )
+
+        result = ar.clean(
+            frame,
+            strip_whitespace={"subset": ["name"]},
+        )
+
+        data = result.to_dict()
+
+        assert data["name"] == ["Alice", "Bob"]
+
+        # city should remain untouched
+        assert data["city"] == ["  NYC  ", "  LA  "]
+
+    def test_clean_invalid_option_type(self):
+        frame = ar.from_dict(
+            {
+                "name": ["Alice"],
+            }
+        )
+
+        with pytest.raises(TypeError):
+            ar.clean(
+                frame,
+                drop_nulls="invalid",
+            )
 
 
 class TestFilterRows:
@@ -2935,31 +3020,41 @@ class TestReplaceValues:
     def test_replace_values_tuple_mapping_key_does_not_crash(self):
         frame = ar.from_pandas(pd.DataFrame({"col": ["A", "B", "C"]}))
 
-        result = ar.replace_values(
-            frame,
-            {("A", "B"): "X"},
-            column="col",
-        )
-
-        df = ar.to_pandas(result)
-
-        assert list(df["col"]) == ["A", "B", "C"]
+        with pytest.raises(TypeError, match="non-scalar mapping keys"):
+            ar.replace_values(
+                frame,
+                {("A", "B"): "X"},
+                column="col",
+            )
 
     def test_replace_values_mixed_tuple_and_null_keys(self):
         frame = ar.from_pandas(pd.DataFrame({"col": ["A", np.nan, "C"]}))
 
-        result = ar.replace_values(
-            frame,
-            {
-                ("A", "B"): "X",
-                np.nan: "missing",
-            },
-            column="col",
-        )
+        with pytest.raises(TypeError, match="non-scalar mapping keys"):
+            ar.replace_values(
+                frame,
+                {
+                    ("A", "B"): "X",
+                    np.nan: "missing",
+                },
+                column="col",
+            )
 
+    def test_replace_values_error_message_includes_key_type(self):
+        """TypeError message must name the offending key type."""
+        frame = ar.from_pandas(pd.DataFrame({"col": ["A"]}))
+
+        with pytest.raises(TypeError, match="tuple"):
+            ar.replace_values(frame, {(1, 2): "X"})
+
+    def test_replace_values_scalar_keys_still_work_after_validation(self):
+        """Valid scalar mappings must be completely unaffected by the new check."""
+        frame = ar.from_pandas(pd.DataFrame({"col": ["A", "B", "C"]}))
+
+        result = ar.replace_values(frame, {"A": "Z"}, column="col")
         df = ar.to_pandas(result)
 
-        assert list(df["col"]) == ["A", "missing", "C"]
+        assert list(df["col"]) == ["Z", "B", "C"]
 
     def test_replace_values_pandas_dataframe_input_returns_dataframe(self):
         df = pd.DataFrame({"status": ["active", "inactive"], "flag": ["ok", "ok"]})
@@ -3446,20 +3541,13 @@ class TestSafeDivideColumns:
         assert df["ratio"].iloc[0] == 2.0
 
     def test_output_column_already_exists(self, tmp_path):
-        import warnings
-
         path = tmp_path / "data.csv"
         path.write_text("revenue,cost,ratio\n100,50,99\n200,100,99\n")
         frame = ar.read_csv(path)
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            result = ar.safe_divide_columns(
+        with pytest.raises(ValueError, match="Output column 'ratio' already exists"):
+            ar.safe_divide_columns(
                 frame, numerator="revenue", denominator="cost", output_column="ratio"
             )
-            assert len(w) == 1
-            assert "already exists" in str(w[0].message)
-        df = ar.to_pandas(result)
-        assert df["ratio"].iloc[0] == 2.0
 
     def test_string_zero_denominator_is_treated_as_zero(self):
         frame = ar.from_pandas(
@@ -3581,30 +3669,6 @@ class TestSafeDivideColumns:
         df = original_to_pandas(result)
 
         assert list(df["ratio"]) == [10.0, 10.0]
-
-    def test_native_output_column_overwrite_preserves_column_order(self):
-        frame = ar.from_pandas(
-            pd.DataFrame(
-                {
-                    "revenue": [100, 200],
-                    "ratio": [99, 99],
-                    "cost": [25, 50],
-                }
-            )
-        )
-
-        with pytest.warns(UserWarning, match="already exists"):
-            result = ar.safe_divide_columns(
-                frame,
-                numerator="revenue",
-                denominator="cost",
-                output_column="ratio",
-            )
-
-        df = ar.to_pandas(result)
-
-        assert list(df.columns) == ["revenue", "ratio", "cost"]
-        assert list(df["ratio"]) == [4.0, 4.0]
 
     # --- Regression tests for string zero denominators (bug fix) ---
 
@@ -4495,3 +4559,66 @@ class TestSlugifyColumnNames:
         frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
         with pytest.raises(ValueError):
             ar.slugify_column_names(frame, on_duplicates="ignore")
+
+
+class TestRenameColumnsMatching:
+    def test_basic_rename(self):
+        frame = ar.from_pandas(
+            pd.DataFrame({"temp_revenue": [1], "temp_cost": [2], "name": ["Alice"]})
+        )
+        result = ar.rename_columns_matching(frame, "^temp_", "")
+        assert list(ar.to_pandas(result).columns) == ["revenue", "cost", "name"]
+
+    def test_unchanged_columns_preserved(self):
+        frame = ar.from_pandas(pd.DataFrame({"temp_a": [1], "b": [2]}))
+        result = ar.rename_columns_matching(frame, "^temp_", "")
+        assert "b" in ar.to_pandas(result).columns
+
+    def test_no_match_returns_original_columns(self):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1], "b": [2]}))
+        result = ar.rename_columns_matching(frame, "^temp_", "")
+        assert list(ar.to_pandas(result).columns) == ["a", "b"]
+
+    def test_rejects_non_string_pattern(self):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
+        with pytest.raises(TypeError, match="pattern must be a string"):
+            ar.rename_columns_matching(frame, 123, "")
+
+    def test_rejects_non_string_replacement(self):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
+        with pytest.raises(TypeError, match="replacement must be a string"):
+            ar.rename_columns_matching(frame, "^a", 123)
+
+    def test_rejects_invalid_regex(self):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
+        with pytest.raises(re.error):
+            ar.rename_columns_matching(frame, "[invalid", "")
+
+    def test_rejects_duplicate_resulting_names(self):
+        frame = ar.from_pandas(pd.DataFrame({"temp_a": [1], "a": [2]}))
+        with pytest.raises(ValueError, match="duplicate column names"):
+            ar.rename_columns_matching(frame, "^temp_", "")
+
+    def test_pandas_input_returns_dataframe(self):
+        df = pd.DataFrame({"temp_x": [1], "y": [2]})
+        result = ar.rename_columns_matching(df, "^temp_", "")
+        assert isinstance(result, pd.DataFrame)
+        assert list(result.columns) == ["x", "y"]
+
+    def test_pipeline_usage(self):
+        frame = ar.from_pandas(pd.DataFrame({"temp_a": [1], "b": [2]}))
+        result = ar.pipeline(
+            frame,
+            [("rename_columns_matching", {"pattern": "^temp_", "replacement": ""})],
+        )
+        assert "a" in ar.to_pandas(result).columns
+
+    def test_rejects_empty_resulting_name(self):
+        frame = ar.from_pandas(pd.DataFrame({"temp_": [1]}))
+        with pytest.raises(ValueError):
+            ar.rename_columns_matching(frame, "^temp_$", "")
+
+    def test_rejects_whitespace_resulting_name(self):
+        frame = ar.from_pandas(pd.DataFrame({"temp_": [1]}))
+        with pytest.raises(ValueError):
+            ar.rename_columns_matching(frame, "^temp_$", "   ")

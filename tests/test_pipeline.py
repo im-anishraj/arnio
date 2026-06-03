@@ -631,8 +631,13 @@ class TestPipeline:
             ar.unregister_step("missing_step")
 
     def test_unregister_builtin_python_step(self):
-        with pytest.raises(ar.UnknownStepError):
-            ar.unregister_step("standardize_missing_tokens")
+        for step_name in [
+            "standardize_missing_tokens",
+            "filter_rows",
+            "replace_values",
+        ]:
+            with pytest.raises(ValueError):
+                ar.unregister_step(step_name)
 
     def test_unregister_custom_step(self):
         def custom_step(df):
@@ -2018,3 +2023,25 @@ class TestRegisterStepValidation:
             register_step(None, dummy_clean)  # type: ignore
         with pytest.raises(ValueError, match="must be a non-empty string"):
             register_step(42, dummy_clean)  # type: ignore
+
+
+class TestPipelineStepContainerValidation:
+    @pytest.fixture
+    def frame(self, sample_csv):
+        return ar.read_csv(sample_csv)
+
+    @pytest.mark.parametrize(
+        "invalid_steps",
+        [None, "drop_nulls", b"drop_nulls", {"drop_nulls": {}}, ("drop_nulls",)],
+    )
+    def test_pipeline_rejects_invalid_step_containers(self, frame, invalid_steps):
+        with pytest.raises(TypeError):
+            ar.pipeline(frame, invalid_steps)
+
+    def test_pipeline_rejects_bare_step_tuple_with_helpful_message(self, frame):
+        with pytest.raises(TypeError, match=r"\[\(\'drop_nulls\',\)\]"):
+            ar.pipeline(frame, ("drop_nulls",))
+
+    def test_pipeline_accepts_valid_step_container(self, frame):
+        result = ar.pipeline(frame, [("strip_whitespace",)])
+        assert isinstance(result, ar.ArFrame)

@@ -4279,3 +4279,27 @@ class TestQualityGateResultConstructorValidation:
                 issues=[issue],
                 thresholds="not a dict",
             )
+
+
+def test_auto_clean_rejects_list_mode():
+    frame = ar.from_dict({"name": [" Alice "], "age": ["1"]})
+    with pytest.raises(ValueError, match="mode must be 'safe' or 'strict'"):
+        ar.auto_clean(frame, mode=["safe"])
+
+
+def test_auto_clean_rejects_none_mode():
+    frame = ar.from_dict({"name": [" Alice "]})
+    with pytest.raises(ValueError, match="mode must be 'safe' or 'strict'"):
+        ar.auto_clean(frame, mode=None)
+
+
+def test_auto_clean_rejects_integer_mode():
+    frame = ar.from_dict({"name": [" Alice "]})
+    with pytest.raises(ValueError, match="mode must be 'safe' or 'strict'"):
+        ar.auto_clean(frame, mode=1)
+
+
+def test_auto_clean_rejects_invalid_string_mode():
+    frame = ar.from_dict({"name": [" Alice "]})
+    with pytest.raises(ValueError, match="mode must be 'safe' or 'strict'"):
+        ar.auto_clean(frame, mode="SAFE")

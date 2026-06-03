@@ -17,9 +17,9 @@ try:
     import duckdb
 except ImportError as e:
     raise ImportError(
-        "DuckDB is required for this example. Install it with: pip install duckdb"
+        'DuckDB is required for this example. Install it with: pip install "arnio[duckdb]" '
+        "or install DuckDB directly with: pip install duckdb"
     ) from e
-
 try:
     import pandas as pd
 except ImportError as e:
