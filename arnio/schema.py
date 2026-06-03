@@ -1264,7 +1264,7 @@ class SchemaDiffEntry:
     expected: Any = None
     observed: Any = None
 
-    def __post_init__(self):
+   def __post_init__(self):
         if self.column is not None and not isinstance(self.column, str):
             raise TypeError("column must be a string or None")
 
