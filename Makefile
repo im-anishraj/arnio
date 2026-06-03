@@ -13,13 +13,11 @@ doctor: ## Check Python dependencies, native core, and local build tools
 test: ## Run tests with coverage
 	pytest tests/ -v --cov=arnio --cov-report=term-missing
 
-
 test-quick: ## Run tests without coverage (fast, pass/fail only)
 	pytest tests/ -v
 
 coverage: ## Generate HTML coverage report
-	pytest tests/ -v --cov=arnio --cov-report=html --cov-report=term	
-
+	pytest tests/ -v --cov=arnio --cov-report=html --cov-report=term
 
 lint: ## Check linting
 	ruff check .
