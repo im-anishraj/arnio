@@ -10,7 +10,13 @@ import pandas as pd
 from arnio.convert import from_pandas, to_pandas
 from arnio.frame import ArFrame
 from arnio.pipeline import pipeline as run_pipeline
-from arnio.quality import DataQualityReport, auto_clean, profile, suggest_cleaning
+from arnio.quality import (
+    CleanExplanation,
+    DataQualityReport,
+    auto_clean,
+    profile,
+    suggest_cleaning,
+)
 from arnio.schema import Schema, ValidationResult, validate
 
 
@@ -56,9 +62,24 @@ class ArnioPandasAccessor:
         )
         return to_pandas(frame)
 
-    def profile(self, *, sample_size: int = 5) -> DataQualityReport:
+    def profile(
+        self,
+        *,
+        sample_size: int = 5,
+        approx_top_values: bool = False,
+        approx_top_values_min_unique: int = 1000,
+        approx_top_values_min_ratio: float = 0.2,
+        approx_top_values_sample_size: int = 2000,
+    ) -> DataQualityReport:
         """Profile DataFrame quality with Arnio."""
-        return profile(self.to_arframe(), sample_size=sample_size)
+        return profile(
+            self.to_arframe(),
+            sample_size=sample_size,
+            approx_top_values=approx_top_values,
+            approx_top_values_min_unique=approx_top_values_min_unique,
+            approx_top_values_min_ratio=approx_top_values_min_ratio,
+            approx_top_values_sample_size=approx_top_values_sample_size,
+        )
 
     def suggest_cleaning(self) -> list[tuple[str, dict[str, Any]]]:
         """Return Arnio pipeline-compatible cleaning suggestions."""
@@ -69,20 +90,70 @@ class ArnioPandasAccessor:
         *,
         mode: str = "safe",
         return_report: bool = False,
-    ) -> pd.DataFrame | tuple[pd.DataFrame, DataQualityReport]:
-        """Run Arnio's automatic cleaning and return pandas output."""
+        dry_run: bool = False,
+        allow_lossy_casts: bool = False,
+        confirmed_casts: dict[str, str] | None = None,
+        explain: bool = False,
+    ) -> (
+        pd.DataFrame
+        | DataQualityReport
+        | tuple[pd.DataFrame, DataQualityReport]
+        | tuple[pd.DataFrame, CleanExplanation]
+        | tuple[pd.DataFrame, DataQualityReport, CleanExplanation]
+    ):
+        """Run Arnio's automatic cleaning and return pandas output.
+
+        Parameters
+        ----------
+        explain : bool, default False
+            When ``True``, also return a :class:`~arnio.quality.CleanExplanation`
+            audit trail describing which steps ran and why.
+        confirmed_casts : dict[str, str] or None, default None
+            Exact strict-mode ``cast_types`` mapping to confirm after previewing
+            proposed casts with ``dry_run=True`` or ``suggest_cleaning()``.
+        """
         result = auto_clean(
             self.to_arframe(),
             mode=mode,
             return_report=return_report,
+            dry_run=dry_run,
+            allow_lossy_casts=allow_lossy_casts,
+            confirmed_casts=confirmed_casts,
+            explain=explain,
         )
+
+        if dry_run:
+            return result
+
+        if return_report and explain:
+            frame, report, explanation = result
+            return to_pandas(frame), report, explanation
 
         if return_report:
             frame, report = result
             return to_pandas(frame), report
 
+        if explain:
+            frame, explanation = result
+            return to_pandas(frame), explanation
+
         return to_pandas(result)
 
-    def validate(self, schema: Schema | dict[str, Any]) -> ValidationResult:
-        """Validate the DataFrame against an Arnio schema."""
-        return validate(self.to_arframe(), schema)
+    def validate(
+        self,
+        schema: Schema | dict[str, Any],
+        *,
+        max_errors: int | None = None,
+    ) -> ValidationResult:
+        """Validate the DataFrame against an Arnio schema.
+
+        Parameters
+        ----------
+        schema : Schema or dict[str, Field]
+            Schema to validate against.
+        max_errors : int or None, default None
+            Maximum number of validation issues to collect. Mirrors the
+            ``max_errors`` parameter of ``ar.validate()``. When None all
+            issues are collected.
+        """
+        return validate(self.to_arframe(), schema, max_errors=max_errors)

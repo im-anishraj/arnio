@@ -1,0 +1,50 @@
+name: Manylinux Wheel Smoke Test
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/wheel-smoke.yml'
+      - 'pyproject.toml'
+      - 'setup.py'
+      - 'CMakeLists.txt'
+      - 'cpp/**'
+      - 'bindings/**'
+  schedule:
+    - cron: '0 4 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  wheel-smoke:
+    name: Build manylinux wheel and smoke test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install cibuildwheel
+        run: pip install "cibuildwheel>=3.2,<4"
+
+      - name: Build manylinux wheel
+        run: cibuildwheel --only cp312-manylinux_x86_64 --output-dir wheelhouse
+        env:
+          CIBW_BUILD_VERBOSITY: 1
+          CIBW_TEST_COMMAND: ""
+
+      - name: Run wheel smoke test
+        run: python tests/smoke_wheel_install.py --wheelhouse wheelhouse
+
+      - name: Upload wheel as artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: manylinux-wheel
+          path: wheelhouse/*.whl
+          retention-days: 7

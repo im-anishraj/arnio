@@ -1,7 +1,7 @@
 name: Performance task
 description: Report or propose parser, conversion, memory, or C++ performance work.
 title: "Performance: "
-labels: ["type: performance", "status: needs triage"]
+labels: ["type:performance", "status:needs-triage"]
 body:
   - type: textarea
     id: workload

@@ -3,13 +3,29 @@ repos:
     rev: 24.3.0
     hooks:
       - id: black
+
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.4.1
     hooks:
       - id: ruff
         args: [--fix]
+
   - repo: https://github.com/pre-commit/mirrors-clang-format
     rev: v17.0.6
     hooks:
       - id: clang-format
         types_or: [c++, c]
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-yaml
+        files: ^\.github/
+
+  - repo: local
+    hooks:
+      - id: check-docs-utf8
+        name: Check docs are valid UTF-8
+        entry: python scripts/check_docs_utf8.py
+        language: python
+        files: (?i)(^docs/.*\.(md|rst|txt)$|^[^/]+\.(md|rst)$)

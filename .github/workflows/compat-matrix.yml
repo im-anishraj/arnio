@@ -1,0 +1,61 @@
+name: Compatibility Matrix
+
+on:
+  pull_request:
+    # Run compatibility checks for runtime and test changes.
+    paths:
+    - '.github/workflows/compat-matrix.yml'
+    - 'pyproject.toml'
+    - 'arnio/**'
+    - 'tests/**'
+  schedule:
+    - cron: '0 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compat:
+    name: pandas=${{ matrix.pandas-version }} numpy=${{ matrix.numpy-version }} (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Oldest supported versions (Python 3.9 only)
+          - python-version: "3.9"
+            pandas-version: "1.5.3"
+            numpy-version: "1.23.5"
+          # Middle ground
+          - python-version: "3.11"
+            pandas-version: "2.0.0"
+            numpy-version: "1.26.0"
+          # Latest versions
+          - python-version: "3.12"
+            pandas-version: "2.2.3"
+            numpy-version: "2.0.0"
+          # Newest Python — pandas 2.3.3 and numpy 2.4 are the first releases cp314 wheels.
+          - python-version: "3.14"
+            pandas-version: "2.3.3"
+            numpy-version: "2.4.0"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install arnio
+        run: |
+          pip install --upgrade pip
+          pip install -e .[dev]
+
+      - name: Pin oldest pandas and numpy
+        run: pip install "pandas==${{ matrix.pandas-version }}" "numpy==${{ matrix.numpy-version }}"
+
+      - name: Run test suite
+        run: pytest tests/test_compat_matrix.py -v --tb=short
