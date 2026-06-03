@@ -300,6 +300,7 @@ def _validate_column(
 ) -> list[ValidationIssue]:
     issues: list[ValidationIssue] = []
 
+    # dtype check (unchanged)
     if field_def.dtype is not None and actual_dtype != field_def.dtype:
         issues.append(
             ValidationIssue(
@@ -312,83 +313,112 @@ def _validate_column(
             )
         )
 
+    # null check (vectorized mask reuse)
     if not field_def.nullable:
-        issues.extend(
-            _row_issues(
-                series[series.isna()],
-                column=name,
-                rule="nullable",
-                message=f"Column {name!r} contains null values",
+        null_mask = series.isna()
+        if null_mask.any():
+            issues.extend(
+                _row_issues(
+                    series[null_mask],
+                    column=name,
+                    rule="nullable",
+                    message=f"Column {name!r} contains null values",
+                )
             )
-        )
 
     non_null = series.dropna()
 
-    if field_def.unique:
-        duplicate_mask = non_null.duplicated(keep=False)
-        issues.extend(
-            _row_issues(
-                non_null[duplicate_mask],
-                column=name,
-                rule="unique",
-                message=f"Column {name!r} contains duplicate values",
+    # uniqueness (vectorized)
+    if field_def.unique and len(non_null) > 0:
+        dup_mask = non_null.duplicated(keep=False)
+        if dup_mask.any():
+            issues.extend(
+                _row_issues(
+                    non_null[dup_mask],
+                    column=name,
+                    rule="unique",
+                    message=f"Column {name!r} contains duplicate values",
+                )
             )
-        )
 
-    if field_def.allowed is not None:
-        invalid = non_null[~non_null.isin(field_def.allowed)]
-        issues.extend(
-            _row_issues(
-                invalid,
-                column=name,
-                rule="allowed",
-                message=f"Column {name!r} contains values outside the allowed set",
+    # allowed set (vectorized)
+    if field_def.allowed is not None and len(non_null) > 0:
+        invalid_mask = ~non_null.isin(field_def.allowed)
+        if invalid_mask.any():
+            issues.extend(
+                _row_issues(
+                    non_null[invalid_mask],
+                    column=name,
+                    rule="allowed",
+                    message=f"Column {name!r} contains values outside the allowed set",
+                )
             )
-        )
 
+    # numeric validation (reduce repeated coercion)
     if field_def.min is not None or field_def.max is not None:
         numeric = pd.to_numeric(non_null, errors="coerce")
-        invalid_numeric = non_null[numeric.isna()]
-        issues.extend(
-            _row_issues(
-                invalid_numeric,
-                column=name,
-                rule="numeric",
-                message=f"Column {name!r} contains non-numeric values",
+
+        invalid_numeric_mask = numeric.isna() & ~non_null.isna()
+        if invalid_numeric_mask.any():
+            issues.extend(
+                _row_issues(
+                    non_null[invalid_numeric_mask],
+                    column=name,
+                    rule="numeric",
+                    message=f"Column {name!r} contains non-numeric values",
+                )
             )
-        )
+
         if field_def.min is not None:
-            issues.extend(
-                _row_issues(
-                    non_null[numeric < field_def.min],
-                    column=name,
-                    rule="min",
-                    message=f"Column {name!r} has values below {field_def.min}",
+            min_mask = numeric < field_def.min
+            if min_mask.any():
+                issues.extend(
+                    _row_issues(
+                        non_null[min_mask],
+                        column=name,
+                        rule="min",
+                        message=f"Column {name!r} has values below {field_def.min}",
+                    )
                 )
-            )
+
         if field_def.max is not None:
+            max_mask = numeric > field_def.max
+            if max_mask.any():
+                issues.extend(
+                    _row_issues(
+                        non_null[max_mask],
+                        column=name,
+                        rule="max",
+                        message=f"Column {name!r} has values above {field_def.max}",
+                    )
+                )
+
+    # string conversion once
+    # avoid repeated string conversion
+    if (
+        field_def.pattern is not None
+        or field_def.semantic is not None
+        or field_def.min_length is not None
+        or field_def.max_length is not None
+    ):
+        text = non_null.astype("string")
+    else:
+        text = None
+
+    # pattern
+    if field_def.pattern is not None and len(non_null) > 0:
+        invalid_mask = ~text.str.fullmatch(field_def.pattern, na=False)
+        if invalid_mask.any():
             issues.extend(
                 _row_issues(
-                    non_null[numeric > field_def.max],
+                    non_null[invalid_mask],
                     column=name,
-                    rule="max",
-                    message=f"Column {name!r} has values above {field_def.max}",
+                    rule="pattern",
+                    message=f"Column {name!r} has values that do not match the pattern",
                 )
             )
 
-    text = non_null.astype("string")
-
-    if field_def.pattern is not None:
-        invalid = non_null[~text.str.fullmatch(field_def.pattern, na=False)]
-        issues.extend(
-            _row_issues(
-                invalid,
-                column=name,
-                rule="pattern",
-                message=f"Column {name!r} has values that do not match the pattern",
-            )
-        )
-
+    # semantic
     if field_def.semantic is not None:
         pattern = _SEMANTIC_PATTERNS.get(field_def.semantic)
         if pattern is None:
@@ -400,37 +430,42 @@ def _validate_column(
                 )
             )
         else:
-            invalid = non_null[~text.str.fullmatch(pattern, na=False)]
+            invalid_mask = ~text.str.fullmatch(pattern, na=False)
+            if invalid_mask.any():
+                issues.extend(
+                    _row_issues(
+                        non_null[invalid_mask],
+                        column=name,
+                        rule=field_def.semantic,
+                        message=f"Column {name!r} contains invalid {field_def.semantic} values",
+                    )
+                )
+
+    # min length
+    if field_def.min_length is not None:
+        mask = text.str.len() < field_def.min_length
+        if mask.any():
             issues.extend(
                 _row_issues(
-                    invalid,
+                    non_null[mask],
                     column=name,
-                    rule=field_def.semantic,
-                    message=f"Column {name!r} contains invalid {field_def.semantic} values",
+                    rule="min_length",
+                    message=f"Column {name!r} has values shorter than {field_def.min_length}",
                 )
             )
 
-    if field_def.min_length is not None:
-        invalid = non_null[text.str.len() < field_def.min_length]
-        issues.extend(
-            _row_issues(
-                invalid,
-                column=name,
-                rule="min_length",
-                message=f"Column {name!r} has values shorter than {field_def.min_length}",
-            )
-        )
-
+    # max length
     if field_def.max_length is not None:
-        invalid = non_null[text.str.len() > field_def.max_length]
-        issues.extend(
-            _row_issues(
-                invalid,
-                column=name,
-                rule="max_length",
-                message=f"Column {name!r} has values longer than {field_def.max_length}",
+        mask = text.str.len() > field_def.max_length
+        if mask.any():
+            issues.extend(
+                _row_issues(
+                    non_null[mask],
+                    column=name,
+                    rule="max_length",
+                    message=f"Column {name!r} has values longer than {field_def.max_length}",
+                )
             )
-        )
 
     return issues
 
@@ -442,15 +477,19 @@ def _row_issues(
     rule: str,
     message: str,
 ) -> list[ValidationIssue]:
+    if invalid.empty:
+        return []
+
+    # vectorized extraction (faster than .items loop overhead)
     return [
         ValidationIssue(
             column=column,
             rule=rule,
             message=message,
-            row_index=int(index),
-            value=value,
+            row_index=int(idx),
+            value=val,
         )
-        for index, value in invalid.items()
+        for idx, val in zip(invalid.index, invalid.values)
     ]
 
 
