@@ -694,6 +694,7 @@ class TestReadCsvChunkedCoverage:
 def test_read_csv_chunked_early_exit_behavioral_cleanup():
     import os
     import tempfile
+
     import arnio as ar
 
     fd, path = tempfile.mkstemp(suffix=".csv")
