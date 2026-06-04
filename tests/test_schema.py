@@ -1156,9 +1156,9 @@ def test_to_markdown_rejects_non_bool_redact_values():
         try:
             result.to_markdown(redact_values=invalid)  # type: ignore[arg-type]
         except TypeError as exc:
-            assert "redact_values must be a bool" in str(exc), (
-                f"Wrong error message for {invalid!r}: {exc}"
-            )
+            assert "redact_values must be a bool" in str(
+                exc
+            ), f"Wrong error message for {invalid!r}: {exc}"
         else:
             raise AssertionError(
                 f"Expected TypeError for redact_values={invalid!r}, but no exception was raised"
