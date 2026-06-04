@@ -95,7 +95,7 @@ def test_dtype_validation_does_not_report_safe_conversion_for_invalid_numeric_st
 
 def test_validate_rejects_chunked_iterators(tmp_path):
     path = tmp_path / "data.csv"
-    path.write_text("email\n" "a@example.com\n")
+    path.write_text("email\na@example.com\n")
 
     chunks = ar.read_csv_chunked(path, chunksize=1)
 
@@ -231,10 +231,7 @@ def test_schema_validation_stops_after_max_errors(tmp_path):
     path = tmp_path / "bad.csv"
 
     path.write_text(
-        "name,age,email\n"
-        ",150,invalid-email\n"
-        ",200,another-invalid\n"
-        ",300,bad-email\n"
+        "name,age,email\n,150,invalid-email\n,200,another-invalid\n,300,bad-email\n"
     )
 
     frame = ar.read_csv(path)
@@ -1159,9 +1156,9 @@ def test_to_markdown_rejects_non_bool_redact_values():
         try:
             result.to_markdown(redact_values=invalid)  # type: ignore[arg-type]
         except TypeError as exc:
-            assert "redact_values must be a bool" in str(
-                exc
-            ), f"Wrong error message for {invalid!r}: {exc}"
+            assert "redact_values must be a bool" in str(exc), (
+                f"Wrong error message for {invalid!r}: {exc}"
+            )
         else:
             raise AssertionError(
                 f"Expected TypeError for redact_values={invalid!r}, but no exception was raised"
@@ -1260,10 +1257,7 @@ def test_raise_for_errors_multiple_issues(tmp_path):
 def test_schema_bootstrap_from_report_infers_dtype_and_nullable(tmp_path):
     path = tmp_path / "quality.csv"
     path.write_text(
-        "id,name,score,active\n"
-        "1,Alice,9.5,true\n"
-        "2,Bob,,false\n"
-        "3,Carol,7.25,true\n"
+        "id,name,score,active\n1,Alice,9.5,true\n2,Bob,,false\n3,Carol,7.25,true\n"
     )
     report = ar.profile(ar.read_csv(path))
 
@@ -1327,7 +1321,7 @@ def test_email_validation_requires_string():
 
 def test_email_default_validation_mode_is_backward_compatible(tmp_path):
     path = tmp_path / "emails.csv"
-    path.write_text("email\n" "simple@test.com\n")
+    path.write_text("email\nsimple@test.com\n")
 
     frame = ar.read_csv(path)
 
@@ -1341,7 +1335,7 @@ def test_email_default_validation_mode_is_backward_compatible(tmp_path):
 
 def test_email_strict_validation_rejects_invalid_emails(tmp_path):
     path = tmp_path / "invalid_emails.csv"
-    path.write_text("email\n" "bad@@test.com\n" "user@localhost\n" "user@.com\n")
+    path.write_text("email\nbad@@test.com\nuser@localhost\nuser@.com\n")
 
     frame = ar.read_csv(path)
 
@@ -1363,7 +1357,7 @@ def test_email_strict_validation_rejects_invalid_emails(tmp_path):
 def test_email_strict_validation_accepts_valid_emails(tmp_path):
     path = tmp_path / "valid_emails.csv"
     path.write_text(
-        "email\n" "user@example.com\n" "first.last@test.co.uk\n" "hello+tag@gmail.com\n"
+        "email\nuser@example.com\nfirst.last@test.co.uk\nhello+tag@gmail.com\n"
     )
 
     frame = ar.read_csv(path)
@@ -2414,7 +2408,7 @@ def test_required_if_accepts_scalar_expected_value(value):
 
 def test_required_if_valid_conditional_validation(tmp_path):
     path = tmp_path / "conditional_req.csv"
-    path.write_text("status,notes\n" "active,has notes\n" "inactive,\n" "active,\n")
+    path.write_text("status,notes\nactive,has notes\ninactive,\nactive,\n")
     frame = ar.read_csv(path)
     schema = ar.Schema(
         {"notes": ar.String(required_if=("status", "active"), nullable=True)}
@@ -2445,7 +2439,7 @@ def test_email_default_keeps_backward_compatibility(sample_csv):
 def test_datetime_validation_passes_for_valid_column(tmp_path):
     path = tmp_path / "valid_datetimes.csv"
     path.write_text(
-        "ts\n" "2026-01-01T12:00:00\n" "2026-06-15T08:30:00\n" "2026-12-31T23:59:59\n"
+        "ts\n2026-01-01T12:00:00\n2026-06-15T08:30:00\n2026-12-31T23:59:59\n"
     )
 
     result = ar.validate(
@@ -2512,7 +2506,7 @@ def test_datetime_validation(tmp_path):
     assert "nullable" in rules
 
     path2 = tmp_path / "boundary.csv"
-    path2.write_text("ts\n" "2025-12-31T23:59:59\n" "2027-01-01T00:00:00\n")
+    path2.write_text("ts\n2025-12-31T23:59:59\n2027-01-01T00:00:00\n")
     frame2 = ar.read_csv(path2)
     result2 = ar.validate(frame2, schema)
     rules2 = [issue.rule for issue in result2.issues]
@@ -2675,7 +2669,7 @@ def test_regex_fullmatch_not_partial(tmp_path):
 
 def test_date_validation_rejects_non_zero_padded_dates(tmp_path):
     path = tmp_path / "non_padded_dates.csv"
-    path.write_text("created_at\n" "2026-5-15\n" "2026-05-5\n" "2026-5-5\n")
+    path.write_text("created_at\n2026-5-15\n2026-05-5\n2026-5-5\n")
 
     result = ar.validate(
         ar.read_csv(path),
@@ -2691,9 +2685,7 @@ def test_date_validation_rejects_non_zero_padded_dates(tmp_path):
 
 def test_date_validation_reports_only_invalid_vectorized_values(tmp_path):
     path = tmp_path / "mixed_dates.csv"
-    path.write_text(
-        "created_at\n" "2026-05-15\n" "2026-02-30\n" "2026-5-15\n" "2024-02-29\n"
-    )
+    path.write_text("created_at\n2026-05-15\n2026-02-30\n2026-5-15\n2024-02-29\n")
 
     result = ar.validate(
         ar.read_csv(path),
@@ -2710,7 +2702,7 @@ def test_date_validation_reports_only_invalid_vectorized_values(tmp_path):
 
 def test_required_if_validation_passes_when_condition_matches(tmp_path):
     path = tmp_path / "conditional_pass.csv"
-    path.write_text("user_type,country\n" "international,IN\n" "local,\n")
+    path.write_text("user_type,country\ninternational,IN\nlocal,\n")
 
     frame = ar.read_csv(path)
 
@@ -2733,7 +2725,7 @@ def test_required_if_validation_passes_when_condition_matches(tmp_path):
 
 def test_required_if_validation_fails_when_condition_matches(tmp_path):
     path = tmp_path / "conditional_fail.csv"
-    path.write_text("user_type,country\n" "international,\n" "local,IN\n")
+    path.write_text("user_type,country\ninternational,\nlocal,IN\n")
 
     frame = ar.read_csv(path)
 
@@ -2808,7 +2800,7 @@ def test_schema_rules_fails_when_end_date_before_start_date(tmp_path):
 
 def test_required_if_validation_ignores_non_matching_conditions(tmp_path):
     path = tmp_path / "conditional_ignore.csv"
-    path.write_text("user_type,country\n" "local,\n" "guest,\n")
+    path.write_text("user_type,country\nlocal,\nguest,\n")
 
     frame = ar.read_csv(path)
 
@@ -2845,7 +2837,7 @@ def test_schema_rules_equal_boundary_passes(tmp_path):
 
 def test_required_if_validation_reports_missing_trigger_column(tmp_path):
     path = tmp_path / "missing_trigger.csv"
-    path.write_text("country\n" "IN\n")
+    path.write_text("country\nIN\n")
     frame = ar.read_csv(path)
     schema = ar.Schema(
         {
@@ -2945,7 +2937,7 @@ def test_schema_rules_missing_column_returns_validation_issue(tmp_path):
 
 def test_required_if_validation_handles_null_trigger_values(tmp_path):
     path = tmp_path / "null_trigger.csv"
-    path.write_text("user_type,country\n" ",\n" "international,IN\n")
+    path.write_text("user_type,country\n,\ninternational,IN\n")
     frame = ar.read_csv(path)
     schema = ar.Schema(
         {
@@ -4064,7 +4056,7 @@ def test_custom_field_required_if_validation_passes_when_condition_matches(tmp_p
     ar.register_validator("positive_req_pass", lambda v: v > 0)
 
     path = tmp_path / "custom_conditional_pass.csv"
-    path.write_text("status,score\n" "active,10\n" "inactive,\n")
+    path.write_text("status,score\nactive,10\ninactive,\n")
     frame = ar.read_csv(path)
 
     schema = ar.Schema(
@@ -4085,7 +4077,7 @@ def test_custom_field_required_if_validation_fails_when_condition_matches(tmp_pa
     ar.register_validator("positive_req_required", lambda v: v > 0)
 
     path = tmp_path / "custom_conditional_fail.csv"
-    path.write_text("status,score\n" "active,\n" "inactive,5\n")
+    path.write_text("status,score\nactive,\ninactive,5\n")
     frame = ar.read_csv(path)
 
     schema = ar.Schema(
@@ -4109,7 +4101,7 @@ def test_custom_field_required_if_validation_ignores_non_matching_conditions(tmp
     ar.register_validator("positive_req_ignore", lambda v: v > 0)
 
     path = tmp_path / "custom_conditional_ignore.csv"
-    path.write_text("status,score\n" "pending,\n" "inactive,\n")
+    path.write_text("status,score\npending,\ninactive,\n")
     frame = ar.read_csv(path)
 
     schema = ar.Schema(
@@ -4130,7 +4122,7 @@ def test_custom_field_required_if_enforces_rule_logic_when_matched(tmp_path):
     ar.register_validator("positive_req_rule", lambda v: v > 0)
 
     path = tmp_path / "custom_conditional_rule_fail.csv"
-    path.write_text("status,score\n" "active,-5\n")
+    path.write_text("status,score\nactive,-5\n")
     frame = ar.read_csv(path)
 
     schema = ar.Schema(
