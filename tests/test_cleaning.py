@@ -4707,7 +4707,7 @@ class TestCastTypesFloat64LocaleIndependent:
         prev = _set_locale("de_DE.UTF-8")
         try:
             frame = ar.from_pandas(pd.DataFrame({"x": ["1.5", "bad", "3.0"]}))
-            result = ar.cast_types(frame, {"x": "float64"}, coerce_invalid=True)
+            result = ar.cast_types(frame, {"x": "float64"}, errors="coerce")
             df = to_pandas(result)
             assert df["x"].iloc[0] == pytest.approx(1.5)
             assert pd.isna(df["x"].iloc[1])
@@ -4720,9 +4720,9 @@ class TestCastTypesFloat64LocaleIndependent:
         prev = _set_locale("de_DE.UTF-8")
         try:
             frame = ar.from_pandas(pd.DataFrame({"v": ["nan", "inf", "-inf"]}))
-            result = ar.cast_types(frame, {"v": "float64"}, coerce_invalid=True)
+            result = ar.cast_types(frame, {"v": "float64"}, errors="coerce")
             df = to_pandas(result)
-            # nan, inf, -inf are non-finite — with coerce_invalid they become null
+            # nan, inf, -inf are non-finite — with errors="coerce" they become null
             assert df["v"].isna().all()
         finally:
             _locale.setlocale(_locale.LC_NUMERIC, prev)
