@@ -86,10 +86,34 @@ def test_coalesce_columns_validation() -> None:
     with pytest.raises(ValueError, match="already exists"):
         ar.coalesce_columns(frame, subset=["a"], output_column="b")
 
-    # Invalid subset type
-    with pytest.raises(TypeError, match="subset must be a list"):
+    # Invalid subset type (string)
+    with pytest.raises(
+        TypeError, match="subset must be a sequence of column names, not a string"
+    ):
         ar.coalesce_columns(frame, subset="not_a_list")  # type: ignore
+
+    # Invalid subset type (unordered set)
+    with pytest.raises(TypeError, match="subset must be a sequence of column names"):
+        ar.coalesce_columns(frame, subset={"a", "b"})  # type: ignore
 
     # Invalid output_column type
     with pytest.raises(ValueError, match="must be a non-empty string"):
         ar.coalesce_columns(frame, subset=["a"], output_column="")
+
+
+def test_coalesce_columns_pandas_index() -> None:
+    # Test coalesce on pandas DataFrame with pandas Index for subset
+    df = pd.DataFrame(
+        {
+            "a": [None, 2.0, None],
+            "b": [10.0, None, None],
+            "c": [20.0, 30.0, 40.0],
+        }
+    )
+    subset_index = pd.Index(["a", "b", "c"])
+    res_df = ar.coalesce_columns(df, subset=subset_index, output_column="result")
+
+    expected = df.copy()
+    expected["result"] = [10.0, 2.0, 40.0]
+
+    pd.testing.assert_frame_equal(res_df, expected, check_dtype=False)

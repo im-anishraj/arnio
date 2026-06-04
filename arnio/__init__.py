@@ -4,16 +4,11 @@ arnio — Fast CSV processing and data cleaning companion for pandas.
 import arnio as ar
 """
 
-try:
-    from importlib.metadata import version
-
-    __version__ = version("arnio")
-except Exception:
-    __version__ = "unknown"
-
+from ._version import __version__ as __version__
 from .cleaning import (
     cast_types,
     clean,
+    clean_column_names,
     clip_numeric,
     coalesce_columns,
     combine_columns,
@@ -31,22 +26,26 @@ from .cleaning import (
     normalize_whitespace,
     parse_bool_strings,
     rename_columns,
+    rename_columns_matching,
     replace_values,
     round_numeric_columns,
     safe_divide_columns,
     select_columns,
+    slugify_column_names,
     standardize_missing_tokens,
     strip_whitespace,
     trim_column_names,
     validate_columns_exist,
     winsorize_outliers,
 )
-from .convert import from_pandas, to_arrow, to_pandas
+from .convert import from_dict, from_pandas, from_polars, to_arrow, to_pandas, to_polars
 from .exceptions import (
     ArnioError,
     CsvReadError,
     JsonlReadError,
     PipelineStepError,
+    RemoteReadError,
+    SchemaValidationError,
     TypeCastError,
     UnknownStepError,
 )
@@ -56,21 +55,26 @@ from .io import (
     read_csv,
     read_csv_chunked,
     read_jsonl,
+    read_jsonl_chunked,
+    read_parquet,
     scan_csv,
     sniff_delimiter,
     write_csv,
     write_parquet,
 )
 from .pipeline import (
+    LineageReport,
     PipelineContext,
     get_builtin_step_signatures,
     list_steps,
     pipeline,
     register_step,
     reset_steps,
+    unregister_step,
 )
 from .quality import (
     CleanExplanation,
+    CleaningSuggestion,
     CleanStepRecord,
     ColumnProfile,
     DataQualityReport,
@@ -121,7 +125,9 @@ __all__ = [
     "read_csv",
     "read_csv_chunked",
     "read_jsonl",
+    "read_jsonl_chunked",
     "write_csv",
+    "read_parquet",
     "write_parquet",
     "scan_csv",
     "sniff_delimiter",
@@ -138,10 +144,12 @@ __all__ = [
     "drop_duplicates",
     "drop_constant_columns",
     "drop_empty_columns",
+    "clean_column_names",
     "clip_numeric",
     "winsorize_outliers",
     "coalesce_columns",
     "combine_columns",
+    "rename_columns_matching",
     "drop_columns_matching",
     "strip_whitespace",
     "parse_bool_strings",
@@ -151,22 +159,29 @@ __all__ = [
     "cast_types",
     "clean",
     "safe_divide_columns",
+    "slugify_column_names",
     "trim_column_names",
     "standardize_missing_tokens",
+    "CleaningSuggestion",
     # Conversion
     "to_pandas",
     "to_arrow",
+    "to_polars",
     "from_pandas",
+    "from_polars",
     "from_records",
+    "from_dict",
     # Integrations
     "ArnioPandasAccessor",
     "register_duckdb",
     # Pipeline
     "pipeline",
     "register_step",
+    "unregister_step",
     "get_builtin_step_signatures",
     "list_steps",
     "PipelineContext",
+    "LineageReport",
     "reset_steps",
     # Data quality
     "profile",
@@ -207,8 +222,10 @@ __all__ = [
     "ArnioError",
     "CsvReadError",
     "JsonlReadError",
+    "RemoteReadError",
     "TypeCastError",
     "PipelineStepError",
+    "SchemaValidationError",
     "normalize_unicode",
     "Regex",
     "Custom",

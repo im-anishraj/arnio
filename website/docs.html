@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Documentation — Arnio</title>
   <meta name="description" content="Current Arnio documentation for CSV I/O, chunked reads, cleaning, profiling, schema validation, Arrow, DuckDB, Parquet, and pandas workflows.">
-  <link rel="icon" type="image/svg+xml" href="updated-icon.svg">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="stylesheet" href="css/variables.css?v=20260522">
   <link rel="stylesheet" href="css/base.css?v=20260522">
   <link rel="stylesheet" href="css/layout.css?v=20260522">
@@ -16,19 +16,19 @@
   <meta property="og:url" content="https://arnio.vercel.app/">
   <meta property="og:title" content="Arnio — Production Data Preparation for Python">
   <meta property="og:description" content="Arnio combines a native C++ CSV engine with Python APIs for cleaning, quality profiling, and schema validation.">
-  <meta property="og:image" content="https://arnio.vercel.app/arnio-transparent-logo.svg">
+  <meta property="og:image" content="https://arnio.vercel.app/arnio-social-card.svg">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Arnio — Production Data Preparation for Python">
   <meta name="twitter:description" content="Arnio combines a native C++ CSV engine with Python APIs for cleaning, quality profiling, and schema validation.">
-  <meta name="twitter:image" content="https://arnio.vercel.app/arnio-transparent-logo.svg">
+  <meta name="twitter:image" content="https://arnio.vercel.app/arnio-social-card.svg">
 </head>
 <body>
   <a href="#main-content" class="skip-link">Skip to content</a>
   <nav class="top-nav" aria-label="Main navigation">
     <div class="container container--wide">
-      <a href="index.html" class="nav-brand" aria-label="Arnio home"><img src="arnio-transparent-logo.svg" alt="Arnio" height="32"></a>
+      <a href="index.html" class="nav-brand" aria-label="Arnio home"><img src="arnio-logo.svg" alt="Arnio" height="32"></a>
       <ul class="nav-links"><li><a href="docs.html">Docs</a></li><li><a href="api.html">API</a></li><li><a href="benchmarks.html">Benchmarks</a></li><li><a href="contributing.html">Contributing</a></li><li><a href="architecture.html">Architecture</a></li><li><a href="roadmap.html">Roadmap</a></li><li><a href="community.html">Community</a></li><li><a href="changelog.html">Changelog</a></li></ul>
-      <div class="nav-actions"><a href="https://discord.gg/xsEw7r78M" class="nav-discord" target="_blank" rel="noopener">Discord</a><a href="https://github.com/im-anishraj/arnio" class="nav-github" target="_blank" rel="noopener">GitHub</a><button class="theme-toggle" aria-label="Toggle theme">Theme</button><button class="nav-hamburger" aria-label="Open menu" aria-expanded="false">☰</button></div>
+      <div class="nav-actions"><a href="https://discord.gg/xsEw7r78M" class="nav-discord" target="_blank" rel="noopener" aria-label="Join Discord">Discord</a><a href="https://github.com/im-anishraj/arnio" class="nav-github" target="_blank" rel="noopener" aria-label="View on GitHub">GitHub</a><button class="theme-toggle" aria-label="Toggle theme">Theme</button><button class="nav-hamburger" aria-label="Open menu" aria-expanded="false">☰</button></div>
     </div>
   </nav>
   <div class="mobile-menu" aria-label="Mobile navigation"><a href="index.html">Home</a><a href="docs.html">Documentation</a><a href="api.html">API Reference</a><a href="benchmarks.html">Benchmarks</a><a href="contributing.html">Contributing</a><a href="architecture.html">Architecture</a><a href="roadmap.html">Roadmap</a><a href="community.html">Community</a><a href="https://discord.gg/xsEw7r78M" target="_blank" rel="noopener">Discord</a><a href="changelog.html">Changelog</a></div>
@@ -62,6 +62,10 @@
           <a href="#schema" class="sidebar-nav-link">Schema</a>
           <a href="#integrations" class="sidebar-nav-link">Integrations</a>
         </div>
+        <div class="sidebar-nav-group">
+          <div class="sidebar-nav-title">Notebook</div>
+          <a href="#notebook-display" class="sidebar-nav-link">Display</a>
+        </div>
       </aside>
 
       <article class="docs-content">
@@ -76,7 +80,7 @@ pip install "arnio[sklearn]"</code></pre></div>
         <p>Use Arnio at the boundary where raw files enter analysis or automation. It keeps parsing, cleaning, profiling, and validation explicit.</p>
         <div class="code-block"><div class="code-block-header">Python</div><pre><code class="language-python">import arnio as ar
 
-frame = ar.read_csv("customers.csv", on_bad_lines="warn")
+frame = ar.read_csv("customers.csv")
 report = ar.profile(frame)
 suggestions = ar.suggest_cleaning(report)
 clean = ar.pipeline(frame, suggestions)
@@ -86,6 +90,7 @@ schema = ar.Schema({
     "email": ar.Email(nullable=True),
 })
 result = ar.validate(clean, schema, max_errors=50)</code></pre></div>
+<div class="callout callout-info"><p class="callout-title">Note</p><p>The <code>on_bad_lines</code> parameter defaults to <code>"error"</code>. Use <code>"warn"</code> to log malformed rows without failing, or <code>"skip"</code> to silently skip them.</p></div>
 
         <h2 id="csv">CSV Reading</h2>
         <p>Current CSV reading covers the production edge cases that were added across v1.17.0, v1.18.0, and current main.</p>
@@ -93,6 +98,13 @@ result = ar.validate(clean, schema, max_errors=50)</code></pre></div>
           <thead><tr><th>Option</th><th>Use</th></tr></thead>
           <tbody>
             <tr><td><code>skiprows</code></td><td>Skip leading rows before header or data parsing.</td></tr>
+            <tr><td><code>has_header</code></td><td>Control whether the first row is treated as column headers.</td></tr>
+            <tr><td><code>usecols</code></td><td>Read only a selected subset of columns.</td></tr>
+            <tr><td><code>nrows</code></td><td>Limit the number of rows read from the file.</td></tr>
+            <tr><td><code>trim_headers</code></td><td>Remove leading and trailing whitespace from column names.</td></tr>
+            <tr><td><code>thousands_separator</code></td><td>Parse numbers containing thousands separators such as commas.</td></tr>
+            <tr><td><code>null_values</code></td><td>Treat specified values as null or missing data.</td></tr>
+            <tr><td><code>mode</code></td><td>Control CSV parsing behavior for strict or relaxed ingestion workflows.</td></tr>
             <tr><td><code>decimal_separator</code></td><td>Parse locale-specific decimal characters such as comma decimals.</td></tr>
             <tr><td><code>dtype</code></td><td>Force selected columns to supported Arnio dtypes.</td></tr>
             <tr><td><code>encoding_errors</code></td><td>Choose <code>strict</code>, <code>replace</code>, or <code>ignore</code> for decode failures.</td></tr>
@@ -101,13 +113,19 @@ result = ar.validate(clean, schema, max_errors=50)</code></pre></div>
         </table>
         <div class="code-block"><div class="code-block-header">Python</div><pre><code class="language-python">frame = ar.read_csv(
     "orders.csv",
-    delimiter=",",
+    has_header=True,
+    usecols=["order_id", "amount", "customer"],
+    nrows=50_000,
     skiprows=2,
+    trim_headers=True,
+    thousands_separator=",",
+    null_values=["", "N/A", "NULL"],
     decimal_separator=".",
     dtype={"order_id": "string"},
+    mode="strict",
     encoding_errors="replace",
-    on_bad_lines="warn",
 )</code></pre></div>
+<div class="callout callout-info"><p class="callout-title">Note</p><p><code>on_bad_lines</code> defaults to <code>"error"</code> for malformed rows. Use <code>"warn"</code> to log issues without failing, or <code>"skip"</code> to skip them silently.</p></div>
 
         <h2 id="chunked">Chunked CSV</h2>
         <p><code>read_csv_chunked</code> streams a CSV into ArFrame chunks. Chunked reads support malformed-row handling, but schema validation itself remains a whole-frame operation after you materialize the data you want to validate.</p>
@@ -141,7 +159,7 @@ payload = frame.to_dict()</code></pre></div>
         <h2 id="cleaning">Cleaning</h2>
         <p>Cleaning functions are available directly and through <code>pipeline</code>. Recent releases added column removal helpers, winsorization, missing-token standardization, coalescing, safer division, unicode normalization, and stricter validation errors.</p>
         <div class="feature-list">
-          <div class="card"><h3>Column operations</h3><p><code>select_columns</code>, <code>drop_columns</code>, <code>drop_empty_columns</code>, <code>drop_columns_matching</code>, <code>rename_columns</code>.</p></div>
+          <div class="card"><h3>Column operations</h3><p><code>select_columns</code>, <code>drop_columns</code>, <code>drop_empty_columns</code>, <code>drop_columns_matching</code>, <code>rename_columns</code>, <code>rename_columns_matching</code>.</p></div>
           <div class="card"><h3>Value operations</h3><p><code>replace_values</code>, <code>standardize_missing_tokens</code>, <code>coalesce_columns</code>, <code>parse_bool_strings</code>, <code>normalize_unicode</code>.</p></div>
           <div class="card"><h3>Numeric operations</h3><p><code>clip_numeric</code>, <code>round_numeric_columns</code>, <code>winsorize_outliers</code>, <code>safe_divide_columns</code>.</p></div>
           <div class="card"><h3>Rows and nulls</h3><p><code>drop_nulls</code>, <code>keep_rows_with_nulls</code>, <code>fill_nulls</code>, <code>drop_duplicates</code>, <code>filter_rows</code>.</p></div>
@@ -159,6 +177,26 @@ baseline = ar.profile(old_frame)
 current = ar.profile(new_frame)
 gate = ar.check_quality_gates(baseline, current)</code></pre></div>
 
+        <h3>Safe auto_clean Workflow</h3>
+        <p><code>auto_clean()</code> is powerful and safety-sensitive. Use <code>dry_run=True</code> and <code>explain=True</code> to audit changes before applying them to real data.</p>
+        <div class="code-block"><div class="code-block-header">Python</div><pre><code class="language-python">
+# Step 1 — Preview what would change, without touching the data
+report = ar.auto_clean(frame, mode="strict", dry_run=True)
+casts = dict(report.suggestions).get("cast_types")
+
+# Step 2 — Inspect explanations separately (cannot combine with dry_run)
+clean, explanation = ar.auto_clean(frame, explain=True)
+
+# Step 3 — Apply intentionally using the previewed casts
+clean = ar.auto_clean(
+    frame,
+    mode="strict",
+    allow_lossy_casts=True,
+    confirmed_casts=casts,
+)
+df = ar.to_pandas(clean)</code></pre></div>
+
+
         <h2 id="schema">Schema Validation</h2>
         <p>Schemas validate the shape and semantics of a dataset. v1.18.0 added <code>max_errors</code>; v1.17.0 added URL scheme restrictions and YAML export helpers.</p>
         <div class="code-block"><div class="code-block-header">Python</div><pre><code class="language-python">ar.register_validator("positive", lambda value: value > 0)
@@ -174,20 +212,88 @@ schema = ar.Schema({
 result = schema.validate(frame, max_errors=100)
 yaml_text = ar.schema_to_yaml(schema)</code></pre></div>
 
+        <h3>Schema-level uniqueness and cross-field rules</h3>
+        <p>For production data contracts, use <code>unique</code> to enforce uniqueness across columns and <code>rules</code> for custom cross-field validation.</p>
+        <div class="code-block"><div class="code-block-header">Python</div><pre><code class="language-python">schema = ar.Schema(
+    fields={
+        "customer_id": ar.Int64(nullable=False),
+        "account_balance": ar.Float64(nullable=False),
+        "credit_limit": ar.Float64(nullable=False),
+    },
+    # Ensure customer_id is unique across the dataset
+    unique=["customer_id"],
+    # Cross-field rule: balance cannot exceed credit limit
+    rules=[
+        lambda df: [
+            ar.ValidationIssue(
+                column="account_balance",
+                rule="balance_exceeds_limit",
+                message="Account balance exceeds credit limit",
+                row_index=int(idx) + 1,
+            )
+            for idx in df[df["account_balance"] > df["credit_limit"]].index
+        ],
+    ],
+)
+
+result = ar.validate(frame, schema)
+result.passed</code></pre></div>
+
         <h2 id="integrations">Integrations</h2>
         <p>Arnio is designed to sit beside pandas, not replace it. Use the pandas accessor, Arrow export, DuckDB registration, Parquet output, and scikit-learn transformer where they fit your workflow.</p>
         <div class="code-block"><div class="code-block-header">Python</div><pre><code class="language-python">df = ar.to_pandas(frame, copy=True)
 frame = df.arnio.to_arframe()
 profile = df.arnio.profile()
 
+suggestions = df.arnio.suggest_cleaning()
+clean = df.arnio.to_arframe()
+for step, params in suggestions:
+    clean = ar.pipeline(clean, [(step, params)])
+
+clean_df = df.arnio.auto_clean()
+
+result = df.arnio.validate({"email": ar.Email(nullable=False), "age": ar.Int64(min=0)})
+
 arrow_table = ar.to_arrow(frame)
 ar.register_duckdb(frame, conn, "clean_sales")</code></pre></div>
+
+        <h2 id="notebook-display">Notebook Display</h2>
+        <p>ArFrame and DataQualityReport render HTML automatically in Jupyter and IPython. When an object is the last expression in a notebook cell, the frontend calls <code>_repr_html_</code> and renders a rich view—no extra conversion needed.</p>
+        <div class="code-block"><div class="code-block-header">Python</div><pre><code class="language-python">import arnio as ar
+
+frame  # ArFrame renders a bounded HTML preview of up to 10 rows
+report = ar.profile(frame)
+report  # DataQualityReport renders its full HTML dashboard</code></pre></div>
+        <p>The preview is bounded so notebook output stays readable on large frames. Use <code>frame.head()</code>, <code>report.to_html("file.html")</code>, or <code>report.to_dict()</code> for fuller inspection.</p>
       </article>
     </div>
   </main>
 
-  <footer class="site-footer"><div class="container"><div class="footer-bottom"><span>© 2026 Anish Raj. MIT License.</span><span>Docs aligned with v1.18.0 and current main.</span></div></div></footer>
-  <script src="js/main.js"></script>
-  <script src="js/code.js"></script>
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-brand"><img src="arnio-logo.svg" alt="Arnio" height="32" loading="lazy" decoding="async"><p>C++ accelerated data preparation for pandas and the Python data stack.</p></div>
+        <div><h4 class="footer-heading">Project</h4><ul class="footer-links"><li><a href="docs.html">Docs</a></li><li><a href="api.html">API</a></li><li><a href="changelog.html">Changelog</a></li></ul></div>
+        <div><h4 class="footer-heading">Engineering</h4><ul class="footer-links"><li><a href="architecture.html">Architecture</a></li><li><a href="benchmarks.html">Benchmarks</a></li><li><a href="roadmap.html">Roadmap</a></li></ul></div>
+        <div><h4 class="footer-heading">Community</h4><ul class="footer-links"><li><a href="contributing.html">Contributing</a></li><li><a href="community.html">Community</a></li>
+         <li class="footer-socials">
+            <a href="https://github.com/im-anishraj/arnio" target="_blank" rel="noopener" aria-label="GitHub">
+              <svg viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61-.546-1.387-1.333-1.757-1.333-1.757-1.09-.745.082-.729.082-.729 1.205.084 1.84 1.237 1.84 1.237 1.07 1.834 2.807 1.304 3.492.997.108-.775.418-1.304.76-1.604-2.665-.305-5.467-1.332-5.467-5.93 0-1.31.467-2.382 1.235-3.222-.123-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.3 1.23A11.52 11.52 0 0112 6.844c1.02.005 2.045.138 3.003.404 2.29-1.552 3.296-1.23 3.296-1.23.654 1.653.242 2.874.12 3.176.77.84 1.233 1.911 1.233 3.222 0 4.61-2.807 5.623-5.48 5.921.43.37.814 1.102.814 2.222 0 1.606-.015 2.898-.015 3.293 0 .322.216.694.825.576C20.565 21.796 24 17.297 24 12c0-6.63-5.373-12-12-12z"/>
+              </svg>
+            </a>
+
+            <a href="https://www.linkedin.com/in/im-anishraj" target="_blank" rel="noopener" aria-label="LinkedIn">
+              <svg viewBox="0 0 24 24" fill="currentColor">
+                <path d="M20.447 20.452H16.89V14.87c0-1.332-.026-3.045-1.854-3.045-1.854 0-2.137 1.447-2.137 2.946v5.68H9.343V9h3.414v1.561h.049c.476-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.063 2.063 0 11.001-4.126 2.063 2.063 0 01-.001 4.126zM7.119 20.452H3.556V9H7.12v11.452z"/>
+              </svg>
+            </a>
+          </li></ul></div>
+      </div>
+      <div class="footer-bottom"><span>© 2026 Anish Raj. MIT License.</span><span>Latest release: v1.19.0</span></div>
+    </div>
+  </footer>
+  <script src="js/main.js" defer></script>
+  <script src="js/code.js" defer></script>
 </body>
 </html>

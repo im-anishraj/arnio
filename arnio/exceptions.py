@@ -3,6 +3,13 @@ arnio.exceptions
 Custom exceptions for the Arnio library.
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .schema import ValidationResult
+
 
 class ArnioError(Exception):
     """Base exception for all Arnio errors."""
@@ -33,6 +40,24 @@ class JsonlReadError(ArnioError):
     pass
 
 
+class RemoteReadError(ArnioError):
+    """Raised when a remote CSV URL cannot be fetched or the response is invalid.
+
+    Attributes
+    ----------
+    url : str
+        The URL that failed.
+    status_code : int or None
+        HTTP status code from the response, or ``None`` for network-level
+        failures (DNS, timeout, connection refused, etc.).
+    """
+
+    def __init__(self, message: str, *, url: str = "", status_code: int | None = None):
+        self.url = url
+        self.status_code = status_code
+        super().__init__(message)
+
+
 class TypeCastError(ArnioError):
     """Raised when cast_types encounters an incompatible type."""
 
@@ -48,3 +73,11 @@ class PipelineStepError(ArnioError):
         super().__init__(
             f"Error occurred during custom pipeline step '{step_name}': {orig_err}"
         )
+
+
+class SchemaValidationError(ArnioError):
+    """Raised when a dataframe fails schema validation."""
+
+    def __init__(self, message: str, result: ValidationResult = None):
+        self.result = result
+        super().__init__(message)

@@ -44,16 +44,34 @@ inline void strip_utf8_bom(std::string& s) {
     }
 }
 
-inline bool record_complete(const std::string& record) {
+inline bool record_complete(const std::string& record, char delimiter) {
     bool in_quotes = false;
+    bool at_field_start = true;
 
     for (size_t i = 0; i < record.size(); ++i) {
-        if (record[i] != '"') continue;
+        const char c = record[i];
 
-        if (in_quotes && i + 1 < record.size() && record[i + 1] == '"') {
-            ++i;
-        } else {
-            in_quotes = !in_quotes;
+        if (in_quotes) {
+            if (c == '"') {
+                if (i + 1 < record.size() && record[i + 1] == '"') {
+                    ++i;
+                } else {
+                    in_quotes = false;
+                    at_field_start = false;
+                }
+            }
+            continue;
+        }
+
+        if (c == '"') {
+            if (at_field_start) {
+                in_quotes = true;
+                at_field_start = false;
+            }
+        } else if (c == delimiter) {
+            at_field_start = true;
+        } else if (c != '\r') {
+            at_field_start = false;
         }
     }
 
@@ -137,7 +155,8 @@ class BufferedStreamReader {
 
 class RecordReader {
    public:
-    explicit RecordReader(std::istream& stream) : reader_(stream) {
+    explicit RecordReader(std::istream& stream, char delimiter)
+        : reader_(stream), delimiter_(delimiter) {
         record_.reserve(1024);
         line_.reserve(1024);
     }
@@ -161,13 +180,13 @@ class RecordReader {
             prev_line_ending_ = line_ending_;
             first = false;
 
-            if (record_complete(record_)) {
+            if (record_complete(record_, delimiter_)) {
                 out_record = record_;
                 return true;
             }
         }
 
-        if (!record_.empty() && !record_complete(record_)) {
+        if (!record_.empty() && !record_complete(record_, delimiter_)) {
             throw std::runtime_error("Unterminated quoted field starting at line " +
                                      std::to_string(record_start_line));
         }
@@ -185,6 +204,7 @@ class RecordReader {
     std::string line_;
     std::string line_ending_;
     std::string prev_line_ending_;
+    char delimiter_;
 };
 
 namespace {
@@ -332,6 +352,70 @@ void validate_row_width(size_t row_number, size_t expected, size_t actual) {
     throw std::runtime_error("CSV row " + std::to_string(row_number) + " has " +
                              std::to_string(actual) + " fields; expected " +
                              std::to_string(expected));
+}
+
+void generate_synthetic_header(std::vector<std::string>& header, size_t column_count) {
+    header.clear();
+    header.reserve(column_count);
+    for (size_t i = 0; i < column_count; ++i) header.push_back("col_" + std::to_string(i));
+    validate_header(header);
+}
+
+std::vector<size_t> resolve_col_indices(const std::vector<std::string>& header,
+                                        const CsvConfig& config) {
+    std::vector<size_t> col_indices;
+    if (config.usecols.has_value()) {
+        for (const auto& name : config.usecols.value()) {
+            auto it = std::find(header.begin(), header.end(), name);
+            if (it == header.end()) throw std::runtime_error("Column not found: " + name);
+            col_indices.push_back(static_cast<size_t>(std::distance(header.begin(), it)));
+        }
+    } else {
+        for (size_t i = 0; i < header.size(); ++i) col_indices.push_back(i);
+    }
+    return col_indices;
+}
+
+struct ExplicitDTypeResult {
+    std::vector<bool> explicit_columns;
+    bool covers_selected_columns = false;
+};
+
+ExplicitDTypeResult apply_explicit_dtypes(const CsvConfig& config,
+                                          const std::vector<std::string>& header,
+                                          const std::vector<size_t>& col_indices,
+                                          std::vector<DType>& col_types) {
+    ExplicitDTypeResult result{std::vector<bool>(col_types.size(), false), false};
+
+    if (!config.dtype.has_value()) {
+        return result;
+    }
+
+    const auto& dtype = config.dtype.value();
+    for (const auto& [column_name, dtype_name] : dtype) {
+        auto header_it = std::find(header.begin(), header.end(), column_name);
+        if (header_it == header.end()) {
+            throw std::runtime_error("Column not found in dtype mapping: " + column_name);
+        }
+        size_t column_index = static_cast<size_t>(std::distance(header.begin(), header_it));
+        bool selected =
+            std::find(col_indices.begin(), col_indices.end(), column_index) != col_indices.end();
+        if (!selected) {
+            throw std::runtime_error("dtype specified for non-selected column: " + column_name);
+        }
+        col_types[column_index] = string_to_dtype(dtype_name);
+        result.explicit_columns[column_index] = true;
+    }
+
+    result.covers_selected_columns = !col_indices.empty();
+    for (size_t ci : col_indices) {
+        if (ci >= result.explicit_columns.size() || !result.explicit_columns[ci]) {
+            result.covers_selected_columns = false;
+            break;
+        }
+    }
+
+    return result;
 }
 
 // Detect if a numeric string has leading zeros that indicate it's likely an
@@ -522,6 +606,7 @@ void CsvParser::parse_line(const std::string& line, std::vector<std::string>& fi
     std::string field;
     field.reserve(line.size() / 4 + 1);  // heuristic for average field length
     bool in_quotes = false;
+    bool at_field_start = true;
 
     for (size_t i = 0; i < line.size(); ++i) {
         char c = line[i];
@@ -532,16 +617,23 @@ void CsvParser::parse_line(const std::string& line, std::vector<std::string>& fi
                     ++i;
                 } else {
                     in_quotes = false;
+                    at_field_start = false;
                 }
             } else {
                 field += c;
             }
         } else {
             if (c == '"') {
-                in_quotes = true;
+                if (at_field_start) {
+                    in_quotes = true;
+                    at_field_start = false;
+                } else {
+                    field += c;
+                }
             } else if (c == config_.delimiter) {
                 add_field(field);
                 field.clear();
+                at_field_start = true;
             } else if (c == '\r') {
                 continue;
             } else {
@@ -559,6 +651,7 @@ void CsvParser::parse_line(const std::string& line, std::vector<std::string>& fi
                 // After loop's ++i, i will point at the first stop char (or
                 // one past end), so subtract 1 to compensate.
                 i = static_cast<size_t>(scan - line.data()) - 1;
+                at_field_start = false;
             }
         }
     }
@@ -665,7 +758,7 @@ DType CsvParser::promote_type(DType current, DType incoming) {
     return DType::STRING;
 }
 
-CellValue CsvParser::parse_value(const std::string& raw, DType dtype) const {
+CellValue CsvParser::parse_value(const std::string& raw, DType dtype, bool is_forced) const {
     const std::string sanitized = handle_utf8_errors(raw, config_.encoding_errors);
     if (is_null_sentinel(sanitized)) return std::monostate{};
 
@@ -674,18 +767,36 @@ CellValue CsvParser::parse_value(const std::string& raw, DType dtype) const {
             std::string trimmed = sanitized;
             trim_in_place(trimmed);
             std::string lower = to_lower_copy(trimmed);
-            return (lower == "true");
+            if (lower == "true") return true;
+            if (lower == "false") return false;
+            if (is_forced) {
+                throw std::runtime_error("CsvReadError: Invalid token '" + raw +
+                                         "' for forced bool column");
+            }
+            return std::monostate{};
         }
         case DType::INT64: {
             std::string cleaned = normalize_numeric(sanitized, config_);
             int64_t value = 0;
-            if (!try_parse_int64(cleaned, value)) return std::monostate{};
+            if (!try_parse_int64(cleaned, value)) {
+                if (is_forced) {
+                    throw std::runtime_error("CsvReadError: Invalid token '" + raw +
+                                             "' for forced int64 column");
+                }
+                return std::monostate{};
+            }
             return value;
         }
         case DType::FLOAT64: {
             std::string cleaned = normalize_numeric(sanitized, config_);
             double value = 0.0;
-            if (!try_parse_float64(cleaned, value)) return std::monostate{};
+            if (!try_parse_float64(cleaned, value)) {
+                if (is_forced) {
+                    throw std::runtime_error("CsvReadError: Invalid token '" + raw +
+                                             "' for forced float64 column");
+                }
+                return std::monostate{};
+            }
             return value;
         }
         case DType::STRING: {
@@ -699,178 +810,247 @@ CellValue CsvParser::parse_value(const std::string& raw, DType dtype) const {
 
 CsvParseResult CsvReader::read(const std::string& path, const std::string& on_bad_lines) const {
     const CsvConfig& config = parser_.config();
-    std::ifstream file;
-    open_binary_input(file, path);
     std::vector<BadRow> bad_rows;
-
-    if (!file.is_open()) {
-        throw std::runtime_error("Cannot open file: " + path);
-    }
-
-    RecordReader record_reader(file);
-
     std::string line;
     std::vector<std::string> header;
-    std::vector<std::vector<std::string>> raw_data;
-
-    size_t record_number = 0;
-    size_t line_number = 0;
-
-    if (config.skip_rows.has_value()) {
-        size_t to_skip = config.skip_rows.value();
-        size_t skipped = 0;
-        while (skipped < to_skip && record_reader.read(line, line_number)) {
-            ++record_number;
-            ++skipped;
-        }
-    }
-
-    // Read header
-    if (config.has_header && record_reader.read(line, line_number)) {
-        ++record_number;
-        strip_utf8_bom(line);
-        header = parser_.parse_line(line);
-        for (auto& h : header) {
-            h = handle_utf8_errors(h, config.encoding_errors);
-        }
-        for (auto& h : header) {
-            if (config.trim_headers) trim_in_place(h);
-        }
-        validate_header(header);
-    }
-
-    // Read all rows
-    size_t row_count = 0;
-    std::optional<size_t> expected_cols =
-        config.has_header ? std::optional<size_t>{header.size()} : std::nullopt;
-
-    std::vector<std::string> reusable_fields;
-    if (expected_cols.has_value()) {
-        reusable_fields.reserve(expected_cols.value());
-    }
-
-    while (record_reader.read(line, line_number)) {
-        ++record_number;
-
-        if (config.nrows.has_value() && (row_count + bad_rows.size()) >= config.nrows.value()) {
-            break;
-        }
-
-        if (line.empty()) {
-            continue;
-        }
-
-        parser_.parse_line(line, reusable_fields);
-
-        if (!config.has_header && !expected_cols.has_value()) {
-            expected_cols = reusable_fields.size();
-        }
-
-        if (expected_cols.has_value() && reusable_fields.size() != expected_cols.value()) {
-            const size_t expected = expected_cols.value();
-            const size_t actual = reusable_fields.size();
-            // The definition of "bad rows" will remain the same as before for consistency.
-            if (actual > expected || config.mode == "strict") {
-                if (on_bad_lines == "error") {
-                    validate_row_width(record_number, expected, actual);
-                }
-                // on_bad_lines='warn' also skips the row to be consistent with pandas
-                bad_rows.push_back(BadRow{record_number, expected, actual});
-                continue;
-            }
-        }
-
-        if (expected_cols.has_value()) {
-            while (reusable_fields.size() < expected_cols.value()) {
-                reusable_fields.push_back("");
-            }
-        }
-
-        raw_data.push_back(reusable_fields);
-        ++row_count;
-    }
-    file.close();
-
-    // If no header, generate column names
-    if (!config.has_header && !raw_data.empty()) {
-        for (size_t i = 0; i < raw_data[0].size(); ++i) {
-            header.push_back("col_" + std::to_string(i));
-        }
-        validate_header(header);
-    }
-
-    size_t num_cols = header.size();
-
-    // Determine which columns to keep
+    std::vector<DType> col_types;
     std::vector<size_t> col_indices;
-    if (config.usecols.has_value()) {
-        for (const auto& name : config.usecols.value()) {
-            auto it = std::find(header.begin(), header.end(), name);
-            if (it == header.end()) {
-                throw std::runtime_error("Column not found: " + name);
+    std::vector<bool> explicit_dtype_columns;
+    std::optional<size_t> expected_cols;
+    bool inference_pass_ran = true;
+
+    // =================================================================
+    // PASS 1: Infer column types from data rows when needed (nothing stored).
+    // Fully explicit dtype mappings can skip value type inference once
+    // header/usecols resolution proves every selected output column is typed.
+    // When this pass is skipped, pass 2 owns bad-row collection.
+    // =================================================================
+    {
+        std::ifstream file;
+        open_binary_input(file, path);
+        if (!file.is_open()) throw std::runtime_error("Cannot open file: " + path);
+        RecordReader record_reader(file, config.delimiter);
+
+        size_t record_number = 0;
+        size_t line_number = 0;
+
+        if (config.skip_rows.has_value()) {
+            size_t to_skip = config.skip_rows.value();
+            size_t skipped = 0;
+            while (skipped < to_skip && record_reader.read(line, line_number)) {
+                ++record_number;
+                ++skipped;
             }
-            col_indices.push_back(static_cast<size_t>(std::distance(header.begin(), it)));
         }
-    } else {
-        for (size_t i = 0; i < num_cols; ++i) {
-            col_indices.push_back(i);
+
+        // Read header
+        if (config.has_header && record_reader.read(line, line_number)) {
+            ++record_number;
+            strip_utf8_bom(line);
+            header = parser_.parse_line(line);
+            for (auto& h : header) {
+                h = handle_utf8_errors(h, config.encoding_errors);
+            }
+            for (auto& h : header) {
+                if (config.trim_headers) trim_in_place(h);
+            }
+            validate_header(header);
+        }
+
+        expected_cols = config.has_header ? std::optional<size_t>{header.size()} : std::nullopt;
+
+        if (config.has_header && !header.empty()) {
+            col_types.assign(header.size(), DType::NULL_TYPE);
+            col_indices = resolve_col_indices(header, config);
+            auto dtype_result = apply_explicit_dtypes(config, header, col_indices, col_types);
+            explicit_dtype_columns = std::move(dtype_result.explicit_columns);
+            if (dtype_result.covers_selected_columns) {
+                inference_pass_ran = false;
+            }
+        }
+
+        size_t row_count = 0;
+        std::vector<std::string> reusable_fields;
+        if (expected_cols.has_value()) {
+            reusable_fields.reserve(expected_cols.value());
+        }
+
+        while (inference_pass_ran && record_reader.read(line, line_number)) {
+            ++record_number;
+
+            if (config.nrows.has_value() && (row_count + bad_rows.size()) >= config.nrows.value()) {
+                break;
+            }
+
+            if (line.empty()) continue;
+
+            parser_.parse_line(line, reusable_fields);
+
+            if (!config.has_header && !expected_cols.has_value()) {
+                expected_cols = reusable_fields.size();
+            }
+
+            if (expected_cols.has_value() && reusable_fields.size() != expected_cols.value()) {
+                const size_t expected = expected_cols.value();
+                const size_t actual = reusable_fields.size();
+                if (actual > expected || config.mode == "strict") {
+                    if (on_bad_lines == "error") {
+                        validate_row_width(record_number, expected, actual);
+                    }
+                    bad_rows.push_back(BadRow{record_number, expected, actual});
+                    continue;
+                }
+            }
+
+            if (expected_cols.has_value()) {
+                while (reusable_fields.size() < expected_cols.value()) {
+                    reusable_fields.push_back("");
+                }
+            }
+
+            if (col_types.empty()) {
+                col_types.assign(reusable_fields.size(), DType::NULL_TYPE);
+                if (!config.has_header) {
+                    generate_synthetic_header(header, col_types.size());
+                    col_indices = resolve_col_indices(header, config);
+                    auto dtype_result =
+                        apply_explicit_dtypes(config, header, col_indices, col_types);
+                    explicit_dtype_columns = std::move(dtype_result.explicit_columns);
+                    if (dtype_result.covers_selected_columns) {
+                        inference_pass_ran = false;
+                        break;
+                    }
+                }
+            }
+
+            for (size_t ci = 0; ci < col_types.size(); ++ci) {
+                if (ci < reusable_fields.size()) {
+                    if (ci < explicit_dtype_columns.size() && explicit_dtype_columns[ci]) continue;
+                    col_types[ci] = CsvParser::promote_type(
+                        col_types[ci], parser_.infer_type(reusable_fields[ci]));
+                }
+            }
+            ++row_count;
         }
     }
-    if (config.dtype.has_value()) {
-        for (const auto& [column_name, dtype_name] : config.dtype.value()) {
-            auto header_it = std::find(header.begin(), header.end(), column_name);
 
-            if (header_it == header.end()) {
-                throw std::runtime_error("Column not found in dtype mapping: " + column_name);
-            }
-
-            size_t column_index = static_cast<size_t>(std::distance(header.begin(), header_it));
-
-            bool selected = std::find(col_indices.begin(), col_indices.end(), column_index) !=
-                            col_indices.end();
-
-            if (!selected) {
-                throw std::runtime_error("dtype specified for non-selected column: " + column_name);
-            }
-        }
-    }
-    // Infer types (first pass)
-    std::vector<DType> col_types(num_cols, DType::NULL_TYPE);
-
-    for (size_t ci : col_indices) {
-        const std::string& column_name = header[ci];
-
-        if (config.dtype.has_value() && config.dtype->count(column_name)) {
-            col_types[ci] = string_to_dtype(config.dtype->at(column_name));
-            continue;
-        }
-
-        for (const auto& row : raw_data) {
-            if (ci < row.size()) {
-                DType inferred = parser_.infer_type(row[ci]);
-                col_types[ci] = CsvParser::promote_type(col_types[ci], inferred);
-            }
-        }
-    }
-
-    // Promote any remaining NULL_TYPE columns to STRING
+    // Finalise: promote all-null columns to STRING.
     for (auto& dt : col_types) {
         if (dt == DType::NULL_TYPE) dt = DType::STRING;
     }
 
-    // Build columns (second pass)
+    // For headerless CSVs generate synthetic column names.
+    if (!config.has_header && !col_types.empty()) {
+        if (header.empty()) {
+            generate_synthetic_header(header, col_types.size());
+        }
+    }
+
+    // Zero-data-row edge case (headerless empty body).
+    if (header.empty() && col_types.empty()) {
+        return CsvParseResult{Frame(std::vector<Column>{}), std::move(bad_rows)};
+    }
+
+    if (col_indices.empty()) {
+        col_indices = resolve_col_indices(header, config);
+    }
+
+    if (explicit_dtype_columns.empty()) {
+        auto dtype_result = apply_explicit_dtypes(config, header, col_indices, col_types);
+        explicit_dtype_columns = std::move(dtype_result.explicit_columns);
+    }
+
+    // Initialise output columns with the statically-known types.
     std::vector<Column> columns;
     columns.reserve(col_indices.size());
-    for (size_t ci : col_indices) {
-        Column col(header[ci], col_types[ci]);
-        for (const auto& row : raw_data) {
-            if (ci < row.size()) {
-                col.push_back(parser_.parse_value(row[ci], col_types[ci]));
-            } else {
-                col.push_null();
+    for (size_t ci : col_indices) columns.push_back(Column(header[ci], col_types[ci]));
+
+    // =================================================================
+    // PASS 2: Stream rows directly into typed columns.
+    // =================================================================
+    {
+        std::ifstream file2;
+        open_binary_input(file2, path);
+        RecordReader record_reader2(file2, config.delimiter);
+
+        size_t record_number2 = 0;
+        size_t line_number2 = 0;
+        std::string line2;
+
+        if (config.skip_rows.has_value()) {
+            size_t to_skip = config.skip_rows.value();
+            size_t skipped = 0;
+            while (skipped < to_skip && record_reader2.read(line2, line_number2)) {
+                ++record_number2;
+                ++skipped;
             }
         }
-        columns.push_back(std::move(col));
+
+        if (config.has_header && record_reader2.read(line2, line_number2)) {
+            ++record_number2;
+        }
+
+        std::optional<size_t> expected_cols2 =
+            config.has_header ? std::optional<size_t>{header.size()} : std::nullopt;
+        size_t row_count2 = 0;
+        size_t bad_row_count2 = 0;
+        std::vector<std::string> reusable_fields2;
+        if (expected_cols2.has_value()) {
+            reusable_fields2.reserve(expected_cols2.value());
+        }
+
+        while (record_reader2.read(line2, line_number2)) {
+            ++record_number2;
+
+            if (config.nrows.has_value() && (row_count2 + bad_row_count2) >= config.nrows.value()) {
+                break;
+            }
+
+            if (line2.empty()) continue;
+
+            parser_.parse_line(line2, reusable_fields2);
+
+            if (!config.has_header && !expected_cols2.has_value()) {
+                expected_cols2 = reusable_fields2.size();
+            }
+
+            if (expected_cols2.has_value() && reusable_fields2.size() != expected_cols2.value()) {
+                const size_t expected = expected_cols2.value();
+                const size_t actual = reusable_fields2.size();
+                if (actual > expected || config.mode == "strict") {
+                    if (!inference_pass_ran) {
+                        if (on_bad_lines == "error") {
+                            validate_row_width(record_number2, expected, actual);
+                        }
+                        bad_rows.push_back(BadRow{record_number2, expected, actual});
+                    }
+                    // Already recorded in pass 1 when it ran; either way count to
+                    // skip and enforce nrows properly.
+                    ++bad_row_count2;
+                    continue;
+                }
+            }
+
+            if (expected_cols2.has_value()) {
+                while (reusable_fields2.size() < expected_cols2.value()) {
+                    reusable_fields2.push_back("");
+                }
+            }
+
+            for (size_t i = 0; i < col_indices.size(); ++i) {
+                size_t ci = col_indices[i];
+                if (ci < reusable_fields2.size()) {
+                    bool is_forced =
+                        ci < explicit_dtype_columns.size() && explicit_dtype_columns[ci];
+                    CellValue parsed =
+                        parser_.parse_value(reusable_fields2[ci], col_types[ci], is_forced);
+                    columns[i].push_back(parsed);
+                } else {
+                    columns[i].push_null();
+                }
+            }
+            ++row_count2;
+        }
     }
 
     return CsvParseResult{Frame(std::move(columns)), std::move(bad_rows)};
@@ -885,7 +1065,7 @@ CsvReader::scan_schema(const std::string& path, const std::string& on_bad_lines)
         throw std::runtime_error("Cannot open file: " + path);
     }
 
-    RecordReader record_reader(file);
+    RecordReader record_reader(file, config.delimiter);
 
     std::string line;
     std::vector<std::string> header;
@@ -947,15 +1127,22 @@ CsvReader::scan_schema(const std::string& path, const std::string& on_bad_lines)
         if (line.empty()) continue;
         parser_.parse_line(line, reusable_fields);
         if (reusable_fields.size() != num_cols) {
-            if (on_bad_lines == "error") {
-                validate_row_width(record_number, num_cols, reusable_fields.size());
-            } else if (on_bad_lines == "warn") {
-                bad_rows.push_back("CSV row " + std::to_string(record_number) + " has " +
-                                   std::to_string(reusable_fields.size()) + " fields; expected " +
-                                   std::to_string(num_cols));
-                continue;
-            } else if (on_bad_lines == "skip") {
-                continue;
+            const size_t actual = reusable_fields.size();
+            if (actual > num_cols || config.mode == "strict") {
+                if (on_bad_lines == "error") {
+                    validate_row_width(record_number, num_cols, actual);
+                } else if (on_bad_lines == "warn") {
+                    bad_rows.push_back("CSV row " + std::to_string(record_number) + " has " +
+                                       std::to_string(actual) + " fields; expected " +
+                                       std::to_string(num_cols));
+                    continue;
+                } else if (on_bad_lines == "skip") {
+                    continue;
+                }
+            } else {
+                while (reusable_fields.size() < num_cols) {
+                    reusable_fields.push_back("");
+                }
             }
         }
         for (size_t i = 0; i < num_cols && i < reusable_fields.size(); ++i) {
@@ -1049,11 +1236,18 @@ Frame CsvChunkReader::build_frame(const std::vector<std::vector<std::string>>& r
     std::vector<Column> columns;
     columns.reserve(col_indices_.size());
     for (size_t ci : col_indices_) {
-        Column col(header_[ci], col_types_[ci]);
+        // A column whose type is still NULL_TYPE has been all-null in every chunk
+        // seen so far.  Fall back to STRING so the Python layer always receives a
+        // concrete type.  col_types_[ci] is intentionally left as NULL_TYPE so
+        // subsequent chunks can still promote it to the correct type.
+        DType effective_type =
+            (col_types_[ci] == DType::NULL_TYPE) ? DType::STRING : col_types_[ci];
+        Column col(header_[ci], effective_type);
         for (const auto& row : raw_data) {
             if (ci < row.size()) {
                 const std::string& raw_value = row[ci];
-                CellValue parsed = parser_.parse_value(raw_value, col_types_[ci]);
+                bool is_forced = ci < explicit_dtype_columns_.size() && explicit_dtype_columns_[ci];
+                CellValue parsed = parser_.parse_value(raw_value, effective_type, is_forced);
 
                 // Fail-fast validation for locked schema in subsequent chunks
                 if (validate_locked_schema && std::holds_alternative<std::monostate>(parsed)) {
@@ -1104,7 +1298,7 @@ void CsvChunkReader::open(const std::string& path) {
         throw std::runtime_error("Cannot open file: " + path);
     }
 
-    record_reader_ = std::make_unique<RecordReader>(file_);
+    record_reader_ = std::make_unique<RecordReader>(file_, config.delimiter);
 
     opened_ = true;
     record_number_ = 0;
@@ -1128,6 +1322,8 @@ void CsvChunkReader::open(const std::string& path) {
         expected_cols_ = header_.size();
         resolve_col_indices();
         col_types_.assign(header_.size(), DType::NULL_TYPE);
+        auto dtype_result = apply_explicit_dtypes(config, header_, col_indices_, col_types_);
+        explicit_dtype_columns_ = std::move(dtype_result.explicit_columns);
     }
 
     const size_t skip_target = config.skip_rows.value_or(0);
@@ -1193,21 +1389,39 @@ std::optional<CsvParseResult> CsvChunkReader::next_chunk(size_t chunksize,
         expected_cols_ = header_.size();
         resolve_col_indices();
         col_types_.assign(header_.size(), DType::NULL_TYPE);
+        auto dtype_result = apply_explicit_dtypes(config, header_, col_indices_, col_types_);
+        explicit_dtype_columns_ = std::move(dtype_result.explicit_columns);
     }
 
     if (!schema_locked_) {
         for (const auto& row : raw_data) {
             for (size_t ci : col_indices_) {
                 if (ci < row.size()) {
+                    if (ci < explicit_dtype_columns_.size() && explicit_dtype_columns_[ci]) {
+                        continue;
+                    }
                     DType inferred = parser_.infer_type(row[ci]);
                     col_types_[ci] = CsvParser::promote_type(col_types_[ci], inferred);
                 }
             }
         }
-        for (auto& dt : col_types_) {
-            if (dt == DType::NULL_TYPE) dt = DType::STRING;
+        // Only lock the schema once every selected column has been resolved to a
+        // concrete type.  Columns that are still NULL_TYPE were all-null in this
+        // chunk; leaving them unlocked allows the next chunk to infer the real
+        // type instead of permanently (and silently) casting them to STRING.
+        // If we reach the end of the file with a column still NULL_TYPE it will
+        // be emitted as STRING by build_frame, which is the correct fallback for
+        // a genuinely all-null column.
+        bool all_resolved = true;
+        for (size_t ci : col_indices_) {
+            if (col_types_[ci] == DType::NULL_TYPE) {
+                all_resolved = false;
+                break;
+            }
         }
-        schema_locked_ = true;
+        if (all_resolved) {
+            schema_locked_ = true;
+        }
     }
 
     rows_read_total_ += raw_data.size() + bad_rows.size();

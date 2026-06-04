@@ -244,3 +244,8 @@ benchmarks/benchmark_sparse_nulls_dense.csv
 benchmark_results.json
 benchmark_run_output.txt
 benchmarks/benchmark_strip_whitespace.csv
+
+# Local diagnostic logs
+failed_log.txt
+run_error.txt
+*.swp
