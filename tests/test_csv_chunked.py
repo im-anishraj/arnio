@@ -689,3 +689,23 @@ class TestReadCsvChunkedCoverage:
         assert len(chunks) == 1
         assert chunks[0].shape[0] == 10
         assert ar.to_pandas(chunks[0])["id"].tolist() == list(range(10))
+
+
+def test_read_csv_chunked_early_exit_behavioral_cleanup():
+    import os
+    import tempfile
+    import arnio as ar
+
+    fd, path = tempfile.mkstemp(suffix=".csv")
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write("a,b\n" + "\n".join(f"{i},{i*2}" for i in range(100)))
+
+        gen = ar.read_csv_chunked(path, chunksize=10)
+        for chunk in gen:
+            break
+
+        gen.close()
+    finally:
+        if os.path.exists(path):
+            os.remove(path)

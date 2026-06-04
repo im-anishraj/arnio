@@ -1103,12 +1103,13 @@ def read_csv_chunked(
         raise
     except RuntimeError as e:
         raise CsvReadError(str(e)) from None
-    except GeneratorExit:
-        raise
     finally:
         reader.close()
         if should_cleanup and os.path.exists(native_path):
-            os.unlink(native_path)
+            try:
+                os.unlink(native_path)
+            except OSError:
+                pass
 
 
 def write_csv(
