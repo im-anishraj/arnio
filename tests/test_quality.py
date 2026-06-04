@@ -3,11 +3,14 @@
 import io
 import json
 import math
+import warnings
 
 import pandas as pd
 import pytest
 
 import arnio as ar
+from arnio._core import _DType, _Frame
+from arnio.frame import ArFrame
 from arnio.quality import (
     QUALITY_REPORT_COLUMNS,
     CleaningSuggestion,
@@ -1668,6 +1671,228 @@ def test_report_to_markdown_includes_uniqueness_metrics(tmp_path):
     assert "66.67%" in md
 
 
+def test_report_to_markdown_exclude_columns_filters_columns_and_suggestions():
+    report = ar.DataQualityReport(
+        row_count=2,
+        column_count=2,
+        memory_usage=128,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        quality_score=100.0,
+        score_components={},
+        columns={
+            "ssn": ar.ColumnProfile(
+                name="ssn",
+                dtype="string",
+                semantic_type="identifier",
+                row_count=2,
+                null_count=0,
+                null_ratio=0.0,
+                unique_count=2,
+                unique_ratio=1.0,
+                warnings=[],
+            ),
+            "age": ar.ColumnProfile(
+                name="age",
+                dtype="int64",
+                semantic_type="numeric",
+                row_count=2,
+                null_count=0,
+                null_ratio=0.0,
+                unique_count=2,
+                unique_ratio=1.0,
+                warnings=[],
+            ),
+        },
+        suggestions=[
+            ar.CleaningSuggestion(
+                "strip_whitespace",
+                {"subset": ["ssn", "age"], "columns": ["ssn"]},
+                0.95,
+                "Column 'ssn' has leading whitespace",
+            )
+        ],
+    )
+
+    md = report.to_markdown(exclude_columns=["ssn"])
+
+    assert "ssn" not in md
+    assert "age" in md
+    assert "[REDACTED]" in md
+
+
+def test_report_to_markdown_exclude_columns_unknown_raises_keyerror():
+    report = ar.profile(ar.from_dict({"a": [1]}))
+
+    with pytest.raises(KeyError):
+        report.to_markdown(exclude_columns=["nope"])
+
+
+@pytest.mark.parametrize("exclude_columns", [{"ssn"}, ("ssn",)])
+def test_report_to_markdown_accepts_set_and_tuple_exclude_columns(exclude_columns):
+    report = ar.profile(ar.from_dict({"ssn": ["123-45-6789"], "age": [30]}))
+
+    md = report.to_markdown(exclude_columns=exclude_columns)
+
+    assert "ssn" not in md
+    assert "age" in md
+
+
+def test_report_to_markdown_exclude_columns_invalid_type_raises_typeerror():
+    report = ar.profile(ar.from_dict({"a": [1]}))
+
+    with pytest.raises(TypeError):
+        report.to_markdown(exclude_columns=123)
+
+
+def test_report_to_markdown_exclude_columns_preserves_kwarg_named_columns():
+    report = ar.DataQualityReport(
+        row_count=3,
+        column_count=3,
+        memory_usage=256,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        quality_score=100.0,
+        score_components={},
+        columns={
+            "columns": ar.ColumnProfile(
+                name="columns",
+                dtype="string",
+                semantic_type="identifier",
+                row_count=3,
+                null_count=0,
+                null_ratio=0.0,
+                unique_count=3,
+                unique_ratio=1.0,
+                warnings=[],
+            ),
+            "visible": ar.ColumnProfile(
+                name="visible",
+                dtype="string",
+                semantic_type="text",
+                row_count=3,
+                null_count=0,
+                null_ratio=0.0,
+                unique_count=3,
+                unique_ratio=1.0,
+                warnings=[],
+            ),
+            "secret": ar.ColumnProfile(
+                name="secret",
+                dtype="string",
+                semantic_type="identifier",
+                row_count=3,
+                null_count=0,
+                null_ratio=0.0,
+                unique_count=3,
+                unique_ratio=1.0,
+                warnings=[],
+            ),
+        },
+        suggestions=[
+            ar.CleaningSuggestion(
+                "example",
+                {"columns": ["secret", "visible"], "subset": ["columns", "secret"]},
+                0.90,
+                "Example suggestion for secret and columns",
+            )
+        ],
+    )
+
+    md = report.to_markdown(exclude_columns=["secret"])
+
+    assert "secret" not in md
+    assert "visible" in md
+    assert '"columns"' in md
+
+
+def test_report_to_markdown_redacts_unquoted_confidence_reason():
+    report = ar.DataQualityReport(
+        row_count=1,
+        column_count=1,
+        memory_usage=64,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        quality_score=100.0,
+        score_components={},
+        columns={
+            "ssn": ar.ColumnProfile(
+                name="ssn",
+                dtype="string",
+                semantic_type="identifier",
+                row_count=1,
+                null_count=0,
+                null_ratio=0.0,
+                unique_count=1,
+                unique_ratio=1.0,
+                warnings=[],
+            ),
+        },
+        suggestions=[
+            ar.CleaningSuggestion(
+                "example",
+                {},
+                0.90,
+                "Column ssn contains whitespace",
+            )
+        ],
+    )
+
+    md = report.to_markdown(exclude_columns=["ssn"])
+
+    assert "ssn" not in md
+    assert "[REDACTED]" in md
+
+
+def test_report_to_markdown_filters_tuple_and_set_suggestion_columns():
+    report = ar.DataQualityReport(
+        row_count=2,
+        column_count=2,
+        memory_usage=128,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        quality_score=100.0,
+        score_components={},
+        columns={
+            "secret": ar.ColumnProfile(
+                name="secret",
+                dtype="string",
+                semantic_type="identifier",
+                row_count=2,
+                null_count=0,
+                null_ratio=0.0,
+                unique_count=2,
+                unique_ratio=1.0,
+                warnings=[],
+            ),
+            "visible": ar.ColumnProfile(
+                name="visible",
+                dtype="string",
+                semantic_type="text",
+                row_count=2,
+                null_count=0,
+                null_ratio=0.0,
+                unique_count=2,
+                unique_ratio=1.0,
+                warnings=[],
+            ),
+        },
+        suggestions=[
+            ar.CleaningSuggestion(
+                "example",
+                {"subset": ("secret", "visible"), "columns": {"secret", "visible"}},
+                0.90,
+                "Example suggestion for secret and visible",
+            )
+        ],
+    )
+
+    md = report.to_markdown(exclude_columns=["secret"])
+
+    assert "secret" not in md
+    assert "visible" in md
+
+
 def test_unique_ratio_empty_column(tmp_path):
     path = tmp_path / "empty_unique.csv"
 
@@ -3080,25 +3305,48 @@ def test_profile_numeric_histogram_to_pandas():
     assert pdf.loc[pdf["name"] == "nums", "histogram"].values[0] is not None
 
 
+@pytest.mark.filterwarnings("ignore::RuntimeWarning")
 def test_profile_numeric_histogram_non_finite_values():
     # Test handling of infinite values in histogram calculation
-    from arnio._core import _DType, _Frame
-    from arnio.frame import ArFrame
 
     cpp_frame = _Frame.from_dict(
         {"nums": [1.0, 2.0, float("inf"), float("-inf"), None, 3.0]},
         {"nums": _DType.FLOAT64},
     )
     frame = ArFrame(cpp_frame)
-    report = ar.profile(frame)
+
+    # Profile must be warning-free
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        report = ar.profile(frame)
+    runtime_warnings = [w for w in caught if issubclass(w.category, RuntimeWarning)]
+    assert (
+        runtime_warnings == []
+    ), f"Unexpected RuntimeWarnings: {[str(w.message) for w in runtime_warnings]}"
+
     profile = report.columns["nums"]
 
-    # The histogram should filter out +/- inf and NaNs, binning only [1.0, 2.0, 3.0]
+    # The histogram should filter out +/- inf and NaNs
     assert profile.histogram is not None
     assert len(profile.histogram) == 10
 
     counts = [c for _, _, c, _ in profile.histogram]
     assert sum(counts) == 3
+
+    # Summary stats must be finite and reflect only the finite values
+    assert profile.min == 1.0
+    assert profile.max == 3.0
+    for stat_name, value in [
+        ("mean", profile.mean),
+        ("std", profile.std),
+        ("q25", profile.q25),
+        ("q50", profile.q50),
+        ("q75", profile.q75),
+        ("q95", profile.q95),
+    ]:
+        assert value is not None and math.isfinite(
+            float(value)
+        ), f"{stat_name} should be finite, got {value}"
 
     # All infinities (no finite values to bin)
     cpp_frame_all_inf = _Frame.from_dict(
@@ -3109,6 +3357,36 @@ def test_profile_numeric_histogram_non_finite_values():
     report_all_inf = ar.profile(frame_all_inf)
     profile_all_inf = report_all_inf.columns["nums"]
     assert profile_all_inf.histogram is None
+
+
+def test_profile_non_finite_values_json_safe():
+    """to_dict() and to_json() must never produce NaN/Infinity JSON tokens."""
+    frame = ArFrame(
+        _Frame.from_dict(
+            {"nums": [1.0, 2.0, float("inf"), float("-inf"), None, 3.0]},
+            {"nums": _DType.FLOAT64},
+        )
+    )
+    report = ar.profile(frame)
+
+    # Strictest check: raises ValueError on any NaN/Infinity token
+    json.dumps(report.to_dict(), allow_nan=False)
+
+    # to_json() must produce valid JSON parseable by a strict consumer
+    json_str = report.to_json()
+    assert json_str is not None
+    parsed = json.loads(json_str)
+    col = parsed["columns"]["nums"]
+
+    # Core stats must be present and finite
+    for key in ("min", "max", "mean", "std"):
+        assert col[key] is not None, f"{key} should not be None after finite-value fix"
+        assert math.isfinite(col[key]), f"{key} should be finite, got {col[key]}"
+
+    # sample_values must contain no inf/-inf
+    for v in col["sample_values"]:
+        if isinstance(v, float):
+            assert math.isfinite(v), f"sample_values contains non-finite: {v}"
 
 
 def test_report_to_markdown_escapes_newlines_in_column_cells():
@@ -3997,15 +4275,33 @@ def test_data_quality_report_invariant_invalid_metrics():
         DataQualityReport(10, 2, 512, 0, 0.0, {}, quality_score=float("nan"))
 
 
-# fmt: off
 def test_cleaning_suggestion_is_exported():
-    msg_missing = "CleaningSuggestion is missing from arnio.__init__ file"
-    msg_match = "Top-level CleaningSuggestion does not match the internal type"
+    assert hasattr(
+        ar, "CleaningSuggestion"
+    ), "CleaningSuggestion is missing from arnio.__init__ file"
 
-    assert hasattr(ar, "CleaningSuggestion"), msg_missing
-    assert ar.CleaningSuggestion is CleaningSuggestion, msg_match
-    assert ar.CleaningSuggestion is CleaningSuggestion, msg_match
-# fmt: on
+    missing_message = "CleaningSuggestion is missing from arnio.__init__ file"
+    mismatch_message = "Top-level CleaningSuggestion does not match the internal type"
+
+    assert hasattr(ar, "CleaningSuggestion"), missing_message
+    assert ar.CleaningSuggestion is CleaningSuggestion, mismatch_message
+    assert ar.CleaningSuggestion is CleaningSuggestion, mismatch_message
+    assert hasattr(
+        ar, "CleaningSuggestion"
+    ), "CleaningSuggestion is missing from arnio.__init__ file"
+    assert hasattr(
+        ar, "CleaningSuggestion"
+    ), "CleaningSuggestion is missing from arnio.__init__ file"
+
+    assert (
+        ar.CleaningSuggestion is CleaningSuggestion
+    ), "Top-level CleaningSuggestion does not match the internal type"
+    assert (
+        ar.CleaningSuggestion is CleaningSuggestion
+    ), "Top-level CleaningSuggestion does not match the internal type"
+
+
+# ── CleanStepRecord and CleanExplanation validation tests (Fixes #1687) ──────
 
 
 class TestCleanStepRecordValidation:
@@ -4301,6 +4597,14 @@ def test_auto_clean_rejects_invalid_string_mode():
         ar.auto_clean(frame, mode="SAFE")
 
 
+@pytest.mark.parametrize("obj", [object(), None, 123, pd.DataFrame()])
+def test_quality_helpers_reject_invalid_frame(obj):
+    with pytest.raises(TypeError, match=".*must be an ArFrame.*"):
+        ar.profile(obj)
+    with pytest.raises(TypeError, match=".*must be an ArFrame.*"):
+        ar.auto_clean(obj)
+
+
 def test_score_breakdown_with_real_values():
     """Ensure score_breakdown correctly maps real penalty components and handles to_dict."""
 
@@ -4352,8 +4656,4 @@ def test_profile_comparison_drift_report_exclude_columns():
 
     assert "secret_key" not in exported_dict["left_profile"]["columns"]
     assert "secret_key" not in exported_dict["right_profile"]["columns"]
-
-    # fmt: off
-    leak_msg = "Privacy leak: secret_key still present in drift_report keys!"
-    assert "secret_key" not in exported_dict["drift_report"], leak_msg
-    # fmt: on
+    assert "secret_key" not in exported_dict["drift_report"]
