@@ -10,7 +10,7 @@ import json
 import math
 import os
 import re
-from collections.abc import Sequence
+from collections.abc import Sequence, Set
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -611,10 +611,17 @@ class DataQualityReport:
             for step in rendered_suggestions:
                 filtered_kwargs: dict[str, Any] = {}
                 for key, value in sorted(dict(step[1]).items()):
-                    if key in {"subset", "columns"} and isinstance(value, list):
-                        filtered_kwargs[key] = [
-                            item for item in value if item not in exclude_columns
-                        ]
+                    if key in {"subset", "columns"}:
+                        if isinstance(value, Sequence) and not isinstance(value, str):
+                            filtered_kwargs[key] = [
+                                item for item in value if item not in exclude_columns
+                            ]
+                        elif isinstance(value, Set):
+                            filtered_kwargs[key] = sorted(
+                                item for item in value if item not in exclude_columns
+                            )
+                        else:
+                            filtered_kwargs[key] = value
                     elif key == "cast_types" and isinstance(value, dict):
                         filtered_kwargs[key] = {
                             col_name: col_type
