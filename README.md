@@ -422,17 +422,23 @@ Raises `ar.JsonlReadError` with the 1-based line number if a line contains inval
 </details>
 
 <details>
-<summary><b>📦 Export to Parquet for columnar analytics pipelines</b></summary>
+<summary><b>📦 Parquet import and export for columnar analytics pipelines</b></summary>
 <br>
 
-`write_parquet` exports an ArFrame to a Parquet file via pyarrow.  Install the optional extra first:
+`read_parquet` and `write_parquet` use pyarrow for Parquet I/O.  Install the optional extra first:
 
 ```bash
 pip install arnio[parquet]
 ```
 
 ```python
-# Basic export
+# Import a Parquet file into an ArFrame (no pandas intermediate)
+frame = ar.read_parquet("data.parquet")
+
+# Read only selected columns
+frame = ar.read_parquet("data.parquet", usecols=["name", "age"])
+
+# Export an ArFrame to Parquet
 ar.write_parquet(frame, "output.parquet")
 
 # Choose compression codec: "snappy" (default), "gzip", "zstd", "brotli", "none"
@@ -441,11 +447,12 @@ ar.write_parquet(frame, "output.parquet", compression="zstd")
 # Control row group size for large files
 ar.write_parquet(frame, "output.parquet", row_group_size=50_000)
 
-# .pq extension also accepted
+# .pq extension also accepted for both read and write
+frame = ar.read_parquet("data.pq")
 ar.write_parquet(frame, "output.pq")
 ```
 
-Raises `ImportError` with an install hint if pyarrow is not available.
+Both functions raise `ImportError` with an install hint if pyarrow is not available.
 </details>
 
 <details>

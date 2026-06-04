@@ -3541,20 +3541,13 @@ class TestSafeDivideColumns:
         assert df["ratio"].iloc[0] == 2.0
 
     def test_output_column_already_exists(self, tmp_path):
-        import warnings
-
         path = tmp_path / "data.csv"
         path.write_text("revenue,cost,ratio\n100,50,99\n200,100,99\n")
         frame = ar.read_csv(path)
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            result = ar.safe_divide_columns(
+        with pytest.raises(ValueError, match="Output column 'ratio' already exists"):
+            ar.safe_divide_columns(
                 frame, numerator="revenue", denominator="cost", output_column="ratio"
             )
-            assert len(w) == 1
-            assert "already exists" in str(w[0].message)
-        df = ar.to_pandas(result)
-        assert df["ratio"].iloc[0] == 2.0
 
     def test_string_zero_denominator_is_treated_as_zero(self):
         frame = ar.from_pandas(
@@ -3676,30 +3669,6 @@ class TestSafeDivideColumns:
         df = original_to_pandas(result)
 
         assert list(df["ratio"]) == [10.0, 10.0]
-
-    def test_native_output_column_overwrite_preserves_column_order(self):
-        frame = ar.from_pandas(
-            pd.DataFrame(
-                {
-                    "revenue": [100, 200],
-                    "ratio": [99, 99],
-                    "cost": [25, 50],
-                }
-            )
-        )
-
-        with pytest.warns(UserWarning, match="already exists"):
-            result = ar.safe_divide_columns(
-                frame,
-                numerator="revenue",
-                denominator="cost",
-                output_column="ratio",
-            )
-
-        df = ar.to_pandas(result)
-
-        assert list(df.columns) == ["revenue", "ratio", "cost"]
-        assert list(df["ratio"]) == [4.0, 4.0]
 
     # --- Regression tests for string zero denominators (bug fix) ---
 

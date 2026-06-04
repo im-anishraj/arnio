@@ -43,6 +43,9 @@ dependencies = [
     "numpy>=1.23",
 ]
 
+[project.scripts]
+arnio = "arnio.cli:main"
+
 [project.urls]
 Homepage = "https://github.com/im-anishraj/arnio"
 Documentation = "https://github.com/im-anishraj/arnio#readme"
@@ -54,6 +57,7 @@ Discord = "https://discord.gg/xsEw7r78M"
 [project.optional-dependencies]
 arrow = ["pyarrow>=6.0"]
 duckdb = ["duckdb>=1.0"]
+polars = ["polars>=0.20", "pyarrow>=6.0"]
 
 dev = [
     "pytest>=7.0",
