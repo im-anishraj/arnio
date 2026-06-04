@@ -9,6 +9,7 @@ import copy
 import math
 import unicodedata
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
@@ -31,6 +32,62 @@ from ._core import (
 from .convert import from_pandas, to_pandas
 from .exceptions import TypeCastError
 from .frame import ArFrame
+
+# ---------------------------------------------------------------------------
+# Report types for errors="report" mode
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class CastFailure:
+    """One failed cast: the original value that could not be converted.
+
+    Attributes
+    ----------
+    column : str
+        Column name where the failure occurred.
+    row : int
+        0-based row index of the failing value.
+    value : str
+        Original string representation of the value that failed to cast.
+    target_dtype : str
+        The target dtype string that was requested (e.g. ``"int64"``).
+    """
+
+    column: str
+    row: int
+    value: str
+    target_dtype: str
+
+
+@dataclass
+class CastReport:
+    """Result of ``cast_types(..., errors="report")``.
+
+    Attributes
+    ----------
+    frame : ArFrame
+        The cast frame. Failures are represented as null values.
+    failures : list[CastFailure]
+        All values that could not be cast, in row order.
+
+    Examples
+    --------
+    >>> report = ar.cast_types(frame, {"age": "int64"}, errors="report")
+    >>> if report:
+    ...     for f in report.failures:
+    ...         print(f.column, f.row, f.value)
+    """
+
+    frame: ArFrame
+    failures: list[CastFailure] = field(default_factory=list)
+
+    def __len__(self) -> int:
+        return len(self.failures)
+
+    def __bool__(self) -> bool:
+        """``True`` when there is at least one failure."""
+        return bool(self.failures)
 
 
 def validate_columns_exist(
@@ -1275,7 +1332,7 @@ def cast_types(
     mapping: dict[str, str],
     *,
     errors: str = "raise",
-) -> ArFrame:
+) -> ArFrame | CastReport:
     """Cast columns to specified types via {col: type_str} dict.
 
     Parameters
@@ -1283,24 +1340,51 @@ def cast_types(
     frame : ArFrame
         Input data frame.
     mapping : dict[str, str]
-        Dictionary mapping column names to target type strings (e.g., "int64", "float64", "bool", "string").
-    errors : {"raise", "coerce", "ignore"}, default "raise"
-        Whether invalid casts raise ``TypeCastError``, become null values, or
-        leave the affected column unchanged.
+        Dictionary mapping column names to target type strings
+        (e.g., ``"int64"``, ``"float64"``, ``"bool"``, ``"string"``).
+    errors : {"raise", "coerce", "ignore", "report"}, default "raise"
+        Policy for handling values that cannot be cast:
+
+        ``"raise"``
+            Raise ``TypeCastError`` on the first failure, including the
+            column name, row index, original value, and target dtype.
+        ``"coerce"``
+            Silently replace failures with null. Preserves current behaviour;
+            note that this can mask upstream data-quality problems.
+        ``"ignore"``
+            Leave the entire column unchanged when *any* value in it fails;
+            the column keeps its original dtype.
+        ``"report"``
+            Replace failures with null **and** return a :class:`CastReport`
+            instead of a plain ``ArFrame``.  The report's ``.failures``
+            list contains one :class:`CastFailure` per bad value, with the
+            column name, row index, original value, and target dtype.
 
     Returns
     -------
     ArFrame
-        New frame with columns cast to specified types.
+        New frame with columns cast to specified types (all modes except
+        ``"report"``).
+    CastReport
+        Cast frame plus a machine-readable list of failures
+        (``errors="report"`` only).
 
     Examples
     --------
     >>> frame = ar.read_csv("data.csv")
     >>> casted = ar.cast_types(frame, {"age": "int64", "score": "float64"})
+
+    >>> # Collect failures without raising
+    >>> report = ar.cast_types(frame, {"age": "int64"}, errors="report")
+    >>> if report:
+    ...     for f in report.failures:
+    ...         print(f.column, f.row, repr(f.value), "->", f.target_dtype)
     """
     frame, _ = _validate_frame(frame)
-    if errors not in {"raise", "coerce", "ignore"}:
-        raise ValueError("errors must be one of 'raise', 'coerce', or 'ignore'")
+    if errors not in {"raise", "coerce", "ignore", "report"}:
+        raise ValueError(
+            "errors must be one of 'raise', 'coerce', 'ignore', or 'report'"
+        )
 
     mapping = _validate_string_mapping(mapping, argument_name="mapping")
     validate_columns_exist(
@@ -1310,22 +1394,35 @@ def cast_types(
     )
     try:
         if errors == "ignore":
-            result = frame._frame
+            cpp_frame = frame._frame
             for column, dtype in mapping.items():
                 try:
-                    result = _cast_types(result, {column: dtype}, False)
+                    new_cpp_frame, _ = _cast_types(cpp_frame, {column: dtype}, "raise")
+                    cpp_frame = new_cpp_frame
                 except ValueError as e:
                     if not str(e).startswith("Cannot cast column "):
                         raise
-        else:
-            result = _cast_types(
-                frame._frame,
-                mapping,
-                errors == "coerce",
-            )
+            return ArFrame(cpp_frame)
+
+        if errors == "report":
+            cpp_frame, raw_failures = _cast_types(frame._frame, mapping, "report")
+            failures = [
+                CastFailure(
+                    column=f["column"],
+                    row=f["row"],
+                    value=f["value"],
+                    target_dtype=f["target_dtype"],
+                )
+                for f in raw_failures
+            ]
+            return CastReport(frame=ArFrame(cpp_frame), failures=failures)
+
+        # "raise" or "coerce" — C++ handles both natively
+        cpp_frame, _ = _cast_types(frame._frame, mapping, errors)
+        return ArFrame(cpp_frame)
+
     except ValueError as e:
         raise TypeCastError(str(e)) from e
-    return ArFrame(result)
 
 
 def _append_clean_step(

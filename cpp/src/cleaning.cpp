@@ -507,10 +507,27 @@ Frame rename_columns(const Frame& frame,
     return Frame(frame.num_rows(), std::move(new_cols));
 }
 
-Frame cast_types(const Frame& frame, const std::unordered_map<std::string, std::string>& mapping,
-                 bool coerce_invalid) {
+CastResult cast_types(const Frame& frame,
+                      const std::unordered_map<std::string, std::string>& mapping,
+                      CastErrors errors) {
+    std::vector<CastFailure> failures;
     std::vector<Column> new_cols;
     new_cols.reserve(frame.num_cols());
+
+    // Helper: handle a parse failure according to the chosen error policy.
+    // For kRaise it throws immediately; for kCoerce/kReport it pushes null
+    // and (for kReport) appends a CastFailure record.
+    auto on_failure = [&](Column& col, const std::string& col_name, const std::string& val,
+                          const std::string& dtype_str, size_t r) {
+        if (errors == CastErrors::kRaise) {
+            throw cast_error(col_name, val, dtype_str, r);
+        }
+        col.push_null();
+        if (errors == CastErrors::kReport) {
+            failures.push_back({col_name, r, val, dtype_str});
+        }
+    };
+
     for (size_t ci = 0; ci < frame.num_cols(); ++ci) {
         const auto& src = frame.column(ci);
         auto it = mapping.find(src.name());
@@ -562,29 +579,28 @@ Frame cast_types(const Frame& frame, const std::unordered_map<std::string, std::
                     }
                     if (ok) {
                         col.push_back(parsed);
-                    } else if (coerce_invalid) {
-                        col.push_null();
                     } else {
-                        throw cast_error(src.name(), str_val, it->second, r);
+                        on_failure(col, src.name(), str_val, it->second, r);
                     }
                     break;
                 }
-                case DType::FLOAT64:
+                case DType::FLOAT64: {
+                    bool float_ok = false;
+                    double parsed = 0.0;
                     try {
                         size_t pos = 0;
-                        double parsed = std::stod(str_val, &pos);
-                        if (pos != str_val.size() || !std::isfinite(parsed)) {
-                            throw cast_error(src.name(), str_val, it->second, r);
-                        }
-                        col.push_back(parsed);
+                        parsed = std::stod(str_val, &pos);
+                        float_ok = (pos == str_val.size() && std::isfinite(parsed));
                     } catch (...) {
-                        if (coerce_invalid) {
-                            col.push_null();
-                        } else {
-                            throw cast_error(src.name(), str_val, it->second, r);
-                        }
+                        float_ok = false;
+                    }
+                    if (float_ok) {
+                        col.push_back(parsed);
+                    } else {
+                        on_failure(col, src.name(), str_val, it->second, r);
                     }
                     break;
+                }
                 case DType::BOOL: {
                     std::string lower = str_val;
                     std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
@@ -592,10 +608,8 @@ Frame cast_types(const Frame& frame, const std::unordered_map<std::string, std::
                         col.push_back(true);
                     } else if (lower == "false" || lower == "0") {
                         col.push_back(false);
-                    } else if (coerce_invalid) {
-                        col.push_null();
                     } else {
-                        throw cast_error(src.name(), str_val, it->second, r);
+                        on_failure(col, src.name(), str_val, it->second, r);
                     }
                     break;
                 }
@@ -606,7 +620,7 @@ Frame cast_types(const Frame& frame, const std::unordered_map<std::string, std::
         }
         new_cols.push_back(std::move(col));
     }
-    return Frame(frame.num_rows(), std::move(new_cols));
+    return CastResult{Frame(frame.num_rows(), std::move(new_cols)), std::move(failures)};
 }
 
 Frame clip_numeric(const Frame& frame, std::optional<double> lower, std::optional<double> upper,

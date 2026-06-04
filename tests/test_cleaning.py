@@ -2734,6 +2734,113 @@ class TestCastTypes:
         with pytest.raises(ar.TypeCastError, match="Unknown target dtype"):
             ar.cast_types(frame, {"age": "datetime"})
 
+    # ------------------------------------------------------------------
+    # errors="report" mode
+    # ------------------------------------------------------------------
+
+    def test_cast_report_clean_data_returns_empty_failures(self):
+        # No bad values → CastReport with empty failures list
+        frame = ar.from_pandas(pd.DataFrame({"age": ["1", "2", "3"]}))
+        report = ar.cast_types(frame, {"age": "int64"}, errors="report")
+        assert isinstance(report, ar.CastReport)
+        assert len(report.failures) == 0
+        assert not report  # __bool__ is False when no failures
+
+    def test_cast_report_returns_cast_report_type(self):
+        frame = ar.from_pandas(pd.DataFrame({"age": ["1", "bad"]}))
+        result = ar.cast_types(frame, {"age": "int64"}, errors="report")
+        assert isinstance(result, ar.CastReport)
+        assert isinstance(result.frame, ar.ArFrame)
+
+    def test_cast_report_int_collects_failure(self):
+        frame = ar.from_pandas(pd.DataFrame({"age": ["10", "bad", "30"]}))
+        report = ar.cast_types(frame, {"age": "int64"}, errors="report")
+        assert len(report.failures) == 1
+        assert bool(report)  # __bool__ is True when there are failures
+
+    def test_cast_report_failure_fields_are_correct(self):
+        frame = ar.from_pandas(pd.DataFrame({"age": ["10", "bad"]}))
+        report = ar.cast_types(frame, {"age": "int64"}, errors="report")
+        f = report.failures[0]
+        assert f.column == "age"
+        assert f.row == 1  # 0-based index
+        assert f.value == "bad"
+        assert f.target_dtype == "int64"
+
+    def test_cast_report_float_collects_failure(self):
+        frame = ar.from_pandas(pd.DataFrame({"score": ["1.5", "abc"]}))
+        report = ar.cast_types(frame, {"score": "float64"}, errors="report")
+        assert len(report.failures) == 1
+        f = report.failures[0]
+        assert f.column == "score"
+        assert f.row == 1
+        assert f.value == "abc"
+        assert f.target_dtype == "float64"
+
+    def test_cast_report_bool_collects_failure(self):
+        frame = ar.from_pandas(pd.DataFrame({"active": ["true", "maybe"]}))
+        report = ar.cast_types(frame, {"active": "bool"}, errors="report")
+        assert len(report.failures) == 1
+        f = report.failures[0]
+        assert f.column == "active"
+        assert f.value == "maybe"
+        assert f.target_dtype == "bool"
+
+    def test_cast_report_null_not_included_in_failures(self):
+        # Nulls are preserved as-is — they are not failures
+        frame = ar.from_pandas(pd.DataFrame({"age": ["10", None, "30"]}))
+        report = ar.cast_types(frame, {"age": "int64"}, errors="report")
+        assert len(report.failures) == 0
+        df = ar.to_pandas(report.frame)
+        assert pd.isna(df["age"].iloc[1])
+
+    def test_cast_report_mixed_valid_and_invalid(self):
+        frame = ar.from_pandas(
+            pd.DataFrame({"age": ["1", "bad", "3", "also_bad", "5"]})
+        )
+        report = ar.cast_types(frame, {"age": "int64"}, errors="report")
+        assert len(report.failures) == 2
+        assert report.failures[0].row == 1
+        assert report.failures[1].row == 3
+
+    def test_cast_report_failure_values_become_null_in_frame(self):
+        frame = ar.from_pandas(pd.DataFrame({"age": ["10", "bad", "30"]}))
+        report = ar.cast_types(frame, {"age": "int64"}, errors="report")
+        df = ar.to_pandas(report.frame)
+        assert df["age"].iloc[0] == 10
+        assert pd.isna(df["age"].iloc[1])  # failure → null
+        assert df["age"].iloc[2] == 30
+
+    def test_cast_report_all_bad_values_no_raise(self):
+        # report mode must never raise, even when every value fails
+        frame = ar.from_pandas(pd.DataFrame({"age": ["a", "b", "c"]}))
+        report = ar.cast_types(frame, {"age": "int64"}, errors="report")
+        assert len(report.failures) == 3
+        df = ar.to_pandas(report.frame)
+        assert df["age"].isna().all()
+
+    def test_cast_report_frame_dtype_matches_target(self):
+        frame = ar.from_pandas(pd.DataFrame({"age": ["1", "bad"]}))
+        report = ar.cast_types(frame, {"age": "int64"}, errors="report")
+        assert report.frame.dtypes["age"] == "int64"
+
+    def test_cast_report_multi_column_collects_across_columns(self):
+        frame = ar.from_pandas(
+            pd.DataFrame({"age": ["1", "bad"], "score": ["1.5", "abc"]})
+        )
+        report = ar.cast_types(
+            frame, {"age": "int64", "score": "float64"}, errors="report"
+        )
+        columns = [f.column for f in report.failures]
+        assert "age" in columns
+        assert "score" in columns
+
+    def test_cast_report_failures_ordered_by_row(self):
+        frame = ar.from_pandas(pd.DataFrame({"age": ["bad", "1", "also_bad"]}))
+        report = ar.cast_types(frame, {"age": "int64"}, errors="report")
+        rows = [f.row for f in report.failures]
+        assert rows == sorted(rows)
+
 
 class TestCleanAPI:
     def test_clean_defaults(self, csv_with_whitespace):

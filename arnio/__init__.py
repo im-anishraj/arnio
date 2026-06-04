@@ -6,6 +6,8 @@ import arnio as ar
 
 from ._version import __version__ as __version__
 from .cleaning import (
+    CastFailure,
+    CastReport,
     cast_types,
     clean,
     clean_column_names,
@@ -157,6 +159,8 @@ __all__ = [
     "rename_columns",
     "round_numeric_columns",
     "cast_types",
+    "CastFailure",
+    "CastReport",
     "clean",
     "safe_divide_columns",
     "slugify_column_names",
