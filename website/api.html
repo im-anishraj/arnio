@@ -84,7 +84,7 @@
         <table><thead><tr><th>Function</th><th>Purpose</th></tr></thead><tbody>
           <tr><td><code>drop_nulls</code>, <code>keep_rows_with_nulls</code>, <code>fill_nulls</code></td><td>Control null-bearing rows and values.</td></tr>
           <tr><td><code>validate_columns_exist</code>, <code>drop_columns</code>, <code>select_columns</code>, <code>drop_empty_columns</code>, <code>drop_constant_columns</code>, <code>drop_columns_matching</code></td><td>Validate and manage columns explicitly, by emptiness, constants, or regex.</td></tr>
-          <tr><td><code>filter_rows</code>, <code>drop_duplicates</code></td><td>Filter row sets and remove duplicate rows.</td></tr>
+          <tr><td><code>filter_rows</code>, <code>drop_duplicates</code>, <code>find_fuzzy_duplicates</code></td><td>Filter row sets, remove duplicate rows, and detect near-duplicate rows by similarity.</td></tr>
           <tr><td><code>strip_whitespace</code>, <code>normalize_whitespace</code>, <code>normalize_case</code>, <code>normalize_unicode</code>, <code>clean_column_names</code>, <code>trim_column_names</code>, <code>slugify_column_names</code>, <code>rename_columns</code>, <code>rename_columns_matching</code></td><td>Normalize text, headers, and column names.</td></tr>
           <tr><td><code>cast_types</code>, <code>parse_bool_strings</code>, <code>round_numeric_columns</code>, <code>clip_numeric</code>, <code>winsorize_outliers</code></td><td>Type and numeric cleanup.</td></tr>
           <tr><td><code>replace_values</code>, <code>standardize_missing_tokens</code>, <code>combine_columns</code>, <code>coalesce_columns</code>, <code>safe_divide_columns</code></td><td>Common feature engineering and value repair helpers.</td></tr>

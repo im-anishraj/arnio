@@ -2280,3 +2280,172 @@ def slugify_column_names(frame, on_duplicates="raise"):
     df = df.copy()
     df.columns = new_cols
     return from_pandas(df) if is_arframe else df
+
+
+def find_fuzzy_duplicates(
+    frame,
+    *,
+    subset: list[str] | None = None,
+    threshold: float = 0.85,
+    ignore_case: bool = True,
+    normalize_whitespace: bool = True,
+) -> list[list[int]]:
+    """Return groups of near-duplicate row indices using similarity matching.
+
+    Uses ``difflib.SequenceMatcher`` from the Python standard library —
+    no new dependencies are required.
+
+    Row similarity is computed as the average ``SequenceMatcher.ratio()``
+    across the comparison columns (string columns only).  Numeric and bool
+    columns use exact equality.  Only groups of two or more rows are returned.
+
+    Parameters
+    ----------
+    frame : ArFrame or pd.DataFrame
+        Input data frame.
+    subset : list[str], optional
+        Column names to compare.  ``None`` (default) uses all string columns.
+    threshold : float, default 0.85
+        Minimum similarity in [0.0, 1.0] to treat two rows as near-duplicates.
+        Use ``1.0`` for exact duplicates only.
+    ignore_case : bool, default True
+        Normalize string values to lowercase before comparison.
+    normalize_whitespace : bool, default True
+        Collapse consecutive whitespace characters to a single space and strip
+        leading/trailing whitespace before comparison.
+
+    Returns
+    -------
+    list[list[int]]
+        Each inner list is a group of row indices (0-based) that are
+        near-duplicates of each other.  Exact duplicates (similarity = 1.0)
+        are always included regardless of threshold.
+
+    Raises
+    ------
+    ValueError
+        If ``threshold`` is outside [0.0, 1.0].
+    ValueError
+        If ``subset`` is empty or contains non-existent column names.
+    ValueError
+        If the frame has more than 50,000 rows and no ``subset`` is provided,
+        to avoid accidental O(n²) execution on large datasets.
+
+    Examples
+    --------
+    >>> groups = ar.find_fuzzy_duplicates(frame, threshold=0.85)
+    >>> for group in groups:
+    ...     print(group)   # e.g. [0, 2] means rows 0 and 2 are near-duplicates
+
+    >>> # Only compare the "name" column, case-insensitively
+    >>> groups = ar.find_fuzzy_duplicates(frame, subset=["name"], threshold=0.9)
+    """
+    import difflib
+    import re
+
+    from .convert import to_pandas
+    from .frame import ArFrame
+
+    # --- validate threshold -------------------------------------------------
+    if not (0.0 <= threshold <= 1.0):
+        raise ValueError(f"threshold must be between 0.0 and 1.0, got {threshold!r}")
+
+    # --- normalise input to pandas -----------------------------------------
+    is_arframe = isinstance(frame, ArFrame)
+    df = to_pandas(frame) if is_arframe else frame.copy()
+
+    # --- validate / resolve subset BEFORE early-return checks ---------------
+    if subset is not None:
+        if len(subset) == 0:
+            raise ValueError(
+                "find_fuzzy_duplicates: subset cannot be empty; "
+                "pass subset=None to compare all string columns."
+            )
+        missing = [c for c in subset if c not in df.columns]
+        if missing:
+            raise ValueError(
+                f"find_fuzzy_duplicates: column(s) not found: {missing}. "
+                f"Available: {list(df.columns)}"
+            )
+        compare_cols = list(subset)
+
+    n_rows = len(df)
+    if n_rows == 0:
+        return []
+    if n_rows == 1:
+        return []
+
+    if subset is not None:
+        pass  # already resolved above
+
+    else:
+        # default: all object/string columns
+        compare_cols = df.select_dtypes(include=["object", "string"]).columns.tolist()
+        if not compare_cols:
+            # fall back to all columns if no string columns found
+            compare_cols = list(df.columns)
+
+    # --- size guard ---------------------------------------------------------
+    if n_rows > 50_000 and subset is None:
+        raise ValueError(
+            f"find_fuzzy_duplicates: frame has {n_rows:,} rows. "
+            "Pairwise comparison is O(n²) and may be slow for large frames. "
+            "Pass subset= to limit the comparison columns, or filter the "
+            "frame to a smaller working set first."
+        )
+
+    # --- pre-process rows into normalised string tuples --------------------
+    def _normalise(val: object) -> str:
+        s = "" if val is None or (isinstance(val, float) and val != val) else str(val)
+        if ignore_case:
+            s = s.lower()
+        if normalize_whitespace:
+            s = re.sub(r"\s+", " ", s).strip()
+        return s
+
+    rows: list[tuple] = []
+    for i in range(n_rows):
+        row_vals = []
+        for col in compare_cols:
+            raw = df[col].iloc[i]
+            # Numeric / bool columns: keep as-is for exact comparison
+            if df[col].dtype in ("int64", "float64", "bool"):
+                row_vals.append(raw)
+            else:
+                row_vals.append(_normalise(raw))
+        rows.append(tuple(row_vals))
+
+    # --- pairwise similarity + Union-Find ----------------------------------
+    parent = list(range(n_rows))
+
+    def _find(x: int) -> int:
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def _union(x: int, y: int) -> None:
+        parent[_find(x)] = _find(y)
+
+    def _row_similarity(a: tuple, b: tuple) -> float:
+        scores: list[float] = []
+        for va, vb in zip(a, b):
+            if isinstance(va, str) and isinstance(vb, str):
+                scores.append(difflib.SequenceMatcher(None, va, vb).ratio())
+            else:
+                scores.append(1.0 if va == vb else 0.0)
+        return sum(scores) / len(scores) if scores else 0.0
+
+    for i in range(n_rows):
+        for j in range(i + 1, n_rows):
+            if _row_similarity(rows[i], rows[j]) >= threshold:
+                _union(i, j)
+
+    # --- collect groups with 2+ members ------------------------------------
+    from collections import defaultdict
+
+    groups: dict[int, list[int]] = defaultdict(list)
+    for i in range(n_rows):
+        groups[_find(i)].append(i)
+
+    return [sorted(g) for g in groups.values() if len(g) >= 2]
