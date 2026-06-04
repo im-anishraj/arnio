@@ -1,5 +1,6 @@
 """Tests for data cleaning functions."""
 
+import locale as _locale
 import re
 
 import numpy as np
@@ -185,9 +186,8 @@ class TestFillNulls:
         for good_value in [0, 0.0, False]:
             result = ar.fill_nulls(frame_num, good_value)
             df = ar.to_pandas(result)
-            assert (
-                df["a"].isnull().sum() == 0
-            ), f"Nulls remain after filling with {good_value!r}"
+            message = f"Nulls remain after filling with {good_value!r}"
+            assert df["a"].isnull().sum() == 0, message
 
         # string column → fill with string
         frame_str = ar.from_pandas(pd.DataFrame({"b": ["x", None]}))
@@ -1819,10 +1819,8 @@ class TestNormalizeUnicode:
         result = ar.normalize_unicode(frame)
         result_df = ar.to_pandas(result)
         assert result_df["score"].iloc[0] == 42
-        assert (
-            result_df["flag"].iloc[0] is True
-            or result_df["flag"].iloc[0] == True  # noqa: E712
-        )
+        flag = result_df["flag"].iloc[0]
+        assert flag is True or flag == True  # noqa: E712
 
     def test_normalize_unicode_subset_only_targets_specified_columns(self):
         import pandas as pd
@@ -4420,7 +4418,6 @@ class TestValidateStringMapping:
         with pytest.raises(
             TypeError, match="must be a mapping of string keys to strings"
         ):
-
             _validate_string_mapping([("a", "b")], argument_name="mapping")
 
     def test_invalid_non_string_keys_raise_type_error(self):
@@ -4622,3 +4619,188 @@ class TestRenameColumnsMatching:
         frame = ar.from_pandas(pd.DataFrame({"temp_": [1]}))
         with pytest.raises(ValueError):
             ar.rename_columns_matching(frame, "^temp_$", "   ")
+
+
+class TestPublicHelpersValidateArFrame:
+    @pytest.mark.parametrize("obj", [object(), None, 123, pd.DataFrame()])
+    def test_cleaning_helpers_reject_invalid_frame(self, obj):
+        with pytest.raises(TypeError, match=".*must be an ArFrame.*"):
+            ar.drop_nulls(obj)
+        with pytest.raises(TypeError, match=".*must be an ArFrame.*"):
+            ar.strip_whitespace(obj)
+        with pytest.raises(TypeError, match=".*must be an ArFrame.*"):
+            ar.drop_columns(obj, ["x"])
+        with pytest.raises(TypeError, match=".*must be an ArFrame.*"):
+            ar.validate_columns_exist(obj, ["x"])
+
+
+# ---------------------------------------------------------------------------
+# Regression tests: locale-independent FLOAT64 parsing — issue #1989
+#
+# cast_types() and fill_nulls() previously used std::stod() which is
+# locale-sensitive. On systems using locales like de_DE.UTF-8 or fr_FR.UTF-8,
+# '.' is treated as a thousands separator rather than a decimal point, causing
+# values that were ingested correctly from CSV to fail at cast time.
+#
+# The fix replaces both std::stod() call sites in cleaning.cpp with
+# parse_float64_classic(), which uses std::istringstream imbued with
+# std::locale::classic() — the same approach used by csv_reader.cpp.
+#
+# Each test that requires a non-English locale is skipped when the locale is
+# unavailable on the runner (locale.setlocale raises locale.Error).
+# ---------------------------------------------------------------------------
+
+
+def _set_locale(name: str):
+    """Attempt to activate *name* for LC_NUMERIC; return the previous value.
+
+    Raises pytest.skip if the locale is unavailable on this machine.
+    """
+    try:
+        prev = _locale.setlocale(_locale.LC_NUMERIC)
+        _locale.setlocale(_locale.LC_NUMERIC, name)
+        return prev
+    except _locale.Error:
+        pytest.skip(f"Locale {name!r} not available on this runner")
+
+
+class TestCastTypesFloat64LocaleIndependent:
+    """cast_types() FLOAT64 path must use locale-independent parsing (issue #1989)."""
+
+    def test_cast_float64_succeeds_under_de_locale(self):
+        """'1.5' must parse to 1.5 even when LC_NUMERIC=de_DE.UTF-8."""
+        prev = _set_locale("de_DE.UTF-8")
+        try:
+            frame = ar.from_pandas(pd.DataFrame({"price": ["1.5", "2.5"]}))
+            result = ar.cast_types(frame, {"price": "float64"})
+            df = to_pandas(result)
+            assert df["price"].tolist() == pytest.approx([1.5, 2.5])
+        finally:
+            _locale.setlocale(_locale.LC_NUMERIC, prev)
+
+    def test_cast_float64_succeeds_under_fr_locale(self):
+        """Same regression check with fr_FR.UTF-8."""
+        prev = _set_locale("fr_FR.UTF-8")
+        try:
+            frame = ar.from_pandas(pd.DataFrame({"val": ["3.14", "2.71"]}))
+            result = ar.cast_types(frame, {"val": "float64"})
+            df = to_pandas(result)
+            assert df["val"].tolist() == pytest.approx([3.14, 2.71])
+        finally:
+            _locale.setlocale(_locale.LC_NUMERIC, prev)
+
+    def test_cast_float64_negative_value_under_de_locale(self):
+        """Negative floats must also parse correctly under a non-English locale."""
+        prev = _set_locale("de_DE.UTF-8")
+        try:
+            frame = ar.from_pandas(pd.DataFrame({"x": ["-1.25", "0.5"]}))
+            result = ar.cast_types(frame, {"x": "float64"})
+            df = to_pandas(result)
+            assert df["x"].tolist() == pytest.approx([-1.25, 0.5])
+        finally:
+            _locale.setlocale(_locale.LC_NUMERIC, prev)
+
+    def test_cast_float64_scientific_notation_under_de_locale(self):
+        """Scientific notation must survive locale change."""
+        prev = _set_locale("de_DE.UTF-8")
+        try:
+            frame = ar.from_pandas(pd.DataFrame({"v": ["1.5e2", "2.0e-1"]}))
+            result = ar.cast_types(frame, {"v": "float64"})
+            df = to_pandas(result)
+            assert df["v"].tolist() == pytest.approx([150.0, 0.2])
+        finally:
+            _locale.setlocale(_locale.LC_NUMERIC, prev)
+
+    def test_cast_float64_coerce_invalid_under_de_locale(self):
+        """coerce_invalid=True must still null-out genuinely unparseable values."""
+        prev = _set_locale("de_DE.UTF-8")
+        try:
+            frame = ar.from_pandas(pd.DataFrame({"x": ["1.5", "bad", "3.0"]}))
+            result = ar.cast_types(frame, {"x": "float64"}, errors="coerce")
+            df = to_pandas(result)
+            assert df["x"].iloc[0] == pytest.approx(1.5)
+            assert pd.isna(df["x"].iloc[1])
+            assert df["x"].iloc[2] == pytest.approx(3.0)
+        finally:
+            _locale.setlocale(_locale.LC_NUMERIC, prev)
+
+    def test_cast_float64_special_tokens_unchanged_under_de_locale(self):
+        """'nan', 'inf', '-inf' must still map to special float values."""
+        prev = _set_locale("de_DE.UTF-8")
+        try:
+            frame = ar.from_pandas(pd.DataFrame({"v": ["nan", "inf", "-inf"]}))
+            result = ar.cast_types(frame, {"v": "float64"}, errors="coerce")
+            df = to_pandas(result)
+            # nan, inf, -inf are non-finite — with errors="coerce" they become null
+            assert df["v"].isna().all()
+        finally:
+            _locale.setlocale(_locale.LC_NUMERIC, prev)
+
+    def test_cast_float64_baseline_locale_independent(self):
+        """Baseline: cast_types FLOAT64 works correctly under the default locale."""
+        frame = ar.from_pandas(pd.DataFrame({"price": ["1.5", "99.99", "-3.14"]}))
+        result = ar.cast_types(frame, {"price": "float64"})
+        df = to_pandas(result)
+        assert df["price"].tolist() == pytest.approx([1.5, 99.99, -3.14])
+
+    def test_cast_float64_invalid_value_raises_under_de_locale(self):
+        """A genuinely invalid value must still raise without coerce_invalid."""
+        prev = _set_locale("de_DE.UTF-8")
+        try:
+            frame = ar.from_pandas(pd.DataFrame({"x": ["not_a_float"]}))
+            with pytest.raises(Exception):
+                ar.cast_types(frame, {"x": "float64"})
+        finally:
+            _locale.setlocale(_locale.LC_NUMERIC, prev)
+
+
+class TestFillNullsFloat64LocaleIndependent:
+    """fill_nulls() FLOAT64 fill-value path must also be locale-independent (issue #1989)."""
+
+    def test_fill_nulls_float64_fill_value_under_de_locale(self):
+        """A string fill value like '0.5' must be accepted under de_DE.UTF-8."""
+        prev = _set_locale("de_DE.UTF-8")
+        try:
+            frame = ar.from_pandas(
+                pd.DataFrame({"price": pd.array([1.5, None, 3.0], dtype="Float64")})
+            )
+            result = ar.fill_nulls(frame, "0.5", subset=["price"])
+            df = to_pandas(result)
+            assert df["price"].iloc[1] == pytest.approx(0.5)
+        finally:
+            _locale.setlocale(_locale.LC_NUMERIC, prev)
+
+    def test_fill_nulls_float64_fill_value_under_fr_locale(self):
+        """Same fill_nulls regression check with fr_FR.UTF-8."""
+        prev = _set_locale("fr_FR.UTF-8")
+        try:
+            frame = ar.from_pandas(
+                pd.DataFrame({"v": pd.array([None, 2.0], dtype="Float64")})
+            )
+            result = ar.fill_nulls(frame, "1.5", subset=["v"])
+            df = to_pandas(result)
+            assert df["v"].iloc[0] == pytest.approx(1.5)
+        finally:
+            _locale.setlocale(_locale.LC_NUMERIC, prev)
+
+    def test_fill_nulls_float64_fill_value_baseline(self):
+        """Baseline: fill_nulls FLOAT64 string fill value works under default locale."""
+        frame = ar.from_pandas(
+            pd.DataFrame({"x": pd.array([None, 2.5, None], dtype="Float64")})
+        )
+        result = ar.fill_nulls(frame, "1.0", subset=["x"])
+        df = to_pandas(result)
+        assert df["x"].iloc[0] == pytest.approx(1.0)
+        assert df["x"].iloc[2] == pytest.approx(1.0)
+
+    def test_fill_nulls_float64_non_finite_fill_rejected_under_de_locale(self):
+        """Non-finite fill values must still be rejected regardless of locale."""
+        prev = _set_locale("de_DE.UTF-8")
+        try:
+            frame = ar.from_pandas(
+                pd.DataFrame({"x": pd.array([None, 1.0], dtype="Float64")})
+            )
+            with pytest.raises(Exception):
+                ar.fill_nulls(frame, "inf", subset=["x"])
+        finally:
+            _locale.setlocale(_locale.LC_NUMERIC, prev)
