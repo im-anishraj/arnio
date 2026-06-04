@@ -771,7 +771,21 @@ def winsorize_outliers(
     >>> frame = ar.read_csv("data.csv")
     >>> clean = ar.winsorize_outliers(frame, lower=0.01, upper=0.99, subset=["revenue"])
     """
+
+    if isinstance(lower, bool):
+        raise TypeError("lower must not be bool")
+
+    if isinstance(upper, bool):
+        raise TypeError("upper must not be bool")
+
+    if not isinstance(lower, (int, float)):
+        raise TypeError("lower must be a numeric value")
+
+    if not isinstance(upper, (int, float)):
+        raise TypeError("upper must be a numeric value")
+
     frame, _ = _validate_frame(frame)
+
     if lower < 0 or upper > 1:
         raise ValueError("lower and upper must be between 0 and 1")
 
@@ -785,6 +799,11 @@ def winsorize_outliers(
     ]
 
     if subset is not None:
+        subset = _validate_column_sequence(
+            subset,
+            argument_name="subset",
+        )
+
         unknown_columns = [col for col in subset if col not in dtypes]
         if unknown_columns:
             raise ValueError(f"Unknown columns in subset: {unknown_columns}")
