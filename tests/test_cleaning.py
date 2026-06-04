@@ -4632,6 +4632,8 @@ class TestPublicHelpersValidateArFrame:
             ar.drop_columns(obj, ["x"])
         with pytest.raises(TypeError, match=".*must be an ArFrame.*"):
             ar.validate_columns_exist(obj, ["x"])
+
+
 # ---------------------------------------------------------------------------
 # Regression tests: locale-independent FLOAT64 parsing — issue #1989
 #

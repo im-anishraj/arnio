@@ -4004,9 +4004,9 @@ def test_cleaning_suggestion_is_exported():
     assert hasattr(ar, "CleaningSuggestion"), missing_message
     assert ar.CleaningSuggestion is CleaningSuggestion, mismatch_message
     assert ar.CleaningSuggestion is CleaningSuggestion, mismatch_message
-    assert hasattr(ar, "CleaningSuggestion"), (
-        "CleaningSuggestion is missing from arnio.__init__ file"
-    )
+    assert hasattr(
+        ar, "CleaningSuggestion"
+    ), "CleaningSuggestion is missing from arnio.__init__ file"
     assert hasattr(
         ar, "CleaningSuggestion"
     ), "CleaningSuggestion is missing from arnio.__init__ file"
@@ -4321,6 +4321,8 @@ def test_quality_helpers_reject_invalid_frame(obj):
         ar.profile(obj)
     with pytest.raises(TypeError, match=".*must be an ArFrame.*"):
         ar.auto_clean(obj)
+
+
 def test_score_breakdown_with_real_values():
     """Ensure score_breakdown correctly maps real penalty components and handles to_dict."""
 
