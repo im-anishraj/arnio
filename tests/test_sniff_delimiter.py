@@ -169,6 +169,43 @@ class TestSniffDelimiter:
         result = sniff_delimiter(path)
         assert result == ","
 
+    def test_issue_1928_comma_wins_over_high_frequency_pipe_in_quoted_field(
+        self, tmp_path
+    ):
+        """Regression test for issue #1928 — quoted-field variant.
+
+        Exact minimal reproduction from the issue report: a 2-column
+        comma-delimited CSV where col1 is a quoted field containing 25
+        pipe characters (a|b|c|...|z).  Before the fix the old scoring
+        formula (consistency * 10.0 + mode * 0.1) returned '|' because
+        the raw pipe frequency inflated its score above the perfectly
+        consistent comma.  The fixed two-phase scoring returns ','.
+        """
+        path = tmp_path / "issue_1928_quoted.csv"
+        path.write_text(
+            'col1,col2\n"a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z",1\n'
+        )
+        result = sniff_delimiter(path)
+        assert result == ","
+
+    def test_issue_1928_comma_wins_over_high_frequency_pipe_in_unquoted_field(
+        self, tmp_path
+    ):
+        """Regression test for issue #1928 — unquoted-field variant.
+
+        The unquoted form is the strongest trigger of the bug: 25 raw
+        pipe characters per data row while the true delimiter ',' appears
+        on every line including the header.  The old formula
+        misidentified '|'; the new two-phase scoring (consistency as
+        the primary metric, mode only as tie-breaker) correctly returns
+        ','.
+        """
+        path = tmp_path / "issue_1928_unquoted.csv"
+        data = "a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z"
+        path.write_text(f"col1,col2\n{data},1\n{data},2\n{data},3\n")
+        result = sniff_delimiter(path)
+        assert result == ","
+
 
 class TestReadCsvDelimiterDetection:
     """Test suite for CSV delimiter auto-detection through read_csv/scan_csv."""

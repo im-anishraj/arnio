@@ -261,8 +261,7 @@ def _validate_dtype_mapping(dtype: dict[str, str]) -> dict[str, str]:
 
         if dtype_name not in allowed:
             raise ValueError(
-                f"Unsupported dtype {dtype_name!r}. "
-                f"Expected one of: {sorted(allowed)}"
+                f"Unsupported dtype {dtype_name!r}. Expected one of: {sorted(allowed)}"
             )
 
         validated[column] = dtype_name
@@ -663,7 +662,7 @@ def _validate_encoding_errors(value: str) -> str:
 
     if value not in _VALID_ENCODING_ERRORS:
         raise ValueError(
-            "encoding_errors must be one of " "'strict', 'replace', or 'ignore'"
+            "encoding_errors must be one of 'strict', 'replace', or 'ignore'"
         )
 
     return value
@@ -1514,7 +1513,7 @@ def read_jsonl(
 
     if not isinstance(path, (str, os.PathLike)):
         raise TypeError(
-            f"read_jsonl expected a filesystem path, " f"got {type(path).__name__!r}"
+            f"read_jsonl expected a filesystem path, got {type(path).__name__!r}"
         )
     path = os.fspath(path)
     encoding_errors = _validate_encoding_errors(encoding_errors)
@@ -1655,8 +1654,7 @@ def sniff_delimiter(
     """
     if not isinstance(path, (str, os.PathLike)):
         raise TypeError(
-            f"sniff_delimiter expected a filesystem path, "
-            f"got {type(path).__name__!r}"
+            f"sniff_delimiter expected a filesystem path, got {type(path).__name__!r}"
         )
     path = os.fspath(path)
 
