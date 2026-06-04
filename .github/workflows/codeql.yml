@@ -4,8 +4,18 @@ name: "CodeQL Security Scan"
 on:
   push:
     branches: [ "main" ]
+
   pull_request:
     branches: [ "main" ]
+    paths:
+      - ".github/workflows/codeql.yml"
+      - "arnio/**"
+      - "bindings/**"
+      - "cpp/**"
+      - "tests/**"
+      - "pyproject.toml"
+      - "setup.py"
+      - "CMakeLists.txt"
 
 jobs:
   analyze:
