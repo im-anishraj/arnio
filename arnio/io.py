@@ -864,7 +864,7 @@ def read_csv(
 
         return ArFrame(cpp_frame)
 
-    except ValueError:
+    except (ValueError, TypeError):
         raise
     except CsvReadError:
         raise
@@ -1341,6 +1341,8 @@ def scan_csv(
                     stacklevel=2,
                 )
             return cast(dict[str, str], schema)
+    except (ValueError, TypeError):
+        raise
     except CsvReadError:
         raise
     except Exception as e:
