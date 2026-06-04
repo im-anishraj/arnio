@@ -12,7 +12,6 @@ import arnio as ar
 from arnio.schema import _is_safely_convertible_to_dtype
 
 
-
 def test_dtype_validation_reports_safe_int_conversion_for_numeric_strings():
     frame = ar.from_pandas(
         pd.DataFrame(
@@ -51,6 +50,8 @@ def test_dtype_validation_reports_safe_float_conversion_for_numeric_strings():
 
     assert not result.passed
     assert "safely convertible to 'float64'" in result.issues[0].message
+
+
 def test_dtype_validation_does_not_report_safe_float_conversion_for_inf():
     frame = ar.from_pandas(
         pd.DataFrame(
@@ -129,6 +130,7 @@ def test_dtype_validation_does_not_report_safe_float_conversion_for_mixed_finite
 
     assert not result.passed
     assert "safely convertible" not in result.issues[0].message
+
 
 def test_schema_validation_row_indexed_issues_respect_cap():
     frame = ar.from_pandas(
