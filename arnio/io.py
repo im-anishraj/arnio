@@ -261,8 +261,7 @@ def _validate_dtype_mapping(dtype: dict[str, str]) -> dict[str, str]:
 
         if dtype_name not in allowed:
             raise ValueError(
-                f"Unsupported dtype {dtype_name!r}. "
-                f"Expected one of: {sorted(allowed)}"
+                f"Unsupported dtype {dtype_name!r}. Expected one of: {sorted(allowed)}"
             )
 
         validated[column] = dtype_name
@@ -663,7 +662,7 @@ def _validate_encoding_errors(value: str) -> str:
 
     if value not in _VALID_ENCODING_ERRORS:
         raise ValueError(
-            "encoding_errors must be one of " "'strict', 'replace', or 'ignore'"
+            "encoding_errors must be one of 'strict', 'replace', or 'ignore'"
         )
 
     return value
@@ -1516,7 +1515,7 @@ def read_jsonl(
 
     if not isinstance(path, (str, os.PathLike)):
         raise TypeError(
-            f"read_jsonl expected a filesystem path, " f"got {type(path).__name__!r}"
+            f"read_jsonl expected a filesystem path, got {type(path).__name__!r}"
         )
     path = os.fspath(path)
     encoding_errors = _validate_encoding_errors(encoding_errors)
@@ -1657,8 +1656,7 @@ def sniff_delimiter(
     """
     if not isinstance(path, (str, os.PathLike)):
         raise TypeError(
-            f"sniff_delimiter expected a filesystem path, "
-            f"got {type(path).__name__!r}"
+            f"sniff_delimiter expected a filesystem path, got {type(path).__name__!r}"
         )
     path = os.fspath(path)
 
@@ -1773,6 +1771,120 @@ def sniff_delimiter(
 
 
 _VALID_COMPRESSIONS = {"snappy", "gzip", "brotli", "zstd", "none"}
+
+
+def read_parquet(
+    path: str | os.PathLike[str],
+    *,
+    columns: list[str] | None = None,
+    usecols: list[str] | None = None,
+) -> ArFrame:
+    """Read a Parquet file into an ArFrame via pyarrow.
+
+    Requires the ``pyarrow`` package.  Install it with::
+
+        pip install arnio[parquet]
+
+    The implementation reads the Parquet file into a ``pyarrow.Table`` and
+    converts it to an ArFrame using the existing Arrow bridge
+    (``_from_arrow_table``), with no pandas intermediate.
+
+    Parameters
+    ----------
+    path : str or path-like
+        Source file path.  Must end with ``.parquet`` or ``.pq``.
+    columns : list of str, optional
+        Column subset to read, using pyarrow's native parameter name.
+        Cannot be used together with ``usecols``.
+    usecols : list of str, optional
+        Column subset to read, matching the ``read_csv`` parameter name.
+        Cannot be used together with ``columns``.
+
+    Returns
+    -------
+    ArFrame
+        Parsed frame with inferred types and null values preserved.
+
+    Raises
+    ------
+    ImportError
+        If ``pyarrow`` is not installed.
+    TypeError
+        If ``path`` is not a string or path-like object.
+    ValueError
+        If the file extension is not ``.parquet`` or ``.pq``.
+    ValueError
+        If both ``columns`` and ``usecols`` are provided.
+    ValueError
+        If ``columns``/``usecols`` is empty or contains non-string values.
+    FileNotFoundError
+        If the file does not exist.
+    CsvReadError
+        If the file is not a valid Parquet file (corrupted or wrong format).
+
+    Examples
+    --------
+    >>> frame = ar.read_parquet("data.parquet")
+    >>> frame = ar.read_parquet("data.pq", columns=["name", "age"])
+    >>> frame = ar.read_parquet("data.parquet", usecols=["name", "age"])
+    """
+    if not isinstance(path, (str, bytes, os.PathLike)):
+        raise TypeError(
+            f"path must be a string, bytes, or os.PathLike object, "
+            f"got {type(path).__name__!r}"
+        )
+
+    path = os.fsdecode(os.fspath(path))
+    path_lower = path.lower()
+    if not (path_lower.endswith(".parquet") or path_lower.endswith(".pq")):
+        raise ValueError(
+            f"Unsupported file format: {path}. "
+            "read_parquet only supports .parquet and .pq files."
+        )
+
+    if columns is not None and usecols is not None:
+        raise ValueError(
+            "Cannot specify both 'columns' and 'usecols'. "
+            "Use 'usecols' to match read_csv, or 'columns' to match pyarrow."
+        )
+
+    # Normalise to a single variable; prefer usecols when only one is given.
+    col_selection = usecols if usecols is not None else columns
+
+    if col_selection is not None:
+        if isinstance(col_selection, (str, bytes)):
+            raise TypeError(
+                "columns/usecols must be a list of column name strings, "
+                "not a bare string."
+            )
+        if len(col_selection) == 0:
+            raise ValueError("columns/usecols must not be empty.")
+        for c in col_selection:
+            if not isinstance(c, str):
+                raise ValueError(
+                    f"All entries in columns/usecols must be strings, "
+                    f"got {type(c).__name__!r}."
+                )
+
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"No such file or directory: {path!r}")
+
+    try:
+        import pyarrow.parquet as pq
+    except ImportError as exc:
+        raise ImportError(
+            "pyarrow is required for Parquet import. "
+            "Install it with: pip install arnio[parquet]"
+        ) from exc
+
+    try:
+        table = pq.read_table(path, columns=col_selection)
+    except Exception as exc:
+        raise CsvReadError(f"Failed to read Parquet file {path!r}: {exc}") from exc
+
+    from .convert import _from_arrow_table
+
+    return _from_arrow_table(table)
 
 
 def write_parquet(
