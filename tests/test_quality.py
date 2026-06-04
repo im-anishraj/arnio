@@ -3998,16 +3998,16 @@ def test_data_quality_report_invariant_invalid_metrics():
 
 
 def test_cleaning_suggestion_is_exported():
-    assert hasattr(ar, "CleaningSuggestion"), (
-        "CleaningSuggestion is missing from arnio.__init__ file"
-    )
+    assert hasattr(
+        ar, "CleaningSuggestion"
+    ), "CleaningSuggestion is missing from arnio.__init__ file"
 
-    assert ar.CleaningSuggestion is CleaningSuggestion, (
-        "Top-level CleaningSuggestion does not match the internal type"
-    )
-    assert ar.CleaningSuggestion is CleaningSuggestion, (
-        "Top-level CleaningSuggestion does not match the internal type"
-    )
+    assert (
+        ar.CleaningSuggestion is CleaningSuggestion
+    ), "Top-level CleaningSuggestion does not match the internal type"
+    assert (
+        ar.CleaningSuggestion is CleaningSuggestion
+    ), "Top-level CleaningSuggestion does not match the internal type"
 
 
 # ── CleanStepRecord and CleanExplanation validation tests (Fixes #1687) ──────
