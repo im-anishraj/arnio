@@ -788,7 +788,7 @@ class DataQualityReport:
         )
         lines.append("</div>")
         lines.append(
-            f"<div class=\"pill\"><span class=\"muted\">Quality score</span> <span class=\"score {score_class(self.quality_score)}\">{e(f'{self.quality_score:.2f}')}</span></div>"
+            f'<div class="pill"><span class="muted">Quality score</span> <span class="score {score_class(self.quality_score)}">{e(f"{self.quality_score:.2f}")}</span></div>'
         )
         lines.append("</div>")
 
@@ -819,7 +819,7 @@ class DataQualityReport:
                 cls = "warn" if value < 0 else "muted"
                 lines.append("<tr>")
                 lines.append(f"<td><code>{e(key)}</code></td>")
-                lines.append(f"<td class=\"{cls}\">{e(f'{value:+.2f}')}</td>")
+                lines.append(f'<td class="{cls}">{e(f"{value:+.2f}")}</td>')
                 lines.append("</tr>")
             lines.append("</tbody>")
             lines.append("</table>")
@@ -852,7 +852,7 @@ class DataQualityReport:
                     for v, _c, r in col.top_values[:3]:
                         label = e("[REDACTED]") if redact_top_values else e(v)
                         top_bits.append(
-                            f"<span class=\"chip\">{label} · {e(f'{r:.0%}')}</span>"
+                            f'<span class="chip">{label} · {e(f"{r:.0%}")}</span>'
                         )
                     top_html = "".join(top_bits)
                 elif col.histogram:
@@ -876,7 +876,7 @@ class DataQualityReport:
                         f'<div style="display:inline-flex;align-items:flex-end;gap:1.5px;'
                         f'height:20px;width:100px;background:#f3f4f6;border-radius:3px;padding:2px;" '
                         f'title="Numeric Distribution Histogram">'
-                        f'{"".join(bars)}'
+                        f"{''.join(bars)}"
                         f"</div>"
                     )
                 else:
@@ -888,19 +888,19 @@ class DataQualityReport:
                 lines.append(f"<td>{e(col.semantic_type)}</td>")
                 lines.append(
                     "<td>"
-                    f"{e(col.null_count)} <span class=\"muted\">({e(f'{null_pct:.1f}%')})</span>"
+                    f'{e(col.null_count)} <span class="muted">({e(f"{null_pct:.1f}%")})</span>'
                     f'<div class="bar"><span style="width:{max(0.0, min(100.0, null_pct)):.2f}%"></span></div>'
                     "</td>"
                 )
                 lines.append(
                     "<td>"
-                    f"{e(col.unique_count)} <span class=\"muted\">({e(f'{unique_pct:.1f}%')})</span>"
+                    f'{e(col.unique_count)} <span class="muted">({e(f"{unique_pct:.1f}%")})</span>'
                     f'<div class="bar"><span style="width:{max(0.0, min(100.0, unique_pct)):.2f}%"></span></div>'
                     "</td>"
                 )
                 lines.append(f"<td>{top_html}</td>")
                 lines.append(
-                    f"<td class=\"{'warn' if col.warnings else 'muted'}\">{e(warnings_str)}</td>"
+                    f'<td class="{"warn" if col.warnings else "muted"}">{e(warnings_str)}</td>'
                 )
                 lines.append(f"<td>{e(suggested)}</td>")
                 lines.append("</tr>")
@@ -1082,15 +1082,12 @@ class ProfileComparison:
         ----------
         redact_sample_values : bool, default False
             If True, removes actual data examples from the quality summaries.
-        exclude_columns : list, set, or tuple of str, optional
-            A collection of column names to completely omit from the final report structure.
 
         Returns
         -------
         dict
             A structured dictionary containing the metric profiles and comparisons.
         """
-        # Convert exclude_columns to a set for strict, exact-name lookup performance
         exclude_set = set(exclude_columns) if exclude_columns is not None else set()
 
         return {
@@ -1104,7 +1101,7 @@ class ProfileComparison:
             ),
             "status_counts": dict(self.status_counts),
             "drift_report": {
-                name: entry
+                name: _clean_drift_entry(entry)
                 for name, entry in self.drift_report.items()
                 if name not in exclude_set
             },
@@ -1124,22 +1121,13 @@ class ProfileComparison:
         ----------
         redact_sample_values : bool, default False
             If True, redacts sensitive statistical sample values.
-        exclude_columns : list, set, or tuple of str, optional
-            Columns to drop entirely from the serialization pipeline.
         indent : int, optional
             Spacing for pretty-printed JSON output format.
-        output : file-like object, optional
-            A writable text stream (like a file or StringIO) to write the JSON to directly.
 
         Returns
         -------
         str or None
-            A valid JSON string representation of the comparison metrics,
-            or None if an output stream was provided.
-
-        Examples
-        --------
-        >>> comparison.to_json(exclude_columns=["password", "ssn"], indent=2)
+            A valid JSON string representation of the comparison metrics.
         """
         if output is not None and not hasattr(output, "write"):
             raise TypeError("output must be a writable text stream")

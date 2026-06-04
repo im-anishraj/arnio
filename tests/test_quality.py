@@ -11,6 +11,7 @@ import arnio as ar
 from arnio.quality import (
     QUALITY_REPORT_COLUMNS,
     CleaningSuggestion,
+    DataQualityReport,
     _validate_gate_bool,
     _validate_gate_ratio_threshold,
     _validate_gate_threshold,
@@ -1337,7 +1338,7 @@ def test_profile_exclude_columns_default_behavior(sample_csv):
 def test_profile_exclude_columns_valid_exclusion(tmp_path):
     path = tmp_path / "profile_exclude.csv"
     path.write_text(
-        "id,status,raw_payload\n" "1,active,{a}\n" "2,inactive,{b}\n" "3,active,{c}\n",
+        "id,status,raw_payload\n1,active,{a}\n2,inactive,{b}\n3,active,{c}\n",
         encoding="utf-8",
     )
 
@@ -1428,7 +1429,7 @@ def test_profile_exclude_columns_accepts_empty_list(sample_csv):
 def test_profile_exclude_columns_scopes_report_metrics_and_suggestions(tmp_path):
     path = tmp_path / "profile_scope.csv"
     path.write_text(
-        "id,score\n" "1,10\n" "1,10\n" "2,20\n",
+        "id,score\n1,10\n1,10\n2,20\n",
         encoding="utf-8",
     )
 
@@ -3079,7 +3080,6 @@ def test_profile_numeric_histogram_to_pandas():
     assert pdf.loc[pdf["name"] == "nums", "histogram"].values[0] is not None
 
 
-@pytest.mark.filterwarnings("ignore:invalid value encountered")
 def test_profile_numeric_histogram_non_finite_values():
     # Test handling of infinite values in histogram calculation
     from arnio._core import _DType, _Frame
@@ -3997,20 +3997,15 @@ def test_data_quality_report_invariant_invalid_metrics():
         DataQualityReport(10, 2, 512, 0, 0.0, {}, quality_score=float("nan"))
 
 
+# fmt: off
 def test_cleaning_suggestion_is_exported():
-    assert hasattr(
-        ar, "CleaningSuggestion"
-    ), "CleaningSuggestion is missing from arnio.__init__ file"
+    msg_missing = "CleaningSuggestion is missing from arnio.__init__ file"
+    msg_match = "Top-level CleaningSuggestion does not match the internal type"
 
-    assert (
-        ar.CleaningSuggestion is CleaningSuggestion
-    ), "Top-level CleaningSuggestion does not match the internal type"
-    assert (
-        ar.CleaningSuggestion is CleaningSuggestion
-    ), "Top-level CleaningSuggestion does not match the internal type"
-
-
-# ── CleanStepRecord and CleanExplanation validation tests (Fixes #1687) ──────
+    assert hasattr(ar, "CleaningSuggestion"), msg_missing
+    assert ar.CleaningSuggestion is CleaningSuggestion, msg_match
+    assert ar.CleaningSuggestion is CleaningSuggestion, msg_match
+# fmt: on
 
 
 class TestCleanStepRecordValidation:
@@ -4282,36 +4277,6 @@ class TestQualityGateResultConstructorValidation:
             )
 
 
-def test_profile_comparison_drift_report_exclude_columns():
-    """Regression test ensuring exclude_columns drops keys from drift_report."""
-    import pandas as pd
-
-    import arnio as ar
-
-    # Create dummy frame with a sensitive column
-    df = pd.DataFrame(
-        {
-            "name": ["Alice", "Bob"],
-            "secret_key": ["abc123", "xyz789"],
-        }
-    )
-    frame = ar.from_pandas(df)
-
-    # Generate profile comparison
-    p1 = ar.profile(frame)
-    comparison = ar.compare_profiles(p1, p1)
-
-    # Export dictionary while excluding 'secret_key'
-    exported_dict = comparison.to_dict(exclude_columns=["secret_key"])
-
-    # Assertions to satisfy the code review
-    assert "secret_key" not in exported_dict["left_profile"]["columns"]
-    assert "secret_key" not in exported_dict["right_profile"]["columns"]
-    assert (
-        "secret_key" not in exported_dict["drift_report"]
-    ), "Privacy leak: secret_key still present in drift_report keys!"
-
-
 def test_auto_clean_rejects_list_mode():
     frame = ar.from_dict({"name": [" Alice "], "age": ["1"]})
     with pytest.raises(ValueError, match="mode must be 'safe' or 'strict'"):
@@ -4334,3 +4299,61 @@ def test_auto_clean_rejects_invalid_string_mode():
     frame = ar.from_dict({"name": [" Alice "]})
     with pytest.raises(ValueError, match="mode must be 'safe' or 'strict'"):
         ar.auto_clean(frame, mode="SAFE")
+
+
+def test_score_breakdown_with_real_values():
+    """Ensure score_breakdown correctly maps real penalty components and handles to_dict."""
+
+    # 1. Define real or mock score components dictionary
+    real_components = {
+        "null_penalty": 5.0,
+        "duplicate_penalty": 2.0,
+        "type_mismatch_penalty": 1.5,
+    }
+
+    # 2. Reconstruct the report using an empty dict for columns (or a proper mapping)
+    # instead of a raw list of strings to prevent serialization errors.
+    instance = DataQualityReport(
+        row_count=100,
+        column_count=5,
+        memory_usage=1024,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},  # Pass an empty dict or valid ColumnQualityReport mapping
+        score_components=real_components,
+        quality_score=85.0,
+        suggestions=[],
+    )
+
+    # 3. Explicitly call your new method to assign 'result'
+    result = instance.score_breakdown()
+
+    # 4. Assertions
+    assert isinstance(result, dict)
+
+    expected_keys = [
+        "null_penalty",
+        "duplicate_penalty",
+        "type_mismatch_penalty",
+        "final_score",
+    ]
+
+    for key in expected_keys:
+        assert key in result, f"Missing key: {key}"
+        assert isinstance(result[key], (int, float)), f"{key} must be numeric"
+
+
+def test_profile_comparison_drift_report_exclude_columns():
+    df = pd.DataFrame({"name": ["Alice", "Bob"], "secret_key": ["abc123", "xyz789"]})
+    frame = ar.from_pandas(df)
+    p1 = ar.profile(frame)
+    comparison = ar.compare_profiles(p1, p1)
+    exported_dict = comparison.to_dict(exclude_columns=["secret_key"])
+
+    assert "secret_key" not in exported_dict["left_profile"]["columns"]
+    assert "secret_key" not in exported_dict["right_profile"]["columns"]
+
+    # fmt: off
+    leak_msg = "Privacy leak: secret_key still present in drift_report keys!"
+    assert "secret_key" not in exported_dict["drift_report"], leak_msg
+    # fmt: on
