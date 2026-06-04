@@ -26,6 +26,7 @@ from .cleaning import (
     normalize_whitespace,
     parse_bool_strings,
     rename_columns,
+    rename_columns_matching,
     replace_values,
     round_numeric_columns,
     safe_divide_columns,
@@ -37,12 +38,13 @@ from .cleaning import (
     validate_columns_exist,
     winsorize_outliers,
 )
-from .convert import from_dict, from_pandas, to_arrow, to_pandas
+from .convert import from_dict, from_pandas, from_polars, to_arrow, to_pandas, to_polars
 from .exceptions import (
     ArnioError,
     CsvReadError,
     JsonlReadError,
     PipelineStepError,
+    RemoteReadError,
     SchemaValidationError,
     TypeCastError,
     UnknownStepError,
@@ -53,12 +55,15 @@ from .io import (
     read_csv,
     read_csv_chunked,
     read_jsonl,
+    read_jsonl_chunked,
+    read_parquet,
     scan_csv,
     sniff_delimiter,
     write_csv,
     write_parquet,
 )
 from .pipeline import (
+    LineageReport,
     PipelineContext,
     get_builtin_step_signatures,
     list_steps,
@@ -120,7 +125,9 @@ __all__ = [
     "read_csv",
     "read_csv_chunked",
     "read_jsonl",
+    "read_jsonl_chunked",
     "write_csv",
+    "read_parquet",
     "write_parquet",
     "scan_csv",
     "sniff_delimiter",
@@ -142,6 +149,7 @@ __all__ = [
     "winsorize_outliers",
     "coalesce_columns",
     "combine_columns",
+    "rename_columns_matching",
     "drop_columns_matching",
     "strip_whitespace",
     "parse_bool_strings",
@@ -158,7 +166,9 @@ __all__ = [
     # Conversion
     "to_pandas",
     "to_arrow",
+    "to_polars",
     "from_pandas",
+    "from_polars",
     "from_records",
     "from_dict",
     # Integrations
@@ -171,6 +181,7 @@ __all__ = [
     "get_builtin_step_signatures",
     "list_steps",
     "PipelineContext",
+    "LineageReport",
     "reset_steps",
     # Data quality
     "profile",
@@ -211,6 +222,7 @@ __all__ = [
     "ArnioError",
     "CsvReadError",
     "JsonlReadError",
+    "RemoteReadError",
     "TypeCastError",
     "PipelineStepError",
     "SchemaValidationError",

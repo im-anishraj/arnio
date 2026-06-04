@@ -402,6 +402,10 @@ frame = ar.read_jsonl("events.jsonl")
 # Limit rows
 frame = ar.read_jsonl("large.jsonl", nrows=1000)
 
+# Stream large JSONL/NDJSON files in bounded chunks
+for chunk in ar.read_jsonl_chunked("large.jsonl", chunksize=50_000):
+    process(chunk)
+
 # Non-UTF-8 encoding
 frame = ar.read_jsonl("data.ndjson", encoding="latin-1")
 
@@ -409,21 +413,27 @@ frame = ar.read_jsonl("data.ndjson", encoding="latin-1")
 clean = ar.pipeline(frame, [("strip_whitespace",), ("drop_nulls",)])
 ```
 
-Raises `ar.JsonlReadError` with the 1-based line number if a line contains invalid JSON.
+Raises `ar.JsonlReadError` with the 1-based line number if a line contains invalid JSON. The chunked reader uses the same validation and decoding rules as `read_jsonl`, but only materializes one chunk at a time.
 </details>
 
 <details>
-<summary><b>📦 Export to Parquet for columnar analytics pipelines</b></summary>
+<summary><b>📦 Parquet import and export for columnar analytics pipelines</b></summary>
 <br>
 
-`write_parquet` exports an ArFrame to a Parquet file via pyarrow.  Install the optional extra first:
+`read_parquet` and `write_parquet` use pyarrow for Parquet I/O.  Install the optional extra first:
 
 ```bash
 pip install arnio[parquet]
 ```
 
 ```python
-# Basic export
+# Import a Parquet file into an ArFrame (no pandas intermediate)
+frame = ar.read_parquet("data.parquet")
+
+# Read only selected columns
+frame = ar.read_parquet("data.parquet", usecols=["name", "age"])
+
+# Export an ArFrame to Parquet
 ar.write_parquet(frame, "output.parquet")
 
 # Choose compression codec: "snappy" (default), "gzip", "zstd", "brotli", "none"
@@ -432,11 +442,12 @@ ar.write_parquet(frame, "output.parquet", compression="zstd")
 # Control row group size for large files
 ar.write_parquet(frame, "output.parquet", row_group_size=50_000)
 
-# .pq extension also accepted
+# .pq extension also accepted for both read and write
+frame = ar.read_parquet("data.pq")
 ar.write_parquet(frame, "output.pq")
 ```
 
-Raises `ImportError` with an install hint if pyarrow is not available.
+Both functions raise `ImportError` with an install hint if pyarrow is not available.
 </details>
 
 <details>

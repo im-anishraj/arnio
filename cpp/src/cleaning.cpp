@@ -151,6 +151,47 @@ static int64_t checked_double_to_int64(double value, const char* context) {
     return static_cast<int64_t>(value);
 }
 
+// Locale-independent floating-point parser.
+//
+// Mirrors the parsing contract used by csv_reader.cpp (try_parse_float64) so
+// that values successfully ingested during CSV reading can always be cast later
+// regardless of the active process locale.
+//
+// Special tokens ("nan", "inf", "+inf", "-inf") are handled explicitly because
+// std::istringstream behaviour for these varies across platforms and locales.
+// All other values are parsed with std::istringstream imbued with
+// std::locale::classic(), which uses '.' as the decimal separator — the same
+// separator the CSV reader expects.
+static bool parse_float64_classic(const std::string& s, double& out) {
+    if (s.empty()) return false;
+
+    // Build a lowercase copy for special-token matching only.
+    std::string lower = s;
+    std::transform(lower.begin(), lower.end(), lower.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
+    if (lower == "nan") {
+        out = std::numeric_limits<double>::quiet_NaN();
+        return true;
+    }
+    if (lower == "inf" || lower == "+inf") {
+        out = std::numeric_limits<double>::infinity();
+        return true;
+    }
+    if (lower == "-inf") {
+        out = -std::numeric_limits<double>::infinity();
+        return true;
+    }
+
+    std::istringstream iss(s);
+    iss.imbue(std::locale::classic());
+    double val = 0.0;
+    iss >> val;
+    if (iss.fail() || !iss.eof()) return false;
+    out = val;
+    return true;
+}
+
 static CellValue coerce_value(const CellValue& value, DType target) {
     if (std::holds_alternative<std::monostate>(value)) {
         return std::monostate{};
@@ -204,15 +245,13 @@ static CellValue coerce_value(const CellValue& value, DType target) {
         if (std::holds_alternative<bool>(value)) return std::get<bool>(value) ? 1.0 : 0.0;
         if (std::holds_alternative<std::string>(value)) {
             const auto& s = std::get<std::string>(value);
-            try {
-                size_t pos = 0;
-                double parsed = std::stod(s, &pos);
+            double parsed = 0.0;
+            if (parse_float64_classic(s, parsed)) {
                 if (std::isnan(parsed) || std::isinf(parsed)) {
                     throw std::invalid_argument(
                         "Non-finite numeric fill values are not permitted for float columns.");
                 }
-                if (pos == s.size()) return parsed;
-            } catch (...) {
+                return parsed;
             }
         }
     }
@@ -569,22 +608,17 @@ Frame cast_types(const Frame& frame, const std::unordered_map<std::string, std::
                     }
                     break;
                 }
-                case DType::FLOAT64:
-                    try {
-                        size_t pos = 0;
-                        double parsed = std::stod(str_val, &pos);
-                        if (pos != str_val.size() || !std::isfinite(parsed)) {
-                            throw cast_error(src.name(), str_val, it->second, r);
-                        }
+                case DType::FLOAT64: {
+                    double parsed = 0.0;
+                    if (parse_float64_classic(str_val, parsed) && std::isfinite(parsed)) {
                         col.push_back(parsed);
-                    } catch (...) {
-                        if (coerce_invalid) {
-                            col.push_null();
-                        } else {
-                            throw cast_error(src.name(), str_val, it->second, r);
-                        }
+                    } else if (coerce_invalid) {
+                        col.push_null();
+                    } else {
+                        throw cast_error(src.name(), str_val, it->second, r);
                     }
                     break;
+                }
                 case DType::BOOL: {
                     std::string lower = str_val;
                     std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
