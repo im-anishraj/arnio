@@ -184,6 +184,9 @@ def _series_to_python_values(series: pd.Series, col_name: object) -> list[object
 
 
 def to_pandas(frame: ArFrame, *, copy: bool = False) -> pd.DataFrame:
+def to_pandas(frame: ArFrame) -> pd.DataFrame:
+    if isinstance(frame, tuple):
+        frame = frame[0]
     """Convert ArFrame to pandas.DataFrame.
 
     Parameters
@@ -218,9 +221,16 @@ def to_pandas(frame: ArFrame, *, copy: bool = False) -> pd.DataFrame:
         )
 
     cpp_frame = frame._frame
+    if isinstance(cpp_frame, tuple):
+        cpp_frame = cpp_frame[0]
+
+    if hasattr(cpp_frame, "num_cols"):
+        n_cols = cpp_frame.num_cols()
+    else:
+        raise TypeError("Invalid internal frame object")
     data = {}
 
-    for i in range(cpp_frame.num_cols()):
+    for i in range(n_cols):
         col = cpp_frame.column_by_index(i)
         name = col.name()
         dtype = col.dtype()

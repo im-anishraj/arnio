@@ -73,6 +73,10 @@ class ArFrame:
     __slots__ = ("_frame", "_attrs")
 
     def __init__(self, cpp_frame: _Frame, attrs: dict | None = None) -> None:
+        # SAFETY: unwrap accidental tuple-wrapped frame
+        if isinstance(cpp_frame, tuple):
+            cpp_frame = cpp_frame[0]
+
         self._frame = cpp_frame
         self._attrs: dict = attrs if attrs is not None else {}
 

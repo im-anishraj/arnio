@@ -1181,6 +1181,23 @@ def write_csv(
         writer.write(frame._frame, path)
     except RuntimeError as e:
         raise RuntimeError(str(e)) from e
+        with _utf8_csv_path(path, encoding) as native_path:
+            cpp_frame = reader.read(native_path)
+            result = reader.read(native_path)
+            cpp_frame = result[0] if isinstance(result, tuple) else result
+    except ValueError:
+        raise
+    except CsvReadError:
+        raise
+    except RuntimeError as e:
+        msg = str(e)
+
+        if "Unterminated quoted field" in msg:
+            raise CsvReadError("Unterminated quoted CSV record") from e
+        
+        raise CsvReadError(msg) from e
+        
+    return ArFrame(cpp_frame)
 
 
 def scan_csv(

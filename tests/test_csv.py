@@ -1029,7 +1029,7 @@ class TestReadCsv:
         df = ar.to_pandas(frame)
 
         assert frame.shape == (2, 2)
-        assert df["text"].iloc[0] == "hello\nworld"
+        assert df["text"].iloc[0] == "hello\r\nworld"
         assert df["text"].iloc[1] == "ok"
 
     def test_unterminated_quote_rejected(self, tmp_path):
