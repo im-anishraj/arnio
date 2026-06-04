@@ -194,26 +194,27 @@ class TestFillNulls:
         result = ar.fill_nulls(frame_str, "missing")
         df = ar.to_pandas(result)
         assert df["b"].isnull().sum() == 0, "Nulls remain after filling with 'missing'"
-    
+
     def test_fill_nulls_rejects_bool_for_int64_column(self):
         frame = ar.from_pandas(pd.DataFrame({"a": [1, None, 3]}))
         with pytest.raises(TypeError, match="bool"):
             ar.fill_nulls(frame, True)
-    
+
     def test_fill_nulls_rejects_bool_for_float64_column(self):
         frame = ar.from_pandas(pd.DataFrame({"a": [1.0, None, 3.0]}))
         with pytest.raises(TypeError, match="bool"):
             ar.fill_nulls(frame, False)
-    
+
     def test_fill_nulls_rejects_bool_via_subset(self):
         frame = ar.from_pandas(pd.DataFrame({"a": [1, None, 3], "b": ["x", None, "z"]}))
         with pytest.raises(TypeError, match="bool"):
             ar.fill_nulls(frame, True, subset=["a"])
-    
+
     def test_fill_nulls_bool_accepted_for_bool_column(self):
         frame = ar.from_pandas(pd.DataFrame({"a": [True, None, False]}))
         result = ar.fill_nulls(frame, False)
         assert result is not None
+
 
 class TestWinsorizeOutliers:
     def test_winsorize_outliers_clips_numeric_values(self):
