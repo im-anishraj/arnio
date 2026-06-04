@@ -694,19 +694,28 @@ class TestReadCsvChunkedCoverage:
 def test_read_csv_chunked_early_exit_behavioral_cleanup():
     import os
     import tempfile
-
     import arnio as ar
 
     fd, path = tempfile.mkstemp(suffix=".csv")
     try:
-        with os.fdopen(fd, "w") as f:
+        with os.fdopen(fd, "w", encoding="utf-16") as f:
             f.write("a,b\n" + "\n".join(f"{i},{i*2}" for i in range(100)))
 
-        gen = ar.read_csv_chunked(path, chunksize=10)
+        temp_dir = tempfile.gettempdir()
+        initial_files = set(os.listdir(temp_dir))
+
+        gen = ar.read_csv_chunked(path, encoding="utf-16", chunksize=10)
         for chunk in gen:
             break
 
         gen.close()
+
+        final_files = set(os.listdir(temp_dir))
+        leaked_files = final_files - initial_files
+        assert (
+            not leaked_files
+        ), f"Deterministic cleanup failed! Stranded temp files: {leaked_files}"
+
     finally:
         if os.path.exists(path):
             os.remove(path)

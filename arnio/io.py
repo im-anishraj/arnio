@@ -1080,36 +1080,39 @@ def read_csv_chunked(
         ) as native_csv_path:
             reader.open(native_csv_path)
             yielded_nonempty_chunk = False
-            while True:
-                chunk = reader.next_chunk(chunksize, on_bad_lines)
-                if chunk is None:
-                    break
-                cpp_frame, bad_rows = chunk
+            try:
+                while True:
+                    chunk = reader.next_chunk(chunksize, on_bad_lines)
+                    if chunk is None:
+                        break
+                    cpp_frame, bad_rows = chunk
 
-                if on_bad_lines == "warn" and bad_rows:
-                    _warn_bad_rows(bad_rows)
-                frame = ArFrame(cpp_frame)
+                    if on_bad_lines == "warn" and bad_rows:
+                        _warn_bad_rows(bad_rows)
+                    frame = ArFrame(cpp_frame)
 
-                if frame.shape[0] == 0 and bad_rows:
-                    if yielded_nonempty_chunk:
-                        continue
+                    if frame.shape[0] == 0 and bad_rows:
+                        if yielded_nonempty_chunk:
+                            continue
 
-                yielded_nonempty_chunk = yielded_nonempty_chunk or frame.shape[0] > 0
+                    yielded_nonempty_chunk = (
+                        yielded_nonempty_chunk or frame.shape[0] > 0
+                    )
 
-                yield frame
+                    yield frame
+            finally:
+                reader.close()
+                if should_cleanup and os.path.exists(native_path):
+                    try:
+                        os.unlink(native_path)
+                    except OSError:
+                        pass
     except ValueError:
         raise
     except CsvReadError:
         raise
     except RuntimeError as e:
         raise CsvReadError(str(e)) from None
-    finally:
-        reader.close()
-        if should_cleanup and os.path.exists(native_path):
-            try:
-                os.unlink(native_path)
-            except OSError:
-                pass
 
 
 def write_csv(
