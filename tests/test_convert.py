@@ -1039,6 +1039,64 @@ class TestToArrow:
         assert table.column(0).type == pyarrow.int64()
         assert table.column(0).to_pylist() == [1, 2, 3]
 
+    def test_to_arrow_preserves_attrs_metadata(self):
+        df = pd.DataFrame({"x": [1]})
+        df.attrs = {"source": "test"}
+
+        frame = ar.from_pandas(df)
+        table = ar.to_arrow(frame)
+
+        metadata = table.schema.metadata or {}
+
+        assert b"arnio.attrs" in metadata
+
+    def test_to_arrow_preserves_nested_attrs_metadata(self):
+        df = pd.DataFrame({"x": [1]})
+        df.attrs = {"config": {"version": 1}}
+
+        frame = ar.from_pandas(df)
+        table = ar.to_arrow(frame)
+
+        metadata = table.schema.metadata or {}
+
+        assert b"arnio.attrs" in metadata
+
+    def test_to_arrow_skips_empty_attrs_metadata(self):
+        df = pd.DataFrame({"x": [1]})
+        df.attrs = {}
+
+        frame = ar.from_pandas(df)
+        table = ar.to_arrow(frame)
+
+        metadata = table.schema.metadata or {}
+
+        assert b"arnio.attrs" not in metadata
+
+    def test_to_arrow_zero_column_frame_preserves_attrs(self):
+        df = pd.DataFrame({"a": [None, None]})
+        df.attrs = {"source": "zero-column"}
+
+        frame = ar.from_pandas(df)
+        frame = ar.drop_empty_columns(frame)
+
+        table = ar.to_arrow(frame)
+
+        metadata = table.schema.metadata or {}
+
+        assert b"arnio.attrs" in metadata
+
+    def test_to_arrow_non_serializable_attrs_raise(self):
+        df = pd.DataFrame({"x": [1]})
+        df.attrs = {"bad": {1, 2, 3}}
+
+        frame = ar.from_pandas(df)
+
+        with pytest.raises(
+            TypeError,
+            match="JSON-serializable attrs metadata",
+        ):
+            ar.to_arrow(frame)
+
     def test_float64_columns(self):
         import pyarrow
 

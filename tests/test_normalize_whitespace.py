@@ -213,3 +213,35 @@ def test_leading_whitespace_only():
     frame = ar.from_pandas(pd.DataFrame({"name": ["   hello"]}))
     result = ar.to_pandas(ar.pipeline(frame, [("normalize_whitespace",)]))
     assert result["name"][0] == "hello"
+
+
+# --- Mixed-type object column tests (regression for silent NaN data loss) ---
+
+
+def test_mixed_type_object_column_preserves_integers():
+    df = pd.DataFrame({"col": ["hello  world", 42, 0]})
+    result = ar.normalize_whitespace(df)  # raw DataFrame, bypasses from_pandas coercion
+    values = result["col"].tolist()
+    assert values[0] == "hello world"
+    assert values[1] == 42
+    assert values[2] == 0
+
+
+def test_mixed_type_object_column_preserves_booleans():
+    df = pd.DataFrame({"col": ["  yes  ", True, False]})
+    result = ar.normalize_whitespace(df)
+    values = result["col"].tolist()
+    assert values[0] == "yes"
+    assert values[1] is True
+    assert values[2] is False
+
+
+def test_mixed_type_object_column_full_variety():
+    df = pd.DataFrame({"col": ["hello  world", 42, True, 3.14, None]})
+    result = ar.normalize_whitespace(df)
+    values = result["col"].tolist()
+    assert values[0] == "hello world"
+    assert values[1] == 42
+    assert values[2] is True
+    assert values[3] == 3.14
+    assert values[4] is None  # None must NOT become NaN

@@ -899,8 +899,16 @@ def normalize_whitespace(frame, columns=None):
     else:
         cols = list(df.select_dtypes(include=["object", "string"]).columns)
 
+    import re
+
+    def _fix_whitespace(val):
+        # Only process actual str values; pass through int, bool, float, None, etc.
+        if isinstance(val, str):
+            return re.sub(r"\s+", " ", val).strip()
+        return val
+
     for col in cols:
-        df[col] = df[col].str.replace(r"\s+", " ", regex=True).str.strip()
+        df[col] = df[col].map(_fix_whitespace)
     return from_pandas(df) if is_arframe else df
 
 

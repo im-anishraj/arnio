@@ -11,6 +11,7 @@ import arnio as ar
 from arnio.quality import (
     QUALITY_REPORT_COLUMNS,
     CleaningSuggestion,
+    DataQualityReport,
     _validate_gate_bool,
     _validate_gate_ratio_threshold,
     _validate_gate_threshold,
@@ -4003,6 +4004,16 @@ def test_cleaning_suggestion_is_exported():
     assert hasattr(ar, "CleaningSuggestion"), missing_message
     assert ar.CleaningSuggestion is CleaningSuggestion, mismatch_message
     assert ar.CleaningSuggestion is CleaningSuggestion, mismatch_message
+    assert hasattr(ar, "CleaningSuggestion"), (
+        "CleaningSuggestion is missing from arnio.__init__ file"
+    )
+
+    assert ar.CleaningSuggestion is CleaningSuggestion, (
+        "Top-level CleaningSuggestion does not match the internal type"
+    )
+    assert ar.CleaningSuggestion is CleaningSuggestion, (
+        "Top-level CleaningSuggestion does not match the internal type"
+    )
 
 
 # ── CleanStepRecord and CleanExplanation validation tests (Fixes #1687) ──────
@@ -4307,3 +4318,43 @@ def test_quality_helpers_reject_invalid_frame(obj):
         ar.profile(obj)
     with pytest.raises(TypeError, match=".*must be an ArFrame.*"):
         ar.auto_clean(obj)
+def test_score_breakdown_with_real_values():
+    """Ensure score_breakdown correctly maps real penalty components and handles to_dict."""
+
+    # 1. Define real or mock score components dictionary
+    real_components = {
+        "null_penalty": 5.0,
+        "duplicate_penalty": 2.0,
+        "type_mismatch_penalty": 1.5,
+    }
+
+    # 2. Reconstruct the report using an empty dict for columns (or a proper mapping)
+    # instead of a raw list of strings to prevent serialization errors.
+    instance = DataQualityReport(
+        row_count=100,
+        column_count=5,
+        memory_usage=1024,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},  # Pass an empty dict or valid ColumnQualityReport mapping
+        score_components=real_components,
+        quality_score=85.0,
+        suggestions=[],
+    )
+
+    # 3. Explicitly call your new method to assign 'result'
+    result = instance.score_breakdown()
+
+    # 4. Assertions
+    assert isinstance(result, dict)
+
+    expected_keys = [
+        "null_penalty",
+        "duplicate_penalty",
+        "type_mismatch_penalty",
+        "final_score",
+    ]
+
+    for key in expected_keys:
+        assert key in result, f"Missing key: {key}"
+        assert isinstance(result[key], (int, float)), f"{key} must be numeric"
