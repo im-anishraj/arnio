@@ -1909,6 +1909,72 @@ class TestNormalizeUnicode:
         assert frame_3_0_attrs._attrs["key"] == "value"
 
 
+class TestAttrsPreservation:
+    """Native cleaning wrappers must carry over ArFrame._attrs via deep copy."""
+
+    def _base_frame(self):
+        import pandas as pd
+
+        df = pd.DataFrame({"name": [" Alice ", " Bob "], "age": [20, 30], "score": [1.5, 2.5]})
+        frame = ar.from_pandas(df)
+        frame._attrs = {"source": "crm", "meta": {"version": 1}}
+        return frame
+
+    @pytest.mark.parametrize(
+        "op_name, fn",
+        [
+            ("drop_nulls", lambda f: ar.drop_nulls(f)),
+            ("fill_nulls", lambda f: ar.fill_nulls(f, 0)),
+            ("drop_duplicates", lambda f: ar.drop_duplicates(f)),
+            ("strip_whitespace", lambda f: ar.strip_whitespace(f)),
+            ("normalize_case", lambda f: ar.normalize_case(f, subset=["name"], case_type="lower")),
+            ("clip_numeric", lambda f: ar.clip_numeric(f, subset=["age"], lower=0, upper=99)),
+            ("rename_columns", lambda f: ar.rename_columns(f, {"score": "score2"})),
+            ("trim_column_names", lambda f: ar.trim_column_names(f)),
+            ("cast_types", lambda f: ar.cast_types(f, {"age": "float64"})),
+            ("normalize_unicode", lambda f: ar.normalize_unicode(f, subset=["name"])),
+        ],
+    )
+    def test_attrs_propagated(self, op_name, fn):
+        frame = self._base_frame()
+        result = fn(frame)
+        assert result._attrs == {"source": "crm", "meta": {"version": 1}}, (
+            f"{op_name} dropped _attrs"
+        )
+
+    @pytest.mark.parametrize(
+        "op_name, fn",
+        [
+            ("drop_nulls", lambda f: ar.drop_nulls(f)),
+            ("fill_nulls", lambda f: ar.fill_nulls(f, 0)),
+            ("drop_duplicates", lambda f: ar.drop_duplicates(f)),
+            ("strip_whitespace", lambda f: ar.strip_whitespace(f)),
+            ("normalize_case", lambda f: ar.normalize_case(f, subset=["name"], case_type="lower")),
+            ("clip_numeric", lambda f: ar.clip_numeric(f, subset=["age"], lower=0, upper=99)),
+            ("rename_columns", lambda f: ar.rename_columns(f, {"score": "score2"})),
+            ("trim_column_names", lambda f: ar.trim_column_names(f)),
+            ("cast_types", lambda f: ar.cast_types(f, {"age": "float64"})),
+            ("normalize_unicode", lambda f: ar.normalize_unicode(f, subset=["name"])),
+        ],
+    )
+    def test_attrs_deep_copy_isolated(self, op_name, fn):
+        frame = self._base_frame()
+        result = fn(frame)
+        result._attrs["meta"]["version"] = 999
+        assert frame._attrs["meta"]["version"] == 1, (
+            f"{op_name} shared _attrs by reference instead of deep copying"
+        )
+
+    def test_empty_attrs_not_propagated(self):
+        """When source frame has no attrs, result attrs should also be empty."""
+        frame = ar.from_pandas(
+            __import__("pandas").DataFrame({"name": ["Alice"], "age": [20]})
+        )
+        assert frame._attrs == {}
+        result = ar.strip_whitespace(frame)
+        assert result._attrs == {}
+
+
 class TestParseBoolStrings:
     def test_parse_basic_bool_strings(self):
         import pandas as pd

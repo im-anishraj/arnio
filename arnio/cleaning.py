@@ -33,6 +33,14 @@ from .exceptions import TypeCastError
 from .frame import ArFrame
 
 
+def _wrap(cpp_result, source: ArFrame) -> ArFrame:
+    """Wrap a C++ frame result, carrying over a deep copy of source attrs."""
+    return ArFrame(
+        cpp_result,
+        attrs=copy.deepcopy(source._attrs),
+    )
+
+
 def validate_columns_exist(
     frame: ArFrame,
     columns: Sequence[str],
@@ -238,7 +246,7 @@ def drop_nulls(
             ),
         )
     result = _drop_nulls(frame._frame, subset=subset)
-    return ArFrame(result)
+    return _wrap(result, frame)
 
 
 def drop_columns(frame: ArFrame, columns: Sequence[str]) -> ArFrame:
@@ -443,7 +451,7 @@ def fill_nulls(
             f"got {type(value).__name__!r}"
         )
     result = _fill_nulls(frame._frame, value, subset=subset)
-    return ArFrame(result)
+    return _wrap(result, frame)
 
 
 def drop_duplicates(
@@ -501,7 +509,7 @@ def drop_duplicates(
 
         return ArFrame(_Frame.from_dict({}, {}, frame.shape[0]))
     result = _drop_duplicates(frame._frame, subset=subset, keep=keep_arg)
-    return ArFrame(result)
+    return _wrap(result, frame)
 
 
 def drop_constant_columns(
@@ -737,7 +745,7 @@ def clip_numeric(
         upper=float(upper) if upper is not None else None,
         subset=subset,
     )
-    return ArFrame(result)
+    return _wrap(result, frame)
 
 
 def winsorize_outliers(
@@ -857,7 +865,7 @@ def strip_whitespace(
             ),
         )
     result = _strip_whitespace(frame._frame, subset=subset)
-    return ArFrame(result)
+    return _wrap(result, frame)
 
 
 def normalize_whitespace(frame, columns=None):
@@ -1090,7 +1098,7 @@ def normalize_case(
             ),
         )
     result = _normalize_case(frame._frame, subset=subset, case_type=case_type)
-    return ArFrame(result)
+    return _wrap(result, frame)
 
 
 def normalize_unicode(
@@ -1173,10 +1181,7 @@ def normalize_unicode(
             new_columns[name] = col.to_python_list()
             dtype_hints[name] = dtype
     new_cpp_frame = _Frame.from_dict(new_columns, dtype_hints, frame.shape[0])
-    return ArFrame(
-        new_cpp_frame,
-        attrs=copy.deepcopy(frame._attrs) if frame._attrs is not None else None,
-    )
+    return _wrap(new_cpp_frame, frame)
 
 
 def rename_columns(
@@ -1229,7 +1234,7 @@ def rename_columns(
         )
 
     result = _rename_columns(frame._frame, mapping)
-    return ArFrame(result)
+    return _wrap(result, frame)
 
 
 def trim_column_names(frame: ArFrame) -> ArFrame:
@@ -1267,7 +1272,7 @@ def trim_column_names(frame: ArFrame) -> ArFrame:
         if original != updated
     }
     result = _rename_columns(frame._frame, mapping)
-    return ArFrame(result)
+    return _wrap(result, frame)
 
 
 def cast_types(
@@ -1325,7 +1330,7 @@ def cast_types(
             )
     except ValueError as e:
         raise TypeCastError(str(e)) from e
-    return ArFrame(result)
+    return _wrap(result, frame)
 
 
 def _append_clean_step(
@@ -1613,7 +1618,7 @@ def combine_columns(
         result = _combine_columns(
             frame._frame, subset_columns, separator, output_column
         )
-        return ArFrame(result)
+        return _wrap(result, frame)
 
     # Pandas fallback
     df = frame.copy(deep=False)
