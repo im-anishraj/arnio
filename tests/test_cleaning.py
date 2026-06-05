@@ -1749,9 +1749,9 @@ class TestNormalizeUnicode:
 
     def test_normalize_unicode_non_string_form_raises(self):
         import pandas as pd
+        import pytest
 
         import arnio as ar
-        import pytest
 
         df = pd.DataFrame({"text": ["hello"]})
         frame = ar.from_pandas(df)
