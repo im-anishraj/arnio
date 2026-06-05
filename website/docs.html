@@ -181,6 +181,9 @@ payload = frame.to_dict()</code></pre></div>
         <div class="code-block"><div class="code-block-header">Python</div><pre><code class="language-python">report = ar.profile(frame, exclude_columns=["private_notes"])
 report.to_markdown()
 report.to_html("quality.html")
+report.to_dict()
+
+report = ar.profile(frame)
 report.to_dict(exclude_columns=["private_notes"])
 report.to_json()
 
