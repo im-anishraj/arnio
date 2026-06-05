@@ -253,40 +253,123 @@ def test_sniff_delimiter_signature_matches_website():
 # New: badge check for unreleased APIs (#2368)
 # ---------------------------------------------------------------------------
 
+
 def test_website_marks_unreleased_apis():
     # v1.19.0 exports from git
     v1_19_0_exports = {
-        "ArFrame", "ColumnSummary", "read_csv", "read_csv_chunked", "read_jsonl", 
-        "write_csv", "write_parquet", "scan_csv", "sniff_delimiter", "drop_nulls", 
-        "drop_columns", "select_columns", "keep_rows_with_nulls", "fill_nulls", 
-        "validate_columns_exist", "filter_rows", "replace_values", "normalize_whitespace", 
-        "drop_duplicates", "drop_constant_columns", "drop_empty_columns", "clean_column_names", 
-        "clip_numeric", "winsorize_outliers", "coalesce_columns", "combine_columns", 
-        "drop_columns_matching", "strip_whitespace", "parse_bool_strings", "normalize_case", 
-        "rename_columns", "round_numeric_columns", "cast_types", "clean", "safe_divide_columns", 
-        "trim_column_names", "standardize_missing_tokens", "to_pandas", "to_arrow", 
-        "from_pandas", "from_records", "from_dict", "ArnioPandasAccessor", "register_duckdb", 
-        "pipeline", "register_step", "unregister_step", "get_builtin_step_signatures", 
-        "list_steps", "PipelineContext", "reset_steps", "profile", "compare_profiles", 
-        "check_quality_gates", "suggest_cleaning", "auto_clean", "ColumnProfile", 
-        "DataQualityReport", "CleanStepRecord", "CleanExplanation", "ProfileComparison", 
-        "QualityGateIssue", "QualityGateResult", "Schema", "SchemaDiff", "SchemaDiffEntry", 
-        "Field", "ValidationIssue", "ValidationResult", "validate", "diff_schema", "Int64", 
-        "Float64", "String", "CountryCode", "CurrencyCode", "LanguageCode", "TimeZone", 
-        "Bool", "Email", "URL", "PhoneNumber", "DateTime", "UnknownStepError", "ArnioError", 
-        "CsvReadError", "JsonlReadError", "TypeCastError", "PipelineStepError", "SchemaValidationError", 
-        "normalize_unicode", "Regex", "Custom", "register_validator", "Date", "schema_to_dict", "schema_to_yaml"
+        "ArFrame",
+        "ColumnSummary",
+        "read_csv",
+        "read_csv_chunked",
+        "read_jsonl",
+        "write_csv",
+        "write_parquet",
+        "scan_csv",
+        "sniff_delimiter",
+        "drop_nulls",
+        "drop_columns",
+        "select_columns",
+        "keep_rows_with_nulls",
+        "fill_nulls",
+        "validate_columns_exist",
+        "filter_rows",
+        "replace_values",
+        "normalize_whitespace",
+        "drop_duplicates",
+        "drop_constant_columns",
+        "drop_empty_columns",
+        "clean_column_names",
+        "clip_numeric",
+        "winsorize_outliers",
+        "coalesce_columns",
+        "combine_columns",
+        "drop_columns_matching",
+        "strip_whitespace",
+        "parse_bool_strings",
+        "normalize_case",
+        "rename_columns",
+        "round_numeric_columns",
+        "cast_types",
+        "clean",
+        "safe_divide_columns",
+        "trim_column_names",
+        "standardize_missing_tokens",
+        "to_pandas",
+        "to_arrow",
+        "from_pandas",
+        "from_records",
+        "from_dict",
+        "ArnioPandasAccessor",
+        "register_duckdb",
+        "pipeline",
+        "register_step",
+        "unregister_step",
+        "get_builtin_step_signatures",
+        "list_steps",
+        "PipelineContext",
+        "reset_steps",
+        "profile",
+        "compare_profiles",
+        "check_quality_gates",
+        "suggest_cleaning",
+        "auto_clean",
+        "ColumnProfile",
+        "DataQualityReport",
+        "CleanStepRecord",
+        "CleanExplanation",
+        "ProfileComparison",
+        "QualityGateIssue",
+        "QualityGateResult",
+        "Schema",
+        "SchemaDiff",
+        "SchemaDiffEntry",
+        "Field",
+        "ValidationIssue",
+        "ValidationResult",
+        "validate",
+        "diff_schema",
+        "Int64",
+        "Float64",
+        "String",
+        "CountryCode",
+        "CurrencyCode",
+        "LanguageCode",
+        "TimeZone",
+        "Bool",
+        "Email",
+        "URL",
+        "PhoneNumber",
+        "DateTime",
+        "UnknownStepError",
+        "ArnioError",
+        "CsvReadError",
+        "JsonlReadError",
+        "TypeCastError",
+        "PipelineStepError",
+        "SchemaValidationError",
+        "normalize_unicode",
+        "Regex",
+        "Custom",
+        "register_validator",
+        "Date",
+        "schema_to_dict",
+        "schema_to_yaml",
     }
-    
+
     current_exports = set(_public_exports())
     unreleased_apis = current_exports - v1_19_0_exports
-    
+
     api_html = _api_html()
-    
+
     for api in unreleased_apis:
         # Not every API is individually documented. Only test those that appear in api.html
         if api in api_html:
             # Check that the API name is closely followed by the unreleased badge or enclosed in a block with it.
             # We allow up to 150 characters between the api name and the badge.
-            pattern = re.compile(re.escape(api) + r'.{0,150}?<span[^>]*class="[^"]*badge-unreleased', re.IGNORECASE | re.DOTALL)
-            assert pattern.search(api_html), f"Unreleased API {api!r} appears in website/api.html but lacks a badge-unreleased"
+            pattern = re.compile(
+                re.escape(api) + r'.{0,150}?<span[^>]*class="[^"]*badge-unreleased',
+                re.IGNORECASE | re.DOTALL,
+            )
+            assert pattern.search(
+                api_html
+            ), f"Unreleased API {api!r} appears in website/api.html but lacks a badge-unreleased"
