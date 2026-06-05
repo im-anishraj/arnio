@@ -648,10 +648,21 @@ def pipeline(
                 ):
                     step_result = fn(working_frame, mapping=kwargs)
 
-                elif name == "cast_types" and (
-                    "mapping" not in kwargs or not isinstance(kwargs["mapping"], dict)
-                ):
-                    step_result = fn(working_frame, kwargs)
+                elif name == "cast_types":
+                    reserved_kwargs = {"mapping", "errors"}
+                    has_reserved_kwargs = any(
+                        key in kwargs for key in reserved_kwargs - {"mapping"}
+                    )
+                    if "mapping" in kwargs and isinstance(kwargs["mapping"], dict):
+                        step_result = fn(working_frame, **kwargs)
+                    elif has_reserved_kwargs:
+                        raise ValueError(
+                            "cast_types shorthand mapping cannot be mixed with "
+                            "reserved keyword arguments. Use "
+                            "{'mapping': {...}, ...} form instead."
+                        )
+                    else:
+                        step_result = fn(working_frame, kwargs)
 
                 else:
                     step_result = fn(working_frame, **kwargs)

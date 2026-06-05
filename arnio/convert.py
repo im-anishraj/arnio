@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import copy as copylib
 import decimal
+import json
 import math
 from typing import TYPE_CHECKING, Any
 
@@ -303,31 +304,46 @@ def to_arrow(frame: ArFrame) -> pa.Table:
 
     if cpp_frame.num_cols() == 0:
         empty = pd.DataFrame(index=pd.RangeIndex(cpp_frame.num_rows()))
-        return pa.Table.from_pandas(empty)
+        table = pa.Table.from_pandas(empty)
+    else:
+        for i in range(cpp_frame.num_cols()):
+            col = cpp_frame.column_by_index(i)
+            name = col.name()
+            dtype = col.dtype()
+            mask = col.get_null_mask()
 
-    for i in range(cpp_frame.num_cols()):
-        col = cpp_frame.column_by_index(i)
-        name = col.name()
-        dtype = col.dtype()
-        mask = col.get_null_mask()
+            if dtype == _DType.INT64:
+                arr = col.to_numpy_int()
+                pa_arr = pa.array(arr, mask=mask, type=pa.int64())
+            elif dtype == _DType.FLOAT64:
+                arr = col.to_numpy_float()
+                pa_arr = pa.array(arr, mask=mask, type=pa.float64())
+            elif dtype == _DType.BOOL:
+                arr = col.to_numpy_bool()
+                pa_arr = pa.array(arr, mask=mask, type=pa.bool_())
+            else:
+                values = col.to_python_list()
+                pa_arr = pa.array(values, type=pa.string())
 
-        if dtype == _DType.INT64:
-            arr = col.to_numpy_int()
-            pa_arr = pa.array(arr, mask=mask, type=pa.int64())
-        elif dtype == _DType.FLOAT64:
-            arr = col.to_numpy_float()
-            pa_arr = pa.array(arr, mask=mask, type=pa.float64())
-        elif dtype == _DType.BOOL:
-            arr = col.to_numpy_bool()
-            pa_arr = pa.array(arr, mask=mask, type=pa.bool_())
-        else:
-            values = col.to_python_list()
-            pa_arr = pa.array(values, type=pa.string())
+            arrays.append(pa_arr)
+            names.append(name)
 
-        arrays.append(pa_arr)
-        names.append(name)
+        table = pa.Table.from_arrays(arrays, names=names)
 
-    return pa.Table.from_arrays(arrays, names=names)
+    if frame._attrs:
+        try:
+            attrs_json = json.dumps(frame._attrs)
+        except TypeError as e:
+            raise TypeError(
+                "to_arrow() only supports JSON-serializable attrs metadata"
+            ) from e
+
+        metadata = dict(table.schema.metadata or {})
+        metadata[b"arnio.attrs"] = attrs_json.encode("utf-8")
+
+        table = table.replace_schema_metadata(metadata)
+
+    return table
 
 
 def _pandas_dtype_to_arnio(dtype: object) -> _DType | None:

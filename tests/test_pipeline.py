@@ -322,6 +322,32 @@ class TestPipeline:
         assert result.dtypes["years"] == "float64"
         assert "age" not in result.columns
 
+    def test_pipeline_cast_types_shorthand_rejects_reserved_kwargs(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "age": ["1", "2"],
+                }
+            )
+        )
+
+        with pytest.raises(
+            ValueError,
+            match="cast_types shorthand mapping cannot be mixed",
+        ):
+            ar.pipeline(
+                frame,
+                [
+                    (
+                        "cast_types",
+                        {
+                            "age": "int64",
+                            "errors": "coerce",
+                        },
+                    ),
+                ],
+            )
+
     def test_pipeline_mapping_keyword_form(self, sample_csv):
         frame = ar.read_csv(sample_csv)
         result = ar.pipeline(
