@@ -155,9 +155,12 @@ def test_detect_core_status_uses_importable_package_path(
 
     (installed_package / "_arnio_cpp.pyd").write_text("compiled extension")
 
-    with patch(
-        "importlib.util.find_spec",
-        return_value=MagicMock(origin=str(init_file)),
+    with (
+        patch.dict(sys.modules, {"arnio._core": None}, clear=False),
+        patch(
+            "importlib.util.find_spec",
+            return_value=MagicMock(origin=str(init_file)),
+        ),
     ):
         status, available = detect_core_status()
 
