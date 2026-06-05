@@ -3998,16 +3998,29 @@ def test_data_quality_report_invariant_invalid_metrics():
 
 
 def test_cleaning_suggestion_is_exported():
-    assert hasattr(ar, "CleaningSuggestion"), (
-        "CleaningSuggestion is missing from arnio.__init__ file"
-    )
+    assert hasattr(
+        ar, "CleaningSuggestion"
+    ), "CleaningSuggestion is missing from arnio.__init__ file"
 
-    assert ar.CleaningSuggestion is CleaningSuggestion, (
-        "Top-level CleaningSuggestion does not match the internal type"
-    )
-    assert ar.CleaningSuggestion is CleaningSuggestion, (
-        "Top-level CleaningSuggestion does not match the internal type"
-    )
+    missing_message = "CleaningSuggestion is missing from arnio.__init__ file"
+    mismatch_message = "Top-level CleaningSuggestion does not match the internal type"
+
+    assert hasattr(ar, "CleaningSuggestion"), missing_message
+    assert ar.CleaningSuggestion is CleaningSuggestion, mismatch_message
+    assert ar.CleaningSuggestion is CleaningSuggestion, mismatch_message
+    assert hasattr(
+        ar, "CleaningSuggestion"
+    ), "CleaningSuggestion is missing from arnio.__init__ file"
+    assert hasattr(
+        ar, "CleaningSuggestion"
+    ), "CleaningSuggestion is missing from arnio.__init__ file"
+
+    assert (
+        ar.CleaningSuggestion is CleaningSuggestion
+    ), "Top-level CleaningSuggestion does not match the internal type"
+    assert (
+        ar.CleaningSuggestion is CleaningSuggestion
+    ), "Top-level CleaningSuggestion does not match the internal type"
 
 
 # ── CleanStepRecord and CleanExplanation validation tests (Fixes #1687) ──────
@@ -4304,6 +4317,14 @@ def test_auto_clean_rejects_invalid_string_mode():
     frame = ar.from_dict({"name": [" Alice "]})
     with pytest.raises(ValueError, match="mode must be 'safe' or 'strict'"):
         ar.auto_clean(frame, mode="SAFE")
+
+
+@pytest.mark.parametrize("obj", [object(), None, 123, pd.DataFrame()])
+def test_quality_helpers_reject_invalid_frame(obj):
+    with pytest.raises(TypeError, match=".*must be an ArFrame.*"):
+        ar.profile(obj)
+    with pytest.raises(TypeError, match=".*must be an ArFrame.*"):
+        ar.auto_clean(obj)
 
 
 def test_score_breakdown_with_real_values():

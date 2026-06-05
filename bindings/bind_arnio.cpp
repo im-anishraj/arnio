@@ -320,7 +320,8 @@ PYBIND11_MODULE(_arnio_cpp, m) {
         .def(py::init<>())
         .def_readwrite("delimiter", &CsvWriteConfig::delimiter)
         .def_readwrite("write_header", &CsvWriteConfig::write_header)
-        .def_readwrite("line_terminator", &CsvWriteConfig::line_terminator);
+        .def_readwrite("line_terminator", &CsvWriteConfig::line_terminator)
+        .def_readwrite("escape_formulas", &CsvWriteConfig::escape_formulas);
 
     py::class_<CsvWriter>(m, "CsvWriter")
         .def(py::init<const CsvWriteConfig&>(), py::arg("config") = CsvWriteConfig{})

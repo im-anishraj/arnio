@@ -31,7 +31,7 @@ from ._core import (
 )
 from .convert import from_pandas, to_pandas
 from .exceptions import TypeCastError
-from .frame import ArFrame
+from .frame import ArFrame, _validate_arframe
 
 # ---------------------------------------------------------------------------
 # Report types for errors="report" mode
@@ -119,7 +119,7 @@ def validate_columns_exist(
     KeyError
         If any requested column is missing.
     """
-    frame, _ = _validate_frame(frame)
+    _validate_arframe(frame)
     _validate_existing_column_sequence(
         columns,
         available_columns=frame.columns,
@@ -278,7 +278,7 @@ def drop_nulls(
     >>> frame = ar.read_csv("data.csv")
     >>> clean = ar.drop_nulls(frame, subset=["age", "name"])
     """
-    frame, _ = _validate_frame(frame)
+    _validate_arframe(frame)
     if subset is not None:
         subset = _validate_column_sequence(subset, argument_name="subset")
         if len(subset) == 0:
@@ -324,7 +324,7 @@ def drop_columns(frame: ArFrame, columns: Sequence[str]) -> ArFrame:
     --------
     >>> frame = ar.drop_columns(frame, ["debug_col"])
     """
-    frame, _ = _validate_frame(frame)
+    _validate_arframe(frame)
     requested_columns = _validate_existing_column_sequence(
         columns,
         available_columns=frame.columns,
@@ -447,7 +447,7 @@ def select_columns(frame: ArFrame, columns: Sequence[str]) -> ArFrame:
     >>> frame = ar.read_csv("data.csv")
     >>> subset = ar.select_columns(frame, ["name", "revenue"])
     """
-    frame, _ = _validate_frame(frame)
+    _validate_arframe(frame)
     return frame.select_columns(columns)
 
 
@@ -478,7 +478,7 @@ def fill_nulls(
     >>> frame = ar.read_csv("data.csv")
     >>> filled = ar.fill_nulls(frame, 0, subset=["age"])
     """
-    frame, _ = _validate_frame(frame)
+    _validate_arframe(frame)
     if subset is not None:
         subset = _validate_column_sequence(subset, argument_name="subset")
         if len(subset) == 0:
@@ -531,7 +531,7 @@ def drop_duplicates(
     >>> frame = ar.read_csv("data.csv")
     >>> unique = ar.drop_duplicates(frame, subset=["name"], keep="first")
     """
-    frame, _ = _validate_frame(frame)
+    _validate_arframe(frame)
 
     if subset is not None:
         subset = _validate_column_sequence(subset, argument_name="subset")
@@ -632,7 +632,7 @@ def drop_empty_columns(frame: ArFrame) -> ArFrame:
     >>> frame = ar.read_csv("data.csv")
     >>> reduced = ar.drop_empty_columns(frame)
     """
-    frame, _ = _validate_frame(frame)
+    _validate_arframe(frame)
     from .convert import to_pandas
 
     if frame.shape[0] == 0:
@@ -711,7 +711,7 @@ def clip_numeric(
     >>> frame = ar.read_csv("data.csv")
     >>> clipped = ar.clip_numeric(frame, lower=0, upper=100)
     """
-    frame, _ = _validate_frame(frame)
+    _validate_arframe(frame)
     if lower is not None:
         if isinstance(lower, bool) or not isinstance(lower, (int, float)):
             raise TypeError(
@@ -828,7 +828,7 @@ def winsorize_outliers(
     >>> frame = ar.read_csv("data.csv")
     >>> clean = ar.winsorize_outliers(frame, lower=0.01, upper=0.99, subset=["revenue"])
     """
-    frame, _ = _validate_frame(frame)
+    _validate_arframe(frame)
     if lower < 0 or upper > 1:
         raise ValueError("lower and upper must be between 0 and 1")
 
@@ -902,7 +902,7 @@ def strip_whitespace(
     >>> frame = ar.read_csv("data.csv")
     >>> clean = ar.strip_whitespace(frame, subset=["name"])
     """
-    frame, _ = _validate_frame(frame)
+    _validate_arframe(frame)
     if subset is not None:
         subset = _validate_existing_column_sequence(
             subset,
@@ -1006,7 +1006,7 @@ def parse_bool_strings(
     """
     from .convert import from_pandas, to_pandas
 
-    frame, _ = _validate_frame(frame)
+    _validate_arframe(frame)
     if true_values is not None and isinstance(true_values, (str, bytes)):
         raise TypeError(
             "true_values must be a set/list/tuple of strings, not a bare string"
@@ -1130,7 +1130,7 @@ def normalize_case(
     >>> frame = ar.read_csv("data.csv")
     >>> lower = ar.normalize_case(frame, case_type="lower")
     """
-    frame, _ = _validate_frame(frame)
+    _validate_arframe(frame)
     if not isinstance(case_type, str):
         raise TypeError("case_type must be a string")
     valid_cases = {"lower", "upper", "title"}
@@ -1188,7 +1188,7 @@ def normalize_unicode(
     >>> frame = ar.read_csv("data.csv")
     >>> normalized = ar.normalize_unicode(frame, form="NFC")
     """
-    frame, _ = _validate_frame(frame)
+    _validate_arframe(frame)
     valid_forms = {"NFC", "NFD", "NFKC", "NFKD"}
     if form not in valid_forms:
         raise ValueError(f"Unsupported Unicode normalization form: {form}")
@@ -1259,7 +1259,7 @@ def rename_columns(
     >>> frame = ar.read_csv("data.csv")
     >>> renamed = ar.rename_columns(frame, {"old_name": "new_name"})
     """
-    frame, _ = _validate_frame(frame)
+    _validate_arframe(frame)
     mapping = _validate_string_mapping(mapping, argument_name="mapping")
     validate_columns_exist(
         frame,
@@ -1312,7 +1312,7 @@ def trim_column_names(frame: ArFrame) -> ArFrame:
     >>> frame = ar.read_csv("data.csv")  # columns: [" name ", " age "]
     >>> clean = ar.trim_column_names(frame)  # columns: ["name", "age"]
     """
-    frame, _ = _validate_frame(frame)
+    _validate_arframe(frame)
     trimmed = [col.strip() for col in frame.columns]
 
     if len(trimmed) != len(set(trimmed)):
@@ -1380,7 +1380,7 @@ def cast_types(
     ...     for f in report.failures:
     ...         print(f.column, f.row, repr(f.value), "->", f.target_dtype)
     """
-    frame, _ = _validate_frame(frame)
+    _validate_arframe(frame)
     if errors not in {"raise", "coerce", "ignore", "report"}:
         raise ValueError(
             "errors must be one of 'raise', 'coerce', 'ignore', or 'report'"
@@ -2305,7 +2305,7 @@ def clean_column_names(
     ValueError
         If case_type is invalid or if cleaning would create duplicate column names.
     """
-    frame, _ = _validate_frame(frame)
+    _validate_arframe(frame)
     if not isinstance(case_type, str):
         raise TypeError("case_type must be a string")
     if case_type not in {"lower", "upper", "none"}:
