@@ -2350,8 +2350,13 @@ def find_fuzzy_duplicates(
     if not (0.0 <= threshold <= 1.0):
         raise ValueError(f"threshold must be between 0.0 and 1.0, got {threshold!r}")
 
-    # --- normalise input to pandas -----------------------------------------
+    # --- validate and normalise input to pandas ----------------------------
     is_arframe = isinstance(frame, ArFrame)
+    if not is_arframe and not isinstance(frame, pd.DataFrame):
+        raise TypeError(
+            f"find_fuzzy_duplicates() expects an ArFrame or pandas DataFrame, "
+            f"got {type(frame).__name__!r}"
+        )
     df = to_pandas(frame) if is_arframe else frame.copy()
 
     # --- validate / resolve subset BEFORE early-return checks ---------------
@@ -2408,8 +2413,13 @@ def find_fuzzy_duplicates(
         row_vals = []
         for col in compare_cols:
             raw = df[col].iloc[i]
-            # Numeric / bool columns: keep as-is for exact comparison
-            if df[col].dtype in ("int64", "float64", "bool"):
+            # Numeric / bool columns (including nullable extension types):
+            # keep as-is for exact equality comparison
+            import pandas as _pd
+
+            if _pd.api.types.is_numeric_dtype(df[col]) or _pd.api.types.is_bool_dtype(
+                df[col]
+            ):
                 row_vals.append(raw)
             else:
                 row_vals.append(_normalise(raw))

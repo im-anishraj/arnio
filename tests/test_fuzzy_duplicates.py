@@ -213,3 +213,41 @@ class TestPandasInput:
         df = pd.DataFrame({"name": ["Alice", "alice"]})
         groups = ar.find_fuzzy_duplicates(df, threshold=1.0, ignore_case=True)
         assert [0, 1] in groups
+
+
+# ---------------------------------------------------------------------------
+# dtype helpers regression
+# ---------------------------------------------------------------------------
+
+
+class TestNullableNumericDtype:
+    def test_nullable_int64_uses_exact_equality(self):
+        """Nullable Int64 must use exact equality, not string similarity."""
+        df = pd.DataFrame(
+            {
+                "name": ["Alice", "Alice"],
+                "id": pd.array([1000, 1001], dtype="Int64"),
+            }
+        )
+        groups = ar.find_fuzzy_duplicates(df, subset=["name", "id"])
+        assert groups == []
+
+    def test_nullable_uint64_uses_exact_equality(self):
+        df = pd.DataFrame(
+            {
+                "name": ["Bob", "Bob"],
+                "code": pd.array([99, 100], dtype="UInt64"),
+            }
+        )
+        groups = ar.find_fuzzy_duplicates(df, subset=["name", "code"])
+        assert groups == []
+
+
+class TestInvalidInput:
+    def test_invalid_input_type_raises_typeerror(self):
+        with pytest.raises(TypeError, match="ArFrame or pandas DataFrame"):
+            ar.find_fuzzy_duplicates({"name": ["Alice", "Alice"]})
+
+    def test_list_input_raises_typeerror(self):
+        with pytest.raises(TypeError, match="ArFrame or pandas DataFrame"):
+            ar.find_fuzzy_duplicates([["Alice"], ["Alice"]])
