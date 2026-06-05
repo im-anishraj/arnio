@@ -1,4 +1,5 @@
 import pandas as pd
+
 import arnio as ar
 
 
@@ -38,11 +39,7 @@ def test_schema_validate_large_invalid_column():
 
     frame = ar.from_pandas(df)
 
-    schema = ar.Schema(
-        {
-            "email": ar.Regex(r"^[^@]+@[^@]+\.[^@]+$")
-        }
-    )
+    schema = ar.Schema({"email": ar.Regex(r"^[^@]+@[^@]+\.[^@]+$")})
 
     result = schema.validate(frame)
 
