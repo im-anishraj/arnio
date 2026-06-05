@@ -35,6 +35,136 @@ URL_SCHEME_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*$")
 
 _VALID_SEVERITIES = {"error", "warning"}
 _VALID_FIELD_DTYPES = frozenset({"int64", "float64", "string", "bool", "datetime"})
+_REGEX_UNSAFE_MESSAGE = (
+    "Unsafe regex pattern rejected: nested quantifiers can cause "
+    "catastrophic backtracking during schema validation"
+)
+
+
+def _is_regex_quantifier(pattern: str, index: int) -> bool:
+    if index >= len(pattern):
+        return False
+
+    char = pattern[index]
+    if char in {"*", "+", "?"}:
+        return True
+
+    if char != "{":
+        return False
+
+    end = pattern.find("}", index + 1)
+    if end == -1:
+        return False
+
+    body = pattern[index + 1 : end]
+    if not body:
+        return False
+
+    parts = body.split(",")
+    if len(parts) > 2:
+        return False
+
+    return all(part == "" or part.isdigit() for part in parts)
+
+
+def _has_variable_quantifier(fragment: str) -> bool:
+    escaped = False
+    in_class = False
+
+    for index, char in enumerate(fragment):
+        if escaped:
+            escaped = False
+            continue
+
+        if char == "\\":
+            escaped = True
+            continue
+
+        if char == "[":
+            in_class = True
+            continue
+
+        if char == "]":
+            in_class = False
+            continue
+
+        if in_class:
+            continue
+
+        if char in {"*", "+", "?"}:
+            return True
+
+        if char == "{":
+            end = fragment.find("}", index + 1)
+            if end == -1:
+                continue
+
+            body = fragment[index + 1 : end]
+            parts = body.split(",")
+
+            if len(parts) == 2 and all(part == "" or part.isdigit() for part in parts):
+                return True
+
+    return False
+
+
+def _has_nested_quantifier(pattern: str) -> bool:
+    escaped = False
+    in_class = False
+    stack: list[int] = []
+
+    for index, char in enumerate(pattern):
+        if escaped:
+            escaped = False
+            continue
+
+        if char == "\\":
+            escaped = True
+            continue
+
+        if char == "[":
+            in_class = True
+            continue
+
+        if char == "]":
+            in_class = False
+            continue
+
+        if in_class:
+            continue
+
+        if char == "(":
+            stack.append(index)
+            continue
+
+        if char == ")" and stack:
+            start = stack.pop()
+            next_index = index + 1
+
+            if _is_regex_quantifier(pattern, next_index):
+                group_body = pattern[start + 1 : index]
+
+                if group_body.startswith("?P<"):
+                    name_end = group_body.find(">")
+                    if name_end != -1:
+                        group_body = group_body[name_end + 1 :]
+                else:
+                    for prefix in ("?:", "?=", "?!", "?<=", "?<!"):
+                        if group_body.startswith(prefix):
+                            group_body = group_body[len(prefix) :]
+                            break
+
+                if _has_variable_quantifier(group_body):
+                    return True
+
+    return False
+
+
+def _reject_unsafe_regex_pattern(pattern: str) -> None:
+    if _has_nested_quantifier(pattern):
+        raise ValueError(_REGEX_UNSAFE_MESSAGE)
+
+
 _FIELD_DTYPE_OPTIONS = "int64, float64, string, bool, datetime, or None"
 
 _ALLOWED_FIELD_KEYS = {
@@ -788,6 +918,7 @@ class Field:
                 raise ValueError(
                     f"pattern is not a valid regular expression: {exc}"
                 ) from exc
+            _reject_unsafe_regex_pattern(self.pattern)
 
         if self.allowed is not None:
             if not isinstance(self.allowed, (list, tuple, set)):
@@ -1044,8 +1175,7 @@ class ValidationIssue:
                 )
             if self.row_index < 0:
                 raise ValueError(
-                    f"ValidationIssue 'row_index' must be >= 0, "
-                    f"got {self.row_index}"
+                    f"ValidationIssue 'row_index' must be >= 0, got {self.row_index}"
                 )
         _validate_severity(self.severity)
 
@@ -1273,6 +1403,16 @@ class SchemaDiffEntry:
     expected: Any = None
     observed: Any = None
 
+    def __post_init__(self) -> None:
+        if self.column is not None and not isinstance(self.column, str):
+            raise TypeError("column must be a str or None")
+
+        if self.attribute is not None and not isinstance(self.attribute, str):
+            raise TypeError("attribute must be a str or None")
+
+        if not isinstance(self.change, str) or not self.change.strip():
+            raise TypeError("change must be a non-empty string")
+
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-friendly dictionary."""
         return {
@@ -1289,6 +1429,14 @@ class SchemaDiff:
     """Result of comparing two schema contracts."""
 
     differences: list[SchemaDiffEntry]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.differences, list):
+            raise TypeError("differences must be a list of SchemaDiffEntry instances")
+
+        for i, diff in enumerate(self.differences):
+            if not isinstance(diff, SchemaDiffEntry):
+                raise TypeError(f"differences[{i}] must be a SchemaDiffEntry instance")
 
     @property
     def changed(self) -> bool:
@@ -1923,6 +2071,7 @@ def String(
             re.compile(pattern)
         except re.error as exc:
             raise ValueError(f"Invalid regex pattern: {pattern!r}") from exc
+        _reject_unsafe_regex_pattern(pattern)
 
     for name, value in (
         ("min_length", min_length),
@@ -2293,6 +2442,7 @@ def Regex(
     import re
 
     re.compile(pattern)  # fail fast on invalid pattern
+    _reject_unsafe_regex_pattern(pattern)
     return Field(
         dtype="string",
         nullable=nullable,
@@ -2400,7 +2550,6 @@ def _validate_column(
 
     if field_def.dtype is not None and actual_dtype != field_def.dtype:
         if not (field_def.dtype == "datetime" and actual_dtype == "string"):
-
             message = (
                 f"Column {name!r} has dtype {actual_dtype!r}; "
                 f"expected {field_def.dtype!r}"
@@ -2414,9 +2563,7 @@ def _validate_column(
                     name,
                 )
             ):
-                message += (
-                    f". Values appear safely convertible " f"to '{field_def.dtype}'"
-                )
+                message += f". Values appear safely convertible to '{field_def.dtype}'"
 
             issues.append(
                 ValidationIssue(

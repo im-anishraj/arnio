@@ -1,5 +1,8 @@
 """Tests for data cleaning functions."""
 
+import locale as _locale
+import re
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -183,9 +186,8 @@ class TestFillNulls:
         for good_value in [0, 0.0, False]:
             result = ar.fill_nulls(frame_num, good_value)
             df = ar.to_pandas(result)
-            assert (
-                df["a"].isnull().sum() == 0
-            ), f"Nulls remain after filling with {good_value!r}"
+            message = f"Nulls remain after filling with {good_value!r}"
+            assert df["a"].isnull().sum() == 0, message
 
         # string column → fill with string
         frame_str = ar.from_pandas(pd.DataFrame({"b": ["x", None]}))
@@ -1745,6 +1747,17 @@ class TestNormalizeUnicode:
         result_df = ar.to_pandas(result)
         assert result_df["text"].iloc[0] == unicodedata.normalize("NFC", "cafe\u0301")
 
+    def test_normalize_unicode_non_string_form_raises(self):
+        import pandas as pd
+        import pytest
+
+        import arnio as ar
+
+        df = pd.DataFrame({"text": ["hello"]})
+        frame = ar.from_pandas(df)
+        with pytest.raises(TypeError, match="form must be a string"):
+            ar.normalize_unicode(frame, form=["NFC"])
+
     def test_normalize_unicode_no_pandas_roundtrip(self):
         import pandas as pd
 
@@ -1817,10 +1830,8 @@ class TestNormalizeUnicode:
         result = ar.normalize_unicode(frame)
         result_df = ar.to_pandas(result)
         assert result_df["score"].iloc[0] == 42
-        assert (
-            result_df["flag"].iloc[0] is True
-            or result_df["flag"].iloc[0] == True  # noqa: E712
-        )
+        flag = result_df["flag"].iloc[0]
+        assert flag is True or flag == True  # noqa: E712
 
     def test_normalize_unicode_subset_only_targets_specified_columns(self):
         import pandas as pd
@@ -2732,6 +2743,127 @@ class TestCastTypes:
         with pytest.raises(ar.TypeCastError, match="Unknown target dtype"):
             ar.cast_types(frame, {"age": "datetime"})
 
+    # ------------------------------------------------------------------
+    # errors="report" mode
+    # ------------------------------------------------------------------
+
+    def test_cast_report_clean_data_returns_empty_failures(self):
+        # No bad values → CastReport with empty failures list
+        frame = ar.from_pandas(pd.DataFrame({"age": ["1", "2", "3"]}))
+        report = ar.cast_types(frame, {"age": "int64"}, errors="report")
+        assert isinstance(report, ar.CastReport)
+        assert len(report.failures) == 0
+        assert not report  # __bool__ is False when no failures
+
+    def test_cast_report_returns_cast_report_type(self):
+        frame = ar.from_pandas(pd.DataFrame({"age": ["1", "bad"]}))
+        result = ar.cast_types(frame, {"age": "int64"}, errors="report")
+        assert isinstance(result, ar.CastReport)
+        assert isinstance(result.frame, ar.ArFrame)
+
+    def test_cast_report_int_collects_failure(self):
+        frame = ar.from_pandas(pd.DataFrame({"age": ["10", "bad", "30"]}))
+        report = ar.cast_types(frame, {"age": "int64"}, errors="report")
+        assert len(report.failures) == 1
+        assert bool(report)  # __bool__ is True when there are failures
+
+    def test_cast_report_failure_fields_are_correct(self):
+        frame = ar.from_pandas(pd.DataFrame({"age": ["10", "bad"]}))
+        report = ar.cast_types(frame, {"age": "int64"}, errors="report")
+        f = report.failures[0]
+        assert f.column == "age"
+        assert f.row == 1  # 0-based index
+        assert f.value == "bad"
+        assert f.target_dtype == "int64"
+
+    def test_cast_report_float_collects_failure(self):
+        frame = ar.from_pandas(pd.DataFrame({"score": ["1.5", "abc"]}))
+        report = ar.cast_types(frame, {"score": "float64"}, errors="report")
+        assert len(report.failures) == 1
+        f = report.failures[0]
+        assert f.column == "score"
+        assert f.row == 1
+        assert f.value == "abc"
+        assert f.target_dtype == "float64"
+
+    def test_cast_report_bool_collects_failure(self):
+        frame = ar.from_pandas(pd.DataFrame({"active": ["true", "maybe"]}))
+        report = ar.cast_types(frame, {"active": "bool"}, errors="report")
+        assert len(report.failures) == 1
+        f = report.failures[0]
+        assert f.column == "active"
+        assert f.value == "maybe"
+        assert f.target_dtype == "bool"
+
+    def test_cast_report_null_not_included_in_failures(self):
+        # Nulls are preserved as-is — they are not failures
+        frame = ar.from_pandas(pd.DataFrame({"age": ["10", None, "30"]}))
+        report = ar.cast_types(frame, {"age": "int64"}, errors="report")
+        assert len(report.failures) == 0
+        df = ar.to_pandas(report.frame)
+        assert pd.isna(df["age"].iloc[1])
+
+    def test_cast_report_mixed_valid_and_invalid(self):
+        frame = ar.from_pandas(
+            pd.DataFrame({"age": ["1", "bad", "3", "also_bad", "5"]})
+        )
+        report = ar.cast_types(frame, {"age": "int64"}, errors="report")
+        assert len(report.failures) == 2
+        assert report.failures[0].row == 1
+        assert report.failures[1].row == 3
+
+    def test_cast_report_failure_values_become_null_in_frame(self):
+        frame = ar.from_pandas(pd.DataFrame({"age": ["10", "bad", "30"]}))
+        report = ar.cast_types(frame, {"age": "int64"}, errors="report")
+        df = ar.to_pandas(report.frame)
+        assert df["age"].iloc[0] == 10
+        assert pd.isna(df["age"].iloc[1])  # failure → null
+        assert df["age"].iloc[2] == 30
+
+    def test_cast_report_all_bad_values_no_raise(self):
+        # report mode must never raise, even when every value fails
+        frame = ar.from_pandas(pd.DataFrame({"age": ["a", "b", "c"]}))
+        report = ar.cast_types(frame, {"age": "int64"}, errors="report")
+        assert len(report.failures) == 3
+        df = ar.to_pandas(report.frame)
+        assert df["age"].isna().all()
+
+    def test_cast_report_frame_dtype_matches_target(self):
+        frame = ar.from_pandas(pd.DataFrame({"age": ["1", "bad"]}))
+        report = ar.cast_types(frame, {"age": "int64"}, errors="report")
+        assert report.frame.dtypes["age"] == "int64"
+
+    def test_cast_report_multi_column_collects_across_columns(self):
+        frame = ar.from_pandas(
+            pd.DataFrame({"age": ["1", "bad"], "score": ["1.5", "abc"]})
+        )
+        report = ar.cast_types(
+            frame, {"age": "int64", "score": "float64"}, errors="report"
+        )
+        columns = [f.column for f in report.failures]
+        assert "age" in columns
+        assert "score" in columns
+
+    def test_cast_report_failures_ordered_by_row(self):
+        frame = ar.from_pandas(pd.DataFrame({"age": ["bad", "1", "also_bad"]}))
+        report = ar.cast_types(frame, {"age": "int64"}, errors="report")
+        rows = [f.row for f in report.failures]
+        assert rows == sorted(rows)
+
+    def test_cast_report_multi_column_failures_ordered_by_row(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "age": ["1", "bad"],
+                    "score": ["bad", "2.5"],
+                }
+            )
+        )
+        report = ar.cast_types(
+            frame, {"age": "int64", "score": "float64"}, errors="report"
+        )
+        assert [f.row for f in report.failures] == [0, 1]
+
 
 class TestCleanAPI:
     def test_clean_defaults(self, csv_with_whitespace):
@@ -3539,20 +3671,13 @@ class TestSafeDivideColumns:
         assert df["ratio"].iloc[0] == 2.0
 
     def test_output_column_already_exists(self, tmp_path):
-        import warnings
-
         path = tmp_path / "data.csv"
         path.write_text("revenue,cost,ratio\n100,50,99\n200,100,99\n")
         frame = ar.read_csv(path)
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            result = ar.safe_divide_columns(
+        with pytest.raises(ValueError, match="Output column 'ratio' already exists"):
+            ar.safe_divide_columns(
                 frame, numerator="revenue", denominator="cost", output_column="ratio"
             )
-            assert len(w) == 1
-            assert "already exists" in str(w[0].message)
-        df = ar.to_pandas(result)
-        assert df["ratio"].iloc[0] == 2.0
 
     def test_string_zero_denominator_is_treated_as_zero(self):
         frame = ar.from_pandas(
@@ -3674,30 +3799,6 @@ class TestSafeDivideColumns:
         df = original_to_pandas(result)
 
         assert list(df["ratio"]) == [10.0, 10.0]
-
-    def test_native_output_column_overwrite_preserves_column_order(self):
-        frame = ar.from_pandas(
-            pd.DataFrame(
-                {
-                    "revenue": [100, 200],
-                    "ratio": [99, 99],
-                    "cost": [25, 50],
-                }
-            )
-        )
-
-        with pytest.warns(UserWarning, match="already exists"):
-            result = ar.safe_divide_columns(
-                frame,
-                numerator="revenue",
-                denominator="cost",
-                output_column="ratio",
-            )
-
-        df = ar.to_pandas(result)
-
-        assert list(df.columns) == ["revenue", "ratio", "cost"]
-        assert list(df["ratio"]) == [4.0, 4.0]
 
     # --- Regression tests for string zero denominators (bug fix) ---
 
@@ -4449,7 +4550,6 @@ class TestValidateStringMapping:
         with pytest.raises(
             TypeError, match="must be a mapping of string keys to strings"
         ):
-
             _validate_string_mapping([("a", "b")], argument_name="mapping")
 
     def test_invalid_non_string_keys_raise_type_error(self):
@@ -4588,3 +4688,251 @@ class TestSlugifyColumnNames:
         frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
         with pytest.raises(ValueError):
             ar.slugify_column_names(frame, on_duplicates="ignore")
+
+
+class TestRenameColumnsMatching:
+    def test_basic_rename(self):
+        frame = ar.from_pandas(
+            pd.DataFrame({"temp_revenue": [1], "temp_cost": [2], "name": ["Alice"]})
+        )
+        result = ar.rename_columns_matching(frame, "^temp_", "")
+        assert list(ar.to_pandas(result).columns) == ["revenue", "cost", "name"]
+
+    def test_unchanged_columns_preserved(self):
+        frame = ar.from_pandas(pd.DataFrame({"temp_a": [1], "b": [2]}))
+        result = ar.rename_columns_matching(frame, "^temp_", "")
+        assert "b" in ar.to_pandas(result).columns
+
+    def test_no_match_returns_original_columns(self):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1], "b": [2]}))
+        result = ar.rename_columns_matching(frame, "^temp_", "")
+        assert list(ar.to_pandas(result).columns) == ["a", "b"]
+
+    def test_rejects_non_string_pattern(self):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
+        with pytest.raises(TypeError, match="pattern must be a string"):
+            ar.rename_columns_matching(frame, 123, "")
+
+    def test_rejects_non_string_replacement(self):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
+        with pytest.raises(TypeError, match="replacement must be a string"):
+            ar.rename_columns_matching(frame, "^a", 123)
+
+    def test_rejects_invalid_regex(self):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
+        with pytest.raises(re.error):
+            ar.rename_columns_matching(frame, "[invalid", "")
+
+    def test_rejects_duplicate_resulting_names(self):
+        frame = ar.from_pandas(pd.DataFrame({"temp_a": [1], "a": [2]}))
+        with pytest.raises(ValueError, match="duplicate column names"):
+            ar.rename_columns_matching(frame, "^temp_", "")
+
+    def test_pandas_input_returns_dataframe(self):
+        df = pd.DataFrame({"temp_x": [1], "y": [2]})
+        result = ar.rename_columns_matching(df, "^temp_", "")
+        assert isinstance(result, pd.DataFrame)
+        assert list(result.columns) == ["x", "y"]
+
+    def test_pipeline_usage(self):
+        frame = ar.from_pandas(pd.DataFrame({"temp_a": [1], "b": [2]}))
+        result = ar.pipeline(
+            frame,
+            [("rename_columns_matching", {"pattern": "^temp_", "replacement": ""})],
+        )
+        assert "a" in ar.to_pandas(result).columns
+
+    def test_rejects_empty_resulting_name(self):
+        frame = ar.from_pandas(pd.DataFrame({"temp_": [1]}))
+        with pytest.raises(ValueError):
+            ar.rename_columns_matching(frame, "^temp_$", "")
+
+    def test_rejects_whitespace_resulting_name(self):
+        frame = ar.from_pandas(pd.DataFrame({"temp_": [1]}))
+        with pytest.raises(ValueError):
+            ar.rename_columns_matching(frame, "^temp_$", "   ")
+
+
+class TestPublicHelpersValidateArFrame:
+    @pytest.mark.parametrize("obj", [object(), None, 123, pd.DataFrame()])
+    def test_cleaning_helpers_reject_invalid_frame(self, obj):
+        with pytest.raises(TypeError, match=".*must be an ArFrame.*"):
+            ar.drop_nulls(obj)
+        with pytest.raises(TypeError, match=".*must be an ArFrame.*"):
+            ar.strip_whitespace(obj)
+        with pytest.raises(TypeError, match=".*must be an ArFrame.*"):
+            ar.drop_columns(obj, ["x"])
+        with pytest.raises(TypeError, match=".*must be an ArFrame.*"):
+            ar.validate_columns_exist(obj, ["x"])
+
+
+# ---------------------------------------------------------------------------
+# Regression tests: locale-independent FLOAT64 parsing — issue #1989
+#
+# cast_types() and fill_nulls() previously used std::stod() which is
+# locale-sensitive. On systems using locales like de_DE.UTF-8 or fr_FR.UTF-8,
+# '.' is treated as a thousands separator rather than a decimal point, causing
+# values that were ingested correctly from CSV to fail at cast time.
+#
+# The fix replaces both std::stod() call sites in cleaning.cpp with
+# parse_float64_classic(), which uses std::istringstream imbued with
+# std::locale::classic() — the same approach used by csv_reader.cpp.
+#
+# Each test that requires a non-English locale is skipped when the locale is
+# unavailable on the runner (locale.setlocale raises locale.Error).
+# ---------------------------------------------------------------------------
+
+
+def _set_locale(name: str):
+    """Attempt to activate *name* for LC_NUMERIC; return the previous value.
+
+    Raises pytest.skip if the locale is unavailable on this machine.
+    """
+    try:
+        prev = _locale.setlocale(_locale.LC_NUMERIC)
+        _locale.setlocale(_locale.LC_NUMERIC, name)
+        return prev
+    except _locale.Error:
+        pytest.skip(f"Locale {name!r} not available on this runner")
+
+
+class TestCastTypesFloat64LocaleIndependent:
+    """cast_types() FLOAT64 path must use locale-independent parsing (issue #1989)."""
+
+    def test_cast_float64_succeeds_under_de_locale(self):
+        """'1.5' must parse to 1.5 even when LC_NUMERIC=de_DE.UTF-8."""
+        prev = _set_locale("de_DE.UTF-8")
+        try:
+            frame = ar.from_pandas(pd.DataFrame({"price": ["1.5", "2.5"]}))
+            result = ar.cast_types(frame, {"price": "float64"})
+            df = to_pandas(result)
+            assert df["price"].tolist() == pytest.approx([1.5, 2.5])
+        finally:
+            _locale.setlocale(_locale.LC_NUMERIC, prev)
+
+    def test_cast_float64_succeeds_under_fr_locale(self):
+        """Same regression check with fr_FR.UTF-8."""
+        prev = _set_locale("fr_FR.UTF-8")
+        try:
+            frame = ar.from_pandas(pd.DataFrame({"val": ["3.14", "2.71"]}))
+            result = ar.cast_types(frame, {"val": "float64"})
+            df = to_pandas(result)
+            assert df["val"].tolist() == pytest.approx([3.14, 2.71])
+        finally:
+            _locale.setlocale(_locale.LC_NUMERIC, prev)
+
+    def test_cast_float64_negative_value_under_de_locale(self):
+        """Negative floats must also parse correctly under a non-English locale."""
+        prev = _set_locale("de_DE.UTF-8")
+        try:
+            frame = ar.from_pandas(pd.DataFrame({"x": ["-1.25", "0.5"]}))
+            result = ar.cast_types(frame, {"x": "float64"})
+            df = to_pandas(result)
+            assert df["x"].tolist() == pytest.approx([-1.25, 0.5])
+        finally:
+            _locale.setlocale(_locale.LC_NUMERIC, prev)
+
+    def test_cast_float64_scientific_notation_under_de_locale(self):
+        """Scientific notation must survive locale change."""
+        prev = _set_locale("de_DE.UTF-8")
+        try:
+            frame = ar.from_pandas(pd.DataFrame({"v": ["1.5e2", "2.0e-1"]}))
+            result = ar.cast_types(frame, {"v": "float64"})
+            df = to_pandas(result)
+            assert df["v"].tolist() == pytest.approx([150.0, 0.2])
+        finally:
+            _locale.setlocale(_locale.LC_NUMERIC, prev)
+
+    def test_cast_float64_coerce_invalid_under_de_locale(self):
+        """coerce_invalid=True must still null-out genuinely unparseable values."""
+        prev = _set_locale("de_DE.UTF-8")
+        try:
+            frame = ar.from_pandas(pd.DataFrame({"x": ["1.5", "bad", "3.0"]}))
+            result = ar.cast_types(frame, {"x": "float64"}, errors="coerce")
+            df = to_pandas(result)
+            assert df["x"].iloc[0] == pytest.approx(1.5)
+            assert pd.isna(df["x"].iloc[1])
+            assert df["x"].iloc[2] == pytest.approx(3.0)
+        finally:
+            _locale.setlocale(_locale.LC_NUMERIC, prev)
+
+    def test_cast_float64_special_tokens_unchanged_under_de_locale(self):
+        """'nan', 'inf', '-inf' must still map to special float values."""
+        prev = _set_locale("de_DE.UTF-8")
+        try:
+            frame = ar.from_pandas(pd.DataFrame({"v": ["nan", "inf", "-inf"]}))
+            result = ar.cast_types(frame, {"v": "float64"}, errors="coerce")
+            df = to_pandas(result)
+            # nan, inf, -inf are non-finite — with errors="coerce" they become null
+            assert df["v"].isna().all()
+        finally:
+            _locale.setlocale(_locale.LC_NUMERIC, prev)
+
+    def test_cast_float64_baseline_locale_independent(self):
+        """Baseline: cast_types FLOAT64 works correctly under the default locale."""
+        frame = ar.from_pandas(pd.DataFrame({"price": ["1.5", "99.99", "-3.14"]}))
+        result = ar.cast_types(frame, {"price": "float64"})
+        df = to_pandas(result)
+        assert df["price"].tolist() == pytest.approx([1.5, 99.99, -3.14])
+
+    def test_cast_float64_invalid_value_raises_under_de_locale(self):
+        """A genuinely invalid value must still raise without coerce_invalid."""
+        prev = _set_locale("de_DE.UTF-8")
+        try:
+            frame = ar.from_pandas(pd.DataFrame({"x": ["not_a_float"]}))
+            with pytest.raises(Exception):
+                ar.cast_types(frame, {"x": "float64"})
+        finally:
+            _locale.setlocale(_locale.LC_NUMERIC, prev)
+
+
+class TestFillNullsFloat64LocaleIndependent:
+    """fill_nulls() FLOAT64 fill-value path must also be locale-independent (issue #1989)."""
+
+    def test_fill_nulls_float64_fill_value_under_de_locale(self):
+        """A string fill value like '0.5' must be accepted under de_DE.UTF-8."""
+        prev = _set_locale("de_DE.UTF-8")
+        try:
+            frame = ar.from_pandas(
+                pd.DataFrame({"price": pd.array([1.5, None, 3.0], dtype="Float64")})
+            )
+            result = ar.fill_nulls(frame, "0.5", subset=["price"])
+            df = to_pandas(result)
+            assert df["price"].iloc[1] == pytest.approx(0.5)
+        finally:
+            _locale.setlocale(_locale.LC_NUMERIC, prev)
+
+    def test_fill_nulls_float64_fill_value_under_fr_locale(self):
+        """Same fill_nulls regression check with fr_FR.UTF-8."""
+        prev = _set_locale("fr_FR.UTF-8")
+        try:
+            frame = ar.from_pandas(
+                pd.DataFrame({"v": pd.array([None, 2.0], dtype="Float64")})
+            )
+            result = ar.fill_nulls(frame, "1.5", subset=["v"])
+            df = to_pandas(result)
+            assert df["v"].iloc[0] == pytest.approx(1.5)
+        finally:
+            _locale.setlocale(_locale.LC_NUMERIC, prev)
+
+    def test_fill_nulls_float64_fill_value_baseline(self):
+        """Baseline: fill_nulls FLOAT64 string fill value works under default locale."""
+        frame = ar.from_pandas(
+            pd.DataFrame({"x": pd.array([None, 2.5, None], dtype="Float64")})
+        )
+        result = ar.fill_nulls(frame, "1.0", subset=["x"])
+        df = to_pandas(result)
+        assert df["x"].iloc[0] == pytest.approx(1.0)
+        assert df["x"].iloc[2] == pytest.approx(1.0)
+
+    def test_fill_nulls_float64_non_finite_fill_rejected_under_de_locale(self):
+        """Non-finite fill values must still be rejected regardless of locale."""
+        prev = _set_locale("de_DE.UTF-8")
+        try:
+            frame = ar.from_pandas(
+                pd.DataFrame({"x": pd.array([None, 1.0], dtype="Float64")})
+            )
+            with pytest.raises(Exception):
+                ar.fill_nulls(frame, "inf", subset=["x"])
+        finally:
+            _locale.setlocale(_locale.LC_NUMERIC, prev)

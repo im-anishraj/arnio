@@ -278,3 +278,16 @@ class TestReadCsvDelimiterDetection:
         p.write_text("名前,年齢\n太郎,30\n花子,25", encoding="utf-8")
         df = ar.read_csv(p)
         assert df.columns == ["名前", "年齢"]
+
+
+class TestSniffDelimiterInvalidPathType:
+    @pytest.mark.parametrize(
+        "bad_input",
+        [123, 3.14, None, object(), ["a.csv"]],
+    )
+    def test_raises_type_error(self, bad_input):
+        with pytest.raises(
+            TypeError,
+            match="sniff_delimiter expected a filesystem path",
+        ):
+            sniff_delimiter(bad_input)

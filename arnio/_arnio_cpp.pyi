@@ -134,6 +134,7 @@ class CsvWriteConfig:
     delimiter: str
     write_header: bool
     line_terminator: str
+    escape_formulas: bool
 
     def __init__(self) -> None: ...
 
@@ -146,8 +147,8 @@ class CsvWriter:
 def cast_types(
     frame: Frame,
     mapping: Mapping[str, str],
-    coerce_invalid: bool = False,
-) -> Frame: ...
+    errors: str = "raise",
+) -> tuple[Frame, list[dict[str, Any]]]: ...
 def clip_numeric(
     frame: Frame,
     *,
