@@ -37,6 +37,7 @@ from .cleaning import (
     trim_column_names,
     validate_columns_exist,
     winsorize_outliers,
+    normalize_minmax,
 )
 from .convert import from_dict, from_pandas, from_polars, to_arrow, to_pandas, to_polars
 from .exceptions import (
@@ -147,6 +148,7 @@ __all__ = [
     "clean_column_names",
     "clip_numeric",
     "winsorize_outliers",
+    "normalize_minmax",
     "coalesce_columns",
     "combine_columns",
     "rename_columns_matching",

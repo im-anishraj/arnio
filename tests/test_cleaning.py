@@ -4622,3 +4622,203 @@ class TestRenameColumnsMatching:
         frame = ar.from_pandas(pd.DataFrame({"temp_": [1]}))
         with pytest.raises(ValueError):
             ar.rename_columns_matching(frame, "^temp_$", "   ")
+
+
+class TestNormalizeMinmax:
+    def test_basic_scale_to_unit_range(self):
+        frame = ar.from_pandas(pd.DataFrame({"price": [0.0, 50.0, 100.0]}))
+        result = ar.normalize_minmax(frame, subset=["price"])
+        df = ar.to_pandas(result)
+        assert df["price"].tolist() == pytest.approx([0.0, 0.5, 1.0])
+
+    def test_returns_arframe(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [1.0, 2.0, 3.0]}))
+        result = ar.normalize_minmax(frame, subset=["x"])
+        assert isinstance(result, ar.ArFrame)
+
+    def test_custom_feature_range(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [0.0, 100.0]}))
+        result = ar.normalize_minmax(frame, subset=["x"], feature_range=(-1.0, 1.0))
+        df = ar.to_pandas(result)
+        assert df["x"].tolist() == pytest.approx([-1.0, 1.0])
+
+    def test_nulls_preserved_and_excluded_from_computation(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [0.0, None, 100.0]}))
+        result = ar.normalize_minmax(frame, subset=["x"])
+        df = ar.to_pandas(result)
+        assert df["x"].iloc[0] == pytest.approx(0.0)
+        assert df["x"].iloc[2] == pytest.approx(1.0)
+        assert pd.isna(df["x"].iloc[1])
+
+    def test_all_null_column_left_unchanged(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [None, None, None]}))
+        result = ar.normalize_minmax(frame, subset=["x"])
+        df = ar.to_pandas(result)
+        assert df["x"].isna().all()
+
+    def test_constant_column_maps_to_lower_bound(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [5.0, 5.0, 5.0]}))
+        result = ar.normalize_minmax(frame, subset=["x"])
+        df = ar.to_pandas(result)
+        assert all(v == pytest.approx(0.0) for v in df["x"].dropna())
+
+    def test_constant_column_preserves_nulls(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [5.0, None, 5.0]}))
+        result = ar.normalize_minmax(frame, subset=["x"])
+        df = ar.to_pandas(result)
+        assert df["x"].iloc[0] == pytest.approx(0.0)
+        assert pd.isna(df["x"].iloc[1])
+        assert df["x"].iloc[2] == pytest.approx(0.0)
+
+    def test_non_numeric_subset_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"name": ["a", "b"]}))
+        with pytest.raises(ValueError, match="only supports numeric columns"):
+            ar.normalize_minmax(frame, subset=["name"])
+
+    def test_missing_subset_column_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [1.0, 2.0]}))
+        with pytest.raises(ValueError, match="Unknown columns in subset"):
+            ar.normalize_minmax(frame, subset=["nonexistent"])
+
+    def test_feature_range_min_ge_max_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [1.0, 2.0]}))
+        with pytest.raises(ValueError, match="strictly less than max"):
+            ar.normalize_minmax(frame, feature_range=(1.0, 0.0))
+
+    def test_feature_range_equal_bounds_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [1.0, 2.0]}))
+        with pytest.raises(ValueError):
+            ar.normalize_minmax(frame, feature_range=(1.0, 1.0))
+
+    def test_feature_range_non_finite_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [1.0, 2.0]}))
+        with pytest.raises(ValueError, match="finite"):
+            ar.normalize_minmax(frame, feature_range=(float("-inf"), 1.0))
+
+    def test_feature_range_wrong_type_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [1.0, 2.0]}))
+        with pytest.raises(TypeError):
+            ar.normalize_minmax(frame, feature_range="bad")
+
+    def test_feature_range_bool_bounds_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [1.0, 2.0]}))
+        with pytest.raises(TypeError):
+            ar.normalize_minmax(frame, feature_range=(True, False))
+
+    def test_no_subset_applies_to_all_numeric_columns(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "a": [0.0, 100.0],
+                    "b": [0.0, 50.0],
+                    "label": ["x", "y"],
+                }
+            )
+        )
+        result = ar.normalize_minmax(frame)
+        df = ar.to_pandas(result)
+        assert df["a"].tolist() == pytest.approx([0.0, 1.0])
+        assert df["b"].tolist() == pytest.approx([0.0, 1.0])
+        assert df["label"].tolist() == ["x", "y"]
+
+    def test_int64_column_normalized(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [0, 50, 100]}))
+        result = ar.normalize_minmax(frame, subset=["x"])
+        df = ar.to_pandas(result)
+        assert df["x"].tolist() == pytest.approx([0.0, 0.5, 1.0])
+
+    def test_no_numeric_columns_returns_frame_unchanged(self):
+        frame = ar.from_pandas(pd.DataFrame({"label": ["a", "b"]}))
+        result = ar.normalize_minmax(frame)
+        df = ar.to_pandas(result)
+        assert list(df.columns) == ["label"]
+        assert df["label"].tolist() == ["a", "b"]
+
+    def test_output_is_float64(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [0, 1, 2]}))
+        result = ar.normalize_minmax(frame)
+        df = ar.to_pandas(result)
+        assert df["x"].dtype in ("float64", "float")
+
+    def test_pipeline_step_registered(self):
+        frame = ar.from_pandas(pd.DataFrame({"price": [0.0, 100.0]}))
+        result = ar.pipeline(frame, [("normalize_minmax", {"subset": ["price"]})])
+        df = ar.to_pandas(result)
+        assert df["price"].tolist() == pytest.approx([0.0, 1.0])
+
+    def test_pipeline_with_custom_feature_range(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [0.0, 50.0, 100.0]}))
+        result = ar.pipeline(
+            frame,
+            [
+                ("normalize_minmax", {"subset": ["x"], "feature_range": (-1.0, 1.0)}),
+            ],
+        )
+        df = ar.to_pandas(result)
+        assert df["x"].tolist() == pytest.approx([-1.0, 0.0, 1.0])
+
+    def test_pipeline_chained_with_other_steps(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "price": [0.0, None, 100.0],
+                    "label": ["  a  ", "b", "c"],
+                }
+            )
+        )
+        result = ar.pipeline(
+            frame,
+            [
+                ("strip_whitespace",),
+                ("normalize_minmax", {"subset": ["price"]}),
+            ],
+        )
+        df = ar.to_pandas(result)
+        assert df["price"].iloc[0] == pytest.approx(0.0)
+        assert pd.isna(df["price"].iloc[1])
+        assert df["price"].iloc[2] == pytest.approx(1.0)
+        assert df["label"].iloc[0] == "a"
+
+
+class TestNormalizeMinmaxExtra:
+    def test_single_row_maps_to_lower_bound(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [42.0]}))
+        result = ar.normalize_minmax(frame, subset=["x"])
+        df = ar.to_pandas(result)
+        assert df["x"].iloc[0] == pytest.approx(0.0)
+
+    def test_empty_frame_returns_empty(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": pd.Series(dtype="float64")}))
+        result = ar.normalize_minmax(frame, subset=["x"])
+        df = ar.to_pandas(result)
+        assert df.empty
+
+    def test_negative_values_scaled_correctly(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [-100.0, 0.0, 100.0]}))
+        result = ar.normalize_minmax(frame, subset=["x"])
+        df = ar.to_pandas(result)
+        assert df["x"].tolist() == pytest.approx([0.0, 0.5, 1.0])
+
+    def test_non_subset_columns_untouched(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "price": [0.0, 100.0],
+                    "qty": [10.0, 20.0],
+                }
+            )
+        )
+        result = ar.normalize_minmax(frame, subset=["price"])
+        df = ar.to_pandas(result)
+        assert df["price"].tolist() == pytest.approx([0.0, 1.0])
+        assert df["qty"].tolist() == [10.0, 20.0]
+
+    def test_feature_range_single_element_tuple_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [1.0, 2.0]}))
+        with pytest.raises(ValueError):
+            ar.normalize_minmax(frame, feature_range=(0.0,))
+
+    def test_feature_range_three_elements_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [1.0, 2.0]}))
+        with pytest.raises(ValueError):
+            ar.normalize_minmax(frame, feature_range=(0.0, 0.5, 1.0))
