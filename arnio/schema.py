@@ -2913,7 +2913,7 @@ def _row_issues(
 ) -> list[ValidationIssue]:
     """Convert a series of invalid rows into a list of ValidationIssue objects."""
     return [
-        ValidationIssue(
+        ValidationIssue._fast_create(
             column=column,
             rule=rule,
             message=message,
