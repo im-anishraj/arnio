@@ -29,10 +29,14 @@
 ## Testing
 <!-- Paste commands you ran and summarize the result. -->
 - [ ] `make test` (or `python -m pytest tests -v --cov=arnio`)
+```markdown
 - [ ] `make lint` (or run separately:
-  ```powershell
-  python -m ruff check .
-  python -m black --check .
+  ```bash
+  python scripts/check_docs_utf8.py
+  python -m black --check --diff .
+  python -m ruff check . --extend-exclude "*.ipynb"
+  python -m mypy --config-file mypy.ini
+  find cpp/ bindings/ -type f \( -name '*.cpp' -o -name '*.h' \) | xargs clang-format --dry-run --Werror
   ```
 )
 - [ ] optionally `python -m pytest tests -v --tb=short -x`
