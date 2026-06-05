@@ -25,6 +25,7 @@ from .cleaning import (
     find_fuzzy_duplicates,
     keep_rows_with_nulls,
     normalize_case,
+    normalize_minmax,
     normalize_unicode,
     normalize_whitespace,
     parse_bool_strings,
@@ -40,7 +41,6 @@ from .cleaning import (
     trim_column_names,
     validate_columns_exist,
     winsorize_outliers,
-    normalize_minmax,
 )
 from .convert import from_dict, from_pandas, from_polars, to_arrow, to_pandas, to_polars
 from .exceptions import (
