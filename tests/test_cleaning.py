@@ -4951,6 +4951,8 @@ class TestNormalizeMinmaxExtra:
         frame = ar.from_pandas(pd.DataFrame({"x": [1.0, 2.0]}))
         with pytest.raises(ValueError):
             ar.normalize_minmax(frame, feature_range=(0.0, 0.5, 1.0))
+
+
 class TestPublicHelpersValidateArFrame:
     @pytest.mark.parametrize("obj", [object(), None, 123, pd.DataFrame()])
     def test_cleaning_helpers_reject_invalid_frame(self, obj):
