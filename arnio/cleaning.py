@@ -443,14 +443,14 @@ def fill_nulls(
             f"got {type(value).__name__!r}"
         )
     if isinstance(value, bool):
-        dtype_map = dict(frame.dtypes())
+        dtype_map = dict(frame.dtypes)
         target_cols = subset if subset is not None else frame.columns
         for col_name in target_cols:
-            if dtype_map.get(col_name) in ("int64", "float64"):
+            if dtype_map.get(col_name) == "int64":
                 raise TypeError(
                     f"fill_nulls: fill value {value!r} has type 'bool', which is not "
                     f"compatible with column {col_name!r}. "
-                    f"Use an integer or float value instead."
+                    f"Use an integer value instead."
                 )
     result = _fill_nulls(frame._frame, value, subset=subset)
     return ArFrame(result)
