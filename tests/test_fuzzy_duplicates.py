@@ -251,3 +251,49 @@ class TestInvalidInput:
     def test_list_input_raises_typeerror(self):
         with pytest.raises(TypeError, match="ArFrame or pandas DataFrame"):
             ar.find_fuzzy_duplicates([["Alice"], ["Alice"]])
+
+
+class TestNullableNAHandling:
+    def test_nullable_int64_both_na_treated_as_exact_match(self):
+        """Two pd.NA values in a numeric column count as matching."""
+        df = pd.DataFrame(
+            {
+                "name": ["Alice", "Alice"],
+                "id": pd.array([pd.NA, pd.NA], dtype="Int64"),
+            }
+        )
+        groups = ar.find_fuzzy_duplicates(df, subset=["name", "id"], threshold=1.0)
+        assert [0, 1] in groups
+
+    def test_nullable_int64_one_na_treated_as_mismatch(self):
+        """pd.NA vs a real value counts as mismatch — rows not grouped."""
+        df = pd.DataFrame(
+            {
+                "name": ["Alice", "Alice"],
+                "id": pd.array([pd.NA, 1001], dtype="Int64"),
+            }
+        )
+        groups = ar.find_fuzzy_duplicates(df, subset=["name", "id"], threshold=1.0)
+        assert groups == []
+
+    def test_nullable_boolean_with_na_does_not_crash(self):
+        """Nullable boolean column containing pd.NA must not raise TypeError."""
+        df = pd.DataFrame(
+            {
+                "name": ["Alice", "Alice"],
+                "flag": pd.array([pd.NA, True], dtype="boolean"),
+            }
+        )
+        # Should not raise — result doesn't matter, just no crash
+        result = ar.find_fuzzy_duplicates(df, subset=["name", "flag"], threshold=1.0)
+        assert isinstance(result, list)
+
+    def test_nullable_boolean_both_na_treated_as_exact_match(self):
+        df = pd.DataFrame(
+            {
+                "name": ["Bob", "Bob"],
+                "flag": pd.array([pd.NA, pd.NA], dtype="boolean"),
+            }
+        )
+        groups = ar.find_fuzzy_duplicates(df, subset=["name", "flag"], threshold=1.0)
+        assert [0, 1] in groups

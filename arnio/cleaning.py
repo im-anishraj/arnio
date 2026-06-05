@@ -2443,7 +2443,22 @@ def find_fuzzy_duplicates(
             if isinstance(va, str) and isinstance(vb, str):
                 scores.append(difflib.SequenceMatcher(None, va, vb).ratio())
             else:
-                scores.append(1.0 if va == vb else 0.0)
+                # Handle pd.NA and other missing sentinels before equality
+                # to avoid "boolean value of NA is ambiguous" TypeError.
+                import pandas as _pd
+
+                va_null = (
+                    va is None or va is _pd.NA or (isinstance(va, float) and va != va)
+                )
+                vb_null = (
+                    vb is None or vb is _pd.NA or (isinstance(vb, float) and vb != vb)
+                )
+                if va_null and vb_null:
+                    scores.append(1.0)  # both missing → exact match
+                elif va_null or vb_null:
+                    scores.append(0.0)  # one missing → mismatch
+                else:
+                    scores.append(1.0 if va == vb else 0.0)
         return sum(scores) / len(scores) if scores else 0.0
 
     for i in range(n_rows):
