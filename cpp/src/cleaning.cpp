@@ -881,7 +881,8 @@ Frame collapse_rare_categories(const Frame& frame, const std::string& column, do
                 if (col.is_null(r)) {
                     new_col.push_null();
                 } else {
-                    const auto& val = std::get<std::string>(col.at(r));
+                    const auto cell = col.at(r);
+                    const auto& val = std::get<std::string>(cell);
                     new_col.push_back(rare.count(val) ? fill_value : val);
                 }
             }

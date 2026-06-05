@@ -953,6 +953,29 @@ class TestPipeline:
                 frame, [("filter_rows", {"column": "x", "op": ["=="], "value": 1})]
             )
 
+    def test_pipeline_collapse_rare_categories(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {"city": ["NYC", "NYC", "NYC", "LA", "LA", "Boston", "Portland"]}
+            )
+        )
+
+        result = ar.pipeline(
+            frame,
+            [
+                (
+                    "collapse_rare_categories",
+                    {"column": "city", "threshold": 0.25, "fill_value": "Other"},
+                )
+            ],
+        )
+
+        df = ar.to_pandas(result)
+
+        assert set(df["city"].unique()) <= {"NYC", "LA", "Other"}
+        assert "Boston" not in df["city"].values
+        assert "Portland" not in df["city"].values
+
 
 class TestPipelineDryRunIntermediateFrame:
     """Regression tests for dry_run validating against intermediate frame."""

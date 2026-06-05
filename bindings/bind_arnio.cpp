@@ -464,7 +464,6 @@ PYBIND11_MODULE(_arnio_cpp, m) {
         py::arg("frame"), py::arg("numerator"), py::arg("denominator"), py::arg("output_column"),
         py::arg("fill_value") = 0.0);
 
-
     // ── encode_categorical bindings ──────────────────────────────────────────────
     // Add this #include at the top of bind_arnio.cpp with the other headers:
     //   #include "arnio/encode_categorical.h"

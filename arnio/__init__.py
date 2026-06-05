@@ -159,7 +159,6 @@ __all__ = [
     "clean_column_names",
     "clip_numeric",
     "winsorize_outliers",
-
     "normalize_minmax",
     "collapse_rare_categories",
     "coalesce_columns",
