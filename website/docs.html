@@ -159,7 +159,7 @@ payload = frame.to_dict()</code></pre></div>
         <h2 id="cleaning">Cleaning</h2>
         <p>Cleaning functions are available directly and through <code>pipeline</code>. Recent releases added column removal helpers, winsorization, missing-token standardization, coalescing, safer division, unicode normalization, and stricter validation errors.</p>
         <div class="feature-list">
-          <div class="card"><h3>Column operations</h3><p><code>select_columns</code>, <code>drop_columns</code>, <code>drop_empty_columns</code>, <code>drop_columns_matching</code>, <code>rename_columns</code>, <code>rename_columns_matching</code>.</p></div>
+          <div class="card"><h3>Column operations</h3><p><code>select_columns</code>, <code>drop_columns</code>, <code>drop_empty_columns</code>, <code>drop_columns_matching</code>, <code>rename_columns</code>, <code>rename_columns_matching</code> <span class="badge badge-unreleased">Unreleased</span>, <code>slugify_column_names</code> <span class="badge badge-unreleased">Unreleased</span>.</p></div>
           <div class="card"><h3>Value operations</h3><p><code>replace_values</code>, <code>standardize_missing_tokens</code>, <code>coalesce_columns</code>, <code>parse_bool_strings</code>, <code>normalize_unicode</code>.</p></div>
           <div class="card"><h3>Numeric operations</h3><p><code>clip_numeric</code>, <code>round_numeric_columns</code>, <code>winsorize_outliers</code>, <code>safe_divide_columns</code>.</p></div>
           <div class="card"><h3>Rows and nulls</h3><p><code>drop_nulls</code>, <code>keep_rows_with_nulls</code>, <code>fill_nulls</code>, <code>drop_duplicates</code>, <code>filter_rows</code>.</p></div>

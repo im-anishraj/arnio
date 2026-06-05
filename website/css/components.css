@@ -396,6 +396,26 @@
   color: var(--color-accent-text);
 }
 
+.badge-unreleased {
+  background-color: var(--color-warning-bg, #fff3cd);
+  color: var(--color-warning-text, #856404);
+  border: 1px solid var(--color-warning-border, #ffeeba);
+  text-transform: none;
+  letter-spacing: normal;
+  padding: 0.2em 0.6em;
+  margin-left: var(--space-2);
+}
+
+.badge-released {
+  background-color: var(--color-success-bg, #d4edda);
+  color: var(--color-success-text, #155724);
+  border: 1px solid var(--color-success-border, #c3e6cb);
+  text-transform: none;
+  letter-spacing: normal;
+  padding: 0.2em 0.6em;
+  margin-left: var(--space-2);
+}
+
 /* ── Code Block with Copy Button ─────────────────────────── */
 .code-block {
   position: relative;
