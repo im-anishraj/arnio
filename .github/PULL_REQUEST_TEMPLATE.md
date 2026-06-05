@@ -36,6 +36,7 @@
   python -m ruff check . --extend-exclude "*.ipynb"
   python -m mypy --config-file mypy.ini
   find cpp/ bindings/ -type f \( -name '*.cpp' -o -name '*.h' \) | xargs clang-format --dry-run --Werror
+  ```
 - [ ] optionally `python -m pytest tests -v --tb=short -x`
 - [ ] Other:
 
