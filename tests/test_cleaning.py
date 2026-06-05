@@ -1747,6 +1747,17 @@ class TestNormalizeUnicode:
         result_df = ar.to_pandas(result)
         assert result_df["text"].iloc[0] == unicodedata.normalize("NFC", "cafe\u0301")
 
+    def test_normalize_unicode_non_string_form_raises(self):
+        import pandas as pd 
+
+        import arnio as ar
+        import pytest
+        
+        df=pd.DataFrame({"text":["hello"]})
+        frame=ar.from_pandas(df)
+        with pytest.raises(TypeError,match="form must be a string"):
+            ar.normalize_unicode(frame,form=["NFC"])
+
     def test_normalize_unicode_no_pandas_roundtrip(self):
         import pandas as pd
 
