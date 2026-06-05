@@ -1,13 +1,15 @@
 """Tests for pandas conversion."""
 
+import sys
 from decimal import Decimal
+from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
 import pytest
 
 import arnio as ar
-from arnio.convert import _to_binding_safe
+from arnio.convert import _from_arrow_table, _to_binding_safe
 
 
 class TestToPandas:
@@ -1039,6 +1041,64 @@ class TestToArrow:
         assert table.column(0).type == pyarrow.int64()
         assert table.column(0).to_pylist() == [1, 2, 3]
 
+    def test_to_arrow_preserves_attrs_metadata(self):
+        df = pd.DataFrame({"x": [1]})
+        df.attrs = {"source": "test"}
+
+        frame = ar.from_pandas(df)
+        table = ar.to_arrow(frame)
+
+        metadata = table.schema.metadata or {}
+
+        assert b"arnio.attrs" in metadata
+
+    def test_to_arrow_preserves_nested_attrs_metadata(self):
+        df = pd.DataFrame({"x": [1]})
+        df.attrs = {"config": {"version": 1}}
+
+        frame = ar.from_pandas(df)
+        table = ar.to_arrow(frame)
+
+        metadata = table.schema.metadata or {}
+
+        assert b"arnio.attrs" in metadata
+
+    def test_to_arrow_skips_empty_attrs_metadata(self):
+        df = pd.DataFrame({"x": [1]})
+        df.attrs = {}
+
+        frame = ar.from_pandas(df)
+        table = ar.to_arrow(frame)
+
+        metadata = table.schema.metadata or {}
+
+        assert b"arnio.attrs" not in metadata
+
+    def test_to_arrow_zero_column_frame_preserves_attrs(self):
+        df = pd.DataFrame({"a": [None, None]})
+        df.attrs = {"source": "zero-column"}
+
+        frame = ar.from_pandas(df)
+        frame = ar.drop_empty_columns(frame)
+
+        table = ar.to_arrow(frame)
+
+        metadata = table.schema.metadata or {}
+
+        assert b"arnio.attrs" in metadata
+
+    def test_to_arrow_non_serializable_attrs_raise(self):
+        df = pd.DataFrame({"x": [1]})
+        df.attrs = {"bad": {1, 2, 3}}
+
+        frame = ar.from_pandas(df)
+
+        with pytest.raises(
+            TypeError,
+            match="JSON-serializable attrs metadata",
+        ):
+            ar.to_arrow(frame)
+
     def test_float64_columns(self):
         import pyarrow
 
@@ -1283,3 +1343,18 @@ def test_from_records_accepts_valid_string_columns_tuple():
     frame = ar.ArFrame.from_records([[1, 2]], columns=("a", "b"))
 
     assert frame.columns == ["a", "b"]
+
+
+# ---------------------------------------------------------------------------
+# _from_arrow_table: ImportError regression
+# ---------------------------------------------------------------------------
+
+
+def test_from_arrow_table_missing_pyarrow_raises_helpful_import_error():
+    """When pyarrow is absent, _from_arrow_table() must raise the custom
+    helpful ImportError, not a generic ModuleNotFoundError or dead code."""
+    with patch.dict(sys.modules, {"pyarrow": None}):
+        with pytest.raises(ImportError) as exc_info:
+            _from_arrow_table(None)
+    assert "_from_arrow_table() requires pyarrow." in str(exc_info.value)
+    assert "pip install arnio[arrow]" in str(exc_info.value)

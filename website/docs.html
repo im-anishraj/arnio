@@ -28,7 +28,18 @@
     <div class="container container--wide">
       <a href="index.html" class="nav-brand" aria-label="Arnio home"><img src="arnio-logo.svg" alt="Arnio" height="32"></a>
       <ul class="nav-links"><li><a href="docs.html">Docs</a></li><li><a href="api.html">API</a></li><li><a href="benchmarks.html">Benchmarks</a></li><li><a href="contributing.html">Contributing</a></li><li><a href="architecture.html">Architecture</a></li><li><a href="roadmap.html">Roadmap</a></li><li><a href="community.html">Community</a></li><li><a href="changelog.html">Changelog</a></li></ul>
-      <div class="nav-actions"><a href="https://discord.gg/xsEw7r78M" class="nav-discord" target="_blank" rel="noopener" aria-label="Join Discord">Discord</a><a href="https://github.com/im-anishraj/arnio" class="nav-github" target="_blank" rel="noopener" aria-label="View on GitHub">GitHub</a><button class="theme-toggle" aria-label="Toggle theme">Theme</button><button class="nav-hamburger" aria-label="Open menu" aria-expanded="false">☰</button></div>
+      <div class="nav-actions"><div class="search-wrapper">
+        <input
+          id="docs-search"
+          class="search-input"
+          type="text"
+          placeholder="Search docs... (Ctrl+K)"
+          aria-label="Search documentation"
+        />
+        <div id="search-results" class="search-results"></div>
+      </div>
+
+      <a href="https://discord.gg/xsEw7r78M" class="nav-discord" target="_blank" rel="noopener" aria-label="Join Discord">Discord</a><a href="https://github.com/im-anishraj/arnio" class="nav-github" target="_blank" rel="noopener" aria-label="View on GitHub">GitHub</a><button class="theme-toggle" aria-label="Toggle theme">Theme</button><button class="nav-hamburger" aria-label="Open menu" aria-expanded="false">☰</button></div>
     </div>
   </nav>
   <div class="mobile-menu" aria-label="Mobile navigation"><a href="index.html">Home</a><a href="docs.html">Documentation</a><a href="api.html">API Reference</a><a href="benchmarks.html">Benchmarks</a><a href="contributing.html">Contributing</a><a href="architecture.html">Architecture</a><a href="roadmap.html">Roadmap</a><a href="community.html">Community</a><a href="https://discord.gg/xsEw7r78M" target="_blank" rel="noopener">Discord</a><a href="changelog.html">Changelog</a></div>
@@ -177,6 +188,26 @@ baseline = ar.profile(old_frame)
 current = ar.profile(new_frame)
 gate = ar.check_quality_gates(baseline, current)</code></pre></div>
 
+        <h3>Safe auto_clean Workflow</h3>
+        <p><code>auto_clean()</code> is powerful and safety-sensitive. Use <code>dry_run=True</code> and <code>explain=True</code> to audit changes before applying them to real data.</p>
+        <div class="code-block"><div class="code-block-header">Python</div><pre><code class="language-python">
+# Step 1 — Preview what would change, without touching the data
+report = ar.auto_clean(frame, mode="strict", dry_run=True)
+casts = dict(report.suggestions).get("cast_types")
+
+# Step 2 — Inspect explanations separately (cannot combine with dry_run)
+clean, explanation = ar.auto_clean(frame, explain=True)
+
+# Step 3 — Apply intentionally using the previewed casts
+clean = ar.auto_clean(
+    frame,
+    mode="strict",
+    allow_lossy_casts=True,
+    confirmed_casts=casts,
+)
+df = ar.to_pandas(clean)</code></pre></div>
+
+
         <h2 id="schema">Schema Validation</h2>
         <p>Schemas validate the shape and semantics of a dataset. v1.18.0 added <code>max_errors</code>; v1.17.0 added URL scheme restrictions and YAML export helpers.</p>
         <div class="code-block"><div class="code-block-header">Python</div><pre><code class="language-python">ar.register_validator("positive", lambda value: value > 0)
@@ -275,5 +306,6 @@ report  # DataQualityReport renders its full HTML dashboard</code></pre></div>
   </footer>
   <script src="js/main.js" defer></script>
   <script src="js/code.js" defer></script>
+  <script src="js/search.js" defer></script>
 </body>
 </html>

@@ -11,6 +11,7 @@ import arnio as ar
 from arnio.quality import (
     QUALITY_REPORT_COLUMNS,
     CleaningSuggestion,
+    DataQualityReport,
     _validate_gate_bool,
     _validate_gate_ratio_threshold,
     _validate_gate_threshold,
@@ -1337,7 +1338,7 @@ def test_profile_exclude_columns_default_behavior(sample_csv):
 def test_profile_exclude_columns_valid_exclusion(tmp_path):
     path = tmp_path / "profile_exclude.csv"
     path.write_text(
-        "id,status,raw_payload\n" "1,active,{a}\n" "2,inactive,{b}\n" "3,active,{c}\n",
+        "id,status,raw_payload\n1,active,{a}\n2,inactive,{b}\n3,active,{c}\n",
         encoding="utf-8",
     )
 
@@ -1428,7 +1429,7 @@ def test_profile_exclude_columns_accepts_empty_list(sample_csv):
 def test_profile_exclude_columns_scopes_report_metrics_and_suggestions(tmp_path):
     path = tmp_path / "profile_scope.csv"
     path.write_text(
-        "id,score\n" "1,10\n" "1,10\n" "2,20\n",
+        "id,score\n1,10\n1,10\n2,20\n",
         encoding="utf-8",
     )
 
@@ -1665,6 +1666,228 @@ def test_report_to_markdown_includes_uniqueness_metrics(tmp_path):
 
     # id column: 2 unique non-null values across 3 rows
     assert "66.67%" in md
+
+
+def test_report_to_markdown_exclude_columns_filters_columns_and_suggestions():
+    report = ar.DataQualityReport(
+        row_count=2,
+        column_count=2,
+        memory_usage=128,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        quality_score=100.0,
+        score_components={},
+        columns={
+            "ssn": ar.ColumnProfile(
+                name="ssn",
+                dtype="string",
+                semantic_type="identifier",
+                row_count=2,
+                null_count=0,
+                null_ratio=0.0,
+                unique_count=2,
+                unique_ratio=1.0,
+                warnings=[],
+            ),
+            "age": ar.ColumnProfile(
+                name="age",
+                dtype="int64",
+                semantic_type="numeric",
+                row_count=2,
+                null_count=0,
+                null_ratio=0.0,
+                unique_count=2,
+                unique_ratio=1.0,
+                warnings=[],
+            ),
+        },
+        suggestions=[
+            ar.CleaningSuggestion(
+                "strip_whitespace",
+                {"subset": ["ssn", "age"], "columns": ["ssn"]},
+                0.95,
+                "Column 'ssn' has leading whitespace",
+            )
+        ],
+    )
+
+    md = report.to_markdown(exclude_columns=["ssn"])
+
+    assert "ssn" not in md
+    assert "age" in md
+    assert "[REDACTED]" in md
+
+
+def test_report_to_markdown_exclude_columns_unknown_raises_keyerror():
+    report = ar.profile(ar.from_dict({"a": [1]}))
+
+    with pytest.raises(KeyError):
+        report.to_markdown(exclude_columns=["nope"])
+
+
+@pytest.mark.parametrize("exclude_columns", [{"ssn"}, ("ssn",)])
+def test_report_to_markdown_accepts_set_and_tuple_exclude_columns(exclude_columns):
+    report = ar.profile(ar.from_dict({"ssn": ["123-45-6789"], "age": [30]}))
+
+    md = report.to_markdown(exclude_columns=exclude_columns)
+
+    assert "ssn" not in md
+    assert "age" in md
+
+
+def test_report_to_markdown_exclude_columns_invalid_type_raises_typeerror():
+    report = ar.profile(ar.from_dict({"a": [1]}))
+
+    with pytest.raises(TypeError):
+        report.to_markdown(exclude_columns=123)
+
+
+def test_report_to_markdown_exclude_columns_preserves_kwarg_named_columns():
+    report = ar.DataQualityReport(
+        row_count=3,
+        column_count=3,
+        memory_usage=256,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        quality_score=100.0,
+        score_components={},
+        columns={
+            "columns": ar.ColumnProfile(
+                name="columns",
+                dtype="string",
+                semantic_type="identifier",
+                row_count=3,
+                null_count=0,
+                null_ratio=0.0,
+                unique_count=3,
+                unique_ratio=1.0,
+                warnings=[],
+            ),
+            "visible": ar.ColumnProfile(
+                name="visible",
+                dtype="string",
+                semantic_type="text",
+                row_count=3,
+                null_count=0,
+                null_ratio=0.0,
+                unique_count=3,
+                unique_ratio=1.0,
+                warnings=[],
+            ),
+            "secret": ar.ColumnProfile(
+                name="secret",
+                dtype="string",
+                semantic_type="identifier",
+                row_count=3,
+                null_count=0,
+                null_ratio=0.0,
+                unique_count=3,
+                unique_ratio=1.0,
+                warnings=[],
+            ),
+        },
+        suggestions=[
+            ar.CleaningSuggestion(
+                "example",
+                {"columns": ["secret", "visible"], "subset": ["columns", "secret"]},
+                0.90,
+                "Example suggestion for secret and columns",
+            )
+        ],
+    )
+
+    md = report.to_markdown(exclude_columns=["secret"])
+
+    assert "secret" not in md
+    assert "visible" in md
+    assert '"columns"' in md
+
+
+def test_report_to_markdown_redacts_unquoted_confidence_reason():
+    report = ar.DataQualityReport(
+        row_count=1,
+        column_count=1,
+        memory_usage=64,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        quality_score=100.0,
+        score_components={},
+        columns={
+            "ssn": ar.ColumnProfile(
+                name="ssn",
+                dtype="string",
+                semantic_type="identifier",
+                row_count=1,
+                null_count=0,
+                null_ratio=0.0,
+                unique_count=1,
+                unique_ratio=1.0,
+                warnings=[],
+            ),
+        },
+        suggestions=[
+            ar.CleaningSuggestion(
+                "example",
+                {},
+                0.90,
+                "Column ssn contains whitespace",
+            )
+        ],
+    )
+
+    md = report.to_markdown(exclude_columns=["ssn"])
+
+    assert "ssn" not in md
+    assert "[REDACTED]" in md
+
+
+def test_report_to_markdown_filters_tuple_and_set_suggestion_columns():
+    report = ar.DataQualityReport(
+        row_count=2,
+        column_count=2,
+        memory_usage=128,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        quality_score=100.0,
+        score_components={},
+        columns={
+            "secret": ar.ColumnProfile(
+                name="secret",
+                dtype="string",
+                semantic_type="identifier",
+                row_count=2,
+                null_count=0,
+                null_ratio=0.0,
+                unique_count=2,
+                unique_ratio=1.0,
+                warnings=[],
+            ),
+            "visible": ar.ColumnProfile(
+                name="visible",
+                dtype="string",
+                semantic_type="text",
+                row_count=2,
+                null_count=0,
+                null_ratio=0.0,
+                unique_count=2,
+                unique_ratio=1.0,
+                warnings=[],
+            ),
+        },
+        suggestions=[
+            ar.CleaningSuggestion(
+                "example",
+                {"subset": ("secret", "visible"), "columns": {"secret", "visible"}},
+                0.90,
+                "Example suggestion for secret and visible",
+            )
+        ],
+    )
+
+    md = report.to_markdown(exclude_columns=["secret"])
+
+    assert "secret" not in md
+    assert "visible" in md
 
 
 def test_unique_ratio_empty_column(tmp_path):
@@ -4001,6 +4224,19 @@ def test_cleaning_suggestion_is_exported():
         ar, "CleaningSuggestion"
     ), "CleaningSuggestion is missing from arnio.__init__ file"
 
+    missing_message = "CleaningSuggestion is missing from arnio.__init__ file"
+    mismatch_message = "Top-level CleaningSuggestion does not match the internal type"
+
+    assert hasattr(ar, "CleaningSuggestion"), missing_message
+    assert ar.CleaningSuggestion is CleaningSuggestion, mismatch_message
+    assert ar.CleaningSuggestion is CleaningSuggestion, mismatch_message
+    assert hasattr(
+        ar, "CleaningSuggestion"
+    ), "CleaningSuggestion is missing from arnio.__init__ file"
+    assert hasattr(
+        ar, "CleaningSuggestion"
+    ), "CleaningSuggestion is missing from arnio.__init__ file"
+
     assert (
         ar.CleaningSuggestion is CleaningSuggestion
     ), "Top-level CleaningSuggestion does not match the internal type"
@@ -4303,3 +4539,53 @@ def test_auto_clean_rejects_invalid_string_mode():
     frame = ar.from_dict({"name": [" Alice "]})
     with pytest.raises(ValueError, match="mode must be 'safe' or 'strict'"):
         ar.auto_clean(frame, mode="SAFE")
+
+
+@pytest.mark.parametrize("obj", [object(), None, 123, pd.DataFrame()])
+def test_quality_helpers_reject_invalid_frame(obj):
+    with pytest.raises(TypeError, match=".*must be an ArFrame.*"):
+        ar.profile(obj)
+    with pytest.raises(TypeError, match=".*must be an ArFrame.*"):
+        ar.auto_clean(obj)
+
+
+def test_score_breakdown_with_real_values():
+    """Ensure score_breakdown correctly maps real penalty components and handles to_dict."""
+
+    # 1. Define real or mock score components dictionary
+    real_components = {
+        "null_penalty": 5.0,
+        "duplicate_penalty": 2.0,
+        "type_mismatch_penalty": 1.5,
+    }
+
+    # 2. Reconstruct the report using an empty dict for columns (or a proper mapping)
+    # instead of a raw list of strings to prevent serialization errors.
+    instance = DataQualityReport(
+        row_count=100,
+        column_count=5,
+        memory_usage=1024,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},  # Pass an empty dict or valid ColumnQualityReport mapping
+        score_components=real_components,
+        quality_score=85.0,
+        suggestions=[],
+    )
+
+    # 3. Explicitly call your new method to assign 'result'
+    result = instance.score_breakdown()
+
+    # 4. Assertions
+    assert isinstance(result, dict)
+
+    expected_keys = [
+        "null_penalty",
+        "duplicate_penalty",
+        "type_mismatch_penalty",
+        "final_score",
+    ]
+
+    for key in expected_keys:
+        assert key in result, f"Missing key: {key}"
+        assert isinstance(result[key], (int, float)), f"{key} must be numeric"

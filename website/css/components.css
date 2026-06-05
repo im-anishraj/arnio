@@ -922,3 +922,53 @@ pre:hover .copy-btn {
   font-size: var(--font-size-sm);
   margin-bottom: var(--space-2);
 }
+
+/* Search */
+
+.search-wrapper{
+  position:relative;
+}
+
+.search-input{
+  width:220px;
+  padding:8px 12px;
+  border:1px solid var(--color-border);
+  border-radius:8px;
+  background:var(--color-bg);
+  color:var(--color-text);
+}
+
+.search-results{
+  display:none;
+  position:absolute;
+  top:110%;
+  left:0;
+  width:320px;
+  max-height:300px;
+  overflow-y:auto;
+  background:var(--color-bg);
+  border:1px solid var(--color-border);
+  border-radius:8px;
+  box-shadow:var(--shadow-md);
+  z-index:2000;
+}
+
+.search-results.show{
+  display:block;
+}
+
+.search-result{
+  padding:10px 12px;
+  cursor:pointer;
+}
+
+.search-result:hover,
+.search-result.active{
+  background:var(--color-surface);
+}
+
+@media(max-width:767px){
+  .search-wrapper{
+    display:none;
+  }
+}
