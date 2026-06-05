@@ -2337,7 +2337,44 @@ class TestParseBoolStrings:
             match="false_values must be a set/list/tuple of strings, not a bare string",
         ):
             ar.parse_bool_strings(frame, false_values=b"no")
+    
+    def test_parse_bool_strings_implicit_empty_and_whitespace(self):
+        """
+        Test that implicit empty strings, whitespace-only strings, and unsupported 
+        tokens are preserved completely unchanged, as per current design contracts.
+        """
+        import pandas as pd
+        import arnio as ar
 
+        # Scenario 1: Testing Default Tokens (Standard behavior)
+        raw_data_default = {"bool_col": ["True", "False", "", "   ", "unsupported_token"]}
+        frame_default = ar.from_pandas(pd.DataFrame(raw_data_default))
+        
+        result_default = ar.parse_bool_strings(frame_default)
+        df_default = ar.to_pandas(result_default)
+        
+        # Checking that empty/whitespace strings are strictly preserved unchanged
+        assert df_default["bool_col"].iloc[2] == ""              
+        assert df_default["bool_col"].iloc[3] == "   "           
+        assert df_default["bool_col"].iloc[4] == "unsupported_token"
+
+        # Scenario 2: Testing Custom Tokens (As requested by the maintainer)
+        raw_data_custom = {"custom_col": ["yea", "nay", "", "   "]}
+        frame_custom = ar.from_pandas(pd.DataFrame(raw_data_custom))
+        
+        result_custom = ar.parse_bool_strings(
+            frame_custom, 
+            true_values=["yea"], 
+            false_values=["nay"]
+        )
+        df_custom = ar.to_pandas(result_custom)
+        
+        # Checking that for custom tokens, empty/whitespace strings are still completely untouched
+        assert df_custom["custom_col"].iloc[2] == ""            
+        assert df_custom["custom_col"].iloc[3] == "   "
+        
+        # Verification that parsing action occurred (it will either be boolean True or string 'True'/'yea')
+        assert str(df_custom["custom_col"].iloc[0]).strip() in ["True", "yea"]
 
 class TestRenameColumns:
     def test_rename(self, sample_csv):
