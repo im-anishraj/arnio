@@ -467,8 +467,6 @@ def _from_arrow_table(table: pa.Table) -> ArFrame:
             "Install it with: pip install arnio[arrow]"
         ) from exc
 
-    import pyarrow as pa_mod
-
     _ARROW_INT_TYPES = frozenset(
         [
             "int8",

@@ -1,13 +1,15 @@
 """Tests for pandas conversion."""
 
+import sys
 from decimal import Decimal
+from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
 import pytest
 
 import arnio as ar
-from arnio.convert import _to_binding_safe
+from arnio.convert import _from_arrow_table, _to_binding_safe
 
 
 class TestToPandas:
@@ -1341,3 +1343,18 @@ def test_from_records_accepts_valid_string_columns_tuple():
     frame = ar.ArFrame.from_records([[1, 2]], columns=("a", "b"))
 
     assert frame.columns == ["a", "b"]
+
+
+# ---------------------------------------------------------------------------
+# _from_arrow_table: ImportError regression
+# ---------------------------------------------------------------------------
+
+
+def test_from_arrow_table_missing_pyarrow_raises_helpful_import_error():
+    """When pyarrow is absent, _from_arrow_table() must raise the custom
+    helpful ImportError, not a generic ModuleNotFoundError or dead code."""
+    with patch.dict(sys.modules, {"pyarrow": None}):
+        with pytest.raises(ImportError) as exc_info:
+            _from_arrow_table(None)
+    assert "_from_arrow_table() requires pyarrow." in str(exc_info.value)
+    assert "pip install arnio[arrow]" in str(exc_info.value)
