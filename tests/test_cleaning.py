@@ -3026,3 +3026,701 @@ class TestCleanColumnNames:
         frame = from_pandas(df)
         result = ar.pipeline(frame, [("clean_column_names", {"case_type": "upper"})])
         assert to_pandas(result).columns.tolist() == ["MY_NAME", "AGE"]
+
+    def test_clean_column_names_case_type_title(self):
+        df = pd.DataFrame({"My-NaMe!!": [1]})
+        frame = from_pandas(df)
+        result = ar.clean_column_names(frame, case_type="title")
+        assert to_pandas(result).columns.tolist() == ["My_Name"]
+
+    def test_clean_column_names_case_type_camel(self):
+        df = pd.DataFrame({"My-Name!!": [1]})
+        frame = from_pandas(df)
+        result = ar.clean_column_names(frame, case_type="camel")
+        assert to_pandas(result).columns.tolist() == ["myName"]
+
+    def test_clean_column_names_case_type_title_acronyms(self):
+        df = pd.DataFrame({"HTTP_status": [1]})
+        frame = from_pandas(df)
+        result = ar.clean_column_names(frame, case_type="title")
+        assert to_pandas(result).columns.tolist() == ["Http_Status"]
+
+    def test_clean_column_names_case_type_camel_acronyms(self):
+        df = pd.DataFrame({"HTTP_status": [1]})
+        frame = from_pandas(df)
+        result = ar.clean_column_names(frame, case_type="camel")
+        assert to_pandas(result).columns.tolist() == ["httpStatus"]
+
+    def test_clean_column_names_case_type_title_leading_digits(self):
+        df = pd.DataFrame({"123_status": [1]})
+        frame = from_pandas(df)
+        result = ar.clean_column_names(frame, case_type="title")
+        assert to_pandas(result).columns.tolist() == ["123_Status"]
+
+    def test_clean_column_names_case_type_camel_leading_digits(self):
+        df = pd.DataFrame({"123_status": [1]})
+        frame = from_pandas(df)
+        result = ar.clean_column_names(frame, case_type="camel")
+        assert to_pandas(result).columns.tolist() == ["123Status"]
+
+    def test_clean_column_names_title_pipeline(self):
+        df = pd.DataFrame({"My-Name!!": [1], "age##": [2]})
+        frame = from_pandas(df)
+        result = ar.pipeline(frame, [("clean_column_names", {"case_type": "title"})])
+        assert to_pandas(result).columns.tolist() == ["My_Name", "Age"]
+
+    def test_clean_column_names_camel_pipeline(self):
+        df = pd.DataFrame({"My-Name!!": [1], "age##": [2]})
+        frame = from_pandas(df)
+        result = ar.pipeline(frame, [("clean_column_names", {"case_type": "camel"})])
+        assert to_pandas(result).columns.tolist() == ["myName", "age"]
+
+    def test_clean_column_names_title_duplicate_raises(self):
+        df = pd.DataFrame({"My_Name": [1], "my_name": [2]})
+        frame = from_pandas(df)
+        with pytest.raises(ValueError, match="duplicates"):
+            ar.clean_column_names(frame, case_type="title")
+
+    def test_clean_column_names_camel_duplicate_raises(self):
+        df = pd.DataFrame({"My_Name": [1], "my_name": [2]})
+        frame = from_pandas(df)
+        with pytest.raises(ValueError, match="duplicates"):
+            ar.clean_column_names(frame, case_type="camel")
+
+
+class TestSlugifyColumnNames:
+    def test_spaces_become_underscores(self):
+        frame = ar.from_pandas(pd.DataFrame({"First Name": ["Alice"]}))
+        result = ar.slugify_column_names(frame)
+        assert result.columns == ["first_name"]
+
+    def test_mixed_case_lowercased(self):
+        frame = ar.from_pandas(pd.DataFrame({"UserID": [1]}))
+        result = ar.slugify_column_names(frame)
+        assert result.columns == ["userid"]
+
+    def test_special_chars_removed(self):
+        frame = ar.from_pandas(pd.DataFrame({"Revenue ($)": [100.0]}))
+        result = ar.slugify_column_names(frame)
+        assert result.columns == ["revenue"]
+
+    def test_empty_slug_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"!!!": [1]}))
+        with pytest.raises(ValueError):
+            ar.slugify_column_names(frame)
+
+    def test_duplicate_slugs_raise_by_default(self):
+        frame = ar.from_pandas(pd.DataFrame({"First Name": [1], "first name": [2]}))
+        with pytest.raises(ValueError):
+            ar.slugify_column_names(frame)
+
+    def test_pipeline_usage(self):
+        frame = ar.from_pandas(pd.DataFrame({"First Name": ["Alice"], "Age": [25]}))
+        result = ar.pipeline(frame, [("slugify_column_names", {})])
+        assert result.columns == ["first_name", "age"]
+
+    def test_on_duplicates_invalid_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
+        with pytest.raises(ValueError):
+            ar.slugify_column_names(frame, on_duplicates="ignore")
+
+def test_parse_numeric_strings():
+    frame = ar.from_pandas(pd.DataFrame({
+        "price": ["1234.50", "500", "10.25", "bad"],
+        "rate": ["15%", "45.5%", "0.5%", "none"],
+        "normal_text": ["apple", "banana", "cherry", "date"],
+    }))
+
+    cleaned = ar.parse_numeric_strings(frame, subset=["price", "rate"], errors="coerce")
+    df = ar.to_pandas(cleaned)
+
+    assert df["price"].iloc[0] == 1234.50
+    assert df["price"].iloc[1] == 500.0
+    assert df["price"].iloc[2] == 10.25
+    assert pd.isna(df["price"].iloc[3])
+
+    assert df["rate"].iloc[0] == 0.15
+    assert df["rate"].iloc[1] == 0.455
+    assert df["rate"].iloc[2] == 0.005
+    assert pd.isna(df["rate"].iloc[3])
+
+    assert df["normal_text"].iloc[0] == "apple"
+
+    with pytest.raises(ValueError):
+        ar.parse_numeric_strings(frame, subset=["price"], errors="raise")
+    @pytest.mark.parametrize("frame", [None, [], {"a": [1]}])
+    def test_non_frame_input_raises_typeerror(self, frame):
+        with pytest.raises(
+            TypeError, match="frame must be an ArFrame or pandas.DataFrame"
+        ):
+            ar.slugify_column_names(frame)
+
+
+class TestRenameColumnsMatching:
+    def test_basic_rename(self):
+        frame = ar.from_pandas(
+            pd.DataFrame({"temp_revenue": [1], "temp_cost": [2], "name": ["Alice"]})
+        )
+        result = ar.rename_columns_matching(frame, "^temp_", "")
+        assert list(ar.to_pandas(result).columns) == ["revenue", "cost", "name"]
+
+    def test_unchanged_columns_preserved(self):
+        frame = ar.from_pandas(pd.DataFrame({"temp_a": [1], "b": [2]}))
+        result = ar.rename_columns_matching(frame, "^temp_", "")
+        assert "b" in ar.to_pandas(result).columns
+
+    def test_no_match_returns_original_columns(self):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1], "b": [2]}))
+        result = ar.rename_columns_matching(frame, "^temp_", "")
+        assert list(ar.to_pandas(result).columns) == ["a", "b"]
+
+    def test_rejects_non_string_pattern(self):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
+        with pytest.raises(TypeError, match="pattern must be a string"):
+            ar.rename_columns_matching(frame, 123, "")
+
+    def test_rejects_non_string_replacement(self):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
+        with pytest.raises(TypeError, match="replacement must be a string"):
+            ar.rename_columns_matching(frame, "^a", 123)
+
+    def test_rejects_invalid_regex(self):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
+        with pytest.raises(re.error):
+            ar.rename_columns_matching(frame, "[invalid", "")
+
+    def test_rejects_duplicate_resulting_names(self):
+        frame = ar.from_pandas(pd.DataFrame({"temp_a": [1], "a": [2]}))
+        with pytest.raises(ValueError, match="duplicate column names"):
+            ar.rename_columns_matching(frame, "^temp_", "")
+
+    def test_pandas_input_returns_dataframe(self):
+        df = pd.DataFrame({"temp_x": [1], "y": [2]})
+        result = ar.rename_columns_matching(df, "^temp_", "")
+        assert isinstance(result, pd.DataFrame)
+        assert list(result.columns) == ["x", "y"]
+
+    def test_pipeline_usage(self):
+        frame = ar.from_pandas(pd.DataFrame({"temp_a": [1], "b": [2]}))
+        result = ar.pipeline(
+            frame,
+            [("rename_columns_matching", {"pattern": "^temp_", "replacement": ""})],
+        )
+        assert "a" in ar.to_pandas(result).columns
+
+    def test_rejects_empty_resulting_name(self):
+        frame = ar.from_pandas(pd.DataFrame({"temp_": [1]}))
+        with pytest.raises(ValueError):
+            ar.rename_columns_matching(frame, "^temp_$", "")
+
+    def test_rejects_whitespace_resulting_name(self):
+        frame = ar.from_pandas(pd.DataFrame({"temp_": [1]}))
+        with pytest.raises(ValueError):
+            ar.rename_columns_matching(frame, "^temp_$", "   ")
+
+
+class TestNormalizeMinmax:
+    def test_basic_scale_to_unit_range(self):
+        frame = ar.from_pandas(pd.DataFrame({"price": [0.0, 50.0, 100.0]}))
+        result = ar.normalize_minmax(frame, subset=["price"])
+        df = ar.to_pandas(result)
+        assert df["price"].tolist() == pytest.approx([0.0, 0.5, 1.0])
+
+    def test_returns_arframe(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [1.0, 2.0, 3.0]}))
+        result = ar.normalize_minmax(frame, subset=["x"])
+        assert isinstance(result, ar.ArFrame)
+
+    def test_custom_feature_range(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [0.0, 100.0]}))
+        result = ar.normalize_minmax(frame, subset=["x"], feature_range=(-1.0, 1.0))
+        df = ar.to_pandas(result)
+        assert df["x"].tolist() == pytest.approx([-1.0, 1.0])
+
+    def test_nulls_preserved_and_excluded_from_computation(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [0.0, None, 100.0]}))
+        result = ar.normalize_minmax(frame, subset=["x"])
+        df = ar.to_pandas(result)
+        assert df["x"].iloc[0] == pytest.approx(0.0)
+        assert df["x"].iloc[2] == pytest.approx(1.0)
+        assert pd.isna(df["x"].iloc[1])
+
+    def test_all_null_column_left_unchanged(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [None, None, None]}))
+        result = ar.normalize_minmax(frame, subset=["x"])
+        df = ar.to_pandas(result)
+        assert df["x"].isna().all()
+
+    def test_constant_column_maps_to_lower_bound(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [5.0, 5.0, 5.0]}))
+        result = ar.normalize_minmax(frame, subset=["x"])
+        df = ar.to_pandas(result)
+        assert all(v == pytest.approx(0.0) for v in df["x"].dropna())
+
+    def test_constant_column_preserves_nulls(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [5.0, None, 5.0]}))
+        result = ar.normalize_minmax(frame, subset=["x"])
+        df = ar.to_pandas(result)
+        assert df["x"].iloc[0] == pytest.approx(0.0)
+        assert pd.isna(df["x"].iloc[1])
+        assert df["x"].iloc[2] == pytest.approx(0.0)
+
+    def test_non_numeric_subset_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"name": ["a", "b"]}))
+        with pytest.raises(ValueError, match="only supports numeric columns"):
+            ar.normalize_minmax(frame, subset=["name"])
+
+    def test_missing_subset_column_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [1.0, 2.0]}))
+        with pytest.raises(ValueError, match="Unknown columns in subset"):
+            ar.normalize_minmax(frame, subset=["nonexistent"])
+
+    def test_feature_range_min_ge_max_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [1.0, 2.0]}))
+        with pytest.raises(ValueError, match="strictly less than max"):
+            ar.normalize_minmax(frame, feature_range=(1.0, 0.0))
+
+    def test_feature_range_equal_bounds_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [1.0, 2.0]}))
+        with pytest.raises(ValueError):
+            ar.normalize_minmax(frame, feature_range=(1.0, 1.0))
+
+    def test_feature_range_non_finite_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [1.0, 2.0]}))
+        with pytest.raises(ValueError, match="finite"):
+            ar.normalize_minmax(frame, feature_range=(float("-inf"), 1.0))
+
+    def test_feature_range_wrong_type_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [1.0, 2.0]}))
+        with pytest.raises(TypeError):
+            ar.normalize_minmax(frame, feature_range="bad")
+
+    def test_feature_range_bool_bounds_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [1.0, 2.0]}))
+        with pytest.raises(TypeError):
+            ar.normalize_minmax(frame, feature_range=(True, False))
+
+    def test_no_subset_applies_to_all_numeric_columns(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "a": [0.0, 100.0],
+                    "b": [0.0, 50.0],
+                    "label": ["x", "y"],
+                }
+            )
+        )
+        result = ar.normalize_minmax(frame)
+        df = ar.to_pandas(result)
+        assert df["a"].tolist() == pytest.approx([0.0, 1.0])
+        assert df["b"].tolist() == pytest.approx([0.0, 1.0])
+        assert df["label"].tolist() == ["x", "y"]
+
+    def test_int64_column_normalized(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [0, 50, 100]}))
+        result = ar.normalize_minmax(frame, subset=["x"])
+        df = ar.to_pandas(result)
+        assert df["x"].tolist() == pytest.approx([0.0, 0.5, 1.0])
+
+    def test_no_numeric_columns_returns_frame_unchanged(self):
+        frame = ar.from_pandas(pd.DataFrame({"label": ["a", "b"]}))
+        result = ar.normalize_minmax(frame)
+        df = ar.to_pandas(result)
+        assert list(df.columns) == ["label"]
+        assert df["label"].tolist() == ["a", "b"]
+
+    def test_output_is_float64(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [0, 1, 2]}))
+        result = ar.normalize_minmax(frame)
+        df = ar.to_pandas(result)
+        assert df["x"].dtype in ("float64", "float")
+
+    def test_pipeline_step_registered(self):
+        frame = ar.from_pandas(pd.DataFrame({"price": [0.0, 100.0]}))
+        result = ar.pipeline(frame, [("normalize_minmax", {"subset": ["price"]})])
+        df = ar.to_pandas(result)
+        assert df["price"].tolist() == pytest.approx([0.0, 1.0])
+
+    def test_pipeline_with_custom_feature_range(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [0.0, 50.0, 100.0]}))
+        result = ar.pipeline(
+            frame,
+            [
+                ("normalize_minmax", {"subset": ["x"], "feature_range": (-1.0, 1.0)}),
+            ],
+        )
+        df = ar.to_pandas(result)
+        assert df["x"].tolist() == pytest.approx([-1.0, 0.0, 1.0])
+
+    def test_pipeline_chained_with_other_steps(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "price": [0.0, None, 100.0],
+                    "label": ["  a  ", "b", "c"],
+                }
+            )
+        )
+        result = ar.pipeline(
+            frame,
+            [
+                ("strip_whitespace",),
+                ("normalize_minmax", {"subset": ["price"]}),
+            ],
+        )
+        df = ar.to_pandas(result)
+        assert df["price"].iloc[0] == pytest.approx(0.0)
+        assert pd.isna(df["price"].iloc[1])
+        assert df["price"].iloc[2] == pytest.approx(1.0)
+        assert df["label"].iloc[0] == "a"
+
+
+class TestNormalizeMinmaxExtra:
+    def test_single_row_maps_to_lower_bound(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [42.0]}))
+        result = ar.normalize_minmax(frame, subset=["x"])
+        df = ar.to_pandas(result)
+        assert df["x"].iloc[0] == pytest.approx(0.0)
+
+    def test_empty_frame_returns_empty(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": pd.Series(dtype="float64")}))
+        result = ar.normalize_minmax(frame, subset=["x"])
+        df = ar.to_pandas(result)
+        assert df.empty
+
+    def test_negative_values_scaled_correctly(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [-100.0, 0.0, 100.0]}))
+        result = ar.normalize_minmax(frame, subset=["x"])
+        df = ar.to_pandas(result)
+        assert df["x"].tolist() == pytest.approx([0.0, 0.5, 1.0])
+
+    def test_non_subset_columns_untouched(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "price": [0.0, 100.0],
+                    "qty": [10.0, 20.0],
+                }
+            )
+        )
+        result = ar.normalize_minmax(frame, subset=["price"])
+        df = ar.to_pandas(result)
+        assert df["price"].tolist() == pytest.approx([0.0, 1.0])
+        assert df["qty"].tolist() == [10.0, 20.0]
+
+    def test_feature_range_single_element_tuple_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [1.0, 2.0]}))
+        with pytest.raises(ValueError):
+            ar.normalize_minmax(frame, feature_range=(0.0,))
+
+    def test_feature_range_three_elements_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"x": [1.0, 2.0]}))
+        with pytest.raises(ValueError):
+            ar.normalize_minmax(frame, feature_range=(0.0, 0.5, 1.0))
+
+
+class TestPublicHelpersValidateArFrame:
+    @pytest.mark.parametrize("obj", [object(), None, 123, pd.DataFrame()])
+    def test_cleaning_helpers_reject_invalid_frame(self, obj):
+        with pytest.raises(TypeError, match=".*must be an ArFrame.*"):
+            ar.drop_nulls(obj)
+        with pytest.raises(TypeError, match=".*must be an ArFrame.*"):
+            ar.strip_whitespace(obj)
+        with pytest.raises(TypeError, match=".*must be an ArFrame.*"):
+            ar.drop_columns(obj, ["x"])
+        with pytest.raises(TypeError, match=".*must be an ArFrame.*"):
+            ar.validate_columns_exist(obj, ["x"])
+
+
+# ---------------------------------------------------------------------------
+# Regression tests: locale-independent FLOAT64 parsing — issue #1989
+#
+# cast_types() and fill_nulls() previously used std::stod() which is
+# locale-sensitive. On systems using locales like de_DE.UTF-8 or fr_FR.UTF-8,
+# '.' is treated as a thousands separator rather than a decimal point, causing
+# values that were ingested correctly from CSV to fail at cast time.
+#
+# The fix replaces both std::stod() call sites in cleaning.cpp with
+# parse_float64_classic(), which uses std::istringstream imbued with
+# std::locale::classic() — the same approach used by csv_reader.cpp.
+#
+# Each test that requires a non-English locale is skipped when the locale is
+# unavailable on the runner (locale.setlocale raises locale.Error).
+# ---------------------------------------------------------------------------
+
+
+def _set_locale(name: str):
+    """Attempt to activate *name* for LC_NUMERIC; return the previous value.
+
+    Raises pytest.skip if the locale is unavailable on this machine.
+    """
+    try:
+        prev = _locale.setlocale(_locale.LC_NUMERIC)
+        _locale.setlocale(_locale.LC_NUMERIC, name)
+        return prev
+    except _locale.Error:
+        pytest.skip(f"Locale {name!r} not available on this runner")
+
+
+class TestCastTypesFloat64LocaleIndependent:
+    """cast_types() FLOAT64 path must use locale-independent parsing (issue #1989)."""
+
+    def test_cast_float64_succeeds_under_de_locale(self):
+        """'1.5' must parse to 1.5 even when LC_NUMERIC=de_DE.UTF-8."""
+        prev = _set_locale("de_DE.UTF-8")
+        try:
+            frame = ar.from_pandas(pd.DataFrame({"price": ["1.5", "2.5"]}))
+            result = ar.cast_types(frame, {"price": "float64"})
+            df = to_pandas(result)
+            assert df["price"].tolist() == pytest.approx([1.5, 2.5])
+        finally:
+            _locale.setlocale(_locale.LC_NUMERIC, prev)
+
+    def test_cast_float64_succeeds_under_fr_locale(self):
+        """Same regression check with fr_FR.UTF-8."""
+        prev = _set_locale("fr_FR.UTF-8")
+        try:
+            frame = ar.from_pandas(pd.DataFrame({"val": ["3.14", "2.71"]}))
+            result = ar.cast_types(frame, {"val": "float64"})
+            df = to_pandas(result)
+            assert df["val"].tolist() == pytest.approx([3.14, 2.71])
+        finally:
+            _locale.setlocale(_locale.LC_NUMERIC, prev)
+
+    def test_cast_float64_negative_value_under_de_locale(self):
+        """Negative floats must also parse correctly under a non-English locale."""
+        prev = _set_locale("de_DE.UTF-8")
+        try:
+            frame = ar.from_pandas(pd.DataFrame({"x": ["-1.25", "0.5"]}))
+            result = ar.cast_types(frame, {"x": "float64"})
+            df = to_pandas(result)
+            assert df["x"].tolist() == pytest.approx([-1.25, 0.5])
+        finally:
+            _locale.setlocale(_locale.LC_NUMERIC, prev)
+
+    def test_cast_float64_scientific_notation_under_de_locale(self):
+        """Scientific notation must survive locale change."""
+        prev = _set_locale("de_DE.UTF-8")
+        try:
+            frame = ar.from_pandas(pd.DataFrame({"v": ["1.5e2", "2.0e-1"]}))
+            result = ar.cast_types(frame, {"v": "float64"})
+            df = to_pandas(result)
+            assert df["v"].tolist() == pytest.approx([150.0, 0.2])
+        finally:
+            _locale.setlocale(_locale.LC_NUMERIC, prev)
+
+    def test_cast_float64_coerce_invalid_under_de_locale(self):
+        """coerce_invalid=True must still null-out genuinely unparseable values."""
+        prev = _set_locale("de_DE.UTF-8")
+        try:
+            frame = ar.from_pandas(pd.DataFrame({"x": ["1.5", "bad", "3.0"]}))
+            result = ar.cast_types(frame, {"x": "float64"}, errors="coerce")
+            df = to_pandas(result)
+            assert df["x"].iloc[0] == pytest.approx(1.5)
+            assert pd.isna(df["x"].iloc[1])
+            assert df["x"].iloc[2] == pytest.approx(3.0)
+        finally:
+            _locale.setlocale(_locale.LC_NUMERIC, prev)
+
+    def test_cast_float64_special_tokens_unchanged_under_de_locale(self):
+        """'nan', 'inf', '-inf' must still map to special float values."""
+        prev = _set_locale("de_DE.UTF-8")
+        try:
+            frame = ar.from_pandas(pd.DataFrame({"v": ["nan", "inf", "-inf"]}))
+            result = ar.cast_types(frame, {"v": "float64"}, errors="coerce")
+            df = to_pandas(result)
+            # nan, inf, -inf are non-finite — with errors="coerce" they become null
+            assert df["v"].isna().all()
+        finally:
+            _locale.setlocale(_locale.LC_NUMERIC, prev)
+
+    def test_cast_float64_baseline_locale_independent(self):
+        """Baseline: cast_types FLOAT64 works correctly under the default locale."""
+        frame = ar.from_pandas(pd.DataFrame({"price": ["1.5", "99.99", "-3.14"]}))
+        result = ar.cast_types(frame, {"price": "float64"})
+        df = to_pandas(result)
+        assert df["price"].tolist() == pytest.approx([1.5, 99.99, -3.14])
+
+    def test_cast_float64_invalid_value_raises_under_de_locale(self):
+        """A genuinely invalid value must still raise without coerce_invalid."""
+        prev = _set_locale("de_DE.UTF-8")
+        try:
+            frame = ar.from_pandas(pd.DataFrame({"x": ["not_a_float"]}))
+            with pytest.raises(Exception):
+                ar.cast_types(frame, {"x": "float64"})
+        finally:
+            _locale.setlocale(_locale.LC_NUMERIC, prev)
+
+
+class TestFillNullsFloat64LocaleIndependent:
+    """fill_nulls() FLOAT64 fill-value path must also be locale-independent (issue #1989)."""
+
+    def test_fill_nulls_float64_fill_value_under_de_locale(self):
+        """A string fill value like '0.5' must be accepted under de_DE.UTF-8."""
+        prev = _set_locale("de_DE.UTF-8")
+        try:
+            frame = ar.from_pandas(
+                pd.DataFrame({"price": pd.array([1.5, None, 3.0], dtype="Float64")})
+            )
+            result = ar.fill_nulls(frame, "0.5", subset=["price"])
+            df = to_pandas(result)
+            assert df["price"].iloc[1] == pytest.approx(0.5)
+        finally:
+            _locale.setlocale(_locale.LC_NUMERIC, prev)
+
+    def test_fill_nulls_float64_fill_value_under_fr_locale(self):
+        """Same fill_nulls regression check with fr_FR.UTF-8."""
+        prev = _set_locale("fr_FR.UTF-8")
+        try:
+            frame = ar.from_pandas(
+                pd.DataFrame({"v": pd.array([None, 2.0], dtype="Float64")})
+            )
+            result = ar.fill_nulls(frame, "1.5", subset=["v"])
+            df = to_pandas(result)
+            assert df["v"].iloc[0] == pytest.approx(1.5)
+        finally:
+            _locale.setlocale(_locale.LC_NUMERIC, prev)
+
+    def test_fill_nulls_float64_fill_value_baseline(self):
+        """Baseline: fill_nulls FLOAT64 string fill value works under default locale."""
+        frame = ar.from_pandas(
+            pd.DataFrame({"x": pd.array([None, 2.5, None], dtype="Float64")})
+        )
+        result = ar.fill_nulls(frame, "1.0", subset=["x"])
+        df = to_pandas(result)
+        assert df["x"].iloc[0] == pytest.approx(1.0)
+        assert df["x"].iloc[2] == pytest.approx(1.0)
+
+    def test_fill_nulls_float64_non_finite_fill_rejected_under_de_locale(self):
+        """Non-finite fill values must still be rejected regardless of locale."""
+        prev = _set_locale("de_DE.UTF-8")
+        try:
+            frame = ar.from_pandas(
+                pd.DataFrame({"x": pd.array([None, 1.0], dtype="Float64")})
+            )
+            with pytest.raises(Exception):
+                ar.fill_nulls(frame, "inf", subset=["x"])
+        finally:
+            _locale.setlocale(_locale.LC_NUMERIC, prev)
+
+
+class TestHashColumns:
+    """Tests for ar.hash_columns (pure-Python / hashlib implementation)."""
+
+    def _frame(self):
+        return ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "email": ["user@example.com", None, ""],
+                    "user_id": ["abc123", "xyz999", "def456"],
+                    "age": [30, 25, 40],
+                }
+            )
+        )
+
+    def test_sha256_produces_64_char_hex(self):
+        frame = self._frame()
+        result = ar.hash_columns(frame, subset=["email"])
+        df = ar.to_pandas(result)
+        digest = df["email"].iloc[0]
+        assert len(digest) == 64
+        assert all(c in "0123456789abcdef" for c in digest)
+
+    def test_sha256_known_answer(self):
+        import hashlib
+
+        frame = self._frame()
+        result = ar.hash_columns(frame, subset=["email"])
+        df = ar.to_pandas(result)
+        assert df["email"].iloc[0] == hashlib.sha256(b"user@example.com").hexdigest()
+
+    def test_sha256_empty_string_is_hashed_not_null(self):
+        import hashlib
+
+        frame = self._frame()
+        result = ar.hash_columns(frame, subset=["email"])
+        df = ar.to_pandas(result)
+        assert df["email"].iloc[2] == hashlib.sha256(b"").hexdigest()
+
+    def test_null_cells_preserved(self):
+        frame = self._frame()
+        result = ar.hash_columns(frame, subset=["email"])
+        df = ar.to_pandas(result)
+        assert pd.isna(df["email"].iloc[1])
+
+    def test_non_subset_columns_unchanged(self):
+        frame = self._frame()
+        result = ar.hash_columns(frame, subset=["email"])
+        df = ar.to_pandas(result)
+        assert df["user_id"].iloc[0] == "abc123"
+        assert df["age"].iloc[0] == 30
+
+    def test_md5_produces_32_char_hex(self):
+        import hashlib
+
+        frame = self._frame()
+        result = ar.hash_columns(frame, subset=["user_id"], algorithm="md5")
+        df = ar.to_pandas(result)
+        digest = df["user_id"].iloc[0]
+        assert len(digest) == 32
+        assert all(c in "0123456789abcdef" for c in digest)
+        assert digest == hashlib.md5(b"abc123").hexdigest()
+
+    def test_multiple_subset_columns(self):
+        import hashlib
+
+        frame = self._frame()
+        result = ar.hash_columns(frame, subset=["email", "user_id"])
+        df = ar.to_pandas(result)
+        assert df["email"].iloc[0] == hashlib.sha256(b"user@example.com").hexdigest()
+        assert df["user_id"].iloc[0] == hashlib.sha256(b"abc123").hexdigest()
+
+    def test_missing_column_raises_value_error(self):
+        frame = self._frame()
+        with pytest.raises(ValueError, match="not found"):
+            ar.hash_columns(frame, subset=["nonexistent"])
+
+    def test_non_string_column_raises_type_error(self):
+        frame = self._frame()
+        with pytest.raises(TypeError, match="string"):
+            ar.hash_columns(frame, subset=["age"])
+
+    def test_empty_subset_raises_value_error(self):
+        frame = self._frame()
+        with pytest.raises(ValueError, match="non-empty"):
+            ar.hash_columns(frame, subset=[])
+
+    def test_unsupported_algorithm_raises_value_error(self):
+        frame = self._frame()
+        with pytest.raises(ValueError, match="algorithm"):
+            ar.hash_columns(frame, subset=["email"], algorithm="sha512")
+
+    def test_pipeline_step(self):
+        import hashlib
+
+        frame = self._frame()
+        result = ar.pipeline(
+            frame,
+            [("hash_columns", {"subset": ["email", "user_id"], "algorithm": "sha256"})],
+        )
+        df = ar.to_pandas(result)
+        assert df["email"].iloc[0] == hashlib.sha256(b"user@example.com").hexdigest()
+
+    def test_pipeline_step_default_algorithm(self):
+        import hashlib
+
+        frame = self._frame()
+        result = ar.pipeline(frame, [("hash_columns", {"subset": ["user_id"]})])
+        df = ar.to_pandas(result)
+        assert df["user_id"].iloc[0] == hashlib.sha256(b"abc123").hexdigest()
+
+    def test_input_frame_is_not_mutated(self):
+
+        frame = self._frame()
+        df_before = ar.to_pandas(frame).copy()
+        ar.hash_columns(frame, subset=["email", "user_id"])
+        df_after = ar.to_pandas(frame)
+        # Original frame must be byte-for-byte identical after the call
+        assert df_after["email"].iloc[0] == df_before["email"].iloc[0]
+        assert df_after["user_id"].iloc[0] == df_before["user_id"].iloc[0]
+        assert pd.isna(df_after["email"].iloc[1]) == pd.isna(df_before["email"].iloc[1])

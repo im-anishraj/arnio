@@ -144,6 +144,7 @@ __all__ = [
     "drop_columns_matching",
     "strip_whitespace",
     "parse_bool_strings",
+    "parse_numeric_strings",
     "normalize_case",
     "rename_columns",
     "round_numeric_columns",
