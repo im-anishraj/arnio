@@ -1404,6 +1404,16 @@ class SchemaDiffEntry:
     expected: Any = None
     observed: Any = None
 
+    def __post_init__(self) -> None:
+        if self.column is not None and not isinstance(self.column, str):
+            raise TypeError("column must be a str or None")
+
+        if self.attribute is not None and not isinstance(self.attribute, str):
+            raise TypeError("attribute must be a str or None")
+
+        if not isinstance(self.change, str) or not self.change.strip():
+            raise TypeError("change must be a non-empty string")
+
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-friendly dictionary."""
         return {
@@ -1420,7 +1430,19 @@ class SchemaDiff:
     """Result of comparing two schema contracts."""
 
     differences: list[SchemaDiffEntry]
+    
+    def __post_init__(self) -> None:
+        if not isinstance(self.differences, list):
+            raise TypeError(
+                "differences must be a list of SchemaDiffEntry instances"
+            )
 
+        for i, diff in enumerate(self.differences):
+            if not isinstance(diff, SchemaDiffEntry):
+                raise TypeError(
+                    f"differences[{i}] must be a SchemaDiffEntry instance"
+                )
+        
     @property
     def changed(self) -> bool:
         """Whether the two schemas differ."""
