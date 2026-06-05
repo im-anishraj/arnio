@@ -953,30 +953,62 @@ Frame combine_columns(const Frame& frame, const std::vector<std::string>& subset
 
     return Frame(std::move(new_cols));
 }
-
-// The core C++ engine function
-std::vector<std::vector<double>> create_rolling_windows(const std::vector<double>& input,
-                                                        int window_size, int stride) {
-    if (window_size <= 0) {
-        throw std::invalid_argument("window_size must be greater than 0");
-    }
-    if (stride <= 0) {
-        throw std::invalid_argument("stride must be greater than 0");
-    }
-    if (window_size > input.size()) {
-        throw std::invalid_argument("window_size cannot be larger than the input array length");
+Frame collapse_rare_categories(const Frame& frame, const std::string& column, double threshold,
+                               const std::string& fill_value) {
+    if (threshold < 0.0 || threshold > 1.0) {
+        throw std::invalid_argument("collapse_rare_categories: threshold must be in [0.0, 1.0]");
     }
 
-    std::vector<std::vector<double>> result;
-    int num_windows = (input.size() - window_size) / stride + 1;
+    const size_t col_idx = frame.column_index(column);
+    const auto& src = frame.column(col_idx);
 
-    result.reserve(num_windows);
-
-    for (size_t i = 0; i <= input.size() - window_size; i += stride) {
-        std::vector<double> window(input.begin() + i, input.begin() + i + window_size);
-        result.push_back(window);
+    if (src.dtype() != DType::STRING) {
+        throw std::invalid_argument("collapse_rare_categories: column '" + column +
+                                    "' is not of type STRING");
     }
 
-    return result;
+    const size_t n = src.size();
+
+    std::unordered_map<std::string, size_t> freq;
+    size_t non_null_count = 0;
+    for (size_t r = 0; r < n; ++r) {
+        if (src.is_null(r)) continue;
+        ++non_null_count;
+        ++freq[std::get<std::string>(src.at(r))];
+    }
+
+    std::unordered_set<std::string> rare;
+    if (non_null_count > 0) {
+        for (const auto& [cat, cnt] : freq) {
+            double proportion = static_cast<double>(cnt) / static_cast<double>(non_null_count);
+            if (proportion < threshold) {
+                rare.insert(cat);
+            }
+        }
+    }
+
+    Frame src_frame = frame.clone();
+    std::vector<Column> new_cols;
+    new_cols.reserve(src_frame.num_cols());
+
+    for (size_t ci = 0; ci < src_frame.num_cols(); ++ci) {
+        auto& col = src_frame.column_mut(ci);
+        if (ci == col_idx) {
+            Column new_col(col.name(), DType::STRING);
+            for (size_t r = 0; r < col.size(); ++r) {
+                if (col.is_null(r)) {
+                    new_col.push_null();
+                } else {
+                    const auto cell = col.at(r);
+                    const auto& val = std::get<std::string>(cell);
+                    new_col.push_back(rare.count(val) ? fill_value : val);
+                }
+            }
+            new_cols.push_back(std::move(new_col));
+        } else {
+            new_cols.push_back(col.move_clone());
+        }
+    }
+    return Frame(std::move(new_cols));
 }
 }  // namespace arnio

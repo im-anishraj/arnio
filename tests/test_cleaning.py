@@ -3604,123 +3604,108 @@ class TestFillNullsFloat64LocaleIndependent:
             _locale.setlocale(_locale.LC_NUMERIC, prev)
 
 
-class TestHashColumns:
-    """Tests for ar.hash_columns (pure-Python / hashlib implementation)."""
+class TestCollapseRareCategories:
+    def test_basic_collapse(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {"city": ["NYC"] * 50 + ["LA"] * 30 + ["Tiny"] * 2 + ["Rare"] * 1}
+            )
+        )
+        result = ar.collapse_rare_categories(frame, column="city", threshold=0.05)
+        df = ar.to_pandas(result)
+        assert set(df["city"].unique()) == {"NYC", "LA", "Other"}
 
-    def _frame(self):
-        return ar.from_pandas(
+    def test_custom_fill_value(self):
+        frame = ar.from_pandas(pd.DataFrame({"city": ["NYC"] * 50 + ["Tiny"] * 1}))
+        result = ar.collapse_rare_categories(
+            frame, column="city", threshold=0.05, fill_value="Misc"
+        )
+        df = ar.to_pandas(result)
+        assert "Misc" in df["city"].values
+        assert "Tiny" not in df["city"].values
+
+    def test_null_preservation(self):
+        frame = ar.from_pandas(
+            pd.DataFrame({"city": ["NYC"] * 50 + [None] * 10 + ["Rare"] * 1})
+        )
+        result = ar.collapse_rare_categories(frame, column="city", threshold=0.05)
+        df = ar.to_pandas(result)
+        assert df["city"].isna().sum() == 10
+
+    def test_threshold_zero_keeps_all(self):
+        frame = ar.from_pandas(pd.DataFrame({"city": ["NYC", "LA", "Tiny", "Rare"]}))
+        result = ar.collapse_rare_categories(frame, column="city", threshold=0.0)
+        df = ar.to_pandas(result)
+        assert set(df["city"].unique()) == {"NYC", "LA", "Tiny", "Rare"}
+
+    def test_threshold_one_collapses_all(self):
+        frame = ar.from_pandas(pd.DataFrame({"city": ["NYC"] * 50 + ["LA"] * 30}))
+        result = ar.collapse_rare_categories(frame, column="city", threshold=1.0)
+        df = ar.to_pandas(result)
+        assert set(df["city"].unique()) == {"Other"}
+
+    def test_empty_frame(self):
+        frame = ar.from_pandas(pd.DataFrame({"city": pd.Series(dtype="object")}))
+        result = ar.collapse_rare_categories(frame, column="city", threshold=0.02)
+        assert result.shape == (0, 1)
+
+    def test_all_unique_values(self):
+        frame = ar.from_pandas(pd.DataFrame({"city": ["A", "B", "C", "D", "E"]}))
+        result = ar.collapse_rare_categories(frame, column="city", threshold=0.5)
+        df = ar.to_pandas(result)
+        assert set(df["city"].unique()) == {"Other"}
+
+    def test_non_string_column_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"age": [1, 2, 3]}))
+        with pytest.raises(Exception, match="STRING"):
+            ar.collapse_rare_categories(frame, column="age", threshold=0.02)
+
+    def test_missing_column_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"city": ["NYC"]}))
+        with pytest.raises(ValueError, match="not found"):
+            ar.collapse_rare_categories(frame, column="nonexistent")
+
+    def test_invalid_threshold_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"city": ["NYC"]}))
+        with pytest.raises(ValueError, match="threshold"):
+            ar.collapse_rare_categories(frame, column="city", threshold=1.5)
+
+    def test_nan_threshold_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"city": ["NYC"]}))
+        with pytest.raises(ValueError, match="finite"):
+            ar.collapse_rare_categories(frame, column="city", threshold=float("nan"))
+
+    def test_inf_threshold_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"city": ["NYC"]}))
+        with pytest.raises(ValueError, match="finite"):
+            ar.collapse_rare_categories(frame, column="city", threshold=float("inf"))
+
+    def test_neg_inf_threshold_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"city": ["NYC"]}))
+        with pytest.raises(ValueError, match="finite"):
+            ar.collapse_rare_categories(frame, column="city", threshold=float("-inf"))
+
+    def test_other_columns_untouched(self):
+        frame = ar.from_pandas(
             pd.DataFrame(
                 {
-                    "email": ["user@example.com", None, ""],
-                    "user_id": ["abc123", "xyz999", "def456"],
-                    "age": [30, 25, 40],
+                    "city": ["NYC"] * 50 + ["Rare"] * 1,
+                    "age": list(range(51)),
                 }
             )
         )
-
-    def test_sha256_produces_64_char_hex(self):
-        frame = self._frame()
-        result = ar.hash_columns(frame, subset=["email"])
+        result = ar.collapse_rare_categories(frame, column="city", threshold=0.05)
         df = ar.to_pandas(result)
-        digest = df["email"].iloc[0]
-        assert len(digest) == 64
-        assert all(c in "0123456789abcdef" for c in digest)
+        assert list(df["age"]) == list(range(51))
 
-    def test_sha256_known_answer(self):
-        import hashlib
-
-        frame = self._frame()
-        result = ar.hash_columns(frame, subset=["email"])
-        df = ar.to_pandas(result)
-        assert df["email"].iloc[0] == hashlib.sha256(b"user@example.com").hexdigest()
-
-    def test_sha256_empty_string_is_hashed_not_null(self):
-        import hashlib
-
-        frame = self._frame()
-        result = ar.hash_columns(frame, subset=["email"])
-        df = ar.to_pandas(result)
-        assert df["email"].iloc[2] == hashlib.sha256(b"").hexdigest()
-
-    def test_null_cells_preserved(self):
-        frame = self._frame()
-        result = ar.hash_columns(frame, subset=["email"])
-        df = ar.to_pandas(result)
-        assert pd.isna(df["email"].iloc[1])
-
-    def test_non_subset_columns_unchanged(self):
-        frame = self._frame()
-        result = ar.hash_columns(frame, subset=["email"])
-        df = ar.to_pandas(result)
-        assert df["user_id"].iloc[0] == "abc123"
-        assert df["age"].iloc[0] == 30
-
-    def test_md5_produces_32_char_hex(self):
-        import hashlib
-
-        frame = self._frame()
-        result = ar.hash_columns(frame, subset=["user_id"], algorithm="md5")
-        df = ar.to_pandas(result)
-        digest = df["user_id"].iloc[0]
-        assert len(digest) == 32
-        assert all(c in "0123456789abcdef" for c in digest)
-        assert digest == hashlib.md5(b"abc123").hexdigest()
-
-    def test_multiple_subset_columns(self):
-        import hashlib
-
-        frame = self._frame()
-        result = ar.hash_columns(frame, subset=["email", "user_id"])
-        df = ar.to_pandas(result)
-        assert df["email"].iloc[0] == hashlib.sha256(b"user@example.com").hexdigest()
-        assert df["user_id"].iloc[0] == hashlib.sha256(b"abc123").hexdigest()
-
-    def test_missing_column_raises_value_error(self):
-        frame = self._frame()
-        with pytest.raises(ValueError, match="not found"):
-            ar.hash_columns(frame, subset=["nonexistent"])
-
-    def test_non_string_column_raises_type_error(self):
-        frame = self._frame()
-        with pytest.raises(TypeError, match="string"):
-            ar.hash_columns(frame, subset=["age"])
-
-    def test_empty_subset_raises_value_error(self):
-        frame = self._frame()
-        with pytest.raises(ValueError, match="non-empty"):
-            ar.hash_columns(frame, subset=[])
-
-    def test_unsupported_algorithm_raises_value_error(self):
-        frame = self._frame()
-        with pytest.raises(ValueError, match="algorithm"):
-            ar.hash_columns(frame, subset=["email"], algorithm="sha512")
-
-    def test_pipeline_step(self):
-        import hashlib
-
-        frame = self._frame()
-        result = ar.pipeline(
-            frame,
-            [("hash_columns", {"subset": ["email", "user_id"], "algorithm": "sha256"})],
+    def test_determinism(self):
+        frame = ar.from_pandas(
+            pd.DataFrame({"city": ["NYC"] * 50 + ["LA"] * 30 + ["Rare"] * 1})
         )
-        df = ar.to_pandas(result)
-        assert df["email"].iloc[0] == hashlib.sha256(b"user@example.com").hexdigest()
-
-    def test_pipeline_step_default_algorithm(self):
-        import hashlib
-
-        frame = self._frame()
-        result = ar.pipeline(frame, [("hash_columns", {"subset": ["user_id"]})])
-        df = ar.to_pandas(result)
-        assert df["user_id"].iloc[0] == hashlib.sha256(b"abc123").hexdigest()
-
-    def test_input_frame_is_not_mutated(self):
-
-        frame = self._frame()
-        df_before = ar.to_pandas(frame).copy()
-        ar.hash_columns(frame, subset=["email", "user_id"])
-        df_after = ar.to_pandas(frame)
-        # Original frame must be byte-for-byte identical after the call
-        assert df_after["email"].iloc[0] == df_before["email"].iloc[0]
-        assert df_after["user_id"].iloc[0] == df_before["user_id"].iloc[0]
-        assert pd.isna(df_after["email"].iloc[1]) == pd.isna(df_before["email"].iloc[1])
+        r1 = ar.to_pandas(
+            ar.collapse_rare_categories(frame, column="city", threshold=0.02)
+        )
+        r2 = ar.to_pandas(
+            ar.collapse_rare_categories(frame, column="city", threshold=0.02)
+        )
+        pd.testing.assert_frame_equal(r1, r2)

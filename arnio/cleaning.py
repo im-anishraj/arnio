@@ -14,7 +14,7 @@ from typing import Any
 from ._core import (
     _cast_types,
     _clip_numeric,
-    _Column,
+    _collapse_rare_categories,
     _drop_duplicates,
     _drop_nulls,
     _DType,
@@ -1965,26 +1965,69 @@ def coalesce_columns(
     return from_pandas(df) if is_arframe else df
 
 
-def rolling_window(
-    data: list[float], window_size: int, stride: int = 1
-) -> list[list[float]]:
+def collapse_rare_categories(
+    frame: ArFrame,
+    column: str,
+    threshold: float = 0.02,
+    fill_value: str = "Other",
+) -> ArFrame:
+    """Group rare string categories into a single unified label based on frequency.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input data frame.
+    column : str
+        Name of the STRING column to process.
+    threshold : float, default 0.02
+        Minimum relative frequency [0.0, 1.0] for a category to be kept.
+        Categories whose proportion is strictly below this value are replaced
+        with fill_value.
+    fill_value : str, default "Other"
+        Label assigned to all rare categories.
+
+    Returns
+    -------
+    ArFrame
+        New frame with rare categories collapsed.
+
+    Raises
+    ------
+    TypeError
+        If column is not a string, or fill_value is not a string.
+    ValueError
+        If threshold is outside [0.0, 1.0], or column does not exist.
+    TypeError
+        If the target column is not of type STRING (raised by C++ engine).
+
+    Examples
+    --------
+    >>> frame = ar.read_csv("data.csv")
+    >>> clean = ar.collapse_rare_categories(frame, column="city", threshold=0.02)
     """
-    Transforms a sequential dataset into overlapping rolling windows.
+    _validate_arframe(frame)
+    if not isinstance(column, str) or not column.strip():
+        raise TypeError("column must be a non-empty string")
 
-    Args:
-        data: A 1D list of numeric values.
-        window_size: The number of elements to include in each window.
-        stride: The step size between windows (default is 1).
+    if column not in frame.columns:
+        raise ValueError(
+            f"Column '{column}' not found. Available columns: "
+            f"{', '.join(frame.columns) or '<none>'}"
+        )
+    if not isinstance(threshold, (int, float)) or isinstance(threshold, bool):
+        raise TypeError("threshold must be a float in [0.0, 1.0]")
 
-    Returns:
-        A list of sequential window arrays.
-    """
-    if not isinstance(window_size, int) or isinstance(window_size, bool):
-        raise TypeError("window_size must be an integer")
-    if not isinstance(stride, int) or isinstance(stride, bool):
-        raise TypeError("stride must be an integer")
+    if not math.isfinite(threshold):
+        raise ValueError(f"threshold must be a finite value, got {threshold!r}")
+    if threshold < 0.0 or threshold > 1.0:
+        raise ValueError(f"threshold must be in [0.0, 1.0], got {threshold!r}")
+    if not isinstance(fill_value, str):
+        raise TypeError(
+            f"fill_value must be a string, got {type(fill_value).__name__!r}"
+        )
 
-    return create_rolling_windows(data, window_size, stride)
+    result = _collapse_rare_categories(frame._frame, column, threshold, fill_value)
+    return ArFrame(result)
 
 
 def clean_column_names(

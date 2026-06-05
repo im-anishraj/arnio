@@ -586,6 +586,7 @@ Most operations below run natively in C++. Currently, `filter_rows`, `replace_va
 | `drop_constant_columns` | Remove columns with only one unique value | `ar.drop_constant_columns(frame)` |
 | `clip_numeric` | Clip numeric values to lower and/or upper bounds | `ar.clip_numeric(frame, lower=0, upper=100)` |
 | `strip_whitespace` | Trim leading/trailing spaces from strings | `ar.strip_whitespace(frame)` |
+| `collapse_rare_categories` | Group rare string categories into a single label based on frequency | `ar.collapse_rare_categories(frame, column="city", threshold=0.02, fill_value="Other")` |
 | `standardize_missing_tokens` | Replace common missing-value strings with NaN | `ar.standardize_missing_tokens(frame)` |
 | `normalize_case` | Force lower/upper/title case | `ar.normalize_case(frame, case_type="title")` |
 | `rename_columns` | Rename columns via mapping | `ar.rename_columns(frame, {"old": "new"})` |

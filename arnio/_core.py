@@ -15,6 +15,7 @@ try:
         Frame as _Frame,
         cast_types as _cast_types,
         clip_numeric as _clip_numeric,
+        collapse_rare_categories as _collapse_rare_categories,
         drop_duplicates as _drop_duplicates,
         drop_nulls as _drop_nulls,
         fill_nulls as _fill_nulls,

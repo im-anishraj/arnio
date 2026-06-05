@@ -93,8 +93,10 @@ Frame safe_divide_columns(const Frame& frame, std::string_view numerator,
                           std::string_view denominator, std::string_view output_column,
                           double fill_value);
 
-// Extract overlapping rolling windows from a 1D numeric array.
-std::vector<std::vector<double>> create_rolling_windows(const std::vector<double>& input,
-                                                        int window_size, int stride);
+// Collapse rare string categories into a single unified label based on frequency.
+// Categories with frequency < threshold are replaced with fill_value.
+// Throws std::invalid_argument if column is not DType::STRING.
+Frame collapse_rare_categories(const Frame& frame, const std::string& column,
+                               double threshold = 0.02, const std::string& fill_value = "Other");
 
 }  // namespace arnio

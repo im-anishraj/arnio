@@ -35,6 +35,8 @@ _STEP_REGISTRY: dict[str, Callable] = {
     "cast_types": cleaning.cast_types,
     "round_numeric_columns": cleaning.round_numeric_columns,
     "combine_columns": cleaning.combine_columns,
+    "collapse_rare_categories": cleaning.collapse_rare_categories,
+    "slugify_column_names": cleaning.slugify_column_names,
     "trim_column_names": cleaning.trim_column_names,
     "clean_column_names": cleaning.clean_column_names,
     "parse_numeric_strings": cleaning.parse_numeric_strings,
