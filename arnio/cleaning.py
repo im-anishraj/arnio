@@ -30,7 +30,7 @@ from ._core import (
 )
 from .convert import from_pandas, to_pandas
 from .exceptions import TypeCastError
-from .frame import ArFrame
+from .frame import ArFrame, _validate_arframe
 
 
 def validate_columns_exist(
@@ -62,7 +62,7 @@ def validate_columns_exist(
     KeyError
         If any requested column is missing.
     """
-    frame, _ = _validate_frame(frame)
+    _validate_arframe(frame)
     _validate_existing_column_sequence(
         columns,
         available_columns=frame.columns,
@@ -221,7 +221,7 @@ def drop_nulls(
     >>> frame = ar.read_csv("data.csv")
     >>> clean = ar.drop_nulls(frame, subset=["age", "name"])
     """
-    frame, _ = _validate_frame(frame)
+    _validate_arframe(frame)
     if subset is not None:
         subset = _validate_column_sequence(subset, argument_name="subset")
         if len(subset) == 0:
@@ -267,7 +267,7 @@ def drop_columns(frame: ArFrame, columns: Sequence[str]) -> ArFrame:
     --------
     >>> frame = ar.drop_columns(frame, ["debug_col"])
     """
-    frame, _ = _validate_frame(frame)
+    _validate_arframe(frame)
     requested_columns = _validate_existing_column_sequence(
         columns,
         available_columns=frame.columns,
@@ -390,7 +390,7 @@ def select_columns(frame: ArFrame, columns: Sequence[str]) -> ArFrame:
     >>> frame = ar.read_csv("data.csv")
     >>> subset = ar.select_columns(frame, ["name", "revenue"])
     """
-    frame, _ = _validate_frame(frame)
+    _validate_arframe(frame)
     return frame.select_columns(columns)
 
 
@@ -421,7 +421,7 @@ def fill_nulls(
     >>> frame = ar.read_csv("data.csv")
     >>> filled = ar.fill_nulls(frame, 0, subset=["age"])
     """
-    frame, _ = _validate_frame(frame)
+    _validate_arframe(frame)
     if subset is not None:
         subset = _validate_column_sequence(subset, argument_name="subset")
         if len(subset) == 0:
@@ -474,7 +474,7 @@ def drop_duplicates(
     >>> frame = ar.read_csv("data.csv")
     >>> unique = ar.drop_duplicates(frame, subset=["name"], keep="first")
     """
-    frame, _ = _validate_frame(frame)
+    _validate_arframe(frame)
 
     if subset is not None:
         subset = _validate_column_sequence(subset, argument_name="subset")
@@ -575,7 +575,7 @@ def drop_empty_columns(frame: ArFrame) -> ArFrame:
     >>> frame = ar.read_csv("data.csv")
     >>> reduced = ar.drop_empty_columns(frame)
     """
-    frame, _ = _validate_frame(frame)
+    _validate_arframe(frame)
     from .convert import to_pandas
 
     if frame.shape[0] == 0:
@@ -654,7 +654,7 @@ def clip_numeric(
     >>> frame = ar.read_csv("data.csv")
     >>> clipped = ar.clip_numeric(frame, lower=0, upper=100)
     """
-    frame, _ = _validate_frame(frame)
+    _validate_arframe(frame)
     if lower is not None:
         if isinstance(lower, bool) or not isinstance(lower, (int, float)):
             raise TypeError(
@@ -771,7 +771,7 @@ def winsorize_outliers(
     >>> frame = ar.read_csv("data.csv")
     >>> clean = ar.winsorize_outliers(frame, lower=0.01, upper=0.99, subset=["revenue"])
     """
-    frame, _ = _validate_frame(frame)
+    _validate_arframe(frame)
     if lower < 0 or upper > 1:
         raise ValueError("lower and upper must be between 0 and 1")
 
@@ -845,7 +845,7 @@ def strip_whitespace(
     >>> frame = ar.read_csv("data.csv")
     >>> clean = ar.strip_whitespace(frame, subset=["name"])
     """
-    frame, _ = _validate_frame(frame)
+    _validate_arframe(frame)
     if subset is not None:
         subset = _validate_existing_column_sequence(
             subset,
@@ -949,7 +949,7 @@ def parse_bool_strings(
     """
     from .convert import from_pandas, to_pandas
 
-    frame, _ = _validate_frame(frame)
+    _validate_arframe(frame)
     if true_values is not None and isinstance(true_values, (str, bytes)):
         raise TypeError(
             "true_values must be a set/list/tuple of strings, not a bare string"
@@ -1073,7 +1073,7 @@ def normalize_case(
     >>> frame = ar.read_csv("data.csv")
     >>> lower = ar.normalize_case(frame, case_type="lower")
     """
-    frame, _ = _validate_frame(frame)
+    _validate_arframe(frame)
     if not isinstance(case_type, str):
         raise TypeError("case_type must be a string")
     valid_cases = {"lower", "upper", "title"}
@@ -1131,7 +1131,7 @@ def normalize_unicode(
     >>> frame = ar.read_csv("data.csv")
     >>> normalized = ar.normalize_unicode(frame, form="NFC")
     """
-    frame, _ = _validate_frame(frame)
+    _validate_arframe(frame)
     valid_forms = {"NFC", "NFD", "NFKC", "NFKD"}
     if form not in valid_forms:
         raise ValueError(f"Unsupported Unicode normalization form: {form}")
@@ -1202,7 +1202,7 @@ def rename_columns(
     >>> frame = ar.read_csv("data.csv")
     >>> renamed = ar.rename_columns(frame, {"old_name": "new_name"})
     """
-    frame, _ = _validate_frame(frame)
+    _validate_arframe(frame)
     mapping = _validate_string_mapping(mapping, argument_name="mapping")
     validate_columns_exist(
         frame,
@@ -1255,7 +1255,7 @@ def trim_column_names(frame: ArFrame) -> ArFrame:
     >>> frame = ar.read_csv("data.csv")  # columns: [" name ", " age "]
     >>> clean = ar.trim_column_names(frame)  # columns: ["name", "age"]
     """
-    frame, _ = _validate_frame(frame)
+    _validate_arframe(frame)
     trimmed = [col.strip() for col in frame.columns]
 
     if len(trimmed) != len(set(trimmed)):
@@ -1298,7 +1298,7 @@ def cast_types(
     >>> frame = ar.read_csv("data.csv")
     >>> casted = ar.cast_types(frame, {"age": "int64", "score": "float64"})
     """
-    frame, _ = _validate_frame(frame)
+    _validate_arframe(frame)
     if errors not in {"raise", "coerce", "ignore"}:
         raise ValueError("errors must be one of 'raise', 'coerce', or 'ignore'")
 
@@ -2208,7 +2208,7 @@ def clean_column_names(
     ValueError
         If case_type is invalid or if cleaning would create duplicate column names.
     """
-    frame, _ = _validate_frame(frame)
+    _validate_arframe(frame)
     if not isinstance(case_type, str):
         raise TypeError("case_type must be a string")
     if case_type not in {"lower", "upper", "none"}:
@@ -2280,3 +2280,197 @@ def slugify_column_names(frame, on_duplicates="raise"):
     df = df.copy()
     df.columns = new_cols
     return from_pandas(df) if is_arframe else df
+
+
+def find_fuzzy_duplicates(
+    frame,
+    *,
+    subset: list[str] | None = None,
+    threshold: float = 0.85,
+    ignore_case: bool = True,
+    normalize_whitespace: bool = True,
+) -> list[list[int]]:
+    """Return groups of near-duplicate row indices using similarity matching.
+
+    Uses ``difflib.SequenceMatcher`` from the Python standard library —
+    no new dependencies are required.
+
+    Row similarity is computed as the average ``SequenceMatcher.ratio()``
+    across the comparison columns (string columns only).  Numeric and bool
+    columns use exact equality.  Only groups of two or more rows are returned.
+
+    Parameters
+    ----------
+    frame : ArFrame or pd.DataFrame
+        Input data frame.
+    subset : list[str], optional
+        Column names to compare.  ``None`` (default) uses all string columns.
+    threshold : float, default 0.85
+        Minimum similarity in [0.0, 1.0] to treat two rows as near-duplicates.
+        Use ``1.0`` for exact duplicates only.
+    ignore_case : bool, default True
+        Normalize string values to lowercase before comparison.
+    normalize_whitespace : bool, default True
+        Collapse consecutive whitespace characters to a single space and strip
+        leading/trailing whitespace before comparison.
+
+    Returns
+    -------
+    list[list[int]]
+        Each inner list is a group of row indices (0-based) that are
+        near-duplicates of each other.  Exact duplicates (similarity = 1.0)
+        are always included regardless of threshold.
+
+    Raises
+    ------
+    ValueError
+        If ``threshold`` is outside [0.0, 1.0].
+    ValueError
+        If ``subset`` is empty or contains non-existent column names.
+    ValueError
+        If the frame has more than 50,000 rows and no ``subset`` is provided,
+        to avoid accidental O(n²) execution on large datasets.
+
+    Examples
+    --------
+    >>> groups = ar.find_fuzzy_duplicates(frame, threshold=0.85)
+    >>> for group in groups:
+    ...     print(group)   # e.g. [0, 2] means rows 0 and 2 are near-duplicates
+
+    >>> # Only compare the "name" column, case-insensitively
+    >>> groups = ar.find_fuzzy_duplicates(frame, subset=["name"], threshold=0.9)
+    """
+    import difflib
+    import re
+
+    from .convert import to_pandas
+    from .frame import ArFrame
+
+    # --- validate threshold -------------------------------------------------
+    if not (0.0 <= threshold <= 1.0):
+        raise ValueError(f"threshold must be between 0.0 and 1.0, got {threshold!r}")
+
+    # --- validate and normalise input to pandas ----------------------------
+    is_arframe = isinstance(frame, ArFrame)
+    if not is_arframe and not isinstance(frame, pd.DataFrame):
+        raise TypeError(
+            f"find_fuzzy_duplicates() expects an ArFrame or pandas DataFrame, "
+            f"got {type(frame).__name__!r}"
+        )
+    df = to_pandas(frame) if is_arframe else frame.copy()
+
+    # --- validate / resolve subset BEFORE early-return checks ---------------
+    if subset is not None:
+        if len(subset) == 0:
+            raise ValueError(
+                "find_fuzzy_duplicates: subset cannot be empty; "
+                "pass subset=None to compare all string columns."
+            )
+        missing = [c for c in subset if c not in df.columns]
+        if missing:
+            raise ValueError(
+                f"find_fuzzy_duplicates: column(s) not found: {missing}. "
+                f"Available: {list(df.columns)}"
+            )
+        compare_cols = list(subset)
+
+    n_rows = len(df)
+    if n_rows == 0:
+        return []
+    if n_rows == 1:
+        return []
+
+    if subset is not None:
+        pass  # already resolved above
+
+    else:
+        # default: all object/string columns
+        compare_cols = df.select_dtypes(include=["object", "string"]).columns.tolist()
+        if not compare_cols:
+            # fall back to all columns if no string columns found
+            compare_cols = list(df.columns)
+
+    # --- size guard ---------------------------------------------------------
+    if n_rows > 50_000 and subset is None:
+        raise ValueError(
+            f"find_fuzzy_duplicates: frame has {n_rows:,} rows. "
+            "Pairwise comparison is O(n²) and may be slow for large frames. "
+            "Pass subset= to limit the comparison columns, or filter the "
+            "frame to a smaller working set first."
+        )
+
+    # --- pre-process rows into normalised string tuples --------------------
+    def _normalise(val: object) -> str:
+        s = "" if val is None or (isinstance(val, float) and val != val) else str(val)
+        if ignore_case:
+            s = s.lower()
+        if normalize_whitespace:
+            s = re.sub(r"\s+", " ", s).strip()
+        return s
+
+    rows: list[tuple] = []
+    for i in range(n_rows):
+        row_vals = []
+        for col in compare_cols:
+            raw = df[col].iloc[i]
+            # Numeric / bool columns (including nullable extension types):
+            # keep as-is for exact equality comparison
+            import pandas as _pd
+
+            if _pd.api.types.is_numeric_dtype(df[col]) or _pd.api.types.is_bool_dtype(
+                df[col]
+            ):
+                row_vals.append(raw)
+            else:
+                row_vals.append(_normalise(raw))
+        rows.append(tuple(row_vals))
+
+    # --- pairwise similarity + Union-Find ----------------------------------
+    parent = list(range(n_rows))
+
+    def _find(x: int) -> int:
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def _union(x: int, y: int) -> None:
+        parent[_find(x)] = _find(y)
+
+    def _row_similarity(a: tuple, b: tuple) -> float:
+        scores: list[float] = []
+        for va, vb in zip(a, b):
+            if isinstance(va, str) and isinstance(vb, str):
+                scores.append(difflib.SequenceMatcher(None, va, vb).ratio())
+            else:
+                # Handle pd.NA and other missing sentinels before equality
+                # to avoid "boolean value of NA is ambiguous" TypeError.
+                import pandas as _pd
+
+                va_null = (
+                    va is None or va is _pd.NA or (isinstance(va, float) and va != va)
+                )
+                vb_null = (
+                    vb is None or vb is _pd.NA or (isinstance(vb, float) and vb != vb)
+                )
+                if va_null and vb_null:
+                    scores.append(1.0)  # both missing → exact match
+                elif va_null or vb_null:
+                    scores.append(0.0)  # one missing → mismatch
+                else:
+                    scores.append(1.0 if va == vb else 0.0)
+        return sum(scores) / len(scores) if scores else 0.0
+
+    for i in range(n_rows):
+        for j in range(i + 1, n_rows):
+            if _row_similarity(rows[i], rows[j]) >= threshold:
+                _union(i, j)
+
+    # --- collect groups with 2+ members ------------------------------------
+    from collections import defaultdict
+
+    groups: dict[int, list[int]] = defaultdict(list)
+    for i in range(n_rows):
+        groups[_find(i)].append(i)
+
+    return [sorted(g) for g in groups.values() if len(g) >= 2]
