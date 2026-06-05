@@ -47,3 +47,35 @@ Release-worthy changes should be easy to describe in one sentence:
 - Documentation improvement that materially helps adoption.
 
 Avoid merging unrelated changes into one PR because it makes release notes and regressions harder to understand.
+
+## Release & Publishing
+
+Publishing to PyPI is intentionally gated behind an explicit, validated release
+tag so that no untagged or arbitrary commit can be published. The
+[Build & Publish Wheels](.github/workflows/build_wheels.yml) workflow refuses to
+run unless it receives a `tag_name` that (1) matches the `vX.Y.Z` convention (a
+pre-release suffix such as `v1.2.3-rc1` is allowed) **and** (2) resolves to an
+existing Git tag under `refs/tags/`. A branch or other ref that merely looks
+like a tag is rejected. The verified tag is then frozen to its immutable commit
+SHA, every build job checks out that SHA, and the publish job re-verifies `HEAD`
+before uploading. The guard logic lives in
+[`scripts/verify_release_tag.sh`](scripts/verify_release_tag.sh) and is covered
+by [`tests/test_verify_release_tag.sh`](tests/test_verify_release_tag.sh) (run
+in CI by the *Verify Release Tag Guard* workflow).
+
+There are two supported paths:
+
+- **Automated (preferred).** Merging release-worthy changes to `main` lets
+  [Release Please](.github/workflows/release-please.yml) open/maintain a release
+  PR. Merging that PR creates the `vX.Y.Z` tag and automatically calls the build
+  & publish workflow with it. No manual action is required.
+- **Manual release.** If you must trigger publishing by hand, run the
+  *Build & Publish Wheels* workflow via **Run workflow** and enter the exact
+  release tag (e.g. `v1.2.3`) in the `tag_name` field. The tag is required; an
+  empty or non-`vX.Y.Z` value fails immediately before anything is built. The
+  workflow checks out that tag, so the tag must already exist and point at the
+  commit you intend to release.
+
+To verify a build without any chance of publishing, use the
+[Release Dry-Run Checklist](.github/workflows/release-dry-run.yml) workflow,
+which builds and smoke-tests the sdist and wheels but never publishes.
