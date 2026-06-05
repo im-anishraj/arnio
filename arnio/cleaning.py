@@ -1133,7 +1133,7 @@ def normalize_unicode(
     """
     _validate_arframe(frame)
     valid_forms = {"NFC", "NFD", "NFKC", "NFKD"}
-    if not isinstance(form,str):
+    if not isinstance(form, str):
         raise TypeError("form must be a string")
     if form not in valid_forms:
         raise ValueError(f"Unsupported Unicode normalization form: {form}")
