@@ -320,7 +320,8 @@ PYBIND11_MODULE(_arnio_cpp, m) {
         .def(py::init<>())
         .def_readwrite("delimiter", &CsvWriteConfig::delimiter)
         .def_readwrite("write_header", &CsvWriteConfig::write_header)
-        .def_readwrite("line_terminator", &CsvWriteConfig::line_terminator);
+        .def_readwrite("line_terminator", &CsvWriteConfig::line_terminator)
+        .def_readwrite("escape_formulas", &CsvWriteConfig::escape_formulas);
 
     py::class_<CsvWriter>(m, "CsvWriter")
         .def(py::init<const CsvWriteConfig&>(), py::arg("config") = CsvWriteConfig{})
@@ -383,8 +384,40 @@ PYBIND11_MODULE(_arnio_cpp, m) {
 
     m.def("rename_columns", &rename_columns, py::arg("frame"), py::arg("mapping"));
 
-    m.def("cast_types", &cast_types, py::arg("frame"), py::arg("mapping"),
-          py::arg("coerce_invalid") = false);
+    m.def(
+        "cast_types",
+        [](const Frame& frame, const std::unordered_map<std::string, std::string>& mapping,
+           const std::string& errors) {
+            CastErrors mode;
+            if (errors == "raise") {
+                mode = CastErrors::kRaise;
+            } else if (errors == "coerce") {
+                mode = CastErrors::kCoerce;
+            } else if (errors == "report") {
+                mode = CastErrors::kReport;
+            } else {
+                throw std::invalid_argument(
+                    "errors must be 'raise', 'coerce', or 'report', got: '" + errors + "'");
+            }
+            CastResult result;
+            {
+                py::gil_scoped_release release;
+                result = cast_types(frame, mapping, mode);
+            }
+            // Build a list of plain dicts so the Python layer can wrap them
+            // into whatever public type it chooses (CastReport, dataclass, etc.)
+            py::list failures_list;
+            for (const auto& f : result.failures) {
+                py::dict d;
+                d["column"] = f.column;
+                d["row"] = f.row;
+                d["value"] = f.value;
+                d["target_dtype"] = f.target_dtype;
+                failures_list.append(d);
+            }
+            return py::make_tuple(std::move(result.frame), failures_list);
+        },
+        py::arg("frame"), py::arg("mapping"), py::arg("errors") = std::string("raise"));
 
     m.def(
         "clip_numeric",
