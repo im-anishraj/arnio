@@ -30,7 +30,7 @@
 <!-- Paste commands you ran and summarize the result. -->
 - [ ] `make test` (or `python -m pytest tests -v --cov=arnio`)
 - [ ] `make lint` (or run separately):
-  ```bash
+```bash
   python scripts/check_docs_utf8.py
   python -m black --check --diff .
   python -m ruff check . --extend-exclude "*.ipynb"
