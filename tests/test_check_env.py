@@ -1,6 +1,7 @@
 """Unit tests for examples/check_env.py environment dashboard."""
 
 import sys
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -9,6 +10,7 @@ from examples.check_env import (
     EXAMPLES,
     BuildToolCheck,
     check_dependencies,
+    detect_core_status,
     print_dashboard,
 )
 from examples.example_registry import check_env_examples
@@ -114,6 +116,53 @@ def test_check_env_all_available(capsys: pytest.CaptureFixture[str]) -> None:
             if "arnio_with_duckdb.py" in line:
                 assert "[Ready]" in line
         assert "All optional dependencies are successfully installed!" in output
+        assert "Native Arnio core is available. You are ready to go." in output
+
+
+def test_check_env_reports_missing_native_core_readiness(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with patch.dict(sys.modules, {"arnio._core": None}):
+        results = {
+            "numpy": (True, "Installed"),
+            "pandas": (True, "Installed"),
+            "duckdb": (True, "Installed"),
+            "sklearn": (True, "Installed"),
+            "pyarrow": (True, "Installed"),
+            "pytest": (True, "Installed"),
+        }
+
+        print_dashboard(results, build_tools=MISSING_BUILD_TOOLS)
+
+        captured = capsys.readouterr()
+        output = captured.out
+
+        assert "All optional dependencies are successfully installed!" in output
+        assert "Native Arnio core is not available." in output
+
+
+def test_detect_core_status_uses_importable_package_path(
+    tmp_path: Path,
+) -> None:
+    source_package = tmp_path / "source" / "arnio"
+    source_package.mkdir(parents=True)
+
+    init_file = source_package / "__init__.py"
+    init_file.write_text("# source package")
+
+    installed_package = tmp_path / "site-packages" / "arnio"
+    installed_package.mkdir(parents=True)
+
+    (installed_package / "_arnio_cpp.pyd").write_text("compiled extension")
+
+    with patch(
+        "importlib.util.find_spec",
+        return_value=MagicMock(origin=str(init_file)),
+    ):
+        status, available = detect_core_status()
+
+    assert available is False
+    assert "Not Compiled" in status
 
 
 def test_check_dependencies_reports_broken_import() -> None:

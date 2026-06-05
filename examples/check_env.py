@@ -131,20 +131,24 @@ def check_build_tools():
 
 
 def detect_core_status():
-    """Detect the native extension without importing the full arnio package."""
+    """Detect the native extension for the actually importable arnio package."""
+    import importlib.util
+
     if "arnio._core" in sys.modules:
         if sys.modules["arnio._core"] is None:
             return "Not Compiled (arnio._core unavailable)", False
         return "Available (C++ Accelerated)", True
 
-    for entry in sys.path:
-        package_dir = Path(entry or ".") / "arnio"
-        if not package_dir.is_dir():
-            continue
+    spec = importlib.util.find_spec("arnio")
 
-        for suffix in EXTENSION_SUFFIXES:
-            if (package_dir / f"_arnio_cpp{suffix}").exists():
-                return "Available (C++ Accelerated)", True
+    if spec is None or spec.origin is None:
+        return "Not Installed (arnio package not found)", False
+
+    package_dir = Path(spec.origin).parent
+
+    for suffix in EXTENSION_SUFFIXES:
+        if (package_dir / f"_arnio_cpp{suffix}").exists():
+            return "Available (C++ Accelerated)", True
 
     return "Not Compiled (_arnio_cpp extension file not found)", False
 
@@ -229,15 +233,28 @@ def print_dashboard(results, build_tools=None):
         print("\n[TIP] To install all missing optional dependencies, run:")
         print(f"  pip install {' '.join(missing)}")
     else:
+        print("\nAll optional dependencies are successfully installed!")
+
+    if core_available:
+        print("Native Arnio core is available. You are ready to go.")
+    else:
         print(
-            "\nAll optional dependencies are successfully installed! You are ready to go."
+            "Native Arnio core is not available. "
+            "Build the extension before running Arnio examples locally."
         )
     print("=" * 70)
 
 
 def main():
     results = check_dependencies()
-    print_dashboard(results)
+    build_tools = check_build_tools()
+
+    print_dashboard(results, build_tools)
+
+    _, core_available = detect_core_status()
+
+    if not core_available and not build_tools["all_required_found"]:
+        sys.exit(1)
 
 
 if __name__ == "__main__":
