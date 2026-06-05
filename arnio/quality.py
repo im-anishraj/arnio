@@ -633,13 +633,9 @@ class DataQualityReport:
                     else:
                         filtered_kwargs[key] = value
 
-                kwargs_str = json.dumps(
-                    filtered_kwargs, sort_keys=True, default=str
-                )
+                kwargs_str = json.dumps(filtered_kwargs, sort_keys=True, default=str)
                 conf_score = getattr(step, "confidence_score", None)
-                conf_reason = _redact_reason(
-                    getattr(step, "confidence_reason", None)
-                )
+                conf_reason = _redact_reason(getattr(step, "confidence_reason", None))
                 if conf_score is not None and conf_reason is not None:
                     lines.append(
                         f"- `{step[0]}`: `{kwargs_str}` "
