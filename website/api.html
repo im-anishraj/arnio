@@ -28,7 +28,19 @@
     <div class="container container--wide">
       <a href="index.html" class="nav-brand" aria-label="Arnio home"><img src="arnio-logo.svg" alt="Arnio" height="32"></a>
       <ul class="nav-links"><li><a href="docs.html">Docs</a></li><li><a href="api.html">API</a></li><li><a href="benchmarks.html">Benchmarks</a></li><li><a href="contributing.html">Contributing</a></li><li><a href="architecture.html">Architecture</a></li><li><a href="roadmap.html">Roadmap</a></li><li><a href="community.html">Community</a></li><li><a href="changelog.html">Changelog</a></li></ul>
-      <div class="nav-actions"><a href="https://discord.gg/xsEw7r78M" class="nav-discord" target="_blank" rel="noopener" aria-label="Join Discord">Discord</a><a href="https://github.com/im-anishraj/arnio" class="nav-github" target="_blank" rel="noopener" aria-label="View on GitHub">GitHub</a><button class="theme-toggle" aria-label="Toggle theme">Theme</button><button class="nav-hamburger" aria-label="Open menu" aria-expanded="false">☰</button></div>
+      <div class="nav-actions">
+        <div class="search-wrapper">
+          <input
+            id="docs-search"
+            class="search-input"
+            type="text"
+            placeholder="Search docs... (Ctrl+K)"
+            aria-label="Search documentation"
+          />
+          <div id="search-results" class="search-results"></div>
+        </div>
+
+        <a href="https://discord.gg/xsEw7r78M" class="nav-discord" target="_blank" rel="noopener" aria-label="Join Discord">Discord</a><a href="https://github.com/im-anishraj/arnio" class="nav-github" target="_blank" rel="noopener" aria-label="View on GitHub">GitHub</a><button class="theme-toggle" aria-label="Toggle theme">Theme</button><button class="nav-hamburger" aria-label="Open menu" aria-expanded="false">☰</button></div>
     </div>
   </nav>
   <div class="mobile-menu" aria-label="Mobile navigation"><a href="index.html">Home</a><a href="docs.html">Documentation</a><a href="api.html">API Reference</a><a href="benchmarks.html">Benchmarks</a><a href="contributing.html">Contributing</a><a href="architecture.html">Architecture</a><a href="roadmap.html">Roadmap</a><a href="community.html">Community</a><a href="https://discord.gg/xsEw7r78M" target="_blank" rel="noopener">Discord</a><a href="changelog.html">Changelog</a></div>
@@ -303,5 +315,6 @@ cleaned = df.arnio.clean(drop_duplicates=True)
   </footer>
   <script src="js/main.js" defer></script>
   <script src="js/code.js" defer></script>
+  <script src="js/search.js" defer></script>
 </body>
 </html>
