@@ -6,6 +6,8 @@ import arnio as ar
 
 from ._version import __version__ as __version__
 from .cleaning import (
+    CastFailure,
+    CastReport,
     cast_types,
     clean,
     clean_column_names,
@@ -20,6 +22,7 @@ from .cleaning import (
     drop_nulls,
     fill_nulls,
     filter_rows,
+    find_fuzzy_duplicates,
     keep_rows_with_nulls,
     normalize_case,
     normalize_unicode,
@@ -142,6 +145,7 @@ __all__ = [
     "replace_values",
     "normalize_whitespace",
     "drop_duplicates",
+    "find_fuzzy_duplicates",
     "drop_constant_columns",
     "drop_empty_columns",
     "clean_column_names",
@@ -157,6 +161,8 @@ __all__ = [
     "rename_columns",
     "round_numeric_columns",
     "cast_types",
+    "CastFailure",
+    "CastReport",
     "clean",
     "safe_divide_columns",
     "slugify_column_names",

@@ -28,7 +28,19 @@
     <div class="container container--wide">
       <a href="index.html" class="nav-brand" aria-label="Arnio home"><img src="arnio-logo.svg" alt="Arnio" height="32"></a>
       <ul class="nav-links"><li><a href="docs.html">Docs</a></li><li><a href="api.html">API</a></li><li><a href="benchmarks.html">Benchmarks</a></li><li><a href="contributing.html">Contributing</a></li><li><a href="architecture.html">Architecture</a></li><li><a href="roadmap.html">Roadmap</a></li><li><a href="community.html">Community</a></li><li><a href="changelog.html">Changelog</a></li></ul>
-      <div class="nav-actions"><a href="https://discord.gg/xsEw7r78M" class="nav-discord" target="_blank" rel="noopener" aria-label="Join Discord">Discord</a><a href="https://github.com/im-anishraj/arnio" class="nav-github" target="_blank" rel="noopener" aria-label="View on GitHub">GitHub</a><button class="theme-toggle" aria-label="Toggle theme">Theme</button><button class="nav-hamburger" aria-label="Open menu" aria-expanded="false">☰</button></div>
+      <div class="nav-actions">
+        <div class="search-wrapper">
+          <input
+            id="docs-search"
+            class="search-input"
+            type="text"
+            placeholder="Search docs... (Ctrl+K)"
+            aria-label="Search documentation"
+          />
+          <div id="search-results" class="search-results"></div>
+        </div>
+
+        <a href="https://discord.gg/xsEw7r78M" class="nav-discord" target="_blank" rel="noopener" aria-label="Join Discord">Discord</a><a href="https://github.com/im-anishraj/arnio" class="nav-github" target="_blank" rel="noopener" aria-label="View on GitHub">GitHub</a><button class="theme-toggle" aria-label="Toggle theme">Theme</button><button class="nav-hamburger" aria-label="Open menu" aria-expanded="false">☰</button></div>
     </div>
   </nav>
   <div class="mobile-menu" aria-label="Mobile navigation"><a href="index.html">Home</a><a href="docs.html">Documentation</a><a href="api.html">API Reference</a><a href="benchmarks.html">Benchmarks</a><a href="contributing.html">Contributing</a><a href="architecture.html">Architecture</a><a href="roadmap.html">Roadmap</a><a href="community.html">Community</a><a href="https://discord.gg/xsEw7r78M" target="_blank" rel="noopener">Discord</a><a href="changelog.html">Changelog</a></div>
@@ -52,7 +64,7 @@
         <div class="api-func"><div class="api-func-header">scan_csv(path, *, delimiter=None, encoding="utf-8", trim_headers=True, decimal_separator=".", thousands_separator=None, sample_size=None, null_values=None, has_header=True, encoding_errors="strict", mode="strict", on_bad_lines="error")</div><div class="api-func-body"><p>Infer column names and dtypes without loading the full file. Like <code>read_csv</code>, omitted delimiters use tab for <code>.tsv</code> paths and comma otherwise.</p><p><strong>Example:</strong> <code>ar.scan_csv("raw.csv", sample_size=500, null_values=["NA", "MISSING"])</code> keeps sampling and null-token handling aligned with a later <code>read_csv()</code> call.</p></div></div>
         <div class="api-func"><div class="api-func-header">read_jsonl(path, *, encoding="utf-8", encoding_errors="strict", nrows=None)</div><div class="api-func-body"><p>Read JSON Lines or NDJSON into an <code>ArFrame</code>; mixed object columns are coerced to strings. The <code>encoding</code> and <code>encoding_errors</code> parameters control how file bytes are decoded into text.</p></div></div>
         <div class="api-func"><div class="api-func-header">read_jsonl_chunked(path, *, chunksize=10000, encoding="utf-8", encoding_errors="strict", nrows=None)</div><div class="api-func-body"><p>Yield JSON Lines or NDJSON records as <code>ArFrame</code> chunks without buffering the whole file. Uses the same validation, line-numbered errors, decoding controls, and <code>nrows</code> limit as <code>read_jsonl()</code>.</p></div></div>
-        <div class="api-func"><div class="api-func-header">write_csv(frame, path, *, delimiter=",", write_header=True, line_terminator="\n")</div><div class="api-func-body"><p>Write an <code>ArFrame</code> to CSV or TSV with delimiter and line terminator validation.</p></div></div>
+        <div class="api-func"><div class="api-func-header">write_csv(frame, path, *, delimiter=",", write_header=True, line_terminator="\n", escape_formulas=False)</div><div class="api-func-body"><p>Write an <code>ArFrame</code> to CSV or TSV with delimiter and line terminator validation. Set <code>escape_formulas=True</code> to prefix string cells that start with spreadsheet formula trigger characters before CSV quoting.</p></div></div>
         <div class="api-func"><div class="api-func-header">read_parquet(path, *, columns=None, usecols=None)</div><div class="api-func-body"><p>Read a Parquet file into an <code>ArFrame</code> via the optional <code>pyarrow</code> dependency. Install with <code>pip install "arnio[parquet]"</code>. Use <code>usecols</code> or <code>columns</code> for column subset selection.</p></div></div>
         <div class="api-func"><div class="api-func-header">write_parquet(frame, path, *, compression="snappy", row_group_size=None, preserve_attrs=True)</div><div class="api-func-body"><p>Write an <code>ArFrame</code> to Parquet via the optional <code>pyarrow</code> dependency. Install with <code>pip install "arnio[parquet]"</code>. <code>preserve_attrs=True</code> writes JSON-serializable <code>DataFrame.attrs</code> into Parquet metadata; set to <code>False</code> to skip that export. Accepted compression values: <code>"snappy"</code> (default), <code>"gzip"</code>, <code>"brotli"</code>, <code>"zstd"</code>, and <code>"none"</code>.</p></div></div>
         <div class="api-func"><div class="api-func-header">sniff_delimiter(path, *, encoding="utf-8", sample_size=2048)</div><div class="api-func-body"><p>Detect a likely delimiter for CSV-like input before reading or scanning. <code>sample_size</code> controls how many characters are read from the start of the file for detection; the default of <code>2048</code> is sufficient for most files. Increase it when the file has an unusual delimiter that only appears further into the content.</p></div></div>
@@ -84,11 +96,12 @@
         <table><thead><tr><th>Function</th><th>Purpose</th></tr></thead><tbody>
           <tr><td><code>drop_nulls</code>, <code>keep_rows_with_nulls</code>, <code>fill_nulls</code></td><td>Control null-bearing rows and values.</td></tr>
           <tr><td><code>validate_columns_exist</code>, <code>drop_columns</code>, <code>select_columns</code>, <code>drop_empty_columns</code>, <code>drop_constant_columns</code>, <code>drop_columns_matching</code></td><td>Validate and manage columns explicitly, by emptiness, constants, or regex.</td></tr>
-          <tr><td><code>filter_rows</code>, <code>drop_duplicates</code></td><td>Filter row sets and remove duplicate rows.</td></tr>
+          <tr><td><code>filter_rows</code>, <code>drop_duplicates</code>, <code>find_fuzzy_duplicates</code></td><td>Filter row sets, remove duplicate rows, and detect near-duplicate rows by similarity.</td></tr>
           <tr><td><code>strip_whitespace</code>, <code>normalize_whitespace</code>, <code>normalize_case</code>, <code>normalize_unicode</code>, <code>clean_column_names</code>, <code>trim_column_names</code>, <code>slugify_column_names</code>, <code>rename_columns</code>, <code>rename_columns_matching</code></td><td>Normalize text, headers, and column names.</td></tr>
           <tr><td><code>cast_types</code>, <code>parse_bool_strings</code>, <code>round_numeric_columns</code>, <code>clip_numeric</code>, <code>winsorize_outliers</code></td><td>Type and numeric cleanup.</td></tr>
           <tr><td><code>replace_values</code>, <code>standardize_missing_tokens</code>, <code>combine_columns</code>, <code>coalesce_columns</code>, <code>safe_divide_columns</code></td><td>Common feature engineering and value repair helpers.</td></tr>
         </tbody></table>
+        <div class="api-func"><div class="api-func-header">CastReport and CastFailure</div><div class="api-func-body"><p>Returned by <code>cast_types(..., errors="report")</code>. <code>CastReport</code> holds the cast <code>frame</code> and a <code>failures</code> list of <code>CastFailure</code> records. Each <code>CastFailure</code> has <code>column</code>, <code>row</code>, <code>value</code>, and <code>target_dtype</code> attributes. <code>bool(report)</code> is <code>True</code> when there is at least one failure.</p></div></div>
 
         <h2 id="pipeline">Pipeline</h2>
         <div class="api-func"><div class="api-func-header">pipeline(frame, steps, *, verbose=False, track_lineage=False)</div><div class="api-func-body"><p>Run named cleaning steps or registered Python callables. <code>verbose=True</code> enables lightweight diagnostics through the <code>arnio</code> logger and optional <code>PipelineContext</code>. Pass <code>track_lineage=True</code> to receive a <code>(ArFrame, LineageReport)</code> tuple that maps every dropped row back to its original index and the step that removed it.</p></div></div>
@@ -303,5 +316,6 @@ cleaned = df.arnio.clean(drop_duplicates=True)
   </footer>
   <script src="js/main.js" defer></script>
   <script src="js/code.js" defer></script>
+  <script src="js/search.js" defer></script>
 </body>
 </html>

@@ -1175,8 +1175,7 @@ class ValidationIssue:
                 )
             if self.row_index < 0:
                 raise ValueError(
-                    f"ValidationIssue 'row_index' must be >= 0, "
-                    f"got {self.row_index}"
+                    f"ValidationIssue 'row_index' must be >= 0, got {self.row_index}"
                 )
         _validate_severity(self.severity)
 
@@ -1404,6 +1403,16 @@ class SchemaDiffEntry:
     expected: Any = None
     observed: Any = None
 
+    def __post_init__(self) -> None:
+        if self.column is not None and not isinstance(self.column, str):
+            raise TypeError("column must be a str or None")
+
+        if self.attribute is not None and not isinstance(self.attribute, str):
+            raise TypeError("attribute must be a str or None")
+
+        if not isinstance(self.change, str) or not self.change.strip():
+            raise TypeError("change must be a non-empty string")
+
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-friendly dictionary."""
         return {
@@ -1420,6 +1429,14 @@ class SchemaDiff:
     """Result of comparing two schema contracts."""
 
     differences: list[SchemaDiffEntry]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.differences, list):
+            raise TypeError("differences must be a list of SchemaDiffEntry instances")
+
+        for i, diff in enumerate(self.differences):
+            if not isinstance(diff, SchemaDiffEntry):
+                raise TypeError(f"differences[{i}] must be a SchemaDiffEntry instance")
 
     @property
     def changed(self) -> bool:
@@ -2533,7 +2550,6 @@ def _validate_column(
 
     if field_def.dtype is not None and actual_dtype != field_def.dtype:
         if not (field_def.dtype == "datetime" and actual_dtype == "string"):
-
             message = (
                 f"Column {name!r} has dtype {actual_dtype!r}; "
                 f"expected {field_def.dtype!r}"
@@ -2547,9 +2563,7 @@ def _validate_column(
                     name,
                 )
             ):
-                message += (
-                    f". Values appear safely convertible " f"to '{field_def.dtype}'"
-                )
+                message += f". Values appear safely convertible to '{field_def.dtype}'"
 
             issues.append(
                 ValidationIssue(
