@@ -878,6 +878,138 @@ def winsorize_outliers(
     return from_pandas(df)
 
 
+def normalize_minmax(
+    frame: ArFrame,
+    *,
+    subset: list[str] | None = None,
+    feature_range: tuple[float, float] = (0.0, 1.0),
+) -> ArFrame:
+    """Scale numeric columns to a target range using min-max normalization.
+
+    Null values are preserved and excluded from min/max computation.
+    Constant columns (all non-null values identical) map to the lower bound
+    of ``feature_range`` without raising or producing NaN.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input data frame.
+    subset : list[str], optional
+        Numeric columns to normalize. If None, applies to all int64/float64 columns.
+    feature_range : tuple[float, float], default (0.0, 1.0)
+        Target output range as (min, max). Both bounds must be finite and min < max.
+
+    Returns
+    -------
+    ArFrame
+        New frame with normalized numeric columns.
+
+    Raises
+    ------
+    TypeError
+        If feature_range is not a tuple or list of two numbers.
+    ValueError
+        If feature_range bounds are not finite, or min >= max.
+        If subset contains non-numeric columns.
+        If any column in subset does not exist in the frame.
+
+    Examples
+    --------
+    >>> import arnio as ar
+    >>> frame = ar.read_csv("data.csv")
+    >>> scaled = ar.normalize_minmax(frame, subset=["price", "age"])
+    >>> scaled = ar.normalize_minmax(frame, feature_range=(-1.0, 1.0))
+    >>> # Pipeline usage
+    >>> cleaned = ar.pipeline(frame, [
+    ...     ("normalize_minmax", {"subset": ["price"], "feature_range": (0.0, 1.0)}),
+    ... ])
+    """
+    frame, _ = _validate_frame(frame)
+
+    # --- validate feature_range ---
+    if not isinstance(feature_range, (tuple, list)):
+        raise TypeError(
+            f"feature_range must be a tuple or list of two numbers, got {type(feature_range).__name__!r}"
+        )
+
+    if len(feature_range) != 2:
+        raise ValueError(
+            f"feature_range must contain exactly 2 elements, got {len(feature_range)}"
+        )
+    lo, hi = feature_range
+
+    if isinstance(lo, bool) or isinstance(hi, bool):
+        raise TypeError("feature_range bounds must be numeric (int or float), not bool")
+    if not isinstance(lo, (int, float)) or not isinstance(hi, (int, float)):
+        raise TypeError(
+            f"feature_range bounds must be numeric (int or float), "
+            f"got {type(lo).__name__!r} and {type(hi).__name__!r}"
+        )
+    if not math.isfinite(lo) or not math.isfinite(hi):
+        raise ValueError("feature_range bounds must be finite")
+    if lo >= hi:
+        raise ValueError(
+            f"feature_range min ({lo}) must be strictly less than max ({hi})"
+        )
+
+    # --- resolve target columns  ---
+    dtypes = frame.dtypes
+
+    numeric_columns = [
+        col for col, dtype in dtypes.items() if dtype in ("int64", "float64")
+    ]
+
+    if subset is not None:
+        subset = _validate_existing_column_sequence(
+            subset,
+            available_columns=frame.columns,
+            argument_name="subset",
+            missing_error=ValueError,
+            missing_message=lambda missing, available: (
+                f"Unknown columns in subset: {missing}. Available: {available}"
+            ),
+        )
+        non_numeric = [
+            col
+            for col in subset
+            if dtypes.get(col) not in ("int64", "float64")
+            and not to_pandas(frame)[col].isna().all()
+        ]
+        if non_numeric:
+            raise ValueError(
+                f"normalize_minmax only supports numeric columns: {non_numeric}"
+            )
+        target_columns = subset
+    else:
+        target_columns = numeric_columns
+
+    if not target_columns:
+        return from_pandas(to_pandas(frame))
+
+    # --- scale  ---
+    df = to_pandas(frame).copy(deep=False)
+    lo_f = float(lo)
+    hi_f = float(hi)
+    scale = hi_f - lo_f
+
+    for col in target_columns:
+        series = df[col].astype("float64")
+        col_min = series.min(skipna=True)
+        col_max = series.max(skipna=True)
+
+        if pd.isna(col_min):
+            # All-null column — leave unchanged
+            continue
+
+        if col_min == col_max:
+            # Constant column — map to lower bound, preserve nulls
+            df[col] = series.where(series.isna(), lo_f)
+        else:
+            df[col] = lo_f + (series - col_min) / (col_max - col_min) * scale
+
+    return from_pandas(df)
+
+
 def strip_whitespace(
     frame: ArFrame,
     *,

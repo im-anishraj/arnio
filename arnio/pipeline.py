@@ -38,6 +38,7 @@ _STEP_REGISTRY: dict[str, Callable] = {
     "drop_empty_columns": cleaning.drop_empty_columns,
     "clip_numeric": cleaning.clip_numeric,
     "winsorize_outliers": cleaning.winsorize_outliers,
+    "normalize_minmax": cleaning.normalize_minmax,
     "strip_whitespace": cleaning.strip_whitespace,
     "parse_bool_strings": cleaning.parse_bool_strings,
     "normalize_case": cleaning.normalize_case,
