@@ -119,6 +119,29 @@ def test_check_env_all_available(capsys: pytest.CaptureFixture[str]) -> None:
         assert "Native Arnio core is available. You are ready to go." in output
 
 
+def test_main_exits_when_core_and_required_build_tools_missing() -> None:
+    with (
+        patch(
+            "examples.check_env.check_dependencies",
+            return_value={},
+        ),
+        patch(
+            "examples.check_env.check_build_tools",
+            return_value=MISSING_BUILD_TOOLS,
+        ),
+        patch(
+            "examples.check_env.detect_core_status",
+            return_value=("Not Compiled", False),
+        ),
+        pytest.raises(SystemExit) as exc_info,
+    ):
+        from examples.check_env import main
+
+        main()
+
+    assert exc_info.value.code == 1
+
+
 def test_check_env_reports_missing_native_core_readiness(
     capsys: pytest.CaptureFixture[str],
 ) -> None:

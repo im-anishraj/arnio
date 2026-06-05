@@ -253,7 +253,11 @@ def main():
 
     _, core_available = detect_core_status()
 
-    if not core_available and not build_tools["all_required_found"]:
+    required_build_tools_available = all(
+        check.available for check in build_tools if check.required
+    )
+
+    if not core_available and not required_build_tools_available:
         sys.exit(1)
 
 
