@@ -4662,6 +4662,19 @@ class TestRenameColumnsMatching:
             ar.rename_columns_matching(frame, "^temp_$", "   ")
 
 
+class TestPublicHelpersValidateArFrame:
+    @pytest.mark.parametrize("obj", [object(), None, 123, pd.DataFrame()])
+    def test_cleaning_helpers_reject_invalid_frame(self, obj):
+        with pytest.raises(TypeError, match=".*must be an ArFrame.*"):
+            ar.drop_nulls(obj)
+        with pytest.raises(TypeError, match=".*must be an ArFrame.*"):
+            ar.strip_whitespace(obj)
+        with pytest.raises(TypeError, match=".*must be an ArFrame.*"):
+            ar.drop_columns(obj, ["x"])
+        with pytest.raises(TypeError, match=".*must be an ArFrame.*"):
+            ar.validate_columns_exist(obj, ["x"])
+
+
 # ---------------------------------------------------------------------------
 # Regression tests: locale-independent FLOAT64 parsing — issue #1989
 #

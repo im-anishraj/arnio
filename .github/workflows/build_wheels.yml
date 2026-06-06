@@ -21,7 +21,7 @@ jobs:
     name: Build source distribution
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           ref: ${{ inputs.tag_name || github.ref }}
       - name: Build sdist
@@ -56,7 +56,7 @@ jobs:
                   env={**os.environ, "PYTHONPATH": ""},
               )
           PY
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: sdist
           path: dist/*.tar.gz
@@ -71,19 +71,19 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           ref: ${{ inputs.tag_name || github.ref }}
 
       - name: Build wheels
-        uses: pypa/cibuildwheel@v3.2
+        uses: pypa/cibuildwheel@9c00cb4f6b517705a3794b22395aedc36257242c # v3.2
         env:
           CIBW_ARCHS_MACOS: "x86_64 arm64"
           CIBW_TEST_COMMAND: >-
             python -c "import os, pathlib, tempfile; os.chdir(tempfile.mkdtemp()); import arnio as ar; print('arnio wheel:', ar.__file__); assert hasattr(ar, 'read_csv'); csv = pathlib.Path('smoke.csv'); csv.write_text('name,age\nAlice,30\n'); frame = ar.read_csv(str(csv)); assert frame.shape == (1, 2)"
 
       - name: Set up Python for wheel smoke test
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
         with:
           python-version: "3.12"
 
@@ -91,7 +91,7 @@ jobs:
         run: python tests/smoke_wheel_install.py --wheelhouse wheelhouse
 
       - name: Upload wheels as artifacts
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: wheels-${{ matrix.os }}
           path: ./wheelhouse/*.whl
@@ -107,13 +107,13 @@ jobs:
 
     steps:
       - name: Download all artifacts
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
           pattern: '*'
           merge-multiple: true
           path: dist/
 
       - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # release/v1
         with:
           attestations: false
