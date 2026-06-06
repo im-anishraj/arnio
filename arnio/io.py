@@ -1217,43 +1217,84 @@ def write_csv(
             raise RuntimeError(str(e)) from e
         return
 
-    # Non-UTF-8 path: write UTF-8 to a temp file, then transcode in bounded
-    # chunks so the entire file is never held in memory at once.
+    # Non-UTF-8 path: write UTF-8 to a temp file, transcode into a second
+    # temp file in the destination directory, then atomically replace the
+    # destination only after the stream closes successfully.  This ensures
+    # an existing destination is never truncated when transcoding fails.
     import tempfile
 
     _CHUNK_SIZE = 1 << 20  # 1 MiB per chunk
 
-    tmp_fd, tmp_path = tempfile.mkstemp(suffix=".csv")
+    dest_dir = os.path.dirname(os.path.abspath(path)) or "."
+
+    # Temp file 1: UTF-8 output from the native C++ writer.
+    src_fd, src_tmp = tempfile.mkstemp(suffix=".csv")
+    # Temp file 2: transcoded output in the destination directory so that
+    # os.replace() is atomic on POSIX (same filesystem).
     try:
-        os.close(tmp_fd)
+        dst_fd, dst_tmp = tempfile.mkstemp(suffix=".csv", dir=dest_dir)
+    except OSError as exc:
+        os.close(src_fd)
         try:
-            writer.write(frame._frame, tmp_path)
+            os.unlink(src_tmp)
+        except OSError:
+            pass
+        raise RuntimeError(
+            f"write_csv: could not create temporary file in {dest_dir!r}: {exc}"
+        ) from exc
+
+    try:
+        os.close(src_fd)
+        os.close(dst_fd)
+
+        try:
+            writer.write(frame._frame, src_tmp)
         except RuntimeError as e:
             raise RuntimeError(str(e)) from e
 
         # newline="" on both sides preserves the line_terminator written by
         # the C++ backend exactly — no platform newline translation.
-        with (
-            open(tmp_path, encoding="utf-8", newline="") as src,
-            open(
-                path, "w", encoding=encoding, errors=encoding_errors, newline=""
-            ) as dst,
-        ):
-            while True:
-                chunk = src.read(_CHUNK_SIZE)
-                if not chunk:
-                    break
-                try:
-                    dst.write(chunk)
-                except UnicodeEncodeError as exc:
-                    raise ValueError(
-                        f"write_csv: character cannot be encoded in {encoding!r}: {exc}"
-                    ) from exc
+        try:
+            with (
+                open(src_tmp, encoding="utf-8", newline="") as src,
+                open(
+                    dst_tmp, "w", encoding=encoding, errors=encoding_errors, newline=""
+                ) as dst,
+            ):
+                while True:
+                    chunk = src.read(_CHUNK_SIZE)
+                    if not chunk:
+                        break
+                    try:
+                        dst.write(chunk)
+                    except UnicodeEncodeError as exc:
+                        raise ValueError(
+                            f"write_csv: character cannot be encoded in {encoding!r}: {exc}"
+                        ) from exc
+        except (OSError, FileNotFoundError) as exc:
+            raise RuntimeError(
+                f"write_csv: filesystem error during transcoding: {exc}"
+            ) from exc
+
+        # Atomically replace destination only after transcoding succeeded.
+        try:
+            os.replace(dst_tmp, path)
+        except OSError as exc:
+            raise RuntimeError(
+                f"write_csv: could not move transcoded file to {path!r}: {exc}"
+            ) from exc
+        dst_tmp = None  # successfully moved — do not delete in finally
+
     finally:
         try:
-            os.unlink(tmp_path)
+            os.unlink(src_tmp)
         except OSError:
             pass
+        if dst_tmp is not None:
+            try:
+                os.unlink(dst_tmp)
+            except OSError:
+                pass
 
 
 def scan_csv(

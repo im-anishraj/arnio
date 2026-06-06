@@ -605,3 +605,23 @@ class TestWriteCsvEncoding:
         ar.write_csv(frame, str(out), encoding="latin-1")
         after = set(glob.glob(str(tmp_path / "*.csv")))
         assert after - before == {str(out)}
+
+    def test_existing_destination_preserved_on_strict_encoding_failure(self, tmp_path):
+        """Existing destination must survive a strict encoding failure unchanged."""
+        sentinel = "original sentinel content"
+        out = tmp_path / "out.csv"
+        out.write_text(sentinel, encoding="utf-8")
+
+        frame = ar.from_pandas(pd.DataFrame({"val": ["こんにちは"]}))
+        with pytest.raises(ValueError, match="cannot be encoded"):
+            ar.write_csv(frame, str(out), encoding="latin-1", encoding_errors="strict")
+
+        # Destination must be untouched — not truncated or corrupted.
+        assert out.read_text(encoding="utf-8") == sentinel
+
+    def test_missing_parent_raises_runtime_error(self, tmp_path):
+        """Missing parent directory must raise RuntimeError, not raw FileNotFoundError."""
+        frame = self._simple_frame()
+        out = tmp_path / "nonexistent_dir" / "out.csv"
+        with pytest.raises(RuntimeError):
+            ar.write_csv(frame, str(out), encoding="latin-1")
