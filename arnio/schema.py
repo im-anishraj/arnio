@@ -6,11 +6,11 @@ Production data contracts and validation.
 from __future__ import annotations
 
 import json
+import math
 import re
 import warnings
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from datetime import datetime
 from typing import Any, Callable
 from zoneinfo import available_timezones
 
@@ -34,6 +34,138 @@ DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 URL_SCHEME_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*$")
 
 _VALID_SEVERITIES = {"error", "warning"}
+_VALID_FIELD_DTYPES = frozenset({"int64", "float64", "string", "bool", "datetime"})
+_REGEX_UNSAFE_MESSAGE = (
+    "Unsafe regex pattern rejected: nested quantifiers can cause "
+    "catastrophic backtracking during schema validation"
+)
+
+
+def _is_regex_quantifier(pattern: str, index: int) -> bool:
+    if index >= len(pattern):
+        return False
+
+    char = pattern[index]
+    if char in {"*", "+", "?"}:
+        return True
+
+    if char != "{":
+        return False
+
+    end = pattern.find("}", index + 1)
+    if end == -1:
+        return False
+
+    body = pattern[index + 1 : end]
+    if not body:
+        return False
+
+    parts = body.split(",")
+    if len(parts) > 2:
+        return False
+
+    return all(part == "" or part.isdigit() for part in parts)
+
+
+def _has_variable_quantifier(fragment: str) -> bool:
+    escaped = False
+    in_class = False
+
+    for index, char in enumerate(fragment):
+        if escaped:
+            escaped = False
+            continue
+
+        if char == "\\":
+            escaped = True
+            continue
+
+        if char == "[":
+            in_class = True
+            continue
+
+        if char == "]":
+            in_class = False
+            continue
+
+        if in_class:
+            continue
+
+        if char in {"*", "+", "?"}:
+            return True
+
+        if char == "{":
+            end = fragment.find("}", index + 1)
+            if end == -1:
+                continue
+
+            body = fragment[index + 1 : end]
+            parts = body.split(",")
+
+            if len(parts) == 2 and all(part == "" or part.isdigit() for part in parts):
+                return True
+
+    return False
+
+
+def _has_nested_quantifier(pattern: str) -> bool:
+    escaped = False
+    in_class = False
+    stack: list[int] = []
+
+    for index, char in enumerate(pattern):
+        if escaped:
+            escaped = False
+            continue
+
+        if char == "\\":
+            escaped = True
+            continue
+
+        if char == "[":
+            in_class = True
+            continue
+
+        if char == "]":
+            in_class = False
+            continue
+
+        if in_class:
+            continue
+
+        if char == "(":
+            stack.append(index)
+            continue
+
+        if char == ")" and stack:
+            start = stack.pop()
+            next_index = index + 1
+
+            if _is_regex_quantifier(pattern, next_index):
+                group_body = pattern[start + 1 : index]
+
+                if group_body.startswith("?P<"):
+                    name_end = group_body.find(">")
+                    if name_end != -1:
+                        group_body = group_body[name_end + 1 :]
+                else:
+                    for prefix in ("?:", "?=", "?!", "?<=", "?<!"):
+                        if group_body.startswith(prefix):
+                            group_body = group_body[len(prefix) :]
+                            break
+
+                if _has_variable_quantifier(group_body):
+                    return True
+
+    return False
+
+
+def _reject_unsafe_regex_pattern(pattern: str) -> None:
+    if _has_nested_quantifier(pattern):
+        raise ValueError(_REGEX_UNSAFE_MESSAGE)
+
+
+_FIELD_DTYPE_OPTIONS = "int64, float64, string, bool, datetime, or None"
 
 _ALLOWED_FIELD_KEYS = {
     "dtype",
@@ -66,6 +198,22 @@ def _validate_severity(severity: str) -> None:
     """Raise ValueError if severity is not 'error' or 'warning'."""
     if severity not in _VALID_SEVERITIES:
         raise ValueError("severity must be 'error' or 'warning'")
+
+
+def _validate_numeric_bound(value: float | int, name: str) -> None:
+    """Raise ValueError if value is not a finite number."""
+    if not math.isfinite(value):
+        raise ValueError(f"{name} must be a finite number, got {value!r}")
+
+
+def _validate_field_dtype(dtype: str | None) -> None:
+    """Raise if a Field dtype is not a supported public dtype."""
+    if dtype is None:
+        return
+    if not isinstance(dtype, str):
+        raise TypeError(f"dtype must be a string or None, got {type(dtype).__name__}")
+    if dtype not in _VALID_FIELD_DTYPES:
+        raise ValueError(f"dtype must be one of {_FIELD_DTYPE_OPTIONS}, got {dtype!r}")
 
 
 _DTYPE_MAP = {
@@ -728,6 +876,8 @@ class Field:
     severity: str = "error"
 
     def __post_init__(self) -> None:
+        _validate_field_dtype(self.dtype)
+
         if not isinstance(self.nullable, bool):
             raise TypeError("nullable must be a bool")
         if not isinstance(self.unique, bool):
@@ -756,10 +906,6 @@ class Field:
             if self.min is not None and self.max is not None:
                 if self.min > self.max:
                     raise ValueError("min must be less than or equal to max")
-        if self.dtype is not None and not isinstance(self.dtype, str):
-            raise TypeError(
-                f"dtype must be a str or None, got {type(self.dtype).__name__}"
-            )
 
         if self.pattern is not None:
             if not isinstance(self.pattern, str):
@@ -772,6 +918,7 @@ class Field:
                 raise ValueError(
                     f"pattern is not a valid regular expression: {exc}"
                 ) from exc
+            _reject_unsafe_regex_pattern(self.pattern)
 
         if self.allowed is not None:
             if not isinstance(self.allowed, (list, tuple, set)):
@@ -1004,6 +1151,26 @@ class ValidationIssue:
     value: Any = None
     severity: str = "error"
 
+    @classmethod
+    def _fast_create(
+        cls,
+        *,
+        column,
+        rule,
+        message,
+        row_index,
+        value,
+        severity,
+    ):
+        obj = object.__new__(cls)
+        object.__setattr__(obj, "column", column)
+        object.__setattr__(obj, "rule", rule)
+        object.__setattr__(obj, "message", message)
+        object.__setattr__(obj, "row_index", row_index)
+        object.__setattr__(obj, "value", value)
+        object.__setattr__(obj, "severity", severity)
+        return obj
+
     def __post_init__(self) -> None:
         if not (self.column is None or isinstance(self.column, str)):
             raise TypeError(
@@ -1028,8 +1195,7 @@ class ValidationIssue:
                 )
             if self.row_index < 0:
                 raise ValueError(
-                    f"ValidationIssue 'row_index' must be >= 0, "
-                    f"got {self.row_index}"
+                    f"ValidationIssue 'row_index' must be >= 0, got {self.row_index}"
                 )
         _validate_severity(self.severity)
 
@@ -1257,6 +1423,16 @@ class SchemaDiffEntry:
     expected: Any = None
     observed: Any = None
 
+    def __post_init__(self) -> None:
+        if self.column is not None and not isinstance(self.column, str):
+            raise TypeError("column must be a str or None")
+
+        if self.attribute is not None and not isinstance(self.attribute, str):
+            raise TypeError("attribute must be a str or None")
+
+        if not isinstance(self.change, str) or not self.change.strip():
+            raise TypeError("change must be a non-empty string")
+
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-friendly dictionary."""
         return {
@@ -1273,6 +1449,14 @@ class SchemaDiff:
     """Result of comparing two schema contracts."""
 
     differences: list[SchemaDiffEntry]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.differences, list):
+            raise TypeError("differences must be a list of SchemaDiffEntry instances")
+
+        for i, diff in enumerate(self.differences):
+            if not isinstance(diff, SchemaDiffEntry):
+                raise TypeError(f"differences[{i}] must be a SchemaDiffEntry instance")
 
     @property
     def changed(self) -> bool:
@@ -1798,9 +1982,11 @@ def Int64(
     if min is not None:
         if isinstance(min, bool) or not isinstance(min, (int, float)):
             raise TypeError("min must be numeric or None")
+        _validate_numeric_bound(min, "min")
     if max is not None:
         if isinstance(max, bool) or not isinstance(max, (int, float)):
             raise TypeError("max must be numeric or None")
+        _validate_numeric_bound(max, "max")
     if min is not None and max is not None and min > max:
         raise ValueError("min must be less than or equal to max")
 
@@ -1841,9 +2027,11 @@ def Float64(
     if min is not None:
         if isinstance(min, bool) or not isinstance(min, (int, float)):
             raise TypeError("min must be numeric or None")
+        _validate_numeric_bound(min, "min")
     if max is not None:
         if isinstance(max, bool) or not isinstance(max, (int, float)):
             raise TypeError("max must be numeric or None")
+        _validate_numeric_bound(max, "max")
     if min is not None and max is not None and min > max:
         raise ValueError("min must be less than or equal to max")
 
@@ -1903,6 +2091,7 @@ def String(
             re.compile(pattern)
         except re.error as exc:
             raise ValueError(f"Invalid regex pattern: {pattern!r}") from exc
+        _reject_unsafe_regex_pattern(pattern)
 
     for name, value in (
         ("min_length", min_length),
@@ -2273,6 +2462,7 @@ def Regex(
     import re
 
     re.compile(pattern)  # fail fast on invalid pattern
+    _reject_unsafe_regex_pattern(pattern)
     return Field(
         dtype="string",
         nullable=nullable,
@@ -2380,7 +2570,6 @@ def _validate_column(
 
     if field_def.dtype is not None and actual_dtype != field_def.dtype:
         if not (field_def.dtype == "datetime" and actual_dtype == "string"):
-
             message = (
                 f"Column {name!r} has dtype {actual_dtype!r}; "
                 f"expected {field_def.dtype!r}"
@@ -2394,9 +2583,7 @@ def _validate_column(
                     name,
                 )
             ):
-                message += (
-                    f". Values appear safely convertible " f"to '{field_def.dtype}'"
-                )
+                message += f". Values appear safely convertible to '{field_def.dtype}'"
 
             issues.append(
                 ValidationIssue(
@@ -2552,7 +2739,12 @@ def _validate_column(
             else:
                 invalid = non_null[
                     ~non_null.map(
-                        lambda v: _normalize_validator_result(fn(v), validator_name)
+                        lambda v: _run_custom_validator(
+                            fn,
+                            v,
+                            column=name,
+                            validator_name=validator_name,
+                        )
                     )
                 ]
                 issues.extend(
@@ -2583,19 +2775,16 @@ def _validate_column(
                 )
             else:
                 if field_def.semantic == "date":
-                    invalid_values = []
-                    for index, value in non_null.items():
-                        value_str = str(value)
-                        if DATE_PATTERN.fullmatch(value_str) is None:
-                            invalid_values.append((index, value))
-                            continue
-                        try:
-                            datetime.strptime(value_str, "%Y-%m-%d")
-                        except ValueError:
-                            invalid_values.append((index, value))
-                    invalid = pd.Series(
-                        {index: value for index, value in invalid_values}
+                    values_as_text = non_null.astype("string")
+                    format_valid = values_as_text.str.fullmatch(
+                        DATE_PATTERN.pattern, na=False
                     )
+                    parsed = pd.to_datetime(
+                        values_as_text.where(format_valid),
+                        format="%Y-%m-%d",
+                        errors="coerce",
+                    )
+                    invalid = non_null[~(format_valid & parsed.notna())]
                 elif field_def.semantic == "country_code":
                     values = (
                         non_null.str.upper()
@@ -2738,7 +2927,7 @@ def _row_issues(
 ) -> list[ValidationIssue]:
     """Convert a series of invalid rows into a list of ValidationIssue objects."""
     return [
-        ValidationIssue(
+        ValidationIssue._fast_create(
             column=column,
             rule=rule,
             message=message,
@@ -2956,8 +3145,8 @@ def register_validator(
     """
     if not callable(fn):
         raise TypeError("fn must be callable")
-    if not isinstance(name, str) or not name:
-        raise ValueError("name must be a non-empty string")
+    if not isinstance(name, str) or not name.strip():
+        raise ValueError("Validator name must be a non-empty, non-whitespace string")
     if name in _CUSTOM_VALIDATORS and not overwrite:
         raise ValueError(
             f"Validator {name!r} is already registered. "
@@ -2997,6 +3186,24 @@ def _normalize_validator_result(result: object, validator_name: str) -> bool:
         f"{type(result).__name__!r} ({result!r}); "
         "validators must return True (pass) or False (fail)."
     )
+
+
+def _run_custom_validator(
+    fn: Callable[[Any], object],
+    value: Any,
+    *,
+    column: str,
+    validator_name: str,
+) -> bool:
+    """Run a registered custom validator and add schema context on failure."""
+    try:
+        result = fn(value)
+    except Exception as exc:
+        raise ArnioError(
+            f"Custom validator {validator_name!r} failed for column "
+            f"{column!r} with value {value!r}: {exc}"
+        ) from exc
+    return _normalize_validator_result(result, validator_name)
 
 
 def Custom(

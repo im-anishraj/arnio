@@ -138,7 +138,6 @@ class TestPipeline:
                 }
             )
         )
-
         result = ar.pipeline(
             frame,
             [
@@ -322,6 +321,32 @@ class TestPipeline:
 
         assert result.dtypes["years"] == "float64"
         assert "age" not in result.columns
+
+    def test_pipeline_cast_types_shorthand_rejects_reserved_kwargs(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "age": ["1", "2"],
+                }
+            )
+        )
+
+        with pytest.raises(
+            ValueError,
+            match="cast_types shorthand mapping cannot be mixed",
+        ):
+            ar.pipeline(
+                frame,
+                [
+                    (
+                        "cast_types",
+                        {
+                            "age": "int64",
+                            "errors": "coerce",
+                        },
+                    ),
+                ],
+            )
 
     def test_pipeline_mapping_keyword_form(self, sample_csv):
         frame = ar.read_csv(sample_csv)
@@ -564,7 +589,12 @@ class TestPipeline:
         )
 
         assert isinstance(result, ar.ArFrame)
-        assert list(metadata.keys()) == ["applied_steps", "row_counts", "step_timings"]
+        assert list(metadata.keys()) == [
+            "applied_steps",
+            "row_counts",
+            "step_timings",
+            "execution_summary",
+        ]
         assert metadata["applied_steps"] == ["strip_whitespace", "normalize_case"]
         assert len(metadata["row_counts"]) == 2
         assert metadata["row_counts"][0]["step"] == "strip_whitespace"
@@ -632,8 +662,13 @@ class TestPipeline:
             ar.unregister_step("missing_step")
 
     def test_unregister_builtin_python_step(self):
-        with pytest.raises(ar.UnknownStepError):
-            ar.unregister_step("standardize_missing_tokens")
+        for step_name in [
+            "standardize_missing_tokens",
+            "filter_rows",
+            "replace_values",
+        ]:
+            with pytest.raises(ValueError):
+                ar.unregister_step(step_name)
 
     def test_unregister_custom_step(self):
         def custom_step(df):
@@ -862,6 +897,42 @@ class TestPipeline:
         assert row_counts[0]["before"] == 3
         assert row_counts[0]["after"] == 3
         assert row_counts[0]["dry_run"] is True
+
+    def test_register_step_invalid_name_type(self):
+        """Raise ValueError when name is not a string."""
+        with pytest.raises(
+            ValueError, match="parameter 'name' must be a non-empty string"
+        ):
+            ar.register_step(123, lambda df: df)
+
+    def test_register_step_empty_name(self):
+        """Raise ValueError when name is empty string."""
+        with pytest.raises(
+            ValueError, match="parameter 'name' must be a non-empty string"
+        ):
+            ar.register_step("", lambda df: df)
+
+    def test_register_step_non_callable_fn(self):
+        """Raise TypeError when fn is not callable."""
+        with pytest.raises(TypeError, match="parameter 'fn' must be a callable object"):
+            ar.register_step("bad_step", 123)
+
+    def test_register_step_non_bool_overwrite(self):
+        """Raise TypeError when overwrite is not a bool."""
+        with pytest.raises(TypeError, match="parameter 'overwrite' must be a bool"):
+            ar.register_step("some_step", lambda df: df, overwrite="yes")
+
+    def test_unregister_step_invalid_name_type(self):
+        """Raise TypeError when name is not a string."""
+        with pytest.raises(TypeError, match="parameter 'name' must be a string"):
+            ar.unregister_step(["bad_step"])
+
+    def test_unregister_step_empty_name(self):
+        """Raise ValueError when name is empty string."""
+        with pytest.raises(
+            ValueError, match="parameter 'name' must be a non-empty string"
+        ):
+            ar.unregister_step("")
 
     def test_pipeline_filter_rows_non_string_column_raises_type_error(self):
         frame = ar.from_pandas(pd.DataFrame({"x": [1, 2, 3]}))
@@ -1983,3 +2054,125 @@ class TestRegisterStepValidation:
             register_step(None, dummy_clean)  # type: ignore
         with pytest.raises(ValueError, match="must be a non-empty string"):
             register_step(42, dummy_clean)  # type: ignore
+
+
+class TestPipelineStepContainerValidation:
+    @pytest.fixture
+    def frame(self, sample_csv):
+        return ar.read_csv(sample_csv)
+
+    @pytest.mark.parametrize(
+        "invalid_steps",
+        [None, "drop_nulls", b"drop_nulls", {"drop_nulls": {}}, ("drop_nulls",)],
+    )
+    def test_pipeline_rejects_invalid_step_containers(self, frame, invalid_steps):
+        with pytest.raises(TypeError):
+            ar.pipeline(frame, invalid_steps)
+
+    def test_pipeline_rejects_bare_step_tuple_with_helpful_message(self, frame):
+        with pytest.raises(TypeError, match=r"\[\(\'drop_nulls\',\)\]"):
+            ar.pipeline(frame, ("drop_nulls",))
+
+    def test_pipeline_accepts_valid_step_container(self, frame):
+        result = ar.pipeline(frame, [("strip_whitespace",)])
+        assert isinstance(result, ar.ArFrame)
+
+
+class TestExecutionSummary:
+    def test_execution_summary_present_in_metadata(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        _, metadata = ar.pipeline(
+            frame,
+            [("drop_nulls",)],
+            return_metadata=True,
+        )
+        assert "execution_summary" in metadata
+
+    def test_execution_summary_total_runtime_is_float(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        _, metadata = ar.pipeline(
+            frame,
+            [("drop_nulls",)],
+            return_metadata=True,
+        )
+        assert isinstance(metadata["execution_summary"]["total_runtime_ms"], float)
+
+    def test_execution_summary_steps_count_matches(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        _, metadata = ar.pipeline(
+            frame,
+            [("drop_nulls",), ("strip_whitespace",)],
+            return_metadata=True,
+        )
+        assert len(metadata["execution_summary"]["steps"]) == 2
+
+    def test_execution_summary_step_fields(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        _, metadata = ar.pipeline(
+            frame,
+            [("drop_nulls",)],
+            return_metadata=True,
+        )
+        step = metadata["execution_summary"]["steps"][0]
+        assert step["name"] == "drop_nulls"
+        assert step["status"] == "success"
+        assert isinstance(step["runtime_ms"], float)
+        assert isinstance(step["rows_before"], int)
+        assert isinstance(step["rows_after"], int)
+        assert isinstance(step["rows_affected"], int)
+        assert isinstance(step["columns_before"], int)
+        assert isinstance(step["columns_after"], int)
+
+    def test_execution_summary_only_contains_successful_steps(self):
+        def bad_step(df):
+            raise ValueError("boom")
+
+        ar.register_step("bad_step_summary", bad_step)
+        frame = ar.from_pandas(pd.DataFrame({"a": [1, 2]}))
+        with pytest.raises(Exception):
+            ar.pipeline(
+                frame,
+                [("drop_nulls",), ("bad_step_summary",)],
+                return_metadata=True,
+            )
+        ar.unregister_step("bad_step_summary")
+
+        frame2 = ar.from_pandas(pd.DataFrame({"a": [1, None, 2]}))
+        _, metadata = ar.pipeline(
+            frame2,
+            [("drop_nulls",), ("strip_whitespace",)],
+            return_metadata=True,
+        )
+        assert all(
+            s["status"] == "success" for s in metadata["execution_summary"]["steps"]
+        )
+        assert len(metadata["execution_summary"]["steps"]) == 2
+
+    def test_execution_summary_dry_run_rows_unchanged(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        _, metadata = ar.pipeline(
+            frame,
+            [("drop_nulls",)],
+            return_metadata=True,
+            dry_run=True,
+        )
+        step = metadata["execution_summary"]["steps"][0]
+        assert step["rows_before"] == step["rows_after"]
+        assert step["rows_affected"] == 0
+
+    def test_execution_summary_python_step(self):
+        def add_col(df):
+            df["x"] = 1
+            return df
+
+        ar.register_step("es_python_step", add_col)
+        frame = ar.from_pandas(pd.DataFrame({"a": [1, 2, 3]}))
+        _, metadata = ar.pipeline(
+            frame,
+            [("es_python_step",)],
+            return_metadata=True,
+        )
+        ar.unregister_step("es_python_step")
+        step = metadata["execution_summary"]["steps"][0]
+        assert step["name"] == "es_python_step"
+        assert step["status"] == "success"

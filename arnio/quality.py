@@ -9,7 +9,8 @@ import html
 import json
 import math
 import os
-from collections.abc import Sequence
+import re
+from collections.abc import Sequence, Set
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -24,7 +25,7 @@ from .cleaning import (
     validate_columns_exist,
 )
 from .convert import to_pandas
-from .frame import ArFrame
+from .frame import ArFrame, _validate_arframe
 
 
 class CleaningSuggestion(tuple):
@@ -271,6 +272,41 @@ class ColumnProfile:
         }
 
 
+QUALITY_REPORT_COLUMNS = [
+    "name",
+    "dtype",
+    "semantic_type",
+    "null_count",
+    "null_ratio",
+    "unique_count",
+    "unique_ratio",
+    "empty_string_count",
+    "whitespace_count",
+    "suggested_dtype",
+    "email_validity_ratio",
+    "url_validity_ratio",
+    "min",
+    "max",
+    "mean",
+    "std",
+    "warnings",
+    "top_values",
+    "top_values_is_approximate",
+    "top_values_sample_count",
+    "top_values_sample_ratio",
+    "histogram",
+    "q25",
+    "q50",
+    "q75",
+    "q95",
+    "iqr",
+    "outlier_lower_bound",
+    "outlier_upper_bound",
+    "outlier_count",
+    "outlier_ratio",
+]
+
+
 @dataclass(frozen=True)
 class DataQualityReport:
     """Whole-frame data quality report."""
@@ -419,6 +455,17 @@ class DataQualityReport:
             ],
         }
 
+    def score_breakdown(self) -> dict[str, float]:
+        """Return a breakdown of the individual penalty scores."""
+        return {
+            "null_penalty": self.score_components.get("null_penalty", 0.0),
+            "duplicate_penalty": self.score_components.get("duplicate_penalty", 0.0),
+            "type_mismatch_penalty": self.score_components.get(
+                "type_mismatch_penalty", 0.0
+            ),
+            "final_score": self.quality_score,
+        }
+
     def __repr__(self) -> str:
         """Deterministic concise representation for terminals and notebooks."""
 
@@ -486,9 +533,35 @@ class DataQualityReport:
         self,
         output: Any | None = None,
         max_suggestions: int | None = None,
+        exclude_columns: list[str] | set[str] | tuple[str, ...] | None = None,
     ) -> str | None:
         """Return a GitHub-friendly Markdown report."""
         max_suggestions = self._validate_max_suggestions(max_suggestions)
+
+        if exclude_columns is None:
+            exclude_columns = set()
+        elif not isinstance(exclude_columns, (list, tuple, set)):
+            raise TypeError("exclude_columns must be a list, tuple, set, or None")
+        else:
+            if not all(isinstance(column, str) for column in exclude_columns):
+                raise TypeError("exclude_columns must contain only string column names")
+            exclude_columns = set(exclude_columns)
+
+        unknown_exclude_columns = sorted(exclude_columns - set(self.columns))
+        if unknown_exclude_columns:
+            available_columns = ", ".join(self.columns) or "<none>"
+            raise KeyError(
+                "Unknown exclude_columns: "
+                f"{unknown_exclude_columns}. Available columns: {available_columns}"
+            )
+
+        def _redact_reason(reason: str | None) -> str | None:
+            if not reason or not exclude_columns:
+                return reason
+            for col in exclude_columns:
+                pattern = rf"\b{re.escape(col)}\b"
+                reason = re.sub(pattern, "[REDACTED]", reason)
+            return reason
 
         lines: list[str] = []
 
@@ -517,6 +590,8 @@ class DataQualityReport:
             lines.append("|---|---|---|---|---|---|---|")
 
             for name in sorted(self.columns):
+                if name in exclude_columns:
+                    continue
                 column = self.columns[name]
 
                 warnings = ", ".join(column.warnings) if column.warnings else "-"
@@ -545,9 +620,33 @@ class DataQualityReport:
                 rendered_suggestions = self.suggestions[:max_suggestions]
 
             for step in rendered_suggestions:
-                kwargs_str = json.dumps(step[1], sort_keys=True, default=str)
+                filtered_kwargs: dict[str, Any] = {}
+                for key, value in sorted(dict(step[1]).items()):
+                    if key in {"subset", "columns"}:
+                        if isinstance(value, Sequence) and not isinstance(value, str):
+                            filtered_kwargs[key] = [
+                                item for item in value if item not in exclude_columns
+                            ]
+                        elif isinstance(value, Set):
+                            filtered_kwargs[key] = sorted(
+                                item for item in value if item not in exclude_columns
+                            )
+                        else:
+                            filtered_kwargs[key] = value
+                    elif key == "cast_types" and isinstance(value, dict):
+                        filtered_kwargs[key] = {
+                            col_name: col_type
+                            for col_name, col_type in value.items()
+                            if col_name not in exclude_columns
+                        }
+                    elif isinstance(value, str) and value in exclude_columns:
+                        filtered_kwargs[key] = "[REDACTED]"
+                    else:
+                        filtered_kwargs[key] = value
+
+                kwargs_str = json.dumps(filtered_kwargs, sort_keys=True, default=str)
                 conf_score = getattr(step, "confidence_score", None)
-                conf_reason = getattr(step, "confidence_reason", None)
+                conf_reason = _redact_reason(getattr(step, "confidence_reason", None))
                 if conf_score is not None and conf_reason is not None:
                     lines.append(
                         f"- `{step[0]}`: `{kwargs_str}` "
@@ -613,6 +712,8 @@ class DataQualityReport:
                 raise TypeError(
                     f"file_path must be a string, bytes, or os.PathLike object, got {type(file_path).__name__}"
                 )
+            if file_path == "":
+                raise ValueError("file_path must not be empty")
 
         redact_top_values = _validate_bool_option(
             redact_top_values, "redact_top_values"
@@ -642,7 +743,7 @@ class DataQualityReport:
             redact_top_values=redact_top_values,
             exclude_columns=validated_exclude,
         )
-        if file_path:
+        if file_path is not None:
             with open(file_path, "w", encoding="utf-8") as f:
                 f.write(html_out)
 
@@ -936,6 +1037,10 @@ class DataQualityReport:
 
     def to_pandas(self) -> pd.DataFrame:
         """Return one row per column as a pandas DataFrame."""
+        expected_columns = QUALITY_REPORT_COLUMNS
+        if not self.columns:
+            return pd.DataFrame(columns=expected_columns)
+
         return pd.DataFrame(
             [
                 {
@@ -982,7 +1087,8 @@ class DataQualityReport:
                     "histogram": column.histogram,
                 }
                 for column in self.columns.values()
-            ]
+            ],
+            columns=expected_columns,
         )
 
 
@@ -1354,10 +1460,7 @@ def profile(
     >>> report = ar.profile(frame, sample_size=3)
     >>> report.summary()
     """
-    if not isinstance(frame, ArFrame):
-        raise TypeError(
-            f"profile() expects an ArFrame, got {type(frame).__name__}. Use arnio.from_pandas() first."
-        )
+    _validate_arframe(frame)
 
     if not isinstance(sample_size, int) or isinstance(sample_size, bool):
         raise TypeError("sample_size must be an integer")
@@ -2244,6 +2347,39 @@ def _validate_confirmed_casts(
     return normalized
 
 
+def _has_duplicate_rows(frame: ArFrame) -> bool:
+    """Return whether a frame contains any full-row duplicates."""
+    if frame.shape[0] <= 1:
+        return False
+    return bool(to_pandas(frame).duplicated().any())
+
+
+def _drop_strict_duplicates_introduced_by_cleaning(
+    result: ArFrame,
+    step_records: list[CleanStepRecord],
+) -> ArFrame:
+    if any(record.step == "drop_duplicates" for record in step_records):
+        return result
+    if not _has_duplicate_rows(result):
+        return result
+
+    rows_before_step = result.shape[0]
+    kwargs = {"keep": "first"}
+    result = drop_duplicates(result, **kwargs)
+    rows_after_step = result.shape[0]
+    step_records.append(
+        CleanStepRecord(
+            step="drop_duplicates",
+            kwargs=kwargs,
+            rows_before=rows_before_step,
+            rows_after=rows_after_step,
+            rows_removed=rows_before_step - rows_after_step,
+            reason="Remove duplicate rows introduced by earlier strict-mode normalization steps.",
+        )
+    )
+    return result
+
+
 def auto_clean(
     frame: ArFrame,
     *,
@@ -2310,12 +2446,9 @@ def auto_clean(
     >>> clean, explanation = ar.auto_clean(frame, explain=True)
     >>> print(explanation)
     """
-    if not isinstance(frame, ArFrame):
-        raise TypeError(
-            f"auto_clean() expects an ArFrame, got {type(frame).__name__}. Use arnio.from_pandas() first."
-        )
+    _validate_arframe(frame)
 
-    if mode not in {"safe", "strict"}:
+    if not isinstance(mode, str) or mode not in {"safe", "strict"}:
         raise ValueError("mode must be 'safe' or 'strict'")
 
     if not isinstance(return_report, bool):
@@ -2393,6 +2526,12 @@ def auto_clean(
                 rows_removed=rows_before_step - rows_after_step,
                 reason=reason,
             )
+        )
+
+    if mode == "strict":
+        result = _drop_strict_duplicates_introduced_by_cleaning(
+            result,
+            step_records,
         )
 
     rows_after_all = result.shape[0]

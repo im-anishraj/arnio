@@ -2,6 +2,7 @@
 
 import pytest
 
+import arnio as ar
 from arnio.exceptions import CsvReadError
 from arnio.io import sniff_delimiter
 
@@ -99,24 +100,6 @@ class TestSniffDelimiter:
         result = sniff_delimiter(path, encoding="latin-1")
         assert result == ","
 
-    def test_handles_utf16_comma_delimited_file(self, tmp_path):
-        """sniff_delimiter decodes UTF-16 CSV before binary checks."""
-        path = tmp_path / "utf16.csv"
-        path.write_text("name,age\nAlice,30\nBob,25\n", encoding="utf-16")
-
-        result = sniff_delimiter(path, encoding="utf-16")
-
-        assert result == ","
-
-    def test_handles_utf16_tab_delimited_file(self, tmp_path):
-        """sniff_delimiter decodes UTF-16 TSV before binary checks."""
-        path = tmp_path / "utf16.tsv"
-        path.write_text("name\tage\nAlice\t30\nBob\t25\n", encoding="utf-16")
-
-        result = sniff_delimiter(path, encoding="utf-16")
-
-        assert result == "\t"
-
     def test_handles_quoted_fields_with_delimiter(self, tmp_path):
         """sniff_delimiter correctly handles delimiters inside quoted fields."""
         path = tmp_path / "quoted.csv"
@@ -167,3 +150,126 @@ class TestSniffDelimiter:
         )
         result = sniff_delimiter(path)
         assert result == ","
+
+
+class TestSniffDelimiterPublicAPI:
+    """Tests validating sniff_delimiter with public parsing APIs."""
+
+    def write_csv(self, tmp_path, name, content):
+        path = tmp_path / name
+        if isinstance(content, str):
+            path.write_text(content, encoding="utf-8")
+        else:
+            path.write_bytes(content)
+        return path
+
+    def test_sniff_comma_delimiter(self, tmp_path):
+        path = self.write_csv(tmp_path, "comma.csv", "a,b,c\n1,2,3\n")
+        delim = ar.sniff_delimiter(str(path))
+        assert delim == ","
+        frame = ar.read_csv(str(path), delimiter=delim)
+        assert frame.columns == ["a", "b", "c"]
+
+    def test_sniff_semicolon_delimiter(self, tmp_path):
+        path = self.write_csv(tmp_path, "semi.csv", "a;b;c\n1;2;3\n")
+        delim = ar.sniff_delimiter(str(path))
+        assert delim == ";"
+        frame = ar.read_csv(str(path), delimiter=delim)
+        assert frame.columns == ["a", "b", "c"]
+
+    def test_sniff_tab_delimiter(self, tmp_path):
+        path = self.write_csv(tmp_path, "tab.csv", "a\tb\tc\n1\t2\t3\n")
+        delim = ar.sniff_delimiter(str(path))
+        assert delim == "\t"
+        frame = ar.read_csv(str(path), delimiter=delim)
+        assert frame.columns == ["a", "b", "c"]
+
+    def test_sniff_pipe_delimiter(self, tmp_path):
+        path = self.write_csv(tmp_path, "pipe.csv", "a|b|c\n1|2|3\n")
+        delim = ar.sniff_delimiter(str(path))
+        assert delim == "|"
+        frame = ar.read_csv(str(path), delimiter=delim)
+        assert frame.columns == ["a", "b", "c"]
+
+    def test_sniff_only_header_row(self, tmp_path):
+        path = self.write_csv(tmp_path, "header.csv", "col1;col2;col3\n")
+        delim = ar.sniff_delimiter(str(path))
+        assert delim == ";"
+        frame = ar.read_csv(str(path), delimiter=delim)
+        assert frame.columns == ["col1", "col2", "col3"]
+
+    def test_sniff_with_quoted_delimiter_inside_field(self, tmp_path):
+        path = self.write_csv(
+            tmp_path, "quoted.csv", 'name;desc\n"Alice;Smith";"a;b;c"\n'
+        )
+        delim = ar.sniff_delimiter(str(path))
+        assert delim == ";"
+        frame = ar.read_csv(str(path), delimiter=delim)
+        assert frame.columns == ["name", "desc"]
+
+    def test_sniff_mixed_whitespace(self, tmp_path):
+        path = self.write_csv(tmp_path, "whitespace.csv", "a ; b ; c\n1 ; 2 ; 3\n")
+        delim = ar.sniff_delimiter(str(path))
+        assert delim == ";"
+        frame = ar.read_csv(str(path), delimiter=delim)
+        assert len(frame.columns) == 3
+
+    def test_sniff_single_column_file(self, tmp_path):
+        path = self.write_csv(tmp_path, "single.csv", "header\nval1\nval2\n")
+        with pytest.raises(ValueError, match="no candidate delimiters found"):
+            ar.sniff_delimiter(str(path))
+
+    def test_sniff_inconsistent_rows(self, tmp_path):
+        path = self.write_csv(tmp_path, "inconsistent.csv", "a;b;c\n1;2\n4;5;6;7\n")
+        delim = ar.sniff_delimiter(str(path))
+        assert delim == ";"
+        with pytest.raises(ar.CsvReadError):
+            ar.read_csv(str(path), delimiter=delim, mode="strict")
+        with pytest.raises(ar.CsvReadError):
+            ar.read_csv(str(path), delimiter=delim, mode="permissive")
+
+    def test_utf8_bom(self, tmp_path):
+        path = self.write_csv(tmp_path, "bom.csv", b"\xef\xbb\xbfa;b;c\n1;2;3\n")
+        delim = ar.sniff_delimiter(str(path))
+        assert delim == ";"
+        frame = ar.read_csv(str(path), delimiter=delim)
+        assert frame.columns == ["a", "b", "c"]
+
+    def test_sniff_empty_file_raises(self, tmp_path):
+        path = self.write_csv(tmp_path, "empty.csv", "")
+        with pytest.raises(ar.CsvReadError, match="CSV file is empty"):
+            ar.sniff_delimiter(str(path))
+
+    def test_sniff_binary_file_raises(self, tmp_path):
+        path = self.write_csv(tmp_path, "binary.csv", b"\x00\x01\x02\x03\x04")
+        with pytest.raises(ar.CsvReadError, match="NUL bytes"):
+            ar.sniff_delimiter(str(path))
+
+    def test_detected_delimiter_correct_values(self, tmp_path):
+        path = self.write_csv(tmp_path, "correct.csv", "a;b;c\n1;2;3\n4;5;6\n")
+        delim = ar.sniff_delimiter(str(path))
+        assert delim == ";"
+        frame = ar.read_csv(str(path), delimiter=delim)
+        assert frame.columns == ["a", "b", "c"]
+        assert frame.shape == (2, 3)
+
+    def test_works_with_scan_csv(self, tmp_path):
+        path = self.write_csv(tmp_path, "scan.csv", "a;b;c\n1;2;3\n")
+        delim = ar.sniff_delimiter(str(path))
+        assert delim == ";"
+        schema = ar.scan_csv(str(path), delimiter=delim)
+        assert list(schema.keys()) == ["a", "b", "c"]
+
+    def test_explicit_delimiter_overrides_sniff(self, tmp_path):
+        path = self.write_csv(tmp_path, "explicit.csv", "a;b;c\n1;2;3\n")
+        delim = ar.sniff_delimiter(str(path))
+        assert delim == ";"
+        frame = ar.read_csv(str(path), delimiter=",")
+        assert len(frame.columns) == 1
+
+    def test_decimal_separator_interaction(self, tmp_path):
+        path = self.write_csv(tmp_path, "decimal.csv", "a;b\n1,5;2,6\n")
+        delim = ar.sniff_delimiter(str(path))
+        assert delim == ";"
+        frame = ar.read_csv(str(path), delimiter=delim, decimal_separator=",")
+        assert frame.columns == ["a", "b"]

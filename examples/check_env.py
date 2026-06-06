@@ -15,6 +15,12 @@ from dataclasses import dataclass
 from importlib.machinery import EXTENSION_SUFFIXES
 from pathlib import Path
 
+try:
+    from .example_registry import check_env_examples
+except ImportError:
+    # Support direct script execution: `python examples/check_env.py`.
+    from example_registry import check_env_examples
+
 # Map import name to (install package name, description)
 DEPENDENCIES = {
     "numpy": (
@@ -52,26 +58,8 @@ class BuildToolCheck:
     required: bool = True
 
 
-# Map example script name to its list of optional dependency keys
-EXAMPLES = {
-    "basic_usage.py": [],
-    "custom_step.py": ["pandas"],
-    "arnio_with_numpy.py": ["numpy"],
-    "arnio_with_pandas.py": ["pandas"],
-    "arnio_with_duckdb.py": ["duckdb", "pandas"],
-    "arnio_with_sklearn.py": ["sklearn", "pandas"],
-    "sklearn_pipeline.py": ["sklearn", "pandas"],
-    "auto_clean_tutorial.py": ["pandas"],
-    "arnio_with_jsonl.py": ["pandas"],
-    "arnio_with_arrow.py": ["pandas", "pyarrow"],
-    "arnio_chunk_reading.py": ["pandas"],
-    "schema_validation.py": ["pandas"],
-    "sales/recipe.py": ["pandas"],
-    "customers/recipe.py": ["pandas"],
-    "survey/recipe.py": ["pandas"],
-    "logs/recipe.py": ["pandas"],
-    "finance/recipe.py": ["pandas"],
-}
+# Map example script name to its list of optional dependency keys.
+EXAMPLES = check_env_examples()
 
 
 def check_dependencies():
@@ -143,20 +131,24 @@ def check_build_tools():
 
 
 def detect_core_status():
-    """Detect the native extension without importing the full arnio package."""
+    """Detect the native extension for the actually importable arnio package."""
+    import importlib.util
+
     if "arnio._core" in sys.modules:
         if sys.modules["arnio._core"] is None:
             return "Not Compiled (arnio._core unavailable)", False
         return "Available (C++ Accelerated)", True
 
-    for entry in sys.path:
-        package_dir = Path(entry or ".") / "arnio"
-        if not package_dir.is_dir():
-            continue
+    spec = importlib.util.find_spec("arnio")
 
-        for suffix in EXTENSION_SUFFIXES:
-            if (package_dir / f"_arnio_cpp{suffix}").exists():
-                return "Available (C++ Accelerated)", True
+    if spec is None or spec.origin is None:
+        return "Not Installed (arnio package not found)", False
+
+    package_dir = Path(spec.origin).parent
+
+    for suffix in EXTENSION_SUFFIXES:
+        if (package_dir / f"_arnio_cpp{suffix}").exists():
+            return "Available (C++ Accelerated)", True
 
     return "Not Compiled (_arnio_cpp extension file not found)", False
 
@@ -241,15 +233,32 @@ def print_dashboard(results, build_tools=None):
         print("\n[TIP] To install all missing optional dependencies, run:")
         print(f"  pip install {' '.join(missing)}")
     else:
+        print("\nAll optional dependencies are successfully installed!")
+
+    if core_available:
+        print("Native Arnio core is available. You are ready to go.")
+    else:
         print(
-            "\nAll optional dependencies are successfully installed! You are ready to go."
+            "Native Arnio core is not available. "
+            "Build the extension before running Arnio examples locally."
         )
     print("=" * 70)
 
 
 def main():
     results = check_dependencies()
-    print_dashboard(results)
+    build_tools = check_build_tools()
+
+    print_dashboard(results, build_tools)
+
+    _, core_available = detect_core_status()
+
+    required_build_tools_available = all(
+        check.available for check in build_tools if check.required
+    )
+
+    if not core_available and not required_build_tools_available:
+        sys.exit(1)
 
 
 if __name__ == "__main__":

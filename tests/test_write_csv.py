@@ -109,20 +109,126 @@ class TestWriteCsv:
         with pytest.raises(TypeError, match="delimiter must be a string"):
             ar.write_csv(frame, str(tmp_path / "out.csv"), delimiter=1)
 
-    @pytest.mark.parametrize("delimiter", ["\n", "\r"])
-    def test_newline_delimiters_rejected(self, tmp_path, delimiter):
+    @pytest.mark.parametrize(
+        "delimiter",
+        [
+            pytest.param("\n", id="newline"),
+            pytest.param("\r", id="carriage-return"),
+            pytest.param("\0", id="NUL"),
+            pytest.param('"', id="double-quote"),
+        ],
+    )
+    def test_unsafe_delimiters_rejected(self, tmp_path, delimiter):
         frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
-        with pytest.raises(
-            ValueError, match="delimiter must not be a newline character"
-        ):
+        with pytest.raises(ValueError, match="delimiter"):
             ar.write_csv(frame, str(tmp_path / "out.csv"), delimiter=delimiter)
 
-    def test_quote_character_delimiter_rejected(self, tmp_path):
-        frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
-        with pytest.raises(
-            ValueError, match="delimiter must not be the CSV quote character"
-        ):
-            ar.write_csv(frame, str(tmp_path / "out.csv"), delimiter='"')
+
+class TestWriteCsvFormulaEscaping:
+    def test_default_preserves_formula_like_strings(self, tmp_path):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "text": ["=SUM(A1:A2)", "+cmd", "-not-a-number", "@user"],
+                    "amount": [-10, 25, -3, 4],
+                }
+            )
+        )
+        out = tmp_path / "out.csv"
+
+        ar.write_csv(frame, out)
+
+        assert out.read_text(encoding="utf-8").splitlines() == [
+            "text,amount",
+            "=SUM(A1:A2),-10",
+            "+cmd,25",
+            "-not-a-number,-3",
+            "@user,4",
+        ]
+
+    def test_escape_formulas_prefixes_string_cells_only(self, tmp_path):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "text": [
+                        "=SUM(A1:A2)",
+                        "+cmd",
+                        "-not-a-number",
+                        "@user",
+                        "\tTabbed",
+                    ],
+                    "amount": [-10, 25, -3, 4, -8],
+                }
+            )
+        )
+        out = tmp_path / "out.csv"
+
+        ar.write_csv(frame, out, escape_formulas=True)
+
+        assert out.read_text(encoding="utf-8").splitlines() == [
+            "text,amount",
+            "'=SUM(A1:A2),-10",
+            "'+cmd,25",
+            "'-not-a-number,-3",
+            "'@user,4",
+            "'\tTabbed,-8",
+        ]
+
+    def test_escape_formulas_runs_before_csv_quoting(self, tmp_path):
+        frame = ar.from_pandas(
+            pd.DataFrame({"note": ['=HYPERLINK("http://example.test", "x")']})
+        )
+        out = tmp_path / "out.csv"
+
+        ar.write_csv(frame, out, escape_formulas=True)
+
+        assert (
+            out.read_text(encoding="utf-8")
+            == 'note\n"\'=HYPERLINK(""http://example.test"", ""x"")"\n'
+        )
+
+    def test_escape_formulas_does_not_modify_headers_nulls_or_empty_strings(
+        self, tmp_path
+    ):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "=header": ["", None, "safe"],
+                    "value": ["=formula", None, ""],
+                }
+            )
+        )
+        out = tmp_path / "out.csv"
+
+        ar.write_csv(frame, out, escape_formulas=True)
+
+        assert out.read_text(encoding="utf-8").splitlines() == [
+            "=header,value",
+            ",'=formula",
+            ",",
+            "safe,",
+        ]
+
+    def test_escape_formulas_respects_delimiter_and_line_terminator(self, tmp_path):
+        frame = ar.from_pandas(pd.DataFrame({"a": ["=x"], "b": ["safe"]}))
+        out = tmp_path / "out.tsv"
+
+        ar.write_csv(
+            frame,
+            out,
+            delimiter="\t",
+            line_terminator="\r\n",
+            escape_formulas=True,
+        )
+
+        assert out.read_bytes() == b"a\tb\r\n'=x\tsafe\r\n"
+
+    @pytest.mark.parametrize("value", [None, 1, "true"])
+    def test_escape_formulas_rejects_non_bool(self, tmp_path, value):
+        frame = ar.from_pandas(pd.DataFrame({"a": ["=x"]}))
+
+        with pytest.raises(TypeError, match="escape_formulas"):
+            ar.write_csv(frame, tmp_path / "out.csv", escape_formulas=value)
 
 
 class TestWriteCsvLineTerminatorBytes:

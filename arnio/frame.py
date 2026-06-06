@@ -8,6 +8,7 @@ from __future__ import annotations
 import copy
 import json
 import math
+from typing import Any
 
 from ._core import _Frame
 
@@ -15,6 +16,11 @@ from ._core import _Frame
 _VALID_DTYPES: frozenset[str] = frozenset(
     {"int64", "float64", "string", "bool", "null"}
 )
+
+
+def _validate_arframe(frame: Any, argument_name: str = "frame") -> None:
+    if not isinstance(frame, ArFrame):
+        raise TypeError(f"{argument_name} must be an ArFrame")
 
 
 class StatsDict(dict):
@@ -155,6 +161,11 @@ class ArFrame:
                             f"nested values are not supported; "
                             f"column {col!r} at row {i} contains a {type(val).__name__!r}"
                         )
+            if columns is not None and len(columns) == 0:
+                raise ValueError(
+                    "columns must not be empty when records are dicts; "
+                    "pass columns=None to infer column names from the record keys"
+                )
             df = pd.DataFrame.from_records(records, columns=columns)
 
         elif isinstance(first, (list, tuple)):
@@ -484,6 +495,43 @@ class ArFrame:
                 ],
             }
 
+    def to_csv(
+        self,
+        path,
+        *,
+        delimiter: str = ",",
+        write_header: bool = True,
+        **kwargs,
+    ) -> None:
+        """Write the ArFrame to a CSV file.
+
+        This is a convenience wrapper around :func:`arnio.write_csv`.
+
+        Parameters
+        ----------
+        path : str or file-like
+            Destination file path.
+        delimiter : str, default ","
+            Field delimiter character.
+        write_header : bool, default True
+            Whether to write the column header row.
+        **kwargs
+            Additional arguments passed to :func:`arnio.write_csv` such as `line_terminator`.
+
+        Examples
+        --------
+        >>> frame.to_csv("output.csv")
+        """
+        from .io import write_csv
+
+        write_csv(
+            self,
+            path,
+            delimiter=delimiter,
+            write_header=write_header,
+            **kwargs,
+        )
+
     def select_columns(self, columns: list[str]) -> ArFrame:
         """Return a new ArFrame with only the selected columns.
 
@@ -577,7 +625,7 @@ class ArFrame:
         missing = [col for col in unique_cols if col not in self.columns]
         if missing:
             raise ValueError(
-                f"Unknown column(s): {missing}. " f"Available columns: {self.columns}"
+                f"Unknown column(s): {missing}. Available columns: {self.columns}"
             )
 
         # Empty input — return unchanged copy
@@ -876,7 +924,7 @@ class ArFrame:
         return True
 
     def __copy__(self) -> ArFrame:
-        return ArFrame(self._frame, attrs=self._attrs.copy())
+        return ArFrame(self._frame.clone(), attrs=self._attrs.copy())
 
     def __deepcopy__(self, memo: dict) -> ArFrame:
         if id(self) in memo:
@@ -919,6 +967,10 @@ class ArFrame:
             raise ValueError(f"`n` must be a positive integer, got {n!r}")
 
         num_rows, num_cols = self.shape
+        if num_rows > 0 and num_cols == 0:
+            return (
+                f"ArFrame preview: {num_rows} rows x 0 columns (no columns to display)"
+            )
 
         if num_rows == 0:
             return "ArFrame preview: (empty frame)"
@@ -987,8 +1039,10 @@ class ArFrame:
         )
 
         # ── empty-frame fast path ─────────────────────────────────────────
-        if num_cols == 0 or num_rows == 0:
+        if num_rows == 0:
             return summary + "<p><em>(empty)</em></p>"
+        if num_cols == 0:
+            return summary + "<p><em>(no columns to display)</em></p>"
 
         # ── column header ─────────────────────────────────────────────────
         th_style = (
@@ -1035,9 +1089,7 @@ class ArFrame:
             rows_html += f"<tr>{cells}</tr>"
 
         tbody = f"<tbody>{rows_html}</tbody>"
-        table = (
-            "<table style='border-collapse:collapse;'>" f"{header}{tbody}" "</table>"
-        )
+        table = f"<table style='border-collapse:collapse;'>{header}{tbody}</table>"
 
         # ── truncation notice ─────────────────────────────────────────────
         notice = ""

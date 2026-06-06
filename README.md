@@ -36,6 +36,10 @@ pip install arnio
 ```
 
 Colab install smoke test: **[COLAB_SMOKE_TEST.md](COLAB_SMOKE_TEST.md)**
+**Interactive Notebooks:**
+[![Basic Usage](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/im-anishraj/arnio/blob/main/examples/basic_usage.ipynb)
+[![Pandas Interop](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/im-anishraj/arnio/blob/main/examples/arnio_with_pandas.ipynb)
+[![Schema Validation](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/im-anishraj/arnio/blob/main/examples/schema_validation.ipynb)
 
 <br>
 
@@ -117,6 +121,7 @@ clean, metadata = ar.pipeline(
 print(metadata["step_timings"])
 print(metadata["applied_steps"])
 print(metadata["row_counts"])
+print(metadata["execution_summary"])
 ```
 ## Quick Example
 
@@ -330,19 +335,24 @@ Supported values:
 
 ### Security note: CSV formula injection
 
-Arnio preserves cell values when reading CSV files. It does not rewrite strings that
-begin with spreadsheet formula prefixes such as `=`, `+`, `-`, or `@`.
+Arnio preserves cell values by default when writing CSV files. It does not rewrite
+strings that begin with spreadsheet formula prefixes such as `=`, `+`, `-`, or `@`
+unless you opt in to formula escaping.
 
 If you export Arnio-cleaned data back to CSV and expect users to open that file in
 Excel, Google Sheets, LibreOffice, or another spreadsheet application, treat
-untrusted text fields as potentially executable spreadsheet formulas. Before
-exporting, escape or neutralize formula-like strings in user-controlled columns,
-for example by prefixing a single quote or another project-approved escape marker.
+untrusted text fields as potentially executable spreadsheet formulas. Use
+`escape_formulas=True` when exporting user-controlled text to prefix formula-like
+string cells with a single quote while leaving numeric columns unchanged:
+
+```python
+ar.write_csv(clean_frame, "safe_export.csv", escape_formulas=True)
+```
 
 This is especially important for customer names, notes, comments, imported form
 fields, and any other free-text values that may come from outside your trust
-boundary. Arnio focuses on parsing, validation, profiling, and cleanup; final CSV
-export policy should stay explicit in the application that writes the file.
+boundary. Arnio keeps the export policy explicit, so existing CSV output remains
+unchanged unless this option is enabled.
 
 <br>
 
@@ -398,6 +408,10 @@ frame = ar.read_jsonl("events.jsonl")
 # Limit rows
 frame = ar.read_jsonl("large.jsonl", nrows=1000)
 
+# Stream large JSONL/NDJSON files in bounded chunks
+for chunk in ar.read_jsonl_chunked("large.jsonl", chunksize=50_000):
+    process(chunk)
+
 # Non-UTF-8 encoding
 frame = ar.read_jsonl("data.ndjson", encoding="latin-1")
 
@@ -405,21 +419,27 @@ frame = ar.read_jsonl("data.ndjson", encoding="latin-1")
 clean = ar.pipeline(frame, [("strip_whitespace",), ("drop_nulls",)])
 ```
 
-Raises `ar.JsonlReadError` with the 1-based line number if a line contains invalid JSON.
+Raises `ar.JsonlReadError` with the 1-based line number if a line contains invalid JSON. The chunked reader uses the same validation and decoding rules as `read_jsonl`, but only materializes one chunk at a time.
 </details>
 
 <details>
-<summary><b>📦 Export to Parquet for columnar analytics pipelines</b></summary>
+<summary><b>📦 Parquet import and export for columnar analytics pipelines</b></summary>
 <br>
 
-`write_parquet` exports an ArFrame to a Parquet file via pyarrow.  Install the optional extra first:
+`read_parquet` and `write_parquet` use pyarrow for Parquet I/O.  Install the optional extra first:
 
 ```bash
 pip install arnio[parquet]
 ```
 
 ```python
-# Basic export
+# Import a Parquet file into an ArFrame (no pandas intermediate)
+frame = ar.read_parquet("data.parquet")
+
+# Read only selected columns
+frame = ar.read_parquet("data.parquet", usecols=["name", "age"])
+
+# Export an ArFrame to Parquet
 ar.write_parquet(frame, "output.parquet")
 
 # Choose compression codec: "snappy" (default), "gzip", "zstd", "brotli", "none"
@@ -428,11 +448,12 @@ ar.write_parquet(frame, "output.parquet", compression="zstd")
 # Control row group size for large files
 ar.write_parquet(frame, "output.parquet", row_group_size=50_000)
 
-# .pq extension also accepted
+# .pq extension also accepted for both read and write
+frame = ar.read_parquet("data.pq")
 ar.write_parquet(frame, "output.pq")
 ```
 
-Raises `ImportError` with an install hint if pyarrow is not available.
+Both functions raise `ImportError` with an install hint if pyarrow is not available.
 </details>
 
 <details>
@@ -618,7 +639,7 @@ not to replace it.
 
 ### DuckDB registration
 
-Use `ar.register_duckdb(frame, conn, "table_name")` to register an ArFrame directly as a DuckDB relation without writing pandas conversion glue yourself. DuckDB is an optional dependency — install it with `pip install duckdb` when needed.
+Use `ar.register_duckdb(frame, conn, "table_name")` to register an ArFrame directly as a DuckDB relation without writing pandas conversion glue yourself. DuckDB is an optional dependency — install it with `pip install "arnio[duckdb]"` when needed. You can also install DuckDB directly with `pip install duckdb`.
 
 For development and CI, `pip install -e ".[dev]"` now includes DuckDB so the integration test module in `tests/test_integrations_duckdb.py` runs in the default test job.
 
@@ -967,7 +988,7 @@ Most operations below run natively in C++. Currently, `filter_rows`, `replace_va
 | `cast_types` | Cast column types with `errors="raise"`, `"coerce"`, or `"ignore"` | `ar.cast_types(frame, {"age": "int64"}, errors="raise")` |
 | `round_numeric_columns` | Round numeric columns (non-numeric columns in subset ignored safely) | `ar.round_numeric_columns(frame, decimals=2)` |
 | `replace_values` | Replace values using a mapping (column or whole-frame). Handles `None`/`NaN`. | `ar.replace_values(frame, {"active": "A", "inactive": "I"}, column="status")` |
-| `clean` | Convenience shorthand | `ar.clean(frame, drop_nulls=True)` |
+| `clean` | Convenience shorthand supporting config dicts | `ar.clean(frame, strip_whitespace={"subset": ["name"]}, drop_nulls=True)` |
 | `safe_divide_columns` | Divide one column by another, handling zero/null denominators | `ar.safe_divide_columns(frame, numerator="revenue", denominator="cost", output_column="ratio")` |
 | `drop_columns_matching` | Drop columns whose names match a regex pattern | `ar.drop_columns_matching(frame, pattern="^temp_")` |
 | `trim_column_names` | Strip leading/trailing whitespace from column names | `ar.trim_column_names(frame)` |
@@ -1824,8 +1845,8 @@ Most new features are pure Python pipeline steps:
 
 ```python
 # 1. Write a function that takes a DataFrame and returns a DataFrame
-def remove_special_chars(df, columns=None):
-    cols = columns or df.select_dtypes("object").columns
+def remove_special_chars(df, subset=None):
+    cols = subset or df.select_dtypes("object").columns
     for col in cols:
         df[col] = df[col].str.replace(r"[^a-zA-Z0-9\s]", "", regex=True)
     return df
@@ -2022,7 +2043,7 @@ arnio/
 ├── tests/                   # pytest suite — CSV, cleaning, pipeline, conversions
 ├── benchmarks/              # Reproducible arnio vs pandas benchmark
 ├── examples/                # basic_usage.py, auto_clean_tutorial.py, custom_step.py and ready to run recipes for sales, customers, survey, logs, finance
-└── website/                 # Project website — arniolib.vercel.app
+└── website/                 # Project website — arnio.vercel.app
 ```
 
 <br>
@@ -2047,7 +2068,7 @@ arnio/
 <a href="https://pypi.org/project/arnio/"><img src="https://img.shields.io/pypi/dm/arnio?style=flat-square&logo=pypi&logoColor=white&labelColor=0d1117&color=3572A5&label=installs" alt="Downloads"></a>&ensp;
 <a href="https://github.com/im-anishraj/arnio/stargazers"><img src="https://img.shields.io/github/stars/im-anishraj/arnio?style=flat-square&logo=github&labelColor=0d1117&color=e3b341&label=stars" alt="Stars"></a>&ensp;
 <a href="https://github.com/im-anishraj/arnio/network/members"><img src="https://img.shields.io/github/forks/im-anishraj/arnio?style=flat-square&logo=github&labelColor=0d1117&color=8b949e&label=forks" alt="Forks"></a>&ensp;
-<a href="https://arniolib.vercel.app/"><img src="https://img.shields.io/badge/website-arniolib.vercel.app-blue?style=flat-square&labelColor=0d1117" alt="Website"></a>&ensp;
+<a href="https://arnio.vercel.app/"><img src="https://img.shields.io/badge/website-arnio.vercel.app-blue?style=flat-square&labelColor=0d1117" alt="Website"></a>&ensp;
 <a href="https://discord.gg/xsEw7r78M"><img src="https://img.shields.io/badge/community-Discord-5865F2?style=flat-square&logo=discord&logoColor=white&labelColor=0d1117" alt="Discord"></a>
 
 <br>

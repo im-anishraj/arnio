@@ -10,19 +10,27 @@ schema_to_yaml(schema, path=None) -> str
     Return the YAML string.  When *path* is given the string is also written
     to that file (UTF-8, trailing newline guaranteed).
 
-Only the Python standard library is required (no PyYAML dependency).
-The emitter is intentionally minimal: it covers the types arnio actually
-produces (str, int, float, bool, None, list, dict) and raises ``TypeError``
-for anything else so the contract stays explicit.
+schema_from_yaml(source) -> Schema
+    Load a Schema from a YAML file path or raw YAML string.  This is the
+    inverse of ``schema_to_yaml`` and reuses the existing ``Schema.from_json``
+    validation path so field contracts are enforced identically.
+
+Only the Python standard library is required (no PyYAML dependency) for the
+emit path.  ``schema_from_yaml`` requires PyYAML (already listed as a project
+dependency in ``pyproject.toml``).
 """
 
 from __future__ import annotations
 
+import datetime as _dt
+import json
+import os
 import pathlib
 import re
+import warnings
 from typing import Any
 
-from arnio.schema import _field_to_dict
+from arnio.schema import Schema, _field_to_dict
 
 _INDENT = "  "
 
@@ -381,8 +389,171 @@ def schema_to_yaml(
     yaml_str = body if body.endswith("\n") else body + "\n"
 
     if path is not None:
+        if not isinstance(path, (str, os.PathLike)):
+            raise TypeError("path must be a string or os.PathLike")
+        if isinstance(path, str) and not path.strip():
+            raise ValueError("path must not be empty")
         target = pathlib.Path(path)
+        if target.is_dir():
+            raise ValueError("path must point to a file, not a directory")
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(yaml_str, encoding="utf-8")
 
     return yaml_str
+
+
+def _normalize_yaml_payload(obj: Any) -> Any:
+    """Recursively convert YAML-native types to JSON-safe equivalents.
+
+    ``yaml.safe_load`` may produce ``datetime.date`` or ``datetime.datetime``
+    objects for timestamp-looking values (e.g. ``datetime_min: 2024-01-01``).
+    These are not JSON-serialisable by default, so we convert them to ISO
+    strings here before handing off to ``Schema.from_json``.  All other
+    types supported by ``_ALLOWED_FIELD_KEYS`` are already JSON-native.
+    """
+    if isinstance(obj, dict):
+        return {k: _normalize_yaml_payload(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_normalize_yaml_payload(item) for item in obj]
+    if isinstance(obj, _dt.datetime):
+        return obj.isoformat()
+    if isinstance(obj, _dt.date):
+        return obj.isoformat()
+    return obj
+
+
+def schema_from_yaml(source: str | os.PathLike) -> Schema:
+    """Load a Schema from a YAML file path or raw YAML string.
+
+    This is the inverse of :func:`schema_to_yaml`.  Field validation reuses
+    the existing ``Schema.from_json`` path, so the same key allowlists and
+    constraint checks apply.
+
+    Parameters
+    ----------
+    source : str or path-like
+        The input is resolved according to the following deterministic rules:
+
+        * **Path-like object** (``pathlib.Path`` or any ``os.PathLike``):
+          always treated as a file path.  ``FileNotFoundError`` is raised if
+          the file does not exist.
+        * **String without newlines**: treated as a file path.
+          ``FileNotFoundError`` is raised if the file does not exist.
+        * **String containing at least one newline**: parsed directly as raw
+          YAML text.
+
+    Returns
+    -------
+    Schema
+        Fully validated :class:`~arnio.schema.Schema` object.
+
+    Raises
+    ------
+    TypeError
+        If *source* is not a ``str`` or ``os.PathLike``.
+    FileNotFoundError
+        If *source* resolves to a file path and the file is not found.
+    ValueError
+        If the YAML is syntactically invalid or the payload contains unknown
+        schema or field keys.
+
+    Notes
+    -----
+    Cross-field ``rules`` cannot be serialized and will never appear in a
+    YAML file produced by :func:`schema_to_yaml`.  If the YAML payload
+    contains ``rules_omitted: true`` (a marker written by ``Schema.to_json``
+    when rules were present), a :class:`UserWarning` is emitted and the
+    marker is silently ignored.  Re-attach rules manually after loading.
+
+    PyYAML (``PyYAML>=6.0``) is required and is already listed as a project
+    dependency in ``pyproject.toml``.
+
+    Examples
+    --------
+    Load from a checked-in config file:
+
+    >>> schema = ar.schema_from_yaml("contracts/users.yaml")
+    >>> schema = ar.schema_from_yaml(pathlib.Path("contracts/users.yaml"))
+
+    Parse an inline YAML string (at least one newline required):
+
+    >>> yaml_text = \"\"\"
+    ... fields:
+    ...   age:
+    ...     dtype: int64
+    ...     nullable: false
+    ...   email:
+    ...     dtype: string
+    ...     semantic: email
+    ... \"\"\"
+    >>> schema = ar.schema_from_yaml(yaml_text)
+    """
+    try:
+        import yaml  # PyYAML — listed in pyproject.toml dependencies
+    except ImportError as exc:  # pragma: no cover
+        raise ImportError(
+            "schema_from_yaml requires PyYAML. "
+            "Install it with: pip install 'PyYAML>=6.0'"
+        ) from exc
+
+    if isinstance(source, os.PathLike):
+        # Always treat any path-like object as a file path.
+        path = pathlib.Path(source)
+        if not path.is_file():
+            raise FileNotFoundError(f"Schema YAML file not found: {path}")
+        text = path.read_text(encoding="utf-8")
+
+    elif isinstance(source, str):
+        if "\n" in source:
+            # String with newlines → raw YAML text.
+            text = source
+        else:
+            # String without newlines → treat as a file path.
+            path = pathlib.Path(source)
+            if not path.is_file():
+                raise FileNotFoundError(f"Schema YAML file not found: {path}")
+            text = path.read_text(encoding="utf-8")
+
+    else:
+        raise TypeError(
+            "schema_from_yaml expects a str or os.PathLike, "
+            f"got {type(source).__name__}"
+        )
+
+    # --- Parse YAML ----------------------------------------------------------
+    try:
+        payload = yaml.safe_load(text)
+    except yaml.YAMLError as exc:
+        raise ValueError(f"Invalid schema YAML: {exc}") from exc
+
+    if payload is None:
+        raise ValueError(
+            "Schema YAML is empty. " "Expected a mapping with at least a 'fields' key."
+        )
+
+    if not isinstance(payload, dict):
+        raise TypeError(
+            "Schema YAML must decode to a mapping with 'fields', "
+            "'strict', and optional 'unique'. "
+            f"Got: {type(payload).__name__}"
+        )
+
+    # Warn about rules_omitted before delegating to from_json, mirroring the
+    # warning already present in Schema.to_json / Schema.from_json.
+    if payload.get("rules_omitted"):
+        warnings.warn(
+            "schema_from_yaml: the YAML payload contains 'rules_omitted: true', "
+            "which means cross-field rules were omitted during serialization. "
+            "Re-attach rules manually after loading.",
+            UserWarning,
+            stacklevel=2,
+        )
+
+    # --- Delegate to Schema.from_json ----------------------------------------
+    # yaml.safe_load may produce datetime.date / datetime.datetime objects for
+    # timestamp-looking values; normalise these to ISO strings so json.dumps
+    # does not raise and _parse_datetime_bound receives the expected type.
+    try:
+        return Schema.from_json(json.dumps(_normalize_yaml_payload(payload)))
+    except (ValueError, TypeError) as exc:
+        raise type(exc)(str(exc)) from exc

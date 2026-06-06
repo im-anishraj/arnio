@@ -1,6 +1,14 @@
 """Tests for diff_schema function in arnio.schema."""
 
-from arnio.schema import Field, Schema, diff_schema
+import pytest
+
+from arnio.schema import (
+    Field,
+    Schema,
+    SchemaDiff,
+    SchemaDiffEntry,
+    diff_schema,
+)
 
 
 def _rule_alpha(df):
@@ -33,15 +41,15 @@ class TestDiffSchema:
 
     def test_returns_empty_diff_for_identical_schemas(self):
         """diff_schema returns empty list when schemas are identical."""
-        s1 = Schema(fields={"name": Field(dtype="string"), "age": Field(dtype="int")})
-        s2 = Schema(fields={"name": Field(dtype="string"), "age": Field(dtype="int")})
+        s1 = Schema(fields={"name": Field(dtype="string"), "age": Field(dtype="int64")})
+        s2 = Schema(fields={"name": Field(dtype="string"), "age": Field(dtype="int64")})
         diff = diff_schema(s1, s2)
         assert diff.difference_count == 0
         assert diff.changed is False
 
     def test_detects_missing_column_in_second_schema(self):
         """diff_schema detects columns missing from second schema."""
-        s1 = Schema(fields={"name": Field(dtype="string"), "age": Field(dtype="int")})
+        s1 = Schema(fields={"name": Field(dtype="string"), "age": Field(dtype="int64")})
         s2 = Schema(fields={"name": Field(dtype="string")})
         diff = diff_schema(s1, s2)
         missing = [d for d in diff.differences if d.change == "missing_column"]
@@ -52,7 +60,7 @@ class TestDiffSchema:
     def test_detects_extra_column_in_second_schema(self):
         """diff_schema detects extra columns in second schema."""
         s1 = Schema(fields={"name": Field(dtype="string")})
-        s2 = Schema(fields={"name": Field(dtype="string"), "age": Field(dtype="int")})
+        s2 = Schema(fields={"name": Field(dtype="string"), "age": Field(dtype="int64")})
         diff = diff_schema(s1, s2)
         extra = [d for d in diff.differences if d.change == "extra_column"]
         assert len(extra) == 1
@@ -61,7 +69,7 @@ class TestDiffSchema:
 
     def test_detects_dtype_change_between_schemas(self):
         """diff_schema detects dtype changes in common columns."""
-        s1 = Schema(fields={"age": Field(dtype="int")})
+        s1 = Schema(fields={"age": Field(dtype="int64")})
         s2 = Schema(fields={"age": Field(dtype="string")})
         diff = diff_schema(s1, s2)
         changed = [
@@ -71,7 +79,7 @@ class TestDiffSchema:
         ]
         assert len(changed) == 1
         assert changed[0].column == "age"
-        assert changed[0].expected == "int"
+        assert changed[0].expected == "int64"
         assert changed[0].observed == "string"
 
     def test_detects_nullable_change(self):
@@ -221,7 +229,7 @@ class TestDiffSchema:
         """diff_schema accepts dict form of expected schema."""
         expected = {"name": Field(dtype="string")}
         observed = Schema(
-            fields={"name": Field(dtype="string"), "age": Field(dtype="int")}
+            fields={"name": Field(dtype="string"), "age": Field(dtype="int64")}
         )
         diff = diff_schema(expected, observed)
         extra = [d for d in diff.differences if d.change == "extra_column"]
@@ -231,7 +239,7 @@ class TestDiffSchema:
     def test_accepts_dict_input_for_observed(self):
         """diff_schema accepts dict form of observed schema."""
         expected = Schema(
-            fields={"name": Field(dtype="string"), "age": Field(dtype="int")}
+            fields={"name": Field(dtype="string"), "age": Field(dtype="int64")}
         )
         observed = {"name": Field(dtype="string")}
         diff = diff_schema(expected, observed)
@@ -242,7 +250,7 @@ class TestDiffSchema:
     def test_accepts_dict_input_for_both(self):
         """diff_schema accepts dict form for both expected and observed."""
         expected = {"name": Field(dtype="string")}
-        observed = {"age": Field(dtype="int")}
+        observed = {"age": Field(dtype="int64")}
         diff = diff_schema(expected, observed)
         assert diff.difference_count == 2
         changes = {d.change for d in diff.differences}
@@ -250,7 +258,7 @@ class TestDiffSchema:
 
     def test_multiple_changed_attributes(self):
         """diff_schema reports all changed attributes for a column."""
-        s1 = Schema(fields={"age": Field(dtype="int", nullable=True)})
+        s1 = Schema(fields={"age": Field(dtype="int64", nullable=True)})
         s2 = Schema(fields={"age": Field(dtype="string", nullable=False)})
         diff = diff_schema(s1, s2)
         changed = [
@@ -307,3 +315,30 @@ class TestDiffSchema:
         assert diff.changed is True
         assert diff.difference_count == 1
         assert diff.differences[0].attribute == "severity"
+
+    def test_schemadiffentry_rejects_invalid_column_type(self):
+        with pytest.raises(TypeError):
+            SchemaDiffEntry(column=1, change="missing_column")
+
+    def test_schemadiffentry_rejects_invalid_attribute_type(self):
+        with pytest.raises(TypeError):
+            SchemaDiffEntry(
+                column="age",
+                change="changed_field",
+                attribute=123,
+            )
+
+    def test_schemadiffentry_rejects_invalid_change_type(self):
+        with pytest.raises(TypeError):
+            SchemaDiffEntry(
+                column="age",
+                change=123,
+            )
+
+    def test_schemadiff_rejects_non_list_differences(self):
+        with pytest.raises(TypeError):
+            SchemaDiff("abc")
+
+    def test_schemadiff_rejects_non_entry_objects(self):
+        with pytest.raises(TypeError):
+            SchemaDiff([1, 2, 3])

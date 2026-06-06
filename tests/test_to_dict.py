@@ -186,3 +186,56 @@ class TestArFrameToDictExtended:
             "a",
             "m",
         ]
+
+    def test_to_dict_empty_frame_zero_rows(self):
+        """to_dict handles a frame with zero rows."""
+        frame = ar.from_pandas(pd.DataFrame({"a": [], "b": []}))
+        result = frame.to_dict()
+        assert result == {"a": [], "b": []}
+
+    def test_to_dict_empty_frame_zero_columns(self):
+        """to_dict handles a frame with zero columns."""
+        frame = ar.from_pandas(pd.DataFrame(index=[0, 1, 2]))
+        result = frame.to_dict()
+        assert result == {}
+
+    def test_to_dict_wide_frame(self):
+        """to_dict handles frames with many columns."""
+        cols = {f"col_{i}": list(range(5)) for i in range(50)}
+        frame = ar.from_pandas(pd.DataFrame(cols))
+        result = frame.to_dict()
+        assert len(result) == 50
+        for i in range(50):
+            assert result[f"col_{i}"] == list(range(5))
+
+    def test_to_dict_special_characters_in_column_names(self):
+        """to_dict handles column names with spaces, underscores, and digits."""
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "user name": ["Alice"],
+                    "user_age": [30],
+                    "col3": [True],
+                    "123": [1.5],
+                }
+            )
+        )
+        result = frame.to_dict()
+        assert "user name" in result
+        assert "user_age" in result
+        assert "col3" in result
+        assert "123" in result
+
+    def test_to_dict_orient_records_style(self):
+        """to_dict result can be used like a column-oriented dict."""
+        frame = ar.from_pandas(pd.DataFrame({"a": [1, 2], "b": ["x", "y"]}))
+        result = frame.to_dict()
+        assert list(result["a"]) == [1, 2]
+        assert list(result["b"]) == ["x", "y"]
+        assert list(result.keys()) == ["a", "b"]
+
+    def test_to_dict_boolean_values_preserved(self):
+        """to_dict correctly preserves True/False boolean values."""
+        frame = ar.from_pandas(pd.DataFrame({"flag": [True, False, True, False]}))
+        result = frame.to_dict()
+        assert result["flag"] == [True, False, True, False]

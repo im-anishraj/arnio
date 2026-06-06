@@ -263,21 +263,21 @@ def test_set_valued_allowed_normalized():
 
 
 def test_real_schema_field_dtype():
-    schema = ar.Schema({"price": ar.Field(dtype="FLOAT64", nullable=False)})
+    schema = ar.Schema({"price": ar.Field(dtype="float64", nullable=False)})
     result = schema_to_dict(schema)
-    assert result["fields"]["price"]["dtype"] == "FLOAT64"
+    assert result["fields"]["price"]["dtype"] == "float64"
     assert result["fields"]["price"]["nullable"] is False
 
 
 def test_real_schema_field_allowed_set_normalized():
-    schema = ar.Schema({"status": ar.Field(dtype="STRING", allowed={"a", "b", "c"})})
+    schema = ar.Schema({"status": ar.Field(dtype="string", allowed={"a", "b", "c"})})
     result = schema_to_dict(schema)
     assert result["fields"]["status"]["allowed"] == ["a", "b", "c"]
 
 
 def test_real_schema_field_required_if_tuple_normalized():
     schema = ar.Schema(
-        {"col": ar.Field(dtype="STRING", required_if=("other_col", "yes"))}
+        {"col": ar.Field(dtype="string", required_if=("other_col", "yes"))}
     )
     result = schema_to_dict(schema)
     assert isinstance(result["fields"]["col"]["required_if"], list)
@@ -286,7 +286,7 @@ def test_real_schema_field_required_if_tuple_normalized():
 
 def test_real_schema_field_datetime_bounds():
     schema = ar.Schema(
-        {"ts": ar.Field(dtype="DATETIME", min="2020-01-01", max="2025-12-31")}
+        {"ts": ar.Field(dtype="datetime", min="2020-01-01", max="2025-12-31")}
     )
     result = schema_to_dict(schema)
     assert "datetime_min" in result["fields"]["ts"]
@@ -296,7 +296,7 @@ def test_real_schema_field_datetime_bounds():
 
 
 def test_real_schema_with_rules_raises():
-    schema = ar.Schema({"col": ar.Field(dtype="STRING")}, rules=[lambda df: []])
+    schema = ar.Schema({"col": ar.Field(dtype="string")}, rules=[lambda df: []])
     with pytest.raises(ValueError, match="rules"):
         schema_to_dict(schema)
 
@@ -346,9 +346,9 @@ def test_schema_object_fields_named_strict_and_unique_not_dropped():
     """Schema object: fields named strict/unique survive alongside schema metadata."""
     schema = ar.Schema(
         {
-            "strict": ar.Field(dtype="INT64"),
-            "unique": ar.Field(dtype="STRING"),
-            "name": ar.Field(dtype="STRING"),
+            "strict": ar.Field(dtype="int64"),
+            "unique": ar.Field(dtype="string"),
+            "name": ar.Field(dtype="string"),
         },
         strict=True,
         unique=["name"],
@@ -469,3 +469,236 @@ class TestStructuredMetadataValidation:
         """schema_to_yaml() must surface the TypeError from object() metadata values."""
         with pytest.raises(TypeError):
             schema_to_yaml({"fields": {"a": "int64"}, "strict": object()})
+
+
+# ── Tests for schema_from_yaml (inverse of schema_to_yaml) ──────────────────
+
+
+class TestSchemaFromYaml:
+    """schema_from_yaml() must be the deterministic inverse of schema_to_yaml().
+
+    Covers:
+    - round-trip: schema_to_yaml(schema) -> file -> schema_from_yaml(path)
+    - PathLike always treated as file path
+    - str without newlines treated as file path
+    - str with newlines parsed as raw YAML text
+    - FileNotFoundError for missing path (PathLike and str)
+    - ValueError for syntactically invalid YAML
+    - ValueError for unknown schema-level keys
+    - ValueError for unknown field-level keys
+    - UserWarning for rules_omitted: true marker
+    - minimal schema (fields only, no strict/unique)
+    - schema with strict=True and unique constraint
+    - TypeError for wrong source type
+    - empty YAML raises ValueError
+    """
+
+    # ── round-trip ────────────────────────────────────────────────────────────
+
+    def test_round_trip_via_file(self, tmp_path):
+        """schema_to_yaml(schema, path=…) then schema_from_yaml(path) is lossless."""
+        import arnio as ar
+
+        schema = ar.Schema(
+            fields={
+                "age": ar.Int64(nullable=False, min=0, max=150),
+                "email": ar.Email(),
+                "country": ar.Field(dtype="string", nullable=True),
+            },
+            strict=True,
+            unique=["email"],
+        )
+        yaml_path = tmp_path / "schema.yaml"
+        ar.schema_to_yaml(schema, path=str(yaml_path))
+
+        loaded = ar.schema_from_yaml(yaml_path)  # PathLike
+
+        assert set(loaded.fields.keys()) == set(schema.fields.keys())
+        assert loaded.strict == schema.strict
+        assert set(loaded.unique) == set(schema.unique)
+
+        for col in schema.fields:
+            original = schema.fields[col]
+            restored = loaded.fields[col]
+            assert restored.dtype == original.dtype
+            assert restored.nullable == original.nullable
+
+    def test_round_trip_via_str_path(self, tmp_path):
+        """Passing a str file path (no newlines) must work identically to PathLike."""
+        import arnio as ar
+
+        schema = ar.Schema(
+            fields={"score": ar.Float64(nullable=True, min=0.0, max=1.0)},
+        )
+        yaml_path = tmp_path / "s.yaml"
+        ar.schema_to_yaml(schema, path=str(yaml_path))
+
+        loaded = ar.schema_from_yaml(str(yaml_path))  # str, no newlines → file
+
+        assert "score" in loaded.fields
+        assert loaded.fields["score"].dtype == "float64"
+
+    def test_round_trip_raw_yaml_text(self):
+        """A str with newlines is parsed directly as YAML text, not as a path."""
+        from arnio.schema_export import schema_from_yaml
+
+        yaml_text = (
+            "fields:\n"
+            "  age:\n"
+            "    dtype: int64\n"
+            "    nullable: false\n"
+            "    min: 0\n"
+            "    max: 120\n"
+            "strict: false\n"
+        )
+        schema = schema_from_yaml(yaml_text)
+
+        assert "age" in schema.fields
+        assert schema.fields["age"].dtype == "int64"
+        assert schema.fields["age"].nullable is False
+
+    # ── minimal schema ────────────────────────────────────────────────────────
+
+    def test_minimal_schema_fields_only(self, tmp_path):
+        """A YAML file with only 'fields' (no strict/unique) must load cleanly."""
+        import arnio as ar
+
+        yaml_text = "fields:\n  name:\n    dtype: string\n    nullable: true\n"
+        yaml_path = tmp_path / "minimal.yaml"
+        yaml_path.write_text(yaml_text, encoding="utf-8")
+
+        schema = ar.schema_from_yaml(yaml_path)
+
+        assert "name" in schema.fields
+        assert schema.fields["name"].dtype == "string"
+        assert schema.strict is False  # default
+
+    # ── PathLike handling ─────────────────────────────────────────────────────
+
+    def test_pathlike_missing_file_raises_file_not_found(self, tmp_path):
+        """PathLike that points to a non-existent file must raise FileNotFoundError."""
+        import arnio as ar
+
+        missing = tmp_path / "does_not_exist.yaml"
+        with pytest.raises(FileNotFoundError, match="does_not_exist.yaml"):
+            ar.schema_from_yaml(missing)
+
+    # ── str-path handling ─────────────────────────────────────────────────────
+
+    def test_str_path_missing_file_raises_file_not_found(self, tmp_path):
+        """str without newlines pointing to a missing file must raise FileNotFoundError."""
+        import arnio as ar
+
+        missing = str(tmp_path / "ghost.yaml")
+        with pytest.raises(FileNotFoundError, match="ghost.yaml"):
+            ar.schema_from_yaml(missing)
+
+    def test_str_path_does_not_silently_parse_as_yaml(self, tmp_path):
+        """A path-looking str that does not exist must NOT be parsed as YAML text."""
+        import arnio as ar
+
+        # "no_newlines_at_all" has no newlines → must be treated as path
+        with pytest.raises(FileNotFoundError):
+            ar.schema_from_yaml("no_newlines_at_all")
+
+    # ── error handling ────────────────────────────────────────────────────────
+
+    def test_invalid_yaml_syntax_raises_value_error(self):
+        """Syntactically broken YAML must raise ValueError, not a yaml.YAMLError."""
+        import arnio as ar
+
+        bad_yaml = "fields:\n  col:\n    dtype: [unclosed\n"
+        with pytest.raises(ValueError, match="Invalid schema YAML"):
+            ar.schema_from_yaml(bad_yaml)
+
+    def test_unknown_schema_key_raises_value_error(self, tmp_path):
+        """An unknown top-level key must raise ValueError with a clear message."""
+        import arnio as ar
+
+        bad = tmp_path / "bad.yaml"
+        bad.write_text(
+            "fields:\n  x:\n    dtype: string\nunknown_key: true\n",
+            encoding="utf-8",
+        )
+        with pytest.raises(ValueError, match="unknown"):
+            ar.schema_from_yaml(bad)
+
+    def test_unknown_field_key_raises_value_error(self, tmp_path):
+        """An unknown key inside a field definition must raise ValueError."""
+        import arnio as ar
+
+        bad = tmp_path / "bad_field.yaml"
+        bad.write_text(
+            "fields:\n  x:\n    dtype: string\n    foobar: true\n",
+            encoding="utf-8",
+        )
+        with pytest.raises(ValueError, match="unknown"):
+            ar.schema_from_yaml(bad)
+
+    def test_empty_yaml_raises_value_error(self, tmp_path):
+        """An empty YAML file must raise ValueError, not AttributeError or TypeError."""
+        import arnio as ar
+
+        empty = tmp_path / "empty.yaml"
+        empty.write_text("", encoding="utf-8")
+        with pytest.raises(ValueError, match="empty"):
+            ar.schema_from_yaml(empty)
+
+    def test_wrong_type_raises_type_error(self):
+        """Passing a non-str, non-PathLike raises TypeError."""
+        import arnio as ar
+
+        with pytest.raises(TypeError, match="str or os.PathLike"):
+            ar.schema_from_yaml(42)  # type: ignore[arg-type]
+
+    # ── rules_omitted warning ─────────────────────────────────────────────────
+
+    def test_rules_omitted_emits_user_warning(self):
+        """A YAML payload with rules_omitted: true must emit a UserWarning."""
+        import arnio as ar
+
+        yaml_text = "fields:\n" "  x:\n" "    dtype: string\n" "rules_omitted: true\n"
+        with pytest.warns(UserWarning, match="rules_omitted"):
+            schema = ar.schema_from_yaml(yaml_text)
+
+        assert "x" in schema.fields  # schema still loads successfully
+
+    # ── schema with strict and unique ─────────────────────────────────────────
+
+    def test_strict_and_unique_preserved(self, tmp_path):
+        """strict=True and unique constraints must survive the round-trip."""
+        import arnio as ar
+
+        yaml_text = (
+            "fields:\n"
+            "  id:\n"
+            "    dtype: int64\n"
+            "    nullable: false\n"
+            "  name:\n"
+            "    dtype: string\n"
+            "strict: true\n"
+            "unique:\n"
+            "- id\n"
+        )
+        yaml_path = tmp_path / "strict.yaml"
+        yaml_path.write_text(yaml_text, encoding="utf-8")
+
+        schema = ar.schema_from_yaml(yaml_path)
+
+        assert schema.strict is True
+        assert "id" in schema.unique
+
+    # ── public API surface ────────────────────────────────────────────────────
+
+    def test_accessible_via_ar_namespace(self):
+        """schema_from_yaml must be importable from the top-level arnio namespace."""
+        import arnio as ar
+
+        assert hasattr(ar, "schema_from_yaml")
+        assert callable(ar.schema_from_yaml)
+
+    def test_in_all(self):
+        """schema_from_yaml must be listed in arnio.__all__."""
+        import arnio as ar
+
+        assert "schema_from_yaml" in ar.__all__
