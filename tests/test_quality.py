@@ -4657,3 +4657,6 @@ def test_profile_comparison_drift_report_exclude_columns():
     assert "secret_key" not in exported_dict["left_profile"]["columns"]
     assert "secret_key" not in exported_dict["right_profile"]["columns"]
     assert "secret_key" not in exported_dict["drift_report"]
+
+
+# lint_sync
