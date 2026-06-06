@@ -43,6 +43,7 @@ from .cleaning import (
     winsorize_outliers,
 )
 from .convert import from_dict, from_pandas, from_polars, to_arrow, to_pandas, to_polars
+from .diff import ColumnDiff, DataFrameDiffReport, diff_dataframes
 from .exceptions import (
     ArnioError,
     CsvReadError,
@@ -213,6 +214,9 @@ __all__ = [
     "ValidationResult",
     "validate",
     "diff_schema",
+    "ColumnDiff",
+    "DataFrameDiffReport",
+    "diff_dataframes",
     "Int64",
     "Float64",
     "String",

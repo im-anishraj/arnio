@@ -8,6 +8,7 @@ from typing import Any
 import pandas as pd
 
 from arnio.convert import from_pandas, to_pandas
+from arnio.diff import DataFrameDiffReport, diff_dataframes
 from arnio.frame import ArFrame
 from arnio.pipeline import pipeline as run_pipeline
 from arnio.quality import (
@@ -157,3 +158,22 @@ class ArnioPandasAccessor:
             issues are collected.
         """
         return validate(self.to_arframe(), schema, max_errors=max_errors)
+
+    def diff(
+        self,
+        other: pd.DataFrame,
+        *,
+        null_ratio_threshold: float = 0.0,
+    ) -> DataFrameDiffReport:
+        """Compare this DataFrame against another for drift.
+
+        Parameters
+        ----------
+        other : pd.DataFrame
+            DataFrame to compare against.
+        null_ratio_threshold : float, default 0.0
+            Minimum absolute change in null ratio to flag as drift.
+        """
+        return diff_dataframes(
+            self._df, other, null_ratio_threshold=null_ratio_threshold
+        )
