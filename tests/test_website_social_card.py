@@ -1,0 +1,93 @@
+from __future__ import annotations
+
+import re
+from pathlib import Path
+
+import requests
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+WEBSITE_DIR = REPO_ROOT / "website"
+
+# og:image and twitter:image tags.
+# Use a simpler extraction: find meta tags, then check property/name inside.
+_META_TAGS_RE = re.compile(
+    r"<meta\b[^>]*>",
+
+
+    flags=re.IGNORECASE | re.DOTALL,
+
+)
+
+
+_VALUE_RE = re.compile(r"content\\s*=\\s*(\"|')([^\"']+)(\1)", re.IGNORECASE)
+
+
+
+def _extract_social_image_urls_from_html(html: str) -> list[str]:
+    urls: list[str] = []
+
+    for m in _META_TAGS_RE.finditer(html):
+        attrs_text = m.group(0)
+        # Extract only the meta tags that target og:image or twitter:image.
+
+        if not re.search(r"(property|name)\\s*=\\s*(\"|')(og:image|twitter:image)\\2", attrs_text, re.IGNORECASE):
+
+            continue
+        content_match = _VALUE_RE.search(attrs_text)
+        if not content_match:
+            # Some meta tags may use single quotes or other formatting.
+            continue
+
+        if not content_match:
+            continue
+        urls.append(content_match.group(2).strip())
+
+    return urls
+
+
+
+def _check_url_returns_200(url: str, *, timeout_s: float = 5.0) -> None:
+    resp = requests.get(url, timeout=timeout_s, headers={"User-Agent": "arnio-social-card-check/1.0"})
+    assert resp.status_code == 200, f"Expected HTTP 200 for {url}, got {resp.status_code}"
+
+
+def test_social_card_urls_resolve_http_200():
+    html_files = sorted(WEBSITE_DIR.glob("*.html"))
+    assert html_files, "Expected website HTML files to validate"
+
+    all_urls: list[str] = []
+    for html_path in html_files:
+        html = html_path.read_text(encoding="utf-8")
+        urls = _extract_social_image_urls_from_html(html)
+        all_urls.extend(urls)
+
+    assert all_urls, "No og:image/twitter:image metadata tags found in website HTML"
+
+    # Validate every extracted URL.
+    failures: list[str] = []
+    for url in sorted(set(all_urls)):
+        try:
+            _check_url_returns_200(url)
+        except Exception as exc:  # pragma: no cover - network errors are real failures
+            failures.append(f"{url}: {type(exc).__name__}: {exc}")
+
+    assert not failures, "Social-card URL(s) did not resolve to HTTP 200:\n" + "\n".join(failures)
+
+
+def test_social_card_url_is_consistent_across_pages():
+    html_files = sorted(WEBSITE_DIR.glob("*.html"))
+    unique_urls: set[str] = set()
+
+    for html_path in html_files:
+        html = html_path.read_text(encoding="utf-8")
+        urls = _extract_social_image_urls_from_html(html)
+        unique_urls.update(urls)
+
+    assert unique_urls, "No og:image/twitter:image metadata tags found in website HTML"
+
+    # Expect all pages to use exactly one social-card URL.
+    assert len(unique_urls) == 1, (
+        "Expected a single consistent social-card URL across website pages, got: "
+        + ", ".join(sorted(unique_urls))
+    )
+
