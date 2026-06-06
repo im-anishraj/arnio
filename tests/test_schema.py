@@ -2469,6 +2469,16 @@ def test_datetime_rejects_invalid_format_type():
     with pytest.raises(TypeError, match="format must be a string or None"):
         ar.DateTime(format=123)
 
+        
+def test_datetime_rejects_invalid_format_directive():
+    with pytest.raises(ValueError, match="invalid or unsupported directive"):
+        ar.DateTime(format="bad-%Q")
+
+
+def test_datetime_accepts_valid_custom_format():
+    field = ar.DateTime(format="%Y-%m-%d")
+    assert field.format == "%Y-%m-%d"        
+
 
 def test_datetime_rejects_invalid_boundary_values():
     with pytest.raises(ValueError, match="min must be a parseable datetime scalar"):
