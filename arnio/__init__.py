@@ -25,6 +25,7 @@ from .cleaning import (
     find_fuzzy_duplicates,
     keep_rows_with_nulls,
     normalize_case,
+    normalize_minmax,
     normalize_unicode,
     normalize_whitespace,
     parse_bool_strings,
@@ -119,7 +120,7 @@ from .schema import (
     register_validator,
     validate,
 )
-from .schema_export import schema_to_dict, schema_to_yaml
+from .schema_export import schema_from_yaml, schema_to_dict, schema_to_yaml
 
 from_records = ArFrame.from_records
 
@@ -161,6 +162,7 @@ __all__ = [
     "strip_whitespace",
     "parse_bool_strings",
     "normalize_case",
+    "normalize_minmax",
     "rename_columns",
     "round_numeric_columns",
     "cast_types",
@@ -242,6 +244,7 @@ __all__ = [
     "Date",
     "schema_to_dict",
     "schema_to_yaml",
+    "schema_from_yaml",
     "save_pipeline",
     "load_pipeline",
     "PipelineSerializationError",
