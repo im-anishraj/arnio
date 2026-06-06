@@ -878,6 +878,138 @@ def winsorize_outliers(
     return from_pandas(df)
 
 
+def normalize_minmax(
+    frame: ArFrame,
+    *,
+    subset: list[str] | None = None,
+    feature_range: tuple[float, float] = (0.0, 1.0),
+) -> ArFrame:
+    """Scale numeric columns to a target range using min-max normalization.
+
+    Null values are preserved and excluded from min/max computation.
+    Constant columns (all non-null values identical) map to the lower bound
+    of ``feature_range`` without raising or producing NaN.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input data frame.
+    subset : list[str], optional
+        Numeric columns to normalize. If None, applies to all int64/float64 columns.
+    feature_range : tuple[float, float], default (0.0, 1.0)
+        Target output range as (min, max). Both bounds must be finite and min < max.
+
+    Returns
+    -------
+    ArFrame
+        New frame with normalized numeric columns.
+
+    Raises
+    ------
+    TypeError
+        If feature_range is not a tuple or list of two numbers.
+    ValueError
+        If feature_range bounds are not finite, or min >= max.
+        If subset contains non-numeric columns.
+        If any column in subset does not exist in the frame.
+
+    Examples
+    --------
+    >>> import arnio as ar
+    >>> frame = ar.read_csv("data.csv")
+    >>> scaled = ar.normalize_minmax(frame, subset=["price", "age"])
+    >>> scaled = ar.normalize_minmax(frame, feature_range=(-1.0, 1.0))
+    >>> # Pipeline usage
+    >>> cleaned = ar.pipeline(frame, [
+    ...     ("normalize_minmax", {"subset": ["price"], "feature_range": (0.0, 1.0)}),
+    ... ])
+    """
+    frame, _ = _validate_frame(frame)
+
+    # --- validate feature_range ---
+    if not isinstance(feature_range, (tuple, list)):
+        raise TypeError(
+            f"feature_range must be a tuple or list of two numbers, got {type(feature_range).__name__!r}"
+        )
+
+    if len(feature_range) != 2:
+        raise ValueError(
+            f"feature_range must contain exactly 2 elements, got {len(feature_range)}"
+        )
+    lo, hi = feature_range
+
+    if isinstance(lo, bool) or isinstance(hi, bool):
+        raise TypeError("feature_range bounds must be numeric (int or float), not bool")
+    if not isinstance(lo, (int, float)) or not isinstance(hi, (int, float)):
+        raise TypeError(
+            f"feature_range bounds must be numeric (int or float), "
+            f"got {type(lo).__name__!r} and {type(hi).__name__!r}"
+        )
+    if not math.isfinite(lo) or not math.isfinite(hi):
+        raise ValueError("feature_range bounds must be finite")
+    if lo >= hi:
+        raise ValueError(
+            f"feature_range min ({lo}) must be strictly less than max ({hi})"
+        )
+
+    # --- resolve target columns  ---
+    dtypes = frame.dtypes
+
+    numeric_columns = [
+        col for col, dtype in dtypes.items() if dtype in ("int64", "float64")
+    ]
+
+    if subset is not None:
+        subset = _validate_existing_column_sequence(
+            subset,
+            available_columns=frame.columns,
+            argument_name="subset",
+            missing_error=ValueError,
+            missing_message=lambda missing, available: (
+                f"Unknown columns in subset: {missing}. Available: {available}"
+            ),
+        )
+        non_numeric = [
+            col
+            for col in subset
+            if dtypes.get(col) not in ("int64", "float64")
+            and not to_pandas(frame)[col].isna().all()
+        ]
+        if non_numeric:
+            raise ValueError(
+                f"normalize_minmax only supports numeric columns: {non_numeric}"
+            )
+        target_columns = subset
+    else:
+        target_columns = numeric_columns
+
+    if not target_columns:
+        return from_pandas(to_pandas(frame))
+
+    # --- scale  ---
+    df = to_pandas(frame).copy(deep=False)
+    lo_f = float(lo)
+    hi_f = float(hi)
+    scale = hi_f - lo_f
+
+    for col in target_columns:
+        series = df[col].astype("float64")
+        col_min = series.min(skipna=True)
+        col_max = series.max(skipna=True)
+
+        if pd.isna(col_min):
+            # All-null column — leave unchanged
+            continue
+
+        if col_min == col_max:
+            # Constant column — map to lower bound, preserve nulls
+            df[col] = series.where(series.isna(), lo_f)
+        else:
+            df[col] = lo_f + (series - col_min) / (col_max - col_min) * scale
+
+    return from_pandas(df)
+
+
 def strip_whitespace(
     frame: ArFrame,
     *,
@@ -1190,6 +1322,8 @@ def normalize_unicode(
     """
     _validate_arframe(frame)
     valid_forms = {"NFC", "NFD", "NFKC", "NFKD"}
+    if not isinstance(form, str):
+        raise TypeError("form must be a string")
     if form not in valid_forms:
         raise ValueError(f"Unsupported Unicode normalization form: {form}")
     if subset is not None:
@@ -2377,3 +2511,197 @@ def slugify_column_names(frame, on_duplicates="raise"):
     df = df.copy()
     df.columns = new_cols
     return from_pandas(df) if is_arframe else df
+
+
+def find_fuzzy_duplicates(
+    frame,
+    *,
+    subset: list[str] | None = None,
+    threshold: float = 0.85,
+    ignore_case: bool = True,
+    normalize_whitespace: bool = True,
+) -> list[list[int]]:
+    """Return groups of near-duplicate row indices using similarity matching.
+
+    Uses ``difflib.SequenceMatcher`` from the Python standard library —
+    no new dependencies are required.
+
+    Row similarity is computed as the average ``SequenceMatcher.ratio()``
+    across the comparison columns (string columns only).  Numeric and bool
+    columns use exact equality.  Only groups of two or more rows are returned.
+
+    Parameters
+    ----------
+    frame : ArFrame or pd.DataFrame
+        Input data frame.
+    subset : list[str], optional
+        Column names to compare.  ``None`` (default) uses all string columns.
+    threshold : float, default 0.85
+        Minimum similarity in [0.0, 1.0] to treat two rows as near-duplicates.
+        Use ``1.0`` for exact duplicates only.
+    ignore_case : bool, default True
+        Normalize string values to lowercase before comparison.
+    normalize_whitespace : bool, default True
+        Collapse consecutive whitespace characters to a single space and strip
+        leading/trailing whitespace before comparison.
+
+    Returns
+    -------
+    list[list[int]]
+        Each inner list is a group of row indices (0-based) that are
+        near-duplicates of each other.  Exact duplicates (similarity = 1.0)
+        are always included regardless of threshold.
+
+    Raises
+    ------
+    ValueError
+        If ``threshold`` is outside [0.0, 1.0].
+    ValueError
+        If ``subset`` is empty or contains non-existent column names.
+    ValueError
+        If the frame has more than 50,000 rows and no ``subset`` is provided,
+        to avoid accidental O(n²) execution on large datasets.
+
+    Examples
+    --------
+    >>> groups = ar.find_fuzzy_duplicates(frame, threshold=0.85)
+    >>> for group in groups:
+    ...     print(group)   # e.g. [0, 2] means rows 0 and 2 are near-duplicates
+
+    >>> # Only compare the "name" column, case-insensitively
+    >>> groups = ar.find_fuzzy_duplicates(frame, subset=["name"], threshold=0.9)
+    """
+    import difflib
+    import re
+
+    from .convert import to_pandas
+    from .frame import ArFrame
+
+    # --- validate threshold -------------------------------------------------
+    if not (0.0 <= threshold <= 1.0):
+        raise ValueError(f"threshold must be between 0.0 and 1.0, got {threshold!r}")
+
+    # --- validate and normalise input to pandas ----------------------------
+    is_arframe = isinstance(frame, ArFrame)
+    if not is_arframe and not isinstance(frame, pd.DataFrame):
+        raise TypeError(
+            f"find_fuzzy_duplicates() expects an ArFrame or pandas DataFrame, "
+            f"got {type(frame).__name__!r}"
+        )
+    df = to_pandas(frame) if is_arframe else frame.copy()
+
+    # --- validate / resolve subset BEFORE early-return checks ---------------
+    if subset is not None:
+        if len(subset) == 0:
+            raise ValueError(
+                "find_fuzzy_duplicates: subset cannot be empty; "
+                "pass subset=None to compare all string columns."
+            )
+        missing = [c for c in subset if c not in df.columns]
+        if missing:
+            raise ValueError(
+                f"find_fuzzy_duplicates: column(s) not found: {missing}. "
+                f"Available: {list(df.columns)}"
+            )
+        compare_cols = list(subset)
+
+    n_rows = len(df)
+    if n_rows == 0:
+        return []
+    if n_rows == 1:
+        return []
+
+    if subset is not None:
+        pass  # already resolved above
+
+    else:
+        # default: all object/string columns
+        compare_cols = df.select_dtypes(include=["object", "string"]).columns.tolist()
+        if not compare_cols:
+            # fall back to all columns if no string columns found
+            compare_cols = list(df.columns)
+
+    # --- size guard ---------------------------------------------------------
+    if n_rows > 50_000 and subset is None:
+        raise ValueError(
+            f"find_fuzzy_duplicates: frame has {n_rows:,} rows. "
+            "Pairwise comparison is O(n²) and may be slow for large frames. "
+            "Pass subset= to limit the comparison columns, or filter the "
+            "frame to a smaller working set first."
+        )
+
+    # --- pre-process rows into normalised string tuples --------------------
+    def _normalise(val: object) -> str:
+        s = "" if val is None or (isinstance(val, float) and val != val) else str(val)
+        if ignore_case:
+            s = s.lower()
+        if normalize_whitespace:
+            s = re.sub(r"\s+", " ", s).strip()
+        return s
+
+    rows: list[tuple] = []
+    for i in range(n_rows):
+        row_vals = []
+        for col in compare_cols:
+            raw = df[col].iloc[i]
+            # Numeric / bool columns (including nullable extension types):
+            # keep as-is for exact equality comparison
+            import pandas as _pd
+
+            if _pd.api.types.is_numeric_dtype(df[col]) or _pd.api.types.is_bool_dtype(
+                df[col]
+            ):
+                row_vals.append(raw)
+            else:
+                row_vals.append(_normalise(raw))
+        rows.append(tuple(row_vals))
+
+    # --- pairwise similarity + Union-Find ----------------------------------
+    parent = list(range(n_rows))
+
+    def _find(x: int) -> int:
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def _union(x: int, y: int) -> None:
+        parent[_find(x)] = _find(y)
+
+    def _row_similarity(a: tuple, b: tuple) -> float:
+        scores: list[float] = []
+        for va, vb in zip(a, b):
+            if isinstance(va, str) and isinstance(vb, str):
+                scores.append(difflib.SequenceMatcher(None, va, vb).ratio())
+            else:
+                # Handle pd.NA and other missing sentinels before equality
+                # to avoid "boolean value of NA is ambiguous" TypeError.
+                import pandas as _pd
+
+                va_null = (
+                    va is None or va is _pd.NA or (isinstance(va, float) and va != va)
+                )
+                vb_null = (
+                    vb is None or vb is _pd.NA or (isinstance(vb, float) and vb != vb)
+                )
+                if va_null and vb_null:
+                    scores.append(1.0)  # both missing → exact match
+                elif va_null or vb_null:
+                    scores.append(0.0)  # one missing → mismatch
+                else:
+                    scores.append(1.0 if va == vb else 0.0)
+        return sum(scores) / len(scores) if scores else 0.0
+
+    for i in range(n_rows):
+        for j in range(i + 1, n_rows):
+            if _row_similarity(rows[i], rows[j]) >= threshold:
+                _union(i, j)
+
+    # --- collect groups with 2+ members ------------------------------------
+    from collections import defaultdict
+
+    groups: dict[int, list[int]] = defaultdict(list)
+    for i in range(n_rows):
+        groups[_find(i)].append(i)
+
+    return [sorted(g) for g in groups.values() if len(g) >= 2]
