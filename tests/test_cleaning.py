@@ -891,7 +891,7 @@ class TestDropColumns:
             )
 
 
-class TestDropEmptyColumns:
+class TestDropEmptyColumnsPipeline:
     def test_drop_empty_columns_all_empty(self, csv_with_empty_columns):
         frame = ar.read_csv(csv_with_empty_columns)
         result = ar.drop_empty_columns(frame)

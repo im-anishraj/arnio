@@ -94,4 +94,3 @@ def csv_with_empty_columns(tmp_path):
     path = tmp_path / "empty_columns.csv"
     path.write_text(csv_content)
     return str(path)
-
