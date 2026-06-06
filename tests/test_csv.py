@@ -2874,6 +2874,42 @@ class TestArFrameToDict:
             assert result[col] == frame[col]
 
 
+def test_csv_chunked_progress_hook_fires(tmp_path):
+    import arnio as ar
+
+    test_file = tmp_path / "test_chunked_progress.csv"
+    test_file.write_text("a,b\n1,2\n3,4\n5,6\n")
+
+    captured_payloads = []
+
+    def dummy_hook(progress):
+        captured_payloads.append(progress)
+
+    reader = ar.read_csv_chunked(
+        str(test_file),
+        chunksize=2,
+        progress_hook=dummy_hook,
+        progress_interval_rows=1,
+    )
+
+    all_rows = 0
+
+    for chunk in reader:
+        all_rows += len(chunk)
+
+    assert len(captured_payloads) > 0
+
+    last_payload = captured_payloads[-1]
+
+    assert hasattr(last_payload, "rows_read")
+    assert hasattr(last_payload, "bytes_read")
+    assert hasattr(last_payload, "total_bytes")
+    assert hasattr(last_payload, "done")
+
+    assert last_payload.done is True
+    assert last_payload.rows_read == all_rows
+
+
 class TestArFrameStr:
     def test_str_contains_shape(self, sample_csv):
         frame = ar.read_csv(sample_csv)
@@ -3018,6 +3054,24 @@ def test_read_csv_chunked_text_stream_encoding_override():
     chunks = list(ar.read_csv_chunked(stream, encoding="utf-16"))
     pandas_df = ar.to_pandas(chunks[0])
     assert pandas_df["col2"][0] == "café"
+
+
+def test_read_csv_progress_hook_payload_and_done(tmp_path):
+    import arnio as ar
+    from arnio.io import CSVProgress
+
+    csv_file = tmp_path / "test.csv"
+    csv_file.write_text("a,b\n1,2\n3,4\n5,6")
+    payloads = []
+
+    def hook(progress: CSVProgress):
+        payloads.append(progress)
+
+    ar.read_csv(str(csv_file), progress_hook=hook, progress_interval_rows=2)
+    assert len(payloads) > 0
+    assert isinstance(payloads[0], CSVProgress)
+    assert payloads[-1].done is True
+    assert payloads[-1].rows_read == 3
 
 
 # --- Tests for scan_csv file-like input support (issue #1842) ---

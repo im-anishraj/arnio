@@ -1,3 +1,4 @@
+#include <pybind11/functional.h>
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
@@ -273,6 +274,8 @@ PYBIND11_MODULE(_arnio_cpp, m) {
         .def_readwrite("sample_size", &CsvConfig::sample_size)
         .def_readwrite("mode", &CsvConfig::mode)
         .def_readwrite("encoding_errors", &CsvConfig::encoding_errors)
+        .def_readwrite("progress_hook", &CsvConfig::progress_hook)
+        .def_readwrite("progress_interval_rows", &CsvConfig::progress_interval_rows)
         .def_readwrite("null_values", &CsvConfig::null_values);
 
     py::class_<CsvReader>(m, "CsvReader")

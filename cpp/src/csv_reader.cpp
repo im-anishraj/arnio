@@ -1050,6 +1050,21 @@ CsvParseResult CsvReader::read(const std::string& path, const std::string& on_ba
                 }
             }
             ++row_count2;
+
+            // Intermediate Progress Signal
+            if (config.progress_hook != nullptr && row_count2 > 0 &&
+                row_count2 % config.progress_interval_rows == 0) {
+                std::streampos pos = file2.tellg();
+                size_t bytes_read = (pos == std::streampos(-1)) ? 0 : static_cast<size_t>(pos);
+                config.progress_hook(row_count2, bytes_read, std::nullopt, false);
+            }
+        }
+
+        // Final Progress Signal
+        if (config.progress_hook != nullptr) {
+            std::streampos pos = file2.tellg();
+            size_t bytes_read = (pos == std::streampos(-1)) ? 0 : static_cast<size_t>(pos);
+            config.progress_hook(row_count2, bytes_read, std::nullopt, true);
         }
     }
 
@@ -1370,8 +1385,18 @@ std::optional<CsvParseResult> CsvChunkReader::next_chunk(size_t chunksize,
             break;
         }
         raw_data.push_back(std::move(fields));
-    }
 
+        size_t current_row = rows_read_total_ + raw_data.size();
+
+        if (config.progress_hook != nullptr && current_row > 0 &&
+            current_row % config.progress_interval_rows == 0) {
+            std::streampos pos = file_.tellg();
+
+            size_t bytes_read = (pos == std::streampos(-1)) ? 0 : static_cast<size_t>(pos);
+
+            config.progress_hook(current_row, bytes_read, std::nullopt, false);
+        }
+    }
     if (raw_data.empty()) {
         if (bad_rows.empty()) {
             return std::nullopt;
@@ -1423,7 +1448,6 @@ std::optional<CsvParseResult> CsvChunkReader::next_chunk(size_t chunksize,
             schema_locked_ = true;
         }
     }
-
     rows_read_total_ += raw_data.size() + bad_rows.size();
     return CsvParseResult{build_frame(raw_data, schema_locked_), std::move(bad_rows)};
 }

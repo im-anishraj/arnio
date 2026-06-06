@@ -17,7 +17,8 @@ import urllib.request
 import warnings
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
-from typing import cast
+from dataclasses import dataclass
+from typing import Callable, cast
 
 from ._core import (
     _CsvChunkReader,
@@ -668,6 +669,14 @@ def _validate_encoding_errors(value: str) -> str:
     return value
 
 
+@dataclass(frozen=True)
+class CSVProgress:
+    rows_read: int
+    bytes_read: int
+    total_bytes: int | None
+    done: bool
+
+
 def read_csv(
     path: str | os.PathLike[str] | io.TextIOBase,
     *,
@@ -685,6 +694,8 @@ def read_csv(
     mode: str = "strict",
     encoding_errors: str = "strict",
     on_bad_lines: str = "error",
+    progress_hook: Callable[[CSVProgress], None] | None = None,
+    progress_interval_rows: int = 10000,
 ) -> ArFrame:
     """Read a CSV file into an ArFrame via C++ backend.
 
@@ -764,6 +775,11 @@ def read_csv(
         not reach this dispatch; only wide rows do. Dropped rows count
         toward ``nrows``.
 
+    progress_hook : Callable[[CSVProgress], None], optional
+        Callback function to report parsing progress. Receives a CSVProgress payload containing rows_read, bytes_read, total_bytes, and done.
+    progress_interval_rows : int, default 10000
+        Number of rows to process before firing the progress hook.
+
     Returns
     -------
     ArFrame
@@ -832,15 +848,34 @@ def read_csv(
             config.null_values = _validate_null_values(null_values)
         if dtype is not None:
             config.dtype = _validate_dtype_mapping(dtype)
-
         if usecols is not None:
             config.usecols = _validate_usecols(usecols)
-
         if nrows is not None:
             config.nrows = _validate_nrows(nrows)
-
         if skiprows is not None:
             config.skip_rows = _validate_skip_rows(skiprows)
+
+        if progress_hook is not None:
+            if isinstance(progress_interval_rows, bool) or not isinstance(
+                progress_interval_rows, int
+            ):
+                raise TypeError("progress_interval_rows must be an integer")
+            if progress_interval_rows <= 0:
+                raise ValueError("progress_interval_rows must be a positive integer")
+
+            def wrapper(
+                rows: int, bytes_read: int, total_bytes: int | None, is_done: bool
+            ) -> None:
+                box = CSVProgress(
+                    rows_read=rows,
+                    bytes_read=bytes_read,
+                    total_bytes=total_bytes,
+                    done=is_done,
+                )
+                progress_hook(box)
+
+            config.progress_hook = wrapper  # type: ignore[attr-defined]
+            config.progress_interval_rows = progress_interval_rows  # type: ignore[attr-defined]
 
         reader = _CsvReader(config)
     except Exception:
@@ -894,6 +929,8 @@ def read_csv_chunked(
     null_values: list[str] | None = None,
     mode: str = "strict",
     on_bad_lines: str = "error",
+    progress_hook: Callable[[CSVProgress], None] | None = None,
+    progress_interval_rows: int = 10000,
 ) -> Iterator[ArFrame]:
     """Read a CSV file in chunks, yielding ArFrame objects.
 
@@ -960,6 +997,11 @@ def read_csv_chunked(
         In permissive mode, narrow rows are still padded silently and do
         not reach this dispatch; only wide rows do. Dropped rows count
         toward ``nrows``.
+
+    progress_hook : Callable[[CSVProgress], None], optional
+        Callback function to report parsing progress. Receives a CSVProgress payload containing rows_read, bytes_read, total_bytes, and done.
+    progress_interval_rows : int, default 10000
+        Number of rows to process before firing the progress hook.
 
     Yields
     ------
@@ -1064,28 +1106,78 @@ def read_csv_chunked(
 
         if usecols is not None:
             config.usecols = _validate_usecols(usecols)
-
         if nrows is not None:
             config.nrows = _validate_nrows(nrows)
+
+        if progress_hook is not None:
+            if isinstance(progress_interval_rows, bool) or not isinstance(
+                progress_interval_rows, int
+            ):
+                raise TypeError("progress_interval_rows must be an integer")
+            if progress_interval_rows <= 0:
+                raise ValueError("progress_interval_rows must be a positive integer")
+
+            last_rows = 0
+            last_bytes = 0
+            last_total: int | None = 0
+
+            def wrapper(
+                rows: int, bytes_read: int, total_bytes: int | None, is_done: bool
+            ) -> None:
+                nonlocal last_rows, last_bytes, last_total
+                last_rows = rows
+                last_bytes = bytes_read
+                last_total = total_bytes
+
+                box = CSVProgress(
+                    rows_read=rows,
+                    bytes_read=bytes_read,
+                    total_bytes=total_bytes,
+                    done=is_done,
+                )
+                progress_hook(box)
+
+            config.progress_hook = wrapper  # type: ignore[attr-defined]
+            config.progress_interval_rows = progress_interval_rows  # type: ignore[attr-defined]
 
         reader = _CsvChunkReader(config)
     except Exception:
         if should_cleanup and os.path.exists(native_path):
             os.unlink(native_path)
         raise
+
     try:
         effective_encoding = "utf-8" if is_materialized_text else encoding
         with _utf8_csv_path(
             native_path, effective_encoding, delimiter=delimiter
         ) as native_csv_path:
             reader.open(native_csv_path)
+
+            # Smart counter for small files
+            total_yielded_rows = 0
+
             yielded_nonempty_chunk = False
+
             try:
                 while True:
                     chunk = reader.next_chunk(chunksize, on_bad_lines)
                     if chunk is None:
+                        if progress_hook is not None:
+                            # Use our manual count if C++ never fired (small files)
+                            final_rows = (
+                                last_rows if last_rows > 0 else total_yielded_rows
+                            )
+                            final_box = CSVProgress(
+                                rows_read=final_rows,
+                                bytes_read=last_bytes,
+                                total_bytes=last_total,
+                                done=True,
+                            )
+                            progress_hook(final_box)
                         break
+
                     cpp_frame, bad_rows = chunk
+                    total_yielded_rows += cpp_frame.num_rows()
 
                     if on_bad_lines == "warn" and bad_rows:
                         _warn_bad_rows(bad_rows)
@@ -1102,17 +1194,19 @@ def read_csv_chunked(
                     yield frame
             finally:
                 reader.close()
-                if should_cleanup and os.path.exists(native_path):
-                    try:
-                        os.unlink(native_path)
-                    except OSError:
-                        pass
-    except ValueError:
+
+    except (ValueError, TypeError):
         raise
     except CsvReadError:
         raise
-    except RuntimeError as e:
+    except Exception as e:
         raise CsvReadError(str(e)) from None
+    finally:
+        if should_cleanup and os.path.exists(native_path):
+            try:
+                os.unlink(native_path)
+            except OSError:
+                pass
 
 
 def write_csv(
