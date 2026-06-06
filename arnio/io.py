@@ -1600,6 +1600,10 @@ def read_jsonl_chunked(
     """
     _validate_jsonl_encoding(encoding)
 
+    if not isinstance(path, (str, os.PathLike)):
+        raise TypeError(
+            f"read_jsonl_chunked expected a filesystem path, got {type(path).__name__!r}"
+        )
     path = os.fspath(path)
     encoding_errors = _validate_encoding_errors(encoding_errors)
     nrows = _validate_jsonl_nrows(nrows)
