@@ -83,7 +83,7 @@ def test_one_hot_nulls_produce_all_zeros(nullable_frame):
 
 def test_one_hot_rejects_non_string_column():
     frame = ar.from_records([{"x": 1}, {"x": 2}])
-    with pytest.raises((TypeError, Exception), match="STRING"):
+    with pytest.raises(ValueError, match="STRING"):
         encode_categorical(frame, ["x"])
 
 
@@ -98,6 +98,23 @@ def test_one_hot_unknown_column_raises_key_error(color_frame):
 def test_one_hot_empty_columns_raises_value_error(color_frame):
     with pytest.raises(ValueError):
         encode_categorical(color_frame, [])
+
+
+def test_one_hot_rejects_existing_output_name_collision():
+    frame = ar.from_records([{"color": "red", "color_red": 10}])
+    with pytest.raises(ValueError, match="generated column name 'color_red'"):
+        encode_categorical(frame, ["color"])
+
+
+def test_one_hot_rejects_collision_between_generated_names():
+    frame = ar.from_records([{"a": "b_c", "a_b": "c"}])
+    with pytest.raises(ValueError, match="generated column name 'a_b_c'"):
+        encode_categorical(frame, ["a", "a_b"])
+
+
+def test_one_hot_rejects_repeated_target_column(color_frame):
+    with pytest.raises(ValueError, match="generated column name 'color_blue'"):
+        encode_categorical(color_frame, ["color", "color"])
 
 
 # ── ordinal: basic correctness ─────────────────────────────────────────────────
@@ -147,8 +164,20 @@ def test_ordinal_missing_mappings_raises_value_error(color_frame):
         encode_categorical(color_frame, ["color"], method="ordinal")
 
 
+def test_ordinal_missing_mapping_for_one_of_multiple_columns(color_frame):
+    with pytest.raises(
+        ValueError, match="ordinal_mappings is missing an entry for column 'size'"
+    ):
+        encode_categorical(
+            color_frame,
+            ["color", "size"],
+            method="ordinal",
+            ordinal_mappings={"color": {"red": 0, "blue": 1, "green": 2}},
+        )
+
+
 def test_ordinal_unmapped_value_raises(color_frame):
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError, match="has no mapping entry"):
         # "green" not in mapping → C++ raises std::invalid_argument
         encode_categorical(
             color_frame,
@@ -160,8 +189,29 @@ def test_ordinal_unmapped_value_raises(color_frame):
 
 def test_ordinal_rejects_non_string_column():
     frame = ar.from_records([{"x": 1}, {"x": 2}])
-    with pytest.raises((TypeError, Exception), match="STRING"):
+    with pytest.raises(ValueError, match="STRING"):
         encode_categorical(frame, ["x"], method="ordinal", ordinal_mappings={"x": {}})
+
+
+def test_ordinal_rejects_existing_output_name_collision():
+    frame = ar.from_records([{"color": "red", "color_ordinal": 10}])
+    with pytest.raises(ValueError, match="generated column name 'color_ordinal'"):
+        encode_categorical(
+            frame,
+            ["color"],
+            method="ordinal",
+            ordinal_mappings={"color": {"red": 0}},
+        )
+
+
+def test_ordinal_rejects_repeated_target_column(color_frame):
+    with pytest.raises(ValueError, match="generated column name 'color_ordinal'"):
+        encode_categorical(
+            color_frame,
+            ["color", "color"],
+            method="ordinal",
+            ordinal_mappings={"color": {"red": 0, "blue": 1, "green": 2}},
+        )
 
 
 # ── bad method ─────────────────────────────────────────────────────────────────

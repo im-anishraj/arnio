@@ -51,10 +51,9 @@ def encode_categorical(
     ValueError
         If ``method`` is not ``"one_hot"`` or ``"ordinal"``, or if
         ``ordinal_mappings`` is missing when ``method="ordinal"``.
-    TypeError
-        (from C++) If a target column is not STRING dtype.
-    KeyError
-        (from C++) If an ordinal mapping is missing an entry for a cell value.
+    ValueError
+        If a target column is not STRING dtype, a generated column name
+        collides with another column, or an ordinal mapping is incomplete.
     """
     from ._core import _encode_one_hot_native, _encode_ordinal_native
     from .cleaning import validate_columns_exist
@@ -76,15 +75,15 @@ def encode_categorical(
     elif method == "ordinal":
         if ordinal_mappings is None:
             raise ValueError("ordinal_mappings must be provided when method='ordinal'")
+        for col in columns:
+            if col not in ordinal_mappings:
+                raise ValueError(
+                    f"ordinal_mappings is missing an entry for column {col!r}"
+                )
         # Convert to the plain dict[str, dict[str, int]] that pybind11 expects
         mappings: dict[str, dict[str, int]] = {
             col: dict(ordinal_mappings[col]) for col in columns
         }
-        for col in columns:
-            if col not in mappings:
-                raise ValueError(
-                    f"ordinal_mappings is missing an entry for column {col!r}"
-                )
         cpp_frame = _encode_ordinal_native(frame._frame, columns, mappings)
         return ArFrame(cpp_frame)
 

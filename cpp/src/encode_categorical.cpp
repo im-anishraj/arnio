@@ -5,9 +5,22 @@
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace arnio {
+
+namespace {
+
+void validate_output_name(const Frame& frame, std::unordered_set<std::string>& planned_names,
+                          const std::string& output_name) {
+    if (frame.has_column(output_name) || !planned_names.insert(output_name).second) {
+        throw std::invalid_argument("encode_categorical: generated column name '" + output_name +
+                                    "' conflicts with an existing or generated column.");
+    }
+}
+
+}  // namespace
 
 Frame encode_one_hot_native(const Frame& frame, const std::vector<std::string>& column_names) {
     // Validate: all target columns must be STRING dtype
@@ -17,6 +30,23 @@ Frame encode_one_hot_native(const Frame& frame, const std::vector<std::string>& 
             throw std::invalid_argument(
                 "encode_one_hot_native: column '" + col_name +
                 "' is not STRING dtype. One-Hot encoding only supports STRING columns.");
+        }
+    }
+
+    // Validate every generated name before constructing the result frame.
+    std::unordered_set<std::string> planned_names;
+    for (const auto& col_name : column_names) {
+        const Column& src = frame.column(col_name);
+        const auto& vec = std::get<std::vector<std::string>>(src.data());
+
+        std::set<std::string> unique_set;
+        for (size_t r = 0; r < src.size(); ++r) {
+            if (!src.is_null(r)) {
+                unique_set.insert(vec[r]);
+            }
+        }
+        for (const auto& cat : unique_set) {
+            validate_output_name(frame, planned_names, col_name + "_" + cat);
         }
     }
 
@@ -72,6 +102,12 @@ Frame encode_ordinal_native(
                 "encode_ordinal_native: column '" + col_name +
                 "' is not STRING dtype. Ordinal encoding only supports STRING columns.");
         }
+    }
+
+    // Validate every generated name before constructing the result frame.
+    std::unordered_set<std::string> planned_names;
+    for (const auto& col_name : column_names) {
+        validate_output_name(frame, planned_names, col_name + "_ordinal");
     }
 
     std::vector<Column> new_cols;
