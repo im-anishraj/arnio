@@ -2612,30 +2612,28 @@ def _profile_column(
         numeric = pd.to_numeric(series, errors="coerce")
         numeric_non_null = numeric.dropna()
         if len(numeric_non_null):
-            min_value = numeric_non_null.min()
-            max_value = numeric_non_null.max()
-            mean = float(numeric_non_null.mean())
-            std = float(numeric_non_null.std(ddof=0))
-            quantiles = numeric_non_null.quantile([0.25, 0.50, 0.75, 0.95])
-            q25 = round(float(quantiles.loc[0.25]), 4)
-            q50 = round(float(quantiles.loc[0.50]), 4)
-            q75 = round(float(quantiles.loc[0.75]), 4)
-            q95 = round(float(quantiles.loc[0.95]), 4)
-            (
-                outlier_count,
-                outlier_ratio,
-                iqr,
-                outlier_lower_bound,
-                outlier_upper_bound,
-            ) = _iqr_outlier_summary(
-                numeric_non_null,
-                q25=q25,
-                q75=q75,
-            )
-
-            # Calculate histogram
             finite_values = numeric_non_null[np.isfinite(numeric_non_null)]
             if len(finite_values):
+                min_value = finite_values.min()
+                max_value = finite_values.max()
+                mean = float(finite_values.mean())
+                std = float(finite_values.std(ddof=0))
+                quantiles = finite_values.quantile([0.25, 0.50, 0.75, 0.95])
+                q25 = round(float(quantiles.loc[0.25]), 4)
+                q50 = round(float(quantiles.loc[0.50]), 4)
+                q75 = round(float(quantiles.loc[0.75]), 4)
+                q95 = round(float(quantiles.loc[0.95]), 4)
+                (
+                    outlier_count,
+                    outlier_ratio,
+                    iqr,
+                    outlier_lower_bound,
+                    outlier_upper_bound,
+                ) = _iqr_outlier_summary(
+                    finite_values,
+                    q25=q25,
+                    q75=q75,
+                )
                 counts, bin_edges = np.histogram(finite_values.to_numpy(), bins=10)
                 total = int(counts.sum())
                 histogram = [
@@ -2648,6 +2646,10 @@ def _profile_column(
                     for i in range(len(counts))
                 ]
             else:
+                min_value = max_value = mean = std = None
+                q25 = q50 = q75 = q95 = None
+                iqr = outlier_count = outlier_ratio = None
+                outlier_lower_bound = outlier_upper_bound = None
                 histogram = None
     elif len(non_null) and (
         dtype == "string" or pd.api.types.is_string_dtype(series.dtype)
@@ -2886,11 +2888,19 @@ def _ratio(part: int, total: int) -> float:
 
 
 def _clean_scalar(value: Any) -> Any:
-    """Convert NaN and numpy scalar values to JSON-safe Python types."""
+    """Convert NaN/inf/-inf and numpy scalar values to JSON-safe Python types.
+
+    Non-finite floats (NaN, inf, -inf) are mapped to ``None`` so that
+    ``json.dumps(..., allow_nan=False)`` never raises on report output.
+    This covers sample_values, top_values, min/max, histogram bucket edges,
+    and any other scalar path that passes through to_dict().
+    """
     if pd.isna(value):
         return None
     if hasattr(value, "item"):
-        return value.item()
+        value = value.item()
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
     return value
 
 

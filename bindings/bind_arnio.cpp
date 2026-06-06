@@ -8,6 +8,7 @@
 #include "arnio/column.h"
 #include "arnio/csv_reader.h"
 #include "arnio/csv_writer.h"
+#include "arnio/encode_categorical.h"
 #include "arnio/frame.h"
 #include "arnio/types.h"
 
@@ -182,6 +183,15 @@ PYBIND11_MODULE(_arnio_cpp, m) {
                 Frame frame =
                     row_count_obj.is_none() ? Frame() : Frame(row_count_obj.cast<size_t>());
 
+                // Extract the row count once so we can pre-allocate each column's
+                // internal vectors before the push_back loop.  This eliminates the
+                // O(log N) heap-reallocation cascade that occurs when vectors grow
+                // from zero capacity.
+                std::optional<size_t> row_count;
+                if (!row_count_obj.is_none()) {
+                    row_count = row_count_obj.cast<size_t>();
+                }
+
                 for (auto item : cols_dict) {
                     std::string name = py::cast<std::string>(item.first);
                     py::list values = py::cast<py::list>(item.second);
@@ -211,6 +221,13 @@ PYBIND11_MODULE(_arnio_cpp, m) {
                     }
 
                     Column col(name, dtype);
+
+                    // Pre-allocate to the known row count to avoid repeated
+                    // vector growth reallocations during the push_back loop below.
+                    if (row_count.has_value()) {
+                        col.reserve(*row_count);
+                    }
+
                     for (auto val : values) {
                         if (val.is_none()) {
                             col.push_null();
@@ -446,4 +463,37 @@ PYBIND11_MODULE(_arnio_cpp, m) {
         },
         py::arg("frame"), py::arg("numerator"), py::arg("denominator"), py::arg("output_column"),
         py::arg("fill_value") = 0.0);
+
+    // ── encode_categorical bindings ──────────────────────────────────────────────
+    // Add this #include at the top of bind_arnio.cpp with the other headers:
+    //   #include "arnio/encode_categorical.h"
+    //
+    // Then paste the two m.def blocks below just before the closing `}` of
+    // PYBIND11_MODULE(_arnio_cpp, m) { ... }
+
+    m.def(
+        "encode_one_hot_native",
+        [](const Frame& frame, const std::vector<std::string>& column_names) {
+            Frame result;
+            {
+                py::gil_scoped_release release;
+                result = encode_one_hot_native(frame, column_names);
+            }
+            return result;
+        },
+        py::arg("frame"), py::arg("column_names"));
+
+    m.def(
+        "encode_ordinal_native",
+        [](const Frame& frame, const std::vector<std::string>& column_names,
+           const std::unordered_map<std::string, std::unordered_map<std::string, int64_t>>&
+               ordinal_mappings) {
+            Frame result;
+            {
+                py::gil_scoped_release release;
+                result = encode_ordinal_native(frame, column_names, ordinal_mappings);
+            }
+            return result;
+        },
+        py::arg("frame"), py::arg("column_names"), py::arg("ordinal_mappings"));
 }

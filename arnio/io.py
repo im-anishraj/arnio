@@ -1123,6 +1123,8 @@ def write_csv(
     write_header: bool = True,
     line_terminator: str = "\n",
     escape_formulas: bool = False,
+    encoding: str = "utf-8",
+    encoding_errors: str = "strict",
 ) -> None:
     """Write an ArFrame to a CSV file via C++ backend.
 
@@ -1142,11 +1144,24 @@ def write_csv(
         If True, prefix string cell values that begin with spreadsheet formula
         trigger characters (``=``, ``+``, ``-``, ``@``, tab, or carriage return)
         with a single quote before CSV quoting. Numeric columns are not changed.
+    encoding : str, default "utf-8"
+        Output file encoding. UTF-8 (default) uses the native writer path
+        directly with no transcoding overhead. Any other encoding supported
+        by Python's ``codecs`` module is accepted; the native writer emits
+        UTF-8 to a temporary file which is then transcoded in bounded chunks.
+    encoding_errors : str, default "strict"
+        How encoding errors are handled: ``"strict"`` raises ``ValueError``
+        for unencodable characters, ``"replace"`` substitutes a replacement
+        character, ``"ignore"`` drops unencodable characters.
 
     Raises
     ------
+    TypeError
+        If ``encoding`` or ``encoding_errors`` is not a string.
     ValueError
-        If file format is unsupported.
+        If ``encoding`` is an unknown codec, ``encoding_errors`` is not one of
+        ``"strict"``, ``"replace"``, or ``"ignore"``, or if a character cannot
+        be encoded in the requested encoding with ``encoding_errors="strict"``.
     RuntimeError
         If the file cannot be opened or written.
 
@@ -1154,6 +1169,7 @@ def write_csv(
     --------
     >>> ar.write_csv(frame, "output.csv")
     >>> ar.write_csv(frame, "output.tsv", delimiter="\\t")
+    >>> ar.write_csv(frame, "output_latin1.csv", encoding="latin-1")
     """
     if not isinstance(frame, ArFrame):
         raise TypeError("frame must be an ArFrame")
@@ -1181,6 +1197,10 @@ def write_csv(
             f"line_terminator must be one of '\\n', '\\r\\n', or '\\r', got {line_terminator!r}"
         )
 
+    # Validate encoding and encoding_errors before any file I/O.
+    _validate_jsonl_encoding(encoding)
+    _validate_encoding_errors(encoding_errors)
+
     config = _CsvWriteConfig()
     config.delimiter = delimiter
     config.write_header = _validate_bool_option(write_header, "write_header")
@@ -1188,10 +1208,74 @@ def write_csv(
     config.escape_formulas = _validate_bool_option(escape_formulas, "escape_formulas")
 
     writer = _CsvWriter(config)
+
+    if _is_utf8_encoding(encoding):
+        # Fast path: native writer emits UTF-8 directly — no transcoding overhead.
+        try:
+            writer.write(frame._frame, path)
+        except RuntimeError as e:
+            raise RuntimeError(str(e)) from e
+        return
+
+    # Non-UTF-8 path: write UTF-8 to a temp file, then transcode in bounded
+    # chunks so the entire file is never held in memory at once.
+    import tempfile
+
+    _CHUNK_SIZE = 1 << 20  # 1 MiB per chunk
+
+    tmp_fd, tmp_path = tempfile.mkstemp(suffix=".csv")
+    output_tmp_path: str | None = None
     try:
-        writer.write(frame._frame, path)
-    except RuntimeError as e:
-        raise RuntimeError(str(e)) from e
+        os.close(tmp_fd)
+        try:
+            writer.write(frame._frame, tmp_path)
+        except RuntimeError as e:
+            raise RuntimeError(str(e)) from e
+
+        try:
+            output_fd, output_tmp_path = tempfile.mkstemp(
+                dir=os.path.dirname(os.path.abspath(path)),
+                prefix=f".{os.path.basename(path)}.",
+                suffix=".tmp",
+            )
+            os.close(output_fd)
+
+            # newline="" on both sides preserves the line_terminator written by
+            # the C++ backend exactly — no platform newline translation.
+            with (
+                open(tmp_path, encoding="utf-8", newline="") as src,
+                open(
+                    output_tmp_path,
+                    "w",
+                    encoding=encoding,
+                    errors=encoding_errors,
+                    newline="",
+                ) as dst,
+            ):
+                while True:
+                    chunk = src.read(_CHUNK_SIZE)
+                    if not chunk:
+                        break
+                    dst.write(chunk)
+
+            os.replace(output_tmp_path, path)
+            output_tmp_path = None
+        except UnicodeEncodeError as exc:
+            raise ValueError(
+                f"write_csv: character cannot be encoded in {encoding!r}: {exc}"
+            ) from exc
+        except OSError as exc:
+            raise RuntimeError(str(exc)) from exc
+    finally:
+        if output_tmp_path is not None:
+            try:
+                os.unlink(output_tmp_path)
+            except OSError:
+                pass
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
 
 
 def scan_csv(
@@ -1600,6 +1684,10 @@ def read_jsonl_chunked(
     """
     _validate_jsonl_encoding(encoding)
 
+    if not isinstance(path, (str, os.PathLike)):
+        raise TypeError(
+            f"read_jsonl_chunked expected a filesystem path, got {type(path).__name__!r}"
+        )
     path = os.fspath(path)
     encoding_errors = _validate_encoding_errors(encoding_errors)
     nrows = _validate_jsonl_nrows(nrows)
@@ -1748,8 +1836,9 @@ def sniff_delimiter(
             counts[c].pop()
 
     # 5. Score Candidates and Detect Ties/Ambiguity
-    best_candidates = []
-    best_score = -1.0
+    best_candidates: list[str] = []
+    best_consistency = -1.0
+    best_mode = -1
 
     from collections import Counter
 
@@ -1762,16 +1851,26 @@ def sniff_delimiter(
         counter = Counter(non_zero_counts)
         mode, mode_freq = counter.most_common(1)[0]
 
+        # Primary score: fraction of ALL lines that show the modal count
         consistency = mode_freq / len(line_counts)
-        score = consistency * 10.0 + (mode * 0.1)
 
-        if score > best_score:
-            best_score = score
+        if consistency > best_consistency + 1e-9:
+            # Strictly better consistency → new sole leader
+            best_consistency = consistency
+            best_mode = mode
             best_candidates = [delimiter]
-        elif abs(score - best_score) < 1e-9:
-            best_candidates.append(delimiter)
+        elif abs(consistency - best_consistency) < 1e-9:
+            # Consistency tied → apply secondary tie-breaker (mode)
+            if mode > best_mode:
+                # Higher per-line count wins the tie
+                best_mode = mode
+                best_candidates = [delimiter]
+            elif mode == best_mode:
+                # Both scores identical → ambiguous; keep both
+                best_candidates.append(delimiter)
+            # mode < best_mode: current leader keeps its position
 
-    if not best_candidates or best_score <= 0.0:
+    if not best_candidates or best_consistency <= 0.0:
         raise ValueError(
             f"Could not determine CSV delimiter from sample: no candidate delimiters found in {path!r}"
         )
@@ -1943,8 +2042,8 @@ def write_parquet(
     ImportError
         If ``pyarrow`` is not installed.
     TypeError
-        If ``preserve_attrs`` is ``True`` and ``DataFrame.attrs``
-        contains non-JSON-serializable values.
+        If ``preserve_attrs`` is not a boolean, or if ``preserve_attrs`` is
+        ``True`` and ``DataFrame.attrs`` contains non-JSON-serializable values.
     ValueError
         If the file extension is not ``.parquet`` or ``.pq``, if
         ``compression`` is not a recognised codec, or if
@@ -1989,6 +2088,9 @@ def write_parquet(
             raise TypeError("row_group_size must be an integer")
         if row_group_size <= 0:
             raise ValueError("row_group_size must be a positive integer")
+
+    if not isinstance(preserve_attrs, bool):
+        raise TypeError("preserve_attrs must be a bool")
 
     try:
         import pyarrow  # noqa: F401 — presence check only

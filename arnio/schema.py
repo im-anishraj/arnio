@@ -1151,6 +1151,26 @@ class ValidationIssue:
     value: Any = None
     severity: str = "error"
 
+    @classmethod
+    def _fast_create(
+        cls,
+        *,
+        column,
+        rule,
+        message,
+        row_index,
+        value,
+        severity,
+    ):
+        obj = object.__new__(cls)
+        object.__setattr__(obj, "column", column)
+        object.__setattr__(obj, "rule", rule)
+        object.__setattr__(obj, "message", message)
+        object.__setattr__(obj, "row_index", row_index)
+        object.__setattr__(obj, "value", value)
+        object.__setattr__(obj, "severity", severity)
+        return obj
+
     def __post_init__(self) -> None:
         if not (self.column is None or isinstance(self.column, str)):
             raise TypeError(
@@ -2907,7 +2927,7 @@ def _row_issues(
 ) -> list[ValidationIssue]:
     """Convert a series of invalid rows into a list of ValidationIssue objects."""
     return [
-        ValidationIssue(
+        ValidationIssue._fast_create(
             column=column,
             rule=rule,
             message=message,
