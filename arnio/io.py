@@ -2061,8 +2061,8 @@ def write_json(
     path : str or path-like
         Destination file path. Must end with ``.json``.
     orient : str, default ``"records"``
-        The JSON orientation format to use. Currently, only ``"records"``
-        and ``"dict"`` are supported.
+        The JSON orientation format to use. Supported values are
+        ``"records"``, ``"list"``, and ``"split"``.
     indent : int, optional
         If specified, the JSON output will be pretty-printed with that
         indentation level. If ``None`` (the default), the JSON is written
@@ -2080,7 +2080,7 @@ def write_json(
     --------
     >>> ar.write_json(frame, "output.json")
     >>> ar.write_json(frame, "output.json", indent=4)
-    >>> ar.write_json(frame, "output.json", orient="dict")
+    >>> ar.write_json(frame, "output.json", orient="list")
     """
     if not isinstance(frame, ArFrame):
         raise TypeError("frame must be an ArFrame")
@@ -2094,15 +2094,13 @@ def write_json(
     path_lower = path.lower()
     if not path_lower.endswith(".json"):
         raise ValueError(
-            f"Unsupported file format: {path}. "
-            "write_json only supports .json files."
+            f"Unsupported file format: {path}. " "write_json only supports .json files."
         )
 
-    valid_orients = ("records", "dict")
+    valid_orients = ("records", "list", "split")
     if orient not in valid_orients:
         raise ValueError(
-            f"Unsupported orient: {orient!r}. "
-            f"Valid options are: {valid_orients}"
+            f"Unsupported orient: {orient!r}. " f"Valid options are: {valid_orients}"
         )
 
     if indent is not None:

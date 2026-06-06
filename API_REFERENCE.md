@@ -92,7 +92,7 @@ ar.write_json(frame, "output.json")
 | :--------- | :-------------------- | :-------- | :----------------------------------------------------------------- |
 | `frame`    | `ArFrame`             |           | The data frame to write.                                           |
 | `path`     | `str` or `PathLike`   |           | Destination file path (must end with `.json`).                     |
-| `orient`   | `str`                 | `"records"` | JSON orientation to use (`"records"` or `"dict"`).               |
+| `orient`   | `str`                 | `"records"` | JSON orientation to use (`"records"`, `"list"`, or `"split"`).   |
 | `indent`   | `int` or `None`       | `None`    | Indentation level for pretty-printing (writes compactly if `None`). |
 
 **Returns:** `None`
@@ -108,8 +108,8 @@ ar.write_json(frame, "output.json")
 # Pretty print with indentation
 ar.write_json(frame, "output.json", indent=4)
 
-# Dict orientation
-ar.write_json(frame, "output.json", orient="dict")
+# List orientation
+ar.write_json(frame, "output.json", orient="list")
 ```
 
 #### Parameters
