@@ -349,6 +349,8 @@ def to_arrow(frame: ArFrame) -> pa.Table:
 def _pandas_dtype_to_arnio(dtype: object) -> _DType | None:
     if dtype == pd.Int64Dtype():
         return _DType.INT64
+    if str(dtype) == "int64":
+        return _DType.INT64
     if dtype == pd.Float64Dtype():
         return _DType.FLOAT64
     if str(dtype) == "float64":
@@ -356,7 +358,6 @@ def _pandas_dtype_to_arnio(dtype: object) -> _DType | None:
     if dtype == pd.BooleanDtype() or str(dtype) == "bool":
         return _DType.BOOL
     return None
-
 
 def _validate_unique_column_labels(labels: pd.Index) -> None:
     seen: set[object] = set()

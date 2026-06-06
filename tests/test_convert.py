@@ -1462,3 +1462,68 @@ def test_from_arrow_table_missing_pyarrow_raises_helpful_import_error():
             _from_arrow_table(None)
     assert "_from_arrow_table() requires pyarrow." in str(exc_info.value)
     assert "pip install arnio[arrow]" in str(exc_info.value)
+
+# ---------------------------------------------------------------------------
+# Issue #1960 — preserve empty pandas int64 dtype in from_pandas
+# ---------------------------------------------------------------------------
+
+
+class TestEmptyInt64DtypePreservation:
+    """Regression tests for from_pandas() with zero-row DataFrames.
+
+    Covers: regular int64, nullable Int64, float64, bool, string columns.
+    """
+
+    def test_empty_numpy_int64_roundtrip(self):
+        df = pd.DataFrame({"id": pd.Series([], dtype="int64")})
+        frame = ar.from_pandas(df)
+        assert frame.dtypes["id"] == "int64"
+        result = ar.to_pandas(frame)
+        assert str(result["id"].dtype) == "Int64"
+        assert len(result) == 0
+
+    def test_empty_nullable_int64_roundtrip(self):
+        df = pd.DataFrame({"id": pd.Series([], dtype=pd.Int64Dtype())})
+        frame = ar.from_pandas(df)
+        assert frame.dtypes["id"] == "int64"
+        result = ar.to_pandas(frame)
+        assert str(result["id"].dtype) == "Int64"
+        assert len(result) == 0
+
+    def test_empty_float64_roundtrip(self):
+        df = pd.DataFrame({"score": pd.Series([], dtype="float64")})
+        frame = ar.from_pandas(df)
+        assert frame.dtypes["score"] == "float64"
+        result = ar.to_pandas(frame)
+        assert str(result["score"].dtype) == "float64"
+        assert len(result) == 0
+
+    def test_empty_bool_roundtrip(self):
+        df = pd.DataFrame({"active": pd.Series([], dtype="bool")})
+        frame = ar.from_pandas(df)
+        assert frame.dtypes["active"] == "bool"
+        result = ar.to_pandas(frame)
+        assert str(result["active"].dtype) == "boolean"
+        assert len(result) == 0
+
+    def test_empty_string_roundtrip(self):
+        df = pd.DataFrame({"name": pd.Series([], dtype="string")})
+        frame = ar.from_pandas(df)
+        result = ar.to_pandas(frame)
+        assert str(result["name"].dtype) == "string"
+        assert len(result) == 0
+
+    def test_empty_mixed_schema_roundtrip(self):
+        df = pd.DataFrame({
+            "id": pd.Series([], dtype="int64"),
+            "score": pd.Series([], dtype="float64"),
+            "active": pd.Series([], dtype="bool"),
+            "name": pd.Series([], dtype="string"),
+        })
+        frame = ar.from_pandas(df)
+        assert frame.dtypes["id"] == "int64"
+        assert frame.dtypes["score"] == "float64"
+        assert frame.dtypes["active"] == "bool"
+        result = ar.to_pandas(frame)
+        assert len(result) == 0
+        assert list(result.columns) == ["id", "score", "active", "name"]
