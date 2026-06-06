@@ -25,7 +25,7 @@ from .cleaning import (
     validate_columns_exist,
 )
 from .convert import to_pandas
-from .frame import ArFrame, _validate_arframe
+from .frame import ArFrame
 
 
 def _validate_arframe(frame):

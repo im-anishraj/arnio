@@ -57,7 +57,7 @@ def encode_categorical(
     """
     from ._core import _encode_one_hot_native, _encode_ordinal_native
     from .cleaning import _validate_existing_column_sequence
-    from .frame import ArFrame, _validate_arframe
+    from .frame import ArFrame
 
     _validate_arframe(frame)
 
