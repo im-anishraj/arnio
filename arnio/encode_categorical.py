@@ -56,17 +56,18 @@ def encode_categorical(
         collides with another column, or an ordinal mapping is incomplete.
     """
     from ._core import _encode_one_hot_native, _encode_ordinal_native
-    from .cleaning import validate_columns_exist
+    from .cleaning import _validate_existing_column_sequence
     from .frame import ArFrame, _validate_arframe
 
     _validate_arframe(frame)
 
-    columns = list(columns)
-    if not columns:
-        raise ValueError("columns must be a non-empty sequence")
-
-    # Validate column existence — raises KeyError for unknown names
-    validate_columns_exist(frame, columns)
+    columns = _validate_existing_column_sequence(
+        columns,
+        available_columns=frame.columns,
+        argument_name="columns",
+        allow_empty=False,
+        reject_duplicates=True,
+    )
 
     if method == "one_hot":
         cpp_frame = _encode_one_hot_native(frame._frame, columns)

@@ -1,5 +1,6 @@
 """Tests for arnio.encode_categorical."""
 
+import pandas as pd
 import pytest
 
 import arnio as ar
@@ -100,6 +101,11 @@ def test_one_hot_empty_columns_raises_value_error(color_frame):
         encode_categorical(color_frame, [])
 
 
+def test_one_hot_bare_string_columns_raises_type_error(color_frame):
+    with pytest.raises(TypeError, match="columns must be a sequence of column names"):
+        encode_categorical(color_frame, "color")
+
+
 def test_one_hot_rejects_existing_output_name_collision():
     frame = ar.from_records([{"color": "red", "color_red": 10}])
     with pytest.raises(ValueError, match="generated column name 'color_red'"):
@@ -112,9 +118,12 @@ def test_one_hot_rejects_collision_between_generated_names():
         encode_categorical(frame, ["a", "a_b"])
 
 
-def test_one_hot_rejects_repeated_target_column(color_frame):
-    with pytest.raises(ValueError, match="generated column name 'color_blue'"):
-        encode_categorical(color_frame, ["color", "color"])
+def test_one_hot_rejects_repeated_all_null_target_column():
+    frame = ar.from_pandas(
+        pd.DataFrame({"color": pd.Series([None, None], dtype="string")})
+    )
+    with pytest.raises(ValueError, match="columns contains duplicate column names"):
+        encode_categorical(frame, ["color", "color"])
 
 
 # ── ordinal: basic correctness ─────────────────────────────────────────────────
@@ -205,7 +214,7 @@ def test_ordinal_rejects_existing_output_name_collision():
 
 
 def test_ordinal_rejects_repeated_target_column(color_frame):
-    with pytest.raises(ValueError, match="generated column name 'color_ordinal'"):
+    with pytest.raises(ValueError, match="columns contains duplicate column names"):
         encode_categorical(
             color_frame,
             ["color", "color"],
