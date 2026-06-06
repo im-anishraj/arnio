@@ -2051,8 +2051,7 @@ def write_json(
 ) -> None:
     """Write an ArFrame to a JSON file.
 
-    This function exports the frame's data natively to JSON, bypassing any
-    intermediate Pandas conversions for performance.
+    This function exports the frame's data to JSON without pandas conversion.
 
     Parameters
     ----------

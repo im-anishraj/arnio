@@ -78,39 +78,6 @@ Writes an `ArFrame` to a CSV file via the C++ backend.
 ar.write_csv(frame, "output.csv")
 ```
 
----
-
-### write_json
-
-Write an `ArFrame` to a JSON file.
-
-```python
-ar.write_json(frame, "output.json")
-```
-
-| Parameter  | Type                  | Default   | Description                                                        |
-| :--------- | :-------------------- | :-------- | :----------------------------------------------------------------- |
-| `frame`    | `ArFrame`             |           | The data frame to write.                                           |
-| `path`     | `str` or `PathLike`   |           | Destination file path (must end with `.json`).                     |
-| `orient`   | `str`                 | `"records"` | JSON orientation to use (`"records"`, `"list"`, or `"split"`).   |
-| `indent`   | `int` or `None`       | `None`    | Indentation level for pretty-printing (writes compactly if `None`). |
-
-**Returns:** `None`
-
-**Raises:**
-- `TypeError`: If input frame is not an `ArFrame` or path is invalid.
-- `ValueError`: If file extension is unsupported or orient is invalid.
-
-**Examples:**
-```python
-ar.write_json(frame, "output.json")
-
-# Pretty print with indentation
-ar.write_json(frame, "output.json", indent=4)
-
-# List orientation
-ar.write_json(frame, "output.json", orient="list")
-```
 
 #### Parameters
 
@@ -144,6 +111,40 @@ ar.write_csv(frame, "output.csv", write_header=False)
 
 # Windows line endings
 ar.write_csv(frame, "output.csv", line_terminator="\r\n")
+```
+
+---
+
+### write_json
+
+Write an `ArFrame` to a JSON file.
+
+```python
+ar.write_json(frame, "output.json")
+```
+
+| Parameter  | Type                  | Default   | Description                                                        |
+| :--------- | :-------------------- | :-------- | :----------------------------------------------------------------- |
+| `frame`    | `ArFrame`             |           | The data frame to write.                                           |
+| `path`     | `str` or `PathLike`   |           | Destination file path (must end with `.json`).                     |
+| `orient`   | `str`                 | `"records"` | JSON orientation to use (`"records"`, `"list"`, or `"split"`).   |
+| `indent`   | `int` or `None`       | `None`    | Indentation level for pretty-printing (writes compactly if `None`). |
+
+**Returns:** `None`
+
+**Raises:**
+- `TypeError`: If input frame is not an `ArFrame` or path is invalid.
+- `ValueError`: If file extension is unsupported or orient is invalid.
+
+**Examples:**
+```python
+ar.write_json(frame, "output.json")
+
+# Pretty print with indentation
+ar.write_json(frame, "output.json", indent=4)
+
+# List orientation
+ar.write_json(frame, "output.json", orient="list")
 ```
 
 ### sniff_delimiter
