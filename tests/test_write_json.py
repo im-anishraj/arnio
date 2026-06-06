@@ -89,7 +89,7 @@ def test_write_json_unsupported_orient(
     sample_frame: ArFrame, tmp_path: pathlib.Path
 ) -> None:
     with pytest.raises(ValueError, match="Unsupported orient"):
-        ar.write_json(sample_frame, tmp_path / "out.json", orient="split")
+        ar.write_json(sample_frame, tmp_path / "out.json", orient="invalid_orient")
 
 
 def test_write_json_invalid_indent(
