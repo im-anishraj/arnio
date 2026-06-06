@@ -1123,6 +1123,8 @@ def write_csv(
     write_header: bool = True,
     line_terminator: str = "\n",
     escape_formulas: bool = False,
+    encoding: str = "utf-8",
+    encoding_errors: str = "strict",
 ) -> None:
     """Write an ArFrame to a CSV file via C++ backend.
 
@@ -1142,11 +1144,24 @@ def write_csv(
         If True, prefix string cell values that begin with spreadsheet formula
         trigger characters (``=``, ``+``, ``-``, ``@``, tab, or carriage return)
         with a single quote before CSV quoting. Numeric columns are not changed.
+    encoding : str, default "utf-8"
+        Output file encoding. UTF-8 (default) uses the native writer path
+        directly with no transcoding overhead. Any other encoding supported
+        by Python's ``codecs`` module is accepted; the native writer emits
+        UTF-8 to a temporary file which is then transcoded in bounded chunks.
+    encoding_errors : str, default "strict"
+        How encoding errors are handled: ``"strict"`` raises ``ValueError``
+        for unencodable characters, ``"replace"`` substitutes a replacement
+        character, ``"ignore"`` drops unencodable characters.
 
     Raises
     ------
+    TypeError
+        If ``encoding`` or ``encoding_errors`` is not a string.
     ValueError
-        If file format is unsupported.
+        If ``encoding`` is an unknown codec, ``encoding_errors`` is not one of
+        ``"strict"``, ``"replace"``, or ``"ignore"``, or if a character cannot
+        be encoded in the requested encoding with ``encoding_errors="strict"``.
     RuntimeError
         If the file cannot be opened or written.
 
@@ -1154,6 +1169,7 @@ def write_csv(
     --------
     >>> ar.write_csv(frame, "output.csv")
     >>> ar.write_csv(frame, "output.tsv", delimiter="\\t")
+    >>> ar.write_csv(frame, "output_latin1.csv", encoding="latin-1")
     """
     if not isinstance(frame, ArFrame):
         raise TypeError("frame must be an ArFrame")
@@ -1181,6 +1197,10 @@ def write_csv(
             f"line_terminator must be one of '\\n', '\\r\\n', or '\\r', got {line_terminator!r}"
         )
 
+    # Validate encoding and encoding_errors before any file I/O.
+    _validate_jsonl_encoding(encoding)
+    _validate_encoding_errors(encoding_errors)
+
     config = _CsvWriteConfig()
     config.delimiter = delimiter
     config.write_header = _validate_bool_option(write_header, "write_header")
@@ -1188,10 +1208,52 @@ def write_csv(
     config.escape_formulas = _validate_bool_option(escape_formulas, "escape_formulas")
 
     writer = _CsvWriter(config)
+
+    if _is_utf8_encoding(encoding):
+        # Fast path: native writer emits UTF-8 directly — no transcoding overhead.
+        try:
+            writer.write(frame._frame, path)
+        except RuntimeError as e:
+            raise RuntimeError(str(e)) from e
+        return
+
+    # Non-UTF-8 path: write UTF-8 to a temp file, then transcode in bounded
+    # chunks so the entire file is never held in memory at once.
+    import tempfile
+
+    _CHUNK_SIZE = 1 << 20  # 1 MiB per chunk
+
+    tmp_fd, tmp_path = tempfile.mkstemp(suffix=".csv")
     try:
-        writer.write(frame._frame, path)
-    except RuntimeError as e:
-        raise RuntimeError(str(e)) from e
+        os.close(tmp_fd)
+        try:
+            writer.write(frame._frame, tmp_path)
+        except RuntimeError as e:
+            raise RuntimeError(str(e)) from e
+
+        # newline="" on both sides preserves the line_terminator written by
+        # the C++ backend exactly — no platform newline translation.
+        with (
+            open(tmp_path, encoding="utf-8", newline="") as src,
+            open(
+                path, "w", encoding=encoding, errors=encoding_errors, newline=""
+            ) as dst,
+        ):
+            while True:
+                chunk = src.read(_CHUNK_SIZE)
+                if not chunk:
+                    break
+                try:
+                    dst.write(chunk)
+                except UnicodeEncodeError as exc:
+                    raise ValueError(
+                        f"write_csv: character cannot be encoded in {encoding!r}: {exc}"
+                    ) from exc
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
 
 
 def scan_csv(
