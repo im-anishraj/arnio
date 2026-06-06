@@ -1188,10 +1188,22 @@ def write_csv(
     config.escape_formulas = _validate_bool_option(escape_formulas, "escape_formulas")
 
     writer = _CsvWriter(config)
+    dir_path = os.path.dirname(os.path.abspath(path))
+    tmp_fd, tmp_path = tempfile.mkstemp(
+        dir=dir_path,
+        suffix=".csv",
+        prefix=f".{os.path.basename(path)}.",
+    )
+    os.close(tmp_fd)
     try:
-        writer.write(frame._frame, path)
-    except RuntimeError as e:
-        raise RuntimeError(str(e)) from e
+        writer.write(frame._frame, tmp_path)
+        os.replace(tmp_path, path)
+    except BaseException:
+        try:
+            os.unlink(tmp_path)
+        except FileNotFoundError:
+            pass
+        raise
 
 
 def scan_csv(

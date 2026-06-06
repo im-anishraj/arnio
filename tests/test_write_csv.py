@@ -7,6 +7,7 @@ import pandas as pd
 import pytest
 
 import arnio as ar
+import arnio.io
 
 
 @pytest.mark.parametrize(
@@ -23,6 +24,45 @@ def test_write_csv_invalid_frame(bad_input, tmp_path):
 
 
 class TestWriteCsv:
+    def test_atomic_write_success(self, tmp_path, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        out = str(tmp_path / "out.csv")
+        ar.write_csv(frame, out)
+        assert Path(out).exists()
+        frame2 = ar.read_csv(out)
+        pd.testing.assert_frame_equal(ar.to_pandas(frame), ar.to_pandas(frame2))
+
+    def test_atomic_write_preserves_dest_on_failure(self, tmp_path, monkeypatch):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1, 2, 3]}))
+        out = str(tmp_path / "out.csv")
+        ar.write_csv(frame, out)
+        original_content = Path(out).read_text()
+
+        orig_write = arnio.io._CsvWriter.write
+        def failing_write(self_, f, p):
+            raise RuntimeError("Writer failed")
+
+        monkeypatch.setattr(arnio.io._CsvWriter, "write", failing_write)
+
+        with pytest.raises(RuntimeError, match="Writer failed"):
+            ar.write_csv(frame, out)
+        assert Path(out).read_text() == original_content
+
+    def test_atomic_write_cleans_up_temp_on_failure(self, tmp_path, monkeypatch):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1, 2, 3]}))
+        out = str(tmp_path / "out.csv")
+
+        orig_write = arnio.io._CsvWriter.write
+        def failing_write(self_, f, p):
+            raise RuntimeError("Writer failed")
+
+        monkeypatch.setattr(arnio.io._CsvWriter, "write", failing_write)
+
+        with pytest.raises(RuntimeError, match="Writer failed"):
+            ar.write_csv(frame, out)
+        leftovers = [p for p in tmp_path.iterdir() if p.name.startswith(".out.csv")]
+        assert len(leftovers) == 0
+
     def test_basic_write(self, tmp_path, sample_csv):
         frame = ar.read_csv(sample_csv)
         out = str(tmp_path / "out.csv")
