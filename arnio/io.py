@@ -1683,7 +1683,8 @@ def read_jsonl_chunked(
     ------
     ValueError
         If the file extension is not ``.jsonl`` or ``.ndjson``, if
-        ``chunksize`` is not positive, or if ``nrows`` is not non-negative.
+        ``chunksize`` is not positive, or if ``nrows`` is not non-negative, or if
+        ``encoding_errors`` is not one of ``"strict"``, ``"replace"``, or ``"ignore"``.
     JsonlReadError
         If the file is empty (no data rows), or if a line contains invalid
         JSON or unsupported nested values. The error message includes the
