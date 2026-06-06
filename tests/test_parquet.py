@@ -252,6 +252,21 @@ class TestWriteParquetErrors:
                 compression=compression,
             )
 
+    @pytest.mark.parametrize(
+        "preserve_attrs",
+        ["False", 0, 1, None, [], {}, object()],
+    )
+    def test_non_bool_preserve_attrs_raises_type_error(self, tmp_path, preserve_attrs):
+        # preserve_attrs validation happens before the pyarrow import check.
+        frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
+
+        with pytest.raises(TypeError, match="preserve_attrs must be a bool"):
+            ar.write_parquet(
+                frame,
+                tmp_path / "out.parquet",
+                preserve_attrs=preserve_attrs,
+            )
+
     def test_missing_pyarrow_raises_import_error(self, tmp_path):
         # This test mocks pyarrow away and must run even without pyarrow.
         frame = ar.from_pandas(pd.DataFrame({"a": [1]}))

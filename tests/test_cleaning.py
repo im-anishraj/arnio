@@ -183,17 +183,44 @@ class TestFillNulls:
     def test_fill_nulls_accepts_valid_scalars(self):
         # numeric column → fill with numeric
         frame_num = ar.from_pandas(pd.DataFrame({"a": [1.0, None]}))
-        for good_value in [0, 0.0, False]:
+        for good_value in [0, 0.0]:
             result = ar.fill_nulls(frame_num, good_value)
             df = ar.to_pandas(result)
-            message = f"Nulls remain after filling with {good_value!r}"
-            assert df["a"].isnull().sum() == 0, message
+            assert (
+                df["a"].isnull().sum() == 0
+            ), f"Nulls remain after filling with {good_value!r}"
 
         # string column → fill with string
         frame_str = ar.from_pandas(pd.DataFrame({"b": ["x", None]}))
         result = ar.fill_nulls(frame_str, "missing")
         df = ar.to_pandas(result)
         assert df["b"].isnull().sum() == 0, "Nulls remain after filling with 'missing'"
+
+    def test_fill_nulls_rejects_bool_for_int64_column(self):
+        frame = ar.from_pandas(
+            pd.DataFrame({"a": pd.array([1, None, 3], dtype="Int64")})
+        )
+        with pytest.raises(TypeError, match="bool"):
+            ar.fill_nulls(frame, True)
+
+    def test_fill_nulls_rejects_bool_for_float64_column(self):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1.0, None, 3.0]}))
+        with pytest.raises(TypeError, match="bool"):
+            ar.fill_nulls(frame, False)
+
+    def test_fill_nulls_rejects_bool_via_subset(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {"a": pd.array([1, None, 3], dtype="Int64"), "b": ["x", None, "z"]}
+            )
+        )
+        with pytest.raises(TypeError, match="bool"):
+            ar.fill_nulls(frame, True, subset=["a"])
+
+    def test_fill_nulls_bool_accepted_for_bool_column(self):
+        frame = ar.from_pandas(pd.DataFrame({"a": [True, None, False]}))
+        result = ar.fill_nulls(frame, False)
+        assert result is not None
 
 
 class TestWinsorizeOutliers:
@@ -1830,8 +1857,10 @@ class TestNormalizeUnicode:
         result = ar.normalize_unicode(frame)
         result_df = ar.to_pandas(result)
         assert result_df["score"].iloc[0] == 42
-        flag = result_df["flag"].iloc[0]
-        assert flag is True or flag == True  # noqa: E712
+        assert (
+            result_df["flag"].iloc[0] is True
+            or result_df["flag"].iloc[0] == True  # noqa: E712
+        )
 
     def test_normalize_unicode_subset_only_targets_specified_columns(self):
         import pandas as pd
@@ -2345,6 +2374,45 @@ class TestParseBoolStrings:
             match="false_values must be a set/list/tuple of strings, not a bare string",
         ):
             ar.parse_bool_strings(frame, false_values=b"no")
+
+    def test_parse_bool_strings_implicit_empty_and_whitespace(self):
+        """
+        Test that implicit empty strings, whitespace-only strings, and unsupported
+        tokens are preserved completely unchanged, as per current design contracts.
+        """
+        import pandas as pd
+
+        import arnio as ar
+
+        # Scenario 1: Testing Default Tokens (Standard behavior)
+        raw_data_default = {
+            "bool_col": ["True", "False", "", "   ", "unsupported_token"]
+        }
+        frame_default = ar.from_pandas(pd.DataFrame(raw_data_default))
+
+        result_default = ar.parse_bool_strings(frame_default)
+        df_default = ar.to_pandas(result_default)
+
+        # Checking that empty/whitespace strings are strictly preserved unchanged
+        assert df_default["bool_col"].iloc[2] == ""
+        assert df_default["bool_col"].iloc[3] == "   "
+        assert df_default["bool_col"].iloc[4] == "unsupported_token"
+
+        # Scenario 2: Testing Custom Tokens (As requested by the maintainer)
+        raw_data_custom = {"custom_col": ["yea", "nay", "", "   "]}
+        frame_custom = ar.from_pandas(pd.DataFrame(raw_data_custom))
+
+        result_custom = ar.parse_bool_strings(
+            frame_custom, true_values=["yea"], false_values=["nay"]
+        )
+        df_custom = ar.to_pandas(result_custom)
+
+        # Checking that for custom tokens, empty/whitespace strings are still completely untouched
+        assert df_custom["custom_col"].iloc[2] == ""
+        assert df_custom["custom_col"].iloc[3] == "   "
+
+        # Verification that parsing action occurred perfectly for all values
+        assert df_custom["custom_col"].to_list() == ["True", "False", "", "   "]
 
 
 class TestRenameColumns:

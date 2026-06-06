@@ -475,14 +475,47 @@ class TestReadCsvChunkedHttpUrl:
 # but the ValueError is raised in Python before C++ is reached)
 # ---------------------------------------------------------------------------
 
+# All five planned cloud schemes must be covered.
+_ALL_CLOUD_SCHEMES = ["s3", "gs", "az", "abfs", "abfss"]
+
 
 class TestCloudSchemeRejectionPublicApi:
-    @pytest.mark.parametrize("scheme", ["s3", "gs", "az", "abfs"])
-    def test_read_csv_cloud_scheme_raises_value_error(self, scheme):
-        with pytest.raises(ValueError, match="pip install"):
-            # No C++ needed — ValueError from _materialize_csv_input
-            _materialize_csv_input(f"{scheme}://bucket/file.csv")
+    """Public API functions must reject cloud schemes with actionable errors.
 
-    def test_scan_csv_cloud_scheme_raises_value_error(self):
+    These tests call ar.read_csv / ar.scan_csv / ar.read_csv_chunked directly
+    (not the internal _materialize_csv_input helper) so a regression in the
+    Python-before-C++ guard is caught regardless of where the hook lives.
+    The ValueError is raised before the C++ extension is invoked, so no
+    compiled extension is required for these tests to run.
+    """
+
+    @pytest.mark.parametrize("scheme", _ALL_CLOUD_SCHEMES)
+    def test_read_csv_raises_value_error_for_cloud_scheme(self, scheme):
         with pytest.raises(ValueError, match="pip install"):
-            _materialize_csv_input("s3://bucket/file.csv")
+            ar.read_csv(f"{scheme}://bucket/file.csv")
+
+    @pytest.mark.parametrize("scheme", _ALL_CLOUD_SCHEMES)
+    def test_read_csv_error_contains_scheme_name(self, scheme):
+        with pytest.raises(ValueError, match=scheme):
+            ar.read_csv(f"{scheme}://bucket/file.csv")
+
+    @pytest.mark.parametrize("scheme", _ALL_CLOUD_SCHEMES)
+    def test_scan_csv_raises_value_error_for_cloud_scheme(self, scheme):
+        with pytest.raises(ValueError, match="pip install"):
+            ar.scan_csv(f"{scheme}://bucket/file.csv")
+
+    @pytest.mark.parametrize("scheme", _ALL_CLOUD_SCHEMES)
+    def test_scan_csv_error_contains_scheme_name(self, scheme):
+        with pytest.raises(ValueError, match=scheme):
+            ar.scan_csv(f"{scheme}://bucket/file.csv")
+
+    @pytest.mark.parametrize("scheme", _ALL_CLOUD_SCHEMES)
+    def test_read_csv_chunked_raises_value_error_for_cloud_scheme(self, scheme):
+        # Must iterate the generator to trigger the guard.
+        with pytest.raises(ValueError, match="pip install"):
+            next(iter(ar.read_csv_chunked(f"{scheme}://bucket/file.csv")))
+
+    @pytest.mark.parametrize("scheme", _ALL_CLOUD_SCHEMES)
+    def test_read_csv_chunked_error_contains_scheme_name(self, scheme):
+        with pytest.raises(ValueError, match=scheme):
+            next(iter(ar.read_csv_chunked(f"{scheme}://bucket/file.csv")))

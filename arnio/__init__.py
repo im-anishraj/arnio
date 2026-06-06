@@ -43,6 +43,7 @@ from .cleaning import (
     winsorize_outliers,
 )
 from .convert import from_dict, from_pandas, from_polars, to_arrow, to_pandas, to_polars
+from .encode_categorical import encode_categorical
 from .exceptions import (
     ArnioError,
     CsvReadError,
@@ -118,7 +119,7 @@ from .schema import (
     register_validator,
     validate,
 )
-from .schema_export import schema_to_dict, schema_to_yaml
+from .schema_export import schema_from_yaml, schema_to_dict, schema_to_yaml
 
 from_records = ArFrame.from_records
 
@@ -241,6 +242,8 @@ __all__ = [
     "Custom",
     "register_validator",
     "Date",
+    "schema_from_yaml",
     "schema_to_dict",
     "schema_to_yaml",
+    "encode_categorical",
 ]

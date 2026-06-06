@@ -12,6 +12,8 @@ from ._arnio_cpp import cast_types as _cast_types
 from ._arnio_cpp import clip_numeric as _clip_numeric
 from ._arnio_cpp import drop_duplicates as _drop_duplicates
 from ._arnio_cpp import drop_nulls as _drop_nulls
+from ._arnio_cpp import encode_one_hot_native as _encode_one_hot_native
+from ._arnio_cpp import encode_ordinal_native as _encode_ordinal_native
 from ._arnio_cpp import fill_nulls as _fill_nulls
 from ._arnio_cpp import normalize_case as _normalize_case
 from ._arnio_cpp import rename_columns as _rename_columns
@@ -31,6 +33,8 @@ __all__ = [
     "_clip_numeric",
     "_drop_duplicates",
     "_drop_nulls",
+    "_encode_one_hot_native",
+    "_encode_ordinal_native",
     "_fill_nulls",
     "_normalize_case",
     "_rename_columns",
