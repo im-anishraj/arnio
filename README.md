@@ -186,6 +186,12 @@ clean_df = df.arnio.clean([
 ])
 
 report = clean_df.arnio.profile()
+
+trimmed_df = (
+    df.arnio.strip_whitespace(subset=["customer_name"])
+      .arnio.clip_numeric(upper=100, subset=["loyalty_score"])
+      .arnio.drop_nulls(subset=["customer_name"])
+)
 ```
 ## Cross-field validation rules
 
@@ -686,21 +692,81 @@ cleaner = ArnioCleaner(
 
 ### Pandas accessor
 
+Arnio integrates directly with pandas through a registered DataFrame accessor. After importing Arnio, every pandas `DataFrame` gains an `.arnio` accessor that provides cleaning, profiling, validation, and pipeline utilities without requiring you to leave your existing pandas workflow.
+
+The accessor is registered through pandas' DataFrame extension API, allowing Arnio methods to be accessed directly as `df.arnio`.
+
+#### Cleaning data with `.clean()`
+
+Use `.clean()` to apply common data-cleaning operations and return a cleaned pandas DataFrame.
+
 ```python
+import pandas as pd
+import arnio as ar
+
 df = pd.read_csv("raw_customers.csv")
 
-clean_df = df.arnio.clean(drop_duplicates=True)
+clean_df = df.arnio.clean(
+    strip_whitespace=True,
+    drop_duplicates=True,
+)
+```
+
+Supported options include:
+
+- `strip_whitespace` – remove leading and trailing whitespace from string values
+- `drop_nulls` – remove rows containing null values
+- `drop_duplicates` – remove duplicate rows
+- `steps` – optional Arnio pipeline steps. When provided, `.clean()` executes the supplied pipeline and returns the resulting pandas DataFrame.
+
+`.clean()` returns a pandas `DataFrame`, allowing you to continue using your existing pandas analysis workflow.
+
+#### Profiling data with `.profile()`
+
+Use `.profile()` to generate a data quality summary.
+
+```python
 quality = clean_df.arnio.profile()
+
+print(quality)
+```
+
+`.profile()` returns a `DataQualityReport` containing dataset quality information and profiling insights that can help identify issues before downstream analysis.
+
+#### Accessor vs `ar.pipeline()`
+
+| Approach | Best for |
+|-----------|-----------|
+| `df.arnio.clean()` | Existing pandas workflows |
+| `df.arnio.profile()` | Quick quality assessment |
+| `df.arnio.pipeline(...)` | Custom pipeline execution from a DataFrame |
+| `ar.pipeline(...)` | Direct Arnio/ArFrame workflows |
+
+#### End-to-end example
+
+```python
+import pandas as pd
+import arnio as ar
+
+df = pd.read_csv("customers.csv")
+
+clean_df = df.arnio.clean(
+    strip_whitespace=True,
+    drop_duplicates=True,
+)
+
+quality = clean_df.arnio.profile()
+
 validation = clean_df.arnio.validate({
     "email": ar.Email(nullable=False),
     "user_code": ar.Regex(r"^USR-\d{4}$", nullable=False),
     "age": ar.Int64(nullable=True, min=0),
-    "score": ar.Custom("positive"),
 })
+
+print(quality)
 ```
 
-This keeps pandas as the analysis tool while Arnio handles the preparation,
-quality, and validation layer.
+This approach keeps pandas as the analysis tool while Arnio handles data preparation, quality checks, and validation.
 
 > Product direction: **[PROJECT_DIRECTION.md](PROJECT_DIRECTION.md)**
 
@@ -2075,6 +2141,22 @@ arnio/
 
 <sub>Built with C++ and pybind11 · Licensed under MIT · Maintained by <a href="https://github.com/im-anishraj">@im-anishraj</a></sub>
 </div>
+
+
+### Reproducible Jobs
+You can save pipelines to JSON or YAML so you can reuse them later:
+
+```python
+import arnio as ar
+
+steps = [
+    ("drop_nulls", {"subset": ["age"]}),
+    ("strip_whitespace",)
+]
+
+ar.save_pipeline(steps, "my_pipeline.json")
+loaded_steps = ar.load_pipeline("my_pipeline.json")
+```
 
 ## Security
 

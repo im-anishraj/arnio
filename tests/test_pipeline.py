@@ -1,6 +1,8 @@
 """Tests for the pipeline function."""
 
 import importlib
+import os
+import tempfile
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from inspect import Signature
@@ -9,6 +11,8 @@ import pandas as pd
 import pytest
 
 import arnio as ar
+from arnio.exceptions import PipelineSerializationError
+from arnio.pipeline import load_pipeline, save_pipeline
 
 pipeline_module = importlib.import_module("arnio.pipeline")
 
@@ -2176,3 +2180,164 @@ class TestExecutionSummary:
         step = metadata["execution_summary"]["steps"][0]
         assert step["name"] == "es_python_step"
         assert step["status"] == "success"
+
+
+def test_pipeline_serialization_errors():
+    with pytest.raises(PipelineSerializationError, match="File not found"):
+        load_pipeline("non_existent_file.json")
+
+
+def test_malformed_pipeline_structures():
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        dict_path = os.path.join(tmpdirname, "dict.json")
+        with open(dict_path, "w") as f:
+            f.write('{"this_is_a_dictionary_not_a_list": true}')
+        with pytest.raises(
+            PipelineSerializationError, match="Pipeline steps must be a list"
+        ):
+            load_pipeline(dict_path)
+
+        empty_path = os.path.join(tmpdirname, "empty.json")
+        with open(empty_path, "w") as f:
+            f.write("")
+        with pytest.raises(PipelineSerializationError, match="file is empty"):
+            load_pipeline(empty_path)
+
+        bad_step_path = os.path.join(tmpdirname, "bad_step.json")
+        with open(bad_step_path, "w") as f:
+            f.write('[["drop_nulls", "not_a_dictionary_kwargs"]]')
+        with pytest.raises(
+            PipelineSerializationError,
+            match="The second element of a step must be a dictionary",
+        ):
+            load_pipeline(bad_step_path)
+
+
+def test_roundtrip_kwargs_determinism():
+    original_steps = [
+        ("cast_types", {"mapping": {"score": "float64", "age": "int64"}}),
+        ("rename_columns", {"mapping": {"old_name": "new_name", "a": "b"}}),
+    ]
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        filepath = os.path.join(tmpdirname, "kwargs_job.json")
+        save_pipeline(original_steps, filepath)
+        loaded_steps = load_pipeline(filepath)
+        assert loaded_steps == original_steps
+
+
+def test_unknown_step_serialization():
+    steps = [("this_step_does_not_exist", {"foo": "bar"})]
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        filepath = os.path.join(tmpdirname, "unknown_step.json")
+        save_pipeline(steps, filepath)
+        loaded_steps = load_pipeline(filepath)
+        assert loaded_steps == steps
+
+
+def test_pipeline_execution_roundtrip():
+    """Verify that a loaded pipeline can be directly executed against an ArFrame."""
+    import pandas as pd
+
+    import arnio as ar
+
+    # 1. Create a dummy frame with whitespace and a null
+    df = pd.DataFrame({"name": [" Alice ", "Bob", None]})
+    frame = ar.from_pandas(df)
+
+    # 2. Define the steps
+    steps = [
+        ("drop_nulls",),
+        ("strip_whitespace", {"subset": ["name"]}),
+    ]
+
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        filepath = os.path.join(tmpdirname, "execution_job.json")
+
+        # 3. Save and load the pipeline
+        ar.save_pipeline(steps, filepath)
+        loaded_steps = ar.load_pipeline(filepath)
+
+        # 4. Execute the loaded pipeline
+        result = ar.pipeline(frame, loaded_steps)
+        result_df = ar.to_pandas(result)
+
+        # 5. Assert the cleaning actually happened
+        assert len(result_df) == 2
+        assert result_df["name"].iloc[0] == "Alice"
+
+
+def test_yaml_pipeline_serialization_roundtrip():
+    """Verify that a pipeline can be saved to and loaded from a YAML file."""
+    import pytest
+
+    pytest.importorskip("yaml")
+    import os
+    import tempfile
+
+    import arnio as ar
+
+    steps = [
+        ("drop_nulls",),
+        ("strip_whitespace", {"subset": ["name"]}),
+    ]
+
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        filepath = os.path.join(tmpdirname, "pipeline.yaml")
+
+        # Save and load the pipeline
+        ar.save_pipeline(steps, filepath)
+        loaded_steps = ar.load_pipeline(filepath)
+
+        # Assert the loaded steps match the original steps
+        assert steps == loaded_steps
+
+
+def test_save_pipeline_atomic_failure():
+    """Verify that an existing file is unchanged after a serialization error."""
+    import os
+    import tempfile
+
+    import arnio as ar
+    from arnio.exceptions import PipelineSerializationError
+
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        filepath = os.path.join(tmpdirname, "pipeline.json")
+
+        # Create a valid pre-existing file
+        with open(filepath, "w") as f:
+            f.write('["original_content"]')
+
+        # Attempt to save a pipeline with an unserializable object (a function)
+        invalid_steps = [("drop_nulls", {"func": lambda x: x})]
+
+        try:
+            ar.save_pipeline(invalid_steps, filepath)
+        except PipelineSerializationError:
+            pass
+
+        # Assert the original file was completely untouched
+        with open(filepath) as f:
+            assert f.read() == '["original_content"]'
+
+
+def test_save_pipeline_validation():
+    """Verify that malformed steps are rejected without creating a file."""
+    import os
+    import tempfile
+
+    import arnio as ar
+    from arnio.exceptions import PipelineSerializationError
+
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        filepath = os.path.join(tmpdirname, "pipeline.json")
+
+        # Attempt to save a malformed structure
+        malformed_steps = [[], ("drop_nulls", "not-a-dict")]
+
+        try:
+            ar.save_pipeline(malformed_steps, filepath)
+        except PipelineSerializationError:
+            pass
+
+        # Assert the bad structure was caught and no file was ever created
+        assert not os.path.exists(filepath)
