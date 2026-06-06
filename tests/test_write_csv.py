@@ -551,6 +551,47 @@ class TestWriteCsvEncoding:
         with pytest.raises(ValueError, match="cannot be encoded"):
             ar.write_csv(frame, str(out), encoding="latin-1", encoding_errors="strict")
 
+    def test_unencodable_character_strict_preserves_existing_file(self, tmp_path):
+        """Strict transcoding failures do not replace an existing destination."""
+        frame = ar.from_pandas(pd.DataFrame({"val": ["こんにちは"]}))
+        out = tmp_path / "out.csv"
+        out.write_bytes(b"sentinel")
+
+        with pytest.raises(ValueError, match="cannot be encoded"):
+            ar.write_csv(frame, str(out), encoding="latin-1", encoding_errors="strict")
+
+        assert out.read_bytes() == b"sentinel"
+
+    def test_missing_destination_parent_raises_runtimeerror(self, tmp_path):
+        """Destination filesystem errors use the public RuntimeError contract."""
+        frame = self._simple_frame()
+        out = tmp_path / "missing" / "out.csv"
+
+        with pytest.raises(RuntimeError) as exc_info:
+            ar.write_csv(frame, str(out), encoding="latin-1")
+
+        assert isinstance(exc_info.value.__cause__, FileNotFoundError)
+
+    def test_replace_error_preserves_existing_file_and_cleans_temp(
+        self, tmp_path, monkeypatch
+    ):
+        """Atomic replacement errors preserve the destination and clean the output temp."""
+        frame = self._simple_frame()
+        out = tmp_path / "out.csv"
+        out.write_bytes(b"sentinel")
+
+        def fail_replace(_src, _dst):
+            raise PermissionError("replace denied")
+
+        monkeypatch.setattr(os, "replace", fail_replace)
+
+        with pytest.raises(RuntimeError, match="replace denied") as exc_info:
+            ar.write_csv(frame, str(out), encoding="latin-1")
+
+        assert isinstance(exc_info.value.__cause__, PermissionError)
+        assert out.read_bytes() == b"sentinel"
+        assert list(tmp_path.iterdir()) == [out]
+
     def test_unencodable_character_replace_writes_file(self, tmp_path):
         """encoding_errors="replace" writes replacement characters instead of raising."""
         frame = ar.from_pandas(pd.DataFrame({"val": ["こんにちは"]}))

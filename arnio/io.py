@@ -1224,6 +1224,7 @@ def write_csv(
     _CHUNK_SIZE = 1 << 20  # 1 MiB per chunk
 
     tmp_fd, tmp_path = tempfile.mkstemp(suffix=".csv")
+    output_tmp_path: str | None = None
     try:
         os.close(tmp_fd)
         try:
@@ -1231,25 +1232,46 @@ def write_csv(
         except RuntimeError as e:
             raise RuntimeError(str(e)) from e
 
-        # newline="" on both sides preserves the line_terminator written by
-        # the C++ backend exactly — no platform newline translation.
-        with (
-            open(tmp_path, encoding="utf-8", newline="") as src,
-            open(
-                path, "w", encoding=encoding, errors=encoding_errors, newline=""
-            ) as dst,
-        ):
-            while True:
-                chunk = src.read(_CHUNK_SIZE)
-                if not chunk:
-                    break
-                try:
+        try:
+            output_fd, output_tmp_path = tempfile.mkstemp(
+                dir=os.path.dirname(os.path.abspath(path)),
+                prefix=f".{os.path.basename(path)}.",
+                suffix=".tmp",
+            )
+            os.close(output_fd)
+
+            # newline="" on both sides preserves the line_terminator written by
+            # the C++ backend exactly — no platform newline translation.
+            with (
+                open(tmp_path, encoding="utf-8", newline="") as src,
+                open(
+                    output_tmp_path,
+                    "w",
+                    encoding=encoding,
+                    errors=encoding_errors,
+                    newline="",
+                ) as dst,
+            ):
+                while True:
+                    chunk = src.read(_CHUNK_SIZE)
+                    if not chunk:
+                        break
                     dst.write(chunk)
-                except UnicodeEncodeError as exc:
-                    raise ValueError(
-                        f"write_csv: character cannot be encoded in {encoding!r}: {exc}"
-                    ) from exc
+
+            os.replace(output_tmp_path, path)
+            output_tmp_path = None
+        except UnicodeEncodeError as exc:
+            raise ValueError(
+                f"write_csv: character cannot be encoded in {encoding!r}: {exc}"
+            ) from exc
+        except OSError as exc:
+            raise RuntimeError(str(exc)) from exc
     finally:
+        if output_tmp_path is not None:
+            try:
+                os.unlink(output_tmp_path)
+            except OSError:
+                pass
         try:
             os.unlink(tmp_path)
         except OSError:
