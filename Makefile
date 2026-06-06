@@ -53,3 +53,6 @@ docker-dev: ## Build and open a shell in the dev container
 
 docker-test: ## Run test suite inside the dev container
 	docker compose run --rm dev make test
+
+docker-rebuild: ## Rebuild the dev image (e.g. after pyproject.toml changes)
+	docker compose build dev

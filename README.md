@@ -2036,18 +2036,28 @@ If you prefer not to install local C++ toolchain dependencies, use the
 development Docker Compose setup:
 
 ```bash
-# Build and start the development container
-docker compose up -d dev
+# Build the image (one-time, or after pyproject.toml changes)
+make docker-rebuild
 
-# Enter the container (repo is mounted at /workspace)
+# Start the development container and open a shell
 make docker-dev
 
-# Run tests inside container
+# Run the test suite inside the container
 make docker-test
 ```
 
-Inside the container, dependencies are installed with `pip install -e ".[dev]"`
-and pre-commit hooks are initialized automatically.
+The image is built with `pip install -e ".[dev]"` already applied, so
+`make docker-test` runs against a fully-initialised environment without
+re-installing on every container start. Bind-mounted files in `/workspace`
+are owned by a non-root user whose UID/GID match the host, so generated
+files (caches, build outputs) stay owned by you on the host.
+
+To override the user mapping (for example, on a system where your UID is
+not `1000`):
+
+```bash
+DEV_UID=$(id -u) DEV_GID=$(id -g) make docker-rebuild
+```
 
 > **PR titles must follow [Conventional Commits](https://www.conventionalcommits.org/)** — `feat:`, `fix:`, `docs:`, `chore:`. Our release pipeline auto-generates changelogs from these.
 
