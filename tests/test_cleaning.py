@@ -2344,7 +2344,6 @@ class TestParseBoolStrings:
         tokens are preserved completely unchanged, as per current design contracts.
         """
         import pandas as pd
-
         import arnio as ar
 
         # Scenario 1: Testing Default Tokens (Standard behavior)
@@ -2374,8 +2373,8 @@ class TestParseBoolStrings:
         assert df_custom["custom_col"].iloc[2] == ""
         assert df_custom["custom_col"].iloc[3] == "   "
 
-        # Verification that parsing action occurred (it will either be boolean True or string 'True'/'yea')
-        assert str(df_custom["custom_col"].iloc[0]).strip() in ["True", "yea"]
+        # Verification that parsing action occurred perfectly for all values
+        assert df_custom["custom_col"].to_list() == ["True", "False", "", "   "]
 
 
 class TestRenameColumns:
