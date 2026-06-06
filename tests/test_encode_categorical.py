@@ -6,6 +6,12 @@ import pytest
 import arnio as ar
 from arnio.encode_categorical import encode_categorical
 
+
+def test_encode_categorical_is_exported():
+    assert ar.encode_categorical is encode_categorical
+    assert "encode_categorical" in ar.__all__
+
+
 # ── fixtures ──────────────────────────────────────────────────────────────────
 
 

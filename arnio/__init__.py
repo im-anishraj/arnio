@@ -25,6 +25,7 @@ from .cleaning import (
     find_fuzzy_duplicates,
     keep_rows_with_nulls,
     normalize_case,
+    normalize_minmax,
     normalize_unicode,
     normalize_whitespace,
     parse_bool_strings,
@@ -42,6 +43,7 @@ from .cleaning import (
     winsorize_outliers,
 )
 from .convert import from_dict, from_pandas, from_polars, to_arrow, to_pandas, to_polars
+from .encode_categorical import encode_categorical
 from .exceptions import (
     ArnioError,
     CsvReadError,
@@ -64,6 +66,7 @@ from .io import (
     scan_csv,
     sniff_delimiter,
     write_csv,
+    write_json,
     write_parquet,
 )
 from .pipeline import (
@@ -119,7 +122,7 @@ from .schema import (
     register_validator,
     validate,
 )
-from .schema_export import schema_to_dict, schema_to_yaml
+from .schema_export import schema_from_yaml, schema_to_dict, schema_to_yaml
 
 from_records = ArFrame.from_records
 
@@ -133,6 +136,7 @@ __all__ = [
     "read_jsonl",
     "read_jsonl_chunked",
     "write_csv",
+    "write_json",
     "read_parquet",
     "write_parquet",
     "scan_csv",
@@ -154,6 +158,7 @@ __all__ = [
     "clean_column_names",
     "clip_numeric",
     "winsorize_outliers",
+    "normalize_minmax",
     "coalesce_columns",
     "combine_columns",
     "rename_columns_matching",
@@ -240,9 +245,11 @@ __all__ = [
     "Custom",
     "register_validator",
     "Date",
+    "schema_from_yaml",
     "schema_to_dict",
     "schema_to_yaml",
     "save_pipeline",
     "load_pipeline",
     "PipelineSerializationError",
+    "encode_categorical",
 ]

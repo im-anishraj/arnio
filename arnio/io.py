@@ -2331,3 +2331,75 @@ def write_parquet(
         kwargs["row_group_size"] = row_group_size
 
     df.to_parquet(path, **kwargs)
+
+
+def write_json(
+    frame: ArFrame,
+    path: str | os.PathLike[str],
+    *,
+    orient: str = "records",
+    indent: int | None = None,
+) -> None:
+    """Write an ArFrame to a JSON file.
+
+    This function exports the frame's data to JSON without pandas conversion.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        The data frame to write.
+    path : str or path-like
+        Destination file path. Must end with ``.json``.
+    orient : str, default ``"records"``
+        The JSON orientation format to use. Supported values are
+        ``"records"``, ``"list"``, and ``"split"``.
+    indent : int, optional
+        If specified, the JSON output will be pretty-printed with that
+        indentation level. If ``None`` (the default), the JSON is written
+        compactly.
+
+    Raises
+    ------
+    TypeError
+        If the input frame is not an ArFrame, or path is not valid.
+    ValueError
+        If the file extension is not ``.json``, or if the orientation
+        is unsupported.
+
+    Examples
+    --------
+    >>> ar.write_json(frame, "output.json")
+    >>> ar.write_json(frame, "output.json", indent=4)
+    >>> ar.write_json(frame, "output.json", orient="list")
+    """
+    if not isinstance(frame, ArFrame):
+        raise TypeError("frame must be an ArFrame")
+
+    if not isinstance(path, (str, bytes, os.PathLike)):
+        raise TypeError(
+            f"path must be a string, bytes, or os.PathLike object, got {type(path).__name__!r}"
+        )
+
+    path = os.fsdecode(os.fspath(path))
+    path_lower = path.lower()
+    if not path_lower.endswith(".json"):
+        raise ValueError(
+            f"Unsupported file format: {path}. " "write_json only supports .json files."
+        )
+
+    valid_orients = ("records", "list", "split")
+    if orient not in valid_orients:
+        raise ValueError(
+            f"Unsupported orient: {orient!r}. " f"Valid options are: {valid_orients}"
+        )
+
+    if indent is not None:
+        if isinstance(indent, bool) or not isinstance(indent, int):
+            raise TypeError("indent must be an integer or None")
+        if indent < 0:
+            raise ValueError("indent must be a non-negative integer")
+
+    data = frame.to_dict(orient=orient)
+
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=indent)
