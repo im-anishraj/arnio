@@ -1463,6 +1463,7 @@ def test_from_arrow_table_missing_pyarrow_raises_helpful_import_error():
     assert "_from_arrow_table() requires pyarrow." in str(exc_info.value)
     assert "pip install arnio[arrow]" in str(exc_info.value)
 
+
 # ---------------------------------------------------------------------------
 # Issue #1960 — preserve empty pandas int64 dtype in from_pandas
 # ---------------------------------------------------------------------------
@@ -1514,12 +1515,14 @@ class TestEmptyInt64DtypePreservation:
         assert len(result) == 0
 
     def test_empty_mixed_schema_roundtrip(self):
-        df = pd.DataFrame({
-            "id": pd.Series([], dtype="int64"),
-            "score": pd.Series([], dtype="float64"),
-            "active": pd.Series([], dtype="bool"),
-            "name": pd.Series([], dtype="string"),
-        })
+        df = pd.DataFrame(
+            {
+                "id": pd.Series([], dtype="int64"),
+                "score": pd.Series([], dtype="float64"),
+                "active": pd.Series([], dtype="bool"),
+                "name": pd.Series([], dtype="string"),
+            }
+        )
         frame = ar.from_pandas(df)
         assert frame.dtypes["id"] == "int64"
         assert frame.dtypes["score"] == "float64"

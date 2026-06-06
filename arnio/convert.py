@@ -359,6 +359,7 @@ def _pandas_dtype_to_arnio(dtype: object) -> _DType | None:
         return _DType.BOOL
     return None
 
+
 def _validate_unique_column_labels(labels: pd.Index) -> None:
     seen: set[object] = set()
     dupes: list[object] = []
