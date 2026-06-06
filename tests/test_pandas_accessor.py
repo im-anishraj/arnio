@@ -52,7 +52,8 @@ def test_pandas_accessor_supports_direct_cleaning_wrapper_chains():
     assert isinstance(result, pd.DataFrame)
     assert list(result["name"]) == ["Alice", "Bob"]
     assert list(result["age"]) == [25, 100]
-    assert list(df["name"]) == [" Alice ", "Bob", None]
+    assert list(df["name"][:2]) == [" Alice ", "Bob"]
+    assert pd.isna(df.loc[2, "name"])
     assert list(df["age"]) == [25, 150, 30]
 
 
