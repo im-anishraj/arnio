@@ -186,9 +186,9 @@ class TestFillNulls:
         for good_value in [0, 0.0, False]:
             result = ar.fill_nulls(frame_num, good_value)
             df = ar.to_pandas(result)
-            assert df["a"].isnull().sum() == 0, (
-                f"Nulls remain after filling with {good_value!r}"
-            )
+            assert (
+                df["a"].isnull().sum() == 0
+            ), f"Nulls remain after filling with {good_value!r}"
 
         # string column → fill with string
         frame_str = ar.from_pandas(pd.DataFrame({"b": ["x", None]}))
@@ -1821,7 +1821,8 @@ class TestNormalizeUnicode:
         result_df = ar.to_pandas(result)
         assert result_df["score"].iloc[0] == 42
         assert (
-            result_df["flag"].iloc[0] is True or result_df["flag"].iloc[0] == True  # noqa: E712
+            result_df["flag"].iloc[0] is True
+            or result_df["flag"].iloc[0] == True  # noqa: E712
         )
 
     def test_normalize_unicode_subset_only_targets_specified_columns(self):
