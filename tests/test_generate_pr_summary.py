@@ -1,4 +1,12 @@
-from benchmarks.generate_pr_summary import generate_summary
+import pytest
+
+from benchmarks.generate_pr_summary import (
+    BASELINE_FILE,
+    OUTPUT_FILE,
+    RESULTS_FILE,
+    generate_summary,
+    parse_args,
+)
 
 
 def test_generate_summary_handles_missing_baseline():
@@ -56,3 +64,55 @@ def test_generate_summary_handles_missing_case_baseline():
     summary = generate_summary(results, baseline)
 
     assert "No comparable baseline data available." in summary
+
+
+# ---------------------------------------------------------------------------
+# CLI argument parsing tests
+# ---------------------------------------------------------------------------
+
+
+def test_parse_args_defaults():
+    """No arguments → defaults match the module-level path constants."""
+    args = parse_args([])
+
+    assert args.results == RESULTS_FILE
+    assert args.baseline == BASELINE_FILE
+    assert args.output == OUTPUT_FILE
+
+
+def test_parse_args_custom_paths():
+    """Custom --results, --baseline, and --output are honoured."""
+    args = parse_args(
+        [
+            "--results",
+            "custom_results.json",
+            "--baseline",
+            "custom_baseline.json",
+            "--output",
+            "custom_output.md",
+        ]
+    )
+
+    assert args.results == "custom_results.json"
+    assert args.baseline == "custom_baseline.json"
+    assert args.output == "custom_output.md"
+
+
+def test_parse_args_help_exits_successfully(capsys):
+    """--help must print usage information and exit with code 0."""
+    with pytest.raises(SystemExit) as exc_info:
+        parse_args(["--help"])
+
+    assert exc_info.value.code == 0
+    captured = capsys.readouterr()
+    assert "--results" in captured.out
+    assert "--baseline" in captured.out
+    assert "--output" in captured.out
+
+
+def test_parse_args_invalid_argument_fails():
+    """Unknown arguments must cause argparse to exit with a non-zero code."""
+    with pytest.raises(SystemExit) as exc_info:
+        parse_args(["--unknown-flag"])
+
+    assert exc_info.value.code != 0

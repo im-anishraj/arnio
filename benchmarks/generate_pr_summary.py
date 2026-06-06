@@ -1,3 +1,4 @@
+import argparse
 import json
 from pathlib import Path
 
@@ -49,13 +50,37 @@ def generate_summary(results, baseline):
     return "\n".join(lines) + "\n"
 
 
-def main():
-    results = load_json(RESULTS_FILE)
-    baseline = load_json(BASELINE_FILE)
+def parse_args(argv=None):
+    parser = argparse.ArgumentParser(
+        description="Generate a Markdown benchmark summary comparing results to a baseline."
+    )
+    parser.add_argument(
+        "--results",
+        default=RESULTS_FILE,
+        help=f"Path to the benchmark results JSON file (default: {RESULTS_FILE})",
+    )
+    parser.add_argument(
+        "--baseline",
+        default=BASELINE_FILE,
+        help=f"Path to the baseline JSON file (default: {BASELINE_FILE})",
+    )
+    parser.add_argument(
+        "--output",
+        default=OUTPUT_FILE,
+        help=f"Path to write the Markdown summary (default: {OUTPUT_FILE})",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv=None):
+    args = parse_args(argv)
+
+    results = load_json(args.results)
+    baseline = load_json(args.baseline)
 
     summary = generate_summary(results, baseline)
 
-    output_path = Path(OUTPUT_FILE)
+    output_path = Path(args.output)
     output_path.write_text(summary)
 
     print(summary)
