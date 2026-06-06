@@ -1600,6 +1600,10 @@ def read_jsonl_chunked(
     """
     _validate_jsonl_encoding(encoding)
 
+    if not isinstance(path, (str, os.PathLike)):
+        raise TypeError(
+            f"read_jsonl_chunked expected a filesystem path, got {type(path).__name__!r}"
+        )
     path = os.fspath(path)
     encoding_errors = _validate_encoding_errors(encoding_errors)
     nrows = _validate_jsonl_nrows(nrows)
@@ -1748,8 +1752,9 @@ def sniff_delimiter(
             counts[c].pop()
 
     # 5. Score Candidates and Detect Ties/Ambiguity
-    best_candidates = []
-    best_score = -1.0
+    best_candidates: list[str] = []
+    best_consistency = -1.0
+    best_mode = -1
 
     from collections import Counter
 
@@ -1762,16 +1767,26 @@ def sniff_delimiter(
         counter = Counter(non_zero_counts)
         mode, mode_freq = counter.most_common(1)[0]
 
+        # Primary score: fraction of ALL lines that show the modal count
         consistency = mode_freq / len(line_counts)
-        score = consistency * 10.0 + (mode * 0.1)
 
-        if score > best_score:
-            best_score = score
+        if consistency > best_consistency + 1e-9:
+            # Strictly better consistency → new sole leader
+            best_consistency = consistency
+            best_mode = mode
             best_candidates = [delimiter]
-        elif abs(score - best_score) < 1e-9:
-            best_candidates.append(delimiter)
+        elif abs(consistency - best_consistency) < 1e-9:
+            # Consistency tied → apply secondary tie-breaker (mode)
+            if mode > best_mode:
+                # Higher per-line count wins the tie
+                best_mode = mode
+                best_candidates = [delimiter]
+            elif mode == best_mode:
+                # Both scores identical → ambiguous; keep both
+                best_candidates.append(delimiter)
+            # mode < best_mode: current leader keeps its position
 
-    if not best_candidates or best_score <= 0.0:
+    if not best_candidates or best_consistency <= 0.0:
         raise ValueError(
             f"Could not determine CSV delimiter from sample: no candidate delimiters found in {path!r}"
         )
@@ -1943,8 +1958,8 @@ def write_parquet(
     ImportError
         If ``pyarrow`` is not installed.
     TypeError
-        If ``preserve_attrs`` is ``True`` and ``DataFrame.attrs``
-        contains non-JSON-serializable values.
+        If ``preserve_attrs`` is not a boolean, or if ``preserve_attrs`` is
+        ``True`` and ``DataFrame.attrs`` contains non-JSON-serializable values.
     ValueError
         If the file extension is not ``.parquet`` or ``.pq``, if
         ``compression`` is not a recognised codec, or if
@@ -1989,6 +2004,9 @@ def write_parquet(
             raise TypeError("row_group_size must be an integer")
         if row_group_size <= 0:
             raise ValueError("row_group_size must be a positive integer")
+
+    if not isinstance(preserve_attrs, bool):
+        raise TypeError("preserve_attrs must be a bool")
 
     try:
         import pyarrow  # noqa: F401 — presence check only

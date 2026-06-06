@@ -546,10 +546,27 @@ Frame rename_columns(const Frame& frame,
     return Frame(std::move(new_cols));
 }
 
-Frame cast_types(const Frame& frame, const std::unordered_map<std::string, std::string>& mapping,
-                 bool coerce_invalid) {
+CastResult cast_types(const Frame& frame,
+                      const std::unordered_map<std::string, std::string>& mapping,
+                      CastErrors errors) {
+    std::vector<CastFailure> failures;
     std::vector<Column> new_cols;
     new_cols.reserve(frame.num_cols());
+
+    // Helper: handle a parse failure according to the chosen error policy.
+    // For kRaise it throws immediately; for kCoerce/kReport it pushes null
+    // and (for kReport) appends a CastFailure record.
+    auto on_failure = [&](Column& col, const std::string& col_name, const std::string& val,
+                          const std::string& dtype_str, size_t r) {
+        if (errors == CastErrors::kRaise) {
+            throw cast_error(col_name, val, dtype_str, r);
+        }
+        col.push_null();
+        if (errors == CastErrors::kReport) {
+            failures.push_back({col_name, r, val, dtype_str});
+        }
+    };
+
     for (size_t ci = 0; ci < frame.num_cols(); ++ci) {
         const auto& src = frame.column(ci);
         auto it = mapping.find(src.name());
@@ -601,10 +618,8 @@ Frame cast_types(const Frame& frame, const std::unordered_map<std::string, std::
                     }
                     if (ok) {
                         col.push_back(parsed);
-                    } else if (coerce_invalid) {
-                        col.push_null();
                     } else {
-                        throw cast_error(src.name(), str_val, it->second, r);
+                        on_failure(col, src.name(), str_val, it->second, r);
                     }
                     break;
                 }
@@ -612,10 +627,8 @@ Frame cast_types(const Frame& frame, const std::unordered_map<std::string, std::
                     double parsed = 0.0;
                     if (parse_float64_classic(str_val, parsed) && std::isfinite(parsed)) {
                         col.push_back(parsed);
-                    } else if (coerce_invalid) {
-                        col.push_null();
                     } else {
-                        throw cast_error(src.name(), str_val, it->second, r);
+                        on_failure(col, src.name(), str_val, it->second, r);
                     }
                     break;
                 }
@@ -626,10 +639,8 @@ Frame cast_types(const Frame& frame, const std::unordered_map<std::string, std::
                         col.push_back(true);
                     } else if (lower == "false" || lower == "0") {
                         col.push_back(false);
-                    } else if (coerce_invalid) {
-                        col.push_null();
                     } else {
-                        throw cast_error(src.name(), str_val, it->second, r);
+                        on_failure(col, src.name(), str_val, it->second, r);
                     }
                     break;
                 }
@@ -640,7 +651,11 @@ Frame cast_types(const Frame& frame, const std::unordered_map<std::string, std::
         }
         new_cols.push_back(std::move(col));
     }
-    return Frame(std::move(new_cols));
+    std::stable_sort(failures.begin(), failures.end(),
+                     [](const CastFailure& a, const CastFailure& b) {
+                         return a.row < b.row || (a.row == b.row && a.column < b.column);
+                     });
+    return CastResult{Frame(std::move(new_cols)), std::move(failures)};
 }
 
 Frame clip_numeric(const Frame& frame, std::optional<double> lower, std::optional<double> upper,
