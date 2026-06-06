@@ -1954,8 +1954,8 @@ def write_parquet(
     ImportError
         If ``pyarrow`` is not installed.
     TypeError
-        If ``preserve_attrs`` is ``True`` and ``DataFrame.attrs``
-        contains non-JSON-serializable values.
+        If ``preserve_attrs`` is not a boolean, or if ``preserve_attrs`` is
+        ``True`` and ``DataFrame.attrs`` contains non-JSON-serializable values.
     ValueError
         If the file extension is not ``.parquet`` or ``.pq``, if
         ``compression`` is not a recognised codec, or if
@@ -2000,6 +2000,9 @@ def write_parquet(
             raise TypeError("row_group_size must be an integer")
         if row_group_size <= 0:
             raise ValueError("row_group_size must be a positive integer")
+
+    if not isinstance(preserve_attrs, bool):
+        raise TypeError("preserve_attrs must be a bool")
 
     try:
         import pyarrow  # noqa: F401 — presence check only
