@@ -7,7 +7,7 @@ A technical reference guide to the public classes and functions within the **Arn
 | Category              | Components                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | :-------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Core Class**        | [**`ArFrame`**](#arframe), Properties: [`shape`](#shape), [`columns`](#columns), [`dtypes`](#dtypes), [`is_empty`](#is_empty), Methods: [`memory_usage`](#memory_usage), [`preview`](#preview), [`select_columns`](#select_columns), [`select_dtypes`](#select_dtypes)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| **I/O**               | [`read_csv`](#read_csv), [`scan_csv`](#scan_csv), [`write_csv`](#write_csv), [`sniff_delimiter`](#sniff_delimiter)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| **I/O**               | [`read_csv`](#read_csv), [`scan_csv`](#scan_csv), [`write_csv`](#write_csv), [`write_json`](#write_json), [`sniff_delimiter`](#sniff_delimiter)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | **Cleaning**          | [`cast_types`](#cast_types), [`clean`](#clean), [`clip_numeric`](#clip_numeric), [`combine_columns`](#combine_columns), [`drop_columns`](#drop_columns), [`drop_constant_columns`](#drop_constant_columns), [`drop_duplicates`](#drop_duplicates), [`drop_nulls`](#drop_nulls), [`fill_nulls`](#fill_nulls), [`filter_rows`](#filter_rows), [`keep_rows_with_nulls`](#keep_rows_with_nulls), [`normalize_case`](#normalize_case), [`normalize_unicode`](#normalize_unicode), [`rename_columns`](#rename_columns), [`replace_values`](#replace_values), [`round_numeric_columns`](#round_numeric_columns), [`safe_divide_columns`](#safe_divide_columns), [`strip_whitespace`](#strip_whitespace), [`trim_column_names`](#trim_column_names), [`validate_columns_exist`](#validate_columns_exist) |
 | **Conversion**        | [`from_pandas`](#from_pandas), [`to_pandas`](#to_pandas)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | **Integration**       | [`ArnioPandasAccessor`](#arniopandasaccessor)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
@@ -76,6 +76,40 @@ Writes an `ArFrame` to a CSV file via the C++ backend.
 
 ```python
 ar.write_csv(frame, "output.csv")
+```
+
+---
+
+### write_json
+
+Write an `ArFrame` to a JSON file.
+
+```python
+ar.write_json(frame, "output.json")
+```
+
+| Parameter  | Type                  | Default   | Description                                                        |
+| :--------- | :-------------------- | :-------- | :----------------------------------------------------------------- |
+| `frame`    | `ArFrame`             |           | The data frame to write.                                           |
+| `path`     | `str` or `PathLike`   |           | Destination file path (must end with `.json`).                     |
+| `orient`   | `str`                 | `"records"` | JSON orientation to use (`"records"` or `"dict"`).               |
+| `indent`   | `int` or `None`       | `None`    | Indentation level for pretty-printing (writes compactly if `None`). |
+
+**Returns:** `None`
+
+**Raises:**
+- `TypeError`: If input frame is not an `ArFrame` or path is invalid.
+- `ValueError`: If file extension is unsupported or orient is invalid.
+
+**Examples:**
+```python
+ar.write_json(frame, "output.json")
+
+# Pretty print with indentation
+ar.write_json(frame, "output.json", indent=4)
+
+# Dict orientation
+ar.write_json(frame, "output.json", orient="dict")
 ```
 
 #### Parameters
