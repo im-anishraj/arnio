@@ -104,7 +104,7 @@ def main() -> int:
 
         import_check = (
             "import arnio as ar; "
-            "import tempfile, pathlib; "
+            "import inspect, tempfile, pathlib; "
             "print('arnio import ok:', ar.__version__); "
             "assert hasattr(ar, 'read_csv'); "
             "assert hasattr(ar, 'pipeline'); "
@@ -114,7 +114,14 @@ def main() -> int:
             "csv.write_text('name,age\\nAlice,30\\nBob,25\\n'); "
             "frame = ar.read_csv(str(csv)); "
             "assert frame is not None; "
-            "print('read_csv smoke test passed')"
+            "print('read_csv smoke test passed'); "
+            "sig = inspect.signature(ar.read_jsonl); "
+            "params = sig.parameters; "
+            "assert 'encoding_errors' in params, 'read_jsonl is missing encoding_errors parameter'; "
+            "assert params['encoding_errors'].default == 'strict', 'read_jsonl encoding_errors default must be strict'; "
+            "sig2 = inspect.signature(ar.read_jsonl_chunked); "
+            "assert 'encoding_errors' in sig2.parameters, 'read_jsonl_chunked is missing encoding_errors parameter'; "
+            "print('read_jsonl signature parity check passed')"
         )
 
         run([str(python), "-c", import_check], cwd=tmp_dir)

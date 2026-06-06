@@ -1586,6 +1586,11 @@ def read_jsonl(
         Path to the ``.jsonl`` or ``.ndjson`` file.
     encoding : str, default ``"utf-8"``
         File encoding.
+    encoding_errors : str, default ``"strict"``
+        How encoding errors are handled while decoding file bytes.
+        One of ``"strict"`` (raise on invalid bytes), ``"replace"``
+        (substitute the Unicode replacement character), or ``"ignore"``
+        (drop invalid bytes silently).
     nrows : int, optional
         Maximum number of data rows to read.  If ``None``, all rows are read.
 
@@ -1597,8 +1602,9 @@ def read_jsonl(
     Raises
     ------
     ValueError
-        If the file extension is not ``.jsonl`` or ``.ndjson``, or if
-        ``nrows`` is not a non-negative integer.
+        If the file extension is not ``.jsonl`` or ``.ndjson``, if
+        ``nrows`` is not a non-negative integer, or if ``encoding_errors``
+        is not one of ``"strict"``, ``"replace"``, or ``"ignore"``.
     JsonlReadError
         If the file is empty (no data rows), or if a line contains invalid
         JSON or unsupported nested values. The error message includes the
@@ -1608,6 +1614,7 @@ def read_jsonl(
     --------
     >>> frame = ar.read_jsonl("events.jsonl")
     >>> frame = ar.read_jsonl("data.ndjson", nrows=1000)
+    >>> frame = ar.read_jsonl("data.jsonl", encoding_errors="replace")
     """
     _validate_jsonl_encoding(encoding)
 
