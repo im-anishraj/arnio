@@ -47,3 +47,16 @@ def test_website_asset_references_match_display_context():
 
     index_html = (WEBSITE_DIR / "index.html").read_text(encoding="utf-8")
     assert 'src="arnio-icon.svg" alt="" width="92" height="92"' in index_html
+
+
+def test_404_page_has_no_exception_wording():
+    html = (WEBSITE_DIR / "404.html").read_text(encoding="utf-8")
+    assert "Python Exception" not in html
+    assert "FileNotFoundError" not in html
+
+
+def test_404_page_has_user_friendly_copy_and_navigation():
+    html = (WEBSITE_DIR / "404.html").read_text(encoding="utf-8")
+    assert "Page not found" in html
+    assert "Go Home" in html
+    assert "View Docs" in html
