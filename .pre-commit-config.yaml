@@ -23,7 +23,7 @@ repos:
         files: ^\.github/
 
   - repo: https://github.com/PyCQA/bandit
-    rev: 1.7.10
+    rev: 1.8.3
     hooks:
       - id: bandit
         args: ["-r", "arnio/", "-c", ".bandit.yml"]
