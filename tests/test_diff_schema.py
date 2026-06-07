@@ -307,3 +307,20 @@ class TestDiffSchema:
         assert diff.changed is True
         assert diff.difference_count == 1
         assert diff.differences[0].attribute == "severity"
+        import pytest
+import arnio as ar
+
+def test_schema_constructor_validation():
+    with pytest.raises(TypeError):
+        ar.SchemaDiffEntry(column=123, change="added")
+    with pytest.raises(TypeError):
+        ar.SchemaDiffEntry(column="user_id", change=456)
+    with pytest.raises(ValueError):
+        ar.SchemaDiffEntry(column="user_id", change="   ")
+    with pytest.raises(TypeError):
+        ar.SchemaDiff(differences=("not", "a", "list"))
+    with pytest.raises(TypeError):
+        ar.SchemaDiff("abc")
+    with pytest.raises(TypeError):
+        ar.SchemaDiff([ar.SchemaDiffEntry(column="x", change="added"), "invalid_item"])
+
