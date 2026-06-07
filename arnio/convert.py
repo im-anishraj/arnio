@@ -349,6 +349,8 @@ def to_arrow(frame: ArFrame) -> pa.Table:
 def _pandas_dtype_to_arnio(dtype: object) -> _DType | None:
     if dtype == pd.Int64Dtype():
         return _DType.INT64
+    if str(dtype) == "int64":
+        return _DType.INT64
     if dtype == pd.Float64Dtype():
         return _DType.FLOAT64
     if str(dtype) == "float64":
@@ -466,8 +468,6 @@ def _from_arrow_table(table: pa.Table) -> ArFrame:
             "_from_arrow_table() requires pyarrow. "
             "Install it with: pip install arnio[arrow]"
         ) from exc
-
-    import pyarrow as pa_mod
 
     _ARROW_INT_TYPES = frozenset(
         [

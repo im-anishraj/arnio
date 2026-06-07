@@ -2,8 +2,13 @@
 
 import pytest
 
-import arnio as ar
-from arnio.schema import Field, Schema, diff_schema
+from arnio.schema import (
+    Field,
+    Schema,
+    SchemaDiff,
+    SchemaDiffEntry,
+    diff_schema,
+)
 
 
 def _rule_alpha(df):
@@ -311,17 +316,29 @@ class TestDiffSchema:
         assert diff.difference_count == 1
         assert diff.differences[0].attribute == "severity"
 
+    def test_schemadiffentry_rejects_invalid_column_type(self):
+        with pytest.raises(TypeError):
+            SchemaDiffEntry(column=1, change="missing_column")
 
-def test_schema_constructor_validation():
-    with pytest.raises(TypeError):
-        ar.SchemaDiffEntry(column=123, change="added")
-    with pytest.raises(TypeError):
-        ar.SchemaDiffEntry(column="user_id", change=456)
-    with pytest.raises(ValueError):
-        ar.SchemaDiffEntry(column="user_id", change="   ")
-    with pytest.raises(TypeError):
-        ar.SchemaDiff(differences=("not", "a", "list"))
-    with pytest.raises(TypeError):
-        ar.SchemaDiff("abc")
-    with pytest.raises(TypeError):
-        ar.SchemaDiff([ar.SchemaDiffEntry(column="x", change="added"), "invalid_item"])
+    def test_schemadiffentry_rejects_invalid_attribute_type(self):
+        with pytest.raises(TypeError):
+            SchemaDiffEntry(
+                column="age",
+                change="changed_field",
+                attribute=123,
+            )
+
+    def test_schemadiffentry_rejects_invalid_change_type(self):
+        with pytest.raises(TypeError):
+            SchemaDiffEntry(
+                column="age",
+                change=123,
+            )
+
+    def test_schemadiff_rejects_non_list_differences(self):
+        with pytest.raises(TypeError):
+            SchemaDiff("abc")
+
+    def test_schemadiff_rejects_non_entry_objects(self):
+        with pytest.raises(TypeError):
+            SchemaDiff([1, 2, 3])

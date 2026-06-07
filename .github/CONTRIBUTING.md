@@ -38,6 +38,31 @@ Or run the commands manually — each `make` target is just one or two commands 
 
 ---
 
+## Security
+
+We take the security of Arnio and its dependencies seriously.
+
+### Dependency Auditing
+We use `pip-audit` to scan our dependencies for known vulnerabilities. This happens automatically in two ways:
+1. **Weekly Audit**: A full scan runs every Monday morning.
+2. **Pull Request Review**: Every PR that modifies `pyproject.toml` is scanned for new vulnerabilities.
+
+### Local Auditing
+You can run the audit locally to check for issues before submitting a PR:
+```bash
+pip install pip-audit
+pip-audit
+```
+
+### What to do if an audit fails
+If the CI audit fails:
+1. Check the `audit-results.json` artifact in the GitHub Action run.
+2. Verify if the vulnerability affects our usage of the package.
+3. Update the dependency to a secure version in `pyproject.toml` if a fix is available.
+4. If no fix is available or it's a false positive, discuss it in the PR or an issue.
+
+---
+
 ## Contributor Glossary
 
 - **ArFrame**: Arnio's internal table object. It stores data in a C++-backed, column-oriented format before you convert it to a pandas DataFrame.
@@ -128,7 +153,7 @@ def test_remove_special_chars(sample_csv):
 4. If you've added code that should be tested, add tests.
 5. If you've changed public behavior, update documentation or examples.
 6. Ensure the test suite passes (`make test`).
-7. Ensure your code passes linting (`make lint`). This is a required pre-PR step.
+7. Ensure your code passes linting (`make lint`). This checks docs encoding, formatting (`black`, `ruff`), types (`mypy`), and C++ styling (`clang-format`). This is a required pre-PR step.
 8. Open the pull request and link the issue with `Fixes #issue-number` when complete.
 9. Ensure your PR title follows **Conventional Commits**.
 

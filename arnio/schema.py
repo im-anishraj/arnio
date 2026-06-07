@@ -1151,6 +1151,26 @@ class ValidationIssue:
     value: Any = None
     severity: str = "error"
 
+    @classmethod
+    def _fast_create(
+        cls,
+        *,
+        column,
+        rule,
+        message,
+        row_index,
+        value,
+        severity,
+    ):
+        obj = object.__new__(cls)
+        object.__setattr__(obj, "column", column)
+        object.__setattr__(obj, "rule", rule)
+        object.__setattr__(obj, "message", message)
+        object.__setattr__(obj, "row_index", row_index)
+        object.__setattr__(obj, "value", value)
+        object.__setattr__(obj, "severity", severity)
+        return obj
+
     def __post_init__(self) -> None:
         if not (self.column is None or isinstance(self.column, str)):
             raise TypeError(
@@ -1175,8 +1195,7 @@ class ValidationIssue:
                 )
             if self.row_index < 0:
                 raise ValueError(
-                    f"ValidationIssue 'row_index' must be >= 0, "
-                    f"got {self.row_index}"
+                    f"ValidationIssue 'row_index' must be >= 0, got {self.row_index}"
                 )
         _validate_severity(self.severity)
 
@@ -1404,15 +1423,15 @@ class SchemaDiffEntry:
     expected: Any = None
     observed: Any = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.column is not None and not isinstance(self.column, str):
-            raise TypeError("column must be a string or None")
+            raise TypeError("column must be a str or None")
+
         if self.attribute is not None and not isinstance(self.attribute, str):
-            raise TypeError("attribute must be a string or None")
-        if not isinstance(self.change, str):
-            raise TypeError("change must be a string")
-        if not self.change.strip():
-            raise ValueError("change cannot be an empty string")
+            raise TypeError("attribute must be a str or None")
+
+        if not isinstance(self.change, str) or not self.change.strip():
+            raise TypeError("change must be a non-empty string")
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-friendly dictionary."""
@@ -1431,14 +1450,13 @@ class SchemaDiff:
 
     differences: list[SchemaDiffEntry]
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if not isinstance(self.differences, list):
-            raise TypeError("differences must be a list")
-        for entry in self.differences:
-            if not isinstance(entry, SchemaDiffEntry):
-                raise TypeError(
-                    "All items in differences must be SchemaDiffEntry instances"
-                )
+            raise TypeError("differences must be a list of SchemaDiffEntry instances")
+
+        for i, diff in enumerate(self.differences):
+            if not isinstance(diff, SchemaDiffEntry):
+                raise TypeError(f"differences[{i}] must be a SchemaDiffEntry instance")
 
     @property
     def changed(self) -> bool:
@@ -2552,7 +2570,6 @@ def _validate_column(
 
     if field_def.dtype is not None and actual_dtype != field_def.dtype:
         if not (field_def.dtype == "datetime" and actual_dtype == "string"):
-
             message = (
                 f"Column {name!r} has dtype {actual_dtype!r}; "
                 f"expected {field_def.dtype!r}"
@@ -2566,9 +2583,7 @@ def _validate_column(
                     name,
                 )
             ):
-                message += (
-                    f". Values appear safely convertible " f"to '{field_def.dtype}'"
-                )
+                message += f". Values appear safely convertible to '{field_def.dtype}'"
 
             issues.append(
                 ValidationIssue(
@@ -2912,7 +2927,7 @@ def _row_issues(
 ) -> list[ValidationIssue]:
     """Convert a series of invalid rows into a list of ValidationIssue objects."""
     return [
-        ValidationIssue(
+        ValidationIssue._fast_create(
             column=column,
             rule=rule,
             message=message,

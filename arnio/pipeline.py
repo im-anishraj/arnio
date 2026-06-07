@@ -7,9 +7,11 @@ from __future__ import annotations
 
 import copy as copylib
 import inspect
+import json
 import logging
 import warnings
 from dataclasses import dataclass
+from pathlib import Path
 from threading import Lock
 from time import perf_counter
 from typing import Any, Callable
@@ -20,6 +22,14 @@ from . import cleaning
 from .convert import from_pandas, to_pandas
 from .exceptions import PipelineStepError, UnknownStepError
 from .frame import ArFrame
+
+try:
+    import yaml
+
+    HAS_YAML = True
+except ImportError:
+    HAS_YAML = False
+
 
 logger = logging.getLogger("arnio")
 _BUILTIN_STEP_NAMESPACE = "builtin"
@@ -38,6 +48,7 @@ _STEP_REGISTRY: dict[str, Callable] = {
     "drop_empty_columns": cleaning.drop_empty_columns,
     "clip_numeric": cleaning.clip_numeric,
     "winsorize_outliers": cleaning.winsorize_outliers,
+    "normalize_minmax": cleaning.normalize_minmax,
     "strip_whitespace": cleaning.strip_whitespace,
     "parse_bool_strings": cleaning.parse_bool_strings,
     "normalize_case": cleaning.normalize_case,
@@ -595,6 +606,8 @@ def pipeline(
     applied_steps: list[str] = []
     row_counts: list[dict[str, int | str]] = []
     total_steps = len(steps)
+    total_pipeline_start = perf_counter()
+    _step_diagnostics: list[dict] = []
     for step_index, step in enumerate(steps):
         if len(step) == 1:
             name = step[0]
@@ -637,34 +650,59 @@ def pipeline(
             # C++ backed step - fast path
             fn = _STEP_REGISTRY[name]
             rows_before = result.shape[0]
+            columns_before = working_frame.shape[1]
 
             started_at = perf_counter()
-            if name == "rename_columns" and (
-                "mapping" not in kwargs or not isinstance(kwargs["mapping"], dict)
-            ):
-                step_result = fn(working_frame, mapping=kwargs)
+            try:
+                if name == "rename_columns" and (
+                    "mapping" not in kwargs or not isinstance(kwargs["mapping"], dict)
+                ):
+                    step_result = fn(working_frame, mapping=kwargs)
 
-                if not dry_run:
-                    result = step_result
-                working_frame = step_result
+                elif name == "cast_types":
+                    reserved_kwargs = {"mapping", "errors"}
+                    has_reserved_kwargs = any(
+                        key in kwargs for key in reserved_kwargs - {"mapping"}
+                    )
+                    if "mapping" in kwargs and isinstance(kwargs["mapping"], dict):
+                        step_result = fn(working_frame, **kwargs)
+                    elif has_reserved_kwargs:
+                        raise ValueError(
+                            "cast_types shorthand mapping cannot be mixed with "
+                            "reserved keyword arguments. Use "
+                            "{'mapping': {...}, ...} form instead."
+                        )
+                    else:
+                        step_result = fn(working_frame, kwargs)
 
-            elif name == "cast_types" and (
-                "mapping" not in kwargs or not isinstance(kwargs["mapping"], dict)
-            ):
-                step_result = fn(working_frame, kwargs)
+                else:
+                    step_result = fn(working_frame, **kwargs)
 
-                if not dry_run:
-                    result = step_result
-                working_frame = step_result
+            except Exception:
+                elapsed_sec = perf_counter() - started_at
+                if return_metadata:
+                    step_timings.append(
+                        {
+                            "step": name,
+                            "seconds": round(elapsed_sec, 9),
+                            "dry_run": dry_run,
+                        }
+                    )
+                    row_counts.append(
+                        {
+                            "step": name,
+                            "before": rows_before,
+                            "after": rows_before,
+                            "dry_run": dry_run,
+                        }
+                    )
 
-            else:
-                target_frame = working_frame
+                raise
 
-                step_result = fn(target_frame, **kwargs)
-
-                if not dry_run:
-                    result = step_result
-                working_frame = step_result
+            columns_after = step_result.shape[1]
+            if not dry_run:
+                result = step_result
+            working_frame = step_result
 
             elapsed_sec = perf_counter() - started_at
             elapsed_ms = elapsed_sec * 1000
@@ -700,6 +738,20 @@ def pipeline(
                         "dry_run": dry_run,
                     }
                 )
+                _step_diagnostics.append(
+                    {
+                        "name": name,
+                        "status": "success",
+                        "runtime_ms": round(elapsed_ms, 3),
+                        "rows_before": rows_before,
+                        "rows_after": rows_before if dry_run else step_result.shape[0],
+                        "rows_affected": (
+                            0 if dry_run else rows_before - step_result.shape[0]
+                        ),
+                        "columns_before": columns_before,
+                        "columns_after": columns_after,
+                    }
+                )
         elif name in python_step_registry:
             # Pure Python step - slower but contributor-friendly
             started_at = perf_counter()
@@ -723,9 +775,28 @@ def pipeline(
                     dry_run=dry_run,
                 )
 
+            columns_before = working_frame.shape[1]
             try:
                 returned = fn(df, **call_kwargs)
             except Exception as e:
+                elapsed_sec = perf_counter() - started_at
+                if return_metadata:
+                    step_timings.append(
+                        {
+                            "step": name,
+                            "seconds": round(elapsed_sec, 9),
+                            "dry_run": dry_run,
+                        }
+                    )
+                    row_counts.append(
+                        {
+                            "step": name,
+                            "before": rows_before,
+                            "after": rows_before,
+                            "dry_run": dry_run,
+                        }
+                    )
+
                 if is_builtin:
                     raise
                 raise PipelineStepError(name, e) from e
@@ -742,6 +813,7 @@ def pipeline(
                     "Steps must return a pandas DataFrame."
                 )
             step_result = from_pandas(returned)
+            columns_after = step_result.shape[1]
             if not dry_run:
                 result = step_result
             working_frame = step_result
@@ -779,6 +851,20 @@ def pipeline(
                         "step": name,
                         "seconds": round(elapsed_sec, 9),
                         "dry_run": dry_run,
+                    }
+                )
+                _step_diagnostics.append(
+                    {
+                        "name": name,
+                        "status": "success",
+                        "runtime_ms": round(elapsed_ms, 3),
+                        "rows_before": rows_before,
+                        "rows_after": rows_before if dry_run else step_result.shape[0],
+                        "rows_affected": (
+                            0 if dry_run else rows_before - step_result.shape[0]
+                        ),
+                        "columns_before": columns_before,
+                        "columns_after": columns_after,
                     }
                 )
         else:
@@ -838,6 +924,12 @@ def pipeline(
             "applied_steps": applied_steps,
             "row_counts": row_counts,
             "step_timings": step_timings,
+            "execution_summary": {
+                "total_runtime_ms": round(
+                    (perf_counter() - total_pipeline_start) * 1000, 3
+                ),
+                "steps": _step_diagnostics,
+            },
         }
     return result
 
@@ -855,3 +947,118 @@ def reset_steps() -> None:
     with _REGISTRY_LOCK:
         _PYTHON_STEP_REGISTRY.clear()
         _PYTHON_STEP_REGISTRY.update(_BUILTIN_PYTHON_STEP_REGISTRY)
+
+
+def _validate_pipeline_structure(steps):
+    """Validate the structural integrity of pipeline steps."""
+    from .exceptions import PipelineSerializationError
+
+    if not isinstance(steps, list):
+        raise PipelineSerializationError("Pipeline steps must be a list.")
+    for step in steps:
+        if not isinstance(step, tuple):
+            raise PipelineSerializationError("Each pipeline step must be a tuple.")
+        if not (1 <= len(step) <= 2):
+            raise PipelineSerializationError(
+                "Each pipeline step tuple must have 1 or 2 elements."
+            )
+        if not isinstance(step[0], str):
+            raise PipelineSerializationError(
+                "The first element of a step must be a string (the step name)."
+            )
+        if len(step) == 2 and not isinstance(step[1], dict):
+            raise PipelineSerializationError(
+                "The second element of a step must be a dictionary (kwargs)."
+            )
+
+
+def save_pipeline(steps, filepath):
+    import json
+    import os
+    import tempfile
+
+    from .exceptions import PipelineSerializationError
+
+    # 1. Validate structure BEFORE writing
+    _validate_pipeline_structure(steps)
+
+    # Convert tuples to lists so YAML doesn't write !!python/tuple tags
+    safe_steps = [list(step) for step in steps]
+
+    # 2. Write atomically using a temporary file in the same directory
+    dirname = os.path.dirname(filepath) or "."
+    fd, temp_path = tempfile.mkstemp(dir=dirname, text=True)
+
+    try:
+        with os.fdopen(fd, "w") as f:
+            if str(filepath).endswith((".yaml", ".yml")):
+                import yaml
+
+                yaml.safe_dump(safe_steps, f)  # Use safe_dump instead of dump!
+            else:
+                json.dump(safe_steps, f)
+
+        # 3. If serialization succeeds, safely replace the target file
+        os.replace(temp_path, filepath)
+
+    except Exception as e:
+        # If anything fails (like a non-serializable kwarg), delete the temp file
+        os.remove(temp_path)
+        raise PipelineSerializationError(f"Failed to serialize pipeline: {e}") from e
+
+
+def load_pipeline(filepath: str | Path) -> list[tuple]:
+    """Load a list of pipeline steps from a JSON or YAML file."""
+    from .exceptions import PipelineSerializationError
+
+    path = Path(filepath)
+    if not path.exists():
+        raise PipelineSerializationError(f"File not found: {filepath}")
+
+    try:
+        if path.suffix == ".json":
+            with open(path, encoding="utf-8") as f:
+                content = f.read().strip()
+                if not content:
+                    raise PipelineSerializationError(
+                        "Malformed pipeline file: file is empty."
+                    )
+                loaded_steps = json.loads(content)
+        elif path.suffix in [".yaml", ".yml"]:
+            if not HAS_YAML:
+                raise PipelineSerializationError(
+                    "PyYAML is required for YAML support. Please install it."
+                )
+            with open(path, encoding="utf-8") as f:
+                content = f.read().strip()
+                if not content:
+                    raise PipelineSerializationError(
+                        "Malformed pipeline file: file is empty."
+                    )
+                loaded_steps = yaml.safe_load(content)
+        else:
+            raise PipelineSerializationError(
+                f"Unsupported format: {path.suffix}. Use .json or .yaml"
+            )
+
+        if loaded_steps is None:
+            raise PipelineSerializationError(
+                "Malformed pipeline file: file is empty or null."
+            )
+
+        # JSON and YAML load arrays as lists. We convert the inner lists
+        # back to tuples before passing them to the strict validator.
+        if isinstance(loaded_steps, list):
+            loaded_steps = [
+                tuple(step) if isinstance(step, list) else step for step in loaded_steps
+            ]
+
+        # Use the shared structural validator exactly as the maintainer requested
+        _validate_pipeline_structure(loaded_steps)
+
+        return loaded_steps
+
+    except Exception as e:
+        if isinstance(e, PipelineSerializationError):
+            raise
+        raise PipelineSerializationError(f"Failed to load pipeline: {e}")
