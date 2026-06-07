@@ -3,6 +3,7 @@
 import io
 import json
 import warnings
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -1943,6 +1944,38 @@ def test_int64_rejects_impossible_bounds():
 def test_invalid_severity_raises():
     with pytest.raises(ValueError, match="severity must be"):
         ar.Int64(severity="warn")
+
+
+def test_field_constructors_reject_non_string_severity():
+    list_severity: Any = ["error"]
+    int_severity: Any = 1
+    none_severity: Any = None
+
+    with pytest.raises(TypeError, match="severity must be a string"):
+        ar.Email(severity=list_severity)
+
+    with pytest.raises(TypeError, match="severity must be a string"):
+        ar.Int64(severity=int_severity)
+
+    with pytest.raises(TypeError, match="severity must be a string"):
+        ar.Int64(severity=none_severity)
+
+
+def test_field_constructors_accept_valid_severities():
+    assert ar.Int64(severity="error").severity == "error"
+    assert ar.Email(severity="warning").severity == "warning"
+
+
+def test_validation_issue_rejects_non_string_severity():
+    list_severity: Any = ["error"]
+
+    with pytest.raises(TypeError, match="severity must be a string"):
+        ar.ValidationIssue(
+            column="score",
+            rule="custom",
+            message="bad",
+            severity=list_severity,
+        )
 
 
 def test_float64_rejects_impossible_bounds():

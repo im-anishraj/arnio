@@ -196,6 +196,8 @@ _ALLOWED_SCHEMA_KEYS = {
 
 def _validate_severity(severity: str) -> None:
     """Raise ValueError if severity is not 'error' or 'warning'."""
+    if not isinstance(severity, str):
+        raise TypeError("severity must be a string")
     if severity not in _VALID_SEVERITIES:
         raise ValueError("severity must be 'error' or 'warning'")
 
