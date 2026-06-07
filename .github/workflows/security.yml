@@ -26,4 +26,4 @@ jobs:
         run: pip install "bandit>=1.7.0"
 
       - name: Run Bandit
-        run: bandit -r arnio/ -c .bandit.yml -ll -v
+        run: bandit -r arnio/ -c .bandit.yml -l -v

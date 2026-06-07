@@ -2,3 +2,20 @@
 
 # Aggregate results by file
 aggregate: file
+
+# Exclude directories from scanning
+# This is useful if running bandit on the whole repository
+exclude_dirs:
+  - 'tests'
+  - 'benchmarks'
+  - 'examples'
+  - 'scripts'
+  - '.github'
+  - 'venv'
+  - '.venv'
+  - 'build'
+  - 'dist'
+
+# Only report medium or high severity issues by default
+# (Matches the -ll flag in the workflow)
+# severity: 'medium'
