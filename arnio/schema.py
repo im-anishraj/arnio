@@ -1436,7 +1436,9 @@ class SchemaDiff:
             raise TypeError("differences must be a list")
         for entry in self.differences:
             if not isinstance(entry, SchemaDiffEntry):
-                raise TypeError("All items in differences must be SchemaDiffEntry instances")
+                raise TypeError(
+                    "All items in differences must be SchemaDiffEntry instances"
+                )
 
     @property
     def changed(self) -> bool:
