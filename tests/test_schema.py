@@ -2707,6 +2707,7 @@ def test_date_validation_reports_only_invalid_vectorized_values(tmp_path):
     ]
     assert {issue.rule for issue in result.issues} == {"date"}
 
+
 def test_date_min_max_valid_range_passes(tmp_path):
     path = tmp_path / "dates_in_range.csv"
     path.write_text("signup_date\n2024-01-01\n2024-06-15\n2024-12-31\n")
@@ -2785,8 +2786,8 @@ def test_date_bounds_only_applied_after_format_check(tmp_path):
     )
 
     rules = {issue.rule for issue in result.issues}
-    assert "date" in rules   # format error for "not-a-date"
-    assert "min" in rules    # bound error for 2023-01-01
+    assert "date" in rules  # format error for "not-a-date"
+    assert "min" in rules  # bound error for 2023-01-01
     # "not-a-date" must NOT also appear as a min violation
     min_issues = [i for i in result.issues if i.rule == "min"]
     assert all(i.value != "not-a-date" for i in min_issues)

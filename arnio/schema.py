@@ -2802,7 +2802,10 @@ def _validate_column(
                     )
                     invalid = non_null[~(format_valid & parsed.notna())]
                     # Date bounds — only checked for calendar-valid values
-                    if field_def._date_min is not None or field_def._date_max is not None:
+                    if (
+                        field_def._date_min is not None
+                        or field_def._date_max is not None
+                    ):
                         valid_mask = format_valid & parsed.notna()
                         valid_non_null = non_null[valid_mask]
                         valid_dates = parsed[valid_mask].dt.date
@@ -2974,7 +2977,9 @@ def _parse_date_bound(value: Any, name: str) -> _dt.date | None:
             f"Date {name} must be a parseable date (YYYY-MM-DD), got {value!r}"
         ) from exc
     if not isinstance(parsed, pd.Timestamp) or pd.isna(parsed):
-        raise ValueError(f"Date {name} must be a parseable date (YYYY-MM-DD), got {value!r}")
+        raise ValueError(
+            f"Date {name} must be a parseable date (YYYY-MM-DD), got {value!r}"
+        )
     return parsed.date()
 
 
@@ -3033,8 +3038,12 @@ def _field_to_dict(field_def: Field) -> dict[str, Any]:
         "format": field_def.format,
         "datetime_min": _clean_scalar(field_def._datetime_min),
         "datetime_max": _clean_scalar(field_def._datetime_max),
-        "date_min": field_def._date_min.isoformat() if field_def._date_min is not None else None,
-        "date_max": field_def._date_max.isoformat() if field_def._date_max is not None else None,
+        "date_min": (
+            field_def._date_min.isoformat() if field_def._date_min is not None else None
+        ),
+        "date_max": (
+            field_def._date_max.isoformat() if field_def._date_max is not None else None
+        ),
         "required_if": _normalize_sequence(field_def.required_if),
         "severity": field_def.severity,
     }
@@ -3054,8 +3063,12 @@ def _field_to_json_dict(field_def: Field) -> dict[str, Any]:
         if field_def._datetime_max is not None
         else None
     )
-    data["date_min"] = field_def._date_min.isoformat() if field_def._date_min is not None else None
-    data["date_max"] = field_def._date_max.isoformat() if field_def._date_max is not None else None
+    data["date_min"] = (
+        field_def._date_min.isoformat() if field_def._date_min is not None else None
+    )
+    data["date_max"] = (
+        field_def._date_max.isoformat() if field_def._date_max is not None else None
+    )
     return data
 
 
