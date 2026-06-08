@@ -2557,6 +2557,116 @@ def Date(
     )
 
 
+def UUID(
+    *,
+    nullable: bool = True,
+    unique: bool = False,
+    severity: str = "error",
+    required_if: tuple[str, Any] | None = None,
+) -> Field:
+    """Create a UUID schema field.
+
+    Validates the canonical 8-4-4-4-12 hexadecimal format (RFC 4122).
+    Both upper- and lower-case hex digits are accepted. Version and
+    variant bits are not enforced so nil UUIDs and DB-generated
+    identifiers all pass.
+
+    Args:
+        nullable: Whether null values are allowed.
+        unique: Whether non-null values must be unique.
+        severity: Severity level for validation issues.
+        required_if: Conditional requirement as a column/value pair.
+
+    Returns:
+        Field: Configured UUID schema field.
+
+    Examples
+    --------
+    >>> schema = ar.Schema({"device_id": ar.UUID(nullable=False, unique=True)})
+    """
+    return Field(
+        dtype="string",
+        nullable=nullable,
+        semantic="uuid",
+        unique=unique,
+        required_if=required_if,
+        severity=severity,
+    )
+
+
+def IPv4(
+    *,
+    nullable: bool = True,
+    unique: bool = False,
+    severity: str = "error",
+    required_if: tuple[str, Any] | None = None,
+) -> Field:
+    """Create a strict IPv4-address schema field.
+
+    Validates dotted-decimal notation (e.g. ``192.168.1.1``) with each
+    octet constrained to 0–255 and leading zeros rejected. IPv6 is
+    intentionally out of scope; use ``ar.Regex()`` for that format.
+
+    Args:
+        nullable: Whether null values are allowed.
+        unique: Whether non-null values must be unique.
+        severity: Severity level for validation issues.
+        required_if: Conditional requirement as a column/value pair.
+
+    Returns:
+        Field: Configured IPv4-address schema field.
+
+    Examples
+    --------
+    >>> schema = ar.Schema({"server_ip": ar.IPv4(nullable=False)})
+    """
+    return Field(
+        dtype="string",
+        nullable=nullable,
+        semantic="ipv4",
+        unique=unique,
+        required_if=required_if,
+        severity=severity,
+    )
+
+
+def MACAddress(
+    *,
+    nullable: bool = True,
+    unique: bool = False,
+    severity: str = "error",
+    required_if: tuple[str, Any] | None = None,
+) -> Field:
+    """Create a MAC-address schema field.
+
+    Validates IEEE 802 MAC-48 addresses in colon-separated
+    (``AA:BB:CC:DD:EE:FF``) or hyphen-separated (``AA-BB-CC-DD-EE-FF``)
+    notation. Both upper- and lower-case hex digits are accepted.
+    The Cisco dot-delimited format is not supported.
+
+    Args:
+        nullable: Whether null values are allowed.
+        unique: Whether non-null values must be unique.
+        severity: Severity level for validation issues.
+        required_if: Conditional requirement as a column/value pair.
+
+    Returns:
+        Field: Configured MAC-address schema field.
+
+    Examples
+    --------
+    >>> schema = ar.Schema({"nic_mac": ar.MACAddress(nullable=False, unique=True)})
+    """
+    return Field(
+        dtype="string",
+        nullable=nullable,
+        semantic="mac_address",
+        unique=unique,
+        required_if=required_if,
+        severity=severity,
+    )
+
+
 def Regex(
     pattern: str,
     *,
@@ -3232,6 +3342,22 @@ _SEMANTIC_PATTERNS = {
     "country_code": r"[A-Z]{2}",
     "currency_code": r"[A-Z]{3}",
     "date": r"\d{4}-\d{2}-\d{2}",
+    # Canonical 8-4-4-4-12 UUID format (RFC 4122); case-insensitive hex.
+    "uuid": (
+        r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}"
+        r"-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+    ),
+    # Strict dotted-decimal IPv4: each octet 0–255, no leading zeros.
+    "ipv4": (
+        r"(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\."
+        r"(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\."
+        r"(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\."
+        r"(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])"
+    ),
+    # IEEE 802 MAC-48: colon (AA:BB:…) or hyphen (AA-BB-…) separated.
+    "mac_address": (
+        r"[0-9a-fA-F]{2}(?::[0-9a-fA-F]{2}){5}" r"|[0-9a-fA-F]{2}(?:-[0-9a-fA-F]{2}){5}"
+    ),
 }
 
 # Registry for custom validators registered via register_validator()

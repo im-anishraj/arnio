@@ -98,6 +98,7 @@ from .quality import (
 )
 from .schema import (
     URL,
+    UUID,
     Bool,
     CountryCode,
     CurrencyCode,
@@ -108,7 +109,9 @@ from .schema import (
     Field,
     Float64,
     Int64,
+    IPv4,
     LanguageCode,
+    MACAddress,
     PhoneNumber,
     Regex,
     Schema,
@@ -254,4 +257,7 @@ __all__ = [
     "load_pipeline",
     "PipelineSerializationError",
     "encode_categorical",
+    "UUID",  # ← add
+    "IPv4",  # ← add
+    "MACAddress",
 ]

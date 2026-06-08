@@ -10,7 +10,14 @@ import pandas as pd
 import pytest
 
 import arnio as ar
-from arnio.schema import _is_safely_convertible_to_dtype
+from arnio.frame import ArFrame
+from arnio.schema import (
+    _SEMANTIC_PATTERNS,
+    Field,
+    Schema,
+    _is_safely_convertible_to_dtype,
+    validate,
+)
 
 
 def test_dtype_validation_reports_safe_int_conversion_for_numeric_strings():
@@ -4427,3 +4434,573 @@ def test_from_json_round_trip_is_accepted():
     recovered = ar.Schema.from_json(original.to_json())
     assert recovered.fields["email"].nullable is False
     assert recovered.unique == ["email"]
+
+
+"""
+Tests for the UUID, IPv4, and MACAddress schema validators added in
+issue #1604 ("Add real-world schema validators").
+
+Covers:
+  - _SEMANTIC_PATTERNS regex correctness (valid / invalid edge cases)
+  - Factory-function return types and Field attribute wiring
+  - End-to-end validate() integration (pass + fail paths)
+  - nullable=False, unique=True, severity="warning" propagation
+  - Schema JSON round-trip (to_json / from_json)
+"""
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _frame(data: dict) -> ArFrame:
+    """Build a minimal ArFrame from a plain dict of lists."""
+    return ar.from_pandas(pd.DataFrame(data))
+
+
+def _issues(result) -> list[str]:
+    """Return (rule, value) pairs for easy assertion."""
+    return [(i.rule, i.value) for i in result.issues]
+
+
+# ===========================================================================
+# 1.  _SEMANTIC_PATTERNS – regex correctness
+# ===========================================================================
+
+
+class TestUUIDPattern:
+    PAT = _SEMANTIC_PATTERNS["uuid"]
+
+    def _match(self, value: str) -> bool:
+        import re
+
+        return bool(re.compile(self.PAT).fullmatch(value))
+
+    # --- valid ---
+    @pytest.mark.parametrize(
+        "value",
+        [
+            "550e8400-e29b-41d4-a716-446655440000",  # v4, lowercase
+            "A987FBC9-4BED-3078-CF07-9141BA07C9F3",  # v3, uppercase
+            "00000000-0000-0000-0000-000000000000",  # nil UUID
+            "ffffffff-ffff-ffff-ffff-ffffffffffff",  # all-f
+            "6ba7b810-9dad-11d1-80b4-00c04fd430c8",  # v1 mixed-case
+        ],
+    )
+    def test_valid_uuids(self, value):
+        assert self._match(value), f"Expected match for {value!r}"
+
+    # --- invalid ---
+    @pytest.mark.parametrize(
+        "value",
+        [
+            "550e8400e29b41d4a716446655440000",  # no hyphens
+            "550e8400-e29b-41d4-a716",  # truncated
+            "550e8400-e29b-41d4-a716-44665544000",  # last segment too short
+            "550e8400-e29b-41d4-a716-4466554400001",  # last segment too long
+            "ZZZZZZZZ-e29b-41d4-a716-446655440000",  # non-hex chars
+            "550e8400-e29b-41d4-a716-446655440000 ",  # trailing space
+            " 550e8400-e29b-41d4-a716-446655440000",  # leading space
+            "",  # empty string
+        ],
+    )
+    def test_invalid_uuids(self, value):
+        assert not self._match(value), f"Expected no match for {value!r}"
+
+
+class TestIPv4Pattern:
+    PAT = _SEMANTIC_PATTERNS["ipv4"]
+
+    def _match(self, value: str) -> bool:
+        import re
+
+        return bool(re.compile(self.PAT).fullmatch(value))
+
+    # --- valid ---
+    @pytest.mark.parametrize(
+        "value",
+        [
+            "0.0.0.0",
+            "255.255.255.255",
+            "192.168.1.1",
+            "10.0.0.1",
+            "172.16.0.1",
+            "1.2.3.4",
+            "100.200.100.200",
+            "249.249.249.249",
+        ],
+    )
+    def test_valid_ipv4(self, value):
+        assert self._match(value), f"Expected match for {value!r}"
+
+    # --- invalid ---
+    @pytest.mark.parametrize(
+        "value",
+        [
+            "256.0.0.0",  # octet out of range
+            "192.168.01.1",  # leading zero rejected
+            "192.168.1.01",  # leading zero rejected (last octet)
+            "00.0.0.0",  # leading zero on first octet
+            "192.168.1",  # only 3 octets
+            "192.168.1.1.1",  # 5 octets
+            "192.168.1.1 ",  # trailing space
+            " 192.168.1.1",  # leading space
+            "abc.def.ghi.jkl",  # letters
+            "999.999.999.999",  # all out of range
+            "",  # empty string
+            "192.168.1.",  # trailing dot
+            ".192.168.1.1",  # leading dot
+        ],
+    )
+    def test_invalid_ipv4(self, value):
+        assert not self._match(value), f"Expected no match for {value!r}"
+
+
+class TestMACAddressPattern:
+    PAT = _SEMANTIC_PATTERNS["mac_address"]
+
+    def _match(self, value: str) -> bool:
+        import re
+
+        return bool(re.compile(self.PAT).fullmatch(value))
+
+    # --- valid ---
+    @pytest.mark.parametrize(
+        "value",
+        [
+            "AA:BB:CC:DD:EE:FF",  # colon, uppercase
+            "aa:bb:cc:dd:ee:ff",  # colon, lowercase
+            "AA-BB-CC-DD-EE-FF",  # hyphen, uppercase
+            "aa-bb-cc-dd-ee-ff",  # hyphen, lowercase
+            "00:1A:2B:3C:4D:5E",  # mixed case, colon
+            "00-1a-2b-3c-4d-5e",  # mixed case, hyphen
+            "FF:FF:FF:FF:FF:FF",  # broadcast
+            "00:00:00:00:00:00",  # zero MAC
+        ],
+    )
+    def test_valid_mac_addresses(self, value):
+        assert self._match(value), f"Expected match for {value!r}"
+
+    # --- invalid ---
+    @pytest.mark.parametrize(
+        "value",
+        [
+            "AA:BB:CC:DD:EE",  # 5 octets only
+            "AA:BB:CC:DD:EE:FF:00",  # 7 octets
+            "GG:BB:CC:DD:EE:FF",  # non-hex octet
+            "AA.BB.CC.DD.EE.FF",  # Cisco dot notation (unsupported)
+            "AABBCCDDEEFF",  # no separator
+            "AA:BB-CC:DD:EE:FF",  # mixed separators
+            "AA:BB:CC:DD:EE:FG",  # non-hex in last octet
+            "AA:BB:CC:DD:EE:FF ",  # trailing space
+            " AA:BB:CC:DD:EE:FF",  # leading space
+            "",  # empty string
+            "AA:BB:CC:DD:EE:F",  # short last octet
+        ],
+    )
+    def test_invalid_mac_addresses(self, value):
+        assert not self._match(value), f"Expected no match for {value!r}"
+
+
+# ===========================================================================
+# 2.  Factory functions – return type and Field attribute wiring
+# ===========================================================================
+
+
+class TestUUIDFactory:
+    def test_returns_field(self):
+        assert isinstance(ar.UUID(), Field)
+
+    def test_semantic_attribute(self):
+        assert ar.UUID().semantic == "uuid"
+
+    def test_dtype_is_string(self):
+        assert ar.UUID().dtype == "string"
+
+    def test_defaults(self):
+        f = ar.UUID()
+        assert f.nullable is True
+        assert f.unique is False
+        assert f.severity == "error"
+        assert f.required_if is None
+
+    def test_nullable_false(self):
+        assert ar.UUID(nullable=False).nullable is False
+
+    def test_unique_true(self):
+        assert ar.UUID(unique=True).unique is True
+
+    def test_severity_warning(self):
+        assert ar.UUID(severity="warning").severity == "warning"
+
+    def test_invalid_severity_raises(self):
+        with pytest.raises(ValueError):
+            ar.UUID(severity="critical")
+
+
+class TestIPv4Factory:
+    def test_returns_field(self):
+        assert isinstance(ar.IPv4(), Field)
+
+    def test_semantic_attribute(self):
+        assert ar.IPv4().semantic == "ipv4"
+
+    def test_dtype_is_string(self):
+        assert ar.IPv4().dtype == "string"
+
+    def test_defaults(self):
+        f = ar.IPv4()
+        assert f.nullable is True
+        assert f.unique is False
+        assert f.severity == "error"
+        assert f.required_if is None
+
+    def test_nullable_false(self):
+        assert ar.IPv4(nullable=False).nullable is False
+
+    def test_unique_true(self):
+        assert ar.IPv4(unique=True).unique is True
+
+    def test_severity_warning(self):
+        assert ar.IPv4(severity="warning").severity == "warning"
+
+    def test_invalid_severity_raises(self):
+        with pytest.raises(ValueError):
+            ar.IPv4(severity="critical")
+
+
+class TestMACAddressFactory:
+    def test_returns_field(self):
+        assert isinstance(ar.MACAddress(), Field)
+
+    def test_semantic_attribute(self):
+        assert ar.MACAddress().semantic == "mac_address"
+
+    def test_dtype_is_string(self):
+        assert ar.MACAddress().dtype == "string"
+
+    def test_defaults(self):
+        f = ar.MACAddress()
+        assert f.nullable is True
+        assert f.unique is False
+        assert f.severity == "error"
+        assert f.required_if is None
+
+    def test_nullable_false(self):
+        assert ar.MACAddress(nullable=False).nullable is False
+
+    def test_unique_true(self):
+        assert ar.MACAddress(unique=True).unique is True
+
+    def test_severity_warning(self):
+        assert ar.MACAddress(severity="warning").severity == "warning"
+
+    def test_invalid_severity_raises(self):
+        with pytest.raises(ValueError):
+            ar.MACAddress(severity="critical")
+
+
+# ===========================================================================
+# 3.  End-to-end validate() – UUID
+# ===========================================================================
+
+
+class TestUUIDValidation:
+    def test_all_valid_passes(self):
+        frame = _frame(
+            {
+                "id": [
+                    "550e8400-e29b-41d4-a716-446655440000",
+                    "A987FBC9-4BED-3078-CF07-9141BA07C9F3",
+                ]
+            }
+        )
+        schema = Schema({"id": ar.UUID()})
+        result = validate(frame, schema)
+        assert result.passed
+
+    def test_missing_hyphens_fails(self):
+        frame = _frame({"id": ["550e8400e29b41d4a716446655440000"]})
+        schema = Schema({"id": ar.UUID()})
+        result = validate(frame, schema)
+        assert not result.passed
+
+    def test_wrong_segment_length_fails(self):
+        frame = _frame({"id": ["550e8400-e29b-41d4-a716-44665544"]})  # last seg short
+        schema = Schema({"id": ar.UUID()})
+        result = validate(frame, schema)
+        assert not result.passed
+
+    def test_non_hex_chars_fails(self):
+        frame = _frame({"id": ["ZZZZZZZZ-e29b-41d4-a716-446655440000"]})
+        schema = Schema({"id": ar.UUID()})
+        result = validate(frame, schema)
+        assert not result.passed
+
+    def test_null_allowed_by_default(self):
+        frame = _frame({"id": [None, "550e8400-e29b-41d4-a716-446655440000"]})
+        schema = Schema({"id": ar.UUID()})
+        result = validate(frame, schema)
+        assert result.passed
+
+    def test_null_rejected_when_not_nullable(self):
+        frame = _frame({"id": [None, "550e8400-e29b-41d4-a716-446655440000"]})
+        schema = Schema({"id": ar.UUID(nullable=False)})
+        result = validate(frame, schema)
+        assert not result.passed
+        assert any(i.rule == "nullable" for i in result.issues)
+
+    def test_duplicates_rejected_when_unique(self):
+        uid = "550e8400-e29b-41d4-a716-446655440000"
+        frame = _frame({"id": [uid, uid]})
+        schema = Schema({"id": ar.UUID(unique=True)})
+        result = validate(frame, schema)
+        assert not result.passed
+        assert any(i.rule == "unique" for i in result.issues)
+
+    def test_severity_warning_propagates(self):
+        frame = _frame({"id": ["not-a-uuid"]})
+        schema = Schema({"id": ar.UUID(severity="warning")})
+        result = validate(frame, schema)
+        assert result.passed  # warnings don't fail
+        assert any(i.severity == "warning" for i in result.issues)
+
+    def test_nil_uuid_passes(self):
+        frame = _frame({"id": ["00000000-0000-0000-0000-000000000000"]})
+        schema = Schema({"id": ar.UUID()})
+        assert validate(frame, schema).passed
+
+    def test_uppercase_hex_passes(self):
+        frame = _frame({"id": ["A987FBC9-4BED-3078-CF07-9141BA07C9F3"]})
+        schema = Schema({"id": ar.UUID()})
+        assert validate(frame, schema).passed
+
+
+# ===========================================================================
+# 4.  End-to-end validate() – IPv4
+# ===========================================================================
+
+
+class TestIPv4Validation:
+    def test_all_valid_passes(self):
+        frame = _frame({"ip": ["0.0.0.0", "192.168.1.1", "255.255.255.255"]})
+        schema = Schema({"ip": ar.IPv4()})
+        assert validate(frame, schema).passed
+
+    def test_octet_out_of_range_fails(self):
+        frame = _frame({"ip": ["256.0.0.0"]})
+        schema = Schema({"ip": ar.IPv4()})
+        result = validate(frame, schema)
+        assert not result.passed
+
+    def test_leading_zero_rejected(self):
+        """192.168.01.1 has a leading zero in the third octet — must fail."""
+        frame = _frame({"ip": ["192.168.01.1"]})
+        schema = Schema({"ip": ar.IPv4()})
+        result = validate(frame, schema)
+        assert not result.passed
+
+    def test_too_few_octets_fails(self):
+        frame = _frame({"ip": ["192.168.1"]})
+        schema = Schema({"ip": ar.IPv4()})
+        result = validate(frame, schema)
+        assert not result.passed
+
+    def test_too_many_octets_fails(self):
+        frame = _frame({"ip": ["192.168.1.1.1"]})
+        schema = Schema({"ip": ar.IPv4()})
+        result = validate(frame, schema)
+        assert not result.passed
+
+    def test_alpha_chars_fail(self):
+        frame = _frame({"ip": ["abc.def.ghi.jkl"]})
+        schema = Schema({"ip": ar.IPv4()})
+        result = validate(frame, schema)
+        assert not result.passed
+
+    def test_null_allowed_by_default(self):
+        frame = _frame({"ip": [None, "10.0.0.1"]})
+        schema = Schema({"ip": ar.IPv4()})
+        assert validate(frame, schema).passed
+
+    def test_null_rejected_when_not_nullable(self):
+        frame = _frame({"ip": [None, "10.0.0.1"]})
+        schema = Schema({"ip": ar.IPv4(nullable=False)})
+        result = validate(frame, schema)
+        assert not result.passed
+        assert any(i.rule == "nullable" for i in result.issues)
+
+    def test_duplicates_rejected_when_unique(self):
+        frame = _frame({"ip": ["10.0.0.1", "10.0.0.1"]})
+        schema = Schema({"ip": ar.IPv4(unique=True)})
+        result = validate(frame, schema)
+        assert not result.passed
+        assert any(i.rule == "unique" for i in result.issues)
+
+    def test_severity_warning_propagates(self):
+        frame = _frame({"ip": ["999.999.999.999"]})
+        schema = Schema({"ip": ar.IPv4(severity="warning")})
+        result = validate(frame, schema)
+        assert result.passed
+        assert any(i.severity == "warning" for i in result.issues)
+
+    def test_boundary_values(self):
+        """Exact boundary octets 0 and 255 are valid; 256 is not."""
+        frame = _frame({"ip": ["0.0.0.0", "255.255.255.255"]})
+        schema = Schema({"ip": ar.IPv4()})
+        assert validate(frame, schema).passed
+
+    def test_leading_zero_first_octet(self):
+        """00.0.0.0 has a leading zero — must fail."""
+        frame = _frame({"ip": ["00.0.0.0"]})
+        schema = Schema({"ip": ar.IPv4()})
+        assert not validate(frame, schema).passed
+
+
+# ===========================================================================
+# 5.  End-to-end validate() – MACAddress
+# ===========================================================================
+
+
+class TestMACAddressValidation:
+    def test_colon_separated_uppercase_passes(self):
+        frame = _frame({"mac": ["AA:BB:CC:DD:EE:FF"]})
+        schema = Schema({"mac": ar.MACAddress()})
+        assert validate(frame, schema).passed
+
+    def test_colon_separated_lowercase_passes(self):
+        frame = _frame({"mac": ["aa:bb:cc:dd:ee:ff"]})
+        schema = Schema({"mac": ar.MACAddress()})
+        assert validate(frame, schema).passed
+
+    def test_hyphen_separated_uppercase_passes(self):
+        frame = _frame({"mac": ["AA-BB-CC-DD-EE-FF"]})
+        schema = Schema({"mac": ar.MACAddress()})
+        assert validate(frame, schema).passed
+
+    def test_hyphen_separated_lowercase_passes(self):
+        frame = _frame({"mac": ["aa-bb-cc-dd-ee-ff"]})
+        schema = Schema({"mac": ar.MACAddress()})
+        assert validate(frame, schema).passed
+
+    def test_broadcast_mac_passes(self):
+        frame = _frame({"mac": ["FF:FF:FF:FF:FF:FF"]})
+        schema = Schema({"mac": ar.MACAddress()})
+        assert validate(frame, schema).passed
+
+    def test_zero_mac_passes(self):
+        frame = _frame({"mac": ["00:00:00:00:00:00"]})
+        schema = Schema({"mac": ar.MACAddress()})
+        assert validate(frame, schema).passed
+
+    def test_five_octets_fails(self):
+        frame = _frame({"mac": ["AA:BB:CC:DD:EE"]})
+        schema = Schema({"mac": ar.MACAddress()})
+        result = validate(frame, schema)
+        assert not result.passed
+
+    def test_seven_octets_fails(self):
+        frame = _frame({"mac": ["AA:BB:CC:DD:EE:FF:00"]})
+        schema = Schema({"mac": ar.MACAddress()})
+        result = validate(frame, schema)
+        assert not result.passed
+
+    def test_non_hex_octet_fails(self):
+        frame = _frame({"mac": ["GG:BB:CC:DD:EE:FF"]})
+        schema = Schema({"mac": ar.MACAddress()})
+        result = validate(frame, schema)
+        assert not result.passed
+
+    def test_no_separator_fails(self):
+        frame = _frame({"mac": ["AABBCCDDEEFF"]})
+        schema = Schema({"mac": ar.MACAddress()})
+        result = validate(frame, schema)
+        assert not result.passed
+
+    def test_mixed_separators_fail(self):
+        """Mixing colons and hyphens is not valid."""
+        frame = _frame({"mac": ["AA:BB-CC:DD:EE:FF"]})
+        schema = Schema({"mac": ar.MACAddress()})
+        result = validate(frame, schema)
+        assert not result.passed
+
+    def test_cisco_dot_format_fails(self):
+        """Dot-delimited (Cisco) format is explicitly unsupported."""
+        frame = _frame({"mac": ["AABB.CCDD.EEFF"]})
+        schema = Schema({"mac": ar.MACAddress()})
+        result = validate(frame, schema)
+        assert not result.passed
+
+    def test_null_allowed_by_default(self):
+        frame = _frame({"mac": [None, "AA:BB:CC:DD:EE:FF"]})
+        schema = Schema({"mac": ar.MACAddress()})
+        assert validate(frame, schema).passed
+
+    def test_null_rejected_when_not_nullable(self):
+        frame = _frame({"mac": [None, "AA:BB:CC:DD:EE:FF"]})
+        schema = Schema({"mac": ar.MACAddress(nullable=False)})
+        result = validate(frame, schema)
+        assert not result.passed
+        assert any(i.rule == "nullable" for i in result.issues)
+
+    def test_duplicates_rejected_when_unique(self):
+        frame = _frame({"mac": ["AA:BB:CC:DD:EE:FF", "AA:BB:CC:DD:EE:FF"]})
+        schema = Schema({"mac": ar.MACAddress(unique=True)})
+        result = validate(frame, schema)
+        assert not result.passed
+        assert any(i.rule == "unique" for i in result.issues)
+
+    def test_severity_warning_propagates(self):
+        frame = _frame({"mac": ["not-a-mac"]})
+        schema = Schema({"mac": ar.MACAddress(severity="warning")})
+        result = validate(frame, schema)
+        assert result.passed
+        assert any(i.severity == "warning" for i in result.issues)
+
+
+# ===========================================================================
+# 6.  Schema JSON round-trip (to_json / from_json)
+# ===========================================================================
+
+
+class TestSemanticValidatorJSONRoundTrip:
+    """Verify that UUID, IPv4, and MACAddress survive Schema serialization."""
+
+    @pytest.mark.parametrize(
+        "factory,semantic",
+        [
+            (ar.UUID, "uuid"),
+            (ar.IPv4, "ipv4"),
+            (ar.MACAddress, "mac_address"),
+        ],
+    )
+    def test_round_trip_preserves_semantic(self, factory, semantic):
+        original = Schema({"col": factory(nullable=False, unique=True)})
+        restored = Schema.from_json(original.to_json())
+        f = restored.fields["col"]
+        assert f.semantic == semantic
+        assert f.nullable is False
+        assert f.unique is True
+
+    @pytest.mark.parametrize(
+        "factory,semantic",
+        [
+            (ar.UUID, "uuid"),
+            (ar.IPv4, "ipv4"),
+            (ar.MACAddress, "mac_address"),
+        ],
+    )
+    def test_restored_schema_validates_correctly(self, factory, semantic):
+        """A schema reloaded from JSON must still reject invalid values."""
+        original = Schema({"col": factory()})
+        restored = Schema.from_json(original.to_json())
+
+        invalid_values = {
+            "uuid": "not-a-uuid",
+            "ipv4": "999.999.999.999",
+            "mac_address": "ZZ:ZZ:ZZ:ZZ:ZZ:ZZ",
+        }
+        frame = _frame({"col": [invalid_values[semantic]]})
+        result = validate(frame, restored)
+        assert not result.passed
