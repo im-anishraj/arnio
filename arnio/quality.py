@@ -9,7 +9,8 @@ import html
 import json
 import math
 import os
-from collections.abc import Sequence
+import re
+from collections.abc import Sequence, Set
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -24,7 +25,7 @@ from .cleaning import (
     validate_columns_exist,
 )
 from .convert import to_pandas
-from .frame import ArFrame
+from .frame import ArFrame, _validate_arframe
 
 
 class CleaningSuggestion(tuple):
@@ -271,6 +272,41 @@ class ColumnProfile:
         }
 
 
+QUALITY_REPORT_COLUMNS = [
+    "name",
+    "dtype",
+    "semantic_type",
+    "null_count",
+    "null_ratio",
+    "unique_count",
+    "unique_ratio",
+    "empty_string_count",
+    "whitespace_count",
+    "suggested_dtype",
+    "email_validity_ratio",
+    "url_validity_ratio",
+    "min",
+    "max",
+    "mean",
+    "std",
+    "warnings",
+    "top_values",
+    "top_values_is_approximate",
+    "top_values_sample_count",
+    "top_values_sample_ratio",
+    "histogram",
+    "q25",
+    "q50",
+    "q75",
+    "q95",
+    "iqr",
+    "outlier_lower_bound",
+    "outlier_upper_bound",
+    "outlier_count",
+    "outlier_ratio",
+]
+
+
 @dataclass(frozen=True)
 class DataQualityReport:
     """Whole-frame data quality report."""
@@ -378,46 +414,79 @@ class DataQualityReport:
             "quality_score": self.quality_score,
             "score_components": self.score_components,
             "columns": {
-                name: column.to_dict(redact_sample_values=redact_sample_values)
-                for name, column in self.columns.items()
+                name: self.columns[name].to_dict(
+                    redact_sample_values=redact_sample_values
+                )
+                for name in sorted(self.columns)
                 if name not in exclude_columns
             },
             "suggestions": [
                 {
                     "step": s[0],
-                    "kwargs": (
-                        {
-                            k: v
-                            for k, v in dict(s[1]).items()
-                            if k not in exclude_columns
-                        }
-                        if s[0] == "cast_types"
-                        else {
-                            key: (
-                                [item for item in value if item not in exclude_columns]
-                                if key in {"subset", "columns"}
-                                and isinstance(value, list)
-                                else (
-                                    {
-                                        col_name: col_type
-                                        for col_name, col_type in value.items()
-                                        if col_name not in exclude_columns
-                                    }
-                                    if key == "cast_types" and isinstance(value, dict)
-                                    else value
-                                )
+                    "kwargs": {
+                        key: (
+                            [item for item in value if item not in exclude_columns]
+                            if key in {"subset", "columns"} and isinstance(value, list)
+                            else (
+                                {
+                                    col_name: col_type
+                                    for col_name, col_type in value.items()
+                                    if col_name not in exclude_columns
+                                }
+                                if key == "cast_types" and isinstance(value, dict)
+                                else value
                             )
-                            for key, value in dict(s[1]).items()
-                        }
-                    ),
+                        )
+                        for key, value in sorted(dict(s[1]).items())
+                        if key not in exclude_columns
+                    },
                     "confidence_score": getattr(s, "confidence_score", None),
                     "confidence_reason": _redact_reason(
                         getattr(s, "confidence_reason", None)
                     ),
                 }
-                for s in self.suggestions
+                for s in sorted(
+                    self.suggestions,
+                    key=lambda item: (
+                        item[0],
+                        json.dumps(item[1], sort_keys=True, default=str),
+                    ),
+                )
             ],
         }
+
+    def score_breakdown(self) -> dict[str, float]:
+        """Return a breakdown of the individual penalty scores."""
+        return {
+            "null_penalty": self.score_components.get("null_penalty", 0.0),
+            "duplicate_penalty": self.score_components.get("duplicate_penalty", 0.0),
+            "type_mismatch_penalty": self.score_components.get(
+                "type_mismatch_penalty", 0.0
+            ),
+            "final_score": self.quality_score,
+        }
+
+    def __repr__(self) -> str:
+        """Deterministic concise representation for terminals and notebooks."""
+
+        column_names = sorted(self.columns)
+
+        preview = ", ".join(column_names[:5])
+
+        if len(column_names) > 5:
+            preview += ", ..."
+
+        return (
+            "DataQualityReport("
+            f"rows={self.row_count}, "
+            f"columns={self.column_count}, "
+            f"duplicates={self.duplicate_rows}, "
+            f"quality_score={self.quality_score:.2f}, "
+            f"column_names=[{preview}]"
+            ")"
+        )
+
+    __str__ = __repr__
 
     def to_json(
         self,
@@ -464,9 +533,35 @@ class DataQualityReport:
         self,
         output: Any | None = None,
         max_suggestions: int | None = None,
+        exclude_columns: list[str] | set[str] | tuple[str, ...] | None = None,
     ) -> str | None:
         """Return a GitHub-friendly Markdown report."""
         max_suggestions = self._validate_max_suggestions(max_suggestions)
+
+        if exclude_columns is None:
+            exclude_columns = set()
+        elif not isinstance(exclude_columns, (list, tuple, set)):
+            raise TypeError("exclude_columns must be a list, tuple, set, or None")
+        else:
+            if not all(isinstance(column, str) for column in exclude_columns):
+                raise TypeError("exclude_columns must contain only string column names")
+            exclude_columns = set(exclude_columns)
+
+        unknown_exclude_columns = sorted(exclude_columns - set(self.columns))
+        if unknown_exclude_columns:
+            available_columns = ", ".join(self.columns) or "<none>"
+            raise KeyError(
+                "Unknown exclude_columns: "
+                f"{unknown_exclude_columns}. Available columns: {available_columns}"
+            )
+
+        def _redact_reason(reason: str | None) -> str | None:
+            if not reason or not exclude_columns:
+                return reason
+            for col in exclude_columns:
+                pattern = rf"\b{re.escape(col)}\b"
+                reason = re.sub(pattern, "[REDACTED]", reason)
+            return reason
 
         lines: list[str] = []
 
@@ -495,6 +590,8 @@ class DataQualityReport:
             lines.append("|---|---|---|---|---|---|---|")
 
             for name in sorted(self.columns):
+                if name in exclude_columns:
+                    continue
                 column = self.columns[name]
 
                 warnings = ", ".join(column.warnings) if column.warnings else "-"
@@ -523,9 +620,33 @@ class DataQualityReport:
                 rendered_suggestions = self.suggestions[:max_suggestions]
 
             for step in rendered_suggestions:
-                kwargs_str = json.dumps(step[1], sort_keys=True, default=str)
+                filtered_kwargs: dict[str, Any] = {}
+                for key, value in sorted(dict(step[1]).items()):
+                    if key in {"subset", "columns"}:
+                        if isinstance(value, Sequence) and not isinstance(value, str):
+                            filtered_kwargs[key] = [
+                                item for item in value if item not in exclude_columns
+                            ]
+                        elif isinstance(value, Set):
+                            filtered_kwargs[key] = sorted(
+                                item for item in value if item not in exclude_columns
+                            )
+                        else:
+                            filtered_kwargs[key] = value
+                    elif key == "cast_types" and isinstance(value, dict):
+                        filtered_kwargs[key] = {
+                            col_name: col_type
+                            for col_name, col_type in value.items()
+                            if col_name not in exclude_columns
+                        }
+                    elif isinstance(value, str) and value in exclude_columns:
+                        filtered_kwargs[key] = "[REDACTED]"
+                    else:
+                        filtered_kwargs[key] = value
+
+                kwargs_str = json.dumps(filtered_kwargs, sort_keys=True, default=str)
                 conf_score = getattr(step, "confidence_score", None)
-                conf_reason = getattr(step, "confidence_reason", None)
+                conf_reason = _redact_reason(getattr(step, "confidence_reason", None))
                 if conf_score is not None and conf_reason is not None:
                     lines.append(
                         f"- `{step[0]}`: `{kwargs_str}` "
@@ -559,11 +680,30 @@ class DataQualityReport:
         file_path: str | None = None,
         output: Any | None = None,
         max_suggestions: int | None = None,
+        *,
+        redact_top_values: bool = False,
+        exclude_columns: list[str] | set[str] | tuple[str, ...] | None = None,
     ) -> str | None:
         """Return a self-contained, dependency-free HTML data quality report.
 
         In notebook environments, ``DataQualityReport`` will render a compact dashboard
         automatically via ``_repr_html_``.
+
+        Parameters
+        ----------
+        file_path : str or path-like, optional
+            Write the HTML to this file in addition to returning it.
+        output : writable text stream, optional
+            If provided, the HTML is written to this stream and None is returned.
+        max_suggestions : int or None, optional
+            Limit the number of cleaning suggestions rendered.
+        redact_top_values : bool, default False
+            When True, every top-values chip label is replaced with ``[REDACTED]``
+            while counts and ratios are preserved.  Use before sharing HTML reports
+            that contain sensitive string columns.
+        exclude_columns : list, set, or tuple of str, optional
+            Column names to omit entirely from the HTML column table.  Unknown
+            names raise ``KeyError``.
         """
         if file_path is not None:
             if isinstance(file_path, bool) or not isinstance(
@@ -572,13 +712,38 @@ class DataQualityReport:
                 raise TypeError(
                     f"file_path must be a string, bytes, or os.PathLike object, got {type(file_path).__name__}"
                 )
+            if file_path == "":
+                raise ValueError("file_path must not be empty")
+
+        redact_top_values = _validate_bool_option(
+            redact_top_values, "redact_top_values"
+        )
+
+        if exclude_columns is None:
+            validated_exclude: set[str] = set()
+        elif not isinstance(exclude_columns, (list, tuple, set)):
+            raise TypeError("exclude_columns must be a list, tuple, set, or None")
+        else:
+            if not all(isinstance(c, str) for c in exclude_columns):
+                raise TypeError("exclude_columns must contain only string column names")
+            validated_exclude = set(exclude_columns)
+
+        if validated_exclude:
+            unknown = sorted(validated_exclude - set(self.columns))
+            if unknown:
+                available = ", ".join(self.columns) or "<none>"
+                raise KeyError(
+                    f"Unknown exclude_columns: {unknown}. Available columns: {available}"
+                )
 
         max_suggestions = self._validate_max_suggestions(max_suggestions)
         html_out = self._to_html_dashboard(
             full_document=True,
             max_suggestions=max_suggestions,
+            redact_top_values=redact_top_values,
+            exclude_columns=validated_exclude,
         )
-        if file_path:
+        if file_path is not None:
             with open(file_path, "w", encoding="utf-8") as f:
                 f.write(html_out)
 
@@ -600,6 +765,8 @@ class DataQualityReport:
         *,
         full_document: bool,
         max_suggestions: int | None = None,
+        redact_top_values: bool = False,
+        exclude_columns: set[str] | None = None,
     ) -> str:
         def e(text: Any) -> str:
             return html.escape(str(text), quote=True)
@@ -685,7 +852,7 @@ class DataQualityReport:
         )
         lines.append("</div>")
         lines.append(
-            f"<div class=\"pill\"><span class=\"muted\">Quality score</span> <span class=\"score {score_class(self.quality_score)}\">{e(f'{self.quality_score:.2f}')}</span></div>"
+            f'<div class="pill"><span class="muted">Quality score</span> <span class="score {score_class(self.quality_score)}">{e(f"{self.quality_score:.2f}")}</span></div>'
         )
         lines.append("</div>")
 
@@ -716,13 +883,17 @@ class DataQualityReport:
                 cls = "warn" if value < 0 else "muted"
                 lines.append("<tr>")
                 lines.append(f"<td><code>{e(key)}</code></td>")
-                lines.append(f"<td class=\"{cls}\">{e(f'{value:+.2f}')}</td>")
+                lines.append(f'<td class="{cls}">{e(f"{value:+.2f}")}</td>')
                 lines.append("</tr>")
             lines.append("</tbody>")
             lines.append("</table>")
             lines.append("</div>")
 
         if self.columns:
+            _excluded = exclude_columns or set()
+            visible_columns = {
+                name: col for name, col in self.columns.items() if name not in _excluded
+            }
             lines.append('<div class="section">')
             lines.append("<h2>Columns</h2>")
             lines.append("<table>")
@@ -733,8 +904,8 @@ class DataQualityReport:
                 "</tr></thead>"
             )
             lines.append("<tbody>")
-            for name in sorted(self.columns):
-                col = self.columns[name]
+            for name in sorted(visible_columns):
+                col = visible_columns[name]
                 null_pct = (col.null_ratio * 100.0) if col.row_count else 0.0
                 unique_pct = (col.unique_ratio * 100.0) if col.row_count else 0.0
                 warnings_str = ", ".join(col.warnings) if col.warnings else "-"
@@ -743,8 +914,9 @@ class DataQualityReport:
                 if col.top_values:
                     top_bits: list[str] = []
                     for v, _c, r in col.top_values[:3]:
+                        label = e("[REDACTED]") if redact_top_values else e(v)
                         top_bits.append(
-                            f"<span class=\"chip\">{e(v)} · {e(f'{r:.0%}')}</span>"
+                            f'<span class="chip">{label} · {e(f"{r:.0%}")}</span>'
                         )
                     top_html = "".join(top_bits)
                 elif col.histogram:
@@ -768,7 +940,7 @@ class DataQualityReport:
                         f'<div style="display:inline-flex;align-items:flex-end;gap:1.5px;'
                         f'height:20px;width:100px;background:#f3f4f6;border-radius:3px;padding:2px;" '
                         f'title="Numeric Distribution Histogram">'
-                        f'{"".join(bars)}'
+                        f"{''.join(bars)}"
                         f"</div>"
                     )
                 else:
@@ -780,19 +952,19 @@ class DataQualityReport:
                 lines.append(f"<td>{e(col.semantic_type)}</td>")
                 lines.append(
                     "<td>"
-                    f"{e(col.null_count)} <span class=\"muted\">({e(f'{null_pct:.1f}%')})</span>"
+                    f'{e(col.null_count)} <span class="muted">({e(f"{null_pct:.1f}%")})</span>'
                     f'<div class="bar"><span style="width:{max(0.0, min(100.0, null_pct)):.2f}%"></span></div>'
                     "</td>"
                 )
                 lines.append(
                     "<td>"
-                    f"{e(col.unique_count)} <span class=\"muted\">({e(f'{unique_pct:.1f}%')})</span>"
+                    f'{e(col.unique_count)} <span class="muted">({e(f"{unique_pct:.1f}%")})</span>'
                     f'<div class="bar"><span style="width:{max(0.0, min(100.0, unique_pct)):.2f}%"></span></div>'
                     "</td>"
                 )
                 lines.append(f"<td>{top_html}</td>")
                 lines.append(
-                    f"<td class=\"{'warn' if col.warnings else 'muted'}\">{e(warnings_str)}</td>"
+                    f'<td class="{"warn" if col.warnings else "muted"}">{e(warnings_str)}</td>'
                 )
                 lines.append(f"<td>{e(suggested)}</td>")
                 lines.append("</tr>")
@@ -865,6 +1037,10 @@ class DataQualityReport:
 
     def to_pandas(self) -> pd.DataFrame:
         """Return one row per column as a pandas DataFrame."""
+        expected_columns = QUALITY_REPORT_COLUMNS
+        if not self.columns:
+            return pd.DataFrame(columns=expected_columns)
+
         return pd.DataFrame(
             [
                 {
@@ -911,7 +1087,8 @@ class DataQualityReport:
                     "histogram": column.histogram,
                 }
                 for column in self.columns.values()
-            ]
+            ],
+            columns=expected_columns,
         )
 
 
@@ -927,24 +1104,35 @@ class ProfileComparison:
     def __post_init__(self) -> None:
         if not isinstance(self.left_profile, DataQualityReport):
             raise TypeError("left_profile must be an instance of DataQualityReport")
+
         if not isinstance(self.right_profile, DataQualityReport):
             raise TypeError("right_profile must be an instance of DataQualityReport")
 
         if not isinstance(self.drift_report, dict):
-            raise TypeError("drift_report must be a dictionary")
-        for key, val in self.drift_report.items():
+            raise TypeError("drift_report must be a nested dictionary of dict")
+
+        for key, value in self.drift_report.items():
             if not isinstance(key, str):
                 raise TypeError("drift_report keys must be strings")
-            if not isinstance(val, dict):
+
+            if not isinstance(value, dict):
                 raise TypeError("drift_report must be a nested dictionary of dict")
 
         if not isinstance(self.status_counts, dict):
-            raise TypeError("status_counts must be a dictionary")
-        for key, val in self.status_counts.items():
+            raise TypeError("status_counts must be a dict")
+
+        for key, value in self.status_counts.items():
             if not isinstance(key, str):
                 raise TypeError("status_counts keys must be strings")
-            if not isinstance(val, int):
+
+            if isinstance(value, bool):
+                raise TypeError("status_counts values must not be booleans")
+
+            if not isinstance(value, int):
                 raise TypeError("status_counts values must be integers")
+
+            if value < 0:
+                raise ValueError("status_counts values must be non-negative integers")
 
     def to_dict(
         self,
@@ -1021,8 +1209,29 @@ class ProfileComparison:
         output.write(json_out)
         return None
 
-    def to_markdown(self, output: Any | None = None) -> str | None:
+    def to_markdown(
+        self,
+        output: Any | None = None,
+        exclude_columns: list[str] | set[str] | tuple[str, ...] | None = None,
+    ) -> str | None:
         """Return a GitHub-friendly Markdown drift report."""
+        if exclude_columns is None:
+            validated_exclude: set[str] = set()
+        elif not isinstance(exclude_columns, (list, tuple, set)):
+            raise TypeError("exclude_columns must be a list, tuple, set, or None")
+        else:
+            if not all(isinstance(column, str) for column in exclude_columns):
+                raise TypeError("exclude_columns must contain only string column names")
+            validated_exclude = set(exclude_columns)
+
+        unknown_exclude_columns = sorted(validated_exclude - set(self.drift_report))
+        if unknown_exclude_columns:
+            available_columns = ", ".join(self.drift_report) or "<none>"
+            raise KeyError(
+                "Unknown exclude_columns: "
+                f"{unknown_exclude_columns}. Available columns: {available_columns}"
+            )
+
         lines: list[str] = ["# Profile Comparison Report", ""]
 
         status_summary = ", ".join(
@@ -1037,6 +1246,8 @@ class ProfileComparison:
             lines.append("| Column | Status | Changes | Reasons |")
             lines.append("|---|---|---|---|")
             for name, entry in sorted(self.drift_report.items()):
+                if name in validated_exclude:
+                    continue
                 status = entry.get("status", "-")
                 changes = ", ".join(entry.get("changes", {}).keys()) or "-"
                 reasons = "; ".join(entry.get("reasons", [])) or "-"
@@ -1072,6 +1283,25 @@ class QualityGateIssue:
     threshold: Any = None
     delta: float | None = None
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.metric, str):
+            raise TypeError(f"metric must be a str, got {type(self.metric).__name__}")
+        if not self.metric.strip():
+            raise ValueError("metric must be a non-empty string")
+        if not isinstance(self.message, str):
+            raise TypeError(f"message must be a str, got {type(self.message).__name__}")
+        if not self.message.strip():
+            raise ValueError("message must be a non-empty string")
+        if self.column is not None and not isinstance(self.column, str):
+            raise TypeError(
+                f"column must be a str or None, got {type(self.column).__name__}"
+            )
+        if self.delta is not None:
+            if isinstance(self.delta, bool) or not isinstance(self.delta, (int, float)):
+                raise TypeError(
+                    f"delta must be a float, integer, or None, got {type(self.delta).__name__}"
+                )
+
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-friendly dictionary representation."""
         return {
@@ -1093,6 +1323,29 @@ class QualityGateResult:
     current_profile: DataQualityReport
     issues: list[QualityGateIssue]
     thresholds: dict[str, Any]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.baseline_profile, DataQualityReport):
+            raise TypeError(
+                f"baseline_profile must be a DataQualityReport instance, got {type(self.baseline_profile).__name__}"
+            )
+        if not isinstance(self.current_profile, DataQualityReport):
+            raise TypeError(
+                f"current_profile must be a DataQualityReport instance, got {type(self.current_profile).__name__}"
+            )
+        if not isinstance(self.issues, list):
+            raise TypeError(
+                f"issues must be a list of QualityGateIssue instances, got {type(self.issues).__name__}"
+            )
+        for i, issue in enumerate(self.issues):
+            if not isinstance(issue, QualityGateIssue):
+                raise TypeError(
+                    f"issues[{i}] must be a QualityGateIssue instance, got {type(issue).__name__}"
+                )
+        if not isinstance(self.thresholds, dict):
+            raise TypeError(
+                f"thresholds must be a dict, got {type(self.thresholds).__name__}"
+            )
 
     @property
     def passed(self) -> bool:
@@ -1230,10 +1483,7 @@ def profile(
     >>> report = ar.profile(frame, sample_size=3)
     >>> report.summary()
     """
-    if not isinstance(frame, ArFrame):
-        raise TypeError(
-            f"profile() expects an ArFrame, got {type(frame).__name__}. Use arnio.from_pandas() first."
-        )
+    _validate_arframe(frame)
 
     if not isinstance(sample_size, int) or isinstance(sample_size, bool):
         raise TypeError("sample_size must be an integer")
@@ -2006,6 +2256,31 @@ class CleanStepRecord:
     reason: str
     """Human-readable explanation of why this step was selected."""
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.step, str):
+            raise TypeError(
+                f"CleanStepRecord.step must be a str, got {type(self.step).__name__}"
+            )
+        if not isinstance(self.reason, str):
+            raise TypeError(
+                f"CleanStepRecord.reason must be a str, got {type(self.reason).__name__}"
+            )
+        if not isinstance(self.kwargs, dict):
+            raise TypeError(
+                f"CleanStepRecord.kwargs must be a dict, got {type(self.kwargs).__name__}"
+            )
+        for name, value in (
+            ("rows_before", self.rows_before),
+            ("rows_after", self.rows_after),
+            ("rows_removed", self.rows_removed),
+        ):
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise TypeError(
+                    f"CleanStepRecord.{name} must be an int, got {type(value).__name__}"
+                )
+            if value < 0:
+                raise ValueError(f"CleanStepRecord.{name} cannot be negative: {value}")
+
 
 @dataclass(frozen=True)
 class CleanExplanation:
@@ -2027,6 +2302,33 @@ class CleanExplanation:
     steps: list[CleanStepRecord]
     """Ordered list of steps that were actually applied."""
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.mode, str):
+            raise TypeError(
+                f"CleanExplanation.mode must be a str, got {type(self.mode).__name__}"
+            )
+        for name, value in (
+            ("rows_before", self.rows_before),
+            ("rows_after", self.rows_after),
+            ("rows_removed", self.rows_removed),
+        ):
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise TypeError(
+                    f"CleanExplanation.{name} must be an int, got {type(value).__name__}"
+                )
+            if value < 0:
+                raise ValueError(f"CleanExplanation.{name} cannot be negative: {value}")
+        if not isinstance(self.steps, list):
+            raise TypeError(
+                f"CleanExplanation.steps must be a list, got {type(self.steps).__name__}"
+            )
+        for i, step in enumerate(self.steps):
+            if not isinstance(step, CleanStepRecord):
+                raise TypeError(
+                    f"CleanExplanation.steps[{i}] must be a CleanStepRecord, "
+                    f"got {type(step).__name__}"
+                )
+
     def __str__(self) -> str:
         lines: list[str] = [
             f"CleanExplanation(mode={self.mode!r})",
@@ -2043,6 +2345,64 @@ class CleanExplanation:
         return "\n".join(lines)
 
 
+def _validate_confirmed_casts(
+    confirmed_casts: dict[str, str] | None,
+) -> dict[str, str] | None:
+    """Validate and copy an explicit auto_clean cast confirmation mapping."""
+    if confirmed_casts is None:
+        return None
+    if not isinstance(confirmed_casts, dict):
+        raise TypeError("confirmed_casts must be a dict[str, str] or None")
+
+    normalized: dict[str, str] = {}
+    for column, dtype in confirmed_casts.items():
+        if not isinstance(column, str):
+            raise TypeError(
+                "confirmed_casts keys must be str column names, "
+                f"got {type(column).__name__}"
+            )
+        if not isinstance(dtype, str):
+            raise TypeError(
+                "confirmed_casts values must be str dtype names, "
+                f"got {type(dtype).__name__}"
+            )
+        normalized[column] = dtype
+    return normalized
+
+
+def _has_duplicate_rows(frame: ArFrame) -> bool:
+    """Return whether a frame contains any full-row duplicates."""
+    if frame.shape[0] <= 1:
+        return False
+    return bool(to_pandas(frame).duplicated().any())
+
+
+def _drop_strict_duplicates_introduced_by_cleaning(
+    result: ArFrame,
+    step_records: list[CleanStepRecord],
+) -> ArFrame:
+    if any(record.step == "drop_duplicates" for record in step_records):
+        return result
+    if not _has_duplicate_rows(result):
+        return result
+
+    rows_before_step = result.shape[0]
+    kwargs = {"keep": "first"}
+    result = drop_duplicates(result, **kwargs)
+    rows_after_step = result.shape[0]
+    step_records.append(
+        CleanStepRecord(
+            step="drop_duplicates",
+            kwargs=kwargs,
+            rows_before=rows_before_step,
+            rows_after=rows_after_step,
+            rows_removed=rows_before_step - rows_after_step,
+            reason="Remove duplicate rows introduced by earlier strict-mode normalization steps.",
+        )
+    )
+    return result
+
+
 def auto_clean(
     frame: ArFrame,
     *,
@@ -2050,6 +2410,7 @@ def auto_clean(
     return_report: bool = False,
     dry_run: bool = False,
     allow_lossy_casts: bool = False,
+    confirmed_casts: dict[str, str] | None = None,
     explain: bool = False,
 ) -> (
     ArFrame
@@ -2072,7 +2433,13 @@ def auto_clean(
     dry_run : bool, default False
         Return the proposed pre-cleaning report without mutating the frame.
     allow_lossy_casts : bool, default False
-        Required before strict mode applies suggested type casts.
+        Required before strict mode applies suggested type casts. Type casts
+        also require *confirmed_casts* so callers explicitly confirm the exact
+        mapping they previewed.
+    confirmed_casts : dict[str, str] or None, default None
+        Exact cast mapping to apply in strict mode. Use ``dry_run=True`` or
+        ``suggest_cleaning()`` to inspect the proposed ``cast_types`` mapping,
+        then pass the same mapping here with ``allow_lossy_casts=True``.
     explain : bool, default False
         When ``True``, return a :class:`CleanExplanation` object that records
         which steps ran, before/after row counts for each step, and why each
@@ -2096,17 +2463,15 @@ def auto_clean(
     --------
     >>> clean = ar.auto_clean(frame)
     >>> report = ar.auto_clean(frame, mode="strict", dry_run=True)
-    >>> clean = ar.auto_clean(frame, mode="strict", allow_lossy_casts=True)
+    >>> casts = dict(report.suggestions)["cast_types"]
+    >>> clean = ar.auto_clean(frame, mode="strict", allow_lossy_casts=True, confirmed_casts=casts)
     >>> clean, report = ar.auto_clean(frame, mode="strict", return_report=True)
     >>> clean, explanation = ar.auto_clean(frame, explain=True)
     >>> print(explanation)
     """
-    if not isinstance(frame, ArFrame):
-        raise TypeError(
-            f"auto_clean() expects an ArFrame, got {type(frame).__name__}. Use arnio.from_pandas() first."
-        )
+    _validate_arframe(frame)
 
-    if mode not in {"safe", "strict"}:
+    if not isinstance(mode, str) or mode not in {"safe", "strict"}:
         raise ValueError("mode must be 'safe' or 'strict'")
 
     if not isinstance(return_report, bool):
@@ -2115,6 +2480,7 @@ def auto_clean(
         raise TypeError("dry_run must be a bool")
     if not isinstance(allow_lossy_casts, bool):
         raise TypeError("allow_lossy_casts must be a bool")
+    confirmed_casts_map = _validate_confirmed_casts(confirmed_casts)
     if not isinstance(explain, bool):
         raise TypeError("explain must be a bool")
 
@@ -2152,7 +2518,20 @@ def auto_clean(
                 raise ValueError(
                     "auto_clean(mode='strict') would apply type casts. "
                     f"Proposed mapping: {kwargs}. Run with dry_run=True to inspect "
-                    "the report, or pass allow_lossy_casts=True to apply them."
+                    "the report, then pass allow_lossy_casts=True and "
+                    "confirmed_casts=<proposed mapping> to apply them."
+                )
+            if confirmed_casts_map is None:
+                raise ValueError(
+                    "auto_clean(mode='strict') requires confirmed_casts before "
+                    "applying type casts. Run with dry_run=True to inspect the "
+                    f"proposed mapping, then pass confirmed_casts={kwargs!r}."
+                )
+            if confirmed_casts_map != kwargs:
+                raise ValueError(
+                    "confirmed_casts must match the proposed cast mapping exactly. "
+                    f"Proposed mapping: {kwargs}. Confirmed mapping: "
+                    f"{confirmed_casts_map}."
                 )
             result = cast_types(result, kwargs)
         elif step == "drop_duplicates":
@@ -2170,6 +2549,12 @@ def auto_clean(
                 rows_removed=rows_before_step - rows_after_step,
                 reason=reason,
             )
+        )
+
+    if mode == "strict":
+        result = _drop_strict_duplicates_introduced_by_cleaning(
+            result,
+            step_records,
         )
 
     rows_after_all = result.shape[0]
@@ -2250,30 +2635,28 @@ def _profile_column(
         numeric = pd.to_numeric(series, errors="coerce")
         numeric_non_null = numeric.dropna()
         if len(numeric_non_null):
-            min_value = numeric_non_null.min()
-            max_value = numeric_non_null.max()
-            mean = float(numeric_non_null.mean())
-            std = float(numeric_non_null.std(ddof=0))
-            quantiles = numeric_non_null.quantile([0.25, 0.50, 0.75, 0.95])
-            q25 = round(float(quantiles.loc[0.25]), 4)
-            q50 = round(float(quantiles.loc[0.50]), 4)
-            q75 = round(float(quantiles.loc[0.75]), 4)
-            q95 = round(float(quantiles.loc[0.95]), 4)
-            (
-                outlier_count,
-                outlier_ratio,
-                iqr,
-                outlier_lower_bound,
-                outlier_upper_bound,
-            ) = _iqr_outlier_summary(
-                numeric_non_null,
-                q25=q25,
-                q75=q75,
-            )
-
-            # Calculate histogram
             finite_values = numeric_non_null[np.isfinite(numeric_non_null)]
             if len(finite_values):
+                min_value = finite_values.min()
+                max_value = finite_values.max()
+                mean = float(finite_values.mean())
+                std = float(finite_values.std(ddof=0))
+                quantiles = finite_values.quantile([0.25, 0.50, 0.75, 0.95])
+                q25 = round(float(quantiles.loc[0.25]), 4)
+                q50 = round(float(quantiles.loc[0.50]), 4)
+                q75 = round(float(quantiles.loc[0.75]), 4)
+                q95 = round(float(quantiles.loc[0.95]), 4)
+                (
+                    outlier_count,
+                    outlier_ratio,
+                    iqr,
+                    outlier_lower_bound,
+                    outlier_upper_bound,
+                ) = _iqr_outlier_summary(
+                    finite_values,
+                    q25=q25,
+                    q75=q75,
+                )
                 counts, bin_edges = np.histogram(finite_values.to_numpy(), bins=10)
                 total = int(counts.sum())
                 histogram = [
@@ -2286,6 +2669,10 @@ def _profile_column(
                     for i in range(len(counts))
                 ]
             else:
+                min_value = max_value = mean = std = None
+                q25 = q50 = q75 = q95 = None
+                iqr = outlier_count = outlier_ratio = None
+                outlier_lower_bound = outlier_upper_bound = None
                 histogram = None
     elif len(non_null) and (
         dtype == "string" or pd.api.types.is_string_dtype(series.dtype)
@@ -2421,10 +2808,13 @@ def _suggest_column_dtype(series: pd.Series, dtype: str) -> str | None:
         return "bool"
 
     numeric = pd.to_numeric(values, errors="coerce")
+
     if numeric.notna().all():
         if values.str.fullmatch(r"[+-]?\d+").all():
             return "int64"
-        return "float64"
+
+        if np.isfinite(numeric).all():
+            return "float64"
     return None
 
 
@@ -2521,11 +2911,19 @@ def _ratio(part: int, total: int) -> float:
 
 
 def _clean_scalar(value: Any) -> Any:
-    """Convert NaN and numpy scalar values to JSON-safe Python types."""
+    """Convert NaN/inf/-inf and numpy scalar values to JSON-safe Python types.
+
+    Non-finite floats (NaN, inf, -inf) are mapped to ``None`` so that
+    ``json.dumps(..., allow_nan=False)`` never raises on report output.
+    This covers sample_values, top_values, min/max, histogram bucket edges,
+    and any other scalar path that passes through to_dict().
+    """
     if pd.isna(value):
         return None
     if hasattr(value, "item"):
-        return value.item()
+        value = value.item()
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
     return value
 
 

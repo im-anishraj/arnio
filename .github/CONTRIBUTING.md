@@ -38,6 +38,31 @@ Or run the commands manually — each `make` target is just one or two commands 
 
 ---
 
+## Security
+
+We take the security of Arnio and its dependencies seriously.
+
+### Dependency Auditing
+We use `pip-audit` to scan our dependencies for known vulnerabilities. This happens automatically in two ways:
+1. **Weekly Audit**: A full scan runs every Monday morning.
+2. **Pull Request Review**: Every PR that modifies `pyproject.toml` is scanned for new vulnerabilities.
+
+### Local Auditing
+You can run the audit locally to check for issues before submitting a PR:
+```bash
+pip install pip-audit
+pip-audit
+```
+
+### What to do if an audit fails
+If the CI audit fails:
+1. Check the `audit-results.json` artifact in the GitHub Action run.
+2. Verify if the vulnerability affects our usage of the package.
+3. Update the dependency to a secure version in `pyproject.toml` if a fix is available.
+4. If no fix is available or it's a false positive, discuss it in the PR or an issue.
+
+---
+
 ## Contributor Glossary
 
 - **ArFrame**: Arnio's internal table object. It stores data in a C++-backed, column-oriented format before you convert it to a pandas DataFrame.
@@ -73,6 +98,33 @@ def remove_special_chars(df, subset=None):
 ar.register_step("remove_special_chars", remove_special_chars)
 ```
 
+### Calling a step with custom parameters
+
+Every step must use tuple syntax — always wrap the step name in a tuple, even when no parameters are needed.
+```python
+import arnio as ar
+
+def remove_special_chars(df, columns=None):
+    cols = columns or df.select_dtypes("object").columns
+    for col in cols:
+        df[col] = df[col].str.replace(r"[^a-zA-Z0-9\s]", "", regex=True)
+    return df
+
+ar.register_step("remove_special_chars", remove_special_chars)
+
+frame = ar.read_csv("data.csv")
+
+# Without parameters — wrap step name in a single-element tuple
+result = ar.pipeline(frame, [
+    ("remove_special_chars",)
+])
+
+# With custom parameters — cleans only specified columns
+result = ar.pipeline(frame, [
+    ("remove_special_chars", {"columns": ["name", "city"]})
+])
+```
+
 ### Contribution Testing Standard
 When adding new pipeline steps (like the Python registry example above), you must write tests that mirror the round-trip verification pattern.
 
@@ -101,7 +153,7 @@ def test_remove_special_chars(sample_csv):
 4. If you've added code that should be tested, add tests.
 5. If you've changed public behavior, update documentation or examples.
 6. Ensure the test suite passes (`make test`).
-7. Ensure your code passes linting (`make lint`). This is a required pre-PR step.
+7. Ensure your code passes linting (`make lint`). This checks docs encoding, formatting (`black`, `ruff`), types (`mypy`), and C++ styling (`clang-format`). This is a required pre-PR step.
 8. Open the pull request and link the issue with `Fixes #issue-number` when complete.
 9. Ensure your PR title follows **Conventional Commits**.
 
@@ -118,6 +170,7 @@ aligned. See [STUBS_UPDATE.md](../STUBS_UPDATE.md) for the short checklist.
 - Do not edit generated files, build output, cache folders, or local logs.
 - Be patient during review. Maintainers may ask for tests, edge cases, or a narrower scope.
 - If you stop working on an assigned issue, please comment so it can be reassigned.
+- If you need more time, comment within 3 days of assignment.
 
 ### Commit Message Convention
 We use an automated release system that relies on [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/). Your PR title must use one of the following prefixes:
@@ -129,4 +182,3 @@ We use an automated release system that relies on [Conventional Commits](https:/
 This allows our CI to automatically generate changelogs and bump version numbers.
 
 We use `black`, `ruff`, and `clang-format` to format our code. `pre-commit` will run these automatically before each commit if installed.
-

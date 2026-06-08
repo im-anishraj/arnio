@@ -3,12 +3,19 @@
 import io
 import json
 import math
+import warnings
+from typing import Any
 
 import pandas as pd
 import pytest
 
 import arnio as ar
+from arnio._core import _DType, _Frame
+from arnio.frame import ArFrame
 from arnio.quality import (
+    QUALITY_REPORT_COLUMNS,
+    CleaningSuggestion,
+    DataQualityReport,
     _validate_gate_bool,
     _validate_gate_ratio_threshold,
     _validate_gate_threshold,
@@ -43,7 +50,60 @@ def test_report_summary_and_pandas_output(csv_with_whitespace):
     assert summary["rows"] == 3
     assert summary["columns_with_whitespace"] == ["name", "city"]
     assert isinstance(df, pd.DataFrame)
+    assert df.columns.tolist() == QUALITY_REPORT_COLUMNS
     assert set(df["name"]) == {"name", "city"}
+
+
+def test_report_to_pandas_uses_stable_columns_for_empty_report():
+    report = ar.DataQualityReport(
+        row_count=0,
+        column_count=0,
+        memory_usage=0,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+        suggestions=[],
+    )
+
+    df = report.to_pandas()
+
+    assert df.columns.tolist() == QUALITY_REPORT_COLUMNS
+    assert df.shape == (0, len(QUALITY_REPORT_COLUMNS))
+
+
+def test_report_to_pandas_uses_stable_columns_when_all_columns_are_excluded():
+    frame = ar.from_pandas(pd.DataFrame({"id": [1, 2], "name": ["Alice", "Bob"]}))
+
+    report = ar.profile(frame, exclude_columns=["id", "name"])
+    df = report.to_pandas()
+
+    assert report.column_count == 0
+    assert report.columns == {}
+    assert df.columns.tolist() == QUALITY_REPORT_COLUMNS
+    assert df.shape == (0, len(QUALITY_REPORT_COLUMNS))
+
+
+def test_report_to_pandas_preserves_columns_and_values_for_normal_reports():
+    report = ar.profile(
+        ar.from_pandas(pd.DataFrame({"name": ["Alice", "Bob"], "score": [1.0, 2.0]}))
+    )
+
+    df = report.to_pandas()
+
+    assert df.columns.tolist() == QUALITY_REPORT_COLUMNS
+    assert df["name"].tolist() == ["name", "score"]
+
+    name_row = df.loc[df["name"] == "name"].iloc[0]
+    score_row = df.loc[df["name"] == "score"].iloc[0]
+
+    assert name_row["name"] == "name"
+    assert name_row["null_count"] == 0
+    assert pd.isna(name_row["q25"])
+    assert score_row["name"] == "score"
+    assert score_row["null_count"] == 0
+    assert score_row["min"] == 1.0
+    assert score_row["max"] == 2.0
+    assert pd.notna(score_row["q25"])
 
 
 def test_profile_numeric_quantiles():
@@ -304,6 +364,53 @@ def test_compare_profiles_handles_single_column_profiles():
     assert comparison.status_counts == {"ok": 1, "warning": 0, "changed": 0}
 
 
+def test_profile_comparison_accepts_valid_status_counts():
+    base = ar.DataQualityReport(0, 0, 0, 0, 0.0, {})
+
+    comparison = ar.ProfileComparison(
+        base,
+        base,
+        {},
+        {"ok": 1, "warning": 2, "changed": 0},
+    )
+
+    assert comparison.status_counts == {
+        "ok": 1,
+        "warning": 2,
+        "changed": 0,
+    }
+
+
+def test_profile_comparison_rejects_bool_status_counts():
+    base = ar.DataQualityReport(0, 0, 0, 0, 0.0, {})
+
+    with pytest.raises(
+        TypeError,
+        match="status_counts values must not be booleans",
+    ):
+        ar.ProfileComparison(
+            base,
+            base,
+            {},
+            {"passed": True},
+        )
+
+
+def test_profile_comparison_rejects_negative_status_counts():
+    base = ar.DataQualityReport(0, 0, 0, 0, 0.0, {})
+
+    with pytest.raises(
+        ValueError,
+        match="status_counts values must be non-negative integers",
+    ):
+        ar.ProfileComparison(
+            base,
+            base,
+            {},
+            {"failed": -1},
+        )
+
+
 def test_check_quality_gates_passes_identical_profiles():
     frame = ar.from_pandas(
         pd.DataFrame({"score": [10.0, 11.0, 12.0], "city": ["a", "b", "a"]})
@@ -538,11 +645,73 @@ def test_auto_clean_strict_applies_exact_deduplication(tmp_path):
     assert clean.shape == (1, 1)
 
 
+def test_auto_clean_strict_drops_duplicates_created_by_whitespace():
+    frame = ar.from_pandas(pd.DataFrame({"name": ["Alice", " Alice "]}))
+
+    clean = ar.auto_clean(frame, mode="strict")
+    result = ar.to_pandas(clean)
+
+    assert clean.shape == (1, 1)
+    assert list(result["name"]) == ["Alice"]
+
+
+def test_auto_clean_strict_drops_duplicates_created_by_casts():
+    frame = ar.from_pandas(pd.DataFrame({"amount": ["1", "1.0"]}))
+    report = ar.auto_clean(frame, mode="strict", dry_run=True)
+
+    clean = ar.auto_clean(
+        frame,
+        mode="strict",
+        allow_lossy_casts=True,
+        confirmed_casts=dict(report.suggestions)["cast_types"],
+    )
+    result = ar.to_pandas(clean)
+
+    assert clean.shape == (1, 1)
+    assert list(result["amount"]) == [1.0]
+    assert pd.api.types.is_float_dtype(result["amount"])
+
+
 def test_auto_clean_strict_casts_require_explicit_opt_in():
     frame = ar.from_pandas(pd.DataFrame({"active": ["true", "false"]}))
 
     with pytest.raises(ValueError, match="would apply type casts"):
         ar.auto_clean(frame, mode="strict")
+
+
+def test_auto_clean_strict_casts_require_preview_confirmation():
+    frame = ar.from_pandas(pd.DataFrame({"active": ["true", "false"]}))
+
+    with pytest.raises(ValueError, match="requires confirmed_casts"):
+        ar.auto_clean(frame, mode="strict", allow_lossy_casts=True)
+
+
+def test_auto_clean_strict_rejects_mismatched_cast_confirmation():
+    frame = ar.from_pandas(pd.DataFrame({"active": ["true", "false"]}))
+
+    with pytest.raises(ValueError, match="must match the proposed cast mapping"):
+        ar.auto_clean(
+            frame,
+            mode="strict",
+            allow_lossy_casts=True,
+            confirmed_casts={"active": "int64"},
+        )
+
+
+@pytest.mark.parametrize(
+    "confirmed_casts",
+    [
+        [("active", "bool")],
+        {1: "bool"},
+        {"active": 1},
+    ],
+    ids=["list", "non-string-key", "non-string-value"],
+)
+def test_auto_clean_rejects_invalid_confirmed_casts(confirmed_casts):
+    frame = ar.from_pandas(pd.DataFrame({"active": ["true", "false"]}))
+
+    with pytest.raises(TypeError, match="confirmed_casts"):
+        ar.auto_clean(frame, mode="strict", confirmed_casts=confirmed_casts)
 
 
 def test_exclude_columns_prevents_leakage_in_json():
@@ -565,6 +734,23 @@ def test_auto_clean_dry_run_returns_report_without_mutating():
     assert isinstance(report, ar.DataQualityReport)
     assert ("cast_types", {"active": "bool"}) in report.suggestions
     assert frame.dtypes["active"] == "string"
+
+
+def test_auto_clean_strict_casts_after_explicit_preview_confirmation():
+    frame = ar.from_pandas(pd.DataFrame({"active": ["true", "false"]}))
+    report = ar.auto_clean(frame, mode="strict", dry_run=True)
+    confirmed_casts = dict(report.suggestions)["cast_types"]
+
+    clean = ar.auto_clean(
+        frame,
+        mode="strict",
+        allow_lossy_casts=True,
+        confirmed_casts=confirmed_casts,
+    )
+    result = ar.to_pandas(clean)
+
+    assert list(result["active"]) == [True, False]
+    assert pd.api.types.is_bool_dtype(result["active"])
 
 
 def test_auto_clean_dry_run_with_return_report_raises():
@@ -631,8 +817,14 @@ def test_auto_clean_strict_casts_ambiguous_numeric_strings():
     with pytest.raises(ValueError, match="would apply type casts"):
         ar.auto_clean(frame, mode="strict")
 
-    # Apply strict mode with allow_lossy_casts
-    clean = ar.auto_clean(frame, mode="strict", allow_lossy_casts=True)
+    # Apply strict mode after explicitly confirming the previewed cast mapping.
+    report = ar.auto_clean(frame, mode="strict", dry_run=True)
+    clean = ar.auto_clean(
+        frame,
+        mode="strict",
+        allow_lossy_casts=True,
+        confirmed_casts=dict(report.suggestions)["cast_types"],
+    )
     result = ar.to_pandas(clean)
 
     # "code" is cast to int64, losing leading zeros
@@ -1019,11 +1211,28 @@ def test_identifier_numeric_cast_prevention():
     assert "customer_id" not in suggestions
     assert "zip_code" not in suggestions
 
-    cleaned = ar.auto_clean(frame, mode="strict", allow_lossy_casts=True)
+    report = ar.auto_clean(frame, mode="strict", dry_run=True)
+    cleaned = ar.auto_clean(
+        frame,
+        mode="strict",
+        allow_lossy_casts=True,
+        confirmed_casts=dict(report.suggestions)["cast_types"],
+    )
     result = ar.to_pandas(cleaned)
     assert list(result["id"]) == ["001", "002", "003"]
     assert list(result["customer_id"]) == ["00123", "00456", "00789"]
     assert list(result["zip_code"]) == ["01234", "02345", "03456"]
+
+
+def test_auto_clean_strict_keeps_protected_identifier_values_distinct():
+    frame = ar.from_pandas(pd.DataFrame({"user_id": ["001", "1"]}))
+
+    clean = ar.auto_clean(frame, mode="strict", allow_lossy_casts=True)
+    result = ar.to_pandas(clean)
+
+    assert clean.shape == (2, 1)
+    assert list(result["user_id"]) == ["001", "1"]
+    assert pd.api.types.is_string_dtype(result["user_id"])
 
 
 def test_profile_detects_near_constant_column():
@@ -1133,7 +1342,7 @@ def test_profile_exclude_columns_default_behavior(sample_csv):
 def test_profile_exclude_columns_valid_exclusion(tmp_path):
     path = tmp_path / "profile_exclude.csv"
     path.write_text(
-        "id,status,raw_payload\n" "1,active,{a}\n" "2,inactive,{b}\n" "3,active,{c}\n",
+        "id,status,raw_payload\n1,active,{a}\n2,inactive,{b}\n3,active,{c}\n",
         encoding="utf-8",
     )
 
@@ -1224,7 +1433,7 @@ def test_profile_exclude_columns_accepts_empty_list(sample_csv):
 def test_profile_exclude_columns_scopes_report_metrics_and_suggestions(tmp_path):
     path = tmp_path / "profile_scope.csv"
     path.write_text(
-        "id,score\n" "1,10\n" "1,10\n" "2,20\n",
+        "id,score\n1,10\n1,10\n2,20\n",
         encoding="utf-8",
     )
 
@@ -1261,6 +1470,47 @@ def test_decimal_looking_strings_suggest_float64_not_int64():
             suggestions.update(kwargs)
 
     assert suggestions["price"] == "float64"
+
+
+def test_finite_numeric_strings_suggest_float64():
+    frame = ar.from_pandas(pd.DataFrame({"x": ["1.5", "2.0", "3.14"]}))
+
+    report = ar.profile(frame)
+
+    assert report.columns["x"].suggested_dtype == "float64"
+
+
+@pytest.mark.parametrize(
+    "values",
+    [
+        ["inf", "2.0"],
+        ["-inf", "2.0"],
+        ["Infinity", "2.0"],
+    ],
+)
+def test_non_finite_numeric_strings_do_not_suggest_float64(values):
+    frame = ar.from_pandas(pd.DataFrame({"x": values}))
+
+    report = ar.profile(frame)
+
+    assert report.columns["x"].suggested_dtype is None
+
+
+def test_auto_clean_strict_float64_suggestions_are_executable():
+    frame = ar.from_pandas(pd.DataFrame({"x": ["1.5", "2.0"]}))
+    report = ar.auto_clean(frame, mode="strict", dry_run=True)
+
+    clean = ar.auto_clean(
+        frame,
+        mode="strict",
+        allow_lossy_casts=True,
+        confirmed_casts=dict(report.suggestions)["cast_types"],
+    )
+
+    result = ar.to_pandas(clean)
+
+    assert pd.api.types.is_float_dtype(result["x"])
+    assert list(result["x"]) == [1.5, 2.0]
 
 
 def test_profile_string_metrics():
@@ -1420,6 +1670,228 @@ def test_report_to_markdown_includes_uniqueness_metrics(tmp_path):
 
     # id column: 2 unique non-null values across 3 rows
     assert "66.67%" in md
+
+
+def test_report_to_markdown_exclude_columns_filters_columns_and_suggestions():
+    report = ar.DataQualityReport(
+        row_count=2,
+        column_count=2,
+        memory_usage=128,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        quality_score=100.0,
+        score_components={},
+        columns={
+            "ssn": ar.ColumnProfile(
+                name="ssn",
+                dtype="string",
+                semantic_type="identifier",
+                row_count=2,
+                null_count=0,
+                null_ratio=0.0,
+                unique_count=2,
+                unique_ratio=1.0,
+                warnings=[],
+            ),
+            "age": ar.ColumnProfile(
+                name="age",
+                dtype="int64",
+                semantic_type="numeric",
+                row_count=2,
+                null_count=0,
+                null_ratio=0.0,
+                unique_count=2,
+                unique_ratio=1.0,
+                warnings=[],
+            ),
+        },
+        suggestions=[
+            ar.CleaningSuggestion(
+                "strip_whitespace",
+                {"subset": ["ssn", "age"], "columns": ["ssn"]},
+                0.95,
+                "Column 'ssn' has leading whitespace",
+            )
+        ],
+    )
+
+    md = report.to_markdown(exclude_columns=["ssn"])
+
+    assert "ssn" not in md
+    assert "age" in md
+    assert "[REDACTED]" in md
+
+
+def test_report_to_markdown_exclude_columns_unknown_raises_keyerror():
+    report = ar.profile(ar.from_dict({"a": [1]}))
+
+    with pytest.raises(KeyError):
+        report.to_markdown(exclude_columns=["nope"])
+
+
+@pytest.mark.parametrize("exclude_columns", [{"ssn"}, ("ssn",)])
+def test_report_to_markdown_accepts_set_and_tuple_exclude_columns(exclude_columns):
+    report = ar.profile(ar.from_dict({"ssn": ["123-45-6789"], "age": [30]}))
+
+    md = report.to_markdown(exclude_columns=exclude_columns)
+
+    assert "ssn" not in md
+    assert "age" in md
+
+
+def test_report_to_markdown_exclude_columns_invalid_type_raises_typeerror():
+    report = ar.profile(ar.from_dict({"a": [1]}))
+
+    with pytest.raises(TypeError):
+        report.to_markdown(exclude_columns=123)
+
+
+def test_report_to_markdown_exclude_columns_preserves_kwarg_named_columns():
+    report = ar.DataQualityReport(
+        row_count=3,
+        column_count=3,
+        memory_usage=256,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        quality_score=100.0,
+        score_components={},
+        columns={
+            "columns": ar.ColumnProfile(
+                name="columns",
+                dtype="string",
+                semantic_type="identifier",
+                row_count=3,
+                null_count=0,
+                null_ratio=0.0,
+                unique_count=3,
+                unique_ratio=1.0,
+                warnings=[],
+            ),
+            "visible": ar.ColumnProfile(
+                name="visible",
+                dtype="string",
+                semantic_type="text",
+                row_count=3,
+                null_count=0,
+                null_ratio=0.0,
+                unique_count=3,
+                unique_ratio=1.0,
+                warnings=[],
+            ),
+            "secret": ar.ColumnProfile(
+                name="secret",
+                dtype="string",
+                semantic_type="identifier",
+                row_count=3,
+                null_count=0,
+                null_ratio=0.0,
+                unique_count=3,
+                unique_ratio=1.0,
+                warnings=[],
+            ),
+        },
+        suggestions=[
+            ar.CleaningSuggestion(
+                "example",
+                {"columns": ["secret", "visible"], "subset": ["columns", "secret"]},
+                0.90,
+                "Example suggestion for secret and columns",
+            )
+        ],
+    )
+
+    md = report.to_markdown(exclude_columns=["secret"])
+
+    assert "secret" not in md
+    assert "visible" in md
+    assert '"columns"' in md
+
+
+def test_report_to_markdown_redacts_unquoted_confidence_reason():
+    report = ar.DataQualityReport(
+        row_count=1,
+        column_count=1,
+        memory_usage=64,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        quality_score=100.0,
+        score_components={},
+        columns={
+            "ssn": ar.ColumnProfile(
+                name="ssn",
+                dtype="string",
+                semantic_type="identifier",
+                row_count=1,
+                null_count=0,
+                null_ratio=0.0,
+                unique_count=1,
+                unique_ratio=1.0,
+                warnings=[],
+            ),
+        },
+        suggestions=[
+            ar.CleaningSuggestion(
+                "example",
+                {},
+                0.90,
+                "Column ssn contains whitespace",
+            )
+        ],
+    )
+
+    md = report.to_markdown(exclude_columns=["ssn"])
+
+    assert "ssn" not in md
+    assert "[REDACTED]" in md
+
+
+def test_report_to_markdown_filters_tuple_and_set_suggestion_columns():
+    report = ar.DataQualityReport(
+        row_count=2,
+        column_count=2,
+        memory_usage=128,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        quality_score=100.0,
+        score_components={},
+        columns={
+            "secret": ar.ColumnProfile(
+                name="secret",
+                dtype="string",
+                semantic_type="identifier",
+                row_count=2,
+                null_count=0,
+                null_ratio=0.0,
+                unique_count=2,
+                unique_ratio=1.0,
+                warnings=[],
+            ),
+            "visible": ar.ColumnProfile(
+                name="visible",
+                dtype="string",
+                semantic_type="text",
+                row_count=2,
+                null_count=0,
+                null_ratio=0.0,
+                unique_count=2,
+                unique_ratio=1.0,
+                warnings=[],
+            ),
+        },
+        suggestions=[
+            ar.CleaningSuggestion(
+                "example",
+                {"subset": ("secret", "visible"), "columns": {"secret", "visible"}},
+                0.90,
+                "Example suggestion for secret and visible",
+            )
+        ],
+    )
+
+    md = report.to_markdown(exclude_columns=["secret"])
+
+    assert "secret" not in md
+    assert "visible" in md
 
 
 def test_unique_ratio_empty_column(tmp_path):
@@ -1768,6 +2240,39 @@ def test_report_to_html_rejects_invalid_filepath_types():
             report.to_html(file_path=invalid_path)
 
 
+def test_report_to_html_rejects_empty_filepath():
+    report = ar.DataQualityReport(
+        row_count=0,
+        column_count=0,
+        memory_usage=0,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+        suggestions=[],
+    )
+
+    with pytest.raises(ValueError, match="file_path must not be empty"):
+        report.to_html(file_path="")
+
+
+def test_report_to_html_writes_valid_pathlike_filepath(tmp_path):
+    report = ar.DataQualityReport(
+        row_count=0,
+        column_count=0,
+        memory_usage=0,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+        suggestions=[],
+    )
+    out_path = tmp_path / "report.html"
+
+    result = report.to_html(file_path=out_path)
+
+    assert result == out_path.read_text(encoding="utf-8")
+    assert result.startswith("<!DOCTYPE html>")
+
+
 def test_report_to_html_limits_suggestions():
     report = ar.DataQualityReport(
         row_count=2,
@@ -2006,6 +2511,277 @@ def test_data_quality_report_repr_html_snippet():
     assert "<script>unsafe_col</script>" not in html_out
 
 
+# ── to_html redaction and column-exclusion tests (Fixes #1754) ────────────────
+
+
+def test_to_html_redact_top_values_hides_labels():
+    """redact_top_values=True must replace every chip label with [REDACTED]
+    while still rendering counts/ratios."""
+    from arnio.quality import ColumnProfile, DataQualityReport
+
+    col = ColumnProfile(
+        name="email",
+        dtype="string",
+        semantic_type="email",
+        row_count=10,
+        null_count=0,
+        null_ratio=0.0,
+        unique_count=3,
+        unique_ratio=0.3,
+        top_values=[
+            ("alice@secret.com", 5, 0.5),
+            ("bob@secret.com", 3, 0.3),
+            ("carol@secret.com", 2, 0.2),
+        ],
+    )
+    report = DataQualityReport(
+        row_count=10,
+        column_count=1,
+        memory_usage=100,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={"email": col},
+    )
+
+    html = report.to_html(redact_top_values=True)
+
+    assert "alice@secret.com" not in html
+    assert "bob@secret.com" not in html
+    assert "carol@secret.com" not in html
+    assert "[REDACTED]" in html
+    assert "50%" in html
+    assert "30%" in html
+    assert "20%" in html
+
+
+def test_to_html_redact_top_values_false_shows_real_labels():
+    """Default (redact_top_values=False) must still render actual top-value labels."""
+    from arnio.quality import ColumnProfile, DataQualityReport
+
+    col = ColumnProfile(
+        name="city",
+        dtype="string",
+        semantic_type="categorical",
+        row_count=6,
+        null_count=0,
+        null_ratio=0.0,
+        unique_count=2,
+        unique_ratio=0.333333,
+        top_values=[
+            ("Paris", 4, 0.666667),
+            ("Lyon", 2, 0.333333),
+        ],
+    )
+    report = DataQualityReport(
+        row_count=6,
+        column_count=1,
+        memory_usage=80,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={"city": col},
+    )
+
+    html = report.to_html()
+
+    assert "Paris" in html
+    assert "Lyon" in html
+    assert "[REDACTED]" not in html
+
+
+def test_to_html_exclude_columns_drops_column_from_table():
+    """exclude_columns must prevent the column row from appearing in the HTML table."""
+    from arnio.quality import ColumnProfile, DataQualityReport
+
+    def make_col(name: str) -> ColumnProfile:
+        return ColumnProfile(
+            name=name,
+            dtype="string",
+            semantic_type="text",
+            row_count=4,
+            null_count=0,
+            null_ratio=0.0,
+            unique_count=4,
+            unique_ratio=1.0,
+            top_values=[(f"val_{name}", 1, 0.25)],
+        )
+
+    report = DataQualityReport(
+        row_count=4,
+        column_count=2,
+        memory_usage=80,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={
+            "public_col": make_col("public_col"),
+            "secret_col": make_col("secret_col"),
+        },
+    )
+
+    html = report.to_html(exclude_columns=["secret_col"])
+
+    assert "secret_col" not in html
+    assert "val_secret_col" not in html
+    assert "public_col" in html
+    assert "val_public_col" in html
+
+
+def test_to_html_redact_and_exclude_combined():
+    """redact_top_values and exclude_columns can be used together."""
+    from arnio.quality import ColumnProfile, DataQualityReport
+
+    def make_col(name: str, value: str) -> ColumnProfile:
+        return ColumnProfile(
+            name=name,
+            dtype="string",
+            semantic_type="text",
+            row_count=4,
+            null_count=0,
+            null_ratio=0.0,
+            unique_count=2,
+            unique_ratio=0.5,
+            top_values=[(value, 3, 0.75)],
+        )
+
+    report = DataQualityReport(
+        row_count=4,
+        column_count=2,
+        memory_usage=80,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={
+            "visible": make_col("visible", "safe_value"),
+            "hidden": make_col("hidden", "secret_value"),
+        },
+    )
+
+    html = report.to_html(redact_top_values=True, exclude_columns=["hidden"])
+
+    assert "<code>hidden</code>" not in html
+    assert "secret_value" not in html
+    assert "visible" in html
+    assert "safe_value" not in html
+    assert "[REDACTED]" in html
+
+
+def test_to_html_redact_top_values_must_be_bool():
+    """redact_top_values rejects non-bool values."""
+    from arnio.quality import DataQualityReport
+
+    report = DataQualityReport(
+        row_count=0,
+        column_count=0,
+        memory_usage=0,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+    )
+    for bad in [1, "true", None, 0.0]:
+        with pytest.raises(TypeError, match="redact_top_values must be a bool"):
+            report.to_html(redact_top_values=bad)  # type: ignore[arg-type]
+
+
+def test_to_html_exclude_columns_rejects_unknown_column():
+    """exclude_columns raises KeyError for column names not in the report."""
+    from arnio.quality import DataQualityReport
+
+    report = DataQualityReport(
+        row_count=0,
+        column_count=0,
+        memory_usage=0,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+    )
+    with pytest.raises(KeyError, match="Unknown exclude_columns"):
+        report.to_html(exclude_columns=["does_not_exist"])
+
+
+def test_to_html_exclude_columns_rejects_non_collection():
+    """exclude_columns rejects bare strings and non-sequence types."""
+    from arnio.quality import DataQualityReport
+
+    report = DataQualityReport(
+        row_count=0,
+        column_count=0,
+        memory_usage=0,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+    )
+    with pytest.raises(
+        TypeError, match="exclude_columns must be a list, tuple, set, or None"
+    ):
+        report.to_html(exclude_columns="col_name")  # type: ignore[arg-type]
+
+    with pytest.raises(
+        TypeError, match="exclude_columns must be a list, tuple, set, or None"
+    ):
+        report.to_html(exclude_columns=123)  # type: ignore[arg-type]
+
+
+def test_to_html_exclude_columns_accepts_set_and_tuple():
+    """exclude_columns works when passed as a set or tuple."""
+    from arnio.quality import ColumnProfile, DataQualityReport
+
+    col = ColumnProfile(
+        name="sensitive",
+        dtype="string",
+        semantic_type="text",
+        row_count=2,
+        null_count=0,
+        null_ratio=0.0,
+        unique_count=2,
+        unique_ratio=1.0,
+    )
+    report = DataQualityReport(
+        row_count=2,
+        column_count=1,
+        memory_usage=50,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={"sensitive": col},
+    )
+
+    html_set = report.to_html(exclude_columns={"sensitive"})
+    html_tuple = report.to_html(exclude_columns=("sensitive",))
+
+    assert "sensitive" not in html_set
+    assert "sensitive" not in html_tuple
+
+
+def test_repr_html_unaffected_by_new_params():
+    """_repr_html_() still works with no arguments and shows values by default."""
+    from arnio.quality import ColumnProfile, DataQualityReport
+
+    col = ColumnProfile(
+        name="x",
+        dtype="string",
+        semantic_type="text",
+        row_count=2,
+        null_count=0,
+        null_ratio=0.0,
+        unique_count=2,
+        unique_ratio=1.0,
+        top_values=[("hello", 1, 0.5), ("world", 1, 0.5)],
+    )
+    report = DataQualityReport(
+        row_count=2,
+        column_count=1,
+        memory_usage=50,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={"x": col},
+    )
+
+    html = report._repr_html_()
+
+    assert "<!DOCTYPE html>" not in html
+    assert 'class="arnio-dqr"' in html
+    assert "hello" in html
+    assert "world" in html
+    assert "[REDACTED]" not in html
+
+
 # ── explain mode tests ────────────────────────────────────────────────────────
 
 
@@ -2085,6 +2861,28 @@ def test_auto_clean_explain_steps_recorded(tmp_path):
     assert len(step.reason) > 0
 
 
+def test_auto_clean_explain_records_post_normalization_dedup():
+    frame = ar.from_pandas(pd.DataFrame({"name": ["Alice", " Alice "]}))
+
+    cleaned, explanation = ar.auto_clean(
+        frame,
+        mode="strict",
+        explain=True,
+        allow_lossy_casts=True,
+    )
+
+    drop_steps = [
+        record for record in explanation.steps if record.step == "drop_duplicates"
+    ]
+    assert cleaned.shape == (1, 1)
+    assert len(drop_steps) == 1
+    assert drop_steps[0].kwargs == {"keep": "first"}
+    assert drop_steps[0].rows_before == 2
+    assert drop_steps[0].rows_after == 1
+    assert drop_steps[0].rows_removed == 1
+    assert "strict-mode normalization" in drop_steps[0].reason
+
+
 def test_auto_clean_explain_with_return_report(tmp_path):
     """explain=True and return_report=True should return (ArFrame, DataQualityReport, CleanExplanation)."""
     path = tmp_path / "data.csv"
@@ -2119,6 +2917,7 @@ def test_auto_clean_explain_no_steps_clean_data(tmp_path):
 
     assert explanation.rows_removed == 0
     assert explanation.rows_before == explanation.rows_after
+    assert explanation.steps == []
 
 
 def test_auto_clean_explain_str_representation(tmp_path):
@@ -2313,6 +3112,80 @@ def test_profile_duplicate_count_hash_path_matches_pandas_baseline_at_scale():
     assert ar.profile(frame).duplicate_rows == baseline_count
 
 
+def test_report_repr_is_concise_and_stable():
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "b": [1, 2],
+                "a": [3, 4],
+            }
+        )
+    )
+
+    report = ar.profile(frame)
+
+    output = repr(report)
+
+    assert "DataQualityReport(" in output
+    assert "rows=2" in output
+    assert "columns=2" in output
+
+    # deterministic ordering
+    assert "column_names=[a, b]" in output
+
+
+def test_report_repr_handles_empty_reports():
+    frame = ar.from_pandas(pd.DataFrame())
+
+    report = ar.profile(frame)
+
+    output = repr(report)
+
+    assert "rows=0" in output
+    assert "columns=0" in output
+    assert "column_names=[]" in output
+
+
+def test_report_to_dict_is_deterministic():
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "z": [1],
+                "a": [2],
+                "m": [3],
+            }
+        )
+    )
+
+    report = ar.profile(frame)
+
+    result = report.to_dict()
+
+    assert list(result["columns"].keys()) == ["a", "m", "z"]
+
+
+def test_report_suggestions_are_deterministic():
+    report = ar.DataQualityReport(
+        row_count=1,
+        column_count=1,
+        memory_usage=1,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+        suggestions=[
+            ("z_step", {"b": 2, "a": 1}),
+            ("a_step", {"d": 4, "c": 3}),
+        ],
+    )
+
+    result = report.to_dict()
+
+    assert result["suggestions"][0]["step"] == "a_step"
+    assert result["suggestions"][1]["step"] == "z_step"
+
+    assert list(result["suggestions"][0]["kwargs"].keys()) == ["c", "d"]
+
+
 # ── numeric histogram tests ──────────────────────────────────────────────────
 
 
@@ -2433,25 +3306,48 @@ def test_profile_numeric_histogram_to_pandas():
     assert pdf.loc[pdf["name"] == "nums", "histogram"].values[0] is not None
 
 
+@pytest.mark.filterwarnings("ignore::RuntimeWarning")
 def test_profile_numeric_histogram_non_finite_values():
     # Test handling of infinite values in histogram calculation
-    from arnio._core import _DType, _Frame
-    from arnio.frame import ArFrame
 
     cpp_frame = _Frame.from_dict(
         {"nums": [1.0, 2.0, float("inf"), float("-inf"), None, 3.0]},
         {"nums": _DType.FLOAT64},
     )
     frame = ArFrame(cpp_frame)
-    report = ar.profile(frame)
+
+    # Profile must be warning-free
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        report = ar.profile(frame)
+    runtime_warnings = [w for w in caught if issubclass(w.category, RuntimeWarning)]
+    assert (
+        runtime_warnings == []
+    ), f"Unexpected RuntimeWarnings: {[str(w.message) for w in runtime_warnings]}"
+
     profile = report.columns["nums"]
 
-    # The histogram should filter out +/- inf and NaNs, binning only [1.0, 2.0, 3.0]
+    # The histogram should filter out +/- inf and NaNs
     assert profile.histogram is not None
     assert len(profile.histogram) == 10
 
     counts = [c for _, _, c, _ in profile.histogram]
     assert sum(counts) == 3
+
+    # Summary stats must be finite and reflect only the finite values
+    assert profile.min == 1.0
+    assert profile.max == 3.0
+    for stat_name, value in [
+        ("mean", profile.mean),
+        ("std", profile.std),
+        ("q25", profile.q25),
+        ("q50", profile.q50),
+        ("q75", profile.q75),
+        ("q95", profile.q95),
+    ]:
+        assert value is not None and math.isfinite(
+            float(value)
+        ), f"{stat_name} should be finite, got {value}"
 
     # All infinities (no finite values to bin)
     cpp_frame_all_inf = _Frame.from_dict(
@@ -2462,6 +3358,36 @@ def test_profile_numeric_histogram_non_finite_values():
     report_all_inf = ar.profile(frame_all_inf)
     profile_all_inf = report_all_inf.columns["nums"]
     assert profile_all_inf.histogram is None
+
+
+def test_profile_non_finite_values_json_safe():
+    """to_dict() and to_json() must never produce NaN/Infinity JSON tokens."""
+    frame = ArFrame(
+        _Frame.from_dict(
+            {"nums": [1.0, 2.0, float("inf"), float("-inf"), None, 3.0]},
+            {"nums": _DType.FLOAT64},
+        )
+    )
+    report = ar.profile(frame)
+
+    # Strictest check: raises ValueError on any NaN/Infinity token
+    json.dumps(report.to_dict(), allow_nan=False)
+
+    # to_json() must produce valid JSON parseable by a strict consumer
+    json_str = report.to_json()
+    assert json_str is not None
+    parsed = json.loads(json_str)
+    col = parsed["columns"]["nums"]
+
+    # Core stats must be present and finite
+    for key in ("min", "max", "mean", "std"):
+        assert col[key] is not None, f"{key} should not be None after finite-value fix"
+        assert math.isfinite(col[key]), f"{key} should be finite, got {col[key]}"
+
+    # sample_values must contain no inf/-inf
+    for v in col["sample_values"]:
+        if isinstance(v, float):
+            assert math.isfinite(v), f"sample_values contains non-finite: {v}"
 
 
 def test_report_to_markdown_escapes_newlines_in_column_cells():
@@ -2859,6 +3785,38 @@ def test_data_quality_report_to_json_redact_sample_values():
     assert parsed["columns"]["name"]["sample_values"] == ["[REDACTED]"]
 
 
+def test_report_suggestions_are_deterministic_with_nested_kwargs():
+    report = ar.DataQualityReport(
+        row_count=1,
+        column_count=1,
+        memory_usage=1,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+        suggestions=[
+            (
+                "same_step",
+                {
+                    "config": {"z": 1, "a": 2},
+                    "values": [3, 2, 1],
+                },
+            ),
+            (
+                "same_step",
+                {
+                    "config": {"a": 2, "z": 1},
+                    "values": [1, 2, 3],
+                },
+            ),
+        ],
+    )
+
+    result = report.to_dict()
+
+    assert result["suggestions"][0]["step"] == "same_step"
+    assert result["suggestions"][1]["step"] == "same_step"
+
+
 def test_data_quality_report_to_json_redacts_top_values():
     frame = ar.from_pandas(
         pd.DataFrame(
@@ -2972,6 +3930,77 @@ def test_profile_comparison_to_markdown_invalid_output_raises():
         comparison.to_markdown(output=42)
 
 
+def test_profile_comparison_to_markdown_exclude_columns_filters_drift_rows():
+    left = ar.profile(
+        ar.from_pandas(pd.DataFrame({"ssn": ["123-45-6789"], "age": [30]}))
+    )
+    right = ar.profile(
+        ar.from_pandas(pd.DataFrame({"ssn": ["987-65-4321"], "age": [31]}))
+    )
+    comparison = ar.compare_profiles(left, right)
+
+    markdown = comparison.to_markdown(exclude_columns=["ssn"])
+
+    assert "| ssn |" not in markdown
+    assert "| age |" in markdown
+
+
+@pytest.mark.parametrize("exclude_columns", [{"ssn"}, ("ssn",)])
+def test_profile_comparison_to_markdown_accepts_set_and_tuple_exclude_columns(
+    exclude_columns,
+):
+    frame = ar.from_pandas(pd.DataFrame({"ssn": ["123-45-6789"], "age": [30]}))
+    profile = ar.profile(frame)
+    comparison = ar.compare_profiles(profile, profile)
+
+    markdown = comparison.to_markdown(exclude_columns=exclude_columns)
+
+    assert "| ssn |" not in markdown
+    assert "| age |" in markdown
+
+
+def test_profile_comparison_to_markdown_exclude_columns_unknown_raises_keyerror():
+    frame = ar.from_pandas(pd.DataFrame({"age": [30]}))
+    profile = ar.profile(frame)
+    comparison = ar.compare_profiles(profile, profile)
+
+    with pytest.raises(KeyError, match="Unknown exclude_columns"):
+        comparison.to_markdown(exclude_columns=["missing"])
+
+
+def test_profile_comparison_to_markdown_exclude_columns_invalid_type_raises():
+    invalid_exclude_columns: Any = "ssn"
+    frame = ar.from_pandas(pd.DataFrame({"ssn": ["123-45-6789"]}))
+    profile = ar.profile(frame)
+    comparison = ar.compare_profiles(profile, profile)
+
+    with pytest.raises(TypeError, match="exclude_columns must be a list"):
+        comparison.to_markdown(exclude_columns=invalid_exclude_columns)
+
+
+def test_profile_comparison_to_markdown_exclude_columns_invalid_entries_raise():
+    invalid_exclude_columns: Any = ["ssn", 123]
+    frame = ar.from_pandas(pd.DataFrame({"ssn": ["123-45-6789"]}))
+    profile = ar.profile(frame)
+    comparison = ar.compare_profiles(profile, profile)
+
+    with pytest.raises(TypeError, match="exclude_columns must contain only string"):
+        comparison.to_markdown(exclude_columns=invalid_exclude_columns)
+
+
+def test_profile_comparison_to_markdown_output_stream_respects_exclude_columns():
+    frame = ar.from_pandas(pd.DataFrame({"ssn": ["123-45-6789"], "age": [30]}))
+    profile = ar.profile(frame)
+    comparison = ar.compare_profiles(profile, profile)
+    buffer = io.StringIO()
+
+    result = comparison.to_markdown(output=buffer, exclude_columns=["ssn"])
+
+    assert result is None
+    assert "| ssn |" not in buffer.getvalue()
+    assert "| age |" in buffer.getvalue()
+
+
 # --- Tests for QualityGateResult.to_json() ---
 
 
@@ -3010,6 +4039,9 @@ def test_quality_gate_result_to_json_invalid_output_raises():
     result = ar.check_quality_gates(p, p)
     with pytest.raises(TypeError, match="writable text stream"):
         result.to_json(output=123)
+
+
+# --- Tests for ProfileComparison.to_json() ---
 
 
 def test_compare_profiles_mismatched_exclude_columns_hints_user():
@@ -3313,3 +4345,375 @@ def test_data_quality_report_invariant_invalid_metrics():
 
     with pytest.raises(ValueError, match="quality_score must be a finite value"):
         DataQualityReport(10, 2, 512, 0, 0.0, {}, quality_score=float("nan"))
+
+
+def test_cleaning_suggestion_is_exported():
+    assert hasattr(
+        ar, "CleaningSuggestion"
+    ), "CleaningSuggestion is missing from arnio.__init__ file"
+
+    missing_message = "CleaningSuggestion is missing from arnio.__init__ file"
+    mismatch_message = "Top-level CleaningSuggestion does not match the internal type"
+
+    assert hasattr(ar, "CleaningSuggestion"), missing_message
+    assert ar.CleaningSuggestion is CleaningSuggestion, mismatch_message
+    assert ar.CleaningSuggestion is CleaningSuggestion, mismatch_message
+    assert hasattr(
+        ar, "CleaningSuggestion"
+    ), "CleaningSuggestion is missing from arnio.__init__ file"
+    assert hasattr(
+        ar, "CleaningSuggestion"
+    ), "CleaningSuggestion is missing from arnio.__init__ file"
+
+    assert (
+        ar.CleaningSuggestion is CleaningSuggestion
+    ), "Top-level CleaningSuggestion does not match the internal type"
+    assert (
+        ar.CleaningSuggestion is CleaningSuggestion
+    ), "Top-level CleaningSuggestion does not match the internal type"
+
+
+# ── CleanStepRecord and CleanExplanation validation tests (Fixes #1687) ──────
+
+
+class TestCleanStepRecordValidation:
+    """CleanStepRecord.__post_init__ must reject invalid field types early."""
+
+    def _valid_record(self, **overrides):
+        defaults = dict(
+            step="strip_whitespace",
+            kwargs={"subset": ["name"]},
+            rows_before=10,
+            rows_after=10,
+            rows_removed=0,
+            reason="whitespace found",
+        )
+        defaults.update(overrides)
+        return ar.CleanStepRecord(**defaults)
+
+    def test_valid_construction_succeeds(self):
+        rec = self._valid_record()
+        assert rec.step == "strip_whitespace"
+        assert rec.rows_removed == 0
+
+    def test_step_must_be_str(self):
+        with pytest.raises(TypeError, match="step must be a str"):
+            self._valid_record(step=42)
+
+    def test_reason_must_be_str(self):
+        with pytest.raises(TypeError, match="reason must be a str"):
+            self._valid_record(reason=None)
+
+    def test_kwargs_must_be_dict(self):
+        with pytest.raises(TypeError, match="kwargs must be a dict"):
+            self._valid_record(kwargs="not-a-dict")
+
+    def test_rows_before_must_be_int(self):
+        with pytest.raises(TypeError, match="rows_before must be an int"):
+            self._valid_record(rows_before="ten")
+
+    def test_rows_before_rejects_bool(self):
+        with pytest.raises(TypeError, match="rows_before must be an int"):
+            self._valid_record(rows_before=True)
+
+    def test_rows_after_must_be_int(self):
+        with pytest.raises(TypeError, match="rows_after must be an int"):
+            self._valid_record(rows_after=3.5)
+
+    def test_rows_removed_must_be_int(self):
+        with pytest.raises(TypeError, match="rows_removed must be an int"):
+            self._valid_record(rows_removed=[])
+
+    def test_rows_before_cannot_be_negative(self):
+        with pytest.raises(ValueError, match="rows_before cannot be negative"):
+            self._valid_record(rows_before=-1)
+
+    def test_rows_after_cannot_be_negative(self):
+        with pytest.raises(ValueError, match="rows_after cannot be negative"):
+            self._valid_record(rows_after=-5)
+
+    def test_rows_removed_cannot_be_negative(self):
+        with pytest.raises(ValueError, match="rows_removed cannot be negative"):
+            self._valid_record(rows_removed=-3)
+
+
+class TestCleanExplanationValidation:
+    """CleanExplanation.__post_init__ must reject invalid field types early."""
+
+    def _valid_record(self):
+        return ar.CleanStepRecord(
+            step="strip_whitespace",
+            kwargs={},
+            rows_before=5,
+            rows_after=5,
+            rows_removed=0,
+            reason="whitespace",
+        )
+
+    def _valid_explanation(self, **overrides):
+        defaults = dict(
+            mode="safe",
+            rows_before=5,
+            rows_after=5,
+            rows_removed=0,
+            steps=[],
+        )
+        defaults.update(overrides)
+        return ar.CleanExplanation(**defaults)
+
+    def test_valid_construction_empty_steps(self):
+        exp = self._valid_explanation()
+        assert exp.mode == "safe"
+        assert exp.steps == []
+
+    def test_valid_construction_with_steps(self):
+        exp = self._valid_explanation(steps=[self._valid_record()])
+        assert len(exp.steps) == 1
+
+    def test_mode_must_be_str(self):
+        with pytest.raises(TypeError, match="mode must be a str"):
+            self._valid_explanation(mode=123)
+
+    def test_mode_rejects_none(self):
+        with pytest.raises(TypeError, match="mode must be a str"):
+            self._valid_explanation(mode=None)
+
+    def test_rows_before_must_be_int(self):
+        with pytest.raises(TypeError, match="rows_before must be an int"):
+            self._valid_explanation(rows_before="a")
+
+    def test_rows_before_rejects_bool(self):
+        with pytest.raises(TypeError, match="rows_before must be an int"):
+            self._valid_explanation(rows_before=True)
+
+    def test_rows_after_must_be_int(self):
+        with pytest.raises(TypeError, match="rows_after must be an int"):
+            self._valid_explanation(rows_after=None)
+
+    def test_rows_removed_must_be_int(self):
+        with pytest.raises(TypeError, match="rows_removed must be an int"):
+            self._valid_explanation(rows_removed=[])
+
+    def test_rows_before_cannot_be_negative(self):
+        with pytest.raises(ValueError, match="rows_before cannot be negative"):
+            self._valid_explanation(rows_before=-1)
+
+    def test_rows_after_cannot_be_negative(self):
+        with pytest.raises(ValueError, match="rows_after cannot be negative"):
+            self._valid_explanation(rows_after=-1)
+
+    def test_rows_removed_cannot_be_negative(self):
+        with pytest.raises(ValueError, match="rows_removed cannot be negative"):
+            self._valid_explanation(rows_removed=-1)
+
+    def test_steps_must_be_list(self):
+        with pytest.raises(TypeError, match="steps must be a list"):
+            self._valid_explanation(steps="bad")
+
+    def test_steps_elements_must_be_cleansteprecord(self):
+        with pytest.raises(TypeError, match="steps\\[0\\] must be a CleanStepRecord"):
+            self._valid_explanation(steps=["bad"])
+
+    def test_steps_rejects_mixed_list(self):
+        with pytest.raises(TypeError, match="steps\\[1\\] must be a CleanStepRecord"):
+            self._valid_explanation(steps=[self._valid_record(), 42])
+
+    def test_original_issue_repro_raises_at_construction(self):
+        """Regression: invalid state must be caught at construction, not in __str__."""
+        with pytest.raises((TypeError, ValueError)):
+            ar.CleanExplanation(
+                mode=123,
+                rows_before="a",
+                rows_after=None,
+                rows_removed=[],
+                steps=["bad"],
+            )
+
+    def test_str_works_on_valid_explanation(self):
+        exp = self._valid_explanation(steps=[self._valid_record()])
+        text = str(exp)
+        assert "CleanExplanation" in text
+        assert "strip_whitespace" in text
+
+    def test_str_works_on_empty_steps(self):
+        exp = self._valid_explanation()
+        text = str(exp)
+        assert "(none)" in text
+
+
+class TestQualityGateResultConstructorValidation:
+    """Tests for QualityGateIssue and QualityGateResult constructor field validation."""
+
+    def test_quality_gate_issue_valid(self):
+        issue = ar.QualityGateIssue(
+            metric="null_ratio",
+            message="Column has too many nulls",
+            column="age",
+            baseline=0.05,
+            current=0.10,
+            threshold=0.08,
+            delta=0.05,
+        )
+        assert issue.metric == "null_ratio"
+        assert issue.message == "Column has too many nulls"
+        assert issue.column == "age"
+        assert issue.delta == 0.05
+        assert issue.to_dict()["metric"] == "null_ratio"
+
+    def test_quality_gate_issue_invalid_metric(self):
+        with pytest.raises(TypeError, match="metric must be a str"):
+            ar.QualityGateIssue(metric=123, message="msg")
+        with pytest.raises(ValueError, match="metric must be a non-empty string"):
+            ar.QualityGateIssue(metric="   ", message="msg")
+
+    def test_quality_gate_issue_invalid_message(self):
+        with pytest.raises(TypeError, match="message must be a str"):
+            ar.QualityGateIssue(metric="null_ratio", message=42)
+        with pytest.raises(ValueError, match="message must be a non-empty string"):
+            ar.QualityGateIssue(metric="null_ratio", message="")
+
+    def test_quality_gate_issue_invalid_column(self):
+        with pytest.raises(TypeError, match="column must be a str or None"):
+            ar.QualityGateIssue(metric="null_ratio", message="msg", column=123)
+
+    def test_quality_gate_issue_invalid_delta(self):
+        with pytest.raises(TypeError, match="delta must be a float, integer, or None"):
+            ar.QualityGateIssue(metric="null_ratio", message="msg", delta="0.5")
+        with pytest.raises(TypeError, match="delta must be a float, integer, or None"):
+            ar.QualityGateIssue(metric="null_ratio", message="msg", delta=True)
+
+    def test_quality_gate_result_valid(self):
+        df = pd.DataFrame({"x": [1, 2, 3]})
+        report = ar.profile(ar.from_pandas(df))
+
+        issue = ar.QualityGateIssue(metric="null_ratio", message="msg")
+        res = ar.QualityGateResult(
+            baseline_profile=report,
+            current_profile=report,
+            issues=[issue],
+            thresholds={"null_ratio": 0.05},
+        )
+        assert res.passed is False
+        assert len(res.issues) == 1
+        assert res.thresholds == {"null_ratio": 0.05}
+
+    def test_quality_gate_result_invalid_profiles(self):
+        issue = ar.QualityGateIssue(metric="null_ratio", message="msg")
+        with pytest.raises(
+            TypeError, match="baseline_profile must be a DataQualityReport instance"
+        ):
+            ar.QualityGateResult(
+                baseline_profile="not a report",
+                current_profile="not a report",
+                issues=[issue],
+                thresholds={},
+            )
+
+    def test_quality_gate_result_invalid_issues(self):
+        df = pd.DataFrame({"x": [1, 2, 3]})
+        report = ar.profile(ar.from_pandas(df))
+
+        with pytest.raises(TypeError, match="issues must be a list"):
+            ar.QualityGateResult(
+                baseline_profile=report,
+                current_profile=report,
+                issues="not a list",
+                thresholds={},
+            )
+
+        with pytest.raises(
+            TypeError, match="issues\\[0\\] must be a QualityGateIssue instance"
+        ):
+            ar.QualityGateResult(
+                baseline_profile=report,
+                current_profile=report,
+                issues=["not an issue"],
+                thresholds={},
+            )
+
+    def test_quality_gate_result_invalid_thresholds(self):
+        df = pd.DataFrame({"x": [1, 2, 3]})
+        report = ar.profile(ar.from_pandas(df))
+        issue = ar.QualityGateIssue(metric="null_ratio", message="msg")
+
+        with pytest.raises(TypeError, match="thresholds must be a dict"):
+            ar.QualityGateResult(
+                baseline_profile=report,
+                current_profile=report,
+                issues=[issue],
+                thresholds="not a dict",
+            )
+
+
+def test_auto_clean_rejects_list_mode():
+    frame = ar.from_dict({"name": [" Alice "], "age": ["1"]})
+    with pytest.raises(ValueError, match="mode must be 'safe' or 'strict'"):
+        ar.auto_clean(frame, mode=["safe"])
+
+
+def test_auto_clean_rejects_none_mode():
+    frame = ar.from_dict({"name": [" Alice "]})
+    with pytest.raises(ValueError, match="mode must be 'safe' or 'strict'"):
+        ar.auto_clean(frame, mode=None)
+
+
+def test_auto_clean_rejects_integer_mode():
+    frame = ar.from_dict({"name": [" Alice "]})
+    with pytest.raises(ValueError, match="mode must be 'safe' or 'strict'"):
+        ar.auto_clean(frame, mode=1)
+
+
+def test_auto_clean_rejects_invalid_string_mode():
+    frame = ar.from_dict({"name": [" Alice "]})
+    with pytest.raises(ValueError, match="mode must be 'safe' or 'strict'"):
+        ar.auto_clean(frame, mode="SAFE")
+
+
+@pytest.mark.parametrize("obj", [object(), None, 123, pd.DataFrame()])
+def test_quality_helpers_reject_invalid_frame(obj):
+    with pytest.raises(TypeError, match=".*must be an ArFrame.*"):
+        ar.profile(obj)
+    with pytest.raises(TypeError, match=".*must be an ArFrame.*"):
+        ar.auto_clean(obj)
+
+
+def test_score_breakdown_with_real_values():
+    """Ensure score_breakdown correctly maps real penalty components and handles to_dict."""
+
+    # 1. Define real or mock score components dictionary
+    real_components = {
+        "null_penalty": 5.0,
+        "duplicate_penalty": 2.0,
+        "type_mismatch_penalty": 1.5,
+    }
+
+    # 2. Reconstruct the report using an empty dict for columns (or a proper mapping)
+    # instead of a raw list of strings to prevent serialization errors.
+    instance = DataQualityReport(
+        row_count=100,
+        column_count=5,
+        memory_usage=1024,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},  # Pass an empty dict or valid ColumnQualityReport mapping
+        score_components=real_components,
+        quality_score=85.0,
+        suggestions=[],
+    )
+
+    # 3. Explicitly call your new method to assign 'result'
+    result = instance.score_breakdown()
+
+    # 4. Assertions
+    assert isinstance(result, dict)
+
+    expected_keys = [
+        "null_penalty",
+        "duplicate_penalty",
+        "type_mismatch_penalty",
+        "final_score",
+    ]
+
+    for key in expected_keys:
+        assert key in result, f"Missing key: {key}"
+        assert isinstance(result[key], (int, float)), f"{key} must be numeric"

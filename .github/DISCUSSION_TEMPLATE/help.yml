@@ -1,5 +1,5 @@
 title: "[Help] "
-labels: ["question"]
+labels: ["type:discussion"]
 body:
   - type: textarea
     id: question

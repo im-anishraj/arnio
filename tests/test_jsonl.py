@@ -260,6 +260,54 @@ class TestReadJsonlEncoding:
         with pytest.raises(ar.JsonlReadError, match="decode"):
             ar.read_jsonl(path, encoding="utf-8")
 
+    def test_encoding_errors_replace(self, tmp_path):
+        path = tmp_path / "bad.jsonl"
+
+        # Invalid UTF-8 byte inside JSON string
+        path.write_bytes(b'{"text": "hello \xff world"}\n')
+
+        frame = ar.read_jsonl(
+            path,
+            encoding="utf-8",
+            encoding_errors="replace",
+        )
+
+        assert frame.shape == (1, 1)
+
+    def test_encoding_errors_ignore(self, tmp_path):
+        path = tmp_path / "bad.jsonl"
+
+        # Invalid UTF-8 byte inside JSON string
+        path.write_bytes(b'{"text": "hello \xff world"}\n')
+
+        frame = ar.read_jsonl(
+            path,
+            encoding="utf-8",
+            encoding_errors="ignore",
+        )
+
+        assert frame.shape == (1, 1)
+
+    def test_encoding_errors_invalid_value(self, tmp_path):
+        path = tmp_path / "data.jsonl"
+        path.write_text('{"a": 1}\n', encoding="utf-8")
+
+        with pytest.raises(ValueError, match="encoding_errors"):
+            ar.read_jsonl(
+                path,
+                encoding_errors="bad",
+            )
+
+    def test_encoding_errors_invalid_type(self, tmp_path):
+        path = tmp_path / "data.jsonl"
+        path.write_text('{"a": 1}\n', encoding="utf-8")
+
+        with pytest.raises(TypeError, match="encoding_errors"):
+            ar.read_jsonl(
+                path,
+                encoding_errors=123,
+            )
+
 
 class TestReadJsonlPipelineCompat:
     def test_result_is_pipeline_compatible(self, tmp_path):
@@ -367,3 +415,195 @@ class TestReadJsonlDuplicateKeys:
 
         with pytest.raises(ar.JsonlReadError):
             ar.read_jsonl(p)
+
+
+class TestReadJsonlNonFiniteConstants:
+    def test_nan_raises_jsonl_read_error(self, tmp_path):
+        p = tmp_path / "nan.jsonl"
+        p.write_text('{"x": NaN}\n', encoding="utf-8")
+        with pytest.raises(ar.JsonlReadError, match="line 1"):
+            ar.read_jsonl(p)
+
+    def test_infinity_raises_jsonl_read_error(self, tmp_path):
+        p = tmp_path / "inf.jsonl"
+        p.write_text('{"x": Infinity}\n', encoding="utf-8")
+        with pytest.raises(ar.JsonlReadError, match="line 1"):
+            ar.read_jsonl(p)
+
+    def test_negative_infinity_raises_jsonl_read_error(self, tmp_path):
+        p = tmp_path / "neginf.jsonl"
+        p.write_text('{"x": -Infinity}\n', encoding="utf-8")
+        with pytest.raises(ar.JsonlReadError, match="line 1"):
+            ar.read_jsonl(p)
+
+    def test_non_finite_error_includes_line_number(self, tmp_path):
+        p = tmp_path / "multi.jsonl"
+        p.write_text('{"x": 1}\n{"x": NaN}\n', encoding="utf-8")
+        with pytest.raises(ar.JsonlReadError, match="line 2"):
+            ar.read_jsonl(p)
+
+    def test_valid_jsonl_unaffected(self, tmp_path):
+        p = tmp_path / "valid.jsonl"
+        p.write_text('{"x": 1}\n{"x": 2}\n', encoding="utf-8")
+        frame = ar.read_jsonl(p)
+        assert frame.shape == (2, 1)
+
+
+class TestReadJsonlChunked:
+    def test_yields_arframe_chunks(self, tmp_path):
+        path = _write(tmp_path, "data.jsonl", [{"i": i} for i in range(5)])
+
+        chunks = list(ar.read_jsonl_chunked(path, chunksize=2))
+
+        assert [chunk.shape for chunk in chunks] == [(2, 1), (2, 1), (1, 1)]
+        assert [ar.to_pandas(chunk)["i"].tolist() for chunk in chunks] == [
+            [0, 1],
+            [2, 3],
+            [4],
+        ]
+
+    def test_ndjson_extension_accepted(self, tmp_path):
+        path = _write(tmp_path, "data.ndjson", [{"x": 1}, {"x": 2}])
+
+        chunks = list(ar.read_jsonl_chunked(path, chunksize=10))
+
+        assert len(chunks) == 1
+        assert chunks[0].shape == (2, 1)
+
+    def test_blank_lines_are_skipped_across_chunks(self, tmp_path):
+        path = tmp_path / "data.jsonl"
+        path.write_text('{"a": 1}\n\n  \n{"a": 2}\n{"a": 3}\n', encoding="utf-8")
+
+        chunks = list(ar.read_jsonl_chunked(path, chunksize=2))
+
+        assert [ar.to_pandas(chunk)["a"].tolist() for chunk in chunks] == [
+            [1, 2],
+            [3],
+        ]
+
+    def test_nrows_stops_across_chunk_boundaries(self, tmp_path):
+        path = _write(tmp_path, "data.jsonl", [{"i": i} for i in range(6)])
+
+        chunks = list(ar.read_jsonl_chunked(path, chunksize=2, nrows=3))
+
+        assert [chunk.shape[0] for chunk in chunks] == [2, 1]
+        assert [ar.to_pandas(chunk)["i"].tolist() for chunk in chunks] == [
+            [0, 1],
+            [2],
+        ]
+
+    def test_nrows_stops_before_malformed_record_beyond_limit(self, tmp_path):
+        path = tmp_path / "limited.jsonl"
+        path.write_text('{"a": 1}\n{"a": 2}\nnot json\n', encoding="utf-8")
+
+        chunks = list(ar.read_jsonl_chunked(path, chunksize=1, nrows=2))
+
+        assert [ar.to_pandas(chunk)["a"].tolist() for chunk in chunks] == [[1], [2]]
+
+    def test_nrows_zero_yields_no_chunks_and_skips_validation(self, tmp_path):
+        path = tmp_path / "probe.txt"
+        path.write_text("not valid json\n", encoding="utf-8")
+
+        assert list(ar.read_jsonl_chunked(path, nrows=0)) == []
+
+    def test_duplicate_key_keeps_line_number(self, tmp_path):
+        path = tmp_path / "dupes.jsonl"
+        path.write_text('{"id": 1}\n{"id": 2, "id": 3}\n', encoding="utf-8")
+
+        with pytest.raises(ar.JsonlReadError, match="line 2"):
+            list(ar.read_jsonl_chunked(path, chunksize=1))
+
+    def test_nested_value_keeps_column_and_line_number(self, tmp_path):
+        path = tmp_path / "nested.jsonl"
+        path.write_text('{"id": 1}\n{"id": 2, "tags": ["x"]}\n', encoding="utf-8")
+
+        with pytest.raises(ar.JsonlReadError) as exc_info:
+            list(ar.read_jsonl_chunked(path, chunksize=1))
+
+        message = str(exc_info.value)
+        assert "tags" in message
+        assert "line 2" in message
+
+    def test_invalid_json_keeps_line_number(self, tmp_path):
+        path = tmp_path / "bad.jsonl"
+        path.write_text('{"a": 1}\n{bad json}\n', encoding="utf-8")
+
+        with pytest.raises(ar.JsonlReadError, match="line 2"):
+            list(ar.read_jsonl_chunked(path, chunksize=1))
+
+    def test_empty_file_raises_on_iteration(self, tmp_path):
+        path = tmp_path / "empty.jsonl"
+        path.write_text("", encoding="utf-8")
+
+        with pytest.raises(ar.JsonlReadError, match="empty"):
+            list(ar.read_jsonl_chunked(path))
+
+    def test_invalid_chunksize_type_raises(self, tmp_path):
+        path = _write(tmp_path, "data.jsonl", [{"x": 1}])
+
+        with pytest.raises(TypeError, match="chunksize must be an integer"):
+            list(ar.read_jsonl_chunked(path, chunksize=1.5))
+
+    def test_invalid_chunksize_bool_raises(self, tmp_path):
+        path = _write(tmp_path, "data.jsonl", [{"x": 1}])
+
+        with pytest.raises(TypeError, match="chunksize must be an integer"):
+            list(ar.read_jsonl_chunked(path, chunksize=True))
+
+    def test_invalid_chunksize_value_raises(self, tmp_path):
+        path = _write(tmp_path, "data.jsonl", [{"x": 1}])
+
+        with pytest.raises(ValueError, match="chunksize must be a positive integer"):
+            list(ar.read_jsonl_chunked(path, chunksize=0))
+
+    def test_encoding_errors_replace(self, tmp_path):
+        path = tmp_path / "bad.jsonl"
+        path.write_bytes(b'{"text": "hello \xff world"}\n')
+
+        chunks = list(
+            ar.read_jsonl_chunked(
+                path,
+                chunksize=1,
+                encoding="utf-8",
+                encoding_errors="replace",
+            )
+        )
+
+        assert chunks[0].shape == (1, 1)
+
+    def test_encoding_errors_invalid_value(self, tmp_path):
+        path = _write(tmp_path, "data.jsonl", [{"x": 1}])
+
+        with pytest.raises(ValueError, match="encoding_errors"):
+            list(ar.read_jsonl_chunked(path, encoding_errors="bad"))
+
+    def test_wrong_encoding_raises_decode_error(self, tmp_path):
+        path = tmp_path / "data.jsonl"
+        path.write_bytes('{"city": "M\xfcnchen"}\n'.encode("latin-1"))
+
+        with pytest.raises(ar.JsonlReadError, match="decode"):
+            list(ar.read_jsonl_chunked(path, encoding="utf-8"))
+
+
+class TestReadJsonlInvalidPathType:
+    @pytest.mark.parametrize(
+        "bad_input",
+        [123, 3.14, None, object(), ["a.jsonl"]],
+    )
+    def test_raises_type_error(self, bad_input):
+        with pytest.raises(
+            TypeError,
+            match="read_jsonl expected a filesystem path",
+        ):
+            ar.read_jsonl(bad_input)
+
+    @pytest.mark.parametrize(
+        "bad_input",
+        [123, 3.14, None, object(), ["a.jsonl"]],
+    )
+    def test_chunked_raises_type_error(self, bad_input):
+        with pytest.raises(
+            TypeError,
+            match="read_jsonl_chunked expected a filesystem path",
+        ):
+            list(ar.read_jsonl_chunked(bad_input))

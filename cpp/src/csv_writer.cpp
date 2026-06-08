@@ -1,5 +1,8 @@
 #include "arnio/csv_writer.h"
 
+#ifdef _WIN32
+#include <filesystem>
+#endif
 #include <fstream>
 #include <iomanip>
 #include <limits>
@@ -10,6 +13,16 @@
 #include "arnio/frame.h"
 
 namespace arnio {
+
+namespace {
+inline void open_binary_output(std::ofstream& file, const std::string& path) {
+#ifdef _WIN32
+    file.open(std::filesystem::u8path(path), std::ios::binary);
+#else
+    file.open(path, std::ios::binary);
+#endif
+}
+}  // namespace
 
 CsvWriter::CsvWriter(const CsvWriteConfig& config) : config_(config) {}
 
@@ -34,13 +47,29 @@ std::string CsvWriter::quote_field(const std::string& field) const {
     return result;
 }
 
+std::string CsvWriter::escape_formula_field(const std::string& field) const {
+    if (!config_.escape_formulas || field.empty()) return field;
+
+    switch (field.front()) {
+        case '=':
+        case '+':
+        case '-':
+        case '@':
+        case '\t':
+        case '\r':
+            return "'" + field;
+        default:
+            return field;
+    }
+}
+
 std::string CsvWriter::cell_to_string(const Frame& frame, size_t row, size_t col) const {
     const auto& column = frame.column(col);
     if (column.is_null(row)) return "";
 
     auto cell = column.at(row);
     if (std::holds_alternative<std::string>(cell)) {
-        return quote_field(std::get<std::string>(cell));
+        return quote_field(escape_formula_field(std::get<std::string>(cell)));
     }
     if (std::holds_alternative<int64_t>(cell)) {
         return std::to_string(std::get<int64_t>(cell));
@@ -63,7 +92,8 @@ void CsvWriter::write(const Frame& frame, const std::string& path) const {
     // text mode would silently expand every '\n' to '\r\n',
     // corrupting any line_terminator that already contains '\r'
     // (e.g. "\r\n" → "\r\r\n").
-    std::ofstream out(path, std::ios::binary);
+    std::ofstream out;
+    open_binary_output(out, path);
     if (!out.is_open()) {
         throw std::runtime_error("Could not open file for writing: " + path);
     }

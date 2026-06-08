@@ -5,8 +5,10 @@ import pytest  # noqa: E402
 from arnio.pipeline import (  # noqa: E402
     _BUILTIN_PYTHON_STEP_REGISTRY,
     _PYTHON_STEP_REGISTRY,
+    list_steps,
     register_step,
     reset_steps,
+    unregister_step,
 )
 
 
@@ -107,3 +109,51 @@ class TestRegisterStepSafety:
         assert step_name not in _PYTHON_STEP_REGISTRY
         for step in _BUILTIN_PYTHON_STEP_REGISTRY:
             assert step in _PYTHON_STEP_REGISTRY
+
+
+class TestUnregisterStepBuiltinAlias:
+    """Regression tests for the custom-alias-of-builtin-function unregister bug.
+
+    Previously, unregister_step() used _is_builtin_python_step() which checked
+    the function's __module__ attribute.  This incorrectly blocked removal of
+    user-registered aliases whose callable originated in arnio.cleaning.
+    The fix switches the guard to a membership check against
+    _BUILTIN_PYTHON_STEP_REGISTRY (keyed by *registered name*).
+    """
+
+    def test_custom_alias_of_builtin_function_can_be_unregistered(self):
+        """A user-defined alias for a built-in cleaning function is removable.
+
+        Regression: unregister_step() previously raised UnknownStepError for
+        any alias whose underlying function originated in arnio.cleaning.
+        """
+        import arnio.cleaning as cleaning
+
+        alias = "tmp_strip_alias_safety_test"
+
+        # Precondition: alias must not already exist
+        assert alias not in _PYTHON_STEP_REGISTRY
+
+        # 1. Register a custom alias pointing to a built-in cleaning function
+        register_step(alias, cleaning.normalize_whitespace)
+
+        # 2. The alias should appear in list_steps()
+        assert alias in list_steps()
+
+        # 3. Unregistering the alias must succeed (this was the bug)
+        unregister_step(alias)
+
+        # 4. The alias must no longer appear in list_steps()
+        assert alias not in list_steps()
+        assert alias not in _PYTHON_STEP_REGISTRY
+
+    def test_builtin_python_step_names_remain_protected(self):
+        """Actual built-in Python step names cannot be unregistered.
+
+        Ensures the fix does not weaken protection for real built-in names
+        such as 'filter_rows', 'normalize_whitespace', 'coalesce_columns'.
+        """
+
+        for step_name in list(_BUILTIN_PYTHON_STEP_REGISTRY):
+            with pytest.raises(ValueError):
+                unregister_step(step_name)

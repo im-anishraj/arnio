@@ -40,6 +40,37 @@ def test_pandas_accessor_runs_convenience_clean():
     assert list(result["score"]) == [10]
 
 
+def test_pandas_accessor_supports_direct_cleaning_wrapper_chains():
+    df = pd.DataFrame({"name": [" Alice ", "Bob", None], "age": [25, 150, 30]})
+
+    result = (
+        df.arnio.strip_whitespace(subset=["name"])
+        .arnio.clip_numeric(upper=100, subset=["age"])
+        .arnio.drop_nulls()
+    )
+
+    assert isinstance(result, pd.DataFrame)
+    assert list(result["name"]) == ["Alice", "Bob"]
+    assert list(result["age"]) == [25, 100]
+    assert list(df["name"][:2]) == [" Alice ", "Bob"]
+    assert pd.isna(df.loc[2, "name"])
+    assert list(df["age"]) == [25, 150, 30]
+
+
+def test_pandas_accessor_fill_nulls_updates_selected_columns_only():
+    df = pd.DataFrame(
+        {"name": ["Alice", None], "city": [None, "Delhi"], "score": [10, 20]}
+    )
+
+    result = df.arnio.fill_nulls("unknown", subset=["city"])
+
+    assert isinstance(result, pd.DataFrame)
+    assert list(result["city"]) == ["unknown", "Delhi"]
+    assert pd.isna(result.loc[1, "name"])
+    assert list(result["score"]) == [10, 20]
+    assert pd.isna(df.loc[0, "city"])
+
+
 def test_pandas_accessor_profiles_dataframe_quality():
     df = pd.DataFrame({"name": [" Alice ", "Bob"], "score": [1.5, None]})
 
@@ -98,6 +129,29 @@ def test_pandas_accessor_auto_clean_dry_run_safe_mode():
     assert isinstance(result, ar.DataQualityReport)
     # Original frame must not be mutated
     assert list(df["score"]) == ["10", "20", "30"]
+
+
+def test_pandas_accessor_auto_clean_strict_requires_confirmed_casts():
+    df = pd.DataFrame({"active": ["true", "false"]})
+
+    with pytest.raises(ValueError, match="requires confirmed_casts"):
+        df.arnio.auto_clean(mode="strict", allow_lossy_casts=True)
+
+
+def test_pandas_accessor_auto_clean_strict_accepts_confirmed_casts():
+    df = pd.DataFrame({"active": ["true", "false"]})
+    report = df.arnio.auto_clean(mode="strict", dry_run=True)
+    confirmed_casts = dict(report.suggestions)["cast_types"]
+
+    result = df.arnio.auto_clean(
+        mode="strict",
+        allow_lossy_casts=True,
+        confirmed_casts=confirmed_casts,
+    )
+
+    assert list(result["active"]) == [True, False]
+    assert pd.api.types.is_bool_dtype(result["active"])
+    assert list(df["active"]) == ["true", "false"]
 
 
 def test_pandas_accessor_validates_dataframe():

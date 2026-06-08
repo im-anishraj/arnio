@@ -36,6 +36,10 @@ pip install arnio
 ```
 
 Colab install smoke test: **[COLAB_SMOKE_TEST.md](COLAB_SMOKE_TEST.md)**
+**Interactive Notebooks:**
+[![Basic Usage](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/im-anishraj/arnio/blob/main/examples/basic_usage.ipynb)
+[![Pandas Interop](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/im-anishraj/arnio/blob/main/examples/arnio_with_pandas.ipynb)
+[![Schema Validation](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/im-anishraj/arnio/blob/main/examples/schema_validation.ipynb)
 
 <br>
 
@@ -117,6 +121,7 @@ clean, metadata = ar.pipeline(
 print(metadata["step_timings"])
 print(metadata["applied_steps"])
 print(metadata["row_counts"])
+print(metadata["execution_summary"])
 ```
 ## Quick Example
 
@@ -181,6 +186,12 @@ clean_df = df.arnio.clean([
 ])
 
 report = clean_df.arnio.profile()
+
+trimmed_df = (
+    df.arnio.strip_whitespace(subset=["customer_name"])
+      .arnio.clip_numeric(upper=100, subset=["loyalty_score"])
+      .arnio.drop_nulls(subset=["customer_name"])
+)
 ```
 ## Cross-field validation rules
 
@@ -330,19 +341,24 @@ Supported values:
 
 ### Security note: CSV formula injection
 
-Arnio preserves cell values when reading CSV files. It does not rewrite strings that
-begin with spreadsheet formula prefixes such as `=`, `+`, `-`, or `@`.
+Arnio preserves cell values by default when writing CSV files. It does not rewrite
+strings that begin with spreadsheet formula prefixes such as `=`, `+`, `-`, or `@`
+unless you opt in to formula escaping.
 
 If you export Arnio-cleaned data back to CSV and expect users to open that file in
 Excel, Google Sheets, LibreOffice, or another spreadsheet application, treat
-untrusted text fields as potentially executable spreadsheet formulas. Before
-exporting, escape or neutralize formula-like strings in user-controlled columns,
-for example by prefixing a single quote or another project-approved escape marker.
+untrusted text fields as potentially executable spreadsheet formulas. Use
+`escape_formulas=True` when exporting user-controlled text to prefix formula-like
+string cells with a single quote while leaving numeric columns unchanged:
+
+```python
+ar.write_csv(clean_frame, "safe_export.csv", escape_formulas=True)
+```
 
 This is especially important for customer names, notes, comments, imported form
 fields, and any other free-text values that may come from outside your trust
-boundary. Arnio focuses on parsing, validation, profiling, and cleanup; final CSV
-export policy should stay explicit in the application that writes the file.
+boundary. Arnio keeps the export policy explicit, so existing CSV output remains
+unchanged unless this option is enabled.
 
 <br>
 
@@ -398,6 +414,10 @@ frame = ar.read_jsonl("events.jsonl")
 # Limit rows
 frame = ar.read_jsonl("large.jsonl", nrows=1000)
 
+# Stream large JSONL/NDJSON files in bounded chunks
+for chunk in ar.read_jsonl_chunked("large.jsonl", chunksize=50_000):
+    process(chunk)
+
 # Non-UTF-8 encoding
 frame = ar.read_jsonl("data.ndjson", encoding="latin-1")
 
@@ -405,21 +425,27 @@ frame = ar.read_jsonl("data.ndjson", encoding="latin-1")
 clean = ar.pipeline(frame, [("strip_whitespace",), ("drop_nulls",)])
 ```
 
-Raises `ar.JsonlReadError` with the 1-based line number if a line contains invalid JSON.
+Raises `ar.JsonlReadError` with the 1-based line number if a line contains invalid JSON. The chunked reader uses the same validation and decoding rules as `read_jsonl`, but only materializes one chunk at a time.
 </details>
 
 <details>
-<summary><b>📦 Export to Parquet for columnar analytics pipelines</b></summary>
+<summary><b>📦 Parquet import and export for columnar analytics pipelines</b></summary>
 <br>
 
-`write_parquet` exports an ArFrame to a Parquet file via pyarrow.  Install the optional extra first:
+`read_parquet` and `write_parquet` use pyarrow for Parquet I/O.  Install the optional extra first:
 
 ```bash
 pip install arnio[parquet]
 ```
 
 ```python
-# Basic export
+# Import a Parquet file into an ArFrame (no pandas intermediate)
+frame = ar.read_parquet("data.parquet")
+
+# Read only selected columns
+frame = ar.read_parquet("data.parquet", usecols=["name", "age"])
+
+# Export an ArFrame to Parquet
 ar.write_parquet(frame, "output.parquet")
 
 # Choose compression codec: "snappy" (default), "gzip", "zstd", "brotli", "none"
@@ -428,11 +454,12 @@ ar.write_parquet(frame, "output.parquet", compression="zstd")
 # Control row group size for large files
 ar.write_parquet(frame, "output.parquet", row_group_size=50_000)
 
-# .pq extension also accepted
+# .pq extension also accepted for both read and write
+frame = ar.read_parquet("data.pq")
 ar.write_parquet(frame, "output.pq")
 ```
 
-Raises `ImportError` with an install hint if pyarrow is not available.
+Both functions raise `ImportError` with an install hint if pyarrow is not available.
 </details>
 
 <details>
@@ -618,7 +645,9 @@ not to replace it.
 
 ### DuckDB registration
 
-Use `ar.register_duckdb(frame, conn, "table_name")` to register an ArFrame directly as a DuckDB relation without writing pandas conversion glue yourself. DuckDB is an optional dependency — install it with `pip install duckdb` when needed.
+Use `ar.register_duckdb(frame, conn, "table_name")` to register an ArFrame directly as a DuckDB relation without writing pandas conversion glue yourself. DuckDB is an optional dependency — install it with `pip install "arnio[duckdb]"` when needed. You can also install DuckDB directly with `pip install duckdb`.
+
+For development and CI, `pip install -e ".[dev]"` now includes DuckDB so the integration test module in `tests/test_integrations_duckdb.py` runs in the default test job.
 
 ```python
 import duckdb
@@ -630,45 +659,114 @@ ar.register_duckdb(frame, conn, "my_table")
 result = conn.execute("SELECT * FROM my_table").fetchdf()
 ```
 
-### Row-dropping pipeline behavior
+### Row-dropping and schema-change behavior
 
-Some pipeline steps such as `drop_nulls` or `drop_duplicates`
-can change the number of rows returned during `transform`.
+`ArnioCleaner` enforces a strict transformer contract by default:
 
-By default, `ArnioCleaner` raises a `ValueError` if a pipeline
-changes row count during transform because many scikit-learn
-workflows expect input and output sample counts to remain aligned.
+- **Row-count-changing steps** (`drop_nulls`, `drop_duplicates`,
+  `filter_rows`, `keep_rows_with_nulls`) are **rejected by default** with a
+  clear `ValueError`. To allow row-count changes, pass `allow_row_count_change=True`.
 
-If row-dropping behavior is intentional, pass
-`allow_row_count_change=True` when constructing `ArnioCleaner`.
+- **Column schema-changing steps** (`rename_columns`, `drop_columns`,
+  `drop_constant_columns`, `combine_columns`) are **rejected by default**
+  and allowed only when `allow_schema_changes=True` is passed.
 
 ```python
+# Schema-preserving (default strict mode)
 cleaner = ArnioCleaner(
     steps=[
-        ("drop_nulls",),
         ("strip_whitespace",),
+        ("fill_nulls", {"value": 0}),
     ],
-    allow_row_count_change=True,
+)
+
+# Opt-in column schema changes
+cleaner = ArnioCleaner(
+    steps=[
+        ("rename_columns", {"old_name": "new_name"}),
+        ("drop_constant_columns",),
+    ],
+    allow_schema_changes=True,
 )
 ```
 
 ### Pandas accessor
 
+Arnio integrates directly with pandas through a registered DataFrame accessor. After importing Arnio, every pandas `DataFrame` gains an `.arnio` accessor that provides cleaning, profiling, validation, and pipeline utilities without requiring you to leave your existing pandas workflow.
+
+The accessor is registered through pandas' DataFrame extension API, allowing Arnio methods to be accessed directly as `df.arnio`.
+
+#### Cleaning data with `.clean()`
+
+Use `.clean()` to apply common data-cleaning operations and return a cleaned pandas DataFrame.
+
 ```python
+import pandas as pd
+import arnio as ar
+
 df = pd.read_csv("raw_customers.csv")
 
-clean_df = df.arnio.clean(drop_duplicates=True)
+clean_df = df.arnio.clean(
+    strip_whitespace=True,
+    drop_duplicates=True,
+)
+```
+
+Supported options include:
+
+- `strip_whitespace` – remove leading and trailing whitespace from string values
+- `drop_nulls` – remove rows containing null values
+- `drop_duplicates` – remove duplicate rows
+- `steps` – optional Arnio pipeline steps. When provided, `.clean()` executes the supplied pipeline and returns the resulting pandas DataFrame.
+
+`.clean()` returns a pandas `DataFrame`, allowing you to continue using your existing pandas analysis workflow.
+
+#### Profiling data with `.profile()`
+
+Use `.profile()` to generate a data quality summary.
+
+```python
 quality = clean_df.arnio.profile()
+
+print(quality)
+```
+
+`.profile()` returns a `DataQualityReport` containing dataset quality information and profiling insights that can help identify issues before downstream analysis.
+
+#### Accessor vs `ar.pipeline()`
+
+| Approach | Best for |
+|-----------|-----------|
+| `df.arnio.clean()` | Existing pandas workflows |
+| `df.arnio.profile()` | Quick quality assessment |
+| `df.arnio.pipeline(...)` | Custom pipeline execution from a DataFrame |
+| `ar.pipeline(...)` | Direct Arnio/ArFrame workflows |
+
+#### End-to-end example
+
+```python
+import pandas as pd
+import arnio as ar
+
+df = pd.read_csv("customers.csv")
+
+clean_df = df.arnio.clean(
+    strip_whitespace=True,
+    drop_duplicates=True,
+)
+
+quality = clean_df.arnio.profile()
+
 validation = clean_df.arnio.validate({
     "email": ar.Email(nullable=False),
     "user_code": ar.Regex(r"^USR-\d{4}$", nullable=False),
     "age": ar.Int64(nullable=True, min=0),
-    "score": ar.Custom("positive"),
 })
+
+print(quality)
 ```
 
-This keeps pandas as the analysis tool while Arnio handles the preparation,
-quality, and validation layer.
+This approach keeps pandas as the analysis tool while Arnio handles data preparation, quality checks, and validation.
 
 > Product direction: **[PROJECT_DIRECTION.md](PROJECT_DIRECTION.md)**
 
@@ -953,14 +1051,15 @@ Most operations below run natively in C++. Currently, `filter_rows`, `replace_va
 | `standardize_missing_tokens` | Replace common missing-value strings with NaN | `ar.standardize_missing_tokens(frame)` |
 | `normalize_case` | Force lower/upper/title case | `ar.normalize_case(frame, case_type="title")` |
 | `rename_columns` | Rename columns via mapping | `ar.rename_columns(frame, {"old": "new"})` |
-| `cast_types` | Cast column types | `ar.cast_types(frame, {"age": "int64"})` |
+| `cast_types` | Cast column types with `errors="raise"`, `"coerce"`, or `"ignore"` | `ar.cast_types(frame, {"age": "int64"}, errors="raise")` |
 | `round_numeric_columns` | Round numeric columns (non-numeric columns in subset ignored safely) | `ar.round_numeric_columns(frame, decimals=2)` |
 | `replace_values` | Replace values using a mapping (column or whole-frame). Handles `None`/`NaN`. | `ar.replace_values(frame, {"active": "A", "inactive": "I"}, column="status")` |
-| `clean` | Convenience shorthand | `ar.clean(frame, drop_nulls=True)` |
+| `clean` | Convenience shorthand supporting config dicts | `ar.clean(frame, strip_whitespace={"subset": ["name"]}, drop_nulls=True)` |
 | `safe_divide_columns` | Divide one column by another, handling zero/null denominators | `ar.safe_divide_columns(frame, numerator="revenue", denominator="cost", output_column="ratio")` |
 | `drop_columns_matching` | Drop columns whose names match a regex pattern | `ar.drop_columns_matching(frame, pattern="^temp_")` |
 | `trim_column_names` | Strip leading/trailing whitespace from column names | `ar.trim_column_names(frame)` |
 | `select_columns` | Return a new frame containing only selected columns | `ar.select_columns(frame, ["id", "name"])` |
+| `slugify_column_names` | Normalise column names to snake_case | `ar.slugify_column_names(frame)` |
 
 #### `ArFrame.select_dtypes` — type-based column selection
 
@@ -1356,10 +1455,24 @@ clean = ar.pipeline(frame, suggestions)
 For low-risk automatic cleanup in one call:
 
 ```python
-clean, report = ar.auto_clean(frame, mode="strict", return_report=True)
+clean, report = ar.auto_clean(frame, return_report=True)
 ```
 
-This is the layer pandas does not try to own: profiling, data contracts, row-level validation issues, and safe cleaning suggestions for messy incoming datasets.
+For strict automatic cleanup, inspect type casts before applying them:
+
+```python
+report = ar.auto_clean(frame, mode="strict", dry_run=True)
+cast_mapping = dict(report.suggestions).get("cast_types")
+
+clean = ar.auto_clean(
+    frame,
+    mode="strict",
+    allow_lossy_casts=True,
+    confirmed_casts=cast_mapping,
+)
+```
+
+This is the layer pandas does not try to own: profiling, data contracts, row-level validation issues, and preview-gated cleaning suggestions for messy incoming datasets.
 
 <br>
 
@@ -1412,7 +1525,7 @@ Expected cleaned output with `mode="strict"`:
 | 1003 | Pranay | New York |
 | 1004 | Dhruv | Tokyo |
 
-`mode="safe"` only trims whitespace. Use `mode="strict"` when you also want deterministic built-in cleanup such as exact duplicate removal.
+`mode="safe"` only trims whitespace. Use `mode="strict"` when you also want deterministic built-in cleanup such as exact duplicate removal. If strict mode proposes type casts, run `dry_run=True` first and pass the exact proposed mapping as `confirmed_casts` with `allow_lossy_casts=True`.
 
 See [examples/auto_clean_tutorial.py](examples/auto_clean_tutorial.py) for a runnable version of this walkthrough, and [examples/schema_validation.py](examples/schema_validation.py) for a focused validation tutorial.
 
@@ -1461,7 +1574,7 @@ sharing **aggregate statistics only** or **raw/sample cell values**.
 | `report.to_dict()` | Mixed | **Yes** — includes `sample_values` and `top_values` unless you redact samples |
 | `report.to_dict(redact_sample_values=True)` | Mixed | `sample_values` → `"[REDACTED]"` (same list length); `top_values[*].value` → `"[REDACTED]"` while counts and ratios remain |
 | `report.to_markdown()`, `report.summary()` | Yes | No raw cell values in output |
-| `report.to_html()` / notebook display of `report` | Partial | **Shows `top_values`** chips; does not list `sample_values` |
+| `report.to_html()` / notebook display of `report` | Partial | **Shows `top_values`** chips; does not list `sample_values`. Use `redact_top_values=True` or `exclude_columns` for safer sharing. |
 | `report.to_pandas()` | Partial | Includes **`top_values`**, not `sample_values` |
 | `ProfileComparison.to_dict()` | Nested profiles | **Yes** — embeds `left_profile` / `right_profile` via default `to_dict()` |
 
@@ -1473,7 +1586,7 @@ controls below for safer sharing.
 - **JSON logs and artifacts:** `report.to_dict(redact_sample_values=True)` before writing or uploading.
 - **Collect fewer samples:** `ar.profile(frame, sample_size=0)` skips `sample_values` (defaults still apply to `top_values` counts on string columns).
 - **Text summaries for CI or comments:** prefer `report.to_markdown()` or `report.summary()` when you do not need per-value examples.
-- **Notebooks and HTML exports:** avoid evaluating `report` or saving `report.to_html()` for sensitive data; HTML still shows `top_values`.
+- **Notebooks and HTML exports:** use `report.to_html(redact_top_values=True)` to replace every top-value chip label with `[REDACTED]` while preserving counts and ratios. To drop entire sensitive columns from the table, add `exclude_columns=["ssn", "email"]`. Avoid saving unredacted `report.to_html()` output for sensitive data.
 - **GitHub bug reports and examples:** use synthetic data (`user@example.com`, `ID-001`), a minimal CSV, and redacted `to_dict()` output — not production dumps.
 - **Pandas export:** `ar.to_pandas(frame)` returns full table data; redaction applies to **quality reports**, not the underlying frame.
 - **Profile comparison:** `ProfileComparison.to_dict()` nests full profiles; build shared artifacts with `profile.to_dict(redact_sample_values=True)` if needed.
@@ -1490,6 +1603,11 @@ report = ar.profile(df, sample_size=2)
 
 # Safer JSON for sharing (sample_values and top_values values redacted)
 safe_json = report.to_dict(redact_sample_values=True)
+
+# Safer HTML export (top-value chip labels replaced with [REDACTED])
+safe_html = report.to_html(redact_top_values=True)
+# or exclude an entire column from the HTML table:
+# safe_html = report.to_html(redact_top_values=True, exclude_columns=["email"])
 
 # Safer text summary (no sample_values or top_values in output)
 print(report.to_markdown())
@@ -1793,8 +1911,8 @@ Most new features are pure Python pipeline steps:
 
 ```python
 # 1. Write a function that takes a DataFrame and returns a DataFrame
-def remove_special_chars(df, columns=None):
-    cols = columns or df.select_dtypes("object").columns
+def remove_special_chars(df, subset=None):
+    cols = subset or df.select_dtypes("object").columns
     for col in cols:
         df[col] = df[col].str.replace(r"[^a-zA-Z0-9\s]", "", regex=True)
     return df
@@ -1991,7 +2109,7 @@ arnio/
 ├── tests/                   # pytest suite — CSV, cleaning, pipeline, conversions
 ├── benchmarks/              # Reproducible arnio vs pandas benchmark
 ├── examples/                # basic_usage.py, auto_clean_tutorial.py, custom_step.py and ready to run recipes for sales, customers, survey, logs, finance
-└── website/                 # Project website — arniolib.vercel.app
+└── website/                 # Project website — arnio.vercel.app
 ```
 
 <br>
@@ -2016,14 +2134,29 @@ arnio/
 <a href="https://pypi.org/project/arnio/"><img src="https://img.shields.io/pypi/dm/arnio?style=flat-square&logo=pypi&logoColor=white&labelColor=0d1117&color=3572A5&label=installs" alt="Downloads"></a>&ensp;
 <a href="https://github.com/im-anishraj/arnio/stargazers"><img src="https://img.shields.io/github/stars/im-anishraj/arnio?style=flat-square&logo=github&labelColor=0d1117&color=e3b341&label=stars" alt="Stars"></a>&ensp;
 <a href="https://github.com/im-anishraj/arnio/network/members"><img src="https://img.shields.io/github/forks/im-anishraj/arnio?style=flat-square&logo=github&labelColor=0d1117&color=8b949e&label=forks" alt="Forks"></a>&ensp;
-<a href="https://arniolib.vercel.app/"><img src="https://img.shields.io/badge/website-arniolib.vercel.app-blue?style=flat-square&labelColor=0d1117" alt="Website"></a>&ensp;
+<a href="https://arnio.vercel.app/"><img src="https://img.shields.io/badge/website-arnio.vercel.app-blue?style=flat-square&labelColor=0d1117" alt="Website"></a>&ensp;
 <a href="https://discord.gg/xsEw7r78M"><img src="https://img.shields.io/badge/community-Discord-5865F2?style=flat-square&logo=discord&logoColor=white&labelColor=0d1117" alt="Discord"></a>
 
 <br>
 
 <sub>Built with C++ and pybind11 · Licensed under MIT · Maintained by <a href="https://github.com/im-anishraj">@im-anishraj</a></sub>
-
 </div>
+
+
+### Reproducible Jobs
+You can save pipelines to JSON or YAML so you can reuse them later:
+
+```python
+import arnio as ar
+
+steps = [
+    ("drop_nulls", {"subset": ["age"]}),
+    ("strip_whitespace",)
+]
+
+ar.save_pipeline(steps, "my_pipeline.json")
+loaded_steps = ar.load_pipeline("my_pipeline.json")
+```
 
 ## Security
 

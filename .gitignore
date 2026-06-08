@@ -248,3 +248,4 @@ benchmarks/benchmark_strip_whitespace.csv
 # Local diagnostic logs
 failed_log.txt
 run_error.txt
+*.swp

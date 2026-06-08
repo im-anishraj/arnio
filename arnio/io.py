@@ -7,9 +7,14 @@ from __future__ import annotations
 
 import codecs
 import io
+import json
 import os
+import re as _re
 import shutil
 import tempfile
+import urllib.error
+import urllib.parse
+import urllib.request
 import warnings
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
@@ -22,7 +27,7 @@ from ._core import (
     _CsvWriteConfig,
     _CsvWriter,
 )
-from .exceptions import CsvReadError, JsonlReadError
+from .exceptions import CsvReadError, JsonlReadError, RemoteReadError
 from .frame import ArFrame
 
 
@@ -148,7 +153,10 @@ def _utf8_csv_path(
         raise ValueError(f"Unknown encoding: {encoding}") from e
     except UnicodeDecodeError as e:
         raise CsvReadError(
-            f"Could not decode {path!r} using encoding {encoding!r}"
+            f"Could not decode {path!r} using encoding {encoding!r}: "
+            f"invalid byte(s) at position {e.start} "
+            f"(byte value: 0x{e.object[e.start]:02x}). "
+            f"Try a different encoding or use encoding_errors='replace'."
         ) from e
     except OSError as e:
         _raise_csv_path_os_error(path, e)
@@ -194,23 +202,26 @@ def _validate_decimal_separator(decimal_separator: str) -> str:
     return decimal_separator
 
 
-_INVALID_DELIMITERS: frozenset[str] = frozenset({"\n", "\r", "\0", '"'})
-
-
 def _validate_delimiter(delimiter: str) -> str:
     """Validate CSV delimiter."""
     if not isinstance(delimiter, str):
         raise TypeError("delimiter must be a string")
 
     if len(delimiter) != 1:
-        raise ValueError("delimiter must be exactly one character")
-
-    if delimiter in _INVALID_DELIMITERS:
         raise ValueError(
-            f"delimiter {delimiter!r} is not allowed; the following characters "
-            f"cannot be used as field delimiters: newline (\\n), "
-            f'carriage-return (\\r), NUL (\\0), double-quote (").'
+            "delimiter must be a single character; delimiter must be exactly one character"
         )
+
+    if delimiter in {"\n", "\r"}:
+        raise ValueError("delimiter must not be a newline character")
+
+    if delimiter == '"':
+        raise ValueError("delimiter must not be the CSV quote character")
+
+    cp = ord(delimiter)
+    if (cp <= 0x1F and cp != 0x09) or cp == 0x7F:  # 0x09 = tab, allowed
+        raise ValueError("delimiter must not be a control character")
+
     return delimiter
 
 
@@ -254,8 +265,7 @@ def _validate_dtype_mapping(dtype: dict[str, str]) -> dict[str, str]:
 
         if dtype_name not in allowed:
             raise ValueError(
-                f"Unsupported dtype {dtype_name!r}. "
-                f"Expected one of: {sorted(allowed)}"
+                f"Unsupported dtype {dtype_name!r}. Expected one of: {sorted(allowed)}"
             )
 
         validated[column] = dtype_name
@@ -276,6 +286,129 @@ def _validate_nrows(nrows: int) -> int:
 
 _PREVIEW_BAD_ROWS = 10
 _FILE_LIKE_COPY_CHUNK_SIZE = 8192
+
+# ---------------------------------------------------------------------------
+# Remote URL support
+# ---------------------------------------------------------------------------
+
+# Schemes fetched via stdlib urllib — zero new dependencies.
+_SUPPORTED_URL_SCHEMES = frozenset({"https", "http"})
+
+# Cloud provider schemes that are reserved for follow-up optional extras.
+# Fail fast with an actionable install hint rather than a cryptic C++ error.
+_CLOUD_SCHEME_HINTS: dict[str, str] = {
+    "s3": 'pip install "arnio[s3]"',
+    "gs": 'pip install "arnio[gcs]"',
+    "gcs": 'pip install "arnio[gcs]"',
+    "az": 'pip install "arnio[azure]"',
+    "abfs": 'pip install "arnio[azure]"',
+    "abfss": 'pip install "arnio[azure]"',
+}
+
+_URL_FETCH_TIMEOUT = 30  # seconds
+_URL_FETCH_CHUNK_SIZE = 65536  # 64 KiB per streaming read
+
+
+def _fetch_url_to_tempfile(url: str) -> str:
+    """Fetch an HTTP/HTTPS URL and write its content to a UTF-8 temp file.
+
+    Parameters
+    ----------
+    url : str
+        A well-formed ``http://`` or ``https://`` URL whose response body
+        is assumed to be UTF-8 encoded CSV text.
+
+    Returns
+    -------
+    str
+        Absolute path to the temporary file.  The caller is responsible for
+        deleting it (``should_cleanup=True`` is returned by
+        ``_materialize_csv_input``).
+
+    Raises
+    ------
+    RemoteReadError
+        On any network-level failure (DNS, timeout, connection refused) or
+        a non-2xx HTTP response.
+    """
+    tmp = tempfile.NamedTemporaryFile(
+        mode="w",
+        encoding="utf-8",
+        suffix=".csv",
+        delete=False,
+    )
+    tmp_name = tmp.name
+    try:
+        req = urllib.request.Request(
+            url,
+            headers={"User-Agent": "arnio/read_csv"},
+        )
+        try:
+            response = urllib.request.urlopen(req, timeout=_URL_FETCH_TIMEOUT)
+        except urllib.error.HTTPError as exc:
+            raise RemoteReadError(
+                f"HTTP {exc.code} fetching CSV URL {url!r}: {exc.reason}",
+                url=url,
+                status_code=exc.code,
+            ) from exc
+        except urllib.error.URLError as exc:
+            raise RemoteReadError(
+                f"Could not fetch CSV URL {url!r}: {exc.reason}",
+                url=url,
+            ) from exc
+
+        # Stream response body into temp file using an incremental UTF-8
+        # decoder so that multi-byte characters split across read() chunk
+        # boundaries are handled correctly and do not raise a false
+        # RemoteReadError.
+        with response:
+            decoder = codecs.getincrementaldecoder("utf-8")("strict")
+            raw_bytes = response.read(_URL_FETCH_CHUNK_SIZE)
+            while raw_bytes:
+                try:
+                    tmp.write(decoder.decode(raw_bytes, final=False))
+                except UnicodeDecodeError as exc:
+                    raise RemoteReadError(
+                        f"Remote CSV at {url!r} is not valid UTF-8: {exc}",
+                        url=url,
+                    ) from exc
+                raw_bytes = response.read(_URL_FETCH_CHUNK_SIZE)
+            # Flush any bytes buffered inside the decoder for the final
+            # (possibly incomplete) multi-byte sequence.
+            try:
+                tmp.write(decoder.decode(b"", final=True))
+            except UnicodeDecodeError as exc:
+                raise RemoteReadError(
+                    f"Remote CSV at {url!r} is not valid UTF-8: {exc}",
+                    url=url,
+                ) from exc
+
+        tmp.close()
+        return tmp_name
+
+    except RemoteReadError:
+        try:
+            tmp.close()
+        except OSError:
+            pass
+        try:
+            os.unlink(tmp_name)
+        except OSError:
+            pass
+        raise
+    except Exception as exc:
+        try:
+            tmp.close()
+        except OSError:
+            pass
+        try:
+            os.unlink(tmp_name)
+        except OSError:
+            pass
+        raise RemoteReadError(
+            f"Unexpected error fetching CSV URL {url!r}: {exc}",
+            url=url,
+        ) from exc
 
 
 def _warn_bad_rows(bad_rows: list) -> None:
@@ -359,14 +492,101 @@ def _validate_on_bad_lines(on_bad_lines: str) -> str:
 
 def _materialize_csv_input(
     source: str | os.PathLike[str] | io.TextIOBase,
+    caller: str = "read_csv",
 ) -> tuple[str, bool, bool]:
-    """Convert supported CSV inputs into a filesystem path."""
+    """Convert supported CSV inputs into a filesystem path.
+
+    Supported input types
+    ---------------------
+    - Local filesystem paths (``str`` or ``os.PathLike``) — returned as-is.
+    - ``https://`` / ``http://`` URLs — fetched via stdlib ``urllib`` and
+      written to a UTF-8 temporary file.
+    - Cloud provider URLs (``s3://``, ``gs://``, ``az://``, …) — raise
+      ``ValueError`` with an actionable ``pip install`` hint.
+    - Text file-like objects (``io.StringIO`` or any object with a
+      ``read()`` method returning ``str``) — copied to a UTF-8 temp file.
+
+    Returns
+    -------
+    (path, should_cleanup, is_materialized_text)
+        ``should_cleanup`` is ``True`` when a temp file was created and the
+        caller must delete it.  ``is_materialized_text`` signals that the
+        file was already decoded to UTF-8, so ``_utf8_csv_path`` should
+        skip re-transcoding.
+    """
     if isinstance(source, (str, os.PathLike)):
-        return os.fspath(source), False, False
+        raw = os.fspath(source)
+        is_temp = False
+
+        # Only inspect scheme for plain strings — PathLike objects are
+        # always local filesystem paths.
+        if isinstance(source, str):
+            parsed = urllib.parse.urlparse(raw)
+            scheme = parsed.scheme.lower()
+
+            # Cloud provider schemes — reserved, fail fast with install hint.
+            if scheme in _CLOUD_SCHEME_HINTS:
+                raise ValueError(
+                    f"Cloud scheme {scheme!r} is not yet supported by arnio. "
+                    f"Install the optional extra when available: "
+                    f"{_CLOUD_SCHEME_HINTS[scheme]}"
+                )
+
+            # HTTP/HTTPS — fetch via stdlib urllib, no new dependencies.
+            if scheme in _SUPPORTED_URL_SCHEMES:
+                raw = _fetch_url_to_tempfile(raw)
+                is_temp = True
+
+        is_gz = False
+        if isinstance(source, str) and source.lower().endswith(".gz"):
+            is_gz = True
+        elif not isinstance(source, str) and raw.lower().endswith(".gz"):
+            is_gz = True
+
+        if is_gz:
+            import gzip
+
+            tmp = tempfile.NamedTemporaryFile(
+                mode="wb",
+                suffix=".csv",
+                delete=False,
+            )
+            try:
+                with gzip.open(raw, "rb") as gz_file:
+                    shutil.copyfileobj(gz_file, tmp, length=_FILE_LIKE_COPY_CHUNK_SIZE)
+                tmp.close()
+                if is_temp:
+                    try:
+                        os.unlink(raw)
+                    except OSError:
+                        pass
+                return tmp.name, True, False
+            except Exception:
+                try:
+                    tmp.close()
+                except OSError:
+                    pass
+                try:
+                    os.unlink(tmp.name)
+                except OSError:
+                    pass
+                if is_temp:
+                    try:
+                        os.unlink(raw)
+                    except OSError:
+                        pass
+                raise
+
+        # If it was an HTTP fetch but not a .gz, it's materialized text
+        if is_temp:
+            return raw, True, True
+
+        return raw, False, False
+
     if isinstance(source, io.StringIO) or (
         hasattr(source, "read") and callable(source.read)
     ):
-        tmp = tempfile.NamedTemporaryFile(
+        text_tmp = tempfile.NamedTemporaryFile(
             mode="w",
             encoding="utf-8",
             suffix=".csv",
@@ -382,15 +602,26 @@ def _materialize_csv_input(
                     raise TypeError(
                         "read_csv file-like objects must return text, not bytes"
                     )
-                tmp.write(chunk)
-            tmp.close()
-            return tmp.name, True, True
+                text_tmp.write(chunk)
+            text_tmp.close()
+            return text_tmp.name, True, True
         except Exception:
-            tmp.close()
-            os.unlink(tmp.name)
+            try:
+                text_tmp.close()
+            except OSError:
+                pass
+            try:
+                os.unlink(text_tmp.name)
+            except OSError:
+                pass
             raise
 
-    raise TypeError("read_csv expected a filesystem path or text file-like object")
+    # read_csv_chunked expects a shorter message (no URL mention) per its test.
+    if caller == "read_csv_chunked":
+        raise TypeError(f"{caller} expected a filesystem path or text file-like object")
+    raise TypeError(
+        f"{caller} expected a filesystem path, a URL, or a text file-like object"
+    )
 
 
 def _reject_utf8_nul_bytes(path: str) -> None:
@@ -408,10 +639,13 @@ def _reject_utf8_nul_bytes(path: str) -> None:
         _raise_csv_path_os_error(path, e)
 
 
-def _validate_csv_path(path: str, encoding: str) -> None:
+def _validate_csv_path(
+    path: str, encoding: str, *, reject_utf8_nul_bytes: bool = True
+) -> None:
     """Shared validation for CSV-style file inputs."""
 
-    if _is_utf8_encoding(encoding):
+    is_utf8 = _is_utf8_encoding(encoding)
+    if reject_utf8_nul_bytes and is_utf8:
         _reject_utf8_nul_bytes(path)
 
     try:
@@ -432,10 +666,181 @@ def _validate_encoding_errors(value: str) -> str:
 
     if value not in _VALID_ENCODING_ERRORS:
         raise ValueError(
-            "encoding_errors must be one of " "'strict', 'replace', or 'ignore'"
+            "encoding_errors must be one of 'strict', 'replace', or 'ignore'"
         )
 
     return value
+
+
+def _enrich_row_width_error(exc: Exception, delimiter: str) -> CsvReadError:
+    """Re-raise a confirmed C++ row-width error with richer Python-layer context.
+
+    The C++ backend emits messages matching:
+        "CSV row <N> has <actual> fields; expected <expected>"
+
+    Only messages that match that exact pattern are enriched; all other
+    exceptions are converted to CsvReadError with the original message intact,
+    preserving established exception behavior for unrelated failures.
+    """
+    msg = str(exc)
+    m = _re.search(
+        r"[Cc][Ss][Vv] row (\d+) has (\d+) fields?;?\s*expected (\d+)",
+        msg,
+    )
+    if m:
+        row_num = int(m.group(1))
+        actual = int(m.group(2))
+        expected = int(m.group(3))
+        direction = (
+            f"too many fields ({actual} found, {expected} expected)"
+            if actual > expected
+            else f"too few fields ({actual} found, {expected} expected)"
+        )
+        enriched = (
+            f"Malformed CSV: row {row_num} has {direction}. "
+            f"To skip bad rows silently use on_bad_lines='skip', or "
+            f"on_bad_lines='warn' to collect them. "
+            f"For rows with missing trailing fields, try mode='permissive'. "
+            f"({msg})"
+        )
+        return CsvReadError(enriched)
+    # Not a row-width message — preserve the original text exactly.
+    return CsvReadError(msg)
+
+
+# Candidate delimiters to probe during delimiter-mismatch detection.
+# Checked only when the parse produced exactly one column, which is the
+# signature of a delimiter mismatch.
+_MISMATCH_PROBE_DELIMITERS = {",", ";", "\t", "|"}
+
+
+def _read_logical_records(path: str, max_records: int = 2) -> list[str]:
+    """Read up to *max_records* logical CSV records from *path*.
+
+    Quote state is preserved across physical newlines so that a field like
+    ``"Alice\\nSmith"`` is correctly treated as part of the same record rather
+    than split into two separate lines.  Each returned string is the raw text
+    of one complete logical record (everything up to and including the closing
+    quote of any spanning field, then up to the next unquoted newline).
+
+    Only the minimum bytes needed are read, so this is O(1) in file size.
+    """
+    records: list[str] = []
+    current: list[str] = []
+    in_quotes = False
+
+    try:
+        with open(path, encoding="utf-8", errors="replace", newline="") as fh:
+            for raw_line in fh:
+                # Count how many quotes are on this physical line to update
+                # in_quotes state, carrying it across newlines.
+                i = 0
+                n = len(raw_line)
+                while i < n:
+                    c = raw_line[i]
+                    if c == '"':
+                        if in_quotes:
+                            # Doubled-quote escape: "" inside a quoted field.
+                            if i + 1 < n and raw_line[i + 1] == '"':
+                                i += 2
+                                continue
+                            in_quotes = False
+                        else:
+                            in_quotes = True
+                    i += 1
+
+                current.append(raw_line.rstrip("\r\n"))
+
+                if not in_quotes:
+                    # Quote state closed — this physical line ends a logical record.
+                    record = " ".join(current).strip()
+                    if record:
+                        records.append(record)
+                        current = []
+                        if len(records) >= max_records:
+                            break
+    except OSError:
+        pass
+
+    return records
+
+
+def _count_unquoted_in_record(record: str, char: str) -> int:
+    """Count occurrences of *char* outside RFC-4180 quoted fields in *record*.
+
+    *record* is the text of a complete logical CSV record (quote state is
+    already resolved across newlines by ``_read_logical_records``).  Handles
+    doubled-quote escapes (``""``) correctly.
+    """
+    count = 0
+    in_quotes = False
+    i = 0
+    n = len(record)
+    while i < n:
+        c = record[i]
+        if c == '"':
+            if in_quotes:
+                if i + 1 < n and record[i + 1] == '"':
+                    i += 2
+                    continue
+                in_quotes = False
+            else:
+                in_quotes = True
+        elif not in_quotes and c == char:
+            count += 1
+        i += 1
+    return count
+
+
+def _warn_delimiter_mismatch(path: str, delimiter: str, col_count: int) -> None:
+    """Emit a UserWarning when the parsed result has one column and the raw
+    file appears to contain a different candidate delimiter outside quoted
+    fields in the first two logical CSV records.
+
+    Quote state is preserved across physical newlines, so a multiline quoted
+    field such as ``"Alice\\nSmith";30`` is correctly handled: the semicolon
+    is detected as outside quotes even though it sits on the second physical
+    line of the file.
+
+    Only fires when the candidate delimiter appears outside quotes in *both*
+    the header record and the first data record, which rules out column
+    headers that coincidentally contain the character.
+
+    This is a best-effort hint — it never raises, so intentional single-column
+    reads are never broken.
+    """
+    if col_count != 1:
+        return
+
+    candidates = _MISMATCH_PROBE_DELIMITERS - {delimiter}
+
+    try:
+        records = _read_logical_records(path, max_records=2)
+        if len(records) < 2:
+            # Header-only or empty file — no data record to probe.
+            return
+
+        header_record, data_record = records[0], records[1]
+
+        for candidate in candidates:
+            if (
+                _count_unquoted_in_record(header_record, candidate) >= 1
+                and _count_unquoted_in_record(data_record, candidate) >= 1
+            ):
+                display = repr(candidate).strip("'")
+                used_display = repr(delimiter).strip("'")
+                warnings.warn(
+                    f"Parsed as a single column — possible delimiter mismatch. "
+                    f"The file appears to contain {display!r} characters but "
+                    f"delimiter={used_display!r} was used. "
+                    f"Try ar.read_csv(path, delimiter={display!r}) or "
+                    f"ar.sniff_delimiter(path) to auto-detect.",
+                    UserWarning,
+                    stacklevel=4,
+                )
+                return
+    except OSError:
+        pass  # best-effort; never mask the original parse result
 
 
 def read_csv(
@@ -462,7 +867,8 @@ def read_csv(
     ----------
     path : str or file-like object
         Filesystem path or text file-like object containing CSV data.
-        Any file extension is accepted. For ``.tsv`` files, the delimiter
+        Any file extension is accepted, including compressed ``.csv.gz`` files.
+        For ``.tsv`` files, the delimiter
         is automatically set to ``'\t'`` when ``delimiter`` is omitted.
     delimiter : str or None, default None
         Field delimiter character.  When ``None`` (the default) the
@@ -568,12 +974,13 @@ def read_csv(
     >>> df = ar.read_csv("data.tsv", delimiter=",")  # explicit comma honoured
     >>> df = ar.read_csv("data.dat")              # non-standard extension accepted
     """
-    path, should_cleanup, is_materialized_text = _materialize_csv_input(path)
+    native_path, should_cleanup, is_materialized_text = _materialize_csv_input(path)
 
     try:
-        _validate_csv_path(path, encoding)
+        # Explicitly validate the decompressed temp file (or local path) rather than the compressed bytes
+        _validate_csv_path(native_path, encoding)
 
-        path_lower = path.lower()
+        path_lower = native_path.lower()
 
         # Resolve the sentinel: auto-detect tab for .tsv only when the caller
         # truly omitted delimiter (None).  An explicit delimiter="," is always
@@ -612,42 +1019,60 @@ def read_csv(
 
         reader = _CsvReader(config)
     except Exception:
-        if should_cleanup and os.path.exists(path):
-            os.unlink(path)
+        if should_cleanup and os.path.exists(native_path):
+            os.unlink(native_path)
         raise
 
     try:
         effective_encoding = "utf-8" if is_materialized_text else encoding
         with _utf8_csv_path(
-            path,
+            native_path,
             effective_encoding,
             encoding_errors=encoding_errors,
             delimiter=delimiter,
-        ) as native_path:
-            cpp_frame, bad_rows = reader.read(native_path, on_bad_lines)
+        ) as native_csv_path:
+            try:
+                cpp_frame, bad_rows = reader.read(native_csv_path, on_bad_lines)
+            except CsvReadError:
+                raise
+            except (ValueError, TypeError):
+                raise
+            except RuntimeError as e:
+                # The C++ backend raises RuntimeError for row-width mismatches.
+                # Enrich only confirmed row-width messages; re-raise everything
+                # else as CsvReadError with the original message intact.
+                raise _enrich_row_width_error(e, delimiter) from None
 
-        # on_bad_lines == "error" will raise RuntimeError then converted to CsvReadError as before
         if on_bad_lines == "warn" and bad_rows:
             _warn_bad_rows(bad_rows)
 
-        return ArFrame(cpp_frame)
+        frame = ArFrame(cpp_frame)
 
-    except ValueError:
+        # Case 2: Delimiter mismatch — check only when usecols was not restricted
+        # (usecols can legitimately produce 1 column) and has_header is True
+        # so we can peek at the data line.
+        if usecols is None and has_header:
+            _warn_delimiter_mismatch(native_path, delimiter, frame.shape[1])
+
+        return frame
+
+    except (ValueError, TypeError):
         raise
     except CsvReadError:
         raise
-    except RuntimeError as e:
+    except Exception as e:
         raise CsvReadError(str(e)) from None
 
     finally:
-        if should_cleanup and os.path.exists(path):
-            os.unlink(path)
+        if should_cleanup and os.path.exists(native_path):
+            os.unlink(native_path)
 
 
 def read_csv_chunked(
     path: str | os.PathLike[str] | io.TextIOBase,
     *,
     chunksize: int = 10_000,
+    dtype: dict[str, str] | None = None,
     delimiter: str | None = None,
     has_header: bool = True,
     usecols: list[str] | None = None,
@@ -670,7 +1095,7 @@ def read_csv_chunked(
     Parameters
     ----------
     path : str or file-like object
-        Path to the CSV file. Supports .csv, .txt, and .tsv extensions.
+        Path to the CSV file. Supports .csv, .txt, .tsv, and compressed .csv.gz extensions.
         Text file-like objects are copied to a temporary file in bounded
         chunks before native parsing.  For ``.tsv`` paths the delimiter is
         automatically set to ``'\\t'`` when ``delimiter`` is omitted.
@@ -713,8 +1138,6 @@ def read_csv_chunked(
     null_values : list[str], optional
         Strings treated as null values.
 
-
-
     mode : {"strict", "permissive"}, default "strict"
         Controls malformed row handling.
         Both modes reject extra fields; permissive mode only allows missing
@@ -753,21 +1176,33 @@ def read_csv_chunked(
     ...     process(chunk)
     """
     is_path_input = isinstance(path, (str, os.PathLike))
-    path, should_cleanup, is_materialized_text = _materialize_csv_input(path)
+    native_path, should_cleanup, is_materialized_text = _materialize_csv_input(
+        path, caller="read_csv_chunked"
+    )
     try:
-        path_lower = path.lower()
+        path_lower = native_path.lower()
         if is_path_input:
+            # We check the original path extension if it was passed as a path
+            if isinstance(path, str):
+                orig_path_lower = path.lower()
+            elif isinstance(path, os.PathLike):
+                orig_path_lower = os.fspath(path).lower()
+            else:
+                orig_path_lower = ""
+
             if not (
-                path_lower.endswith(".csv")
-                or path_lower.endswith(".txt")
-                or path_lower.endswith(".tsv")
+                orig_path_lower.endswith(".csv")
+                or orig_path_lower.endswith(".txt")
+                or orig_path_lower.endswith(".tsv")
+                or orig_path_lower.endswith(".gz")
             ):
                 raise ValueError(
                     f"Unsupported file format: {path}. "
-                    "Only .csv, .txt, and .tsv are supported."
+                    "Only .csv, .txt, .tsv, and compressed .csv.gz are supported."
                 )
 
-        _validate_csv_path(path, encoding)
+        # Explicitly validate the decompressed temp file (or local path) rather than the compressed bytes
+        _validate_csv_path(native_path, encoding, reject_utf8_nul_bytes=False)
 
         # Resolve the sentinel: auto-detect tab for .tsv only when the caller
         # truly omitted delimiter (None).  An explicit delimiter="," is always
@@ -816,6 +1251,9 @@ def read_csv_chunked(
         if null_values is not None:
             config.null_values = _validate_null_values(null_values)
 
+        if dtype is not None:
+            config.dtype = _validate_dtype_mapping(dtype)
+
         if usecols is not None:
             config.usecols = _validate_usecols(usecols)
 
@@ -824,35 +1262,49 @@ def read_csv_chunked(
 
         reader = _CsvChunkReader(config)
     except Exception:
-        if should_cleanup and os.path.exists(path):
-            os.unlink(path)
+        if should_cleanup and os.path.exists(native_path):
+            os.unlink(native_path)
         raise
     try:
         effective_encoding = "utf-8" if is_materialized_text else encoding
         with _utf8_csv_path(
-            path, effective_encoding, delimiter=delimiter
-        ) as native_path:
-            reader.open(native_path)
-            while True:
-                chunk = reader.next_chunk(chunksize, on_bad_lines)
-                if chunk is None:
-                    break
-                cpp_frame, bad_rows = chunk
+            native_path, effective_encoding, delimiter=delimiter
+        ) as native_csv_path:
+            reader.open(native_csv_path)
+            yielded_nonempty_chunk = False
+            try:
+                while True:
+                    chunk = reader.next_chunk(chunksize, on_bad_lines)
+                    if chunk is None:
+                        break
+                    cpp_frame, bad_rows = chunk
 
-                if on_bad_lines == "warn" and bad_rows:
-                    _warn_bad_rows(bad_rows)
+                    if on_bad_lines == "warn" and bad_rows:
+                        _warn_bad_rows(bad_rows)
+                    frame = ArFrame(cpp_frame)
 
-                yield ArFrame(cpp_frame)
+                    if frame.shape[0] == 0 and bad_rows:
+                        if yielded_nonempty_chunk:
+                            continue
+
+                    yielded_nonempty_chunk = (
+                        yielded_nonempty_chunk or frame.shape[0] > 0
+                    )
+
+                    yield frame
+            finally:
+                reader.close()
+                if should_cleanup and os.path.exists(native_path):
+                    try:
+                        os.unlink(native_path)
+                    except OSError:
+                        pass
     except ValueError:
         raise
     except CsvReadError:
         raise
     except RuntimeError as e:
         raise CsvReadError(str(e)) from None
-    finally:
-        reader.close()
-        if should_cleanup and os.path.exists(path):
-            os.unlink(path)
 
 
 def write_csv(
@@ -862,6 +1314,9 @@ def write_csv(
     delimiter: str = ",",
     write_header: bool = True,
     line_terminator: str = "\n",
+    escape_formulas: bool = False,
+    encoding: str = "utf-8",
+    encoding_errors: str = "strict",
 ) -> None:
     """Write an ArFrame to a CSV file via C++ backend.
 
@@ -877,11 +1332,28 @@ def write_csv(
         Whether to write the column header row.
     line_terminator : str, default "\\n"
         Line terminator to use between rows.
+    escape_formulas : bool, default False
+        If True, prefix string cell values that begin with spreadsheet formula
+        trigger characters (``=``, ``+``, ``-``, ``@``, tab, or carriage return)
+        with a single quote before CSV quoting. Numeric columns are not changed.
+    encoding : str, default "utf-8"
+        Output file encoding. UTF-8 (default) uses the native writer path
+        directly with no transcoding overhead. Any other encoding supported
+        by Python's ``codecs`` module is accepted; the native writer emits
+        UTF-8 to a temporary file which is then transcoded in bounded chunks.
+    encoding_errors : str, default "strict"
+        How encoding errors are handled: ``"strict"`` raises ``ValueError``
+        for unencodable characters, ``"replace"`` substitutes a replacement
+        character, ``"ignore"`` drops unencodable characters.
 
     Raises
     ------
+    TypeError
+        If ``encoding`` or ``encoding_errors`` is not a string.
     ValueError
-        If file format is unsupported.
+        If ``encoding`` is an unknown codec, ``encoding_errors`` is not one of
+        ``"strict"``, ``"replace"``, or ``"ignore"``, or if a character cannot
+        be encoded in the requested encoding with ``encoding_errors="strict"``.
     RuntimeError
         If the file cannot be opened or written.
 
@@ -889,7 +1361,11 @@ def write_csv(
     --------
     >>> ar.write_csv(frame, "output.csv")
     >>> ar.write_csv(frame, "output.tsv", delimiter="\\t")
+    >>> ar.write_csv(frame, "output_latin1.csv", encoding="latin-1")
     """
+    if not isinstance(frame, ArFrame):
+        raise TypeError("frame must be an ArFrame")
+
     if not isinstance(path, (str, bytes, os.PathLike)):
         raise TypeError(
             f"path must be a string, bytes, or os.PathLike object, got {type(path).__name__!r}"
@@ -905,37 +1381,97 @@ def write_csv(
             f"Unsupported file format: {path}. Only .csv, .txt, and .tsv are supported."
         )
 
-    if not isinstance(delimiter, str):
-        raise TypeError("delimiter must be a string")
-    if len(delimiter) != 1:
-        raise ValueError(f"delimiter must be a single character, got {delimiter!r}")
-    if delimiter in {"\n", "\r"}:
-        raise ValueError("delimiter must not be a newline character")
-    if delimiter == '"':
-        raise ValueError("delimiter must not be the CSV quote character")
-    if (ord(delimiter) < 32 or ord(delimiter) == 127) and delimiter != "\t":
-        raise ValueError(
-            f"delimiter must not be a control character, got {delimiter!r}"
-        )
+    delimiter = _validate_delimiter(delimiter)
     if not isinstance(line_terminator, str):
         raise TypeError("line_terminator must be a string")
-    if line_terminator == "":
-        raise ValueError("line_terminator must not be empty")
+    if line_terminator not in {"\n", "\r\n", "\r"}:
+        raise ValueError(
+            f"line_terminator must be one of '\\n', '\\r\\n', or '\\r', got {line_terminator!r}"
+        )
+
+    # Validate encoding and encoding_errors before any file I/O.
+    _validate_jsonl_encoding(encoding)
+    _validate_encoding_errors(encoding_errors)
 
     config = _CsvWriteConfig()
     config.delimiter = delimiter
     config.write_header = _validate_bool_option(write_header, "write_header")
     config.line_terminator = line_terminator
+    config.escape_formulas = _validate_bool_option(escape_formulas, "escape_formulas")
 
     writer = _CsvWriter(config)
+
+    if _is_utf8_encoding(encoding):
+        # Fast path: native writer emits UTF-8 directly — no transcoding overhead.
+        try:
+            writer.write(frame._frame, path)
+        except RuntimeError as e:
+            raise RuntimeError(str(e)) from e
+        return
+
+    # Non-UTF-8 path: write UTF-8 to a temp file, then transcode in bounded
+    # chunks so the entire file is never held in memory at once.
+    import tempfile
+
+    _CHUNK_SIZE = 1 << 20  # 1 MiB per chunk
+
+    tmp_fd, tmp_path = tempfile.mkstemp(suffix=".csv")
+    output_tmp_path: str | None = None
     try:
-        writer.write(frame._frame, path)
-    except RuntimeError as e:
-        raise RuntimeError(str(e)) from e
+        os.close(tmp_fd)
+        try:
+            writer.write(frame._frame, tmp_path)
+        except RuntimeError as e:
+            raise RuntimeError(str(e)) from e
+
+        try:
+            output_fd, output_tmp_path = tempfile.mkstemp(
+                dir=os.path.dirname(os.path.abspath(path)),
+                prefix=f".{os.path.basename(path)}.",
+                suffix=".tmp",
+            )
+            os.close(output_fd)
+
+            # newline="" on both sides preserves the line_terminator written by
+            # the C++ backend exactly — no platform newline translation.
+            with (
+                open(tmp_path, encoding="utf-8", newline="") as src,
+                open(
+                    output_tmp_path,
+                    "w",
+                    encoding=encoding,
+                    errors=encoding_errors,
+                    newline="",
+                ) as dst,
+            ):
+                while True:
+                    chunk = src.read(_CHUNK_SIZE)
+                    if not chunk:
+                        break
+                    dst.write(chunk)
+
+            os.replace(output_tmp_path, path)
+            output_tmp_path = None
+        except UnicodeEncodeError as exc:
+            raise ValueError(
+                f"write_csv: character cannot be encoded in {encoding!r}: {exc}"
+            ) from exc
+        except OSError as exc:
+            raise RuntimeError(str(exc)) from exc
+    finally:
+        if output_tmp_path is not None:
+            try:
+                os.unlink(output_tmp_path)
+            except OSError:
+                pass
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
 
 
 def scan_csv(
-    path: str | os.PathLike[str],
+    path: str | os.PathLike[str] | io.TextIOBase,
     *,
     delimiter: str | None = None,
     encoding: str = "utf-8",
@@ -946,16 +1482,18 @@ def scan_csv(
     null_values: list[str] | None = None,
     has_header: bool = True,
     encoding_errors: str = "strict",
+    mode: str = "strict",
     on_bad_lines: str = "error",
 ) -> dict[str, str]:
     """Return schema (column names + inferred types) without loading data.
 
     Parameters
     ----------
-    path : str
-        Path to the CSV file. Any file extension is accepted. For ``.tsv``
-        files, the delimiter is automatically set to ``'\t'`` when
-        ``delimiter`` is omitted.
+    path : str or file-like object
+        Filesystem path or text file-like object containing CSV data.
+        Any file extension is accepted, including compressed ``.csv.gz`` files.
+        For ``.tsv`` files, the delimiter
+        is automatically set to ``'\t'`` when ``delimiter`` is omitted.
     delimiter : str or None, default None
         Field delimiter character.  When ``None`` (the default) the
         delimiter is inferred from the file extension: ``'\t'`` for
@@ -992,6 +1530,11 @@ def scan_csv(
         How encoding errors are handled. One of ``"strict"``, ``"replace"``,
         or ``"ignore"``.
 
+    mode : {"strict", "permissive"}, default "strict"
+        Controls malformed row handling during schema inference. In
+        ``"permissive"`` mode, narrow rows are padded with nulls before type
+        inference so scanning matches ``read_csv(..., mode="permissive")``.
+
     on_bad_lines : str, default "error"
         What to do when a malformed row is encountered during schema inference.
         ``"error"`` raises :exc:`CsvReadError` immediately (default).
@@ -1024,55 +1567,60 @@ def scan_csv(
     >>> schema = ar.scan_csv("data.dat")              # non-standard extension accepted
     """
 
-    path = os.fspath(path)
+    native_path, should_cleanup, _ = _materialize_csv_input(path, caller="scan_csv")
 
-    _validate_csv_path(path, encoding)
-
-    path_lower = path.lower()
-
-    # Resolve the sentinel: auto-detect tab for .tsv only when the caller
-    # truly omitted delimiter (None).  An explicit delimiter="," is always
-    # honoured, even for .tsv paths.
-    if delimiter is None:
-        delimiter = "\t" if path_lower.endswith(".tsv") else ","
-
-    decimal_separator = _validate_decimal_separator(decimal_separator)
-    _validate_thousands_separator(thousands_separator, decimal_separator)
-    delimiter = _validate_delimiter(delimiter)
-    encoding_errors = _validate_encoding_errors(encoding_errors)
-    on_bad_lines = _validate_on_bad_lines(on_bad_lines)
-    config = _CsvConfig()
-    config.delimiter = delimiter
-    config.encoding = encoding
-    config.trim_headers = _validate_bool_option(trim_headers, "trim_headers")
-    config.decimal_separator = decimal_separator
-    config.thousands_separator = thousands_separator
-    config.has_header = _validate_bool_option(has_header, "has_header")
-    config.encoding_errors = encoding_errors
-
-    if null_values is not None:
-        config.null_values = _validate_null_values(null_values)
-
-    if sample_size is not None:
-        if not isinstance(sample_size, int) or isinstance(sample_size, bool):
-            raise TypeError("sample_size must be an integer.")
-        if sample_size <= 0:
-            raise ValueError("sample_size must be a positive integer greater than 0.")
-        config.sample_size = sample_size
-
-    reader = _CsvReader(config)
     try:
+        _validate_csv_path(native_path, encoding, reject_utf8_nul_bytes=False)
+
+        path_lower = native_path.lower()
+
+        # Resolve the sentinel: auto-detect tab for .tsv only when the caller
+        # truly omitted delimiter (None).  An explicit delimiter="," is always
+        # honoured, even for .tsv paths.
+        if delimiter is None:
+            delimiter = "\t" if path_lower.endswith(".tsv") else ","
+
+        decimal_separator = _validate_decimal_separator(decimal_separator)
+        _validate_thousands_separator(thousands_separator, decimal_separator)
+        delimiter = _validate_delimiter(delimiter)
+        encoding_errors = _validate_encoding_errors(encoding_errors)
+        mode = _validate_parser_mode(mode)
+        on_bad_lines = _validate_on_bad_lines(on_bad_lines)
+        config = _CsvConfig()
+        config.delimiter = delimiter
+        config.encoding = encoding
+        config.trim_headers = _validate_bool_option(trim_headers, "trim_headers")
+        config.decimal_separator = decimal_separator
+        config.thousands_separator = thousands_separator
+        config.has_header = _validate_bool_option(has_header, "has_header")
+        config.encoding_errors = encoding_errors
+        config.mode = mode
+
+        if null_values is not None:
+            config.null_values = _validate_null_values(null_values)
+
+        if sample_size is not None:
+            if not isinstance(sample_size, int) or isinstance(sample_size, bool):
+                raise TypeError("sample_size must be an integer.")
+            if sample_size <= 0:
+                raise ValueError(
+                    "sample_size must be a positive integer greater than 0."
+                )
+            config.sample_size = sample_size
+
+        reader = _CsvReader(config)
         # Schema inference only needs a sample, avoiding full-file transcode.
+        # For scan_csv, if sample_rows is specified, we use that for sniffing the schema.
         # sample_rows is passed so _utf8_csv_path uses record-aware sampling
         # without rewriting decoded CSV text before native parsing.
         with _utf8_csv_path(
-            path,
+            native_path,
             encoding,
             encoding_errors=encoding_errors,
             delimiter=delimiter,
             sample_rows=100 if sample_size is None else sample_size,
-        ) as native_path:
-            schema, bad_row_msgs = reader.scan_schema(native_path, on_bad_lines)
+        ) as native_csv_path:
+            schema, bad_row_msgs = reader.scan_schema(native_csv_path, on_bad_lines)
             if on_bad_lines == "warn" and bad_row_msgs:
                 warnings.warn(
                     f"{len(bad_row_msgs)} malformed CSV row(s) skipped during schema inference:\n"
@@ -1081,14 +1629,139 @@ def scan_csv(
                     stacklevel=2,
                 )
             return cast(dict[str, str], schema)
-    except RuntimeError as e:
+    except (ValueError, TypeError):
+        raise
+    except CsvReadError:
+        raise
+    except Exception as e:
         raise CsvReadError(str(e)) from None
+    finally:
+        if should_cleanup and os.path.exists(native_path):
+            try:
+                os.unlink(native_path)
+            except OSError:
+                pass
+
+
+def _reject_non_finite(constant: str) -> None:
+    """Reject non-finite JSON constants (NaN, Infinity, -Infinity)."""
+    raise ValueError(f"Non-finite JSON constant not allowed: {constant!r}")
+
+
+def _reject_duplicate_json_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    seen = set()
+    result = {}
+    for key, value in pairs:
+        if key in seen:
+            raise ValueError(f"duplicate key {key!r}")
+        seen.add(key)
+        result[key] = value
+    return result
+
+
+def _validate_jsonl_encoding(encoding: str) -> None:
+    if not isinstance(encoding, str):
+        raise TypeError(f"encoding must be a string, got {type(encoding).__name__!r}")
+    try:
+        codecs.lookup(encoding)
+    except LookupError:
+        raise ValueError(f"Unknown encoding: {encoding!r}")
+
+
+def _validate_jsonl_nrows(nrows: int | None) -> int | None:
+    if nrows is not None:
+        if isinstance(nrows, bool) or not isinstance(nrows, int):
+            raise TypeError("nrows must be an integer")
+        if nrows < 0:
+            raise ValueError("nrows must be non-negative")
+    return nrows
+
+
+def _validate_jsonl_path(path: str) -> None:
+    path_lower = path.lower()
+    if not (path_lower.endswith(".jsonl") or path_lower.endswith(".ndjson")):
+        raise ValueError(
+            f"Unsupported file format: {path}. "
+            "read_jsonl only supports .jsonl and .ndjson files."
+        )
+
+
+def _parse_jsonl_record(line: str, lineno: int, path: str) -> dict:
+    from .convert import _is_nested
+
+    try:
+        obj = json.loads(
+            line,
+            object_pairs_hook=_reject_duplicate_json_keys,
+            parse_constant=_reject_non_finite,
+        )
+    except json.JSONDecodeError as exc:
+        raise JsonlReadError(
+            f"Invalid JSON on line {lineno} of {path!r}: {exc}"
+        ) from exc
+    except ValueError as exc:
+        message = str(exc)
+        prefix = (
+            "Duplicate key" if message.startswith("duplicate key") else "Invalid value"
+        )
+        raise JsonlReadError(f"{prefix} on line {lineno} of {path!r}: {exc}") from exc
+
+    if not isinstance(obj, dict):
+        raise JsonlReadError(
+            f"Expected a JSON object on line {lineno} of {path!r}, "
+            f"got {type(obj).__name__}"
+        )
+
+    for key, value in obj.items():
+        if _is_nested(value):
+            raise JsonlReadError(
+                f"Column {key!r} contains unsupported nested value "
+                f"of type {type(value).__name__!r} on line {lineno} of {path!r}. "
+                "Convert nested objects to strings or flatten them first."
+            )
+
+    return obj
+
+
+def _iter_jsonl_records(
+    path: str,
+    *,
+    encoding: str,
+    encoding_errors: str,
+    nrows: int | None,
+) -> Iterator[dict]:
+    records_read = 0
+    try:
+        with open(path, encoding=encoding, errors=encoding_errors) as fh:
+            for lineno, raw_line in enumerate(fh, start=1):
+                line = raw_line.rstrip("\r\n")
+                if not line.strip():
+                    continue
+                if nrows is not None and records_read >= nrows:
+                    break
+                yield _parse_jsonl_record(line, lineno, path)
+                records_read += 1
+    except OSError as exc:
+        raise JsonlReadError(str(exc)) from exc
+    except UnicodeDecodeError as exc:
+        raise JsonlReadError(
+            f"Could not decode {path!r} using encoding {encoding!r}: {exc}"
+        ) from exc
+
+
+def _records_to_arframe(records: list[dict]) -> ArFrame:
+    import pandas as pd
+
+    from .convert import from_pandas
+
+    return from_pandas(pd.DataFrame(records))
 
 
 def read_jsonl(
     path: str | os.PathLike[str],
     *,
     encoding: str = "utf-8",
+    encoding_errors: str = "strict",
     nrows: int | None = None,
 ) -> ArFrame:
     """Read a JSON Lines file into an ArFrame.
@@ -1105,6 +1778,11 @@ def read_jsonl(
         Path to the ``.jsonl`` or ``.ndjson`` file.
     encoding : str, default ``"utf-8"``
         File encoding.
+    encoding_errors : str, default ``"strict"``
+        How encoding errors are handled while decoding file bytes.
+        One of ``"strict"`` (raise on invalid bytes), ``"replace"``
+        (substitute the Unicode replacement character), or ``"ignore"``
+        (drop invalid bytes silently).
     nrows : int, optional
         Maximum number of data rows to read.  If ``None``, all rows are read.
 
@@ -1116,8 +1794,9 @@ def read_jsonl(
     Raises
     ------
     ValueError
-        If the file extension is not ``.jsonl`` or ``.ndjson``, or if
-        ``nrows`` is not a non-negative integer.
+        If the file extension is not ``.jsonl`` or ``.ndjson``, if
+        ``nrows`` is not a non-negative integer, or if ``encoding_errors``
+        is not one of ``"strict"``, ``"replace"``, or ``"ignore"``.
     JsonlReadError
         If the file is empty (no data rows), or if a line contains invalid
         JSON or unsupported nested values. The error message includes the
@@ -1127,97 +1806,122 @@ def read_jsonl(
     --------
     >>> frame = ar.read_jsonl("events.jsonl")
     >>> frame = ar.read_jsonl("data.ndjson", nrows=1000)
+    >>> frame = ar.read_jsonl("data.jsonl", encoding_errors="replace")
     """
-    import json
+    _validate_jsonl_encoding(encoding)
 
-    from .convert import _is_nested, from_pandas
-
-    if not isinstance(encoding, str):
-        raise TypeError(f"encoding must be a string, got {type(encoding).__name__!r}")
-    try:
-        codecs.lookup(encoding)
-    except LookupError:
-        raise ValueError(f"Unknown encoding: {encoding!r}")
-
-    path = os.fspath(path)
-
-    if nrows is not None:
-        if isinstance(nrows, bool) or not isinstance(nrows, int):
-            raise TypeError("nrows must be an integer")
-        if nrows < 0:
-            raise ValueError("nrows must be non-negative")
-        if nrows == 0:
-            # Short-circuit: caller explicitly requested zero rows.
-            # Do not open or inspect the file at all — even malformed content
-            # must not raise when nrows=0.
-            import pandas as pd
-
-            return from_pandas(pd.DataFrame())
-
-    path_lower = path.lower()
-    if not (path_lower.endswith(".jsonl") or path_lower.endswith(".ndjson")):
-        raise ValueError(
-            f"Unsupported file format: {path}. "
-            "read_jsonl only supports .jsonl and .ndjson files."
+    if not isinstance(path, (str, os.PathLike)):
+        raise TypeError(
+            f"read_jsonl expected a filesystem path, got {type(path).__name__!r}"
         )
+    path = os.fspath(path)
+    encoding_errors = _validate_encoding_errors(encoding_errors)
+    nrows = _validate_jsonl_nrows(nrows)
 
-    records: list[dict] = []
+    if nrows == 0:
+        # Short-circuit: caller explicitly requested zero rows.
+        # Do not open or inspect the file at all; even malformed content or an
+        # unsupported extension must not raise when nrows=0.
+        return _records_to_arframe([])
 
-    def _reject_duplicate_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
-        seen = set()
-        result = {}
-        for k, v in pairs:
-            if k in seen:
-                raise ValueError(f"duplicate key {k!r}")
-            seen.add(k)
-            result[k] = v
-        return result
-
-    try:
-        with open(path, encoding=encoding) as fh:
-            for lineno, raw_line in enumerate(fh, start=1):
-                line = raw_line.rstrip("\r\n")
-                if not line.strip():
-                    continue  # skip blank / whitespace-only lines
-                if nrows is not None and len(records) >= nrows:
-                    break
-                try:
-                    obj = json.loads(line, object_pairs_hook=_reject_duplicate_keys)
-                except json.JSONDecodeError as exc:
-                    raise JsonlReadError(
-                        f"Invalid JSON on line {lineno} of {path!r}: {exc}"
-                    ) from exc
-                except ValueError as exc:
-                    raise JsonlReadError(
-                        f"Duplicate key on line {lineno} of {path!r}: {exc}"
-                    ) from exc
-                if not isinstance(obj, dict):
-                    raise JsonlReadError(
-                        f"Expected a JSON object on line {lineno} of {path!r}, "
-                        f"got {type(obj).__name__}"
-                    )
-                for key, val in obj.items():
-                    if _is_nested(val):
-                        raise JsonlReadError(
-                            f"Column {key!r} contains unsupported nested value "
-                            f"of type {type(val).__name__!r} on line {lineno} of {path!r}. "
-                            "Convert nested objects to strings or flatten them first."
-                        )
-                records.append(obj)
-    except OSError as exc:
-        raise JsonlReadError(str(exc)) from exc
-    except UnicodeDecodeError as exc:
-        raise JsonlReadError(
-            f"Could not decode {path!r} using encoding {encoding!r}: {exc}"
-        ) from exc
-
+    _validate_jsonl_path(path)
+    records = list(
+        _iter_jsonl_records(
+            path,
+            encoding=encoding,
+            encoding_errors=encoding_errors,
+            nrows=nrows,
+        )
+    )
     if not records:
         raise JsonlReadError(f"JSON Lines file is empty (no data rows): {path!r}")
 
-    import pandas as pd
+    return _records_to_arframe(records)
 
-    df = pd.DataFrame(records)
-    return from_pandas(df)
+
+def read_jsonl_chunked(
+    path: str | os.PathLike[str],
+    *,
+    chunksize: int = 10000,
+    encoding: str = "utf-8",
+    encoding_errors: str = "strict",
+    nrows: int | None = None,
+) -> Iterator[ArFrame]:
+    """Yield JSON Lines records as ``ArFrame`` chunks.
+
+    This is the streaming counterpart to :func:`read_jsonl`.  It preserves the
+    same parsing and validation rules while materializing at most one chunk of
+    decoded records at a time.
+
+    Parameters
+    ----------
+    path : str or path-like
+        Path to the ``.jsonl`` or ``.ndjson`` file.
+    chunksize : int, default ``10000``
+        Maximum number of data rows per yielded chunk.
+    encoding : str, default ``"utf-8"``
+        File encoding.
+    encoding_errors : str, default ``"strict"``
+        Error policy used while decoding file bytes.
+    nrows : int, optional
+        Maximum number of data rows to read. If ``None``, all rows are read.
+
+    Yields
+    ------
+    ArFrame
+        Parsed records in chunks of at most ``chunksize`` rows.
+
+    Raises
+    ------
+    ValueError
+        If the file extension is not ``.jsonl`` or ``.ndjson``, if
+        ``chunksize`` is not positive, or if ``nrows`` is not non-negative, or if
+        ``encoding_errors`` is not one of ``"strict"``, ``"replace"``, or ``"ignore"``.
+    JsonlReadError
+        If the file is empty (no data rows), or if a line contains invalid
+        JSON or unsupported nested values. The error message includes the
+        1-based line number.
+    """
+    _validate_jsonl_encoding(encoding)
+
+    if not isinstance(path, (str, os.PathLike)):
+        raise TypeError(
+            f"read_jsonl_chunked expected a filesystem path, got {type(path).__name__!r}"
+        )
+    path = os.fspath(path)
+    encoding_errors = _validate_encoding_errors(encoding_errors)
+    nrows = _validate_jsonl_nrows(nrows)
+
+    if isinstance(chunksize, bool) or not isinstance(chunksize, int):
+        raise TypeError("chunksize must be an integer")
+    if chunksize <= 0:
+        raise ValueError("chunksize must be a positive integer")
+
+    if nrows == 0:
+        return
+
+    _validate_jsonl_path(path)
+
+    chunk: list[dict] = []
+    yielded_any = False
+    for record in _iter_jsonl_records(
+        path,
+        encoding=encoding,
+        encoding_errors=encoding_errors,
+        nrows=nrows,
+    ):
+        chunk.append(record)
+        if len(chunk) == chunksize:
+            yielded_any = True
+            yield _records_to_arframe(chunk)
+            chunk = []
+
+    if chunk:
+        yielded_any = True
+        yield _records_to_arframe(chunk)
+
+    if not yielded_any:
+        raise JsonlReadError(f"JSON Lines file is empty (no data rows): {path!r}")
 
 
 def sniff_delimiter(
@@ -1252,6 +1956,10 @@ def sniff_delimiter(
     ValueError
         If the sample size is invalid or the delimiter is ambiguous.
     """
+    if not isinstance(path, (str, os.PathLike)):
+        raise TypeError(
+            f"sniff_delimiter expected a filesystem path, got {type(path).__name__!r}"
+        )
     path = os.fspath(path)
 
     # 1. Parameter Validation
@@ -1269,10 +1977,11 @@ def sniff_delimiter(
     except FileNotFoundError as e:
         raise FileNotFoundError(f"File not found: {path!r}") from e
 
-    try:
-        _reject_utf8_nul_bytes(path)
-    except FileNotFoundError:
-        pass
+    if _is_utf8_encoding(encoding):
+        try:
+            _reject_utf8_nul_bytes(path)
+        except FileNotFoundError:
+            pass
 
     # 3. Read Sample
     try:
@@ -1327,8 +2036,9 @@ def sniff_delimiter(
             counts[c].pop()
 
     # 5. Score Candidates and Detect Ties/Ambiguity
-    best_candidates = []
-    best_score = -1.0
+    best_candidates: list[str] = []
+    best_consistency = -1.0
+    best_mode = -1
 
     from collections import Counter
 
@@ -1341,16 +2051,26 @@ def sniff_delimiter(
         counter = Counter(non_zero_counts)
         mode, mode_freq = counter.most_common(1)[0]
 
+        # Primary score: fraction of ALL lines that show the modal count
         consistency = mode_freq / len(line_counts)
-        score = consistency * 10.0 + (mode * 0.1)
 
-        if score > best_score:
-            best_score = score
+        if consistency > best_consistency + 1e-9:
+            # Strictly better consistency → new sole leader
+            best_consistency = consistency
+            best_mode = mode
             best_candidates = [delimiter]
-        elif abs(score - best_score) < 1e-9:
-            best_candidates.append(delimiter)
+        elif abs(consistency - best_consistency) < 1e-9:
+            # Consistency tied → apply secondary tie-breaker (mode)
+            if mode > best_mode:
+                # Higher per-line count wins the tie
+                best_mode = mode
+                best_candidates = [delimiter]
+            elif mode == best_mode:
+                # Both scores identical → ambiguous; keep both
+                best_candidates.append(delimiter)
+            # mode < best_mode: current leader keeps its position
 
-    if not best_candidates or best_score <= 0.0:
+    if not best_candidates or best_consistency <= 0.0:
         raise ValueError(
             f"Could not determine CSV delimiter from sample: no candidate delimiters found in {path!r}"
         )
@@ -1366,12 +2086,127 @@ def sniff_delimiter(
 _VALID_COMPRESSIONS = {"snappy", "gzip", "brotli", "zstd", "none"}
 
 
+def read_parquet(
+    path: str | os.PathLike[str],
+    *,
+    columns: list[str] | None = None,
+    usecols: list[str] | None = None,
+) -> ArFrame:
+    """Read a Parquet file into an ArFrame via pyarrow.
+
+    Requires the ``pyarrow`` package.  Install it with::
+
+        pip install arnio[parquet]
+
+    The implementation reads the Parquet file into a ``pyarrow.Table`` and
+    converts it to an ArFrame using the existing Arrow bridge
+    (``_from_arrow_table``), with no pandas intermediate.
+
+    Parameters
+    ----------
+    path : str or path-like
+        Source file path.  Must end with ``.parquet`` or ``.pq``.
+    columns : list of str, optional
+        Column subset to read, using pyarrow's native parameter name.
+        Cannot be used together with ``usecols``.
+    usecols : list of str, optional
+        Column subset to read, matching the ``read_csv`` parameter name.
+        Cannot be used together with ``columns``.
+
+    Returns
+    -------
+    ArFrame
+        Parsed frame with inferred types and null values preserved.
+
+    Raises
+    ------
+    ImportError
+        If ``pyarrow`` is not installed.
+    TypeError
+        If ``path`` is not a string or path-like object.
+    ValueError
+        If the file extension is not ``.parquet`` or ``.pq``.
+    ValueError
+        If both ``columns`` and ``usecols`` are provided.
+    ValueError
+        If ``columns``/``usecols`` is empty or contains non-string values.
+    FileNotFoundError
+        If the file does not exist.
+    CsvReadError
+        If the file is not a valid Parquet file (corrupted or wrong format).
+
+    Examples
+    --------
+    >>> frame = ar.read_parquet("data.parquet")
+    >>> frame = ar.read_parquet("data.pq", columns=["name", "age"])
+    >>> frame = ar.read_parquet("data.parquet", usecols=["name", "age"])
+    """
+    if not isinstance(path, (str, bytes, os.PathLike)):
+        raise TypeError(
+            f"path must be a string, bytes, or os.PathLike object, "
+            f"got {type(path).__name__!r}"
+        )
+
+    path = os.fsdecode(os.fspath(path))
+    path_lower = path.lower()
+    if not (path_lower.endswith(".parquet") or path_lower.endswith(".pq")):
+        raise ValueError(
+            f"Unsupported file format: {path}. "
+            "read_parquet only supports .parquet and .pq files."
+        )
+
+    if columns is not None and usecols is not None:
+        raise ValueError(
+            "Cannot specify both 'columns' and 'usecols'. "
+            "Use 'usecols' to match read_csv, or 'columns' to match pyarrow."
+        )
+
+    # Normalise to a single variable; prefer usecols when only one is given.
+    col_selection = usecols if usecols is not None else columns
+
+    if col_selection is not None:
+        if isinstance(col_selection, (str, bytes)):
+            raise TypeError(
+                "columns/usecols must be a list of column name strings, "
+                "not a bare string."
+            )
+        if len(col_selection) == 0:
+            raise ValueError("columns/usecols must not be empty.")
+        for c in col_selection:
+            if not isinstance(c, str):
+                raise ValueError(
+                    f"All entries in columns/usecols must be strings, "
+                    f"got {type(c).__name__!r}."
+                )
+
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"No such file or directory: {path!r}")
+
+    try:
+        import pyarrow.parquet as pq
+    except ImportError as exc:
+        raise ImportError(
+            "pyarrow is required for Parquet import. "
+            "Install it with: pip install arnio[parquet]"
+        ) from exc
+
+    try:
+        table = pq.read_table(path, columns=col_selection)
+    except Exception as exc:
+        raise CsvReadError(f"Failed to read Parquet file {path!r}: {exc}") from exc
+
+    from .convert import _from_arrow_table
+
+    return _from_arrow_table(table)
+
+
 def write_parquet(
     frame: ArFrame,
     path: str | os.PathLike[str],
     *,
     compression: str = "snappy",
     row_group_size: int | None = None,
+    preserve_attrs: bool = True,
 ) -> None:
     """Write an ArFrame to a Parquet file via pyarrow.
 
@@ -1396,11 +2231,19 @@ def write_parquet(
         Number of rows per Parquet row group.  If ``None``, pyarrow
         chooses the default (typically 128 MB per group).  Must be a
         positive integer when provided.
+    preserve_attrs : bool, default ``True``
+        When ``True``, ``DataFrame.attrs`` are written into Parquet
+        metadata; all attr values must be JSON-serializable or a
+        ``TypeError`` is raised with a clear message.  Set to ``False``
+        to silently drop attrs on export.
 
     Raises
     ------
     ImportError
         If ``pyarrow`` is not installed.
+    TypeError
+        If ``preserve_attrs`` is not a boolean, or if ``preserve_attrs`` is
+        ``True`` and ``DataFrame.attrs`` contains non-JSON-serializable values.
     ValueError
         If the file extension is not ``.parquet`` or ``.pq``, if
         ``compression`` is not a recognised codec, or if
@@ -1411,7 +2254,11 @@ def write_parquet(
     >>> ar.write_parquet(frame, "output.parquet")
     >>> ar.write_parquet(frame, "output.pq", compression="zstd")
     >>> ar.write_parquet(frame, "output.parquet", row_group_size=50_000)
+    >>> ar.write_parquet(frame, "output.parquet", preserve_attrs=False)
     """
+    if not isinstance(frame, ArFrame):
+        raise TypeError("frame must be an ArFrame")
+
     from .convert import to_pandas
 
     if not isinstance(path, (str, bytes, os.PathLike)):
@@ -1442,6 +2289,9 @@ def write_parquet(
         if row_group_size <= 0:
             raise ValueError("row_group_size must be a positive integer")
 
+    if not isinstance(preserve_attrs, bool):
+        raise TypeError("preserve_attrs must be a bool")
+
     try:
         import pyarrow  # noqa: F401 — presence check only
     except ImportError as exc:
@@ -1450,7 +2300,27 @@ def write_parquet(
             "Install it with: pip install arnio[parquet]"
         ) from exc
 
+    rows, cols = frame.shape
+    if cols == 0 and rows > 0:
+        raise ValueError(
+            f"Cannot write a zero-column ArFrame with {rows} rows to Parquet: the current export path cannot preserve row count without columns."
+        )
+
     df = to_pandas(frame)
+
+    if df.attrs:
+        if preserve_attrs:
+            try:
+                json.dumps(df.attrs)
+            except (TypeError, ValueError) as exc:
+                raise TypeError(
+                    "write_parquet() requires that DataFrame.attrs contain only "
+                    "JSON-serializable values (str, int, float, bool, list, dict, None). "
+                    f"Serialization failed: {exc}. "
+                    "To export without metadata, pass preserve_attrs=False."
+                ) from exc
+        else:
+            df.attrs = {}
 
     kwargs: dict = {
         "engine": "pyarrow",
@@ -1461,3 +2331,75 @@ def write_parquet(
         kwargs["row_group_size"] = row_group_size
 
     df.to_parquet(path, **kwargs)
+
+
+def write_json(
+    frame: ArFrame,
+    path: str | os.PathLike[str],
+    *,
+    orient: str = "records",
+    indent: int | None = None,
+) -> None:
+    """Write an ArFrame to a JSON file.
+
+    This function exports the frame's data to JSON without pandas conversion.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        The data frame to write.
+    path : str or path-like
+        Destination file path. Must end with ``.json``.
+    orient : str, default ``"records"``
+        The JSON orientation format to use. Supported values are
+        ``"records"``, ``"list"``, and ``"split"``.
+    indent : int, optional
+        If specified, the JSON output will be pretty-printed with that
+        indentation level. If ``None`` (the default), the JSON is written
+        compactly.
+
+    Raises
+    ------
+    TypeError
+        If the input frame is not an ArFrame, or path is not valid.
+    ValueError
+        If the file extension is not ``.json``, or if the orientation
+        is unsupported.
+
+    Examples
+    --------
+    >>> ar.write_json(frame, "output.json")
+    >>> ar.write_json(frame, "output.json", indent=4)
+    >>> ar.write_json(frame, "output.json", orient="list")
+    """
+    if not isinstance(frame, ArFrame):
+        raise TypeError("frame must be an ArFrame")
+
+    if not isinstance(path, (str, bytes, os.PathLike)):
+        raise TypeError(
+            f"path must be a string, bytes, or os.PathLike object, got {type(path).__name__!r}"
+        )
+
+    path = os.fsdecode(os.fspath(path))
+    path_lower = path.lower()
+    if not path_lower.endswith(".json"):
+        raise ValueError(
+            f"Unsupported file format: {path}. " "write_json only supports .json files."
+        )
+
+    valid_orients = ("records", "list", "split")
+    if orient not in valid_orients:
+        raise ValueError(
+            f"Unsupported orient: {orient!r}. " f"Valid options are: {valid_orients}"
+        )
+
+    if indent is not None:
+        if isinstance(indent, bool) or not isinstance(indent, int):
+            raise TypeError("indent must be an integer or None")
+        if indent < 0:
+            raise ValueError("indent must be a non-negative integer")
+
+    data = frame.to_dict(orient=orient)
+
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=indent)

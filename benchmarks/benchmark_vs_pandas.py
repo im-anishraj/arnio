@@ -284,13 +284,18 @@ def load_baseline():
         return {}
 
 
+# How much slower current benchmark is compared to baseline
 def calculate_regression(current, baseline):
-    return (
-        (current - baseline) / baseline
-    ) * 100  # How much slower current benchmark is compared to baseline
+    if not isinstance(baseline, (int, float)) or baseline <= 0:
+        return None
+
+    return ((current - baseline) / baseline) * 100
 
 
 def check_regression(current_time, baseline_time, threshold_percent):
+    if not isinstance(baseline_time, (int, float)) or baseline_time <= 0:
+        return False, None
+
     regression_percent = ((current_time - baseline_time) / baseline_time) * 100
 
     return regression_percent > threshold_percent, regression_percent
@@ -406,21 +411,25 @@ def run_case(case, skip_correctness=False):
     baseline_case = baseline_data.get(case.name)
 
     if baseline_case:
-        baseline_time = baseline_case["arnio_exec_time"]
-        current_time = avg(ar_times)
+        baseline_time = baseline_case.get("arnio_exec_time")
 
-        is_regression, regression_percent = check_regression(
-            current_time,
-            baseline_time,
-            REGRESSION_THRESHOLD,
-        )
+        if not isinstance(baseline_time, (int, float)) or baseline_time <= 0:
+            print("No comparable baseline found.")
+        else:
+            current_time = avg(ar_times)
 
-        if is_regression:
-            raise RuntimeError(
-                f"Benchmark regression detected: "
-                f"{regression_percent:.1f}% slower than baseline "
-                f"(threshold: {REGRESSION_THRESHOLD}%)"
+            is_regression, regression_percent = check_regression(
+                current_time,
+                baseline_time,
+                REGRESSION_THRESHOLD,
             )
+
+            if is_regression:
+                raise RuntimeError(
+                    f"Benchmark regression detected: "
+                    f"{regression_percent:.1f}% slower than baseline "
+                    f"(threshold: {REGRESSION_THRESHOLD}%)"
+                )
     else:
         print("No baseline found for regression comparison.")
 

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-label="Arnio">
+  <rect width="64" height="64" rx="14" fill="#0d1117"/>
+  <path fill="#2dd4bf" d="M17 17h13l-3 12H14z"/>
+  <path fill="#6d5bd0" d="M32 17h13l-3 12H29z"/>
+  <path fill="#ff6b4a" d="M47 17h8l-3 12h-8z"/>
+  <path fill="#6d5bd0" d="M24 32h13l-3 12H21z"/>
+  <path fill="#2dd4bf" d="M39 32h13l-3 12H36z"/>
+  <path fill="#ff6b4a" d="M35 47h13l-3 12H32z"/>
+</svg>

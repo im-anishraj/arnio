@@ -3,26 +3,59 @@ name: CI
 on:
   push:
     branches: [ "main" ]
+
   pull_request:
     branches: [ "main" ]
+    paths:
+      - ".github/workflows/ci.yml"
+      - "arnio/**"
+      - "bindings/**"
+      - "cpp/**"
+      - "tests/**"
+      - "examples/**"
+      - "scripts/**"
+      - "pyproject.toml"
+      - "setup.py"
+      - "mypy.ini"
+      - "CMakeLists.txt"
+      - ".pre-commit-config.yaml"
+
+permissions:
+  contents: read
 
 jobs:
+  dependency-review:
+    name: Dependency Review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: moderate
+          comment-summary-in-pr: always
+
   lint:
     name: Lint (Black, Ruff, clang-format)
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
       - name: Set up Python 3.12
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
         with:
           python-version: "3.12"
           cache: 'pip'
 
       - name: Install lint dependencies
-        run: pip install "black>=24.0" "ruff>=0.4.0" "mypy>=1.0" pandas-stubs types-setuptools
+        run: pip install "black>=24.0" "ruff>=0.4.0" "mypy>=1.0,<2.0" pandas-stubs types-PyYAML types-setuptools
 
       - name: Documentation UTF-8 check
         run: python scripts/check_docs_utf8.py
@@ -47,22 +80,44 @@ jobs:
             | xargs clang-format-17 --dry-run --Werror
 
   cpp_tests:
-    name: C++ Native Tests (CMake + Catch2)
-    runs-on: ubuntu-latest
+    name: C++ Native Tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            shell: bash
+          - os: windows-latest
+            shell: bash
+          - os: macos-latest
+            shell: bash
+    defaults:
+      run:
+        shell: ${{ matrix.shell }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
-      - name: Install dependencies
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - name: Set up Python 3.12
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install native build dependencies
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq cmake ninja-build python3-dev
-          pip install pybind11
+          python -m pip install --upgrade pip
+          pip install pybind11 ninja
+
+      - name: Set up MSVC
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1
+
       - name: Configure CMake
         run: |
-          cmake -S . -B build \
+          cmake -S . -B build -GNinja \
             -DCMAKE_BUILD_TYPE=Debug \
             -DARNIO_BUILD_CPP_TESTS=ON \
-            -DCMAKE_PREFIX_PATH=$(python3 -c "import pybind11; print(pybind11.get_cmake_dir())")
+            -DCMAKE_PREFIX_PATH="$(python -c 'import pybind11; print(pybind11.get_cmake_dir())')"
       - name: Build
         run: cmake --build build --parallel
       - name: Run C++ tests
@@ -80,10 +135,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
         with:
           python-version: ${{ matrix.python-version }}
           cache: 'pip'
@@ -100,7 +155,7 @@ jobs:
           pytest tests/ -v --cov=arnio --cov-report=xml
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v6
+        uses: codecov/codecov-action@e79a6962e0d4c0c17b229090214935d2e33f8354 # v6
         with:
           files: ./coverage.xml
           fail_ci_if_error: false
@@ -112,10 +167,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
       - name: Set up Python 3.12
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
         with:
           python-version: "3.12"
           cache: 'pip'
@@ -126,14 +181,20 @@ jobs:
           pip install -e .[dev]
           pip install jupyter nbconvert ipykernel
 
-      - name: Execute notebook
+      - name: Execute notebooks
         run: |
           jupyter nbconvert \
             --to notebook \
             --execute \
             --ExecutePreprocessor.timeout=300 \
             examples/financial_csv_example.ipynb \
-            --output executed_notebook.ipynb
+            --output financial_csv_example.executed.ipynb
+          jupyter nbconvert \
+            --to notebook \
+            --execute \
+            --ExecutePreprocessor.timeout=300 \
+            examples/ignite_arnio_cleaning.ipynb \
+            --output ignite_arnio_cleaning.executed.ipynb
 
   sklearn_integration:
     name: scikit-learn Integration Tests
@@ -142,10 +203,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
       - name: Set up Python 3.12
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
         with:
           python-version: "3.12"
           cache: 'pip'
@@ -157,7 +218,7 @@ jobs:
         run: pytest tests/test_sklearn.py -v --cov=arnio --cov-report=xml
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v6
+        uses: codecov/codecov-action@e79a6962e0d4c0c17b229090214935d2e33f8354 # v6
         with:
           files: ./coverage.xml
           fail_ci_if_error: false

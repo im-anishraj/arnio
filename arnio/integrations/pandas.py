@@ -7,6 +7,18 @@ from typing import Any
 
 import pandas as pd
 
+from arnio.cleaning import (
+    clip_numeric as clip_numeric_values,
+)
+from arnio.cleaning import (
+    drop_nulls as drop_null_rows,
+)
+from arnio.cleaning import (
+    fill_nulls as fill_null_values,
+)
+from arnio.cleaning import (
+    strip_whitespace as strip_whitespace_values,
+)
 from arnio.convert import from_pandas, to_pandas
 from arnio.frame import ArFrame
 from arnio.pipeline import pipeline as run_pipeline
@@ -62,6 +74,39 @@ class ArnioPandasAccessor:
         )
         return to_pandas(frame)
 
+    def strip_whitespace(self, *, subset: list[str] | None = None) -> pd.DataFrame:
+        """Trim leading/trailing whitespace and return pandas output."""
+        frame = strip_whitespace_values(self.to_arframe(), subset=subset)
+        return to_pandas(frame)
+
+    def drop_nulls(self, *, subset: list[str] | None = None) -> pd.DataFrame:
+        """Drop rows with nulls in the selected columns."""
+        frame = drop_null_rows(self.to_arframe(), subset=subset)
+        return to_pandas(frame)
+
+    def fill_nulls(
+        self, value: Any, *, subset: list[str] | None = None
+    ) -> pd.DataFrame:
+        """Fill nulls in the selected columns and return pandas output."""
+        frame = fill_null_values(self.to_arframe(), value, subset=subset)
+        return to_pandas(frame)
+
+    def clip_numeric(
+        self,
+        *,
+        lower: int | float | None = None,
+        upper: int | float | None = None,
+        subset: list[str] | None = None,
+    ) -> pd.DataFrame:
+        """Clip numeric values in the selected columns and return pandas output."""
+        frame = clip_numeric_values(
+            self.to_arframe(),
+            lower=lower,
+            upper=upper,
+            subset=subset,
+        )
+        return to_pandas(frame)
+
     def profile(
         self,
         *,
@@ -92,6 +137,7 @@ class ArnioPandasAccessor:
         return_report: bool = False,
         dry_run: bool = False,
         allow_lossy_casts: bool = False,
+        confirmed_casts: dict[str, str] | None = None,
         explain: bool = False,
     ) -> (
         pd.DataFrame
@@ -107,6 +153,9 @@ class ArnioPandasAccessor:
         explain : bool, default False
             When ``True``, also return a :class:`~arnio.quality.CleanExplanation`
             audit trail describing which steps ran and why.
+        confirmed_casts : dict[str, str] or None, default None
+            Exact strict-mode ``cast_types`` mapping to confirm after previewing
+            proposed casts with ``dry_run=True`` or ``suggest_cleaning()``.
         """
         result = auto_clean(
             self.to_arframe(),
@@ -114,6 +163,7 @@ class ArnioPandasAccessor:
             return_report=return_report,
             dry_run=dry_run,
             allow_lossy_casts=allow_lossy_casts,
+            confirmed_casts=confirmed_casts,
             explain=explain,
         )
 

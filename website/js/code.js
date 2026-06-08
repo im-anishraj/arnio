@@ -7,6 +7,28 @@
 
   document.addEventListener('DOMContentLoaded', function () {
 
+    function fallbackCopyText(text) {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+    }
+
+    function copyText(text) {
+      if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+        return navigator.clipboard.writeText(text).catch(function () {
+          fallbackCopyText(text);
+        });
+      }
+
+      fallbackCopyText(text);
+      return Promise.resolve();
+    }
+
     // ── Add copy buttons to all code blocks ──────────────────
     document.querySelectorAll('.code-block pre, pre[data-copy]').forEach(function (pre) {
       // Skip if already has a copy button
@@ -21,23 +43,7 @@
         const code = pre.querySelector('code') || pre;
         const text = code.textContent;
 
-        navigator.clipboard.writeText(text).then(function () {
-          btn.textContent = 'Copied!';
-          btn.classList.add('copied');
-          setTimeout(function () {
-            btn.textContent = 'Copy';
-            btn.classList.remove('copied');
-          }, 2000);
-        }).catch(function () {
-          // Fallback for older browsers
-          const textarea = document.createElement('textarea');
-          textarea.value = text;
-          textarea.style.position = 'fixed';
-          textarea.style.opacity = '0';
-          document.body.appendChild(textarea);
-          textarea.select();
-          document.execCommand('copy');
-          document.body.removeChild(textarea);
+        copyText(text).then(function () {
           btn.textContent = 'Copied!';
           btn.classList.add('copied');
           setTimeout(function () {
@@ -56,17 +62,7 @@
     function handleInstallCommandCopy(el) {
       const cmd = el.getAttribute('data-cmd') || el.textContent.replace(/^\$\s*/, '').replace(/click to copy/i, '').trim();
 
-      navigator.clipboard.writeText(cmd).then(function () {
-        showCopyFeedback(el);
-      }).catch(function () {
-        const textarea = document.createElement('textarea');
-        textarea.value = cmd;
-        textarea.style.position = 'fixed';
-        textarea.style.opacity = '0';
-        document.body.appendChild(textarea);
-        textarea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textarea);
+      copyText(cmd).then(function () {
         showCopyFeedback(el);
       });
     }
@@ -100,35 +96,69 @@
     }
 
     // ── Minimal syntax highlighting ──────────────────────────
+    //
+    // The previous implementation read block.innerHTML and ran keyword regexes
+    // over it.  Because the injected <span> tags contain attributes like
+    // class="token-keyword", subsequent keyword passes (e.g. "class", "in")
+    // matched inside those attribute strings, producing malformed HTML such as:
+    //
+    //   <span <span class="token-keyword">class</span>="token-keyword">import</span>
+    //
+    // The browser then exposed the broken attribute text ("class=\"token-keyword\">")
+    // as DOM text nodes, so code.textContent — used by the copy button — returned
+    // corrupted content instead of valid Python code.  By always starting from the original raw text, we avoid this problem.
+    function escapeHTML(str) {
+      return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function applyToTextOnly(html, re, replacement) {
+      // Split into alternating [text, tag, text, tag, ...] segments.
+      // Even indices are plain text; odd indices are tag strings like "<span ...>".
+      var parts = html.split(/(<[^>]*>)/);
+      for (var i = 0; i < parts.length; i += 2) {
+        parts[i] = parts[i].replace(re, replacement);
+      }
+      return parts.join('');
+    }
+
     document.querySelectorAll('pre code.language-python').forEach(function (block) {
-      let html = block.innerHTML;
+      var raw = block.textContent;
+      var html = escapeHTML(raw);
 
-      // Comments
-      html = html.replace(/(#[^\n]*)/g, '<span class="token-comment">$1</span>');
+      // Comments — must run first so later passes don't highlight inside them.
+      html = applyToTextOnly(html, /(#[^\n]*)/g, '<span class="token-comment">$1</span>');
 
-      // Strings (double and single quoted)
-      html = html.replace(/(&quot;[^&]*&quot;|"[^"]*")/g, '<span class="token-string">$1</span>');
-      html = html.replace(/('[^']*')/g, '<span class="token-string">$1</span>');
+      // Strings: after escapeHTML, double-quotes are &quot; and single-quotes are &#39;.
+      html = applyToTextOnly(html, /(&quot;(?:[^&]|&(?!quot;))*&quot;)/g, '<span class="token-string">$1</span>');
+      html = applyToTextOnly(html, /(&#39;(?:[^&]|&(?!#39;))*&#39;)/g, '<span class="token-string">$1</span>');
 
-      // Keywords
-      const keywords = ['import', 'from', 'as', 'def', 'return', 'if', 'else', 'elif', 'for', 'in', 'while', 'class', 'with', 'try', 'except', 'raise', 'True', 'False', 'None', 'and', 'or', 'not', 'is', 'pass', 'lambda', 'yield', 'assert'];
+      // Keywords — \b anchors prevent partial-word matches.
+      var keywords = ['import', 'from', 'as', 'def', 'return', 'if', 'else', 'elif', 'for', 'in', 'while', 'class', 'with', 'try', 'except', 'raise', 'True', 'False', 'None', 'and', 'or', 'not', 'is', 'pass', 'lambda', 'yield', 'assert'];
       keywords.forEach(function (kw) {
-        const re = new RegExp('\\b(' + kw + ')\\b', 'g');
-        html = html.replace(re, '<span class="token-keyword">$1</span>');
+        var re = new RegExp('\\b(' + kw + ')\\b', 'g');
+        html = applyToTextOnly(html, re, '<span class="token-keyword">$1</span>');
       });
 
-      // Numbers
-      html = html.replace(/\b(\d+\.?\d*)\b/g, '<span class="token-number">$1</span>');
+      // Numbers.
+      html = applyToTextOnly(html, /\b(\d+\.?\d*)\b/g, '<span class="token-number">$1</span>');
 
       block.innerHTML = html;
     });
 
     document.querySelectorAll('pre code.language-bash').forEach(function (block) {
-      let html = block.innerHTML;
-      // Comments
-      html = html.replace(/(#[^\n]*)/g, '<span class="token-comment">$1</span>');
-      // Strings
-      html = html.replace(/(&quot;[^&]*&quot;|"[^"]*")/g, '<span class="token-string">$1</span>');
+      var raw = block.textContent;
+      var html = escapeHTML(raw);
+
+      // Comments.
+      html = applyToTextOnly(html, /(#[^\n]*)/g, '<span class="token-comment">$1</span>');
+      // Strings.
+      html = applyToTextOnly(html, /(&quot;(?:[^&]|&(?!quot;))*&quot;)/g, '<span class="token-string">$1</span>');
+
       block.innerHTML = html;
     });
   });
