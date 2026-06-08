@@ -55,7 +55,7 @@ jobs:
 
       - name: Verify bind_arnio.cpp was compiled into the extension
         run: |
-          SO=$(python -c "import arnio._core as m; import inspect; print(inspect.getfile(m))")
+          SO=$(python -c "import arnio._arnio_cpp as m; import inspect; print(inspect.getfile(m))")
           echo "Found extension: $SO"
           if strings "$SO" | grep -q "invalid_argument"; then
             echo "GOOD: exception translator string found in .so"
