@@ -309,6 +309,32 @@ class TestWinsorizeOutliers:
         with pytest.raises(ValueError):
             ar.winsorize_outliers(frame, lower=lower, upper=upper)
 
+    def test_winsorize_outliers_rejects_boolean_bounds(self):
+        frame = ar.from_pandas(pd.DataFrame({"value": [1, 2, 3]}))
+
+        with pytest.raises(TypeError, match="'lower' must be an int or float"):
+            ar.winsorize_outliers(frame, lower=True)
+
+        with pytest.raises(TypeError, match="'upper' must be an int or float"):
+            ar.winsorize_outliers(frame, upper=False)
+
+    @pytest.mark.parametrize("value", ["0.1", None, object()])
+    def test_winsorize_outliers_rejects_non_numeric_bounds(self, value):
+        frame = ar.from_pandas(pd.DataFrame({"value": [1, 2, 3]}))
+
+        with pytest.raises(TypeError, match="'lower' must be an int or float"):
+            ar.winsorize_outliers(frame, lower=value)
+
+    @pytest.mark.parametrize(
+        "value",
+        [float("nan"), float("inf"), float("-inf")],
+    )
+    def test_winsorize_outliers_rejects_non_finite_bounds(self, value):
+        frame = ar.from_pandas(pd.DataFrame({"value": [1, 2, 3]}))
+
+        with pytest.raises(ValueError, match="finite"):
+            ar.winsorize_outliers(frame, lower=value)
+
     def test_winsorize_outliers_identical_values_noop(self):
         frame = ar.from_pandas(pd.DataFrame({"value": [5, 5, 5]}))
 

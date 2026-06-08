@@ -847,6 +847,14 @@ def winsorize_outliers(
     >>> clean = ar.winsorize_outliers(frame, lower=0.01, upper=0.99, subset=["revenue"])
     """
     _validate_arframe(frame)
+
+    for name, value in (("lower", lower), ("upper", upper)):
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError(f"'{name}' must be an int or float")
+
+        if not math.isfinite(value):
+            raise ValueError(f"'{name}' must be finite")
+
     if lower < 0 or upper > 1:
         raise ValueError("lower and upper must be between 0 and 1")
 
