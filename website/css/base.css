@@ -16,7 +16,7 @@ html {
   font-size: 16px;
   scroll-behavior: smooth;
   -webkit-text-size-adjust: 100%;
-  
+  scroll-padding-top: calc(var(--nav-height) + var(--space-4));
 }
 
 body {
