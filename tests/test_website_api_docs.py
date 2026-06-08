@@ -38,7 +38,7 @@ def _public_exports() -> list[str]:
 
 
 def _api_html() -> str:
-    return (REPO_ROOT / "website" / "api.html").read_text(encoding="utf-8")
+    return (REPO_ROOT / "website" / "api.html").read_text()
 
 
 def _signature_row(fn_name: str, html: str) -> str:

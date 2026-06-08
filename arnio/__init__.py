@@ -257,7 +257,7 @@ __all__ = [
     "load_pipeline",
     "PipelineSerializationError",
     "encode_categorical",
-    "UUID",  # ← add
-    "IPv4",  # ← add
+    "UUID",
+    "IPv4",
     "MACAddress",
 ]
