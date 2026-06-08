@@ -720,7 +720,7 @@ def _enrich_csv_runtime_error(
     """
     if "Invalid UTF-8 sequence encountered" in msg:
         return CsvReadError(
-            f"Could not read CSV file {path!r} using encoding " f"{encoding!r}: {msg}"
+            f"Could not read CSV file {path} using encoding " f"{encoding}: {msg}"
         )
 
     return _enrich_row_width_error(exc, delimiter)
