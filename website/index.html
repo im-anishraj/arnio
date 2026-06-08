@@ -143,6 +143,33 @@ ar.write_parquet(clean, "sales.parquet", compression="zstd")</code></pre>
       </div>
     </section>
 
+    <section class="section comparison-section">
+      <div class="container">
+        <h2>The Problem Arnio Solves</h2>
+        <p class="section-lede">Stop writing brittle pandas glue code. Arnio handles the messy parts.</p>
+        <div class="comparison-grid">
+          <div class="comparison-card comparison-old">
+            <div class="comparison-label">❌ The Old Way (Pandas)</div>
+            <ul>
+              <li>Manual null handling scattered across notebooks</li>
+              <li>No schema validation before processing</li>
+              <li>Silent type coercion bugs in production</li>
+              <li>CSV encoding errors crash pipelines</li>
+            </ul>
+          </div>
+          <div class="comparison-card comparison-new">
+            <div class="comparison-label">⚡ The Arnio Way</div>
+            <ul>
+              <li>Auto-clean with <code>ar.auto_clean()</code> in one line</li>
+              <li>Schema contracts catch bad data early</li>
+              <li>Quality reports surface issues before they bite</li>
+              <li>Hardened CSV engine handles encoding gracefully</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <section class="quick-links">
       <div class="container">
         <h2>Explore Arnio</h2>

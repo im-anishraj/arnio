@@ -543,35 +543,55 @@ pre:hover .copy-btn {
   margin-bottom: var(--space-2);
 }
 
-/* ── Comparison Table ────────────────────────────────────── */
+/* ── Comparison Section ──────────────────────────────────── */
 .comparison-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: var(--space-6);
-  margin: var(--space-8) 0;
+  margin-top: var(--space-8);
 }
 
-.comparison-col {
-  padding: var(--space-6);
+.comparison-card {
   border-radius: var(--radius-lg);
+  padding: var(--space-7);
 }
 
-.comparison-col--old {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border-subtle);
-}
-
-.comparison-col--new {
-  background: var(--color-accent-subtle);
-  border: 1px solid var(--color-accent);
-}
-
-.comparison-col h3 {
-  margin-top: 0;
+.comparison-label {
+  font-weight: var(--font-weight-bold);
   font-size: var(--font-size-md);
+  margin-bottom: var(--space-4);
 }
 
-@media (max-width: 767px) {
+.comparison-card ul {
+  padding-left: var(--space-5);
+  line-height: var(--line-height-relaxed);
+}
+
+/* Old Way — red tint */
+.comparison-old {
+  border: 1.5px solid var(--color-danger-border, rgba(239, 68, 68, 0.4));
+  background-color: var(--color-danger-subtle, rgba(239, 68, 68, 0.05));
+}
+
+/* Arnio Way — blue tint */
+.comparison-new {
+  border: 1.5px solid var(--color-accent-border, rgba(59, 130, 246, 0.5));
+  background-color: var(--color-accent-subtle, rgba(59, 130, 246, 0.05));
+}
+
+/* Dark mode */
+[data-theme="dark"] .comparison-old {
+  border-color: var(--color-danger-border-dark, rgba(239, 68, 68, 0.35));
+  background-color: var(--color-danger-subtle-dark, rgba(239, 68, 68, 0.08));
+}
+
+[data-theme="dark"] .comparison-new {
+  border-color: var(--color-accent-border-dark, rgba(59, 130, 246, 0.45));
+  background-color: var(--color-accent-subtle-dark, rgba(59, 130, 246, 0.08));
+}
+
+/* Mobile */
+@media (max-width: 640px) {
   .comparison-grid {
     grid-template-columns: 1fr;
   }
