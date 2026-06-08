@@ -1,13 +1,14 @@
 #include "arnio/csv_writer.h"
 
+#include <charconv>
+#include <cstdio>
 #ifdef _WIN32
 #include <filesystem>
 #endif
 #include <fstream>
-#include <iomanip>
 #include <limits>
-#include <sstream>
 #include <stdexcept>
+#include <system_error>
 #include <variant>
 
 #include "arnio/frame.h"
@@ -20,6 +21,28 @@ inline void open_binary_output(std::ofstream& file, const std::string& path) {
     file.open(std::filesystem::u8path(path), std::ios::binary);
 #else
     file.open(path, std::ios::binary);
+#endif
+}
+
+inline std::string format_double(double value) {
+    char num_buffer[64];
+
+#if defined(__APPLE__) && defined(__ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__) && \
+    __ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__ < 130300
+    const int written = std::snprintf(num_buffer, sizeof(num_buffer), "%.*g",
+                                      std::numeric_limits<double>::max_digits10, value);
+    if (written < 0 || static_cast<size_t>(written) >= sizeof(num_buffer)) {
+        throw std::runtime_error("Failed to format floating-point CSV value");
+    }
+    return std::string(num_buffer, static_cast<size_t>(written));
+#else
+    const auto [ptr, ec] =
+        std::to_chars(num_buffer, num_buffer + sizeof(num_buffer), value,
+                      std::chars_format::general, std::numeric_limits<double>::max_digits10);
+    if (ec != std::errc()) {
+        throw std::runtime_error("Failed to format floating-point CSV value");
+    }
+    return std::string(num_buffer, ptr);
 #endif
 }
 }  // namespace
@@ -75,10 +98,7 @@ std::string CsvWriter::cell_to_string(const Frame& frame, size_t row, size_t col
         return std::to_string(std::get<int64_t>(cell));
     }
     if (std::holds_alternative<double>(cell)) {
-        std::ostringstream oss;
-        oss << std::setprecision(std::numeric_limits<double>::max_digits10)
-            << std::get<double>(cell);
-        return oss.str();
+        return format_double(std::get<double>(cell));
     }
     if (std::holds_alternative<bool>(cell)) {
         return std::get<bool>(cell) ? "true" : "false";

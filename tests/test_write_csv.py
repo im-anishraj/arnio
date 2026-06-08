@@ -139,6 +139,14 @@ class TestWriteCsv:
         df = ar.to_pandas(frame2)
         assert abs(df["val"].iloc[0] - 1.23456789012345678) < 1e-15
 
+    def test_high_precision_float_writes_max_digits10(self, tmp_path):
+        frame = ar.from_pandas(pd.DataFrame({"val": [1.2345678901234567]}))
+        out = tmp_path / "float.csv"
+
+        ar.write_csv(frame, out)
+
+        assert out.read_text(encoding="utf-8") == "val\n1.2345678901234567\n"
+
     def test_invalid_delimiter(self, tmp_path):
         frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
         with pytest.raises(ValueError, match="delimiter must be a single character"):
