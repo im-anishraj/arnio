@@ -188,160 +188,158 @@ void Frame::rebuild_index() {
 
 std::vector<std::pair<std::string, std::vector<std::pair<std::string, double>>>> Frame::describe()
     const {
-  std::vector<std::pair<std::string, std::vector<std::pair<std::string, double>>>> summary;
+    std::vector<std::pair<std::string, std::vector<std::pair<std::string, double>>>> summary;
 
-  for (const auto& col : columns_) {
-    std::string col_name = col.name();
-    std::vector<std::pair<std::string, double>> stats;
+    for (const auto& col : columns_) {
+        std::string col_name = col.name();
+        std::vector<std::pair<std::string, double>> stats;
 
-    const size_t total_rows = col.size();
-    size_t null_count = 0;
-    size_t valid_count = 0;
+        const size_t total_rows = col.size();
+        size_t null_count = 0;
+        size_t valid_count = 0;
 
-    const DType dtype = col.dtype();
+        const DType dtype = col.dtype();
 
-    if (dtype == DType::INT64) {
-      const auto& values = std::get<std::vector<int64_t>>(col.data());
+        if (dtype == DType::INT64) {
+            const auto& values = std::get<std::vector<int64_t>>(col.data());
 
-      double sum = 0.0;
-      double min_val = std::numeric_limits<double>::infinity();
-      double max_val = -std::numeric_limits<double>::infinity();
-      size_t finite_count = 0;
+            double sum = 0.0;
+            double min_val = std::numeric_limits<double>::infinity();
+            double max_val = -std::numeric_limits<double>::infinity();
+            size_t finite_count = 0;
 
-      for (size_t i = 0; i < total_rows; ++i) {
-        if (col.is_null(i)) {
-          null_count++;
-          continue;
+            for (size_t i = 0; i < total_rows; ++i) {
+                if (col.is_null(i)) {
+                    null_count++;
+                    continue;
+                }
+
+                valid_count++;
+
+                const double val = static_cast<double>(values[i]);
+                finite_count++;
+                sum += val;
+
+                if (val < min_val) min_val = val;
+                if (val > max_val) max_val = val;
+            }
+
+            stats.push_back({"count", static_cast<double>(valid_count)});
+            stats.push_back({"nulls", static_cast<double>(null_count)});
+            stats.push_back({"non_finite", 0.0});
+
+            if (finite_count > 0) {
+                stats.push_back({"mean", sum / finite_count});
+                stats.push_back({"min", min_val});
+                stats.push_back({"max", max_val});
+            } else {
+                stats.push_back({"mean", 0.0});
+                stats.push_back({"min", 0.0});
+                stats.push_back({"max", 0.0});
+            }
+
+            summary.push_back({col_name, stats});
+        } else if (dtype == DType::FLOAT64) {
+            const auto& values = std::get<std::vector<double>>(col.data());
+
+            double sum = 0.0;
+            double min_val = std::numeric_limits<double>::infinity();
+            double max_val = -std::numeric_limits<double>::infinity();
+            size_t finite_count = 0;
+            size_t non_finite_count = 0;
+
+            for (size_t i = 0; i < total_rows; ++i) {
+                if (col.is_null(i)) {
+                    null_count++;
+                    continue;
+                }
+
+                valid_count++;
+
+                const double val = values[i];
+
+                if (!std::isfinite(val)) {
+                    non_finite_count++;
+                    continue;
+                }
+
+                finite_count++;
+                sum += val;
+
+                if (val < min_val) min_val = val;
+                if (val > max_val) max_val = val;
+            }
+
+            stats.push_back({"count", static_cast<double>(valid_count)});
+            stats.push_back({"nulls", static_cast<double>(null_count)});
+            stats.push_back({"non_finite", static_cast<double>(non_finite_count)});
+
+            if (finite_count > 0) {
+                stats.push_back({"mean", sum / finite_count});
+                stats.push_back({"min", min_val});
+                stats.push_back({"max", max_val});
+            } else {
+                stats.push_back({"mean", 0.0});
+                stats.push_back({"min", 0.0});
+                stats.push_back({"max", 0.0});
+            }
+
+            summary.push_back({col_name, stats});
+        } else if (dtype == DType::BOOL) {
+            size_t true_count = 0;
+            size_t false_count = 0;
+
+            const auto& values = std::get<std::vector<bool>>(col.data());
+
+            for (size_t i = 0; i < total_rows; ++i) {
+                if (col.is_null(i)) {
+                    null_count++;
+                    continue;
+                }
+
+                valid_count++;
+
+                if (values[i]) {
+                    true_count++;
+                } else {
+                    false_count++;
+                }
+            }
+
+            stats.push_back({"count", static_cast<double>(valid_count)});
+            stats.push_back({"nulls", static_cast<double>(null_count)});
+            stats.push_back({"true", static_cast<double>(true_count)});
+            stats.push_back({"false", static_cast<double>(false_count)});
+            stats.push_back({"true_ratio", valid_count > 0 ? static_cast<double>(true_count) /
+                                                                 static_cast<double>(valid_count)
+                                                           : 0.0});
+
+            summary.push_back({col_name, stats});
+        } else if (dtype == DType::STRING) {
+            const auto& values = std::get<std::vector<std::string>>(col.data());
+
+            std::unordered_set<std::string_view> unique_values;
+            unique_values.reserve(total_rows);
+
+            for (size_t i = 0; i < total_rows; ++i) {
+                if (col.is_null(i)) {
+                    null_count++;
+                    continue;
+                }
+
+                valid_count++;
+                unique_values.insert(std::string_view(values[i]));
+            }
+
+            stats.push_back({"count", static_cast<double>(valid_count)});
+            stats.push_back({"nulls", static_cast<double>(null_count)});
+            stats.push_back({"unique", static_cast<double>(unique_values.size())});
+
+            summary.push_back({col_name, stats});
         }
-
-        valid_count++;
-
-        const double val = static_cast<double>(values[i]);
-        finite_count++;
-        sum += val;
-
-        if (val < min_val) min_val = val;
-        if (val > max_val) max_val = val;
-      }
-
-      stats.push_back({"count", static_cast<double>(valid_count)});
-      stats.push_back({"nulls", static_cast<double>(null_count)});
-      stats.push_back({"non_finite", 0.0});
-
-      if (finite_count > 0) {
-        stats.push_back({"mean", sum / finite_count});
-        stats.push_back({"min", min_val});
-        stats.push_back({"max", max_val});
-      } else {
-        stats.push_back({"mean", 0.0});
-        stats.push_back({"min", 0.0});
-        stats.push_back({"max", 0.0});
-      }
-
-      summary.push_back({col_name, stats});
-    } else if (dtype == DType::FLOAT64) {
-      const auto& values = std::get<std::vector<double>>(col.data());
-
-      double sum = 0.0;
-      double min_val = std::numeric_limits<double>::infinity();
-      double max_val = -std::numeric_limits<double>::infinity();
-      size_t finite_count = 0;
-      size_t non_finite_count = 0;
-
-      for (size_t i = 0; i < total_rows; ++i) {
-        if (col.is_null(i)) {
-          null_count++;
-          continue;
-        }
-
-        valid_count++;
-
-        const double val = values[i];
-
-        if (!std::isfinite(val)) {
-          non_finite_count++;
-          continue;
-        }
-
-        finite_count++;
-        sum += val;
-
-        if (val < min_val) min_val = val;
-        if (val > max_val) max_val = val;
-      }
-
-      stats.push_back({"count", static_cast<double>(valid_count)});
-      stats.push_back({"nulls", static_cast<double>(null_count)});
-      stats.push_back({"non_finite", static_cast<double>(non_finite_count)});
-
-      if (finite_count > 0) {
-        stats.push_back({"mean", sum / finite_count});
-        stats.push_back({"min", min_val});
-        stats.push_back({"max", max_val});
-      } else {
-        stats.push_back({"mean", 0.0});
-        stats.push_back({"min", 0.0});
-        stats.push_back({"max", 0.0});
-      }
-
-      summary.push_back({col_name, stats});
-    } else if (dtype == DType::BOOL) {
-      size_t true_count = 0;
-      size_t false_count = 0;
-
-      const auto& values = std::get<std::vector<bool>>(col.data());
-
-      for (size_t i = 0; i < total_rows; ++i) {
-        if (col.is_null(i)) {
-          null_count++;
-          continue;
-        }
-
-        valid_count++;
-
-        if (values[i]) {
-          true_count++;
-        } else {
-          false_count++;
-        }
-      }
-
-      stats.push_back({"count", static_cast<double>(valid_count)});
-      stats.push_back({"nulls", static_cast<double>(null_count)});
-      stats.push_back({"true", static_cast<double>(true_count)});
-      stats.push_back({"false", static_cast<double>(false_count)});
-      stats.push_back({"true_ratio",
-                       valid_count > 0
-                           ? static_cast<double>(true_count) /
-                                 static_cast<double>(valid_count)
-                           : 0.0});
-
-      summary.push_back({col_name, stats});
-    } else if (dtype == DType::STRING) {
-      const auto& values = std::get<std::vector<std::string>>(col.data());
-
-      std::unordered_set<std::string_view> unique_values;
-      unique_values.reserve(total_rows);
-
-      for (size_t i = 0; i < total_rows; ++i) {
-        if (col.is_null(i)) {
-          null_count++;
-          continue;
-        }
-
-        valid_count++;
-        unique_values.insert(std::string_view(values[i]));
-      }
-
-      stats.push_back({"count", static_cast<double>(valid_count)});
-      stats.push_back({"nulls", static_cast<double>(null_count)});
-      stats.push_back({"unique", static_cast<double>(unique_values.size())});
-
-      summary.push_back({col_name, stats});
     }
-  }
 
-  return summary;
+    return summary;
 }
 
 }  // namespace arnio
