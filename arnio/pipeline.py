@@ -50,6 +50,7 @@ _STEP_REGISTRY: dict[str, Callable] = {
     "winsorize_outliers": cleaning.winsorize_outliers,
     "normalize_minmax": cleaning.normalize_minmax,
     "strip_whitespace": cleaning.strip_whitespace,
+    "hash_columns": cleaning.hash_columns,
     "parse_bool_strings": cleaning.parse_bool_strings,
     "normalize_case": cleaning.normalize_case,
     "normalize_unicode": cleaning.normalize_unicode,

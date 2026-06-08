@@ -5366,3 +5366,114 @@ class TestFillNullsFloat64LocaleIndependent:
                 ar.fill_nulls(frame, "inf", subset=["x"])
         finally:
             _locale.setlocale(_locale.LC_NUMERIC, prev)
+
+
+class TestHashColumns:
+    """Tests for ar.hash_columns (pure-Python / hashlib implementation)."""
+
+    def _frame(self):
+        return ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "email": ["user@example.com", None, ""],
+                    "user_id": ["abc123", "xyz999", "def456"],
+                    "age": [30, 25, 40],
+                }
+            )
+        )
+
+    def test_sha256_produces_64_char_hex(self):
+        frame = self._frame()
+        result = ar.hash_columns(frame, subset=["email"])
+        df = ar.to_pandas(result)
+        digest = df["email"].iloc[0]
+        assert len(digest) == 64
+        assert all(c in "0123456789abcdef" for c in digest)
+
+    def test_sha256_known_answer(self):
+        import hashlib
+
+        frame = self._frame()
+        result = ar.hash_columns(frame, subset=["email"])
+        df = ar.to_pandas(result)
+        assert df["email"].iloc[0] == hashlib.sha256(b"user@example.com").hexdigest()
+
+    def test_sha256_empty_string_is_hashed_not_null(self):
+        import hashlib
+
+        frame = self._frame()
+        result = ar.hash_columns(frame, subset=["email"])
+        df = ar.to_pandas(result)
+        assert df["email"].iloc[2] == hashlib.sha256(b"").hexdigest()
+
+    def test_null_cells_preserved(self):
+        frame = self._frame()
+        result = ar.hash_columns(frame, subset=["email"])
+        df = ar.to_pandas(result)
+        assert pd.isna(df["email"].iloc[1])
+
+    def test_non_subset_columns_unchanged(self):
+        frame = self._frame()
+        result = ar.hash_columns(frame, subset=["email"])
+        df = ar.to_pandas(result)
+        assert df["user_id"].iloc[0] == "abc123"
+        assert df["age"].iloc[0] == 30
+
+    def test_md5_produces_32_char_hex(self):
+        import hashlib
+
+        frame = self._frame()
+        result = ar.hash_columns(frame, subset=["user_id"], algorithm="md5")
+        df = ar.to_pandas(result)
+        digest = df["user_id"].iloc[0]
+        assert len(digest) == 32
+        assert all(c in "0123456789abcdef" for c in digest)
+        assert digest == hashlib.md5(b"abc123").hexdigest()
+
+    def test_multiple_subset_columns(self):
+        import hashlib
+
+        frame = self._frame()
+        result = ar.hash_columns(frame, subset=["email", "user_id"])
+        df = ar.to_pandas(result)
+        assert df["email"].iloc[0] == hashlib.sha256(b"user@example.com").hexdigest()
+        assert df["user_id"].iloc[0] == hashlib.sha256(b"abc123").hexdigest()
+
+    def test_missing_column_raises_value_error(self):
+        frame = self._frame()
+        with pytest.raises(ValueError, match="not found"):
+            ar.hash_columns(frame, subset=["nonexistent"])
+
+    def test_non_string_column_raises_type_error(self):
+        frame = self._frame()
+        with pytest.raises(TypeError, match="string"):
+            ar.hash_columns(frame, subset=["age"])
+
+    def test_empty_subset_raises_value_error(self):
+        frame = self._frame()
+        with pytest.raises(ValueError, match="non-empty"):
+            ar.hash_columns(frame, subset=[])
+
+    def test_unsupported_algorithm_raises_value_error(self):
+        frame = self._frame()
+        with pytest.raises(ValueError, match="algorithm"):
+            ar.hash_columns(frame, subset=["email"], algorithm="sha512")
+
+    def test_pipeline_step(self):
+        import hashlib
+
+        frame = self._frame()
+        result = ar.pipeline(
+            frame,
+            [("hash_columns", {"subset": ["email", "user_id"], "algorithm": "sha256"})],
+        )
+        df = ar.to_pandas(result)
+        assert df["email"].iloc[0] == hashlib.sha256(b"user@example.com").hexdigest()
+
+    def test_pipeline_step_default_algorithm(self):
+        import hashlib
+
+        frame = self._frame()
+        result = ar.pipeline(frame, [("hash_columns", {"subset": ["user_id"]})])
+        df = ar.to_pandas(result)
+        assert df["user_id"].iloc[0] == hashlib.sha256(b"abc123").hexdigest()
