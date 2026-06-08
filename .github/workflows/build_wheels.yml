@@ -5,8 +5,11 @@ name: Build & Publish Wheels
 # explicit release tag that matches the project's vX.Y.Z convention:
 #   * release-please calls this workflow (workflow_call) with the tag it created.
 #   * A maintainer running it manually (workflow_dispatch) must enter that tag.
-# The `validate_tag` job rejects anything else before any build runs, and the
-# `publish` job is additionally guarded so it only runs for a validated tag.
+# The `validate_tag` job does more than format-check the input: it verifies the
+# value resolves specifically to an existing Git tag (refs/tags/<tag>), rejecting
+# a branch or other ref that merely looks like a tag, and freezes it to the
+# immutable commit SHA. Every downstream job then checks out that SHA, and the
+# `publish` job re-verifies HEAD before uploading.
 # For build-only verification without publishing, use release-dry-run.yml.
 
 permissions:
@@ -32,22 +35,16 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       tag_name: ${{ steps.check.outputs.tag_name }}
+      tag_sha: ${{ steps.check.outputs.tag_sha }}
     steps:
-      - name: Validate tag_name
+      - uses: actions/checkout@v6
+        with:
+          # Need full history + tags so the tag can be resolved to a commit.
+          fetch-depth: 0
+          fetch-tags: true
+      - name: Verify release tag resolves to an existing Git tag
         id: check
-        env:
-          TAG_NAME: ${{ inputs.tag_name }}
-        run: |
-          if [ -z "${TAG_NAME}" ]; then
-            echo "::error::No release tag provided. This is a publish workflow and requires an explicit tag_name (e.g. v1.2.3)."
-            exit 1
-          fi
-          if ! printf '%s' "${TAG_NAME}" | grep -E -q '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
-            echo "::error::Invalid release tag '${TAG_NAME}'. Expected the vX.Y.Z convention (e.g. v1.2.3 or v1.2.3-rc1)."
-            exit 1
-          fi
-          echo "Release tag '${TAG_NAME}' is valid."
-          echo "tag_name=${TAG_NAME}" >> "$GITHUB_OUTPUT"
+        run: bash scripts/verify_release_tag.sh "${{ inputs.tag_name }}" >> "$GITHUB_OUTPUT"
 
   build_sdist:
     name: Build source distribution
@@ -56,7 +53,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ needs.validate_tag.outputs.tag_name }}
+          # Build the immutable commit the tag resolves to, never a mutable ref.
+          ref: ${{ needs.validate_tag.outputs.tag_sha }}
       - name: Build sdist
         run: pipx run build --sdist
       - name: Verify sdist safety
@@ -107,7 +105,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ needs.validate_tag.outputs.tag_name }}
+          # Build the immutable commit the tag resolves to, never a mutable ref.
+          ref: ${{ needs.validate_tag.outputs.tag_sha }}
 
       - name: Build wheels
         uses: pypa/cibuildwheel@v3.2
@@ -135,14 +134,29 @@ jobs:
     name: Publish to PyPI
     needs: [validate_tag, build_wheels, build_sdist]
     # Defence in depth: even though validate_tag fails the pipeline for a bad
-    # tag, only publish when a validated vX.Y.Z tag is present.
-    if: needs.validate_tag.outputs.tag_name != '' && startsWith(needs.validate_tag.outputs.tag_name, 'v')
+    # tag, only publish when a validated tag resolved to a commit SHA.
+    if: needs.validate_tag.outputs.tag_sha != ''
     runs-on: ubuntu-latest
     environment: pypi  # requires a "pypi" environment configured in repo settings
     permissions:
       id-token: write  # required for trusted publishing
 
     steps:
+      - uses: actions/checkout@v6
+        with:
+          # Check out the exact verified commit so the final guard below can
+          # confirm we are publishing the intended release commit.
+          ref: ${{ needs.validate_tag.outputs.tag_sha }}
+      - name: Verify checked-out commit matches the validated release tag
+        env:
+          EXPECTED_SHA: ${{ needs.validate_tag.outputs.tag_sha }}
+        run: |
+          ACTUAL_SHA="$(git rev-parse HEAD)"
+          if [ "${EXPECTED_SHA}" != "${ACTUAL_SHA}" ]; then
+            echo "::error::Release commit mismatch: expected ${EXPECTED_SHA}, got ${ACTUAL_SHA}."
+            exit 1
+          fi
+          echo "Verified release commit: ${ACTUAL_SHA}"
       - name: Download all artifacts
         uses: actions/download-artifact@v7
         with:
