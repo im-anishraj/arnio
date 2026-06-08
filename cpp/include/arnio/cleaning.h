@@ -9,6 +9,32 @@
 
 namespace arnio {
 
+// ---------------------------------------------------------------------------
+// cast_types error-handling policy
+// ---------------------------------------------------------------------------
+
+enum class CastErrors {
+    kRaise,   // throw std::invalid_argument on first failure (default)
+    kCoerce,  // silently replace failures with null (legacy behaviour)
+    kReport,  // replace failures with null AND collect them in CastResult
+};
+
+struct CastFailure {
+    std::string column;        // column name
+    size_t row;                // 0-based row index
+    std::string value;         // original string value that failed to cast
+    std::string target_dtype;  // target dtype string, e.g. "int64"
+};
+
+struct CastResult {
+    Frame frame;
+    std::vector<CastFailure> failures;  // empty unless errors == kReport
+};
+
+// ---------------------------------------------------------------------------
+// Cleaning primitives
+// ---------------------------------------------------------------------------
+
 // Drop rows containing null values
 Frame drop_nulls(const Frame& frame,
                  const std::optional<std::vector<std::string>>& subset = std::nullopt);
@@ -35,15 +61,21 @@ Frame normalize_case(const Frame& frame,
 Frame rename_columns(const Frame& frame,
                      const std::unordered_map<std::string, std::string>& mapping);
 
-// Cast column types
-Frame cast_types(const Frame& frame, const std::unordered_map<std::string, std::string>& mapping,
-                 bool coerce_invalid = false);
+// Cast column types.
+// errors controls what happens when a value cannot be parsed:
+//   kRaise  – throw std::invalid_argument (column, row, value, dtype) [default]
+//   kCoerce – push null, continue (legacy "coerce_invalid" behaviour)
+//   kReport – push null AND append a CastFailure entry to CastResult::failures
+CastResult cast_types(const Frame& frame,
+                      const std::unordered_map<std::string, std::string>& mapping,
+                      CastErrors errors = CastErrors::kRaise);
 
 // Clip numeric columns to lower and/or upper bounds.
 // Only INT64 and FLOAT64 columns are affected; all other columns are cloned
 // unchanged.  Null values are preserved as-is.
 Frame clip_numeric(const Frame& frame, std::optional<double> lower, std::optional<double> upper,
                    const std::optional<std::vector<std::string>>& subset = std::nullopt);
+
 // Combine multiple columns into a single string column
 Frame combine_columns(const Frame& frame, const std::vector<std::string>& subset,
                       const std::string& separator, const std::string& output_column);

@@ -3,6 +3,7 @@
 import io
 import json
 import warnings
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -1945,6 +1946,38 @@ def test_invalid_severity_raises():
         ar.Int64(severity="warn")
 
 
+def test_field_constructors_reject_non_string_severity():
+    list_severity: Any = ["error"]
+    int_severity: Any = 1
+    none_severity: Any = None
+
+    with pytest.raises(TypeError, match="severity must be a string"):
+        ar.Email(severity=list_severity)
+
+    with pytest.raises(TypeError, match="severity must be a string"):
+        ar.Int64(severity=int_severity)
+
+    with pytest.raises(TypeError, match="severity must be a string"):
+        ar.Int64(severity=none_severity)
+
+
+def test_field_constructors_accept_valid_severities():
+    assert ar.Int64(severity="error").severity == "error"
+    assert ar.Email(severity="warning").severity == "warning"
+
+
+def test_validation_issue_rejects_non_string_severity():
+    list_severity: Any = ["error"]
+
+    with pytest.raises(TypeError, match="severity must be a string"):
+        ar.ValidationIssue(
+            column="score",
+            rule="custom",
+            message="bad",
+            severity=list_severity,
+        )
+
+
 def test_float64_rejects_impossible_bounds():
     try:
         ar.Float64(min=10.0, max=1.0)
@@ -2019,6 +2052,140 @@ def test_string_rejects_boolean_max_length(value):
         match="max_length must be an integer",
     ):
         ar.String(max_length=value)
+
+
+_REGEX_LPAREN = chr(40)
+_REGEX_RPAREN = chr(41)
+_REGEX_PLUS = chr(43)
+_REGEX_STAR = chr(42)
+_REGEX_DOT = chr(46)
+_REGEX_DOLLAR = chr(36)
+_REGEX_QUESTION = chr(63)
+_REGEX_LBRACKET = chr(91)
+_REGEX_RBRACKET = chr(93)
+_REGEX_HYPHEN = chr(45)
+
+
+def _redos_regex_pattern(*parts: str) -> str:
+    """Build unsafe regression-test patterns without static risky regex literals."""
+    return "".join(parts)
+
+
+@pytest.mark.parametrize(
+    "pattern",
+    [
+        _redos_regex_pattern(
+            _REGEX_LPAREN, "a", _REGEX_PLUS, _REGEX_RPAREN, _REGEX_PLUS, _REGEX_DOLLAR
+        ),
+        _redos_regex_pattern(
+            _REGEX_LPAREN,
+            _REGEX_QUESTION,
+            ":",
+            "a",
+            _REGEX_PLUS,
+            _REGEX_RPAREN,
+            _REGEX_PLUS,
+            _REGEX_DOLLAR,
+        ),
+        _redos_regex_pattern(
+            _REGEX_LPAREN,
+            _REGEX_LBRACKET,
+            "a",
+            _REGEX_HYPHEN,
+            "z",
+            _REGEX_RBRACKET,
+            _REGEX_STAR,
+            _REGEX_RPAREN,
+            _REGEX_PLUS,
+            _REGEX_DOLLAR,
+        ),
+        _redos_regex_pattern(
+            _REGEX_LPAREN,
+            _REGEX_DOT,
+            _REGEX_STAR,
+            _REGEX_RPAREN,
+            _REGEX_PLUS,
+            _REGEX_DOLLAR,
+        ),
+        _redos_regex_pattern(
+            _REGEX_LPAREN,
+            _REGEX_DOT,
+            _REGEX_PLUS,
+            _REGEX_RPAREN,
+            _REGEX_STAR,
+            _REGEX_DOLLAR,
+        ),
+    ],
+)
+def test_rejects_nested_quantifier_regex_patterns(pattern):
+    with pytest.raises(ValueError, match="Unsafe regex pattern rejected"):
+        ar.String(pattern=pattern)
+
+
+def test_regex_rejects_pathological_redos_pattern_from_issue_1046():
+    pattern = _redos_regex_pattern(
+        _REGEX_LPAREN,
+        "a",
+        _REGEX_PLUS,
+        _REGEX_RPAREN,
+        _REGEX_PLUS,
+        _REGEX_DOLLAR,
+    )
+
+    with pytest.raises(ValueError, match="Unsafe regex pattern rejected"):
+        ar.Regex(pattern)
+
+
+def test_direct_field_rejects_unsafe_pattern():
+    pattern = _redos_regex_pattern(
+        _REGEX_LPAREN,
+        "a",
+        _REGEX_PLUS,
+        _REGEX_RPAREN,
+        _REGEX_PLUS,
+        _REGEX_DOLLAR,
+    )
+
+    with pytest.raises(ValueError, match="Unsafe regex pattern rejected"):
+        ar.Field(dtype="string", pattern=pattern)
+
+
+def test_schema_from_json_rejects_unsafe_pattern():
+    pattern = _redos_regex_pattern(
+        _REGEX_LPAREN,
+        "a",
+        _REGEX_PLUS,
+        _REGEX_RPAREN,
+        _REGEX_PLUS,
+        _REGEX_DOLLAR,
+    )
+    payload = json.dumps(
+        {
+            "fields": {
+                "txt": {
+                    "dtype": "string",
+                    "pattern": pattern,
+                }
+            },
+            "strict": False,
+            "unique": None,
+        }
+    )
+
+    with pytest.raises(ValueError, match="Unsafe regex pattern rejected"):
+        ar.Schema.from_json(payload)
+
+
+def test_safe_regex_pattern_is_not_rejected():
+    field = ar.String(pattern=r"^[A-Z]{2}\d{3}$")
+
+    assert field.pattern == r"^[A-Z]{2}\d{3}$"
+
+
+def test_safe_named_group_regex_pattern_is_not_rejected():
+    field = ar.String(pattern=r"^(?P<word>[A-Z])+$")
+
+    assert field.pattern == r"^(?P<word>[A-Z])+$"
 
 
 def test_string_rejects_negative_min_length():

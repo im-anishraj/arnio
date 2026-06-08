@@ -7,6 +7,28 @@
 
   document.addEventListener('DOMContentLoaded', function () {
 
+    function fallbackCopyText(text) {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+    }
+
+    function copyText(text) {
+      if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+        return navigator.clipboard.writeText(text).catch(function () {
+          fallbackCopyText(text);
+        });
+      }
+
+      fallbackCopyText(text);
+      return Promise.resolve();
+    }
+
     // ── Add copy buttons to all code blocks ──────────────────
     document.querySelectorAll('.code-block pre, pre[data-copy]').forEach(function (pre) {
       // Skip if already has a copy button
@@ -21,23 +43,7 @@
         const code = pre.querySelector('code') || pre;
         const text = code.textContent;
 
-        navigator.clipboard.writeText(text).then(function () {
-          btn.textContent = 'Copied!';
-          btn.classList.add('copied');
-          setTimeout(function () {
-            btn.textContent = 'Copy';
-            btn.classList.remove('copied');
-          }, 2000);
-        }).catch(function () {
-          // Fallback for older browsers
-          const textarea = document.createElement('textarea');
-          textarea.value = text;
-          textarea.style.position = 'fixed';
-          textarea.style.opacity = '0';
-          document.body.appendChild(textarea);
-          textarea.select();
-          document.execCommand('copy');
-          document.body.removeChild(textarea);
+        copyText(text).then(function () {
           btn.textContent = 'Copied!';
           btn.classList.add('copied');
           setTimeout(function () {
@@ -56,17 +62,7 @@
     function handleInstallCommandCopy(el) {
       const cmd = el.getAttribute('data-cmd') || el.textContent.replace(/^\$\s*/, '').replace(/click to copy/i, '').trim();
 
-      navigator.clipboard.writeText(cmd).then(function () {
-        showCopyFeedback(el);
-      }).catch(function () {
-        const textarea = document.createElement('textarea');
-        textarea.value = cmd;
-        textarea.style.position = 'fixed';
-        textarea.style.opacity = '0';
-        document.body.appendChild(textarea);
-        textarea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textarea);
+      copyText(cmd).then(function () {
         showCopyFeedback(el);
       });
     }

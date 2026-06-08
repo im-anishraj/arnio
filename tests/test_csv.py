@@ -3076,3 +3076,39 @@ def test_scan_csv_file_like_object():
     assert "y" in schema
     assert stream.read_sizes
     assert -1 not in stream.read_sizes
+
+
+# clear path type errors in path-only readers
+
+
+@pytest.mark.parametrize(
+    "bad_input",
+    [123, 3.14, None, object(), ["a.csv"]],
+)
+def test_scan_csv_invalid_path_type(bad_input):
+    with pytest.raises(
+        TypeError,
+        match="scan_csv expected a filesystem path",
+    ):
+        ar.scan_csv(bad_input)
+
+
+def test_read_csv_invalid_delimiter_raises_value_error(tmp_path):
+    f = tmp_path / "data.csv"
+    f.write_text("a,b\n1,2\n")
+    with pytest.raises(ValueError):
+        ar.read_csv(f, delimiter=",,")
+
+
+def test_scan_csv_invalid_sample_size_raises_type_error(tmp_path):
+    f = tmp_path / "data.csv"
+    f.write_text("a,b\n1,2\n")
+    with pytest.raises(TypeError):
+        ar.scan_csv(f, sample_size="bad")
+
+
+def test_read_csv_unterminated_quote_raises_csv_read_error(tmp_path):
+    f = tmp_path / "bad.csv"
+    f.write_text('a,b\n"unterminated,1\n')
+    with pytest.raises(ar.CsvReadError):
+        ar.read_csv(f)
