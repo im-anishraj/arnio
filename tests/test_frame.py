@@ -1713,3 +1713,24 @@ def test_from_records_dict_explicit_valid_columns_subset():
     assert frame.shape == (2, 1)
     assert frame.columns == ["a"]
     assert frame["a"] == [1, 3]
+
+
+def test_to_dict_invalid_orient_types():
+    data = {"name": ["Alice", "Bob"], "age": [25, 30]}
+    frame = ar.from_dict(data)
+
+    # 1. Unhashable list input must raise TypeError cleanly
+    with pytest.raises(TypeError, match="orient must be a string"):
+        frame.to_dict(orient=["list"])
+
+    # 2. Unhashable dict input must raise TypeError cleanly
+    with pytest.raises(TypeError, match="orient must be a string"):
+        frame.to_dict(orient={"mode": "list"})
+
+    # 3. Hashable non-string input (like int) must also raise TypeError cleanly
+    with pytest.raises(TypeError, match="orient must be a string"):
+        frame.to_dict(orient=1)
+
+    # 4. Backward Compatibility: Unsupported string must still raise ValueError
+    with pytest.raises(ValueError, match="orient must be one of: list, records, split"):
+        frame.to_dict(orient="invalid_string")
