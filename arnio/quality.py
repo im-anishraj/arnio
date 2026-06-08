@@ -9,7 +9,6 @@ import html
 import json
 import math
 import os
-import re
 from collections.abc import Sequence, Set
 from dataclasses import dataclass, field
 from typing import Any
@@ -559,8 +558,7 @@ class DataQualityReport:
             if not reason or not exclude_columns:
                 return reason
             for col in exclude_columns:
-                pattern = rf"\b{re.escape(col)}\b"
-                reason = re.sub(pattern, "[REDACTED]", reason)
+                reason = reason.replace(col, "[REDACTED]")
             return reason
 
         lines: list[str] = []
