@@ -5310,6 +5310,21 @@ class TestCollapseRareCategories:
         with pytest.raises(ValueError, match="threshold"):
             ar.collapse_rare_categories(frame, column="city", threshold=1.5)
 
+    def test_nan_threshold_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"city": ["NYC"]}))
+        with pytest.raises(ValueError, match="finite"):
+            ar.collapse_rare_categories(frame, column="city", threshold=float("nan"))
+
+    def test_inf_threshold_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"city": ["NYC"]}))
+        with pytest.raises(ValueError, match="finite"):
+            ar.collapse_rare_categories(frame, column="city", threshold=float("inf"))
+
+    def test_neg_inf_threshold_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"city": ["NYC"]}))
+        with pytest.raises(ValueError, match="finite"):
+            ar.collapse_rare_categories(frame, column="city", threshold=float("-inf"))
+
     def test_other_columns_untouched(self):
         frame = ar.from_pandas(
             pd.DataFrame(

@@ -2473,6 +2473,8 @@ def collapse_rare_categories(
     if not isinstance(threshold, (int, float)) or isinstance(threshold, bool):
         raise TypeError("threshold must be a float in [0.0, 1.0]")
 
+    if not math.isfinite(threshold):
+        raise ValueError(f"threshold must be a finite value, got {threshold!r}")
     if threshold < 0.0 or threshold > 1.0:
         raise ValueError(f"threshold must be in [0.0, 1.0], got {threshold!r}")
     if not isinstance(fill_value, str):

@@ -863,7 +863,7 @@ Frame collapse_rare_categories(const Frame& frame, const std::string& column, do
     if (non_null_count > 0) {
         for (const auto& [cat, cnt] : freq) {
             double proportion = static_cast<double>(cnt) / static_cast<double>(non_null_count);
-            if (proportion <= threshold) {
+            if (proportion < threshold) {
                 rare.insert(cat);
             }
         }
