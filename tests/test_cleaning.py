@@ -45,6 +45,32 @@ class TestDropNulls:
 
         assert result.shape[0] == 2
 
+    def test_mixed_null_and_non_null_columns(self):
+        import pandas as pd
+
+        df = pd.DataFrame(
+            {
+                "a": ["hello", None, "foo", None],
+                "b": [None, "world", "bar", None],
+            }
+        )
+
+        frame = ar.from_pandas(df)
+
+        result = ar.combine_columns(
+            frame,
+            subset=["a", "b"],
+            separator=" ",
+            output_column="combined",
+        )
+
+        result_df = ar.to_pandas(result)
+
+        assert result_df["combined"].iloc[0] == "hello "
+        assert result_df["combined"].iloc[1] == " world"
+        assert result_df["combined"].iloc[2] == "foo bar"
+        assert pd.isna(result_df["combined"].iloc[3])
+
 
 class TestKeepRowsWithNulls:
     def test_pandas_input_empty_subset_raises(self):
