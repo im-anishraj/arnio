@@ -714,10 +714,10 @@ def _enrich_csv_runtime_error(
     """Add path/encoding context to selected native CSV errors."""
 
     msg = str(exc)
-    """Native CSV parsing currently reports malformed UTF-8 using the message below. 
-    We match it here so we can attach file path and encoding context at the Python API boundary. 
-    If the native wording changes, this enrichment may need updating.
-    """
+    # Native CSV parsing currently reports malformed UTF-8 using the message below.
+    # We match it here so we can attach file path and encoding context at the Python API boundary.
+    # If the native wording changes, this enrichment may need updating.
+
     if "Invalid UTF-8 sequence encountered" in msg:
         return CsvReadError(
             f"Could not read CSV file {path} using encoding " f"{encoding}: {msg}"
@@ -1653,6 +1653,8 @@ def scan_csv(
     except RuntimeError as e:
         assert delimiter is not None
         raise _enrich_csv_runtime_error(e, native_path, encoding, delimiter) from None
+    except Exception as e:
+        raise CsvReadError(str(e)) from None
     finally:
         if should_cleanup and os.path.exists(native_path):
             try:
