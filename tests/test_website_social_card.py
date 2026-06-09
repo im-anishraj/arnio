@@ -47,7 +47,7 @@ def _check_url_returns_200(url: str, *, timeout_s: float = 5.0) -> None:
     headers = {"User-Agent": "arnio-social-card-check/1.0"}
 
     # Intercept local website URLs to prevent test failures due to not-yet-deployed assets
-    for domain in ("https://arnio.vercel.app/", "https://arniolib.vercel.app/"):
+    for domain in ("https://arniolib.vercel.app/",):
         if url.startswith(domain):
             local_path = WEBSITE_DIR / url.replace(domain, "")
             if local_path.is_file():
