@@ -176,6 +176,43 @@ def main() -> int:
 
         run([str(python), script_path], cwd=tmp_dir)
 
+        # Verify that from_pandas() rejects unsupported scalar/object values (such as bytes and Period)
+        # with a clear TypeError.
+        pandas_unsupported_script = (
+            "import pandas as pd\n"
+            "import arnio as ar\n"
+            "errors = []\n"
+            "try:\n"
+            "    ar.from_pandas(pd.DataFrame({'x': [b'abc']}))\n"
+            "    errors.append('from_pandas(bytes): expected TypeError, got no exception')\n"
+            "except TypeError as exc:\n"
+            "    pass\n"
+            "except Exception as exc:\n"
+            "    errors.append(f'from_pandas(bytes): expected TypeError, got {type(exc).__name__}: {exc}')\n"
+            "try:\n"
+            "    ar.from_pandas(pd.DataFrame({'p': pd.period_range('2020-01', periods=2, freq='M')}))\n"
+            "    errors.append('from_pandas(Period): expected TypeError, got no exception')\n"
+            "except TypeError as exc:\n"
+            "    pass\n"
+            "except Exception as exc:\n"
+            "    errors.append(f'from_pandas(Period): expected TypeError, got {type(exc).__name__}: {exc}')\n"
+            "if errors:\n"
+            "    raise SystemExit('Pandas unsupported types smoke test FAILED:\\n' + '\\n'.join(errors))\n"
+            "print('pandas unsupported types smoke test passed')\n"
+        )
+
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            suffix=".py",
+            delete=False,
+            dir=tmp_dir,
+            encoding="utf-8",
+        ) as script_file:
+            script_file.write(pandas_unsupported_script)
+            script_path = script_file.name
+
+        run([str(python), script_path], cwd=tmp_dir)
+
     print("Wheel install smoke test passed.")
     return 0
 
