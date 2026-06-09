@@ -1084,8 +1084,8 @@ def hash_columns(
 ) -> ArFrame:
     """Replace values in string columns with their cryptographic hash digest.
 
-    Hashing is performed using :mod:`hashlib`, which delegates to the
-    platform OpenSSL library.  No homegrown digest code is used.
+    Hashing is performed using the standard-library :mod:`hashlib` module.
+    No homegrown digest code is used.
 
     Each non-null cell in the specified columns is replaced with the
     lowercase hex-encoded digest of its UTF-8 byte representation.  Null
@@ -1174,7 +1174,7 @@ def hash_columns(
     cpp_frame = frame._frame
 
     # Build a new C++ Frame column-by-column using the existing pybind11 Column API.
-    # Hashing is done by hashlib (OpenSSL-backed) — no custom digest code.
+    # Hashing is done by the standard-library hashlib — no custom digest code.
     new_frame = _Frame()
     for ci in range(cpp_frame.num_cols()):
         src_col = cpp_frame.column_by_index(ci)
@@ -1185,7 +1185,8 @@ def hash_columns(
                     out.push_null()
                 else:
                     raw: str = src_col.at(r)
-                    digest = _hashlib.new(algorithm, raw.encode()).hexdigest()
+                    kwargs = {"usedforsecurity": False} if algorithm == "md5" else {}
+                    digest = _hashlib.new(algorithm, raw.encode(), **kwargs).hexdigest()
                     out.push_back(digest)
             new_frame.add_column(out)
         else:

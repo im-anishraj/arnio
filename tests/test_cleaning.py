@@ -5503,3 +5503,14 @@ class TestHashColumns:
         result = ar.pipeline(frame, [("hash_columns", {"subset": ["user_id"]})])
         df = ar.to_pandas(result)
         assert df["user_id"].iloc[0] == hashlib.sha256(b"abc123").hexdigest()
+
+    def test_input_frame_is_not_mutated(self):
+
+        frame = self._frame()
+        df_before = ar.to_pandas(frame).copy()
+        ar.hash_columns(frame, subset=["email", "user_id"])
+        df_after = ar.to_pandas(frame)
+        # Original frame must be byte-for-byte identical after the call
+        assert df_after["email"].iloc[0] == df_before["email"].iloc[0]
+        assert df_after["user_id"].iloc[0] == df_before["user_id"].iloc[0]
+        assert pd.isna(df_after["email"].iloc[1]) == pd.isna(df_before["email"].iloc[1])
