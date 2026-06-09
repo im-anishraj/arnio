@@ -253,8 +253,8 @@ result = schema.validate(frame)</code></pre></div></div>
               <tr>
                 <td><code>Date(...)</code></td>
                 <td>Date / Time</td>
-                <td><code>nullable=True</code>, <code>unique=False</code>, <code>severity="error"</code>, <code>required_if=None</code></td>
-                <td>Validates ISO 8601 date strings (<code>YYYY-MM-DD</code>).</td>
+                <td><code>nullable=True</code>, <code>min=None</code>, <code>max=None</code>, <code>unique=False</code>, <code>severity="error"</code>, <code>required_if=None</code></td>
+                <td>Validates ISO 8601 date strings (<code>YYYY-MM-DD</code>). <code>min</code> / <code>max</code> accept ISO date strings, <code>datetime.date</code>, or <code>pd.Timestamp</code>; numeric values raise <code>TypeError</code>.</td>
               </tr>
               <tr>
                 <td><code>DateTime(...)</code></td>

@@ -2965,7 +2965,7 @@ def _parse_date_bound(value: Any, name: str) -> _dt.date | None:
         return value.date()
     if isinstance(value, _dt.date):
         return value
-    if not isinstance(value, (str, pd.Timestamp, int, float)):
+    if not isinstance(value, (str, pd.Timestamp)):
         raise TypeError(
             f"Date {name} must be a date string, datetime.date, or pd.Timestamp, "
             f"got {type(value).__name__}"

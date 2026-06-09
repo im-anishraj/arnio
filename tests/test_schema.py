@@ -2775,6 +2775,13 @@ def test_date_invalid_bound_type_raises():
         pass
 
 
+def test_date_numeric_bound_raises_type_error():
+    with pytest.raises(TypeError):
+        ar.Date(min=123)
+    with pytest.raises(TypeError):
+        ar.Date(max=45.6)
+
+
 def test_date_bounds_only_applied_after_format_check(tmp_path):
     """Invalid date strings should report format errors, not spurious bound errors."""
     path = tmp_path / "bad_and_oob.csv"
