@@ -3379,6 +3379,62 @@ def test_datetime_timezone_aware_above_max_fails(tmp_path):
     assert result.issues[0].row_index == 1
 
 
+def test_datetime_timezone_mismatches_and_mixed_tz(tmp_path):
+    """Regression tests for datetime timezone mismatches and mixed timezones. Fixes #1451."""
+    # Case 1: aware data, naive boundary
+    path1 = tmp_path / "aware_data_naive_bound.csv"
+    path1.write_text("ts\n2026-01-01T00:00:00+05:30\n")
+    frame1 = ar.read_csv(path1)
+    schema1 = ar.Schema({"ts": ar.DateTime(min="2026-01-01T00:00:00")})
+    result1 = schema1.validate(frame1)
+    assert not result1.passed
+    assert result1.issue_count == 1
+    assert result1.issues[0].rule == "timezone"
+    assert (
+        "Cannot compare timezone-aware values in column 'ts' with timezone-naive min boundary"
+        in result1.issues[0].message
+    )
+
+    # Case 2: naive data, aware boundary
+    path2 = tmp_path / "naive_data_aware_bound.csv"
+    path2.write_text("ts\n2026-01-01T00:00:00\n")
+    frame2 = ar.read_csv(path2)
+    schema2 = ar.Schema({"ts": ar.DateTime(min="2026-01-01T00:00:00+05:30")})
+    result2 = schema2.validate(frame2)
+    assert not result2.passed
+    assert result2.issue_count == 1
+    assert result2.issues[0].rule == "timezone"
+    assert (
+        "Cannot compare timezone-naive values in column 'ts' with timezone-aware min boundary"
+        in result2.issues[0].message
+    )
+
+    # Case 3: mixed aware and naive data
+    path3 = tmp_path / "mixed_aware_naive.csv"
+    path3.write_text("ts\n2026-01-01T00:00:00+05:30\n2026-01-01T00:00:00\n")
+    frame3 = ar.read_csv(path3)
+    schema3 = ar.Schema({"ts": ar.DateTime()})
+    result3 = schema3.validate(frame3)
+    assert not result3.passed
+    assert result3.issue_count == 2
+    assert all(issue.rule == "timezone" for issue in result3.issues)
+    assert all(
+        "contains mixed timezone-aware and timezone-naive values" in issue.message
+        for issue in result3.issues
+    )
+
+    # Case 4: mixed timezone offsets (both aware) normalize to UTC and pass
+    path4 = tmp_path / "mixed_tz_offsets.csv"
+    path4.write_text("ts\n2026-06-01T12:00:00+05:30\n2026-06-01T06:30:00Z\n")
+    frame4 = ar.read_csv(path4)
+    schema4 = ar.Schema(
+        {"ts": ar.DateTime(min="2026-06-01T06:00:00Z", max="2026-06-01T07:00:00Z")}
+    )
+    result4 = schema4.validate(frame4)
+    assert result4.passed
+    assert result4.issue_count == 0
+
+
 def test_validate_unique_string_raises_type_error(tmp_path):
     schema = ar.Schema(fields={"id": ar.String()}, unique=["id"])
 
