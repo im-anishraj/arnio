@@ -307,9 +307,14 @@ _CLOUD_SCHEME_HINTS: dict[str, str] = {
 
 _URL_FETCH_TIMEOUT = 30  # seconds
 _URL_FETCH_CHUNK_SIZE = 65536  # 64 KiB per streaming read
+_URL_MAX_RESPONSE_SIZE = int(os.environ.get("ARNIO_REMOTE_MAX_SIZE", 500 * 1024 * 1024))
 
 
-def _fetch_url_to_tempfile(url: str) -> str:
+def _fetch_url_to_tempfile(
+    url: str,
+    limit_rows: int | None = None,
+    max_response_size: int | None = None,
+) -> str:
     """Fetch an HTTP/HTTPS URL and write its content to a UTF-8 temp file.
 
     Parameters
@@ -317,6 +322,11 @@ def _fetch_url_to_tempfile(url: str) -> str:
     url : str
         A well-formed ``http://`` or ``https://`` URL whose response body
         is assumed to be UTF-8 encoded CSV text.
+    limit_rows : int, optional
+        Maximum number of CSV records (rows) to download. If specified,
+        streaming will stop early once at least this many rows are fetched.
+    max_response_size : int, optional
+        Maximum allowed size of the HTTP response in bytes.
 
     Returns
     -------
@@ -328,9 +338,12 @@ def _fetch_url_to_tempfile(url: str) -> str:
     Raises
     ------
     RemoteReadError
-        On any network-level failure (DNS, timeout, connection refused) or
-        a non-2xx HTTP response.
+        On any network-level failure (DNS, timeout, connection refused),
+        a non-2xx HTTP response, or if the size limit or invalid UTF-8 is encountered.
     """
+    if max_response_size is None:
+        max_response_size = _URL_MAX_RESPONSE_SIZE
+
     tmp = tempfile.NamedTemporaryFile(
         mode="w",
         encoding="utf-8",
@@ -363,25 +376,92 @@ def _fetch_url_to_tempfile(url: str) -> str:
         # RemoteReadError.
         with response:
             decoder = codecs.getincrementaldecoder("utf-8")("strict")
-            raw_bytes = response.read(_URL_FETCH_CHUNK_SIZE)
-            while raw_bytes:
+            bytes_downloaded = 0
+
+            row_count = 0
+            in_quotes = False
+            pending_quote = False
+            pending_cr = False
+            limit_reached = False
+
+            while True:
+                raw_bytes = response.read(_URL_FETCH_CHUNK_SIZE)
+                if not raw_bytes:
+                    break
+
+                bytes_downloaded += len(raw_bytes)
+                if max_response_size is not None and bytes_downloaded > max_response_size:
+                    raise RemoteReadError(
+                        f"Remote CSV size exceeded limit of {max_response_size} bytes",
+                        url=url,
+                    )
+
                 try:
-                    tmp.write(decoder.decode(raw_bytes, final=False))
+                    text_chunk = decoder.decode(raw_bytes, final=False)
                 except UnicodeDecodeError as exc:
                     raise RemoteReadError(
                         f"Remote CSV at {url!r} is not valid UTF-8: {exc}",
                         url=url,
                     ) from exc
-                raw_bytes = response.read(_URL_FETCH_CHUNK_SIZE)
-            # Flush any bytes buffered inside the decoder for the final
-            # (possibly incomplete) multi-byte sequence.
-            try:
-                tmp.write(decoder.decode(b"", final=True))
-            except UnicodeDecodeError as exc:
-                raise RemoteReadError(
-                    f"Remote CSV at {url!r} is not valid UTF-8: {exc}",
-                    url=url,
-                ) from exc
+
+                if not text_chunk:
+                    continue
+
+                tmp.write(text_chunk)
+
+                if limit_rows is not None and not limit_reached:
+                    index = 0
+                    chunk_len = len(text_chunk)
+                    while index < chunk_len:
+                        char = text_chunk[index]
+
+                        if pending_cr:
+                            pending_cr = False
+                            if char == "\n":
+                                index += 1
+                                continue
+
+                        if char == '"':
+                            if pending_quote:
+                                pending_quote = False
+                            elif in_quotes:
+                                pending_quote = True
+                            else:
+                                in_quotes = True
+                        else:
+                            if pending_quote:
+                                in_quotes = False
+                                pending_quote = False
+
+                            if not in_quotes and char in {"\n", "\r"}:
+                                row_count += 1
+                                if char == "\r":
+                                    if (
+                                        index + 1 < chunk_len
+                                        and text_chunk[index + 1] == "\n"
+                                    ):
+                                        pass
+                                    else:
+                                        pending_cr = True
+                                if row_count >= limit_rows:
+                                    limit_reached = True
+                                    break
+
+                        index += 1
+
+                if limit_reached:
+                    break
+
+            if not limit_reached:
+                # Flush any bytes buffered inside the decoder for the final
+                # (possibly incomplete) multi-byte sequence.
+                try:
+                    tmp.write(decoder.decode(b"", final=True))
+                except UnicodeDecodeError as exc:
+                    raise RemoteReadError(
+                        f"Remote CSV at {url!r} is not valid UTF-8: {exc}",
+                        url=url,
+                    ) from exc
 
         tmp.close()
         return tmp_name
@@ -427,13 +507,13 @@ def _warn_bad_rows(bad_rows: list) -> None:
     )
 
 
-def _validate_skip_rows(skip_rows: int) -> int:
+def _validate_skip_rows(skip_rows: int, name: str = "skip_rows") -> int:
     """Validate skip_rows parameter."""
     if isinstance(skip_rows, bool) or not isinstance(skip_rows, int):
-        raise TypeError("skip_rows must be an integer")
+        raise TypeError(f"{name} must be an integer")
 
     if skip_rows < 0:
-        raise ValueError("skip_rows must be non-negative")
+        raise ValueError(f"{name} must be non-negative")
 
     return skip_rows
 
@@ -493,6 +573,7 @@ def _validate_on_bad_lines(on_bad_lines: str) -> str:
 def _materialize_csv_input(
     source: str | os.PathLike[str] | io.TextIOBase,
     caller: str = "read_csv",
+    limit_rows: int | None = None,
 ) -> tuple[str, bool, bool]:
     """Convert supported CSV inputs into a filesystem path.
 
@@ -534,7 +615,7 @@ def _materialize_csv_input(
 
             # HTTP/HTTPS — fetch via stdlib urllib, no new dependencies.
             if scheme in _SUPPORTED_URL_SCHEMES:
-                raw = _fetch_url_to_tempfile(raw)
+                raw = _fetch_url_to_tempfile(raw, limit_rows=limit_rows)
                 is_temp = True
 
         is_gz = False
@@ -974,7 +1055,21 @@ def read_csv(
     >>> df = ar.read_csv("data.tsv", delimiter=",")  # explicit comma honoured
     >>> df = ar.read_csv("data.dat")              # non-standard extension accepted
     """
-    native_path, should_cleanup, is_materialized_text = _materialize_csv_input(path)
+    if nrows is not None:
+        _validate_nrows(nrows)
+    if skiprows is not None:
+        _validate_skip_rows(skiprows, name="skiprows")
+
+    limit_rows = None
+    if nrows is not None:
+        effective_skip = skiprows if skiprows is not None else 0
+        limit_rows = nrows + effective_skip + (1 if has_header else 0)
+
+    native_path, should_cleanup, is_materialized_text = _materialize_csv_input(
+        path,
+        caller="read_csv",
+        limit_rows=limit_rows,
+    )
 
     try:
         # Explicitly validate the decompressed temp file (or local path) rather than the compressed bytes
@@ -1175,9 +1270,21 @@ def read_csv_chunked(
     >>> for chunk in ar.read_csv_chunked("data.tsv", delimiter=",", chunksize=10_000):
     ...     process(chunk)
     """
+    if nrows is not None:
+        _validate_nrows(nrows)
+    if skiprows is not None:
+        _validate_skip_rows(skiprows, name="skiprows")
+    if skip_rows is not None:
+        _validate_skip_rows(skip_rows, name="skip_rows")
+
+    limit_rows = None
+    if nrows is not None:
+        effective_skip = skiprows if skiprows is not None else skip_rows
+        limit_rows = nrows + effective_skip + (1 if has_header else 0)
+
     is_path_input = isinstance(path, (str, os.PathLike))
     native_path, should_cleanup, is_materialized_text = _materialize_csv_input(
-        path, caller="read_csv_chunked"
+        path, caller="read_csv_chunked", limit_rows=limit_rows
     )
     try:
         path_lower = native_path.lower()
@@ -1567,7 +1674,14 @@ def scan_csv(
     >>> schema = ar.scan_csv("data.dat")              # non-standard extension accepted
     """
 
-    native_path, should_cleanup, _ = _materialize_csv_input(path, caller="scan_csv")
+    actual_sample_size = 100 if sample_size is None else sample_size
+    limit_rows = actual_sample_size + (1 if has_header else 0)
+
+    native_path, should_cleanup, _ = _materialize_csv_input(
+        path,
+        caller="scan_csv",
+        limit_rows=limit_rows,
+    )
 
     try:
         _validate_csv_path(native_path, encoding, reject_utf8_nul_bytes=False)

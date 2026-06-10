@@ -519,3 +519,43 @@ class TestCloudSchemeRejectionPublicApi:
     def test_read_csv_chunked_error_contains_scheme_name(self, scheme):
         with pytest.raises(ValueError, match=scheme):
             next(iter(ar.read_csv_chunked(f"{scheme}://bucket/file.csv")))
+
+
+class TestRemoteCsvLimits:
+    """Tests for early stream termination and size limits on remote files."""
+
+    def test_size_limit_raises_error(self):
+        """Verify that a response exceeding max_response_size raises RemoteReadError."""
+        mock_response = MagicMock()
+        mock_response.read.side_effect = [b"1,2\n", b"3,4\n", b""]
+        mock_response.__enter__ = lambda s: s
+        mock_response.__exit__ = MagicMock(return_value=False)
+
+        with patch("arnio.io.urllib.request.urlopen", return_value=mock_response):
+            with patch("arnio.io.urllib.request.Request", return_value=MagicMock()):
+                # Set limit to 2 bytes, but chunk is 4 bytes
+                with pytest.raises(RemoteReadError, match="size exceeded limit"):
+                    _fetch_url_to_tempfile("http://example.com/data.csv", max_response_size=2)
+
+    def test_row_limit_stops_reading_early(self):
+        """Verify that streaming stops early once limit_rows is satisfied."""
+        # We simulate a response with 5 chunks, but limit_rows=2 should stop after chunk 2
+        mock_response = MagicMock()
+        mock_response.read.side_effect = [b"a,b\n", b"1,2\n", b"3,4\n", b"5,6\n", b""]
+        mock_response.__enter__ = lambda s: s
+        mock_response.__exit__ = MagicMock(return_value=False)
+
+        with patch("arnio.io.urllib.request.urlopen", return_value=mock_response):
+            with patch("arnio.io.urllib.request.Request", return_value=MagicMock()):
+                # limit_rows = 2 (header + 1 data row)
+                path = _fetch_url_to_tempfile("http://example.com/data.csv", limit_rows=2)
+                try:
+                    content = open(path, encoding="utf-8").read()
+                    assert "a,b" in content
+                    assert "1,2" in content
+                    # Should NOT have downloaded later chunks
+                    assert "3,4" not in content
+                    # read() should have been called only twice
+                    assert mock_response.read.call_count <= 3
+                finally:
+                    os.unlink(path)
