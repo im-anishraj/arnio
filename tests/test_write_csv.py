@@ -464,5 +464,136 @@ class TestWriteCsvSafeForSpreadsheet:
         """safe_for_spreadsheet='true' raises TypeError."""
         frame = ar.from_pandas(pd.DataFrame({"a": ["hello"]}))
         out = tmp_path / "out.csv"
-        with pytest.raises(TypeError):
-            ar.write_csv(frame, out, safe_for_spreadsheet="true")
+        out.write_bytes(b"sentinel")
+
+        def fail_replace(_src, _dst):
+            raise PermissionError("replace denied")
+
+        monkeypatch.setattr(os, "replace", fail_replace)
+
+        with pytest.raises(RuntimeError, match="replace denied") as exc_info:
+            ar.write_csv(frame, str(out), encoding="latin-1")
+
+        assert isinstance(exc_info.value.__cause__, PermissionError)
+        assert out.read_bytes() == b"sentinel"
+        assert list(tmp_path.iterdir()) == [out]
+
+    def test_unencodable_character_replace_writes_file(self, tmp_path):
+        """encoding_errors="replace" writes replacement characters instead of raising."""
+        frame = ar.from_pandas(pd.DataFrame({"val": ["こんにちは"]}))
+        out = tmp_path / "out.csv"
+        ar.write_csv(frame, str(out), encoding="latin-1", encoding_errors="replace")
+        assert out.exists()
+        content = out.read_text(encoding="latin-1")
+        assert "?" in content  # replacement character
+
+    def test_encoding_non_string_raises_typeerror(self, tmp_path):
+        """Non-string encoding raises TypeError before any file I/O."""
+        frame = self._simple_frame()
+        out = tmp_path / "out.csv"
+        with pytest.raises(TypeError, match="encoding"):
+            ar.write_csv(frame, str(out), encoding=123)
+
+    def test_encoding_unknown_codec_raises_valueerror(self, tmp_path):
+        """Unknown codec raises ValueError before any file I/O."""
+        frame = self._simple_frame()
+        out = tmp_path / "out.csv"
+        with pytest.raises(ValueError, match="Unknown encoding"):
+            ar.write_csv(frame, str(out), encoding="not-a-real-codec")
+
+    def test_encoding_errors_non_string_raises_typeerror(self, tmp_path):
+        """Non-string encoding_errors raises TypeError."""
+        frame = self._simple_frame()
+        out = tmp_path / "out.csv"
+        with pytest.raises(TypeError, match="encoding_errors"):
+            ar.write_csv(frame, str(out), encoding_errors=0)
+
+    def test_encoding_errors_invalid_value_raises_valueerror(self, tmp_path):
+        """Unrecognised encoding_errors value raises ValueError."""
+        frame = self._simple_frame()
+        out = tmp_path / "out.csv"
+        with pytest.raises(ValueError, match="encoding_errors"):
+            ar.write_csv(frame, str(out), encoding_errors="xmlcharrefreplace")
+
+    def test_utf8_alias_uses_fast_path(self, tmp_path):
+        """'utf8' (no hyphen) is recognised as UTF-8 and uses the fast path."""
+        frame = self._simple_frame()
+        out = tmp_path / "out.csv"
+        ar.write_csv(frame, str(out), encoding="utf8")
+        assert "Alice" in out.read_text(encoding="utf-8")
+
+    def test_temp_file_cleaned_up_after_success(self, tmp_path):
+        """No stray temp files remain in tmp_path after a successful transcoding write."""
+        import glob
+
+        frame = ar.from_pandas(pd.DataFrame({"city": ["München"]}))
+        out = tmp_path / "out.csv"
+        before = set(glob.glob(str(tmp_path / "*.csv")))
+        ar.write_csv(frame, str(out), encoding="latin-1")
+        after = set(glob.glob(str(tmp_path / "*.csv")))
+        assert after - before == {str(out)}
+
+
+class TestWriteCsvAppend:
+    def test_append_to_empty(self, tmp_path):
+        path = str(tmp_path / "test_append_empty.csv")
+        frame1 = ar.from_pandas(pd.DataFrame({"A": [1, 2], "B": ["x", "y"]}))
+
+        ar.write_csv(frame1, path, append=True)
+        res1 = ar.to_pandas(ar.read_csv(path))
+        assert len(res1) == 2
+        assert list(res1.columns) == ["A", "B"]
+
+    def test_append_to_existing(self, tmp_path):
+        path = str(tmp_path / "test_append_existing.csv")
+        frame1 = ar.from_pandas(pd.DataFrame({"A": [1, 2], "B": ["x", "y"]}))
+        frame2 = ar.from_pandas(pd.DataFrame({"A": [3, 4], "B": ["z", "w"]}))
+
+        ar.write_csv(frame1, path)
+        ar.write_csv(frame2, path, append=True)
+
+        res = ar.to_pandas(ar.read_csv(path))
+        assert len(res) == 4
+        assert list(res["A"]) == [1, 2, 3, 4]
+        assert list(res["B"]) == ["x", "y", "z", "w"]
+
+    def test_append_schema_mismatch(self, tmp_path):
+        path = str(tmp_path / "test_schema_mismatch.csv")
+        frame1 = ar.from_pandas(pd.DataFrame({"A": [1, 2], "B": ["x", "y"]}))
+        frame3 = ar.from_pandas(pd.DataFrame({"A": [5], "C": ["diff"]}))
+
+        ar.write_csv(frame1, path)
+        with pytest.raises(ValueError, match="Schema mismatch"):
+            ar.write_csv(frame3, path, append=True)
+
+    def test_append_missing_newline(self, tmp_path):
+        path = tmp_path / "test_missing_newline.csv"
+        path.write_bytes(b"A,B\n1,x\n2,y")  # No trailing newline
+
+        frame2 = ar.from_pandas(pd.DataFrame({"A": [3], "B": ["z"]}))
+        with pytest.raises(ValueError, match="lacks a final line terminator"):
+            ar.write_csv(frame2, str(path), append=True)
+
+    def test_append_non_utf8(self, tmp_path):
+        path = str(tmp_path / "test_append_non_utf8.csv")
+        frame1 = ar.from_pandas(pd.DataFrame({"city": ["München"]}))
+        frame2 = ar.from_pandas(pd.DataFrame({"city": ["Zürich"]}))
+
+        ar.write_csv(frame1, path, encoding="latin-1")
+        ar.write_csv(frame2, path, encoding="latin-1", append=True)
+
+        res = ar.to_pandas(ar.read_csv(path, encoding="latin-1"))
+        assert len(res) == 2
+        assert list(res["city"]) == ["München", "Zürich"]
+
+    def test_append_false_overwrites(self, tmp_path):
+        path = str(tmp_path / "test_append_false.csv")
+        frame1 = ar.from_pandas(pd.DataFrame({"A": [1, 2]}))
+        frame2 = ar.from_pandas(pd.DataFrame({"A": [3, 4]}))
+
+        ar.write_csv(frame1, path)
+        ar.write_csv(frame2, path, append=False)  # default is False
+
+        res = ar.to_pandas(ar.read_csv(path))
+        assert len(res) == 2
+        assert list(res["A"]) == [3, 4]

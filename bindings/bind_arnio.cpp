@@ -245,8 +245,73 @@ PYBIND11_MODULE(_arnio_cpp, m) {
 
     py::class_<CsvReader>(m, "CsvReader")
         .def(py::init<const CsvConfig&>(), py::arg("config") = CsvConfig{})
-        .def("read", &CsvReader::read)
-        .def("scan_schema", &CsvReader::scan_schema);
+        .def(
+            "read",
+            [](const CsvReader& reader, const std::string& path, const std::string& on_bad_lines) {
+                CsvParseResult result;
+                {
+                    py::gil_scoped_release release;
+                    result = reader.read(path, on_bad_lines);
+                }
+
+                return py::make_tuple(std::move(result.frame), std::move(result.bad_rows));
+            },
+            py::arg("path"), py::arg("on_bad_lines") = std::string("error"))
+        .def(
+            "scan_schema",
+            [](const CsvReader& reader, const std::string& path, const std::string& on_bad_lines) {
+                std::vector<std::pair<std::string, std::string>> schema_vec;
+                std::vector<std::string> bad_rows;
+                {
+                    py::gil_scoped_release release;
+                    auto result = reader.scan_schema(path, on_bad_lines);
+                    schema_vec = std::move(result.first);
+                    bad_rows = std::move(result.second);
+                }
+                py::dict schema;
+                for (const auto& pair : schema_vec) {
+                    schema[py::str(pair.first)] = py::str(pair.second);
+                }
+                return py::make_tuple(schema, bad_rows);
+            },
+            py::arg("path"), py::arg("on_bad_lines") = "error");
+
+    py::class_<CsvChunkReader>(m, "CsvChunkReader")
+        .def(py::init<const CsvConfig&>(), py::arg("config") = CsvConfig{})
+        .def("open",
+             [](CsvChunkReader& reader, const std::string& path) {
+                 py::gil_scoped_release release;
+                 reader.open(path);
+             })
+        .def(
+            "next_chunk",
+            [](CsvChunkReader& reader, size_t chunksize,
+               const std::string& on_bad_lines) -> py::object {
+                std::optional<CsvParseResult> result;
+                {
+                    py::gil_scoped_release release;
+                    result = reader.next_chunk(chunksize, on_bad_lines);
+                }
+                if (!result.has_value()) {
+                    return py::none();
+                }
+                return py::make_tuple(std::move(result->frame), std::move(result->bad_rows));
+            },
+            py::arg("chunksize"), py::arg("on_bad_lines") = std::string("error"))
+        .def("close", &CsvChunkReader::close);
+
+    // --- CsvWriter ---
+    py::class_<CsvWriteConfig>(m, "CsvWriteConfig")
+        .def(py::init<>())
+        .def_readwrite("delimiter", &CsvWriteConfig::delimiter)
+        .def_readwrite("write_header", &CsvWriteConfig::write_header)
+        .def_readwrite("line_terminator", &CsvWriteConfig::line_terminator)
+        .def_readwrite("escape_formulas", &CsvWriteConfig::escape_formulas)
+        .def_readwrite("append", &CsvWriteConfig::append);
+
+    py::class_<CsvWriter>(m, "CsvWriter")
+        .def(py::init<const CsvWriteConfig&>(), py::arg("config") = CsvWriteConfig{})
+        .def("write", &CsvWriter::write);
 
     // --- Cleaning functions ---
     // Expose the function to Python
