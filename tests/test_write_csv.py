@@ -661,8 +661,9 @@ def test_write_csv_append(tmp_path):
     # Append to existing
     ar.write_csv(frame2, path, append=True)
     res2 = ar.read_csv(path)
-    assert len(res2) == 4
-    assert res2.column("A").to_list() == [1, 2, 3, 4]
+    res2_df = ar.to_pandas(res2)
+    assert len(res2_df) == 4
+    assert res2_df["A"].tolist() == [1, 2, 3, 4]
 
     # Schema mismatch
     frame3 = ar.from_pandas(pd.DataFrame({"A": [5], "C": ["diff"]}))
