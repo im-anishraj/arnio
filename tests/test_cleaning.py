@@ -5392,3 +5392,43 @@ class TestFillNullsFloat64LocaleIndependent:
                 ar.fill_nulls(frame, "inf", subset=["x"])
         finally:
             _locale.setlocale(_locale.LC_NUMERIC, prev)
+
+
+class TestSanitizeColumnNames:
+    """Tests for arnio.sanitize_column_names."""
+
+    def test_removes_leading_underscores(self):
+        frame = ar.from_pandas(pd.DataFrame({"_name": [1, 2], "age": [3, 4]}))
+        result = ar.sanitize_column_names(frame)
+        assert list(result.columns) == ["name", "age"]
+
+    def test_removes_trailing_underscores(self):
+        frame = ar.from_pandas(pd.DataFrame({"name_": [1, 2], "age__": [3, 4]}))
+        result = ar.sanitize_column_names(frame)
+        assert list(result.columns) == ["name", "age"]
+
+    def test_collapse_consecutive_underscores(self):
+        frame = ar.from_pandas(pd.DataFrame({"a__b": [1, 2], "c": [3, 4]}))
+        result = ar.sanitize_column_names(frame)
+        assert list(result.columns) == ["a_b", "c"]
+
+    def test_no_change_for_clean_names(self):
+        frame = ar.from_pandas(pd.DataFrame({"name": [1, 2], "age": [3, 4]}))
+        result = ar.sanitize_column_names(frame)
+        assert list(result.columns) == ["name", "age"]
+
+    def test_raises_on_duplicate_after_sanitization(self):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1], "_a": [2]}))
+        with pytest.raises(ValueError, match="duplicates"):
+            ar.sanitize_column_names(frame)
+
+    def test_rejects_non_frame_input(self):
+        with pytest.raises(TypeError, match="must be an ArFrame"):
+            ar.sanitize_column_names([])
+
+    def test_mixed_cleanup(self):
+        frame = ar.from_pandas(
+            pd.DataFrame({"__name__": [1], "age___": [2], "user_id": [3]})
+        )
+        result = ar.sanitize_column_names(frame)
+        assert list(result.columns) == ["name", "age", "user_id"]
