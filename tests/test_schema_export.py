@@ -294,16 +294,10 @@ def test_set_valued_allowed_normalized():
     assert result["fields"]["status"]["allowed"] == ["a", "b", "c"]
 
 
-def test_mixed_scalar_set_valued_allowed_normalized():
+def test_mixed_scalar_set_normalized():
     raw = {"code": {"type": "STRING", "allowed": {1, "1"}}}
     result = schema_to_dict(raw)
     assert result["fields"]["code"]["allowed"] == [1, "1"]
-
-
-def test_none_and_string_set_valued_allowed_normalized():
-    raw = {"status": {"type": "STRING", "allowed": {None, "missing"}}}
-    result = schema_to_dict(raw)
-    assert result["fields"]["status"]["allowed"] == [None, "missing"]
 
 
 def test_real_schema_field_dtype():

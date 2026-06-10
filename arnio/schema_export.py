@@ -166,10 +166,8 @@ def _normalize_serializable(value: Any) -> Any:
     # Convert sets into deterministic sorted lists since YAML
     # emission only supports list-like serialized output.
     if isinstance(value, set):
-        return sorted(
-            (_normalize_serializable(v) for v in value),
-            key=_serializable_sort_key,
-        )
+        normalized_elements = [_normalize_serializable(v) for v in value]
+        return sorted(normalized_elements, key=lambda x: (type(x).__name__, repr(x)))
 
     if isinstance(value, list):
         return [_normalize_serializable(v) for v in value]
