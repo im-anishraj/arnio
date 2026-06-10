@@ -253,6 +253,18 @@ result = schema.validate(frame)</code></pre></div></div>
                 <td>Validates IANA timezone identifiers (e.g. <code>"America/New_York"</code>).</td>
               </tr>
               <tr>
+                <td><code>UUID(...)</code></td>
+                <td>Semantic</td>
+                <td><code>nullable=True</code>, <code>unique=False</code>, <code>version=None</code>, <code>severity="error"</code>, <code>required_if=None</code></td>
+                <td>Validates hexadecimal UUID strings. Optional <code>version</code> (1-5) enforces a specific UUID version; Nil UUIDs are rejected when version filtering is active.</td>
+              </tr>
+              <tr>
+                <td><code>IPAddress(...)</code></td>
+                <td>Semantic</td>
+                <td><code>nullable=True</code>, <code>unique=False</code>, <code>version=None</code>, <code>severity="error"</code>, <code>required_if=None</code></td>
+                <td>Validates standard IP address strings. Optional <code>version</code> (4 or 6) enforces strict IPv4 or IPv6 checking.</td>
+              </tr>
+              <tr>
                 <td><code>Date(...)</code></td>
                 <td>Date / Time</td>
                 <td><code>nullable=True</code>, <code>unique=False</code>, <code>severity="error"</code>, <code>required_if=None</code></td>
