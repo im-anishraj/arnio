@@ -166,7 +166,20 @@ if not result.passed:
     print(result.to_markdown())
     result.raise_for_failures()
 </code></pre></div></div>
-        <div class="api-func"><div class="api-func-header">Quality result classes</div><div class="api-func-body"><p><code>ColumnProfile</code>, <code>CleaningSuggestion</code>, <code>CleanStepRecord</code>, <code>CleanExplanation</code>, <code>ProfileComparison</code>, <code>QualityGateIssue</code>, and <code>QualityGateResult</code> describe structured profiling, cleaning, comparison, and gate output.</p></div></div>
+        <div class="api-func"><div class="api-func-header">Quality result classes</div><div class="api-func-body"><p><code>ColumnProfile</code>, <code>CleaningSuggestion</code>, <code>CleanStepRecord</code>, <code>CleanExplanation</code>, <code>DriftReport</code>, <code>ProfileComparison</code>, <code>QualityGateIssue</code>, and <code>QualityGateResult</code> describe structured profiling, cleaning, comparison, and gate output.</p></div></div>
+        <div class="api-func"><div class="api-func-header">detect_drift(old, new)</div><div class="api-func-body"><p>Compare two <code>ArFrame</code> datasets and return a <code>DriftReport</code> describing structural and statistical changes. Unlike <code>compare_profiles</code>, this function handles added or removed columns without raising an error.</p><p><strong>DriftReport fields:</strong></p><ul><li><code>added_columns</code> – columns present in <code>new</code> but absent from <code>old</code>.</li><li><code>removed_columns</code> – columns present in <code>old</code> but absent from <code>new</code>.</li><li><code>dtype_changes</code> – shared columns whose dtype changed: <code>{col: (old_dtype, new_dtype)}</code>.</li><li><code>null_ratio_changes</code> – shared columns whose null ratio changed: <code>{col: (old_ratio, new_ratio)}</code>.</li><li><code>row_count</code> – row counts as <code>(old_rows, new_rows)</code>.</li><li><code>has_drift</code> – <code>True</code> when any of the above are non-empty or row counts differ.</li><li><code>to_dict()</code> – JSON-safe export of the report.</li></ul><pre><code>old_frame = ar.read_csv("data_v1.csv")
+new_frame = ar.read_csv("data_v2.csv")
+report = ar.detect_drift(old_frame, new_frame)
+
+if report.has_drift:
+    print("Added columns:", report.added_columns)
+    print("Removed columns:", report.removed_columns)
+    print("Dtype changes:", report.dtype_changes)
+    print("Null ratio changes:", report.null_ratio_changes)
+
+import json
+print(json.dumps(report.to_dict(), indent=2))
+</code></pre></div></div>
 
         <h2 id="schema">Schema</h2>
         <div class="api-func"><div class="api-func-header">Schema(fields, strict=False, unique=None, rules=None).validate(frame, max_errors=None) / validate(frame, schema, max_errors=None)</div><div class="api-func-body"><p>Validate frames against field definitions. <code>max_errors</code> was added in v1.18.0.</p><p><code>unique</code>: list or tuple of column names that must contain no duplicate values in the frame.</p><p><code>rules</code>: list of callables <code>(pd.DataFrame) -&gt; list[ValidationIssue]</code> for cross-field or custom contract checks.</p><pre><code>schema = ar.Schema(
