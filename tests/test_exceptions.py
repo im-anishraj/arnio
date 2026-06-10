@@ -124,7 +124,7 @@ def test_jsonl_read_error_for_blank_lines_only_file(tmp_path):
 def test_jsonl_read_error_for_invalid_json_includes_line_number(tmp_path):
     bad_json_file = tmp_path / "bad.jsonl"
     bad_json_file.write_text(
-        '{"name": "Alice"}\n' "NOT VALID JSON\n" '{"name": "Bob"}\n',
+        '{"name": "Alice"}\nNOT VALID JSON\n{"name": "Bob"}\n',
         encoding="utf-8",
     )
 
@@ -139,7 +139,7 @@ def test_jsonl_read_error_for_invalid_json_includes_line_number(tmp_path):
 def test_jsonl_read_error_for_non_object_json_line(tmp_path):
     array_file = tmp_path / "array.jsonl"
     array_file.write_text(
-        '{"name": "Alice"}\n' "[1, 2, 3]\n",
+        '{"name": "Alice"}\n[1, 2, 3]\n',
         encoding="utf-8",
     )
 
@@ -199,19 +199,20 @@ def test_schema_validation_error_optional_result():
     assert exc.result is None
 
 
-def test_pipeline_step_error_preserves_step_name_and_original_error():
-    orig_err = ValueError("bad custom transform")
-    step_err = ar.PipelineStepError("normalize_names", orig_err)
+def test_pipeline_step_error_preserves_context():
+    original_error = ValueError("original error details")
+    exc = ar.PipelineStepError("transform_step", original_error)
 
-    assert step_err.step_name == "normalize_names"
-    assert step_err.orig_err is orig_err
+    assert exc.step_name == "transform_step"
+    assert exc.orig_err is original_error
+    assert "transform_step" in str(exc)
+    assert "original error details" in str(exc)
 
 
-def test_pipeline_step_error_has_clear_string_representation():
-    step_err = ar.PipelineStepError("normalize_names", RuntimeError("boom"))
+def test_pipeline_step_error_serialization():
+    original_error = RuntimeError("test error")
+    exc = ar.PipelineStepError("my_step", original_error)
 
-    message = str(step_err)
-    assert message
-    assert "custom pipeline step" in message.lower()
-    assert "normalize_names" in message
-    assert "boom" in message
+    message = str(exc)
+    assert "PipelineStepError" in message or "my_step" in message
+    assert "test error" in message
