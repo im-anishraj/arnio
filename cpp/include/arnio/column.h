@@ -26,6 +26,12 @@ class Column {
     void push_null();
     void set_name(const std::string& name);
 
+    // Internal capacity pre-allocation.  Called by the binding layer when the
+    // final row count is known upfront (e.g. Frame::from_dict with row_count).
+    // Not registered in the pybind11 wrapper — this is an implementation detail,
+    // not part of the public Python API.
+    void reserve(size_t capacity);
+
     // Data access
     const ColumnData& data() const;
     const std::vector<bool>& null_mask() const;

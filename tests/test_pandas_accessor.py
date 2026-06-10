@@ -40,6 +40,37 @@ def test_pandas_accessor_runs_convenience_clean():
     assert list(result["score"]) == [10]
 
 
+def test_pandas_accessor_supports_direct_cleaning_wrapper_chains():
+    df = pd.DataFrame({"name": [" Alice ", "Bob", None], "age": [25, 150, 30]})
+
+    result = (
+        df.arnio.strip_whitespace(subset=["name"])
+        .arnio.clip_numeric(upper=100, subset=["age"])
+        .arnio.drop_nulls()
+    )
+
+    assert isinstance(result, pd.DataFrame)
+    assert list(result["name"]) == ["Alice", "Bob"]
+    assert list(result["age"]) == [25, 100]
+    assert list(df["name"][:2]) == [" Alice ", "Bob"]
+    assert pd.isna(df.loc[2, "name"])
+    assert list(df["age"]) == [25, 150, 30]
+
+
+def test_pandas_accessor_fill_nulls_updates_selected_columns_only():
+    df = pd.DataFrame(
+        {"name": ["Alice", None], "city": [None, "Delhi"], "score": [10, 20]}
+    )
+
+    result = df.arnio.fill_nulls("unknown", subset=["city"])
+
+    assert isinstance(result, pd.DataFrame)
+    assert list(result["city"]) == ["unknown", "Delhi"]
+    assert pd.isna(result.loc[1, "name"])
+    assert list(result["score"]) == [10, 20]
+    assert pd.isna(df.loc[0, "city"])
+
+
 def test_pandas_accessor_profiles_dataframe_quality():
     df = pd.DataFrame({"name": [" Alice ", "Bob"], "score": [1.5, None]})
 

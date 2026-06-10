@@ -16,11 +16,11 @@
   <meta property="og:url" content="https://arnio.vercel.app/">
   <meta property="og:title" content="Arnio — Production Data Preparation for Python">
   <meta property="og:description" content="Arnio combines a native C++ CSV engine with Python APIs for cleaning, quality profiling, and schema validation.">
-  <meta property="og:image" content="https://arnio.vercel.app/arnio-social-card.svg">
+  <meta property="og:image" content="https://arniolib.vercel.app/arnio-social-card.svg">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Arnio — Production Data Preparation for Python">
   <meta name="twitter:description" content="Arnio combines a native C++ CSV engine with Python APIs for cleaning, quality profiling, and schema validation.">
-  <meta name="twitter:image" content="https://arnio.vercel.app/arnio-social-card.svg">
+  <meta name="twitter:image" content="https://arniolib.vercel.app/arnio-social-card.svg">
 </head>
 <body>
   <a href="#main-content" class="skip-link">Skip to content</a>
@@ -41,11 +41,11 @@
         <a href="https://discord.gg/xsEw7r78M" class="nav-discord" target="_blank" rel="noopener" aria-label="Join Discord">Discord</a>
         <a href="https://github.com/im-anishraj/arnio" class="nav-github" target="_blank" rel="noopener" aria-label="View on GitHub">GitHub</a>
         <button class="theme-toggle" aria-label="Toggle theme">Theme</button>
-        <button class="nav-hamburger" aria-label="Open menu" aria-expanded="false">☰</button>
+        <button class="nav-hamburger" aria-label="Open menu" aria-expanded="false" aria-controls="mobile-navigation">☰</button>
       </div>
     </div>
   </nav>
-  <div class="mobile-menu" aria-label="Mobile navigation">
+  <div id="mobile-navigation" class="mobile-menu" aria-label="Mobile navigation">
     <a href="index.html">Home</a><a href="docs.html">Documentation</a><a href="api.html">API Reference</a><a href="benchmarks.html">Benchmarks</a><a href="contributing.html">Contributing</a><a href="architecture.html">Architecture</a><a href="roadmap.html">Roadmap</a><a href="community.html">Community</a><a href="https://discord.gg/xsEw7r78M" target="_blank" rel="noopener">Discord</a><a href="changelog.html">Changelog</a>
   </div>
 
@@ -139,6 +139,33 @@ ar.write_parquet(clean, "sales.parquet", compression="zstd")</code></pre>
           <div class="card"><h3>Frame ergonomics</h3><p><code>ArFrame.__getitem__</code> column selection, <code>ArFrame.drop_columns</code>, and stronger tuple-key replacement handling.</p></div>
           <div class="card"><h3>Quality exports</h3><p><code>profile(exclude_columns=...)</code>, <code>DataQualityReport.to_dict(exclude_columns=...)</code>, and <code>DataQualityReport.to_json()</code>.</p></div>
           <div class="card"><h3>Docs and CI polish</h3><p>Benchmark regression smoke checks, duplicate-header hardening, and extra dry-run coverage for the pandas accessor.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section comparison-section">
+      <div class="container">
+        <h2>The Problem Arnio Solves</h2>
+        <p class="section-lede">Stop writing brittle pandas glue code. Arnio handles the messy parts.</p>
+        <div class="comparison-grid">
+          <div class="comparison-card comparison-old">
+            <div class="comparison-label">❌ The Old Way (Pandas)</div>
+            <ul>
+              <li>Manual null handling scattered across notebooks</li>
+              <li>No schema validation before processing</li>
+              <li>Silent type coercion bugs in production</li>
+              <li>CSV encoding errors crash pipelines</li>
+            </ul>
+          </div>
+          <div class="comparison-card comparison-new">
+            <div class="comparison-label">⚡ The Arnio Way</div>
+            <ul>
+              <li>Auto-clean with <code>ar.auto_clean()</code> in one line</li>
+              <li>Schema contracts catch bad data early</li>
+              <li>Quality reports surface issues before they bite</li>
+              <li>Hardened CSV engine handles encoding gracefully</li>
+            </ul>
+          </div>
         </div>
       </div>
     </section>

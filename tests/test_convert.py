@@ -1,13 +1,15 @@
 """Tests for pandas conversion."""
 
+import sys
 from decimal import Decimal
+from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
 import pytest
 
 import arnio as ar
-from arnio.convert import _to_binding_safe
+from arnio.convert import _from_arrow_table, _to_binding_safe
 
 
 class TestToPandas:
@@ -797,6 +799,110 @@ class TestFromPandas:
             ar.from_dict({"a": b"abc"})
 
 
+class TestFromPandasReservePreallocation:
+    """Regression tests for the Column::reserve() internal preallocation path.
+
+    Frame::from_dict calls col.reserve(row_count) when the row count is
+    supplied.  These tests verify that the optimised and unoptimised paths
+    produce identical frames — same shape, column names, dtypes, values, and
+    null masks — across all supported column types.
+    """
+
+    def _build_cols_dict(self):
+        return {
+            "col_int": [1, 2, None, 4, 5],
+            "col_float": [1.1, None, 3.3, 4.4, 5.5],
+            "col_bool": [True, False, None, True, False],
+            "col_str": ["alpha", "beta", None, "delta", "epsilon"],
+        }
+
+    def test_from_dict_with_row_count_matches_without(self):
+        """from_dict with row_count supplied must produce the same frame as without."""
+        cols = self._build_cols_dict()
+        from arnio._arnio_cpp import DType, Frame
+
+        dtype_hints = {
+            "col_int": DType.INT64,
+            "col_float": DType.FLOAT64,
+            "col_bool": DType.BOOL,
+            "col_str": DType.STRING,
+        }
+
+        frame_without = Frame.from_dict(cols, dtype_hints)
+        frame_with = Frame.from_dict(cols, dtype_hints, row_count=5)
+
+        assert frame_without.shape() == frame_with.shape()
+        assert frame_without.column_names() == frame_with.column_names()
+
+        for idx in range(frame_without.num_cols()):
+            col_a = frame_without.column_by_index(idx)
+            col_b = frame_with.column_by_index(idx)
+            assert col_a.dtype() == col_b.dtype(), f"dtype mismatch on column {idx}"
+            assert col_a.size() == col_b.size(), f"size mismatch on column {idx}"
+            for row in range(col_a.size()):
+                assert col_a.is_null(row) == col_b.is_null(
+                    row
+                ), f"null mask mismatch at col={idx}, row={row}"
+                if not col_a.is_null(row):
+                    assert col_a.at(row) == col_b.at(
+                        row
+                    ), f"value mismatch at col={idx}, row={row}"
+
+    def test_from_pandas_reserve_preallocation_roundtrip(self):
+        """from_pandas on a mixed-type DataFrame must roundtrip correctly
+        regardless of whether the internal reserve path is exercised."""
+        df = pd.DataFrame(
+            {
+                "col_int": pd.array([1, 2, None, 4, 5], dtype=pd.Int64Dtype()),
+                "col_float": [1.1, float("nan"), 3.3, 4.4, 5.5],
+                "col_bool": [True, False, True, False, True],
+                "col_str": ["alpha", "beta", "gamma", "delta", "epsilon"],
+            }
+        )
+
+        frame = ar.from_pandas(df)
+        result = ar.to_pandas(frame)
+
+        assert list(result.columns) == list(df.columns)
+        assert result.shape == df.shape
+        # Non-null int values must round-trip exactly.
+        assert result["col_int"].dropna().tolist() == [1, 2, 4, 5]
+
+        assert frame.shape == (5, 4)
+
+    def test_from_dict_large_row_count_correctness(self):
+        """Reserve path must not corrupt values or null masks at scale."""
+        n = 10_000
+        cols = {
+            "ints": list(range(n)),
+            "floats": [float(i) + 0.5 for i in range(n)],
+            "bools": [i % 2 == 0 for i in range(n)],
+            "strs": [str(i) for i in range(n)],
+        }
+        from arnio._arnio_cpp import DType, Frame
+
+        dtype_hints = {
+            "ints": DType.INT64,
+            "floats": DType.FLOAT64,
+            "bools": DType.BOOL,
+            "strs": DType.STRING,
+        }
+
+        frame_without = Frame.from_dict(cols, dtype_hints)
+        frame_with = Frame.from_dict(cols, dtype_hints, row_count=n)
+
+        assert frame_without.shape() == frame_with.shape()
+        # Spot-check a sample of rows to keep the test fast.
+        sample_indices = [0, 1, n // 2, n - 2, n - 1]
+        for col_idx in range(frame_without.num_cols()):
+            col_a = frame_without.column_by_index(col_idx)
+            col_b = frame_with.column_by_index(col_idx)
+            for row in sample_indices:
+                assert col_a.is_null(row) == col_b.is_null(row)
+                if not col_a.is_null(row):
+                    assert col_a.at(row) == col_b.at(row)
+
+
 class TestAttrsPreservation:
     def test_attrs_roundtrip(self):
         """attrs set on input DataFrame survive from_pandas -> to_pandas."""
@@ -1038,6 +1144,64 @@ class TestToArrow:
         assert table.column_names == ["x"]
         assert table.column(0).type == pyarrow.int64()
         assert table.column(0).to_pylist() == [1, 2, 3]
+
+    def test_to_arrow_preserves_attrs_metadata(self):
+        df = pd.DataFrame({"x": [1]})
+        df.attrs = {"source": "test"}
+
+        frame = ar.from_pandas(df)
+        table = ar.to_arrow(frame)
+
+        metadata = table.schema.metadata or {}
+
+        assert b"arnio.attrs" in metadata
+
+    def test_to_arrow_preserves_nested_attrs_metadata(self):
+        df = pd.DataFrame({"x": [1]})
+        df.attrs = {"config": {"version": 1}}
+
+        frame = ar.from_pandas(df)
+        table = ar.to_arrow(frame)
+
+        metadata = table.schema.metadata or {}
+
+        assert b"arnio.attrs" in metadata
+
+    def test_to_arrow_skips_empty_attrs_metadata(self):
+        df = pd.DataFrame({"x": [1]})
+        df.attrs = {}
+
+        frame = ar.from_pandas(df)
+        table = ar.to_arrow(frame)
+
+        metadata = table.schema.metadata or {}
+
+        assert b"arnio.attrs" not in metadata
+
+    def test_to_arrow_zero_column_frame_preserves_attrs(self):
+        df = pd.DataFrame({"a": [None, None]})
+        df.attrs = {"source": "zero-column"}
+
+        frame = ar.from_pandas(df)
+        frame = ar.drop_empty_columns(frame)
+
+        table = ar.to_arrow(frame)
+
+        metadata = table.schema.metadata or {}
+
+        assert b"arnio.attrs" in metadata
+
+    def test_to_arrow_non_serializable_attrs_raise(self):
+        df = pd.DataFrame({"x": [1]})
+        df.attrs = {"bad": {1, 2, 3}}
+
+        frame = ar.from_pandas(df)
+
+        with pytest.raises(
+            TypeError,
+            match="JSON-serializable attrs metadata",
+        ):
+            ar.to_arrow(frame)
 
     def test_float64_columns(self):
         import pyarrow
@@ -1283,3 +1447,86 @@ def test_from_records_accepts_valid_string_columns_tuple():
     frame = ar.ArFrame.from_records([[1, 2]], columns=("a", "b"))
 
     assert frame.columns == ["a", "b"]
+
+
+# ---------------------------------------------------------------------------
+# _from_arrow_table: ImportError regression
+# ---------------------------------------------------------------------------
+
+
+def test_from_arrow_table_missing_pyarrow_raises_helpful_import_error():
+    """When pyarrow is absent, _from_arrow_table() must raise the custom
+    helpful ImportError, not a generic ModuleNotFoundError or dead code."""
+    with patch.dict(sys.modules, {"pyarrow": None}):
+        with pytest.raises(ImportError) as exc_info:
+            _from_arrow_table(None)
+    assert "_from_arrow_table() requires pyarrow." in str(exc_info.value)
+    assert "pip install arnio[arrow]" in str(exc_info.value)
+
+
+# ---------------------------------------------------------------------------
+# Issue #1960 — preserve empty pandas int64 dtype in from_pandas
+# ---------------------------------------------------------------------------
+
+
+class TestEmptyInt64DtypePreservation:
+    """Regression tests for from_pandas() with zero-row DataFrames.
+
+    Covers: regular int64, nullable Int64, float64, bool, string columns.
+    """
+
+    def test_empty_numpy_int64_roundtrip(self):
+        df = pd.DataFrame({"id": pd.Series([], dtype="int64")})
+        frame = ar.from_pandas(df)
+        assert frame.dtypes["id"] == "int64"
+        result = ar.to_pandas(frame)
+        assert str(result["id"].dtype) == "Int64"
+        assert len(result) == 0
+
+    def test_empty_nullable_int64_roundtrip(self):
+        df = pd.DataFrame({"id": pd.Series([], dtype=pd.Int64Dtype())})
+        frame = ar.from_pandas(df)
+        assert frame.dtypes["id"] == "int64"
+        result = ar.to_pandas(frame)
+        assert str(result["id"].dtype) == "Int64"
+        assert len(result) == 0
+
+    def test_empty_float64_roundtrip(self):
+        df = pd.DataFrame({"score": pd.Series([], dtype="float64")})
+        frame = ar.from_pandas(df)
+        assert frame.dtypes["score"] == "float64"
+        result = ar.to_pandas(frame)
+        assert str(result["score"].dtype) == "float64"
+        assert len(result) == 0
+
+    def test_empty_bool_roundtrip(self):
+        df = pd.DataFrame({"active": pd.Series([], dtype="bool")})
+        frame = ar.from_pandas(df)
+        assert frame.dtypes["active"] == "bool"
+        result = ar.to_pandas(frame)
+        assert str(result["active"].dtype) == "boolean"
+        assert len(result) == 0
+
+    def test_empty_string_roundtrip(self):
+        df = pd.DataFrame({"name": pd.Series([], dtype="string")})
+        frame = ar.from_pandas(df)
+        result = ar.to_pandas(frame)
+        assert str(result["name"].dtype) == "string"
+        assert len(result) == 0
+
+    def test_empty_mixed_schema_roundtrip(self):
+        df = pd.DataFrame(
+            {
+                "id": pd.Series([], dtype="int64"),
+                "score": pd.Series([], dtype="float64"),
+                "active": pd.Series([], dtype="bool"),
+                "name": pd.Series([], dtype="string"),
+            }
+        )
+        frame = ar.from_pandas(df)
+        assert frame.dtypes["id"] == "int64"
+        assert frame.dtypes["score"] == "float64"
+        assert frame.dtypes["active"] == "bool"
+        result = ar.to_pandas(frame)
+        assert len(result) == 0
+        assert list(result.columns) == ["id", "score", "active", "name"]

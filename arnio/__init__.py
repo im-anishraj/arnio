@@ -6,6 +6,8 @@ import arnio as ar
 
 from ._version import __version__ as __version__
 from .cleaning import (
+    CastFailure,
+    CastReport,
     cast_types,
     clean,
     clean_column_names,
@@ -20,12 +22,16 @@ from .cleaning import (
     drop_nulls,
     fill_nulls,
     filter_rows,
+    find_fuzzy_duplicates,
+    hash_columns,
     keep_rows_with_nulls,
     normalize_case,
+    normalize_minmax,
     normalize_unicode,
     normalize_whitespace,
     parse_bool_strings,
     rename_columns,
+    rename_columns_matching,
     replace_values,
     round_numeric_columns,
     safe_divide_columns,
@@ -37,12 +43,15 @@ from .cleaning import (
     validate_columns_exist,
     winsorize_outliers,
 )
-from .convert import from_dict, from_pandas, to_arrow, to_pandas
+from .convert import from_dict, from_pandas, from_polars, to_arrow, to_pandas, to_polars
+from .encode_categorical import encode_categorical
 from .exceptions import (
     ArnioError,
     CsvReadError,
     JsonlReadError,
+    PipelineSerializationError,
     PipelineStepError,
+    RemoteReadError,
     SchemaValidationError,
     TypeCastError,
     UnknownStepError,
@@ -53,18 +62,24 @@ from .io import (
     read_csv,
     read_csv_chunked,
     read_jsonl,
+    read_jsonl_chunked,
+    read_parquet,
     scan_csv,
     sniff_delimiter,
     write_csv,
+    write_json,
     write_parquet,
 )
 from .pipeline import (
+    LineageReport,
     PipelineContext,
     get_builtin_step_signatures,
     list_steps,
+    load_pipeline,
     pipeline,
     register_step,
     reset_steps,
+    save_pipeline,
     unregister_step,
 )
 from .quality import (
@@ -107,8 +122,9 @@ from .schema import (
     diff_schema,
     register_validator,
     validate,
+    validate_chunked,
 )
-from .schema_export import schema_to_dict, schema_to_yaml
+from .schema_export import schema_from_yaml, schema_to_dict, schema_to_yaml
 
 from_records = ArFrame.from_records
 
@@ -120,7 +136,10 @@ __all__ = [
     "read_csv",
     "read_csv_chunked",
     "read_jsonl",
+    "read_jsonl_chunked",
     "write_csv",
+    "write_json",
+    "read_parquet",
     "write_parquet",
     "scan_csv",
     "sniff_delimiter",
@@ -135,20 +154,26 @@ __all__ = [
     "replace_values",
     "normalize_whitespace",
     "drop_duplicates",
+    "find_fuzzy_duplicates",
     "drop_constant_columns",
     "drop_empty_columns",
     "clean_column_names",
     "clip_numeric",
     "winsorize_outliers",
+    "normalize_minmax",
     "coalesce_columns",
     "combine_columns",
+    "rename_columns_matching",
     "drop_columns_matching",
     "strip_whitespace",
+    "hash_columns",
     "parse_bool_strings",
     "normalize_case",
     "rename_columns",
     "round_numeric_columns",
     "cast_types",
+    "CastFailure",
+    "CastReport",
     "clean",
     "safe_divide_columns",
     "slugify_column_names",
@@ -158,7 +183,9 @@ __all__ = [
     # Conversion
     "to_pandas",
     "to_arrow",
+    "to_polars",
     "from_pandas",
+    "from_polars",
     "from_records",
     "from_dict",
     # Integrations
@@ -171,6 +198,7 @@ __all__ = [
     "get_builtin_step_signatures",
     "list_steps",
     "PipelineContext",
+    "LineageReport",
     "reset_steps",
     # Data quality
     "profile",
@@ -193,6 +221,7 @@ __all__ = [
     "ValidationIssue",
     "ValidationResult",
     "validate",
+    "validate_chunked",
     "diff_schema",
     "Int64",
     "Float64",
@@ -211,6 +240,7 @@ __all__ = [
     "ArnioError",
     "CsvReadError",
     "JsonlReadError",
+    "RemoteReadError",
     "TypeCastError",
     "PipelineStepError",
     "SchemaValidationError",
@@ -219,6 +249,11 @@ __all__ = [
     "Custom",
     "register_validator",
     "Date",
+    "schema_from_yaml",
     "schema_to_dict",
     "schema_to_yaml",
+    "save_pipeline",
+    "load_pipeline",
+    "PipelineSerializationError",
+    "encode_categorical",
 ]

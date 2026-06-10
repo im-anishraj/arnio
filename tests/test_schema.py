@@ -3,6 +3,7 @@
 import io
 import json
 import warnings
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -1945,6 +1946,38 @@ def test_invalid_severity_raises():
         ar.Int64(severity="warn")
 
 
+def test_field_constructors_reject_non_string_severity():
+    list_severity: Any = ["error"]
+    int_severity: Any = 1
+    none_severity: Any = None
+
+    with pytest.raises(TypeError, match="severity must be a string"):
+        ar.Email(severity=list_severity)
+
+    with pytest.raises(TypeError, match="severity must be a string"):
+        ar.Int64(severity=int_severity)
+
+    with pytest.raises(TypeError, match="severity must be a string"):
+        ar.Int64(severity=none_severity)
+
+
+def test_field_constructors_accept_valid_severities():
+    assert ar.Int64(severity="error").severity == "error"
+    assert ar.Email(severity="warning").severity == "warning"
+
+
+def test_validation_issue_rejects_non_string_severity():
+    list_severity: Any = ["error"]
+
+    with pytest.raises(TypeError, match="severity must be a string"):
+        ar.ValidationIssue(
+            column="score",
+            rule="custom",
+            message="bad",
+            severity=list_severity,
+        )
+
+
 def test_float64_rejects_impossible_bounds():
     try:
         ar.Float64(min=10.0, max=1.0)
@@ -2019,6 +2052,140 @@ def test_string_rejects_boolean_max_length(value):
         match="max_length must be an integer",
     ):
         ar.String(max_length=value)
+
+
+_REGEX_LPAREN = chr(40)
+_REGEX_RPAREN = chr(41)
+_REGEX_PLUS = chr(43)
+_REGEX_STAR = chr(42)
+_REGEX_DOT = chr(46)
+_REGEX_DOLLAR = chr(36)
+_REGEX_QUESTION = chr(63)
+_REGEX_LBRACKET = chr(91)
+_REGEX_RBRACKET = chr(93)
+_REGEX_HYPHEN = chr(45)
+
+
+def _redos_regex_pattern(*parts: str) -> str:
+    """Build unsafe regression-test patterns without static risky regex literals."""
+    return "".join(parts)
+
+
+@pytest.mark.parametrize(
+    "pattern",
+    [
+        _redos_regex_pattern(
+            _REGEX_LPAREN, "a", _REGEX_PLUS, _REGEX_RPAREN, _REGEX_PLUS, _REGEX_DOLLAR
+        ),
+        _redos_regex_pattern(
+            _REGEX_LPAREN,
+            _REGEX_QUESTION,
+            ":",
+            "a",
+            _REGEX_PLUS,
+            _REGEX_RPAREN,
+            _REGEX_PLUS,
+            _REGEX_DOLLAR,
+        ),
+        _redos_regex_pattern(
+            _REGEX_LPAREN,
+            _REGEX_LBRACKET,
+            "a",
+            _REGEX_HYPHEN,
+            "z",
+            _REGEX_RBRACKET,
+            _REGEX_STAR,
+            _REGEX_RPAREN,
+            _REGEX_PLUS,
+            _REGEX_DOLLAR,
+        ),
+        _redos_regex_pattern(
+            _REGEX_LPAREN,
+            _REGEX_DOT,
+            _REGEX_STAR,
+            _REGEX_RPAREN,
+            _REGEX_PLUS,
+            _REGEX_DOLLAR,
+        ),
+        _redos_regex_pattern(
+            _REGEX_LPAREN,
+            _REGEX_DOT,
+            _REGEX_PLUS,
+            _REGEX_RPAREN,
+            _REGEX_STAR,
+            _REGEX_DOLLAR,
+        ),
+    ],
+)
+def test_rejects_nested_quantifier_regex_patterns(pattern):
+    with pytest.raises(ValueError, match="Unsafe regex pattern rejected"):
+        ar.String(pattern=pattern)
+
+
+def test_regex_rejects_pathological_redos_pattern_from_issue_1046():
+    pattern = _redos_regex_pattern(
+        _REGEX_LPAREN,
+        "a",
+        _REGEX_PLUS,
+        _REGEX_RPAREN,
+        _REGEX_PLUS,
+        _REGEX_DOLLAR,
+    )
+
+    with pytest.raises(ValueError, match="Unsafe regex pattern rejected"):
+        ar.Regex(pattern)
+
+
+def test_direct_field_rejects_unsafe_pattern():
+    pattern = _redos_regex_pattern(
+        _REGEX_LPAREN,
+        "a",
+        _REGEX_PLUS,
+        _REGEX_RPAREN,
+        _REGEX_PLUS,
+        _REGEX_DOLLAR,
+    )
+
+    with pytest.raises(ValueError, match="Unsafe regex pattern rejected"):
+        ar.Field(dtype="string", pattern=pattern)
+
+
+def test_schema_from_json_rejects_unsafe_pattern():
+    pattern = _redos_regex_pattern(
+        _REGEX_LPAREN,
+        "a",
+        _REGEX_PLUS,
+        _REGEX_RPAREN,
+        _REGEX_PLUS,
+        _REGEX_DOLLAR,
+    )
+    payload = json.dumps(
+        {
+            "fields": {
+                "txt": {
+                    "dtype": "string",
+                    "pattern": pattern,
+                }
+            },
+            "strict": False,
+            "unique": None,
+        }
+    )
+
+    with pytest.raises(ValueError, match="Unsafe regex pattern rejected"):
+        ar.Schema.from_json(payload)
+
+
+def test_safe_regex_pattern_is_not_rejected():
+    field = ar.String(pattern=r"^[A-Z]{2}\d{3}$")
+
+    assert field.pattern == r"^[A-Z]{2}\d{3}$"
+
+
+def test_safe_named_group_regex_pattern_is_not_rejected():
+    field = ar.String(pattern=r"^(?P<word>[A-Z])+$")
+
+    assert field.pattern == r"^(?P<word>[A-Z])+$"
 
 
 def test_string_rejects_negative_min_length():
@@ -2572,6 +2739,110 @@ def test_date_validation_reports_only_invalid_vectorized_values(tmp_path):
         (3, "2026-5-15"),
     ]
     assert {issue.rule for issue in result.issues} == {"date"}
+
+
+def test_date_min_max_valid_range_passes(tmp_path):
+    path = tmp_path / "dates_in_range.csv"
+    path.write_text("signup_date\n2024-01-01\n2024-06-15\n2024-12-31\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"signup_date": ar.Date(min="2024-01-01", max="2024-12-31")},
+    )
+
+    assert result.passed
+    assert result.issue_count == 0
+
+
+def test_date_min_rejects_values_below_bound(tmp_path):
+    path = tmp_path / "dates_below_min.csv"
+    path.write_text("signup_date\n2024-01-01\n2023-12-31\n2022-05-01\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"signup_date": ar.Date(min="2024-01-01")},
+    )
+
+    assert not result.passed
+    rules = {issue.rule for issue in result.issues}
+    assert "min" in rules
+    assert result.issue_count == 2
+
+
+def test_date_max_rejects_values_above_bound(tmp_path):
+    path = tmp_path / "dates_above_max.csv"
+    path.write_text("birth_date\n2000-01-01\n2025-01-01\n2026-01-01\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"birth_date": ar.Date(max="2024-12-31")},
+    )
+
+    assert not result.passed
+    rules = {issue.rule for issue in result.issues}
+    assert "max" in rules
+    assert result.issue_count == 2
+
+
+def test_date_bounds_with_date_objects():
+    import datetime
+
+    field = ar.Date(min=datetime.date(2020, 1, 1), max=datetime.date(2025, 12, 31))
+    assert field._date_min == datetime.date(2020, 1, 1)
+    assert field._date_max == datetime.date(2025, 12, 31)
+
+
+def test_date_inverted_bounds_raises():
+    try:
+        ar.Date(min="2025-01-01", max="2024-01-01")
+        assert False, "Expected ValueError"
+    except ValueError as exc:
+        assert "min" in str(exc).lower() or "max" in str(exc).lower()
+
+
+def test_date_invalid_bound_type_raises():
+    try:
+        ar.Date(min=["2024-01-01"])
+        assert False, "Expected TypeError"
+    except TypeError:
+        pass
+
+
+def test_date_numeric_bound_raises_type_error():
+    with pytest.raises(TypeError):
+        ar.Date(min=123)
+    with pytest.raises(TypeError):
+        ar.Date(max=45.6)
+
+
+def test_date_bounds_only_applied_after_format_check(tmp_path):
+    """Invalid date strings should report format errors, not spurious bound errors."""
+    path = tmp_path / "bad_and_oob.csv"
+    path.write_text("dt\n2024-06-15\nnot-a-date\n2023-01-01\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"dt": ar.Date(min="2024-01-01")},
+    )
+
+    rules = {issue.rule for issue in result.issues}
+    assert "date" in rules  # format error for "not-a-date"
+    assert "min" in rules  # bound error for 2023-01-01
+    # "not-a-date" must NOT also appear as a min violation
+    min_issues = [i for i in result.issues if i.rule == "min"]
+    assert all(i.value != "not-a-date" for i in min_issues)
+
+
+def test_date_nullable_values_skip_bounds_check(tmp_path):
+    path = tmp_path / "nullable_dates.csv"
+    path.write_text("dt\n2024-06-15\n\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"dt": ar.Date(min="2024-01-01", max="2024-12-31", nullable=True)},
+    )
+
+    assert result.passed
 
 
 def test_required_if_validation_passes_when_condition_matches(tmp_path):
