@@ -2139,6 +2139,7 @@ arnio/
 
 <br>
 
+
 <sub>Built with C++ and pybind11 · Licensed under MIT · Maintained by <a href="https://github.com/im-anishraj">@im-anishraj</a></sub>
 </div>
 
@@ -2161,3 +2162,7 @@ loaded_steps = ar.load_pipeline("my_pipeline.json")
 ## Security
 
 Please review our [Security Policy](SECURITY.md) for responsible vulnerability reporting guidelines.
+## Troubleshooting
+
+- [Bad CSV Troubleshooting Guide](docs/bad_csv_troubleshooting.md)
+</div>

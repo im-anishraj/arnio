@@ -172,6 +172,9 @@ Frame → to_pandas() → from_pandas() → Frame
 
 ---
 
+For practical examples of malformed CSV inputs and parser behavior, see:
+- docs/bad_csv_troubleshooting.md
+
 ## 6. Converting to Pandas
 
 The `to_pandas()` function is a critical boundary.
