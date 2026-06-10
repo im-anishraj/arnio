@@ -91,6 +91,64 @@ def test_data_quality_report_to_json_round_trips_through_to_dict_options():
     assert actual == expected
 
 
+def test_data_quality_report_suggestion_kwargs_stringifies_unsupported_leaf():
+    from pathlib import Path
+
+    report = ar.DataQualityReport(
+        row_count=1,
+        column_count=0,
+        memory_usage=0,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+        suggestions=[
+            (
+                "custom_step",
+                {
+                    "path": Path("data/input.csv"),
+                    "nested": {"complex": complex(1, 2)},
+                },
+            )
+        ],
+    )
+
+    payload = report.to_dict()
+    json.dumps(payload)
+
+    kwargs = payload["suggestions"][0]["kwargs"]
+    assert kwargs["path"] == "data/input.csv"
+    assert kwargs["nested"]["complex"] == "(1+2j)"
+    assert json.loads(report.to_json()) == payload
+
+
+def test_data_quality_report_suggestion_kwargs_recurses_numpy_item_result():
+    report = ar.DataQualityReport(
+        row_count=1,
+        column_count=0,
+        memory_usage=0,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+        suggestions=[
+            (
+                "custom_step",
+                {
+                    "timestamp": np.datetime64("2024-01-02T03:04:05"),
+                    "non_finite": np.float64(float("inf")),
+                },
+            )
+        ],
+    )
+
+    payload = report.to_dict()
+    json.dumps(payload)
+
+    kwargs = payload["suggestions"][0]["kwargs"]
+    assert kwargs["timestamp"].startswith("2024-01-02")
+    assert kwargs["non_finite"] is None
+    assert json.loads(report.to_json()) == payload
+
+
 def test_data_quality_report_to_dict_normalizes_suggestions_after_exclusions():
     columns = ar.profile(
         ar.from_pandas(

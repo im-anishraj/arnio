@@ -5,7 +5,6 @@ Data quality profiling and safe automatic cleaning helpers.
 
 from __future__ import annotations
 
-import decimal
 import html
 import json
 import math
@@ -3175,7 +3174,13 @@ def _approx_top_values(
 
 
 def _json_safe_suggestion_value(value: Any) -> Any:
-    """Normalize suggestion kwargs values after redaction/filtering only."""
+    """Normalize cleaning-suggestion kwargs values for json.dumps without default=."""
+    if value is None or isinstance(value, (str, bool, int)):
+        return value
+
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+
     if isinstance(value, dict):
         return {str(k): _json_safe_suggestion_value(v) for k, v in value.items()}
 
@@ -3195,10 +3200,17 @@ def _json_safe_suggestion_value(value: Any) -> Any:
     if isinstance(value, date):
         return value.isoformat()
 
-    if isinstance(value, decimal.Decimal):
-        return str(value)
+    if hasattr(value, "item"):
+        try:
+            return _json_safe_suggestion_value(value.item())
+        except Exception:
+            return str(value)
 
-    return _clean_scalar(value)
+    cleaned = _clean_scalar(value)
+    if cleaned is not value:
+        return _json_safe_suggestion_value(cleaned)
+
+    return str(value)
 
 
 def _filtered_suggestion_kwargs(
