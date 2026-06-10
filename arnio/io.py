@@ -1311,6 +1311,7 @@ def write_csv(
     frame: ArFrame,
     path: str | os.PathLike[str],
     *,
+    append: bool = False,
     delimiter: str = ",",
     write_header: bool = True,
     line_terminator: str = "\n",
@@ -1393,11 +1394,35 @@ def write_csv(
     _validate_jsonl_encoding(encoding)
     _validate_encoding_errors(encoding_errors)
 
+    append = _validate_bool_option(append, "append")
+    file_exists = os.path.exists(path)
+    is_empty = file_exists and os.path.getsize(path) == 0
+
+    if append and file_exists and not is_empty:
+        try:
+            schema = scan_csv(
+                path,
+                delimiter=delimiter,
+                encoding=encoding,
+                encoding_errors=encoding_errors,
+            )
+        except Exception as e:
+            raise ValueError(f"Could not scan existing CSV to validate schema: {e}") from e
+
+        existing_cols = list(schema.keys())
+        if existing_cols != frame.columns:
+            raise ValueError(
+                f"Schema mismatch: Cannot append to {path}. "
+                f"Expected columns {existing_cols}, got {frame.columns}."
+            )
+        write_header = False
+
     config = _CsvWriteConfig()
     config.delimiter = delimiter
     config.write_header = _validate_bool_option(write_header, "write_header")
     config.line_terminator = line_terminator
     config.escape_formulas = _validate_bool_option(escape_formulas, "escape_formulas")
+    config.append = append
 
     writer = _CsvWriter(config)
 

@@ -15,11 +15,17 @@
 namespace arnio {
 
 namespace {
-inline void open_binary_output(std::ofstream& file, const std::string& path) {
+inline void open_binary_output(std::ofstream& file, const std::string& path, bool append) {
+    auto mode = std::ios::binary | std::ios::out;
+    if (append) {
+        mode |= std::ios::app;
+    } else {
+        mode |= std::ios::trunc;
+    }
 #ifdef _WIN32
-    file.open(std::filesystem::u8path(path), std::ios::binary);
+    file.open(std::filesystem::u8path(path), mode);
 #else
-    file.open(path, std::ios::binary);
+    file.open(path, mode);
 #endif
 }
 }  // namespace
@@ -93,7 +99,7 @@ void CsvWriter::write(const Frame& frame, const std::string& path) const {
     // corrupting any line_terminator that already contains '\r'
     // (e.g. "\r\n" → "\r\r\n").
     std::ofstream out;
-    open_binary_output(out, path);
+    open_binary_output(out, path, config_.append);
     if (!out.is_open()) {
         throw std::runtime_error("Could not open file for writing: " + path);
     }
