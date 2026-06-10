@@ -16,6 +16,10 @@ from arnio.quality import (
     QUALITY_REPORT_COLUMNS,
     CleaningSuggestion,
     DataQualityReport,
+    _clean_scalar,
+    _is_numeric_dtype,
+    _markdown_cell,
+    _ratio,
     _validate_gate_bool,
     _validate_gate_ratio_threshold,
     _validate_gate_threshold,
@@ -3321,9 +3325,9 @@ def test_profile_numeric_histogram_non_finite_values():
         warnings.simplefilter("always")
         report = ar.profile(frame)
     runtime_warnings = [w for w in caught if issubclass(w.category, RuntimeWarning)]
-    assert (
-        runtime_warnings == []
-    ), f"Unexpected RuntimeWarnings: {[str(w.message) for w in runtime_warnings]}"
+    assert runtime_warnings == [], (
+        f"Unexpected RuntimeWarnings: {[str(w.message) for w in runtime_warnings]}"
+    )
 
     profile = report.columns["nums"]
 
@@ -3345,9 +3349,9 @@ def test_profile_numeric_histogram_non_finite_values():
         ("q75", profile.q75),
         ("q95", profile.q95),
     ]:
-        assert value is not None and math.isfinite(
-            float(value)
-        ), f"{stat_name} should be finite, got {value}"
+        assert value is not None and math.isfinite(float(value)), (
+            f"{stat_name} should be finite, got {value}"
+        )
 
     # All infinities (no finite values to bin)
     cpp_frame_all_inf = _Frame.from_dict(
@@ -4348,9 +4352,9 @@ def test_data_quality_report_invariant_invalid_metrics():
 
 
 def test_cleaning_suggestion_is_exported():
-    assert hasattr(
-        ar, "CleaningSuggestion"
-    ), "CleaningSuggestion is missing from arnio.__init__ file"
+    assert hasattr(ar, "CleaningSuggestion"), (
+        "CleaningSuggestion is missing from arnio.__init__ file"
+    )
 
     missing_message = "CleaningSuggestion is missing from arnio.__init__ file"
     mismatch_message = "Top-level CleaningSuggestion does not match the internal type"
@@ -4358,19 +4362,19 @@ def test_cleaning_suggestion_is_exported():
     assert hasattr(ar, "CleaningSuggestion"), missing_message
     assert ar.CleaningSuggestion is CleaningSuggestion, mismatch_message
     assert ar.CleaningSuggestion is CleaningSuggestion, mismatch_message
-    assert hasattr(
-        ar, "CleaningSuggestion"
-    ), "CleaningSuggestion is missing from arnio.__init__ file"
-    assert hasattr(
-        ar, "CleaningSuggestion"
-    ), "CleaningSuggestion is missing from arnio.__init__ file"
+    assert hasattr(ar, "CleaningSuggestion"), (
+        "CleaningSuggestion is missing from arnio.__init__ file"
+    )
+    assert hasattr(ar, "CleaningSuggestion"), (
+        "CleaningSuggestion is missing from arnio.__init__ file"
+    )
 
-    assert (
-        ar.CleaningSuggestion is CleaningSuggestion
-    ), "Top-level CleaningSuggestion does not match the internal type"
-    assert (
-        ar.CleaningSuggestion is CleaningSuggestion
-    ), "Top-level CleaningSuggestion does not match the internal type"
+    assert ar.CleaningSuggestion is CleaningSuggestion, (
+        "Top-level CleaningSuggestion does not match the internal type"
+    )
+    assert ar.CleaningSuggestion is CleaningSuggestion, (
+        "Top-level CleaningSuggestion does not match the internal type"
+    )
 
 
 # ── CleanStepRecord and CleanExplanation validation tests (Fixes #1687) ──────
@@ -4717,3 +4721,67 @@ def test_score_breakdown_with_real_values():
     for key in expected_keys:
         assert key in result, f"Missing key: {key}"
         assert isinstance(result[key], (int, float)), f"{key} must be numeric"
+
+
+class TestCleanScalar:
+    def test_none_returns_none(self):
+        assert _clean_scalar(None) is None
+
+    def test_pd_na_returns_none(self):
+        assert _clean_scalar(pd.NA) is None
+
+    def test_float_nan_returns_none(self):
+        assert _clean_scalar(math.nan) is None
+
+    def test_regular_int_returns_int(self):
+        assert _clean_scalar(42) == 42
+
+    def test_regular_float_returns_float(self):
+        assert _clean_scalar(3.14) == 3.14
+
+    def test_string_returns_string(self):
+        assert _clean_scalar("hello") == "hello"
+
+
+class TestRatio:
+    def test_ratio_calculates_correctly(self):
+        assert _ratio(1, 4) == 0.25
+
+    def test_ratio_handles_zero_total(self):
+        assert _ratio(5, 0) == 0.0
+
+    def test_ratio_rounds_to_six_decimals(self):
+        result = _ratio(1, 3)
+        assert result == round(1 / 3, 6)
+
+
+class TestIsNumericDtype:
+    def test_int64_is_numeric(self):
+        assert _is_numeric_dtype("int64") is True
+
+    def test_float64_is_numeric(self):
+        assert _is_numeric_dtype("float64") is True
+
+    def test_string_is_not_numeric(self):
+        assert _is_numeric_dtype("string") is False
+
+    def test_bool_is_not_numeric(self):
+        assert _is_numeric_dtype("bool") is False
+
+
+class TestMarkdownCell:
+    def test_none_returns_dash(self):
+        assert _markdown_cell(None) == "-"
+
+    def test_regular_value_returns_string(self):
+        assert _markdown_cell("hello") == "hello"
+
+    def test_pipe_escaped(self):
+        assert _markdown_cell("a|b") == "a\\|b"
+
+    def test_newline_converted_to_br(self):
+        assert _markdown_cell("a\nb") == "a<br>b"
+
+    def test_backslash_escaped(self):
+        result = _markdown_cell("a\\b")
+        assert "\\\\" in result or result == "a\\\\b"
