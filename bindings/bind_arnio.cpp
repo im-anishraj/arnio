@@ -496,4 +496,13 @@ PYBIND11_MODULE(_arnio_cpp, m) {
             return result;
         },
         py::arg("frame"), py::arg("column_names"), py::arg("ordinal_mappings"));
+    m.def(
+        "collapse_rare_categories",
+        [](const Frame& frame, const std::string& column, double threshold,
+           const std::string& fill_value) -> Frame {
+            py::gil_scoped_release release;
+            return collapse_rare_categories(frame, column, threshold, fill_value);
+        },
+        py::arg("frame"), py::arg("column"), py::arg("threshold") = 0.02,
+        py::arg("fill_value") = std::string("Other"));
 }

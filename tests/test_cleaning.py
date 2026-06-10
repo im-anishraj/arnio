@@ -5392,3 +5392,110 @@ class TestFillNullsFloat64LocaleIndependent:
                 ar.fill_nulls(frame, "inf", subset=["x"])
         finally:
             _locale.setlocale(_locale.LC_NUMERIC, prev)
+
+
+class TestCollapseRareCategories:
+    def test_basic_collapse(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {"city": ["NYC"] * 50 + ["LA"] * 30 + ["Tiny"] * 2 + ["Rare"] * 1}
+            )
+        )
+        result = ar.collapse_rare_categories(frame, column="city", threshold=0.05)
+        df = ar.to_pandas(result)
+        assert set(df["city"].unique()) == {"NYC", "LA", "Other"}
+
+    def test_custom_fill_value(self):
+        frame = ar.from_pandas(pd.DataFrame({"city": ["NYC"] * 50 + ["Tiny"] * 1}))
+        result = ar.collapse_rare_categories(
+            frame, column="city", threshold=0.05, fill_value="Misc"
+        )
+        df = ar.to_pandas(result)
+        assert "Misc" in df["city"].values
+        assert "Tiny" not in df["city"].values
+
+    def test_null_preservation(self):
+        frame = ar.from_pandas(
+            pd.DataFrame({"city": ["NYC"] * 50 + [None] * 10 + ["Rare"] * 1})
+        )
+        result = ar.collapse_rare_categories(frame, column="city", threshold=0.05)
+        df = ar.to_pandas(result)
+        assert df["city"].isna().sum() == 10
+
+    def test_threshold_zero_keeps_all(self):
+        frame = ar.from_pandas(pd.DataFrame({"city": ["NYC", "LA", "Tiny", "Rare"]}))
+        result = ar.collapse_rare_categories(frame, column="city", threshold=0.0)
+        df = ar.to_pandas(result)
+        assert set(df["city"].unique()) == {"NYC", "LA", "Tiny", "Rare"}
+
+    def test_threshold_one_collapses_all(self):
+        frame = ar.from_pandas(pd.DataFrame({"city": ["NYC"] * 50 + ["LA"] * 30}))
+        result = ar.collapse_rare_categories(frame, column="city", threshold=1.0)
+        df = ar.to_pandas(result)
+        assert set(df["city"].unique()) == {"Other"}
+
+    def test_empty_frame(self):
+        frame = ar.from_pandas(pd.DataFrame({"city": pd.Series(dtype="object")}))
+        result = ar.collapse_rare_categories(frame, column="city", threshold=0.02)
+        assert result.shape == (0, 1)
+
+    def test_all_unique_values(self):
+        frame = ar.from_pandas(pd.DataFrame({"city": ["A", "B", "C", "D", "E"]}))
+        result = ar.collapse_rare_categories(frame, column="city", threshold=0.5)
+        df = ar.to_pandas(result)
+        assert set(df["city"].unique()) == {"Other"}
+
+    def test_non_string_column_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"age": [1, 2, 3]}))
+        with pytest.raises(Exception, match="STRING"):
+            ar.collapse_rare_categories(frame, column="age", threshold=0.02)
+
+    def test_missing_column_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"city": ["NYC"]}))
+        with pytest.raises(ValueError, match="not found"):
+            ar.collapse_rare_categories(frame, column="nonexistent")
+
+    def test_invalid_threshold_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"city": ["NYC"]}))
+        with pytest.raises(ValueError, match="threshold"):
+            ar.collapse_rare_categories(frame, column="city", threshold=1.5)
+
+    def test_nan_threshold_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"city": ["NYC"]}))
+        with pytest.raises(ValueError, match="finite"):
+            ar.collapse_rare_categories(frame, column="city", threshold=float("nan"))
+
+    def test_inf_threshold_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"city": ["NYC"]}))
+        with pytest.raises(ValueError, match="finite"):
+            ar.collapse_rare_categories(frame, column="city", threshold=float("inf"))
+
+    def test_neg_inf_threshold_raises(self):
+        frame = ar.from_pandas(pd.DataFrame({"city": ["NYC"]}))
+        with pytest.raises(ValueError, match="finite"):
+            ar.collapse_rare_categories(frame, column="city", threshold=float("-inf"))
+
+    def test_other_columns_untouched(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "city": ["NYC"] * 50 + ["Rare"] * 1,
+                    "age": list(range(51)),
+                }
+            )
+        )
+        result = ar.collapse_rare_categories(frame, column="city", threshold=0.05)
+        df = ar.to_pandas(result)
+        assert list(df["age"]) == list(range(51))
+
+    def test_determinism(self):
+        frame = ar.from_pandas(
+            pd.DataFrame({"city": ["NYC"] * 50 + ["LA"] * 30 + ["Rare"] * 1})
+        )
+        r1 = ar.to_pandas(
+            ar.collapse_rare_categories(frame, column="city", threshold=0.02)
+        )
+        r2 = ar.to_pandas(
+            ar.collapse_rare_categories(frame, column="city", threshold=0.02)
+        )
+        pd.testing.assert_frame_equal(r1, r2)

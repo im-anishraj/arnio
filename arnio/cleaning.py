@@ -19,6 +19,7 @@ from pandas.api.types import is_scalar
 from ._core import (
     _cast_types,
     _clip_numeric,
+    _collapse_rare_categories,
     _drop_duplicates,
     _drop_nulls,
     _DType,
@@ -2431,6 +2432,71 @@ def coalesce_columns(
     df[output_column] = df[subset_columns].bfill(axis=1).iloc[:, 0]
 
     return from_pandas(df) if is_arframe else df
+
+
+def collapse_rare_categories(
+    frame: ArFrame,
+    column: str,
+    threshold: float = 0.02,
+    fill_value: str = "Other",
+) -> ArFrame:
+    """Group rare string categories into a single unified label based on frequency.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input data frame.
+    column : str
+        Name of the STRING column to process.
+    threshold : float, default 0.02
+        Minimum relative frequency [0.0, 1.0] for a category to be kept.
+        Categories whose proportion is strictly below this value are replaced
+        with fill_value.
+    fill_value : str, default "Other"
+        Label assigned to all rare categories.
+
+    Returns
+    -------
+    ArFrame
+        New frame with rare categories collapsed.
+
+    Raises
+    ------
+    TypeError
+        If column is not a string, or fill_value is not a string.
+    ValueError
+        If threshold is outside [0.0, 1.0], or column does not exist.
+    TypeError
+        If the target column is not of type STRING (raised by C++ engine).
+
+    Examples
+    --------
+    >>> frame = ar.read_csv("data.csv")
+    >>> clean = ar.collapse_rare_categories(frame, column="city", threshold=0.02)
+    """
+    _validate_arframe(frame)
+    if not isinstance(column, str) or not column.strip():
+        raise TypeError("column must be a non-empty string")
+
+    if column not in frame.columns:
+        raise ValueError(
+            f"Column '{column}' not found. Available columns: "
+            f"{', '.join(frame.columns) or '<none>'}"
+        )
+    if not isinstance(threshold, (int, float)) or isinstance(threshold, bool):
+        raise TypeError("threshold must be a float in [0.0, 1.0]")
+
+    if not math.isfinite(threshold):
+        raise ValueError(f"threshold must be a finite value, got {threshold!r}")
+    if threshold < 0.0 or threshold > 1.0:
+        raise ValueError(f"threshold must be in [0.0, 1.0], got {threshold!r}")
+    if not isinstance(fill_value, str):
+        raise TypeError(
+            f"fill_value must be a string, got {type(fill_value).__name__!r}"
+        )
+
+    result = _collapse_rare_categories(frame._frame, column, threshold, fill_value)
+    return ArFrame(result)
 
 
 def clean_column_names(
