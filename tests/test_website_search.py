@@ -12,9 +12,7 @@ def test_docs_and_api_load_search_js():
 
 
 def test_search_js_contains_keyboard_accessibility():
-    search_js = (REPO_ROOT / "website" / "js" / "search.js").read_text(
-        encoding="utf-8"
-    )
+    search_js = (REPO_ROOT / "website" / "js" / "search.js").read_text(encoding="utf-8")
 
     assert "aria-controls" in search_js
     assert "aria-expanded" in search_js
@@ -27,9 +25,7 @@ def test_search_js_contains_keyboard_accessibility():
 
 
 def test_search_index_contains_docs_and_api_targets():
-    search_js = (REPO_ROOT / "website" / "js" / "search.js").read_text(
-        encoding="utf-8"
-    )
+    search_js = (REPO_ROOT / "website" / "js" / "search.js").read_text(encoding="utf-8")
 
     assert "docs.html#install" in search_js
     assert "docs.html#quickstart" in search_js
