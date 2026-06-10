@@ -2,7 +2,6 @@
 arnio._core
 Internal module that imports the C++ extension.
 """
-# ruff: noqa: I001
 
 try:
     from ._arnio_cpp import (  # noqa: F401, I001
@@ -24,20 +23,21 @@ try:
         safe_divide_columns as _safe_divide_columns,
         strip_whitespace as _strip_whitespace,
     )
-except ImportError as e:
+except ImportError:
     raise ImportError(
         "arnio C++ extension (_arnio_cpp) not found.\n"
         "Install from source: pip install -e .\n"
         "Windows: Install 'Desktop development with C++' in Visual Studio Build Tools, or use WSL.\n"
         "Linux/macOS: Ensure gcc or clang is installed."
-    ) from e
+    )
 
-# isort: skip
+# isort: off
 try:
     from ._arnio_cpp import (
-        encode_one_hot_native as _encode_one_hot_native,  # noqa: F401
-        encode_ordinal_native as _encode_ordinal_native,  # noqa: F401
-    )
+        encode_one_hot_native as _encode_one_hot_native,
+        encode_ordinal_native as _encode_ordinal_native,
+    )  # noqa: F401
 except ImportError:
     _encode_one_hot_native = None
     _encode_ordinal_native = None
+# isort: on
