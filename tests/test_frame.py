@@ -1793,3 +1793,33 @@ def test_to_dict_invalid_orient_types():
     # 4. Backward Compatibility: Unsupported string must still raise ValueError
     with pytest.raises(ValueError, match="orient must be one of: list, records, split"):
         frame.to_dict(orient="invalid_string")
+
+
+def test_astype_rejects_pandas_na():
+    import pandas as pd
+    import pytest
+
+    import arnio as ar
+
+    frame = ar.ArFrame.from_records([{"a": "1"}, {"a": "2"}])
+
+    # 1. Scalar pd.NA check
+    with pytest.raises(TypeError, match="dtype must be a string"):
+        frame.astype(pd.NA)
+
+    # 2. Mapping/Dict with pd.NA check
+    with pytest.raises(TypeError, match="dtype must be a string"):
+        frame.astype({"a": pd.NA})
+
+
+def test_astype_rejects_multielement_numpy_array():
+    import numpy as np
+    import pytest
+
+    import arnio as ar
+
+    frame = ar.ArFrame.from_records([{"a": "1"}])
+
+    # 3. Multi-element NumPy array check
+    with pytest.raises(TypeError, match="dtype must be a string"):
+        frame.astype(np.array([1, 2]))

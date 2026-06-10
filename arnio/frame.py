@@ -230,7 +230,14 @@ class ArFrame:
                     "of column names to dtypes"
                 )
 
-            if value in (object, "object"):
+            if isinstance(value, np.ndarray) and value.size > 1:
+                raise TypeError(
+                    "dtype must be a string, Python type, "
+                    "NumPy/pandas dtype, or mapping "
+                    "of column names to dtypes"
+                )
+
+            if value is object or (isinstance(value, str) and value == "object"):
                 raise TypeError(
                     "dtype must be a string, Python type, "
                     "NumPy/pandas dtype, or mapping "
