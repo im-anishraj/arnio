@@ -4930,6 +4930,66 @@ class TestCleanColumnNames:
         result = ar.pipeline(frame, [("clean_column_names", {"case_type": "upper"})])
         assert to_pandas(result).columns.tolist() == ["MY_NAME", "AGE"]
 
+    def test_clean_column_names_case_type_title(self):
+        df = pd.DataFrame({"My-NaMe!!": [1]})
+        frame = from_pandas(df)
+        result = ar.clean_column_names(frame, case_type="title")
+        assert to_pandas(result).columns.tolist() == ["My_Name"]
+
+    def test_clean_column_names_case_type_camel(self):
+        df = pd.DataFrame({"My-Name!!": [1]})
+        frame = from_pandas(df)
+        result = ar.clean_column_names(frame, case_type="camel")
+        assert to_pandas(result).columns.tolist() == ["myName"]
+
+    def test_clean_column_names_case_type_title_acronyms(self):
+        df = pd.DataFrame({"HTTP_status": [1]})
+        frame = from_pandas(df)
+        result = ar.clean_column_names(frame, case_type="title")
+        assert to_pandas(result).columns.tolist() == ["Http_Status"]
+
+    def test_clean_column_names_case_type_camel_acronyms(self):
+        df = pd.DataFrame({"HTTP_status": [1]})
+        frame = from_pandas(df)
+        result = ar.clean_column_names(frame, case_type="camel")
+        assert to_pandas(result).columns.tolist() == ["httpStatus"]
+
+    def test_clean_column_names_case_type_title_leading_digits(self):
+        df = pd.DataFrame({"123_status": [1]})
+        frame = from_pandas(df)
+        result = ar.clean_column_names(frame, case_type="title")
+        assert to_pandas(result).columns.tolist() == ["123_Status"]
+
+    def test_clean_column_names_case_type_camel_leading_digits(self):
+        df = pd.DataFrame({"123_status": [1]})
+        frame = from_pandas(df)
+        result = ar.clean_column_names(frame, case_type="camel")
+        assert to_pandas(result).columns.tolist() == ["123Status"]
+
+    def test_clean_column_names_title_pipeline(self):
+        df = pd.DataFrame({"My-Name!!": [1], "age##": [2]})
+        frame = from_pandas(df)
+        result = ar.pipeline(frame, [("clean_column_names", {"case_type": "title"})])
+        assert to_pandas(result).columns.tolist() == ["My_Name", "Age"]
+
+    def test_clean_column_names_camel_pipeline(self):
+        df = pd.DataFrame({"My-Name!!": [1], "age##": [2]})
+        frame = from_pandas(df)
+        result = ar.pipeline(frame, [("clean_column_names", {"case_type": "camel"})])
+        assert to_pandas(result).columns.tolist() == ["myName", "age"]
+
+    def test_clean_column_names_title_duplicate_raises(self):
+        df = pd.DataFrame({"My_Name": [1], "my_name": [2]})
+        frame = from_pandas(df)
+        with pytest.raises(ValueError, match="duplicates"):
+            ar.clean_column_names(frame, case_type="title")
+
+    def test_clean_column_names_camel_duplicate_raises(self):
+        df = pd.DataFrame({"My_Name": [1], "my_name": [2]})
+        frame = from_pandas(df)
+        with pytest.raises(ValueError, match="duplicates"):
+            ar.clean_column_names(frame, case_type="camel")
+
 
 class TestSlugifyColumnNames:
     def test_spaces_become_underscores(self):

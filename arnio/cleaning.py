@@ -2568,7 +2568,7 @@ def clean_column_names(
     frame : ArFrame
         Input data frame.
     case_type : str, default "lower"
-        Case to normalize to. Options: "lower", "upper", "none".
+        Case to normalize to. Options: "lower", "upper", "title", "camel", "none".
 
     Returns
     -------
@@ -2585,8 +2585,10 @@ def clean_column_names(
     _validate_arframe(frame)
     if not isinstance(case_type, str):
         raise TypeError("case_type must be a string")
-    if case_type not in {"lower", "upper", "none"}:
-        raise ValueError("case_type must be one of 'lower', 'upper', or 'none'")
+    if case_type not in {"lower", "upper", "title", "camel", "none"}:
+        raise ValueError(
+            "case_type must be one of 'lower', 'upper', 'title', 'camel' or 'none'"
+        )
 
     import re
 
@@ -2603,6 +2605,14 @@ def clean_column_names(
             name = name.lower()
         elif case_type == "upper":
             name = name.upper()
+        elif case_type == "camel":
+            name = name.lower()
+            parts = name.split("_")
+            name = parts[0] + "".join(el.title() for el in parts[1:])
+        elif case_type == "title":
+            name = name.lower()
+            parts = name.split("_")
+            name = "_".join(el.title() for el in parts)
 
         if not name:
             name = "column"
