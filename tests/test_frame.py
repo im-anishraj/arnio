@@ -1,3 +1,4 @@
+
 """
 Tests for ArFrame.preview()
 """
@@ -394,7 +395,6 @@ def test_select_columns_native_path_avoids_pandas_roundtrip(monkeypatch):
 
     assert list(df.columns) == ["salary", "name"]
 
-
 def test_select_columns_null_nan_handling():
     df = pd.DataFrame(
         {
@@ -669,6 +669,7 @@ class TestArFrame:
         csv_path = tmp_path / "empty.csv"
         csv_path.write_text("name,age\n")  # Header only, no data rows
 
+        
         frame = ar.read_csv(str(csv_path))
         assert frame.is_empty is True
         assert len(frame) == 0
@@ -1772,3 +1773,22 @@ def test_from_records_dict_explicit_valid_columns_subset():
     assert frame.shape == (2, 1)
     assert frame.columns == ["a"]
     assert frame["a"] == [1, 3]
+        
+# ── is_empty ──────────────────────────────────────────────────────────────────
+
+
+def test_is_empty_returns_false_when_frame_has_rows():
+    frame = ar.from_dict({"name": ["Alice", "Bob"], "age": [25, 30]})
+    assert frame.is_empty is False
+
+
+def test_is_empty_returns_true_for_empty_frame():
+    import pandas as pd
+    df = pd.DataFrame(columns=["name", "age"])
+    frame = ar.from_pandas(df)
+    assert frame.is_empty is True
+
+
+def test_is_empty_single_row_is_not_empty():
+    frame = ar.from_dict({"name": ["Alice"], "age": [25]})
+    assert frame.is_empty is False

@@ -99,6 +99,7 @@ from .quality import (
 from .schema import (
     URL,
     Bool,
+    Choice,
     CountryCode,
     CurrencyCode,
     Custom,
@@ -230,6 +231,7 @@ __all__ = [
     "TimeZone",
     "Bool",
     "Email",
+    "Choice",
     "URL",
     "PhoneNumber",
     "DateTime",

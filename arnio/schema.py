@@ -3374,3 +3374,62 @@ def Custom(
         severity=severity,
         required_if=required_if,
     )
+
+
+def Choice(
+    allowed: set[Any] | list[Any] | tuple[Any, ...],
+    *,
+    nullable: bool = True,
+    unique: bool = False,
+    severity: str = "error",
+    required_if: tuple[str, Any] | None = None,
+) -> Field:
+    """Create a categorical schema field restricted to an explicit set of allowed values.
+
+    Parameters
+    ----------
+    allowed : set, list, or tuple
+        The permitted values for this column. Must be non-empty.
+    nullable : bool, default True
+        Whether null values are allowed.
+    unique : bool, default False
+        Whether all non-null values must be unique.
+    severity : str, default "error"
+        Severity level for validation issues.
+    required_if : tuple[str, Any] or None, default None
+        Conditional requirement as a column/value pair.
+
+    Raises
+    ------
+    ValueError
+        If the allowed set is empty.
+    TypeError
+        If allowed is a bare string or not a valid sequence.
+
+    Examples
+    --------
+    >>> schema = ar.Schema({
+    ...     "status": ar.Choice(["active", "inactive", "pending"]),
+    ... })
+    """
+    if isinstance(allowed, (str, bytes)):
+        raise TypeError(
+            "allowed must be a sequence of values, not a bare string"
+        )
+
+    if not isinstance(allowed, (set, list, tuple)):
+        raise TypeError(
+            f"allowed must be a list, tuple, or set, got {type(allowed).__name__}"
+        )
+
+    if len(allowed) == 0:
+        raise ValueError("allowed must contain at least one value")
+
+    return Field(
+        dtype="string",
+        nullable=nullable,
+        allowed=set(allowed),
+        unique=unique,
+        required_if=required_if,
+        severity=severity,
+    )
