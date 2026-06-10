@@ -4427,3 +4427,19 @@ def test_from_json_round_trip_is_accepted():
     recovered = ar.Schema.from_json(original.to_json())
     assert recovered.fields["email"].nullable is False
     assert recovered.unique == ["email"]
+
+
+def test_required_if_missing_column_preserves_warning_severity():
+    frame = ar.from_dict({"x": [""]})
+    schema = ar.Schema({"x": ar.String(required_if=("flag", True), severity="warning")})
+    result = ar.validate(frame, schema)
+    issue = next(i for i in result.issues if i.rule == "missing_column")
+    assert issue.severity == "warning"
+
+
+def test_required_if_missing_column_preserves_error_severity():
+    frame = ar.from_dict({"x": [""]})
+    schema = ar.Schema({"x": ar.String(required_if=("flag", True), severity="error")})
+    result = ar.validate(frame, schema)
+    issue = next(i for i in result.issues if i.rule == "missing_column")
+    assert issue.severity == "error"
