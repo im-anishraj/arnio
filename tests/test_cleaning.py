@@ -9,7 +9,11 @@ import pytest
 
 import arnio as ar
 from arnio import from_pandas, to_pandas
-from arnio.cleaning import _validate_column_sequence, _validate_string_mapping
+from arnio.cleaning import (
+    _validate_column_sequence,
+    _validate_existing_column_sequence,
+    _validate_string_mapping,
+)
 
 
 class TestDropNulls:
@@ -186,9 +190,9 @@ class TestFillNulls:
         for good_value in [0, 0.0]:
             result = ar.fill_nulls(frame_num, good_value)
             df = ar.to_pandas(result)
-            assert (
-                df["a"].isnull().sum() == 0
-            ), f"Nulls remain after filling with {good_value!r}"
+            assert df["a"].isnull().sum() == 0, (
+                f"Nulls remain after filling with {good_value!r}"
+            )
 
         # string column → fill with string
         frame_str = ar.from_pandas(pd.DataFrame({"b": ["x", None]}))
@@ -1922,8 +1926,7 @@ class TestNormalizeUnicode:
         result_df = ar.to_pandas(result)
         assert result_df["score"].iloc[0] == 42
         assert (
-            result_df["flag"].iloc[0] is True
-            or result_df["flag"].iloc[0] == True  # noqa: E712
+            result_df["flag"].iloc[0] is True or result_df["flag"].iloc[0] == True  # noqa: E712
         )
 
     def test_normalize_unicode_subset_only_targets_specified_columns(self):
@@ -2078,9 +2081,9 @@ class TestAttrsPreservation:
         frame = self._base_frame()
         result = fn(frame)
         result._attrs["meta"]["version"] = 999
-        assert (
-            frame._attrs["meta"]["version"] == 1
-        ), f"{op_name} shared _attrs by reference instead of deep copying"
+        assert frame._attrs["meta"]["version"] == 1, (
+            f"{op_name} shared _attrs by reference instead of deep copying"
+        )
 
     def test_drop_duplicates_zero_columns_preserves_attrs(self):
         """drop_duplicates zero-column early return must propagate attrs."""
@@ -2114,9 +2117,9 @@ class TestAttrsPreservation:
         result = ar.drop_duplicates(frame)
         result._attrs["meta"]["version"] = 999
 
-        assert (
-            frame._attrs["meta"]["version"] == 1
-        ), "drop_duplicates zero-column path shared _attrs by reference instead of deep copying"
+        assert frame._attrs["meta"]["version"] == 1, (
+            "drop_duplicates zero-column path shared _attrs by reference instead of deep copying"
+        )
 
     def test_empty_attrs_not_propagated(self):
         """When source frame has no attrs, result attrs should also be empty."""
@@ -5392,3 +5395,31 @@ class TestFillNullsFloat64LocaleIndependent:
                 ar.fill_nulls(frame, "inf", subset=["x"])
         finally:
             _locale.setlocale(_locale.LC_NUMERIC, prev)
+
+
+class TestValidateExistingColumnSequence:
+    def test_missing_columns_raise_keyerror(self):
+        with pytest.raises(KeyError, match="not found"):
+            _validate_existing_column_sequence(
+                ["a", "b", "nonexistent"], ["a", "b"], "my_arg"
+            )
+
+    def test_missing_columns_use_custom_error(self):
+        with pytest.raises(KeyError, match="custom error"):
+            _validate_existing_column_sequence(
+                ["a", "c"], ["a", "b"], "my_arg", "custom error"
+            )
+
+    def test_empty_sequence_allow_empty_false_raises(self):
+        with pytest.raises(ValueError, match="empty"):
+            _validate_existing_column_sequence([], ["a"], "my_arg", allow_empty=False)
+
+    def test_empty_sequence_allow_empty_true_returns_empty(self):
+        result = _validate_existing_column_sequence(
+            [], ["a"], "my_arg", allow_empty=True
+        )
+        assert result == []
+
+    def test_valid_columns_return_normalized(self):
+        result = _validate_existing_column_sequence(["b", "a"], ["a", "b"], "my_arg")
+        assert result == ["a", "b"]
