@@ -19,6 +19,7 @@ from pandas.api.types import is_scalar
 from ._core import (
     _cast_types,
     _clip_numeric,
+    _Column,
     _drop_duplicates,
     _drop_nulls,
     _DType,
@@ -1073,6 +1074,125 @@ def strip_whitespace(
         )
     result = _strip_whitespace(frame._frame, subset=subset)
     return _wrap(result, frame)
+
+
+def hash_columns(
+    frame: ArFrame,
+    *,
+    subset: list[str],
+    algorithm: str = "sha256",
+) -> ArFrame:
+    """Replace values in string columns with their cryptographic hash digest.
+
+    Hashing is performed using the standard-library :mod:`hashlib` module.
+    No homegrown digest code is used.
+
+    Each non-null cell in the specified columns is replaced with the
+    lowercase hex-encoded digest of its UTF-8 byte representation.  Null
+    cells are preserved as null.  Empty strings are hashed normally (they
+    are *not* treated as null).
+
+    .. warning::
+        Hashing is deterministic pseudonymization, not encryption.
+        ``hash_columns`` does not constitute anonymization under GDPR or
+        equivalent regulations.  Consult a qualified privacy engineer
+        before relying on this step for compliance purposes.
+
+    .. note::
+        ``"md5"`` is provided only for speed-sensitive deduplication
+        workloads where cryptographic strength is not required.  Use
+        ``"sha256"`` (the default) for all other cases.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input data frame.
+    subset : list[str]
+        Column names to hash.  Every column must exist and must be a
+        string column; otherwise an error is raised.
+    algorithm : {"sha256", "md5"}, default "sha256"
+        Hashing algorithm.  Passed directly to :func:`hashlib.new`.
+
+    Returns
+    -------
+    ArFrame
+        New frame with the specified string columns replaced by their
+        hex digests.
+
+    Raises
+    ------
+    ValueError
+        If ``subset`` is empty, contains an unknown column name, or
+        ``algorithm`` is not ``"sha256"`` or ``"md5"``.
+    TypeError
+        If a column listed in ``subset`` is not a string column.
+
+    Examples
+    --------
+    >>> frame = ar.from_pandas(pd.DataFrame({"email": ["a@b.com", None]}))
+    >>> clean = ar.hash_columns(frame, subset=["email"])
+    >>> clean = ar.pipeline(frame, [
+    ...     ("hash_columns", {"subset": ["email", "user_id"], "algorithm": "sha256"}),
+    ... ])
+    """
+    import hashlib as _hashlib
+
+    _validate_arframe(frame)
+
+    if not subset:
+        raise ValueError(
+            "hash_columns: subset must be a non-empty list of column names."
+        )
+
+    subset = _validate_existing_column_sequence(
+        subset,
+        available_columns=frame.columns,
+        argument_name="subset",
+        missing_error=ValueError,
+        missing_message=lambda missing, available: (
+            f"hash_columns: column(s) not found: {missing}. "
+            f"Available columns: {available}"
+        ),
+    )
+
+    if algorithm not in ("sha256", "md5"):
+        raise ValueError(
+            f"hash_columns: unsupported algorithm {algorithm!r}. "
+            'Supported values: "sha256", "md5".'
+        )
+
+    # Non-string column check — friendly Python-level TypeError
+    for col_name in subset:
+        col_dtype = frame.dtypes.get(col_name)
+        if col_dtype != "string":
+            raise TypeError(
+                f"hash_columns: column {col_name!r} has dtype {col_dtype!r}. "
+                "Only string columns can be hashed."
+            )
+
+    target_set = set(subset)
+    cpp_frame = frame._frame
+
+    # Build a new C++ Frame column-by-column using the existing pybind11 Column API.
+    # Hashing is done by the standard-library hashlib — no custom digest code.
+    new_frame = _Frame()
+    for ci in range(cpp_frame.num_cols()):
+        src_col = cpp_frame.column_by_index(ci)
+        if src_col.name() in target_set:
+            out = _Column(src_col.name(), _DType.STRING)
+            for r in range(src_col.size()):
+                if src_col.is_null(r):
+                    out.push_null()
+                else:
+                    raw: str = src_col.at(r)
+                    kwargs = {"usedforsecurity": False} if algorithm == "md5" else {}
+                    digest = _hashlib.new(algorithm, raw.encode(), **kwargs).hexdigest()
+                    out.push_back(digest)
+            new_frame.add_column(out)
+        else:
+            new_frame.add_column(src_col)
+
+    return _wrap(new_frame, frame)
 
 
 def normalize_whitespace(frame, columns=None):

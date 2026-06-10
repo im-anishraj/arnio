@@ -5,6 +5,7 @@ Production data contracts and validation.
 
 from __future__ import annotations
 
+import datetime as _dt
 import json
 import math
 import re
@@ -182,6 +183,8 @@ _ALLOWED_FIELD_KEYS = {
     "format",
     "datetime_min",
     "datetime_max",
+    "date_min",
+    "date_max",
     "required_if",
     "severity",
 }
@@ -874,6 +877,8 @@ class Field:
     format: str | None = None
     _datetime_min: pd.Timestamp | None = None
     _datetime_max: pd.Timestamp | None = None
+    _date_min: _dt.date | None = None
+    _date_max: _dt.date | None = None
     required_if: tuple[str, Any] | None = None
     severity: str = "error"
 
@@ -2532,6 +2537,8 @@ def CurrencyCode(
 def Date(
     *,
     nullable: bool = True,
+    min: Any = None,
+    max: Any = None,
     unique: bool = False,
     severity: str = "error",
     required_if: tuple[str, Any] | None = None,
@@ -2540,6 +2547,8 @@ def Date(
 
     Args:
         nullable: Whether null values are allowed.
+        min: Optional inclusive lower bound (YYYY-MM-DD string, datetime.date, or parseable value).
+        max: Optional inclusive upper bound. Same accepted types as *min*.
         unique: Whether non-null values must be unique.
         severity: Severity level for validation issues.
         required_if: Conditional requirement as a column/value pair.
@@ -2547,6 +2556,11 @@ def Date(
     Returns:
         Field: Configured date schema field.
     """
+    min_val = _parse_date_bound(min, "min")
+    max_val = _parse_date_bound(max, "max")
+    if min_val is not None and max_val is not None and min_val > max_val:
+        raise ValueError("Date min must be less than or equal to max")
+
     return Field(
         dtype="string",
         nullable=nullable,
@@ -2554,6 +2568,8 @@ def Date(
         unique=unique,
         required_if=required_if,
         severity=severity,
+        _date_min=min_val,
+        _date_max=max_val,
     )
 
 
@@ -2912,6 +2928,40 @@ def _validate_column(
                         errors="coerce",
                     )
                     invalid = non_null[~(format_valid & parsed.notna())]
+                    # Date bounds — only checked for calendar-valid values
+                    if (
+                        field_def._date_min is not None
+                        or field_def._date_max is not None
+                    ):
+                        valid_mask = format_valid & parsed.notna()
+                        valid_non_null = non_null[valid_mask]
+                        valid_dates = parsed[valid_mask].dt.date
+                        if field_def._date_min is not None:
+                            below = valid_non_null[valid_dates < field_def._date_min]
+                            issues.extend(
+                                _row_issues(
+                                    below,
+                                    column=name,
+                                    rule="min",
+                                    message=(
+                                        f"Column {name!r} has date values before {field_def._date_min}"
+                                    ),
+                                    severity=field_def.severity,
+                                )
+                            )
+                        if field_def._date_max is not None:
+                            above = valid_non_null[valid_dates > field_def._date_max]
+                            issues.extend(
+                                _row_issues(
+                                    above,
+                                    column=name,
+                                    rule="max",
+                                    message=(
+                                        f"Column {name!r} has date values after {field_def._date_max}"
+                                    ),
+                                    severity=field_def.severity,
+                                )
+                            )
                 elif field_def.semantic == "country_code":
                     values = (
                         non_null.str.upper()
@@ -3028,6 +3078,38 @@ def _validate_datetime(
     return issues
 
 
+def _parse_date_bound(value: Any, name: str) -> _dt.date | None:
+    """Parse a date bound value into a datetime.date, raising ValueError on failure.
+
+    Accepts a datetime.date, a str in YYYY-MM-DD format, a
+    pd.Timestamp, or anything that pd.to_datetime can parse.
+    Raises TypeError for completely wrong types and ValueError for
+    values that cannot be interpreted as a calendar date.
+    """
+    if value is None:
+        return None
+    if isinstance(value, _dt.datetime):
+        return value.date()
+    if isinstance(value, _dt.date):
+        return value
+    if not isinstance(value, (str, pd.Timestamp)):
+        raise TypeError(
+            f"Date {name} must be a date string, datetime.date, or pd.Timestamp, "
+            f"got {type(value).__name__}"
+        )
+    try:
+        parsed = pd.to_datetime(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"Date {name} must be a parseable date (YYYY-MM-DD), got {value!r}"
+        ) from exc
+    if not isinstance(parsed, pd.Timestamp) or pd.isna(parsed):
+        raise ValueError(
+            f"Date {name} must be a parseable date (YYYY-MM-DD), got {value!r}"
+        )
+    return parsed.date()
+
+
 def _parse_datetime_bound(value: Any, name: str) -> pd.Timestamp | None:
     """Parse a datetime bound value into a pd.Timestamp, raising ValueError on failure."""
     if value is None:
@@ -3083,6 +3165,12 @@ def _field_to_dict(field_def: Field) -> dict[str, Any]:
         "format": field_def.format,
         "datetime_min": _clean_scalar(field_def._datetime_min),
         "datetime_max": _clean_scalar(field_def._datetime_max),
+        "date_min": (
+            field_def._date_min.isoformat() if field_def._date_min is not None else None
+        ),
+        "date_max": (
+            field_def._date_max.isoformat() if field_def._date_max is not None else None
+        ),
         "required_if": _normalize_sequence(field_def.required_if),
         "severity": field_def.severity,
     }
@@ -3101,6 +3189,12 @@ def _field_to_json_dict(field_def: Field) -> dict[str, Any]:
         field_def._datetime_max.isoformat()
         if field_def._datetime_max is not None
         else None
+    )
+    data["date_min"] = (
+        field_def._date_min.isoformat() if field_def._date_min is not None else None
+    )
+    data["date_max"] = (
+        field_def._date_max.isoformat() if field_def._date_max is not None else None
     )
     return data
 
@@ -3154,6 +3248,8 @@ def _field_from_json_dict(name: str, payload: Any) -> Field:
         _datetime_max=_parse_datetime_bound(
             payload.get("datetime_max"), "datetime_max"
         ),
+        _date_min=_parse_date_bound(payload.get("date_min"), "date_min"),
+        _date_max=_parse_date_bound(payload.get("date_max"), "date_max"),
         required_if=required_if,
         severity=payload.get("severity", "error"),
     )

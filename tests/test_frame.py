@@ -1076,6 +1076,65 @@ def test_describe_boolean_columns_with_nulls():
     assert stats["flag"]["true_ratio"] == pytest.approx(2.0 / 3.0)
 
 
+def test_describe_preserves_mixed_column_outputs():
+    df = pd.DataFrame(
+        {
+            "id": [1, 2, 3, 4],
+            "score": [1.5, 2.5, 3.5, 4.5],
+            "label": ["a", "b", "a", "c"],
+            "active": [True, False, True, True],
+        }
+    )
+
+    frame = ar.from_pandas(df)
+    stats = frame.describe()
+
+    assert stats["id"]["count"] == 4.0
+    assert stats["id"]["nulls"] == 0.0
+    assert stats["id"]["non_finite"] == 0.0
+    assert stats["id"]["mean"] == 2.5
+    assert stats["id"]["min"] == 1.0
+    assert stats["id"]["max"] == 4.0
+
+    assert stats["score"]["count"] == 4.0
+    assert stats["score"]["nulls"] == 0.0
+    assert stats["score"]["non_finite"] == 0.0
+    assert stats["score"]["mean"] == 3.0
+    assert stats["score"]["min"] == 1.5
+    assert stats["score"]["max"] == 4.5
+
+    assert stats["label"]["count"] == 4.0
+    assert stats["label"]["nulls"] == 0.0
+    assert stats["label"]["unique"] == 3.0
+
+    assert stats["active"]["count"] == 4.0
+    assert stats["active"]["nulls"] == 0.0
+    assert stats["active"]["true"] == 3.0
+    assert stats["active"]["false"] == 1.0
+    assert stats["active"]["true_ratio"] == pytest.approx(0.75)
+
+
+def test_describe_preserves_null_and_non_finite_float_handling():
+    import io
+
+    frame = ar.read_csv(
+        io.StringIO("value,name\n" "1.0,a\n" "inf,b\n" "3.0,\n" ",c\n" "-inf,a\n")
+    )
+
+    stats = frame.describe()
+
+    assert stats["value"]["count"] == 4.0
+    assert stats["value"]["nulls"] == 1.0
+    assert stats["value"]["non_finite"] == 2.0
+    assert stats["value"]["mean"] == 2.0
+    assert stats["value"]["min"] == 1.0
+    assert stats["value"]["max"] == 3.0
+
+    assert stats["name"]["count"] == 4.0
+    assert stats["name"]["nulls"] == 1.0
+    assert stats["name"]["unique"] == 3.0
+
+
 # ── non-finite describe regression tests ─────────────────────────────────────
 
 
@@ -1713,3 +1772,24 @@ def test_from_records_dict_explicit_valid_columns_subset():
     assert frame.shape == (2, 1)
     assert frame.columns == ["a"]
     assert frame["a"] == [1, 3]
+
+
+def test_to_dict_invalid_orient_types():
+    data = {"name": ["Alice", "Bob"], "age": [25, 30]}
+    frame = ar.from_dict(data)
+
+    # 1. Unhashable list input must raise TypeError cleanly
+    with pytest.raises(TypeError, match="orient must be a string"):
+        frame.to_dict(orient=["list"])
+
+    # 2. Unhashable dict input must raise TypeError cleanly
+    with pytest.raises(TypeError, match="orient must be a string"):
+        frame.to_dict(orient={"mode": "list"})
+
+    # 3. Hashable non-string input (like int) must also raise TypeError cleanly
+    with pytest.raises(TypeError, match="orient must be a string"):
+        frame.to_dict(orient=1)
+
+    # 4. Backward Compatibility: Unsupported string must still raise ValueError
+    with pytest.raises(ValueError, match="orient must be one of: list, records, split"):
+        frame.to_dict(orient="invalid_string")

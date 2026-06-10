@@ -708,6 +708,24 @@ def _enrich_row_width_error(exc: Exception, delimiter: str) -> CsvReadError:
     return CsvReadError(msg)
 
 
+def _enrich_csv_runtime_error(
+    exc: RuntimeError, path: str, encoding: str, delimiter: str
+) -> CsvReadError:
+    """Add path/encoding context to selected native CSV errors."""
+
+    msg = str(exc)
+    # Native CSV parsing currently reports malformed UTF-8 using the message below.
+    # We match it here so we can attach file path and encoding context at the Python API boundary.
+    # If the native wording changes, this enrichment may need updating.
+
+    if "Invalid UTF-8 sequence encountered" in msg:
+        return CsvReadError(
+            f"Could not read CSV file {path} using encoding " f"{encoding}: {msg}"
+        )
+
+    return _enrich_row_width_error(exc, delimiter)
+
+
 # Candidate delimiters to probe during delimiter-mismatch detection.
 # Checked only when the parse produced exactly one column, which is the
 # signature of a delimiter mismatch.
@@ -1038,10 +1056,9 @@ def read_csv(
             except (ValueError, TypeError):
                 raise
             except RuntimeError as e:
-                # The C++ backend raises RuntimeError for row-width mismatches.
-                # Enrich only confirmed row-width messages; re-raise everything
-                # else as CsvReadError with the original message intact.
-                raise _enrich_row_width_error(e, delimiter) from None
+                raise _enrich_csv_runtime_error(
+                    e, native_path, encoding, delimiter
+                ) from None
 
         if on_bad_lines == "warn" and bad_rows:
             _warn_bad_rows(bad_rows)
@@ -1633,6 +1650,9 @@ def scan_csv(
         raise
     except CsvReadError:
         raise
+    except RuntimeError as e:
+        assert delimiter is not None
+        raise _enrich_csv_runtime_error(e, native_path, encoding, delimiter) from None
     except Exception as e:
         raise CsvReadError(str(e)) from None
     finally:

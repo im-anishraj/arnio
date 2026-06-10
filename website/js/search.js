@@ -4,8 +4,10 @@ const resultsBox = document.getElementById("search-results");
 if (searchInput && resultsBox) {
   searchInput.setAttribute("aria-controls", "search-results");
   searchInput.setAttribute("aria-expanded", "false");
-
+  searchInput.setAttribute("aria-autocomplete", "list");
+  
   resultsBox.setAttribute("role", "listbox");
+  resultsBox.id = "search-results";
 
   const searchIndex = [
     { title: "Installation", page: "docs.html#install" },

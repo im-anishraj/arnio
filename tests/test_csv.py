@@ -839,6 +839,74 @@ class TestReadCsv:
         assert "name" in schema
         assert "\ufeffname" not in schema
 
+    def test_invalid_utf8_read_csv_raises_with_path_and_encoding(self, tmp_path):
+        csv_path = tmp_path / "bad_utf8.csv"
+        csv_path.write_bytes(b"name\n\xff\n")
+
+        with pytest.raises(ar.CsvReadError) as exc_info:
+            ar.read_csv(csv_path, encoding="utf-8")
+
+        msg = str(exc_info.value)
+        assert "utf-8" in msg.lower()
+        assert str(csv_path) in msg
+        # This checks that the underlying UTF-8 validation failure remains
+        # visible to callers. The match comes from the native parser message,
+        # not the wrapper-injected encoding context.
+        assert "invalid utf-8" in msg.lower()
+
+    def test_invalid_utf8_scan_csv_raises_with_path_and_encoding(self, tmp_path):
+        csv_path = tmp_path / "bad_utf8.csv"
+        csv_path.write_bytes(b"name\n\xff\n")
+
+        with pytest.raises(ar.CsvReadError) as exc_info:
+            ar.scan_csv(csv_path, encoding="utf-8")
+
+        msg = str(exc_info.value)
+
+        assert "utf-8" in msg.lower()
+        assert str(csv_path) in msg
+        assert "invalid utf-8" in msg.lower()
+
+    def test_invalid_utf8_read_csv_utf8_alias_also_raises(self, tmp_path):
+        csv_path = tmp_path / "bad_utf8.csv"
+        csv_path.write_bytes(b"name\n\xff\n")
+
+        with pytest.raises(ar.CsvReadError) as exc_info:
+            ar.read_csv(csv_path, encoding="utf8")
+
+        msg = str(exc_info.value)
+
+        assert str(csv_path) in msg
+        assert "utf8" in msg.lower() or "utf-8" in msg.lower()
+        assert "invalid utf-8" in msg.lower()
+
+    def test_valid_utf8_still_reads(self, tmp_path):
+        csv_path = tmp_path / "utf8.csv"
+        csv_path.write_text("name\ncafé\n", encoding="utf-8")
+
+        frame = ar.read_csv(csv_path, encoding="utf-8")
+
+        assert frame.shape == (1, 1)
+
+    def test_utf8_sig_still_reads(self, tmp_path):
+        csv_path = tmp_path / "utf8sig.csv"
+        csv_path.write_bytes(b"\xef\xbb\xbfname\nalice\n")
+
+        frame = ar.read_csv(csv_path, encoding="utf-8")
+        df = ar.to_pandas(frame)
+
+        assert list(df.columns) == ["name"]
+        assert "\ufeff" not in df.columns[0]
+        assert df.iloc[0]["name"] == "alice"
+
+    def test_latin1_transcoding_still_works(self, tmp_path):
+        csv_path = tmp_path / "latin1.csv"
+        csv_path.write_bytes("name\ncafé\n".encode("latin-1"))
+
+        frame = ar.read_csv(csv_path, encoding="latin-1")
+        df = ar.to_pandas(frame)
+        assert df["name"].iloc[0] == "café"
+
     def test_pathlike_input(self, sample_csv):
         frame = ar.read_csv(Path(sample_csv))
         assert frame.shape == (3, 4)

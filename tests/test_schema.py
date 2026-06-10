@@ -2741,6 +2741,110 @@ def test_date_validation_reports_only_invalid_vectorized_values(tmp_path):
     assert {issue.rule for issue in result.issues} == {"date"}
 
 
+def test_date_min_max_valid_range_passes(tmp_path):
+    path = tmp_path / "dates_in_range.csv"
+    path.write_text("signup_date\n2024-01-01\n2024-06-15\n2024-12-31\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"signup_date": ar.Date(min="2024-01-01", max="2024-12-31")},
+    )
+
+    assert result.passed
+    assert result.issue_count == 0
+
+
+def test_date_min_rejects_values_below_bound(tmp_path):
+    path = tmp_path / "dates_below_min.csv"
+    path.write_text("signup_date\n2024-01-01\n2023-12-31\n2022-05-01\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"signup_date": ar.Date(min="2024-01-01")},
+    )
+
+    assert not result.passed
+    rules = {issue.rule for issue in result.issues}
+    assert "min" in rules
+    assert result.issue_count == 2
+
+
+def test_date_max_rejects_values_above_bound(tmp_path):
+    path = tmp_path / "dates_above_max.csv"
+    path.write_text("birth_date\n2000-01-01\n2025-01-01\n2026-01-01\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"birth_date": ar.Date(max="2024-12-31")},
+    )
+
+    assert not result.passed
+    rules = {issue.rule for issue in result.issues}
+    assert "max" in rules
+    assert result.issue_count == 2
+
+
+def test_date_bounds_with_date_objects():
+    import datetime
+
+    field = ar.Date(min=datetime.date(2020, 1, 1), max=datetime.date(2025, 12, 31))
+    assert field._date_min == datetime.date(2020, 1, 1)
+    assert field._date_max == datetime.date(2025, 12, 31)
+
+
+def test_date_inverted_bounds_raises():
+    try:
+        ar.Date(min="2025-01-01", max="2024-01-01")
+        assert False, "Expected ValueError"
+    except ValueError as exc:
+        assert "min" in str(exc).lower() or "max" in str(exc).lower()
+
+
+def test_date_invalid_bound_type_raises():
+    try:
+        ar.Date(min=["2024-01-01"])
+        assert False, "Expected TypeError"
+    except TypeError:
+        pass
+
+
+def test_date_numeric_bound_raises_type_error():
+    with pytest.raises(TypeError):
+        ar.Date(min=123)
+    with pytest.raises(TypeError):
+        ar.Date(max=45.6)
+
+
+def test_date_bounds_only_applied_after_format_check(tmp_path):
+    """Invalid date strings should report format errors, not spurious bound errors."""
+    path = tmp_path / "bad_and_oob.csv"
+    path.write_text("dt\n2024-06-15\nnot-a-date\n2023-01-01\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"dt": ar.Date(min="2024-01-01")},
+    )
+
+    rules = {issue.rule for issue in result.issues}
+    assert "date" in rules  # format error for "not-a-date"
+    assert "min" in rules  # bound error for 2023-01-01
+    # "not-a-date" must NOT also appear as a min violation
+    min_issues = [i for i in result.issues if i.rule == "min"]
+    assert all(i.value != "not-a-date" for i in min_issues)
+
+
+def test_date_nullable_values_skip_bounds_check(tmp_path):
+    path = tmp_path / "nullable_dates.csv"
+    path.write_text("dt\n2024-06-15\n\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"dt": ar.Date(min="2024-01-01", max="2024-12-31", nullable=True)},
+    )
+
+    assert result.passed
+
+
 def test_required_if_validation_passes_when_condition_matches(tmp_path):
     path = tmp_path / "conditional_pass.csv"
     path.write_text("user_type,country\n" "international,IN\n" "local,\n")
