@@ -8,6 +8,7 @@ from __future__ import annotations
 import datetime as _dt
 import json
 import math
+import numbers
 import re
 import warnings
 from collections.abc import Iterable, Sequence
@@ -2178,6 +2179,29 @@ def Float64(
     )
 
 
+def _normalize_length(name: str, val: Any) -> int | None:
+    """Validate and normalize string length constraints."""
+
+    if val is None:
+        return None
+
+    # Reject boolean values explicitly.
+    # numpy.bool_ may satisfy numbers.Integral in some environments.
+    if isinstance(val, bool) or (
+        type(val).__module__ == "numpy" and type(val).__name__ == "bool_"
+    ):
+        raise TypeError(f"{name} must be an integer or None")
+
+    if not isinstance(val, numbers.Integral):
+        raise TypeError(f"{name} must be an integer or None")
+
+    val = int(val)
+
+    if val < 0:
+        raise ValueError(f"{name} must be greater than or equal to 0")
+    return val
+
+
 def String(
     *,
     nullable: bool = True,
@@ -2206,6 +2230,9 @@ def String(
     Returns:
         Field: Configured string schema field.
     """
+
+    min_length = _normalize_length("min_length", min_length)
+    max_length = _normalize_length("max_length", max_length)
 
     if min_length is not None and max_length is not None and min_length > max_length:
         raise ValueError("min_length must be less than or equal to max_length")
