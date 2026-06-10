@@ -5,6 +5,7 @@ Production data contracts and validation.
 
 from __future__ import annotations
 
+from datetime import datetime
 import json
 import math
 import re
@@ -2613,7 +2614,14 @@ def DateTime(
     """Create a datetime schema field for validating string timestamps."""
     if format is not None and not isinstance(format, str):
         raise TypeError("DateTime format must be a string or None")
-
+    if format is not None:
+        try:
+            datetime.strptime("2000-01-01", format)
+        except ValueError as exc:
+            raise ValueError(
+                f"DateTime format {format!r} contains an invalid or unsupported directive: {exc}"
+            ) from exc
+        
     min_val = _parse_datetime_bound(min, "min")
     max_val = _parse_datetime_bound(max, "max")
     if min_val is not None and max_val is not None and min_val > max_val:
