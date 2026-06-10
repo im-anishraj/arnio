@@ -6,6 +6,7 @@ import io
 import json
 import math
 import warnings
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -92,7 +93,6 @@ def test_data_quality_report_to_json_round_trips_through_to_dict_options():
 
 
 def test_data_quality_report_suggestion_kwargs_stringifies_unsupported_leaf():
-    from pathlib import Path
 
     report = ar.DataQualityReport(
         row_count=1,
@@ -116,8 +116,68 @@ def test_data_quality_report_suggestion_kwargs_stringifies_unsupported_leaf():
     json.dumps(payload)
 
     kwargs = payload["suggestions"][0]["kwargs"]
-    assert kwargs["path"] == "data/input.csv"
+    assert kwargs["path"] == str(Path("data/input.csv"))
     assert kwargs["nested"]["complex"] == "(1+2j)"
+    assert json.loads(report.to_json()) == payload
+
+
+def test_data_quality_report_suggestion_kwargs_normalizes_frozenset():
+    report = ar.DataQualityReport(
+        row_count=1,
+        column_count=0,
+        memory_usage=0,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+        suggestions=[
+            (
+                "custom_step",
+                {
+                    "values": frozenset(["beta", "alpha"]),
+                    "nested": {
+                        "ids": frozenset([np.int64(2), np.int64(1)]),
+                    },
+                },
+            )
+        ],
+    )
+
+    payload = report.to_dict()
+    json.dumps(payload)
+
+    kwargs = payload["suggestions"][0]["kwargs"]
+
+    assert kwargs["values"] == ["alpha", "beta"]
+    assert kwargs["nested"]["ids"] == [1, 2]
+
+
+def test_data_quality_report_suggestion_kwargs_normalizes_frozenset_nested_values():
+    report = ar.DataQualityReport(
+        row_count=1,
+        column_count=0,
+        memory_usage=0,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+        suggestions=[
+            (
+                "custom_step",
+                {
+                    "values": frozenset(["beta", "alpha"]),
+                    "nested": {
+                        "values": frozenset([np.int64(2), np.int64(1)]),
+                    },
+                },
+            )
+        ],
+    )
+
+    payload = report.to_dict()
+    json.dumps(payload)
+
+    kwargs = payload["suggestions"][0]["kwargs"]
+    assert kwargs["values"] == ["alpha", "beta"]
+    assert kwargs["nested"]["values"] == [1, 2]
     assert json.loads(report.to_json()) == payload
 
 

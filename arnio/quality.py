@@ -3184,7 +3184,7 @@ def _json_safe_suggestion_value(value: Any) -> Any:
     if isinstance(value, dict):
         return {str(k): _json_safe_suggestion_value(v) for k, v in value.items()}
 
-    if isinstance(value, set):
+    if isinstance(value, Set) and not isinstance(value, (str, bytes, bytearray)):
         try:
             ordered = sorted(value)
         except TypeError:
@@ -3226,7 +3226,7 @@ def _filtered_suggestion_kwargs(
         raw_value = value
 
         if key in {"subset", "columns"} and isinstance(
-            value, (list, tuple, set, np.ndarray)
+            value, (list, tuple, Set, np.ndarray)
         ):
             raw_value = [item for item in value if item not in exclude_columns]
 
