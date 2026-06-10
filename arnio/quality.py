@@ -5,6 +5,7 @@ Data quality profiling and safe automatic cleaning helpers.
 
 from __future__ import annotations
 
+import decimal
 import html
 import json
 import math
@@ -12,6 +13,7 @@ import os
 import re
 from collections.abc import Sequence, Set
 from dataclasses import dataclass, field
+from datetime import date
 from typing import Any
 
 import numpy as np
@@ -423,23 +425,7 @@ class DataQualityReport:
             "suggestions": [
                 {
                     "step": s[0],
-                    "kwargs": {
-                        key: (
-                            [item for item in value if item not in exclude_columns]
-                            if key in {"subset", "columns"} and isinstance(value, list)
-                            else (
-                                {
-                                    col_name: col_type
-                                    for col_name, col_type in value.items()
-                                    if col_name not in exclude_columns
-                                }
-                                if key == "cast_types" and isinstance(value, dict)
-                                else value
-                            )
-                        )
-                        for key, value in sorted(dict(s[1]).items())
-                        if key not in exclude_columns
-                    },
+                    "kwargs": _filtered_suggestion_kwargs(s[1], exclude_columns),
                     "confidence_score": getattr(s, "confidence_score", None),
                     "confidence_reason": _redact_reason(
                         getattr(s, "confidence_reason", None)
@@ -3186,6 +3172,62 @@ def _approx_top_values(
         sample_n,
         _ratio(sample_n, len(series)),
     )
+
+
+def _json_safe_suggestion_value(value: Any) -> Any:
+    """Normalize suggestion kwargs values after redaction/filtering only."""
+    if isinstance(value, dict):
+        return {str(k): _json_safe_suggestion_value(v) for k, v in value.items()}
+
+    if isinstance(value, set):
+        try:
+            ordered = sorted(value)
+        except TypeError:
+            ordered = sorted(value, key=lambda x: (type(x).__name__, repr(x)))
+        return [_json_safe_suggestion_value(x) for x in ordered]
+
+    if isinstance(value, (list, tuple)):
+        return [_json_safe_suggestion_value(x) for x in value]
+
+    if isinstance(value, np.ndarray):
+        return [_json_safe_suggestion_value(x) for x in value.tolist()]
+
+    if isinstance(value, date):
+        return value.isoformat()
+
+    if isinstance(value, decimal.Decimal):
+        return str(value)
+
+    return _clean_scalar(value)
+
+
+def _filtered_suggestion_kwargs(
+    kwargs: dict[str, Any],
+    exclude_columns: set[str],
+) -> dict[str, Any]:
+    filtered: dict[str, Any] = {}
+
+    for key, value in sorted(dict(kwargs).items()):
+        if key in exclude_columns:
+            continue
+
+        raw_value = value
+
+        if key in {"subset", "columns"} and isinstance(
+            value, (list, tuple, set, np.ndarray)
+        ):
+            raw_value = [item for item in value if item not in exclude_columns]
+
+        elif key == "cast_types" and isinstance(value, dict):
+            raw_value = {
+                col_name: col_type
+                for col_name, col_type in value.items()
+                if col_name not in exclude_columns
+            }
+
+        filtered[key] = _json_safe_suggestion_value(raw_value)
+
+    return filtered
 
 
 _EMAIL_PATTERN = r"[^@\s]+@[^@\s]+\.[^@\s]+"

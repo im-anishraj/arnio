@@ -1,11 +1,14 @@
 """Tests for data quality profiling and smart cleaning."""
 
+import datetime as dt
+import decimal
 import io
 import json
 import math
 import warnings
 from typing import Any
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -20,6 +23,123 @@ from arnio.quality import (
     _validate_gate_ratio_threshold,
     _validate_gate_threshold,
 )
+
+
+def test_data_quality_report_suggestion_kwargs_are_json_serializable():
+    report = ar.DataQualityReport(
+        row_count=1,
+        column_count=0,
+        memory_usage=0,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+        suggestions=[
+            (
+                "custom_step",
+                {
+                    "created_at": dt.datetime(2024, 1, 2, 3, 4, 5),
+                    "amount": decimal.Decimal("12.34"),
+                    "metadata": {"count": np.int64(1)},
+                    "columns": ("name", "age"),
+                    "tags": {"beta", "alpha"},
+                },
+            )
+        ],
+    )
+
+    payload = report.to_dict()
+    json.dumps(payload)
+
+    json_output = report.to_json()
+    assert isinstance(json_output, str)
+    assert json.loads(json_output) == payload
+
+    kwargs = payload["suggestions"][0]["kwargs"]
+    assert kwargs["created_at"] == "2024-01-02T03:04:05"
+    assert kwargs["amount"] == "12.34"
+    assert kwargs["metadata"] == {"count": 1}
+    assert kwargs["columns"] == ["name", "age"]
+    assert kwargs["tags"] == ["alpha", "beta"]
+
+
+def test_data_quality_report_to_json_round_trips_through_to_dict_options():
+    report = ar.profile(
+        ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "name": ["Alice", "Bob"],
+                    "age": [30, 40],
+                    "secret": ["token-a", "token-b"],
+                }
+            )
+        ),
+        sample_size=2,
+    )
+
+    expected = report.to_dict(
+        redact_sample_values=True,
+        exclude_columns=["secret"],
+    )
+
+    actual = json.loads(
+        report.to_json(
+            redact_sample_values=True,
+            exclude_columns=["secret"],
+        )
+    )
+
+    assert actual == expected
+
+
+def test_data_quality_report_to_dict_normalizes_suggestions_after_exclusions():
+    columns = ar.profile(
+        ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "name": [" Alice ", "Bob"],
+                    "secret": ["token-a", "token-b"],
+                }
+            )
+        )
+    ).columns
+
+    report = ar.DataQualityReport(
+        row_count=2,
+        column_count=2,
+        memory_usage=100,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns=columns,
+        suggestions=[
+            (
+                "custom_step",
+                {
+                    "subset": np.array(["name", "secret"]),
+                    "columns": ("name", "secret"),
+                    "cast_types": {
+                        "name": np.str_("string"),
+                        "secret": np.str_("string"),
+                    },
+                    "metadata": {"kept_count": np.int64(1)},
+                },
+            )
+        ],
+    )
+
+    result = report.to_dict(
+        redact_sample_values=True,
+        exclude_columns=["secret"],
+    )
+    json.dumps(result)
+
+    kwargs = result["suggestions"][0]["kwargs"]
+
+    assert kwargs["subset"] == ["name"]
+    assert kwargs["columns"] == ["name"]
+    assert kwargs["cast_types"] == {"name": "string"}
+    assert kwargs["metadata"] == {"kept_count": 1}
+    assert "secret" not in json.dumps(result)
+    assert result["columns"]["name"]["sample_values"] == ["[REDACTED]", "[REDACTED]"]
 
 
 def test_profile_reports_quality_signals(tmp_path):
