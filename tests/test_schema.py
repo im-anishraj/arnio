@@ -96,7 +96,7 @@ def test_dtype_validation_does_not_report_safe_conversion_for_invalid_numeric_st
 
 def test_validate_rejects_chunked_iterators(tmp_path):
     path = tmp_path / "data.csv"
-    path.write_text("email\n" "a@example.com\n")
+    path.write_text("email\na@example.com\n")
 
     chunks = ar.read_csv_chunked(path, chunksize=1)
 
@@ -232,10 +232,7 @@ def test_schema_validation_stops_after_max_errors(tmp_path):
     path = tmp_path / "bad.csv"
 
     path.write_text(
-        "name,age,email\n"
-        ",150,invalid-email\n"
-        ",200,another-invalid\n"
-        ",300,bad-email\n"
+        "name,age,email\n,150,invalid-email\n,200,another-invalid\n,300,bad-email\n"
     )
 
     frame = ar.read_csv(path)
@@ -1261,10 +1258,7 @@ def test_raise_for_errors_multiple_issues(tmp_path):
 def test_schema_bootstrap_from_report_infers_dtype_and_nullable(tmp_path):
     path = tmp_path / "quality.csv"
     path.write_text(
-        "id,name,score,active\n"
-        "1,Alice,9.5,true\n"
-        "2,Bob,,false\n"
-        "3,Carol,7.25,true\n"
+        "id,name,score,active\n1,Alice,9.5,true\n2,Bob,,false\n3,Carol,7.25,true\n"
     )
     report = ar.profile(ar.read_csv(path))
 
@@ -1328,7 +1322,7 @@ def test_email_validation_requires_string():
 
 def test_email_default_validation_mode_is_backward_compatible(tmp_path):
     path = tmp_path / "emails.csv"
-    path.write_text("email\n" "simple@test.com\n")
+    path.write_text("email\nsimple@test.com\n")
 
     frame = ar.read_csv(path)
 
@@ -1342,7 +1336,7 @@ def test_email_default_validation_mode_is_backward_compatible(tmp_path):
 
 def test_email_strict_validation_rejects_invalid_emails(tmp_path):
     path = tmp_path / "invalid_emails.csv"
-    path.write_text("email\n" "bad@@test.com\n" "user@localhost\n" "user@.com\n")
+    path.write_text("email\nbad@@test.com\nuser@localhost\nuser@.com\n")
 
     frame = ar.read_csv(path)
 
@@ -1364,7 +1358,7 @@ def test_email_strict_validation_rejects_invalid_emails(tmp_path):
 def test_email_strict_validation_accepts_valid_emails(tmp_path):
     path = tmp_path / "valid_emails.csv"
     path.write_text(
-        "email\n" "user@example.com\n" "first.last@test.co.uk\n" "hello+tag@gmail.com\n"
+        "email\nuser@example.com\nfirst.last@test.co.uk\nhello+tag@gmail.com\n"
     )
 
     frame = ar.read_csv(path)
@@ -1893,7 +1887,7 @@ def test_string_max_length_boundary(tmp_path):
 def test_string_allowed_rejects_bare_string():
     with pytest.raises(
         TypeError,
-        match="allowed must be a sequence of allowed values, not a bare string",
+        match="allowed must be an iterable of hashable scalar values, not a bare string",
     ):
         ar.String(allowed="active")
 
@@ -1901,7 +1895,7 @@ def test_string_allowed_rejects_bare_string():
 def test_string_allowed_rejects_bare_bytes():
     with pytest.raises(
         TypeError,
-        match="allowed must be a sequence of allowed values, not a bare string",
+        match="allowed must be an iterable of hashable scalar values, not a bare string",
     ):
         ar.String(allowed=b"active")
 
@@ -2447,7 +2441,7 @@ def test_required_if_accepts_scalar_expected_value(value):
 
 def test_required_if_valid_conditional_validation(tmp_path):
     path = tmp_path / "conditional_req.csv"
-    path.write_text("status,notes\n" "active,has notes\n" "inactive,\n" "active,\n")
+    path.write_text("status,notes\nactive,has notes\ninactive,\nactive,\n")
     frame = ar.read_csv(path)
     schema = ar.Schema(
         {"notes": ar.String(required_if=("status", "active"), nullable=True)}
@@ -2478,7 +2472,7 @@ def test_email_default_keeps_backward_compatibility(sample_csv):
 def test_datetime_validation_passes_for_valid_column(tmp_path):
     path = tmp_path / "valid_datetimes.csv"
     path.write_text(
-        "ts\n" "2026-01-01T12:00:00\n" "2026-06-15T08:30:00\n" "2026-12-31T23:59:59\n"
+        "ts\n2026-01-01T12:00:00\n2026-06-15T08:30:00\n2026-12-31T23:59:59\n"
     )
 
     result = ar.validate(
@@ -2545,7 +2539,7 @@ def test_datetime_validation(tmp_path):
     assert "nullable" in rules
 
     path2 = tmp_path / "boundary.csv"
-    path2.write_text("ts\n" "2025-12-31T23:59:59\n" "2027-01-01T00:00:00\n")
+    path2.write_text("ts\n2025-12-31T23:59:59\n2027-01-01T00:00:00\n")
     frame2 = ar.read_csv(path2)
     result2 = ar.validate(frame2, schema)
     rules2 = [issue.rule for issue in result2.issues]
@@ -2708,7 +2702,7 @@ def test_regex_fullmatch_not_partial(tmp_path):
 
 def test_date_validation_rejects_non_zero_padded_dates(tmp_path):
     path = tmp_path / "non_padded_dates.csv"
-    path.write_text("created_at\n" "2026-5-15\n" "2026-05-5\n" "2026-5-5\n")
+    path.write_text("created_at\n2026-5-15\n2026-05-5\n2026-5-5\n")
 
     result = ar.validate(
         ar.read_csv(path),
@@ -2724,9 +2718,7 @@ def test_date_validation_rejects_non_zero_padded_dates(tmp_path):
 
 def test_date_validation_reports_only_invalid_vectorized_values(tmp_path):
     path = tmp_path / "mixed_dates.csv"
-    path.write_text(
-        "created_at\n" "2026-05-15\n" "2026-02-30\n" "2026-5-15\n" "2024-02-29\n"
-    )
+    path.write_text("created_at\n2026-05-15\n2026-02-30\n2026-5-15\n2024-02-29\n")
 
     result = ar.validate(
         ar.read_csv(path),
@@ -2743,7 +2735,7 @@ def test_date_validation_reports_only_invalid_vectorized_values(tmp_path):
 
 def test_required_if_validation_passes_when_condition_matches(tmp_path):
     path = tmp_path / "conditional_pass.csv"
-    path.write_text("user_type,country\n" "international,IN\n" "local,\n")
+    path.write_text("user_type,country\ninternational,IN\nlocal,\n")
 
     frame = ar.read_csv(path)
 
@@ -2766,7 +2758,7 @@ def test_required_if_validation_passes_when_condition_matches(tmp_path):
 
 def test_required_if_validation_fails_when_condition_matches(tmp_path):
     path = tmp_path / "conditional_fail.csv"
-    path.write_text("user_type,country\n" "international,\n" "local,IN\n")
+    path.write_text("user_type,country\ninternational,\nlocal,IN\n")
 
     frame = ar.read_csv(path)
 
@@ -2841,7 +2833,7 @@ def test_schema_rules_fails_when_end_date_before_start_date(tmp_path):
 
 def test_required_if_validation_ignores_non_matching_conditions(tmp_path):
     path = tmp_path / "conditional_ignore.csv"
-    path.write_text("user_type,country\n" "local,\n" "guest,\n")
+    path.write_text("user_type,country\nlocal,\nguest,\n")
 
     frame = ar.read_csv(path)
 
@@ -2878,7 +2870,7 @@ def test_schema_rules_equal_boundary_passes(tmp_path):
 
 def test_required_if_validation_reports_missing_trigger_column(tmp_path):
     path = tmp_path / "missing_trigger.csv"
-    path.write_text("country\n" "IN\n")
+    path.write_text("country\nIN\n")
     frame = ar.read_csv(path)
     schema = ar.Schema(
         {
@@ -2978,7 +2970,7 @@ def test_schema_rules_missing_column_returns_validation_issue(tmp_path):
 
 def test_required_if_validation_handles_null_trigger_values(tmp_path):
     path = tmp_path / "null_trigger.csv"
-    path.write_text("user_type,country\n" ",\n" "international,IN\n")
+    path.write_text("user_type,country\n,\ninternational,IN\n")
     frame = ar.read_csv(path)
     schema = ar.Schema(
         {
@@ -4097,7 +4089,7 @@ def test_custom_field_required_if_validation_passes_when_condition_matches(tmp_p
     ar.register_validator("positive_req_pass", lambda v: v > 0)
 
     path = tmp_path / "custom_conditional_pass.csv"
-    path.write_text("status,score\n" "active,10\n" "inactive,\n")
+    path.write_text("status,score\nactive,10\ninactive,\n")
     frame = ar.read_csv(path)
 
     schema = ar.Schema(
@@ -4118,7 +4110,7 @@ def test_custom_field_required_if_validation_fails_when_condition_matches(tmp_pa
     ar.register_validator("positive_req_required", lambda v: v > 0)
 
     path = tmp_path / "custom_conditional_fail.csv"
-    path.write_text("status,score\n" "active,\n" "inactive,5\n")
+    path.write_text("status,score\nactive,\ninactive,5\n")
     frame = ar.read_csv(path)
 
     schema = ar.Schema(
@@ -4142,7 +4134,7 @@ def test_custom_field_required_if_validation_ignores_non_matching_conditions(tmp
     ar.register_validator("positive_req_ignore", lambda v: v > 0)
 
     path = tmp_path / "custom_conditional_ignore.csv"
-    path.write_text("status,score\n" "pending,\n" "inactive,\n")
+    path.write_text("status,score\npending,\ninactive,\n")
     frame = ar.read_csv(path)
 
     schema = ar.Schema(
@@ -4163,7 +4155,7 @@ def test_custom_field_required_if_enforces_rule_logic_when_matched(tmp_path):
     ar.register_validator("positive_req_rule", lambda v: v > 0)
 
     path = tmp_path / "custom_conditional_rule_fail.csv"
-    path.write_text("status,score\n" "active,-5\n")
+    path.write_text("status,score\nactive,-5\n")
     frame = ar.read_csv(path)
 
     schema = ar.Schema(
@@ -4427,3 +4419,64 @@ def test_from_json_round_trip_is_accepted():
     recovered = ar.Schema.from_json(original.to_json())
     assert recovered.fields["email"].nullable is False
     assert recovered.unique == ["email"]
+
+
+class TestValidateAllowedCollection:
+    """Regression tests for issue #1676 - validate allowed-value collections."""
+
+    # --- String ---
+
+    def test_string_valid_list(self):
+        f = ar.String(allowed=["a", "b", "c"])
+        assert f.allowed == {"a", "b", "c"}
+
+    def test_string_valid_tuple(self):
+        f = ar.String(allowed=("x", "y"))
+        assert f.allowed == {"x", "y"}
+
+    def test_string_valid_set(self):
+        f = ar.String(allowed={"foo", "bar"})
+        assert f.allowed == {"foo", "bar"}
+
+    def test_string_rejects_bare_string(self):
+        with pytest.raises(TypeError, match="bare string"):
+            ar.String(allowed="abc")
+
+    def test_string_rejects_bare_bytes(self):
+        with pytest.raises(TypeError):
+            ar.String(allowed=b"abc")
+
+    def test_string_rejects_non_iterable(self):
+        with pytest.raises(TypeError, match="iterable"):
+            ar.String(allowed=123)
+
+    def test_string_rejects_unhashable_nested_list(self):
+        with pytest.raises(TypeError, match="unhashable"):
+            ar.String(allowed=[["x"]])
+
+    def test_string_rejects_unhashable_dict_value(self):
+        with pytest.raises(TypeError, match="unhashable"):
+            ar.String(allowed=[{"a": 1}])
+
+    # --- CurrencyCode ---
+
+    def test_currency_code_valid_list(self):
+        f = ar.CurrencyCode(allowed=["USD", "EUR", "INR"])
+        assert f.allowed == {"USD", "EUR", "INR"}
+
+    def test_currency_code_rejects_bare_string(self):
+        with pytest.raises(TypeError, match="bare string"):
+            ar.CurrencyCode(allowed="USD")
+
+    def test_currency_code_rejects_unhashable(self):
+        with pytest.raises(TypeError, match="unhashable"):
+            ar.CurrencyCode(allowed=[["USD"]])
+
+    def test_currency_code_none_allowed(self):
+        f = ar.CurrencyCode(allowed=None)
+        assert f.allowed is None
+
+
+def test_currency_code_accepts_generator_iterable():
+    f = ar.CurrencyCode(allowed=(x for x in ["USD", "EUR"]))
+    assert f.allowed == {"USD", "EUR"}
