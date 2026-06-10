@@ -100,8 +100,11 @@ ar.register_step("trim_customer_id", trim_customer_id, overwrite=True)</code></p
 
         <h3>ImportError for extras</h3>
         <p><strong>Symptom:</strong> <code>ImportError</code> or <code>ModuleNotFoundError</code> when importing optional integrations.</p>
-        <p><strong>Cause:</strong> Optional dependencies are not installed by default.</p>
-        <p><strong>Fix:</strong> Install the development extras:</p>
+        <p><strong>Cause:</strong> Optional integration dependencies are not installed by default.</p>
+        <p><strong>Fix:</strong> Install the relevant package extra for the integration you need. For example, for Arrow or Parquet support:</p>
+        <div class="code-block"><div class="code-block-header">Shell</div><pre><code class="language-bash">pip install "arnio[arrow]"
+pip install "arnio[parquet]"</code></pre></div>
+        <p>If you are setting up a contributor environment, use the development extras instead:</p>
         <div class="code-block"><div class="code-block-header">Shell</div><pre><code class="language-bash">pip install -e ".[dev]"</code></pre></div>
 
         <h3>ArFrame vs DataFrame confusion</h3>
@@ -119,7 +122,7 @@ df = ar.to_pandas(frame)  # convert before using pandas APIs</code></pre></div>
 
         <h3>Null handling surprises</h3>
         <p><strong>Symptom:</strong> Null counts or null positions differ between Arnio and pandas for the same file.</p>
-        <p><strong>Cause:</strong> Arnio's C++ core represents nulls differently from pandas. Empty strings, sentinel values, and missing fields may be classified differently until you convert to a DataFrame.</p>
+        <p><strong>Cause:</strong> Empty strings, sentinel values, and missing fields may be classified differently depending on how you read and convert the data.</p>
         <p><strong>Fix:</strong> Convert to a pandas DataFrame with <code>ar.to_pandas(frame)</code> before applying null-sensitive operations, or use Arnio's own profiling APIs to inspect null distribution before conversion.</p>
 
       </article>
