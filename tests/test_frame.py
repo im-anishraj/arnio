@@ -947,7 +947,7 @@ def test_add_column_rejects_duplicate_name():
     with pytest.raises(ValueError, match="already exists"):
         frame.add_column(c2)
 
-        
+
 def test_column_reference_survives_add_column_reallocation():
     from arnio._arnio_cpp import Column, DType, Frame
 
@@ -968,6 +968,26 @@ def test_column_reference_survives_add_column_reallocation():
     assert col.size() == 1
     assert col.at(0) == 1
 
+
+def test_named_column_reference_survives_add_column_reallocation():
+    from arnio._arnio_cpp import Column, DType, Frame
+
+    frame = Frame()
+
+    c1 = Column("a", DType.INT64)
+    c1.push_back(1)
+
+    frame.add_column(c1)
+
+    col = frame.column_by_name("a")
+
+    for i in range(100):
+        extra = Column(f"c{i}", DType.INT64)
+        extra.push_back(i)
+        frame.add_column(extra)
+
+    assert col.size() == 1
+    assert col.at(0) == 1
 # ArFrame.describe() Tests
 
 
