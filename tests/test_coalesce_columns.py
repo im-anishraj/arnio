@@ -117,3 +117,43 @@ def test_coalesce_columns_pandas_index() -> None:
     expected["result"] = [10.0, 2.0, 40.0]
 
     pd.testing.assert_frame_equal(res_df, expected, check_dtype=False)
+
+
+def test_coalesce_columns_default_output_column() -> None:
+    # output_column defaults to "coalesced" when not specified
+    df = pd.DataFrame({"a": [None, 2.0], "b": [1.0, None]})
+    res_df = ar.coalesce_columns(df, subset=["a", "b"])
+
+    assert "coalesced" in res_df.columns
+    assert list(res_df["coalesced"]) == [1.0, 2.0]
+
+
+def test_coalesce_columns_preserves_unrelated_columns() -> None:
+    # Columns not in subset must survive unchanged
+    df = pd.DataFrame(
+        {
+            "keep_me": ["x", "y", "z"],
+            "a": [None, 2.0, None],
+            "b": [1.0, None, None],
+        }
+    )
+    res_df = ar.coalesce_columns(df, subset=["a", "b"], output_column="result")
+
+    pd.testing.assert_series_equal(res_df["keep_me"], df["keep_me"])
+    assert list(res_df.columns) == ["keep_me", "a", "b", "result"]
+
+
+def test_coalesce_columns_single_column_subset() -> None:
+    # Single-column subset: output equals that column's values
+    df = pd.DataFrame({"a": [1.0, None, 3.0], "b": [10.0, 20.0, 30.0]})
+    res_df = ar.coalesce_columns(df, subset=["a"], output_column="result")
+
+    expected = df.copy()
+    expected["result"] = [1.0, None, 3.0]
+    pd.testing.assert_frame_equal(res_df, expected, check_dtype=False)
+
+
+def test_coalesce_columns_invalid_frame_type() -> None:
+    # Non-ArFrame / non-DataFrame input must raise TypeError
+    with pytest.raises(TypeError):
+        ar.coalesce_columns({"a": [1, 2]}, subset=["a"], output_column="result")  # type: ignore
