@@ -82,6 +82,17 @@ def test_pandas_accessor_profiles_dataframe_quality():
     assert report.columns["score"].null_count == 1
 
 
+def test_pandas_accessor_profiles_dataframe_quality_exclude_columns():
+    df = pd.DataFrame({"name": [" Alice ", "Bob"], "score": [1.5, None]})
+
+    report = df.arnio.profile(exclude_columns=["score"])
+
+    assert isinstance(report, ar.DataQualityReport)
+    assert report.row_count == 2
+    assert "name" in report.columns
+    assert "score" not in report.columns
+
+
 def test_pandas_accessor_auto_clean_returns_dataframe_and_report():
     df = pd.DataFrame({"name": [" Alice ", "Bob"]})
 

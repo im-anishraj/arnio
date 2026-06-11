@@ -110,6 +110,7 @@ class ArnioPandasAccessor:
     def profile(
         self,
         *,
+        exclude_columns: Sequence[str] | None = None,
         sample_size: int = 5,
         approx_top_values: bool = False,
         approx_top_values_min_unique: int = 1000,
@@ -119,6 +120,7 @@ class ArnioPandasAccessor:
         """Profile DataFrame quality with Arnio."""
         return profile(
             self.to_arframe(),
+            exclude_columns=exclude_columns,
             sample_size=sample_size,
             approx_top_values=approx_top_values,
             approx_top_values_min_unique=approx_top_values_min_unique,
