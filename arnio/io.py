@@ -2423,3 +2423,58 @@ def write_json(
 
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=indent)
+
+
+def write_jsonl(
+    frame: ArFrame,
+    path: str | os.PathLike[str],
+    *,
+    encoding: str = "utf-8",
+    encoding_errors: str = "strict",
+) -> None:
+    """Write an ArFrame to a JSONL file."""
+    if not isinstance(frame, ArFrame):
+        raise TypeError("frame must be an ArFrame")
+    if not isinstance(path, (str, bytes, os.PathLike)):
+        raise TypeError("path must be a string, bytes, or os.PathLike object")
+    path = os.fsdecode(os.fspath(path))
+    if not path.lower().endswith((".jsonl", ".ndjson")):
+        raise ValueError("path must end with .jsonl or .ndjson")
+    _validate_jsonl_encoding(encoding)
+    _validate_encoding_errors(encoding_errors)
+    try:
+        records = frame.to_dict(orient="records")
+    except Exception as exc:
+        raise RuntimeError(
+            f"write_jsonl: failed to convert frame to records: {exc}"
+        ) from exc
+
+    try:
+        with open(
+            path,
+            "w",
+            encoding=encoding,
+            errors=encoding_errors,
+            newline="",
+        ) as dst:
+            for row in records:
+                try:
+                    dst.write(
+                        json.dumps(
+                            row,
+                            ensure_ascii=False,
+                            separators=(",", ":"),
+                            allow_nan=False,
+                        )
+                    )
+                except (TypeError, ValueError) as exc:
+                    raise ValueError(
+                        f"write_jsonl: row contains a value that cannot be serialized as JSON: {exc}"
+                    ) from exc
+                dst.write("\n")
+    except UnicodeEncodeError as exc:
+        raise ValueError(
+            f"write_jsonl: character cannot be encoded in {encoding!r}: {exc}"
+        ) from exc
+    except OSError as exc:
+        raise RuntimeError(str(exc)) from exc

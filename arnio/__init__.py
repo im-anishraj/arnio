@@ -68,6 +68,7 @@ from .io import (
     sniff_delimiter,
     write_csv,
     write_json,
+    write_jsonl,
     write_parquet,
 )
 from .pipeline import (
@@ -144,6 +145,7 @@ __all__ = [
     "read_jsonl_chunked",
     "write_csv",
     "write_json",
+    "write_jsonl",
     "read_parquet",
     "write_parquet",
     "scan_csv",
