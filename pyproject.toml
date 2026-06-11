@@ -57,6 +57,7 @@ Discord = "https://discord.gg/xsEw7r78M"
 [project.optional-dependencies]
 arrow = ["pyarrow>=6.0"]
 duckdb = ["duckdb>=1.0"]
+polars = ["polars>=0.20", "pyarrow>=6.0"]
 
 dev = [
     "pytest>=7.0",
@@ -68,8 +69,9 @@ dev = [
     "PyYAML>=6.0",
     "duckdb>=1.0",
     "tomli; python_version < '3.11'",
-    "mypy>=1.0",
+    "mypy>=1.0,<2.0",
     "pandas-stubs",
+    "types-PyYAML",
     "types-setuptools",
 ]
 sklearn = [
@@ -94,6 +96,7 @@ sdist.exclude = [
     ".mypy_cache/",
     "dist/",
 ]
+build-dir = ""
 
 [tool.black]
 line-length = 88
@@ -113,6 +116,9 @@ known-first-party = ["arnio"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-v --tb=short"
+markers = [
+    "arrow: tests requiring pyarrow",
+]
 
 [tool.cibuildwheel]
 build = "cp39-* cp310-* cp311-* cp312-* cp313-* cp314-*"

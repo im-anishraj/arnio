@@ -222,6 +222,24 @@ def test_read_jsonl_chunked_signature_matches_website():
     )
 
 
+def test_write_csv_signature_matches_website():
+    """write_csv: encoding and formula escaping options are documented."""
+    row = _signature_row("write_csv", _api_html())
+    _check(
+        "write_csv",
+        row,
+        params=["escape_formulas", "encoding", "encoding_errors"],
+        defaults={
+            "delimiter": '","',
+            "write_header": "True",
+            "line_terminator": '"\\n"',
+            "escape_formulas": "False",
+            "encoding": '"utf-8"',
+            "encoding_errors": '"strict"',
+        },
+    )
+
+
 def test_write_parquet_signature_matches_website():
     """write_parquet: compression='snappy' and preserve_attrs in its own row."""
     row = _signature_row("write_parquet", _api_html())

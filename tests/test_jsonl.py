@@ -583,3 +583,27 @@ class TestReadJsonlChunked:
 
         with pytest.raises(ar.JsonlReadError, match="decode"):
             list(ar.read_jsonl_chunked(path, encoding="utf-8"))
+
+
+class TestReadJsonlInvalidPathType:
+    @pytest.mark.parametrize(
+        "bad_input",
+        [123, 3.14, None, object(), ["a.jsonl"]],
+    )
+    def test_raises_type_error(self, bad_input):
+        with pytest.raises(
+            TypeError,
+            match="read_jsonl expected a filesystem path",
+        ):
+            ar.read_jsonl(bad_input)
+
+    @pytest.mark.parametrize(
+        "bad_input",
+        [123, 3.14, None, object(), ["a.jsonl"]],
+    )
+    def test_chunked_raises_type_error(self, bad_input):
+        with pytest.raises(
+            TypeError,
+            match="read_jsonl_chunked expected a filesystem path",
+        ):
+            list(ar.read_jsonl_chunked(bad_input))

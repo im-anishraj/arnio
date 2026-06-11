@@ -9,8 +9,10 @@ import html
 import json
 import math
 import os
-from collections.abc import Sequence
+import re
+from collections.abc import Sequence, Set
 from dataclasses import dataclass, field
+from datetime import date
 from typing import Any
 
 import numpy as np
@@ -24,7 +26,7 @@ from .cleaning import (
     validate_columns_exist,
 )
 from .convert import to_pandas
-from .frame import ArFrame
+from .frame import ArFrame, _validate_arframe
 
 
 class CleaningSuggestion(tuple):
@@ -422,23 +424,7 @@ class DataQualityReport:
             "suggestions": [
                 {
                     "step": s[0],
-                    "kwargs": {
-                        key: (
-                            [item for item in value if item not in exclude_columns]
-                            if key in {"subset", "columns"} and isinstance(value, list)
-                            else (
-                                {
-                                    col_name: col_type
-                                    for col_name, col_type in value.items()
-                                    if col_name not in exclude_columns
-                                }
-                                if key == "cast_types" and isinstance(value, dict)
-                                else value
-                            )
-                        )
-                        for key, value in sorted(dict(s[1]).items())
-                        if key not in exclude_columns
-                    },
+                    "kwargs": _filtered_suggestion_kwargs(s[1], exclude_columns),
                     "confidence_score": getattr(s, "confidence_score", None),
                     "confidence_reason": _redact_reason(
                         getattr(s, "confidence_reason", None)
@@ -452,6 +438,17 @@ class DataQualityReport:
                     ),
                 )
             ],
+        }
+
+    def score_breakdown(self) -> dict[str, float]:
+        """Return a breakdown of the individual penalty scores."""
+        return {
+            "null_penalty": self.score_components.get("null_penalty", 0.0),
+            "duplicate_penalty": self.score_components.get("duplicate_penalty", 0.0),
+            "type_mismatch_penalty": self.score_components.get(
+                "type_mismatch_penalty", 0.0
+            ),
+            "final_score": self.quality_score,
         }
 
     def __repr__(self) -> str:
@@ -521,9 +518,35 @@ class DataQualityReport:
         self,
         output: Any | None = None,
         max_suggestions: int | None = None,
+        exclude_columns: list[str] | set[str] | tuple[str, ...] | None = None,
     ) -> str | None:
         """Return a GitHub-friendly Markdown report."""
         max_suggestions = self._validate_max_suggestions(max_suggestions)
+
+        if exclude_columns is None:
+            exclude_columns = set()
+        elif not isinstance(exclude_columns, (list, tuple, set)):
+            raise TypeError("exclude_columns must be a list, tuple, set, or None")
+        else:
+            if not all(isinstance(column, str) for column in exclude_columns):
+                raise TypeError("exclude_columns must contain only string column names")
+            exclude_columns = set(exclude_columns)
+
+        unknown_exclude_columns = sorted(exclude_columns - set(self.columns))
+        if unknown_exclude_columns:
+            available_columns = ", ".join(self.columns) or "<none>"
+            raise KeyError(
+                "Unknown exclude_columns: "
+                f"{unknown_exclude_columns}. Available columns: {available_columns}"
+            )
+
+        def _redact_reason(reason: str | None) -> str | None:
+            if not reason or not exclude_columns:
+                return reason
+            for col in exclude_columns:
+                pattern = rf"(?<!\w){re.escape(col)}(?!\w)"
+                reason = re.sub(pattern, "[REDACTED]", reason)
+            return reason
 
         lines: list[str] = []
 
@@ -552,6 +575,8 @@ class DataQualityReport:
             lines.append("|---|---|---|---|---|---|---|")
 
             for name in sorted(self.columns):
+                if name in exclude_columns:
+                    continue
                 column = self.columns[name]
 
                 warnings = ", ".join(column.warnings) if column.warnings else "-"
@@ -580,9 +605,33 @@ class DataQualityReport:
                 rendered_suggestions = self.suggestions[:max_suggestions]
 
             for step in rendered_suggestions:
-                kwargs_str = json.dumps(step[1], sort_keys=True, default=str)
+                filtered_kwargs: dict[str, Any] = {}
+                for key, value in sorted(dict(step[1]).items()):
+                    if key in {"subset", "columns"}:
+                        if isinstance(value, Sequence) and not isinstance(value, str):
+                            filtered_kwargs[key] = [
+                                item for item in value if item not in exclude_columns
+                            ]
+                        elif isinstance(value, Set):
+                            filtered_kwargs[key] = sorted(
+                                item for item in value if item not in exclude_columns
+                            )
+                        else:
+                            filtered_kwargs[key] = value
+                    elif key == "cast_types" and isinstance(value, dict):
+                        filtered_kwargs[key] = {
+                            col_name: col_type
+                            for col_name, col_type in value.items()
+                            if col_name not in exclude_columns
+                        }
+                    elif isinstance(value, str) and value in exclude_columns:
+                        filtered_kwargs[key] = "[REDACTED]"
+                    else:
+                        filtered_kwargs[key] = value
+
+                kwargs_str = json.dumps(filtered_kwargs, sort_keys=True, default=str)
                 conf_score = getattr(step, "confidence_score", None)
-                conf_reason = getattr(step, "confidence_reason", None)
+                conf_reason = _redact_reason(getattr(step, "confidence_reason", None))
                 if conf_score is not None and conf_reason is not None:
                     lines.append(
                         f"- `{step[0]}`: `{kwargs_str}` "
@@ -788,7 +837,7 @@ class DataQualityReport:
         )
         lines.append("</div>")
         lines.append(
-            f"<div class=\"pill\"><span class=\"muted\">Quality score</span> <span class=\"score {score_class(self.quality_score)}\">{e(f'{self.quality_score:.2f}')}</span></div>"
+            f'<div class="pill"><span class="muted">Quality score</span> <span class="score {score_class(self.quality_score)}">{e(f"{self.quality_score:.2f}")}</span></div>'
         )
         lines.append("</div>")
 
@@ -819,7 +868,7 @@ class DataQualityReport:
                 cls = "warn" if value < 0 else "muted"
                 lines.append("<tr>")
                 lines.append(f"<td><code>{e(key)}</code></td>")
-                lines.append(f"<td class=\"{cls}\">{e(f'{value:+.2f}')}</td>")
+                lines.append(f'<td class="{cls}">{e(f"{value:+.2f}")}</td>')
                 lines.append("</tr>")
             lines.append("</tbody>")
             lines.append("</table>")
@@ -852,7 +901,7 @@ class DataQualityReport:
                     for v, _c, r in col.top_values[:3]:
                         label = e("[REDACTED]") if redact_top_values else e(v)
                         top_bits.append(
-                            f"<span class=\"chip\">{label} · {e(f'{r:.0%}')}</span>"
+                            f'<span class="chip">{label} · {e(f"{r:.0%}")}</span>'
                         )
                     top_html = "".join(top_bits)
                 elif col.histogram:
@@ -876,7 +925,7 @@ class DataQualityReport:
                         f'<div style="display:inline-flex;align-items:flex-end;gap:1.5px;'
                         f'height:20px;width:100px;background:#f3f4f6;border-radius:3px;padding:2px;" '
                         f'title="Numeric Distribution Histogram">'
-                        f'{"".join(bars)}'
+                        f"{''.join(bars)}"
                         f"</div>"
                     )
                 else:
@@ -888,19 +937,19 @@ class DataQualityReport:
                 lines.append(f"<td>{e(col.semantic_type)}</td>")
                 lines.append(
                     "<td>"
-                    f"{e(col.null_count)} <span class=\"muted\">({e(f'{null_pct:.1f}%')})</span>"
+                    f'{e(col.null_count)} <span class="muted">({e(f"{null_pct:.1f}%")})</span>'
                     f'<div class="bar"><span style="width:{max(0.0, min(100.0, null_pct)):.2f}%"></span></div>'
                     "</td>"
                 )
                 lines.append(
                     "<td>"
-                    f"{e(col.unique_count)} <span class=\"muted\">({e(f'{unique_pct:.1f}%')})</span>"
+                    f'{e(col.unique_count)} <span class="muted">({e(f"{unique_pct:.1f}%")})</span>'
                     f'<div class="bar"><span style="width:{max(0.0, min(100.0, unique_pct)):.2f}%"></span></div>'
                     "</td>"
                 )
                 lines.append(f"<td>{top_html}</td>")
                 lines.append(
-                    f"<td class=\"{'warn' if col.warnings else 'muted'}\">{e(warnings_str)}</td>"
+                    f'<td class="{"warn" if col.warnings else "muted"}">{e(warnings_str)}</td>'
                 )
                 lines.append(f"<td>{e(suggested)}</td>")
                 lines.append("</tr>")
@@ -1145,8 +1194,29 @@ class ProfileComparison:
         output.write(json_out)
         return None
 
-    def to_markdown(self, output: Any | None = None) -> str | None:
+    def to_markdown(
+        self,
+        output: Any | None = None,
+        exclude_columns: list[str] | set[str] | tuple[str, ...] | None = None,
+    ) -> str | None:
         """Return a GitHub-friendly Markdown drift report."""
+        if exclude_columns is None:
+            validated_exclude: set[str] = set()
+        elif not isinstance(exclude_columns, (list, tuple, set)):
+            raise TypeError("exclude_columns must be a list, tuple, set, or None")
+        else:
+            if not all(isinstance(column, str) for column in exclude_columns):
+                raise TypeError("exclude_columns must contain only string column names")
+            validated_exclude = set(exclude_columns)
+
+        unknown_exclude_columns = sorted(validated_exclude - set(self.drift_report))
+        if unknown_exclude_columns:
+            available_columns = ", ".join(self.drift_report) or "<none>"
+            raise KeyError(
+                "Unknown exclude_columns: "
+                f"{unknown_exclude_columns}. Available columns: {available_columns}"
+            )
+
         lines: list[str] = ["# Profile Comparison Report", ""]
 
         status_summary = ", ".join(
@@ -1161,6 +1231,8 @@ class ProfileComparison:
             lines.append("| Column | Status | Changes | Reasons |")
             lines.append("|---|---|---|---|")
             for name, entry in sorted(self.drift_report.items()):
+                if name in validated_exclude:
+                    continue
                 status = entry.get("status", "-")
                 changes = ", ".join(entry.get("changes", {}).keys()) or "-"
                 reasons = "; ".join(entry.get("reasons", [])) or "-"
@@ -1182,6 +1254,140 @@ class ProfileComparison:
 
         output.write(markdown)
         return None
+
+
+@dataclass(frozen=True)
+class DriftReport:
+    """Structured dataset drift report between two ArFrame versions.
+
+    Returned by :func:`detect_drift`.  Unlike :class:`ProfileComparison`,
+    this report handles schema changes (added / removed columns) gracefully
+    rather than raising on mismatched column sets.
+
+    Attributes
+    ----------
+    added_columns : list[str]
+        Columns present in the new dataset but absent from the old one.
+    removed_columns : list[str]
+        Columns present in the old dataset but absent from the new one.
+    dtype_changes : dict[str, tuple[str, str]]
+        Shared columns whose dtype changed, mapped to ``(old_dtype, new_dtype)``.
+    null_ratio_changes : dict[str, tuple[float, float]]
+        Shared columns whose null ratio changed, mapped to
+        ``(old_null_ratio, new_null_ratio)``.
+    row_count : tuple[int, int]
+        Row counts as ``(old_row_count, new_row_count)``.
+    has_drift : bool
+        ``True`` when any structural or statistical drift is present.
+    """
+
+    added_columns: list[str]
+    removed_columns: list[str]
+    dtype_changes: dict[str, tuple[str, str]]
+    null_ratio_changes: dict[str, tuple[float, float]]
+    row_count: tuple[int, int]
+
+    def __post_init__(self) -> None:
+        """Validate structural field invariants for DriftReport."""
+        if not isinstance(self.added_columns, list):
+            raise TypeError("added_columns must be a list")
+        if not all(isinstance(c, str) for c in self.added_columns):
+            raise TypeError("added_columns must contain only strings")
+
+        if not isinstance(self.removed_columns, list):
+            raise TypeError("removed_columns must be a list")
+        if not all(isinstance(c, str) for c in self.removed_columns):
+            raise TypeError("removed_columns must contain only strings")
+
+        if not isinstance(self.dtype_changes, dict):
+            raise TypeError("dtype_changes must be a dict")
+        for k, v in self.dtype_changes.items():
+            if not isinstance(k, str):
+                raise TypeError("dtype_changes keys must be strings")
+            if not (
+                isinstance(v, tuple)
+                and len(v) == 2
+                and isinstance(v[0], str)
+                and isinstance(v[1], str)
+            ):
+                raise TypeError("dtype_changes values must be 2-tuples of (str, str)")
+
+        if not isinstance(self.null_ratio_changes, dict):
+            raise TypeError("null_ratio_changes must be a dict")
+        for k, v in self.null_ratio_changes.items():
+            if not isinstance(k, str):
+                raise TypeError("null_ratio_changes keys must be strings")
+            if not (isinstance(v, tuple) and len(v) == 2):
+                raise TypeError(
+                    "null_ratio_changes values must be 2-tuples of (float, float)"
+                )
+            for i, ratio in enumerate(v):
+                if isinstance(ratio, bool) or not isinstance(ratio, (int, float)):
+                    raise TypeError(
+                        f"null_ratio_changes[{k!r}][{i}] must be a numeric ratio, "
+                        f"got {type(ratio).__name__}"
+                    )
+                if not math.isfinite(ratio):
+                    raise ValueError(
+                        f"null_ratio_changes[{k!r}][{i}] must be finite, got {ratio}"
+                    )
+                if ratio < 0.0 or ratio > 1.0:
+                    raise ValueError(
+                        f"null_ratio_changes[{k!r}][{i}] must be between 0.0 and 1.0, "
+                        f"got {ratio}"
+                    )
+
+        if not (isinstance(self.row_count, tuple) and len(self.row_count) == 2):
+            raise TypeError("row_count must be a 2-tuple of (int, int)")
+        for i, val in enumerate(self.row_count):
+            if isinstance(val, bool) or not isinstance(val, int):
+                raise TypeError(
+                    f"row_count[{i}] must be an integer, got {type(val).__name__}"
+                )
+            if val < 0:
+                raise ValueError(f"row_count[{i}] cannot be negative: {val}")
+
+    @property
+    def has_drift(self) -> bool:
+        """``True`` when any structural or statistical drift was detected."""
+        return bool(
+            self.added_columns
+            or self.removed_columns
+            or self.dtype_changes
+            or self.null_ratio_changes
+            or self.row_count[0] != self.row_count[1]
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-friendly dictionary representation.
+
+        All fields are converted to JSON-safe primitives (lists instead of
+        tuples) so the result can be passed directly to :func:`json.dumps`.
+        """
+        return {
+            "added_columns": list(self.added_columns),
+            "removed_columns": list(self.removed_columns),
+            "dtype_changes": {
+                col: list(change) for col, change in self.dtype_changes.items()
+            },
+            "null_ratio_changes": {
+                col: list(change) for col, change in self.null_ratio_changes.items()
+            },
+            "row_count": list(self.row_count),
+            "has_drift": self.has_drift,
+        }
+
+    def __repr__(self) -> str:
+        return (
+            "DriftReport("
+            f"added={self.added_columns!r}, "
+            f"removed={self.removed_columns!r}, "
+            f"dtype_changes={len(self.dtype_changes)}, "
+            f"null_ratio_changes={len(self.null_ratio_changes)}, "
+            f"row_count={self.row_count!r}, "
+            f"has_drift={self.has_drift}"
+            ")"
+        )
 
 
 @dataclass(frozen=True)
@@ -1396,10 +1602,7 @@ def profile(
     >>> report = ar.profile(frame, sample_size=3)
     >>> report.summary()
     """
-    if not isinstance(frame, ArFrame):
-        raise TypeError(
-            f"profile() expects an ArFrame, got {type(frame).__name__}. Use arnio.from_pandas() first."
-        )
+    _validate_arframe(frame)
 
     if not isinstance(sample_size, int) or isinstance(sample_size, bool):
         raise TypeError("sample_size must be an integer")
@@ -1573,6 +1776,84 @@ def compare_profiles(
         right_profile=profile_b,
         drift_report=drift_report,
         status_counts=status_counts,
+    )
+
+
+def detect_drift(old: ArFrame, new: ArFrame) -> DriftReport:
+    """Detect structural and statistical drift between two ArFrame versions.
+
+    Unlike :func:`compare_profiles`, this function handles schema changes
+    (added or removed columns) without raising an error, making it suitable
+    for monitoring evolving CSV datasets in data pipelines.
+
+    Internally calls :func:`profile` on both frames, then compares column
+    sets and per-column dtype / null-ratio values for shared columns.  Numeric
+    distribution metrics are available through the underlying profiles if
+    deeper analysis is needed.
+
+    Parameters
+    ----------
+    old : ArFrame
+        The older or baseline dataset.
+    new : ArFrame
+        The newer or current dataset.
+
+    Returns
+    -------
+    DriftReport
+        Structured summary of detected drift.  ``report.has_drift`` is
+        ``True`` when any structural or statistical change was found.
+
+    Raises
+    ------
+    TypeError
+        If either argument is not an :class:`ArFrame`.
+
+    Examples
+    --------
+    >>> old_frame = ar.read_csv("data_v1.csv")
+    >>> new_frame = ar.read_csv("data_v2.csv")
+    >>> report = ar.detect_drift(old_frame, new_frame)
+    >>> report.has_drift
+    True
+    >>> report.added_columns
+    ['new_col']
+    >>> import json
+    >>> json.dumps(report.to_dict())  # JSON-safe export
+    """
+    _validate_arframe(old, "old")
+    _validate_arframe(new, "new")
+
+    old_profile = profile(old)
+    new_profile = profile(new)
+
+    old_cols = set(old_profile.columns)
+    new_cols = set(new_profile.columns)
+
+    added = sorted(new_cols - old_cols)
+    removed = sorted(old_cols - new_cols)
+
+    dtype_changes: dict[str, tuple[str, str]] = {}
+    null_ratio_changes: dict[str, tuple[float, float]] = {}
+
+    for col in sorted(old_cols & new_cols):
+        old_col = old_profile.columns[col]
+        new_col = new_profile.columns[col]
+
+        entry = _compare_column_profiles(old_col, new_col)
+
+        if "dtype" in entry["changes"]:
+            dtype_changes[col] = (old_col.dtype, new_col.dtype)
+
+        if "null_ratio" in entry["changes"]:
+            null_ratio_changes[col] = (old_col.null_ratio, new_col.null_ratio)
+
+    return DriftReport(
+        added_columns=added,
+        removed_columns=removed,
+        dtype_changes=dtype_changes,
+        null_ratio_changes=null_ratio_changes,
+        row_count=(old_profile.row_count, new_profile.row_count),
     )
 
 
@@ -2385,10 +2666,7 @@ def auto_clean(
     >>> clean, explanation = ar.auto_clean(frame, explain=True)
     >>> print(explanation)
     """
-    if not isinstance(frame, ArFrame):
-        raise TypeError(
-            f"auto_clean() expects an ArFrame, got {type(frame).__name__}. Use arnio.from_pandas() first."
-        )
+    _validate_arframe(frame)
 
     if not isinstance(mode, str) or mode not in {"safe", "strict"}:
         raise ValueError("mode must be 'safe' or 'strict'")
@@ -2554,30 +2832,28 @@ def _profile_column(
         numeric = pd.to_numeric(series, errors="coerce")
         numeric_non_null = numeric.dropna()
         if len(numeric_non_null):
-            min_value = numeric_non_null.min()
-            max_value = numeric_non_null.max()
-            mean = float(numeric_non_null.mean())
-            std = float(numeric_non_null.std(ddof=0))
-            quantiles = numeric_non_null.quantile([0.25, 0.50, 0.75, 0.95])
-            q25 = round(float(quantiles.loc[0.25]), 4)
-            q50 = round(float(quantiles.loc[0.50]), 4)
-            q75 = round(float(quantiles.loc[0.75]), 4)
-            q95 = round(float(quantiles.loc[0.95]), 4)
-            (
-                outlier_count,
-                outlier_ratio,
-                iqr,
-                outlier_lower_bound,
-                outlier_upper_bound,
-            ) = _iqr_outlier_summary(
-                numeric_non_null,
-                q25=q25,
-                q75=q75,
-            )
-
-            # Calculate histogram
             finite_values = numeric_non_null[np.isfinite(numeric_non_null)]
             if len(finite_values):
+                min_value = finite_values.min()
+                max_value = finite_values.max()
+                mean = float(finite_values.mean())
+                std = float(finite_values.std(ddof=0))
+                quantiles = finite_values.quantile([0.25, 0.50, 0.75, 0.95])
+                q25 = round(float(quantiles.loc[0.25]), 4)
+                q50 = round(float(quantiles.loc[0.50]), 4)
+                q75 = round(float(quantiles.loc[0.75]), 4)
+                q95 = round(float(quantiles.loc[0.95]), 4)
+                (
+                    outlier_count,
+                    outlier_ratio,
+                    iqr,
+                    outlier_lower_bound,
+                    outlier_upper_bound,
+                ) = _iqr_outlier_summary(
+                    finite_values,
+                    q25=q25,
+                    q75=q75,
+                )
                 counts, bin_edges = np.histogram(finite_values.to_numpy(), bins=10)
                 total = int(counts.sum())
                 histogram = [
@@ -2590,6 +2866,10 @@ def _profile_column(
                     for i in range(len(counts))
                 ]
             else:
+                min_value = max_value = mean = std = None
+                q25 = q50 = q75 = q95 = None
+                iqr = outlier_count = outlier_ratio = None
+                outlier_lower_bound = outlier_upper_bound = None
                 histogram = None
     elif len(non_null) and (
         dtype == "string" or pd.api.types.is_string_dtype(series.dtype)
@@ -2828,11 +3108,19 @@ def _ratio(part: int, total: int) -> float:
 
 
 def _clean_scalar(value: Any) -> Any:
-    """Convert NaN and numpy scalar values to JSON-safe Python types."""
+    """Convert NaN/inf/-inf and numpy scalar values to JSON-safe Python types.
+
+    Non-finite floats (NaN, inf, -inf) are mapped to ``None`` so that
+    ``json.dumps(..., allow_nan=False)`` never raises on report output.
+    This covers sample_values, top_values, min/max, histogram bucket edges,
+    and any other scalar path that passes through to_dict().
+    """
     if pd.isna(value):
         return None
     if hasattr(value, "item"):
-        return value.item()
+        value = value.item()
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
     return value
 
 
@@ -2883,6 +3171,75 @@ def _approx_top_values(
         sample_n,
         _ratio(sample_n, len(series)),
     )
+
+
+def _json_safe_suggestion_value(value: Any) -> Any:
+    """Normalize cleaning-suggestion kwargs values for json.dumps without default=."""
+    if value is None or isinstance(value, (str, bool, int)):
+        return value
+
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+
+    if isinstance(value, dict):
+        return {str(k): _json_safe_suggestion_value(v) for k, v in value.items()}
+
+    if isinstance(value, Set) and not isinstance(value, (str, bytes, bytearray)):
+        try:
+            ordered = sorted(value)
+        except TypeError:
+            ordered = sorted(value, key=lambda x: (type(x).__name__, repr(x)))
+        return [_json_safe_suggestion_value(x) for x in ordered]
+
+    if isinstance(value, (list, tuple)):
+        return [_json_safe_suggestion_value(x) for x in value]
+
+    if isinstance(value, np.ndarray):
+        return [_json_safe_suggestion_value(x) for x in value.tolist()]
+
+    if isinstance(value, date):
+        return value.isoformat()
+
+    if hasattr(value, "item"):
+        try:
+            return _json_safe_suggestion_value(value.item())
+        except Exception:
+            return str(value)
+
+    cleaned = _clean_scalar(value)
+    if cleaned is not value:
+        return _json_safe_suggestion_value(cleaned)
+
+    return str(value)
+
+
+def _filtered_suggestion_kwargs(
+    kwargs: dict[str, Any],
+    exclude_columns: set[str],
+) -> dict[str, Any]:
+    filtered: dict[str, Any] = {}
+
+    for key, value in sorted(dict(kwargs).items()):
+        if key in exclude_columns:
+            continue
+
+        raw_value = value
+
+        if key in {"subset", "columns"} and isinstance(
+            value, (list, tuple, Set, np.ndarray)
+        ):
+            raw_value = [item for item in value if item not in exclude_columns]
+
+        elif key == "cast_types" and isinstance(value, dict):
+            raw_value = {
+                col_name: col_type
+                for col_name, col_type in value.items()
+                if col_name not in exclude_columns
+            }
+
+        filtered[key] = _json_safe_suggestion_value(raw_value)
+
+    return filtered
 
 
 _EMAIL_PATTERN = r"[^@\s]+@[^@\s]+\.[^@\s]+"
