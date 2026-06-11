@@ -2,6 +2,11 @@ const searchInput = document.getElementById("docs-search");
 const resultsBox = document.getElementById("search-results");
 
 if (searchInput && resultsBox) {
+  searchInput.setAttribute("aria-controls", "search-results");
+  searchInput.setAttribute("aria-expanded", "false");
+  searchInput.setAttribute("aria-autocomplete", "list");
+  resultsBox.setAttribute("role", "listbox");
+  resultsBox.id = "search-results";
 
   const searchIndex = [
     { title: "Installation", page: "docs.html#install" },
@@ -25,7 +30,7 @@ if (searchInput && resultsBox) {
     { title: "profile", page: "api.html#quality" },
     { title: "DateTime", page: "api.html#schema" },
     { title: "Email", page: "api.html#schema" },
-    { title: "Exceptions", page: "api.html#exceptions" }
+    { title: "Exceptions", page: "api.html#exceptions" },
   ];
 
   let selectedIndex = -1;
@@ -35,22 +40,23 @@ if (searchInput && resultsBox) {
 
     if (!items.length) {
       resultsBox.classList.remove("show");
+      searchInput.setAttribute("aria-expanded", "false");
       return;
     }
 
     items.forEach((item) => {
-      const div = document.createElement("div");
-      div.className = "search-result";
-      div.textContent = item.title;
+      const link = document.createElement("a");
+      link.className = "search-result";
+      link.href = item.page;
+      link.textContent = item.title;
+      link.setAttribute("role", "option");
+      link.setAttribute("aria-selected", "false");
 
-      div.addEventListener("click", () => {
-        window.location.href = item.page;
-      });
-
-      resultsBox.appendChild(div);
+      resultsBox.appendChild(link);
     });
 
     resultsBox.classList.add("show");
+    searchInput.setAttribute("aria-expanded", "true");
   }
 
   searchInput.addEventListener("input", (e) => {
@@ -58,11 +64,12 @@ if (searchInput && resultsBox) {
 
     if (!q) {
       resultsBox.classList.remove("show");
+      searchInput.setAttribute("aria-expanded", "false");
       return;
     }
 
-    const matches = searchIndex.filter(item =>
-      item.title.toLowerCase().includes(q)
+    const matches = searchIndex.filter((item) =>
+      item.title.toLowerCase().includes(q),
     );
 
     selectedIndex = -1;
@@ -70,10 +77,16 @@ if (searchInput && resultsBox) {
   });
 
   document.addEventListener("keydown", (e) => {
-
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
       e.preventDefault();
       searchInput.focus();
+    }
+
+    if (
+      document.activeElement !== searchInput &&
+      !resultsBox.contains(document.activeElement)
+    ) {
+      return;
     }
 
     const results = [...document.querySelectorAll(".search-result")];
@@ -87,22 +100,33 @@ if (searchInput && resultsBox) {
 
     if (e.key === "ArrowUp") {
       e.preventDefault();
-      selectedIndex =
-        (selectedIndex - 1 + results.length) % results.length;
+      selectedIndex = (selectedIndex - 1 + results.length) % results.length;
     }
 
-    results.forEach(r => r.classList.remove("active"));
+    results.forEach((r) => {
+      r.classList.remove("active");
+      r.setAttribute("aria-selected", "false");
+    });
 
     if (selectedIndex >= 0) {
       results[selectedIndex].classList.add("active");
+      results[selectedIndex].focus();
+      results[selectedIndex].setAttribute("aria-selected", "true");
     }
 
     if (e.key === "Enter" && selectedIndex >= 0) {
-      results[selectedIndex].click();
+      window.location.href = results[selectedIndex].getAttribute("href");
     }
 
     if (e.key === "Escape") {
+      selectedIndex = -1;
+      results.forEach((r) => {
+        r.classList.remove("active");
+        r.setAttribute("aria-selected", "false");
+      });
       resultsBox.classList.remove("show");
+      searchInput.setAttribute("aria-expanded", "false");
+      searchInput.focus();
     }
   });
 }
