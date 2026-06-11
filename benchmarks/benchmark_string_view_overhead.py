@@ -25,7 +25,7 @@ def benchmark_strip_whitespace():
 
     # Single execution measured with perf_counter
     start = time.perf_counter()
-    result = arnio.strip_whitespace(frame)
+    _ = arnio.strip_whitespace(frame)
     end = time.perf_counter()
 
     elapsed = end - start
