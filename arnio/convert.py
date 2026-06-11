@@ -258,8 +258,17 @@ def to_pandas(frame: ArFrame, *, copy: bool = False) -> pd.DataFrame:
         result = pd.DataFrame(index=pd.RangeIndex(cpp_frame.num_rows()))
     else:
         result = pd.DataFrame(data)
+    
+    # Always preserve attrs (DO NOT condition on index)
     if frame._attrs:
         result.attrs = copylib.deepcopy(frame._attrs)
+
+    # Restore index only if explicitly stored
+    saved_index = frame._attrs.get("_arnio_index") if frame._attrs else None
+
+    if saved_index is not None:
+        result.index = saved_index.copy()
+
     return result
 
 
@@ -435,7 +444,15 @@ def from_pandas(df: pd.DataFrame) -> ArFrame:
             dtype_hints[name] = dtype_hint
 
     cpp_frame = _Frame.from_dict(columns, dtype_hints, len(df))
-    return ArFrame(cpp_frame, attrs=copylib.deepcopy(df.attrs))
+    
+    attrs = copylib.deepcopy(df.attrs)
+
+    # Store index ONLY if it's not default RangeIndex
+
+    if not isinstance(df.index, pd.RangeIndex):
+        attrs["_arnio_index"] = df.index.copy()
+
+    return ArFrame(cpp_frame, attrs=attrs)
 
 
 def _from_arrow_table(table: pa.Table) -> ArFrame:
@@ -704,3 +721,4 @@ def from_dict(data: dict) -> ArFrame:
         _check_unsupported_dtype(col_name, df[col_name])
 
     return from_pandas(df)
+    
