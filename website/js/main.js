@@ -97,6 +97,51 @@
       });
     });
 
+    // Scroll reveal for landing page feature cards
+    const featureList = document.querySelector('[data-scroll-reveal]');
+    const prefersReducedMotion =
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    if (featureList) {
+      const featureCards = featureList.querySelectorAll('.card');
+
+      featureCards.forEach(function (card, index) {
+        card.style.setProperty('--feature-card-index', index);
+      });
+
+      if ('IntersectionObserver' in window && !prefersReducedMotion) {
+        featureList.classList.add('is-reveal-ready');
+        let visibleCards = 0;
+
+        const featureObserver = new IntersectionObserver(function (entries, observer) {
+          entries.forEach(function (entry) {
+            if (entry.isIntersecting) {
+              entry.target.classList.add('is-visible');
+              observer.unobserve(entry.target);
+              visibleCards += 1;
+
+              if (visibleCards === featureCards.length) {
+                window.setTimeout(function () {
+                  featureList.classList.remove('is-reveal-ready');
+                }, 900);
+              }
+            }
+          });
+        }, {
+          rootMargin: '0px 0px -12% 0px',
+          threshold: 0.18
+        });
+
+        featureCards.forEach(function (card) {
+          featureObserver.observe(card);
+        });
+      } else {
+        featureCards.forEach(function (card) {
+          card.classList.add('is-visible');
+        });
+      }
+    }
+
     // ── Sidebar active section tracking (docs pages) ─────────
     const sidebarLinks = document.querySelectorAll('.sidebar-nav-link');
 
