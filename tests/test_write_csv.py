@@ -648,24 +648,66 @@ class TestWriteCsvEncoding:
         assert after - before == {str(out)}
 
 
-def test_write_csv_append(tmp_path):
-    path = str(tmp_path / "test_append.csv")
-    frame1 = ar.from_pandas(pd.DataFrame({"A": [1, 2], "B": ["x", "y"]}))
-    frame2 = ar.from_pandas(pd.DataFrame({"A": [3, 4], "B": ["z", "w"]}))
+class TestWriteCsvAppend:
+    def test_append_to_empty(self, tmp_path):
+        path = str(tmp_path / "test_append_empty.csv")
+        frame1 = ar.from_pandas(pd.DataFrame({"A": [1, 2], "B": ["x", "y"]}))
+        
+        ar.write_csv(frame1, path, append=True)
+        res1 = ar.to_pandas(ar.read_csv(path))
+        assert len(res1) == 2
+        assert list(res1.columns) == ["A", "B"]
 
-    # Append to empty
-    ar.write_csv(frame1, path, append=True)
-    res1 = ar.read_csv(path)
-    assert len(res1) == 2
+    def test_append_to_existing(self, tmp_path):
+        path = str(tmp_path / "test_append_existing.csv")
+        frame1 = ar.from_pandas(pd.DataFrame({"A": [1, 2], "B": ["x", "y"]}))
+        frame2 = ar.from_pandas(pd.DataFrame({"A": [3, 4], "B": ["z", "w"]}))
 
-    # Append to existing
-    ar.write_csv(frame2, path, append=True)
-    res2 = ar.read_csv(path)
-    res2_df = ar.to_pandas(res2)
-    assert len(res2_df) == 4
-    assert res2_df["A"].tolist() == [1, 2, 3, 4]
+        ar.write_csv(frame1, path)
+        ar.write_csv(frame2, path, append=True)
+        
+        res = ar.to_pandas(ar.read_csv(path))
+        assert len(res) == 4
+        assert list(res["A"]) == [1, 2, 3, 4]
+        assert list(res["B"]) == ["x", "y", "z", "w"]
 
-    # Schema mismatch
-    frame3 = ar.from_pandas(pd.DataFrame({"A": [5], "C": ["diff"]}))
-    with pytest.raises(ValueError, match="Schema mismatch"):
-        ar.write_csv(frame3, path, append=True)
+    def test_append_schema_mismatch(self, tmp_path):
+        path = str(tmp_path / "test_schema_mismatch.csv")
+        frame1 = ar.from_pandas(pd.DataFrame({"A": [1, 2], "B": ["x", "y"]}))
+        frame3 = ar.from_pandas(pd.DataFrame({"A": [5], "C": ["diff"]}))
+        
+        ar.write_csv(frame1, path)
+        with pytest.raises(ValueError, match="Schema mismatch"):
+            ar.write_csv(frame3, path, append=True)
+
+    def test_append_missing_newline(self, tmp_path):
+        path = tmp_path / "test_missing_newline.csv"
+        path.write_bytes(b"A,B\n1,x\n2,y")  # No trailing newline
+        
+        frame2 = ar.from_pandas(pd.DataFrame({"A": [3], "B": ["z"]}))
+        with pytest.raises(ValueError, match="lacks a final line terminator"):
+            ar.write_csv(frame2, str(path), append=True)
+
+    def test_append_non_utf8(self, tmp_path):
+        path = str(tmp_path / "test_append_non_utf8.csv")
+        frame1 = ar.from_pandas(pd.DataFrame({"city": ["München"]}))
+        frame2 = ar.from_pandas(pd.DataFrame({"city": ["Zürich"]}))
+        
+        ar.write_csv(frame1, path, encoding="latin-1")
+        ar.write_csv(frame2, path, encoding="latin-1", append=True)
+        
+        res = ar.to_pandas(ar.read_csv(path, encoding="latin-1"))
+        assert len(res) == 2
+        assert list(res["city"]) == ["München", "Zürich"]
+
+    def test_append_false_overwrites(self, tmp_path):
+        path = str(tmp_path / "test_append_false.csv")
+        frame1 = ar.from_pandas(pd.DataFrame({"A": [1, 2]}))
+        frame2 = ar.from_pandas(pd.DataFrame({"A": [3, 4]}))
+        
+        ar.write_csv(frame1, path)
+        ar.write_csv(frame2, path, append=False)  # default is False
+        
+        res = ar.to_pandas(ar.read_csv(path))
+        assert len(res) == 2
+        assert list(res["A"]) == [3, 4]
