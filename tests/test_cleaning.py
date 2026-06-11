@@ -5479,6 +5479,30 @@ class TestFillNullsFloat64LocaleIndependent:
             )
             with pytest.raises(Exception):
                 ar.fill_nulls(frame, "inf", subset=["x"])
+                    def test_clean_edge_cases(self):
+        """Test clean() with no-op (all False) and drop_duplicates only flags."""
+        import pandas as pd
+        # 1. Setup input data with both nulls and duplicate rows
+        input_data = pd.DataFrame({
+            "A": [1, 1, None, 2],
+            "B": ["x", "x", "y", None]
+        })
+        
+        # 2. No-Op Case: All flags set to False
+        noop_output = clean(input_data, drop_nulls=False, drop_duplicates=False)
+        pd.testing.assert_frame_equal(noop_output, input_data)
+        
+        # 3. Flags-Only Case: Only drop_duplicates=True
+        dup_only_output = clean(input_data, drop_nulls=False, drop_duplicates=True)
+        
+        # Expected output drops row index 1 (the duplicate) but keeps the nulls
+        expected_output = pd.DataFrame({
+            "A": [1, None, 2],
+            "B": ["x", "y", None]
+        }).reset_index(drop=True)
+        
+        pd.testing.assert_frame_equal(dup_only_output.reset_index(drop=True), expected_output)
+
         finally:
             _locale.setlocale(_locale.LC_NUMERIC, prev)
 
