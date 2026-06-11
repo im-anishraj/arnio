@@ -2829,7 +2829,11 @@ def _is_safely_convertible_to_dtype(
             return True
 
         if expected_dtype == "float64":
-            pd.to_numeric(values, errors="raise")
+            parsed = pd.to_numeric(values, errors="raise")
+
+            if not np.isfinite(parsed.to_numpy()).all():
+                return False
+
             return True
 
     except Exception:
@@ -2863,7 +2867,9 @@ def _validate_column(
                     name,
                 )
             ):
-                message += f". Values appear safely convertible to '{field_def.dtype}'"
+                message += (
+                    f". Values appear safely convertible " f"to '{field_def.dtype}'"
+                )
 
             issues.append(
                 ValidationIssue(

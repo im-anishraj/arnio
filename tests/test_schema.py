@@ -60,6 +60,86 @@ def test_dtype_validation_reports_safe_float_conversion_for_numeric_strings():
     assert "safely convertible to 'float64'" in result.issues[0].message
 
 
+def test_dtype_validation_does_not_report_safe_float_conversion_for_inf():
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "score": pd.Series(
+                    ["inf", "2.0"],
+                    dtype="string",
+                )
+            }
+        )
+    )
+
+    schema = ar.Schema({"score": ar.Float64()})
+
+    result = ar.validate(frame, schema)
+
+    assert not result.passed
+    assert "safely convertible" not in result.issues[0].message
+
+
+def test_dtype_validation_does_not_report_safe_float_conversion_for_negative_inf():
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "score": pd.Series(
+                    ["-inf", "2.0"],
+                    dtype="string",
+                )
+            }
+        )
+    )
+
+    schema = ar.Schema({"score": ar.Float64()})
+
+    result = ar.validate(frame, schema)
+
+    assert not result.passed
+    assert "safely convertible" not in result.issues[0].message
+
+
+def test_dtype_validation_does_not_report_safe_float_conversion_for_infinity():
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "score": pd.Series(
+                    ["Infinity", "2.0"],
+                    dtype="string",
+                )
+            }
+        )
+    )
+
+    schema = ar.Schema({"score": ar.Float64()})
+
+    result = ar.validate(frame, schema)
+
+    assert not result.passed
+    assert "safely convertible" not in result.issues[0].message
+
+
+def test_dtype_validation_does_not_report_safe_float_conversion_for_mixed_finite_and_nonfinite():
+    frame = ar.from_pandas(
+        pd.DataFrame(
+            {
+                "score": pd.Series(
+                    ["2.0", "inf"],
+                    dtype="string",
+                )
+            }
+        )
+    )
+
+    schema = ar.Schema({"score": ar.Float64()})
+
+    result = ar.validate(frame, schema)
+
+    assert not result.passed
+    assert "safely convertible" not in result.issues[0].message
+
+
 def test_schema_validation_row_indexed_issues_respect_cap():
     frame = ar.from_pandas(
         pd.DataFrame(
