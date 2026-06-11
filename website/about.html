@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>About — Arnio</title>
+    <meta
+      name="description"
+      content="About Arnio: production data preparation with safe CSV ingestion, cleaning, quality profiling, schema contracts, and integration with pandas, Arrow, DuckDB, and scikit-learn."
+    />
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+    <link rel="stylesheet" href="css/variables.css?v=20260522" />
+    <link rel="stylesheet" href="css/base.css?v=20260522" />
+    <link rel="stylesheet" href="css/layout.css?v=20260522" />
+    <link rel="stylesheet" href="css/components.css?v=20260522" />
+    <link rel="stylesheet" href="css/pages.css?v=20260522" />
+    <script src="js/theme.js"></script>
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://arnio.vercel.app/about.html" />
+    <link rel="canonical" href="https://arnio.vercel.app/about.html" />
+    <meta property="og:title" content="About Arnio" />
+    <meta
+      property="og:description"
+      content="Learn how Arnio prepares messy data before analysis with safe ingestion, reusable cleaning primitives, schema contracts, and ecosystem fit."
+    />
+    <meta
+      property="og:image"
+      content="https://arnio.vercel.app/arnio-social-card.svg"
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta
+      name="twitter:title"
+      content="Arnio — Production Data Preparation for Python"
+    />
+    <meta
+      name="twitter:description"
+      content="Arnio combines a native C++ CSV engine with Python APIs for cleaning, quality profiling, and schema validation."
+    />
+    <meta
+      name="twitter:image"
+      content="https://arnio.vercel.app/arnio-social-card.svg"
+    />
+  </head>
+  <body>
+    <a href="#main-content" class="skip-link">Skip to content</a>
+    <nav class="top-nav" aria-label="Main navigation">
+      <div class="container container--wide">
+        <a href="index.html" class="nav-brand" aria-label="Arnio home"
+          ><img src="arnio-logo.svg" alt="Arnio" height="32"
+        /></a>
+        <ul class="nav-links">
+          <li><a href="docs.html">Docs</a></li>
+          <li><a href="api.html">API</a></li>
+          <li><a href="benchmarks.html">Benchmarks</a></li>
+          <li><a href="contributing.html">Contributing</a></li>
+          <li><a href="architecture.html">Architecture</a></li>
+          <li><a href="roadmap.html">Roadmap</a></li>
+          <li><a href="community.html">Community</a></li>
+          <li><a href="changelog.html">Changelog</a></li>
+          <li><a href="about.html">About Us</a></li>
+        </ul>
+        <div class="nav-actions">
+          <a
+            href="https://discord.gg/xsEw7r78M"
+            class="nav-discord"
+            target="_blank"
+            rel="noopener"
+            aria-label="Join Discord"
+            >Discord</a
+          >
+          <a
+            href="https://github.com/im-anishraj/arnio"
+            class="nav-github"
+            target="_blank"
+            rel="noopener"
+            aria-label="View on GitHub"
+            >GitHub</a
+          >
+          <button class="theme-toggle" aria-label="Toggle theme">Theme</button>
+          <button
+            class="nav-hamburger"
+            aria-label="Open menu"
+            aria-expanded="false"
+            aria-controls="mobile-navigation"
+          >
+            ☰
+          </button>
+        </div>
+      </div>
+    </nav>
+    <div
+      id="mobile-navigation"
+      class="mobile-menu"
+      aria-label="Mobile navigation"
+    >
+      <a href="index.html">Home</a><a href="docs.html">Documentation</a
+      ><a href="api.html">API Reference</a
+      ><a href="benchmarks.html">Benchmarks</a
+      ><a href="contributing.html">Contributing</a
+      ><a href="architecture.html">Architecture</a
+      ><a href="roadmap.html">Roadmap</a><a href="community.html">Community</a
+      ><a href="https://discord.gg/xsEw7r78M" target="_blank" rel="noopener"
+        >Discord</a
+      ><a href="changelog.html">Changelog</a><a href="about.html">About Us</a>
+    </div>
+
+    <main id="main-content">
+      <section class="hero">
+        <div class="container">
+          <img src="arnio-icon.svg" alt="" width="92" height="92" />
+          <h1>About Arnio</h1>
+          <p class="hero-subtitle">
+            A production-ready preparation layer for messy data that keeps
+            pandas, Arrow, DuckDB, and scikit-learn workflows safe and explicit.
+          </p>
+        </div>
+      </section>
+
+        <div class="container">
+          <h2>What is Arnio?</h2>
+          <p class="section-lede">
+            Arnio is a fast, safety-first library for preparing raw tabular data
+            before it reaches analysis or machine learning. It handles brittle
+            CSV and JSONL ingestion, applies reusable cleaning primitives,
+            profiles data quality, and validates schema contracts so downstream
+            tools can trust the input.
+          </p>
+          <div class="grid grid-3">
+            <div class="card">
+              <h3>Hardened ingestion</h3>
+              <p>
+                Fast C++ CSV reading with explicit encoding policy, delimiter
+                sniffing, chunked reads, and controlled bad-line handling.
+              </p>
+            </div>
+            <div class="card">
+              <h3>Reusable cleaning</h3>
+              <p>
+                Composable pipeline steps make it easy to standardize missing
+                values, strip whitespace, drop unwanted columns, and keep
+                transformations predictable.
+              </p>
+            </div>
+            <div class="card">
+              <h3>Contract validation</h3>
+              <p>
+                Schemas and quality reports catch malformed rows, invalid types,
+                and bad values before data is handed to pandas or production
+                workflows.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div class="container">
+          <h2>Design philosophy</h2>
+          <p class="section-lede">
+            Arnio is built around explicit contracts, safe I/O, and reusable
+            primitives. It was designed to prepare data safely at the boundary,
+            not to replace the analysis tools that come after it.
+          </p>
+          <div class="comparison-grid">
+            <div class="comparison-card comparison-old">
+              <div class="comparison-label">Built for</div>
+              <ul>
+                <li>fast C++-backed ingestion</li>
+                <li>reusable cleaning primitives</li>
+                <li>safe schema validation</li>
+                <li>operational quality reporting</li>
+              </ul>
+            </div>
+            <div class="comparison-card comparison-new">
+              <div class="comparison-label">Designed to</div>
+              <ul>
+                <li>make data preparation explicit</li>
+                <li>avoid silent pandas failures</li>
+                <li>surface data issues early</li>
+                <li>deliver clean data to the ecosystem</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="container">
+          <h2>How Arnio fits in the ecosystem</h2>
+          <p class="section-lede">
+            Arnio is a preparation layer for the Python data stack: it prepares
+            data for pandas, Arrow, DuckDB, and machine learning tooling without
+            pretending to replace them.
+          </p>
+          <div class="grid grid-3">
+            <div class="card">
+              <h3>Pandas</h3>
+              <p>
+                Use Arnio to prepare and validate data before analysis. Keep
+                pandas for exploration, modeling, and final transformations.
+              </p>
+            </div>
+            <div class="card">
+              <h3>Pandera</h3>
+              <p>
+                Arnio adds ingestion, data quality reports, and a contract-first
+                preparation layer. Pandera remains a strong choice for schema
+                validation inside pandas workflows.
+              </p>
+            </div>
+            <div class="card">
+              <h3>Great Expectations</h3>
+              <p>
+                Great Expectations is a validation and observability platform.
+                Arnio focuses on the ingestion and cleaning boundary, where raw
+                files become trustworthy inputs.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div class="container">
+          <h2>Maintainers & Community</h2>
+          <p class="section-lede">
+            Arnio is maintained in public on GitHub, with contributor support
+            through Discord and a transparent issue-driven process.
+          </p>
+          <div class="grid grid-3">
+            <article class="card">
+              <h3>Anish Raj</h3>
+              <p>
+                <a
+                  href="https://github.com/im-anishraj"
+                  target="_blank"
+                  rel="noopener"
+                  >@im-anishraj</a
+                ><br />Repository owner and maintainer. View GitHub profile
+                for contributions and activity.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Open contributors</h3>
+              <p>
+                <a
+                  href="https://github.com/im-anishraj/arnio/graphs/contributors"
+                  rel="noopener"
+                  target="_blank"
+                  >open-source contributors</a
+                ><br />
+                All community contributions are tracked and visible in the
+                GitHub contributor graph.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Community support</h3>
+              <p>
+                Join Discord for onboarding, quick questions, and collaboration.
+                Use GitHub issues for reproducible bugs, feature requests, and
+                tracked work.
+              </p>
+            </article>
+          </div>
+        </div>
+
+        <div class="container">
+          <h2>Project history</h2>
+          <p class="section-lede">
+            Arnio was created to address data preparation challenges. The
+            project focuses on making ingestion, cleaning, and validation
+            explicit and trustworthy.
+          </p>
+          <div class="grid grid-3">
+            <div class="card">
+              <h3>Founding goal</h3>
+              <p>
+                Prepare messy data before it reaches pandas, reducing silent
+                coercion, bad-line failures, and hidden errors.
+              </p>
+            </div>
+            <div class="card">
+              <h3>Early milestones</h3>
+              <p>
+                Added schema validation, <code>max_errors</code>, URL scheme checks, and
+                quality profiling to catch bad data before it becomes a
+                downstream problem.
+              </p>
+            </div>
+            <div class="card">
+              <h3>Current focus</h3>
+              <p>
+                Deliver safe interoperability, reproducible benchmarks, and
+                stable primitives for the Python data stack.
+              </p>
+            </div>
+          </div>
+        </div>
+
+      <section class="section">
+        <div class="container">
+          <h2>How to get involved</h2>
+          <p class="section-lede">
+            New contributors can start with the guide, ask help in Discord, and
+            open GitHub issues for work that should be tracked and reviewed.
+          </p>
+          <div class="grid grid-3">
+            <a href="contributing.html" class="quick-link-card"
+              ><div>
+                <h4 class="card-title">Contributing guide</h4>
+                <p>
+                  Read the workflow, local setup, testing expectations, and PR
+                  standards.
+                </p>
+              </div></a
+            >
+            <a
+              href="https://discord.gg/xsEw7r78M"
+              class="quick-link-card"
+              target="_blank"
+              rel="noopener"
+              ><div>
+                <h4 class="card-title">Discord</h4>
+                <p>
+                  Join for quick help, onboarding, and maintainer collaboration.
+                </p>
+              </div></a
+            >
+            <a
+              href="https://github.com/im-anishraj/arnio/issues"
+              class="quick-link-card"
+              target="_blank"
+              rel="noopener"
+              ><div>
+                <h4 class="card-title">GitHub issues</h4>
+                <p>
+                  Report bugs, suggest features, or claim contribution-ready
+                  work.
+                </p>
+              </div></a
+            >
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container">
+        <div class="footer-grid">
+          <div class="footer-brand">
+            <img
+              src="arnio-logo.svg"
+              alt="Arnio"
+              height="32"
+              loading="lazy"
+              decoding="async"
+            />
+            <p>
+              C++ accelerated data preparation for pandas and the Python data
+              stack.
+            </p>
+          </div>
+          <div>
+            <h4 class="footer-heading">Project</h4>
+            <ul class="footer-links">
+              <li><a href="docs.html">Docs</a></li>
+              <li><a href="api.html">API</a></li>
+              <li><a href="about.html">About</a></li>
+              <li><a href="changelog.html">Changelog</a></li>
+            </ul>
+          </div>
+          <div>
+            <h4 class="footer-heading">Engineering</h4>
+            <ul class="footer-links">
+              <li><a href="architecture.html">Architecture</a></li>
+              <li><a href="benchmarks.html">Benchmarks</a></li>
+              <li><a href="roadmap.html">Roadmap</a></li>
+            </ul>
+          </div>
+          <div>
+            <h4 class="footer-heading">Community</h4>
+            <ul class="footer-links">
+              <li><a href="contributing.html">Contributing</a></li>
+              <li><a href="community.html">Community</a></li>
+              <li class="footer-socials">
+                <a
+                  href="https://github.com/im-anishraj/arnio"
+                  target="_blank"
+                  rel="noopener"
+                  aria-label="GitHub"
+                >
+                  <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path
+                      d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61-.546-1.387-1.333-1.757-1.333-1.757-1.09-.745.082-.729.082-.729 1.205.084 1.84 1.237 1.84 1.237 1.07 1.834 2.807 1.304 3.492.997.108-.775.418-1.304.76-1.604-2.665-.305-5.467-1.332-5.467-5.93 0-1.31.467-2.382 1.235-3.222-.123-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.3 1.23A11.52 11.52 0 0112 6.844c1.02.005 2.045.138 3.003.404 2.29-1.552 3.296-1.23 3.296-1.23.654 1.653.242 2.874.12 3.176.77.84 1.233 1.911 1.233 3.222 0 4.61-2.807 5.623-5.48 5.921.43.37.814 1.102.814 2.222 0 1.606-.015 2.898-.015 3.293 0 .322.216.694.825.576C20.565 21.796 24 17.297 24 12c0-6.63-5.373-12-12-12z"
+                    />
+                  </svg>
+                </a>
+
+                <a
+                  href="https://www.linkedin.com/in/im-anishraj"
+                  target="_blank"
+                  rel="noopener"
+                  aria-label="LinkedIn"
+                >
+                  <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path
+                      d="M20.447 20.452H16.89V14.87c0-1.332-.026-3.045-1.854-3.045-1.854 0-2.137 1.447-2.137 2.946v5.68H9.343V9h3.414v1.561h.049c.476-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.063 2.063 0 11.001-4.126 2.063 2.063 0 01-.001 4.126zM7.119 20.452H3.556V9H7.12v11.452z"
+                    />
+                  </svg>
+                </a>
+              </li>
+            </ul>
+          </div>
+        </div>
+        <div class="footer-bottom">
+          <span>© 2026 Anish Raj. MIT License.</span
+          ><span>Latest release: v1.19.0</span>
+        </div>
+      </div>
+    </footer>
+    <script src="js/main.js" defer></script>
+    <script src="js/code.js" defer></script>
+    <script src="js/github.js" defer></script>
+  </body>
+</html>
