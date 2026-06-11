@@ -2,7 +2,6 @@ const searchInput = document.getElementById("docs-search");
 const resultsBox = document.getElementById("search-results");
 
 if (searchInput && resultsBox) {
-
   const searchIndex = [
     { title: "Installation", page: "docs.html#install" },
     { title: "Quickstart", page: "docs.html#quickstart" },
@@ -30,11 +29,22 @@ if (searchInput && resultsBox) {
 
   let selectedIndex = -1;
 
+  function closeResults() {
+    selectedIndex = -1;
+    resultsBox.classList.remove("show");
+
+    resultsBox
+      .querySelectorAll(".search-result.active")
+      .forEach((result) => {
+        result.classList.remove("active");
+      });
+  }
+
   function render(items) {
     resultsBox.innerHTML = "";
 
     if (!items.length) {
-      resultsBox.classList.remove("show");
+      closeResults();
       return;
     }
 
@@ -44,6 +54,7 @@ if (searchInput && resultsBox) {
       div.textContent = item.title;
 
       div.addEventListener("click", () => {
+        closeResults();
         window.location.href = item.page;
       });
 
@@ -57,11 +68,11 @@ if (searchInput && resultsBox) {
     const q = e.target.value.toLowerCase();
 
     if (!q) {
-      resultsBox.classList.remove("show");
+      closeResults();
       return;
     }
 
-    const matches = searchIndex.filter(item =>
+    const matches = searchIndex.filter((item) =>
       item.title.toLowerCase().includes(q)
     );
 
@@ -70,15 +81,18 @@ if (searchInput && resultsBox) {
   });
 
   document.addEventListener("keydown", (e) => {
-
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
       e.preventDefault();
       searchInput.focus();
     }
 
-    const results = [...document.querySelectorAll(".search-result")];
+    const results = [
+      ...resultsBox.querySelectorAll(".search-result")
+    ];
 
-    if (!results.length) return;
+    if (!resultsBox.classList.contains("show") || !results.length) {
+      return;
+    }
 
     if (e.key === "ArrowDown") {
       e.preventDefault();
@@ -91,18 +105,21 @@ if (searchInput && resultsBox) {
         (selectedIndex - 1 + results.length) % results.length;
     }
 
-    results.forEach(r => r.classList.remove("active"));
+    results.forEach((result) => {
+      result.classList.remove("active");
+    });
 
     if (selectedIndex >= 0) {
       results[selectedIndex].classList.add("active");
     }
 
     if (e.key === "Enter" && selectedIndex >= 0) {
+      e.preventDefault();
       results[selectedIndex].click();
     }
 
     if (e.key === "Escape") {
-      resultsBox.classList.remove("show");
+      closeResults();
     }
   });
 }
