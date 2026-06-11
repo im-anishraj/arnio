@@ -989,6 +989,7 @@ def test_named_column_reference_survives_add_column_reallocation():
     assert col.size() == 1
     assert col.at(0) == 1
 
+
 # ArFrame.describe() Tests
 
 
