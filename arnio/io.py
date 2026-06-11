@@ -1328,6 +1328,7 @@ def write_csv(
     frame: ArFrame,
     path: str | os.PathLike[str],
     *,
+    append: bool = False,
     delimiter: str = ",",
     write_header: bool = True,
     line_terminator: str = "\n",
@@ -1371,6 +1372,8 @@ def write_csv(
         If ``encoding`` is an unknown codec, ``encoding_errors`` is not one of
         ``"strict"``, ``"replace"``, or ``"ignore"``, or if a character cannot
         be encoded in the requested encoding with ``encoding_errors="strict"``.
+        Also raised if appending to a file that lacks a trailing newline, or
+        if appending with a schema that doesn't match the existing CSV.
     RuntimeError
         If the file cannot be opened or written.
 
@@ -1379,6 +1382,10 @@ def write_csv(
     >>> ar.write_csv(frame, "output.csv")
     >>> ar.write_csv(frame, "output.tsv", delimiter="\\t")
     >>> ar.write_csv(frame, "output_latin1.csv", encoding="latin-1")
+
+    Append to an existing file (headers are omitted if the file exists):
+
+    >>> ar.write_csv(new_frame, "output.csv", append=True)
     """
     if not isinstance(frame, ArFrame):
         raise TypeError("frame must be an ArFrame")
@@ -1410,11 +1417,45 @@ def write_csv(
     _validate_jsonl_encoding(encoding)
     _validate_encoding_errors(encoding_errors)
 
+    append = _validate_bool_option(append, "append")
+    file_exists = os.path.exists(path)
+    is_empty = file_exists and os.path.getsize(path) == 0
+
+    if append and file_exists and not is_empty:
+        with open(path, "rb") as f:
+            f.seek(-1, os.SEEK_END)
+            last_byte = f.read(1)
+            if last_byte not in (b"\n", b"\r"):
+                raise ValueError(
+                    "Cannot append to a CSV file that lacks a final line terminator."
+                )
+
+        try:
+            schema = scan_csv(
+                path,
+                delimiter=delimiter,
+                encoding=encoding,
+                encoding_errors=encoding_errors,
+            )
+        except Exception as e:
+            raise ValueError(
+                f"Could not scan existing CSV to validate schema: {e}"
+            ) from e
+
+        existing_cols = list(schema.keys())
+        if existing_cols != frame.columns:
+            raise ValueError(
+                f"Schema mismatch: Cannot append to {path}. "
+                f"Expected columns {existing_cols}, got {frame.columns}."
+            )
+        write_header = False
+
     config = _CsvWriteConfig()
     config.delimiter = delimiter
     config.write_header = _validate_bool_option(write_header, "write_header")
     config.line_terminator = line_terminator
     config.escape_formulas = _validate_bool_option(escape_formulas, "escape_formulas")
+    config.append = append
 
     writer = _CsvWriter(config)
 
@@ -1449,13 +1490,21 @@ def write_csv(
             )
             os.close(output_fd)
 
+            if append and file_exists and not is_empty:
+                import shutil
+
+                shutil.copy2(path, output_tmp_path)
+                mode = "a"
+            else:
+                mode = "w"
+
             # newline="" on both sides preserves the line_terminator written by
             # the C++ backend exactly — no platform newline translation.
             with (
                 open(tmp_path, encoding="utf-8", newline="") as src,
                 open(
                     output_tmp_path,
-                    "w",
+                    mode,
                     encoding=encoding,
                     errors=encoding_errors,
                     newline="",
