@@ -7,9 +7,9 @@ A technical reference guide to the public classes and functions within the **Arn
 | Category              | Components                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | :-------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Core Class**        | [**`ArFrame`**](#arframe), Properties: [`shape`](#shape), [`columns`](#columns), [`dtypes`](#dtypes), [`is_empty`](#is_empty), Methods: [`memory_usage`](#memory_usage), [`preview`](#preview), [`select_columns`](#select_columns), [`select_dtypes`](#select_dtypes)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| **I/O** | [`read_csv`](#read_csv), [`scan_csv`](#scan_csv), [`write_csv`](#write_csv), [`write_json`](#write_json), [`write_jsonl`](#write_jsonl), [`sniff_delimiter`](#sniff_delimiter)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| **Cleaning**          | [`cast_types`](#cast_types), [`clean`](#clean), [`clip_numeric`](#clip_numeric), [`combine_columns`](#combine_columns), [`drop_columns`](#drop_columns), [`drop_constant_columns`](#drop_constant_columns), [`drop_duplicates`](#drop_duplicates), [`drop_nulls`](#drop_nulls), [`fill_nulls`](#fill_nulls), [`filter_rows`](#filter_rows), [`keep_rows_with_nulls`](#keep_rows_with_nulls), [`normalize_case`](#normalize_case), [`normalize_unicode`](#normalize_unicode), [`rename_columns`](#rename_columns), [`replace_values`](#replace_values), [`round_numeric_columns`](#round_numeric_columns), [`safe_divide_columns`](#safe_divide_columns), [`strip_whitespace`](#strip_whitespace), [`trim_column_names`](#trim_column_names), [`validate_columns_exist`](#validate_columns_exist) |
-| **Conversion**        | [`from_pandas`](#from_pandas), [`to_pandas`](#to_pandas)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| **I/O**               | [`read_csv`](#read_csv), [`read_csv_chunked`](#read_csv_chunked), [`scan_csv`](#scan_csv), [`read_jsonl`](#read_jsonl), [`read_jsonl_chunked`](#read_jsonl_chunked), [`write_csv`](#write_csv), [`write_json`](#write_json), [`write_jsonl`](#write_jsonl), [`read_parquet`](#read_parquet), [`write_parquet`](#write_parquet), [`sniff_delimiter`](#sniff_delimiter)                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| **Cleaning**          | [`cast_types`](#cast_types), [`clean`](#clean), [`clip_numeric`](#clip_numeric), [`combine_columns`](#combine_columns), [`drop_columns`](#drop_columns), [`drop_constant_columns`](#drop_constant_columns), [`drop_duplicates`](#drop_duplicates), [`drop_nulls`](#drop_nulls), [`fill_nulls`](#fill_nulls), [`filter_rows`](#filter_rows), [`keep_rows_with_nulls`](#keep_rows_with_nulls), [`normalize_case`](#normalize_case), [`normalize_unicode`](#normalize_unicode), [`rename_columns`](#rename_columns), [`replace_values`](#replace_values), [`round_numeric_columns`](#round_numeric_columns), [`safe_divide_columns`](#safe_divide_columns), [`strip_whitespace`](#strip_whitespace), [`trim_column_names`](#trim_column_names), [`validate_columns_exist`](#validate_columns_exist), [`encode_categorical`](#encode_categorical) |
+| **Conversion**        | [`from_dict`](#from_dict), [`from_records`](#from_records), [`from_pandas`](#from_pandas), [`to_pandas`](#to_pandas), [`to_arrow`](#to_arrow), [`from_polars`](#from_polars), [`to_polars`](#to_polars)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | **Integration**       | [`ArnioPandasAccessor`](#arniopandasaccessor)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | **Pipeline**          | [`pipeline`](#pipeline), [`register_step`](#register_step)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | **Data Quality**      | [`profile`](#profile) • [`suggest_cleaning`](#suggest_cleaning) • [`auto_clean`](#auto_clean) • [`check_quality_gates`](#check_quality_gates) • [`DataQualityReport`](#dataqualityreport) • [`ColumnProfile`](#columnprofile)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
@@ -62,6 +62,38 @@ Loads a CSV, TSV, or TXT file into an `ArFrame`.
 df = ar.read_csv("data.csv")
 ```
 
+### read_csv_chunked
+
+Read a CSV-like file in chunks and yield `ArFrame` objects. It supports the
+same parser controls as `read_csv`, including explicit dtypes, column
+selection, null tokens, decimal and thousands separators, and malformed-row
+handling.
+
+```python
+for chunk in ar.read_csv_chunked("large.csv", chunksize=50_000):
+    process(chunk)
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `path` | `str \| os.PathLike[str] \| TextIOBase` | required | Source CSV-like path or text file-like object |
+| `chunksize` | `int` | `10000` | Maximum rows per yielded chunk |
+| `dtype` | `dict[str, str] \| None` | `None` | Optional per-column dtype mapping |
+| `delimiter` | `str \| None` | `None` | Field delimiter; inferred for TSV paths when omitted |
+| `has_header` | `bool` | `True` | Whether the first row contains column names |
+| `usecols` | `list[str] \| None` | `None` | Optional column subset |
+| `nrows` | `int \| None` | `None` | Maximum number of rows to read |
+| `skip_rows` / `skiprows` | `int` / `int \| None` | `0` / `None` | Rows to skip before parsing data |
+| `encoding` | `str` | `"utf-8"` | Input file encoding |
+| `trim_headers` | `bool` | `True` | Strip leading/trailing whitespace from headers |
+| `decimal_separator` | `str` | `"."` | Decimal separator for numeric parsing |
+| `thousands_separator` | `str \| None` | `None` | Grouping separator for numeric parsing |
+| `null_values` | `list[str] \| None` | `None` | Extra tokens to treat as null |
+| `mode` | `str` | `"strict"` | Parser mode: `"strict"` or `"permissive"` |
+| `on_bad_lines` | `str` | `"error"` | Malformed-row policy: `"error"`, `"warn"`, or `"skip"` |
+
+**Returns:** `Iterator[ArFrame]`
+
 ### scan_csv
 
 Return schema (column names + inferred types) without loading data.
@@ -69,6 +101,44 @@ Return schema (column names + inferred types) without loading data.
 ```python
 schema = ar.scan_csv("large_dataset.csv")
 ```
+
+### read_jsonl
+
+Read JSON Lines (`.jsonl`) or NDJSON (`.ndjson`) into an `ArFrame`.
+Each non-blank line must be a JSON object.
+
+```python
+frame = ar.read_jsonl("events.jsonl", encoding="utf-8")
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `path` | `str \| os.PathLike[str]` | required | Source `.jsonl` or `.ndjson` file |
+| `encoding` | `str` | `"utf-8"` | Input file encoding |
+| `encoding_errors` | `str` | `"strict"` | Decode error policy: `"strict"`, `"replace"`, or `"ignore"` |
+| `nrows` | `int \| None` | `None` | Maximum number of records to read |
+
+**Returns:** `ArFrame`
+
+### read_jsonl_chunked
+
+Stream JSON Lines or NDJSON records as `ArFrame` chunks without loading the
+entire file.
+
+```python
+for chunk in ar.read_jsonl_chunked("events.jsonl", chunksize=10_000):
+    process(chunk)
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `path` | `str \| os.PathLike[str]` | required | Source `.jsonl` or `.ndjson` file |
+| `chunksize` | `int` | `10000` | Maximum records per yielded chunk |
+| `encoding` | `str` | `"utf-8"` | Input file encoding |
+| `encoding_errors` | `str` | `"strict"` | Decode error policy: `"strict"`, `"replace"`, or `"ignore"` |
+| `nrows` | `int \| None` | `None` | Maximum number of records to read |
+
+**Returns:** `Iterator[ArFrame]`
 
 ### write_csv
 
@@ -176,6 +246,42 @@ ar.write_jsonl(frame, "output.jsonl")
 
 ar.write_jsonl(frame, "output.ndjson", encoding="utf-8")
 ```
+
+### read_parquet
+
+Read a Parquet file into an `ArFrame` through the optional `pyarrow`
+dependency. Install with `pip install arnio[parquet]`.
+
+```python
+frame = ar.read_parquet("data.parquet", usecols=["id", "amount"])
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `path` | `str \| os.PathLike[str]` | required | Source `.parquet` or `.pq` file |
+| `columns` | `list[str] \| None` | `None` | PyArrow-style column subset |
+| `usecols` | `list[str] \| None` | `None` | Arnio-style column subset; cannot be combined with `columns` |
+
+**Returns:** `ArFrame`
+
+### write_parquet
+
+Write an `ArFrame` to Parquet through the optional `pyarrow` dependency.
+Install with `pip install arnio[parquet]`.
+
+```python
+ar.write_parquet(frame, "clean.parquet", compression="zstd")
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `frame` | `ArFrame` | required | The data frame to write |
+| `path` | `str \| os.PathLike[str]` | required | Destination `.parquet` or `.pq` path |
+| `compression` | `str` | `"snappy"` | One of `"snappy"`, `"gzip"`, `"brotli"`, `"zstd"`, or `"none"` |
+| `row_group_size` | `int \| None` | `None` | Optional Parquet row group size |
+| `preserve_attrs` | `bool` | `True` | Store JSON-serializable pandas `DataFrame.attrs` metadata |
+
+**Returns:** `None`
 
 
 ### sniff_delimiter
@@ -394,7 +500,61 @@ Fail early when required columns are missing.
 df = ar.validate_columns_exist(df, ["age"])
 ```
 
+### encode_categorical
+
+Encode string columns for machine learning workflows using one-hot or ordinal
+encoding.
+
+```python
+encoded = ar.encode_categorical(frame, ["color"])
+
+ordinal = ar.encode_categorical(
+    frame,
+    ["size"],
+    method="ordinal",
+    ordinal_mappings={"size": {"S": 0, "M": 1, "L": 2}},
+)
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `frame` | `ArFrame` | required | Input frame |
+| `columns` | `Sequence[str]` | required | String columns to encode |
+| `method` | `str` | `"one_hot"` | Encoding mode: `"one_hot"` or `"ordinal"` |
+| `ordinal_mappings` | `Mapping[str, Mapping[str, int]] \| None` | `None` | Required mapping for ordinal encoding |
+
+**Returns:** `ArFrame`
+
 ---
+
+### from_dict
+
+Build an `ArFrame` from a dictionary of column names to same-length lists.
+
+```python
+frame = ar.from_dict({"id": [1, 2], "name": ["Alice", "Bob"]})
+```
+
+**Returns:** `ArFrame`
+
+### from_records
+
+Build an `ArFrame` from a non-empty list of dictionaries, lists, or tuples.
+Pass `columns` when records are list-like.
+
+```python
+frame = ar.from_records([
+    {"id": 1, "name": "Alice"},
+    {"id": 2, "name": "Bob"},
+])
+
+frame = ar.from_records(
+    [[1, "Alice"], [2, "Bob"]],
+    columns=["id", "name"],
+)
+```
+
+**Returns:** `ArFrame`
 
 ### from_pandas
 
@@ -412,6 +572,39 @@ pdf = pd.DataFrame(data)
 af = ar.from_pandas(pdf)
 df = ar.to_pandas(af)
 ```
+
+### to_arrow
+
+Convert an `ArFrame` to a `pyarrow.Table`. Arrow support is optional; install
+with `pip install arnio[arrow]`.
+
+```python
+table = ar.to_arrow(frame)
+```
+
+**Returns:** `pyarrow.Table`
+
+### from_polars
+
+Convert a Polars `DataFrame` to an `ArFrame`. Polars support is optional;
+install with `pip install arnio[polars]`.
+
+```python
+frame = ar.from_polars(polars_df)
+```
+
+**Returns:** `ArFrame`
+
+### to_polars
+
+Convert an `ArFrame` to a Polars `DataFrame`. Polars support is optional;
+install with `pip install arnio[polars]`.
+
+```python
+polars_df = ar.to_polars(frame)
+```
+
+**Returns:** `polars.DataFrame`
 
 ---
 
