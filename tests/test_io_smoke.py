@@ -1,4 +1,5 @@
 import pandas as pd
+from arnio import frame
 import pytest
 
 # Only skip the module when the package or its native extension is missing.
@@ -90,4 +91,121 @@ def test_on_bad_lines_error_raises(self, tmp_path):
             csv_path,
             mode="permissive",
             on_bad_lines="error",
+        )
+
+def test_on_bad_lines_warn_long_row(self, tmp_path):
+            csv_path = tmp_path / "warn_long.csv"
+            csv_path.write_text(
+            "name,age\n"
+            "Alice,30\n"
+            "Bob,25,extra\n"
+            )
+
+            frame = ar.read_csv(
+            csv_path,
+            mode="permissive",
+            on_bad_lines="warn",
+            )
+
+            df = ar.to_pandas(frame)
+
+            assert frame.shape == (2, 2)
+            assert df["name"].tolist() == ["Alice", "Bob"]
+            assert df["age"].tolist() == [30, 25]
+
+def test_on_bad_lines_warn_short_row(self, tmp_path):
+        csv_path = tmp_path / "warn_short.csv"
+
+        csv_path.write_text(
+        "name,age\n"
+        "Alice,30\n"
+        "Charlie\n"
+        )
+
+        frame = ar.read_csv(
+        csv_path,
+        mode="permissive",
+        on_bad_lines="warn",
+        )
+
+        df = ar.to_pandas(frame)
+
+        assert frame.shape == (2, 2)
+        assert df["name"].tolist() == ["Alice", "Charlie"]
+        assert pd.isna(df["age"].iloc[1])
+
+def test_on_bad_lines_skip_long_row(self, tmp_path):
+
+    csv_path = tmp_path / "skip_long.csv"
+
+    csv_path.write_text(
+        "name,age\n"
+        "Alice,30\n"
+        "Bob,25,extra\n"
+        )
+
+    frame = ar.read_csv(
+        csv_path,
+        mode="permissive",
+        on_bad_lines="skip",
+        )
+
+    df = ar.to_pandas(frame)
+
+    assert frame.shape == (1, 2)
+    assert df["name"].tolist() == ["Alice"]
+
+
+def test_on_bad_lines_skip_short_row(self, tmp_path):
+
+    csv_path = tmp_path / "skip_short.csv"
+
+    csv_path.write_text(
+        "name,age\n"
+        "Alice,30\n"
+        "Charlie\n"
+        )
+
+    frame = ar.read_csv(
+        csv_path,
+        mode="permissive",
+        on_bad_lines="skip",
+        )
+
+    df = ar.to_pandas(frame)
+
+    assert frame.shape == (1, 2)
+    assert df["name"].tolist() == ["Alice"]
+
+def test_on_bad_lines_error_long_row(self, tmp_path):
+
+    csv_path = tmp_path / "error_long.csv"
+
+    csv_path.write_text(
+        "name,age\n"
+        "Alice,30\n"
+        "Bob,25,extra\n"
+        )
+
+    with pytest.raises(RuntimeError, match="expected 2"):
+        ar.read_csv(
+        csv_path,
+        mode="permissive",
+        on_bad_lines="error",
+        )
+
+
+def test_on_bad_lines_error_short_row(self, tmp_path):
+    csv_path = tmp_path / "error_short.csv"
+    csv_path.write_text(
+        "name,age\n"
+        "Alice,30\n"
+        "Charlie\n"
+        )
+
+    with pytest.raises(RuntimeError, match="expected 2"):
+        ar.read_csv(
+        csv_path,
+        mode="permissive",
+        on_bad_lines="error",
         )
