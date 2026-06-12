@@ -1326,6 +1326,20 @@ def test_astype_rejects_object_dtype_aliases(invalid_dtype):
         frame.astype(invalid_dtype)
 
 
+def test_astype_rejects_object_dtype_in_mapping():
+    frame = ar.ArFrame.from_records([{"a": 1}, {"a": 2}])
+
+    with pytest.raises(TypeError, match="dtype must"):
+        frame.astype({"a": object})
+
+
+def test_astype_rejects_object_string_dtype_in_mapping():
+    frame = ar.ArFrame.from_records([{"a": 1}, {"a": 2}])
+
+    with pytest.raises(TypeError, match="dtype must"):
+        frame.astype({"a": "object"})
+
+
 # ── drop_columns ──────────────────────────────────────────────────────────────
 
 
