@@ -8,6 +8,7 @@
 #include "arnio/column.h"
 #include "arnio/csv_reader.h"
 #include "arnio/csv_writer.h"
+#include "arnio/encode_categorical.h"
 #include "arnio/frame.h"
 #include "arnio/types.h"
 
@@ -153,13 +154,12 @@ PYBIND11_MODULE(_arnio_cpp, m) {
         .def("memory_usage", &Frame::memory_usage)
         .def("has_column", &Frame::has_column)
         .def(
-            "column_by_index",
-            [](const Frame& f, size_t idx) -> const Column& { return f.column(idx); },
-            py::return_value_policy::reference_internal)
+            "column_by_index", [](const Frame& f, size_t idx) { return f.column(idx); },
+            py::return_value_policy::copy)
         .def(
             "column_by_name",
-            [](const Frame& f, const std::string& name) -> const Column& { return f.column(name); },
-            py::return_value_policy::reference_internal)
+            [](const Frame& f, const std::string& name) { return f.column(name); },
+            py::return_value_policy::copy)
         .def("add_column", &Frame::add_column)
         .def("clone", &Frame::clone)
         .def("describe",
@@ -181,6 +181,15 @@ PYBIND11_MODULE(_arnio_cpp, m) {
             [](py::dict cols_dict, py::dict dtype_hints, py::object row_count_obj) {
                 Frame frame =
                     row_count_obj.is_none() ? Frame() : Frame(row_count_obj.cast<size_t>());
+
+                // Extract the row count once so we can pre-allocate each column's
+                // internal vectors before the push_back loop.  This eliminates the
+                // O(log N) heap-reallocation cascade that occurs when vectors grow
+                // from zero capacity.
+                std::optional<size_t> row_count;
+                if (!row_count_obj.is_none()) {
+                    row_count = row_count_obj.cast<size_t>();
+                }
 
                 for (auto item : cols_dict) {
                     std::string name = py::cast<std::string>(item.first);
@@ -211,6 +220,13 @@ PYBIND11_MODULE(_arnio_cpp, m) {
                     }
 
                     Column col(name, dtype);
+
+                    // Pre-allocate to the known row count to avoid repeated
+                    // vector growth reallocations during the push_back loop below.
+                    if (row_count.has_value()) {
+                        col.reserve(*row_count);
+                    }
+
                     for (auto val : values) {
                         if (val.is_none()) {
                             col.push_null();
@@ -320,7 +336,8 @@ PYBIND11_MODULE(_arnio_cpp, m) {
         .def(py::init<>())
         .def_readwrite("delimiter", &CsvWriteConfig::delimiter)
         .def_readwrite("write_header", &CsvWriteConfig::write_header)
-        .def_readwrite("line_terminator", &CsvWriteConfig::line_terminator);
+        .def_readwrite("line_terminator", &CsvWriteConfig::line_terminator)
+        .def_readwrite("escape_formulas", &CsvWriteConfig::escape_formulas);
 
     py::class_<CsvWriter>(m, "CsvWriter")
         .def(py::init<const CsvWriteConfig&>(), py::arg("config") = CsvWriteConfig{})
@@ -383,8 +400,40 @@ PYBIND11_MODULE(_arnio_cpp, m) {
 
     m.def("rename_columns", &rename_columns, py::arg("frame"), py::arg("mapping"));
 
-    m.def("cast_types", &cast_types, py::arg("frame"), py::arg("mapping"),
-          py::arg("coerce_invalid") = false);
+    m.def(
+        "cast_types",
+        [](const Frame& frame, const std::unordered_map<std::string, std::string>& mapping,
+           const std::string& errors) {
+            CastErrors mode;
+            if (errors == "raise") {
+                mode = CastErrors::kRaise;
+            } else if (errors == "coerce") {
+                mode = CastErrors::kCoerce;
+            } else if (errors == "report") {
+                mode = CastErrors::kReport;
+            } else {
+                throw std::invalid_argument(
+                    "errors must be 'raise', 'coerce', or 'report', got: '" + errors + "'");
+            }
+            CastResult result;
+            {
+                py::gil_scoped_release release;
+                result = cast_types(frame, mapping, mode);
+            }
+            // Build a list of plain dicts so the Python layer can wrap them
+            // into whatever public type it chooses (CastReport, dataclass, etc.)
+            py::list failures_list;
+            for (const auto& f : result.failures) {
+                py::dict d;
+                d["column"] = f.column;
+                d["row"] = f.row;
+                d["value"] = f.value;
+                d["target_dtype"] = f.target_dtype;
+                failures_list.append(d);
+            }
+            return py::make_tuple(std::move(result.frame), failures_list);
+        },
+        py::arg("frame"), py::arg("mapping"), py::arg("errors") = std::string("raise"));
 
     m.def(
         "clip_numeric",
@@ -413,4 +462,37 @@ PYBIND11_MODULE(_arnio_cpp, m) {
         },
         py::arg("frame"), py::arg("numerator"), py::arg("denominator"), py::arg("output_column"),
         py::arg("fill_value") = 0.0);
+
+    // ── encode_categorical bindings ──────────────────────────────────────────────
+    // Add this #include at the top of bind_arnio.cpp with the other headers:
+    //   #include "arnio/encode_categorical.h"
+    //
+    // Then paste the two m.def blocks below just before the closing `}` of
+    // PYBIND11_MODULE(_arnio_cpp, m) { ... }
+
+    m.def(
+        "encode_one_hot_native",
+        [](const Frame& frame, const std::vector<std::string>& column_names) {
+            Frame result;
+            {
+                py::gil_scoped_release release;
+                result = encode_one_hot_native(frame, column_names);
+            }
+            return result;
+        },
+        py::arg("frame"), py::arg("column_names"));
+
+    m.def(
+        "encode_ordinal_native",
+        [](const Frame& frame, const std::vector<std::string>& column_names,
+           const std::unordered_map<std::string, std::unordered_map<std::string, int64_t>>&
+               ordinal_mappings) {
+            Frame result;
+            {
+                py::gil_scoped_release release;
+                result = encode_ordinal_native(frame, column_names, ordinal_mappings);
+            }
+            return result;
+        },
+        py::arg("frame"), py::arg("column_names"), py::arg("ordinal_mappings"));
 }

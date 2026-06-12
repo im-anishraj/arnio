@@ -47,13 +47,29 @@ std::string CsvWriter::quote_field(const std::string& field) const {
     return result;
 }
 
+std::string CsvWriter::escape_formula_field(const std::string& field) const {
+    if (!config_.escape_formulas || field.empty()) return field;
+
+    switch (field.front()) {
+        case '=':
+        case '+':
+        case '-':
+        case '@':
+        case '\t':
+        case '\r':
+            return "'" + field;
+        default:
+            return field;
+    }
+}
+
 std::string CsvWriter::cell_to_string(const Frame& frame, size_t row, size_t col) const {
     const auto& column = frame.column(col);
     if (column.is_null(row)) return "";
 
     auto cell = column.at(row);
     if (std::holds_alternative<std::string>(cell)) {
-        return quote_field(std::get<std::string>(cell));
+        return quote_field(escape_formula_field(std::get<std::string>(cell)));
     }
     if (std::holds_alternative<int64_t>(cell)) {
         return std::to_string(std::get<int64_t>(cell));

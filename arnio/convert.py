@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import copy as copylib
 import decimal
+import json
 import math
 from typing import TYPE_CHECKING, Any
 
@@ -303,35 +304,52 @@ def to_arrow(frame: ArFrame) -> pa.Table:
 
     if cpp_frame.num_cols() == 0:
         empty = pd.DataFrame(index=pd.RangeIndex(cpp_frame.num_rows()))
-        return pa.Table.from_pandas(empty)
+        table = pa.Table.from_pandas(empty)
+    else:
+        for i in range(cpp_frame.num_cols()):
+            col = cpp_frame.column_by_index(i)
+            name = col.name()
+            dtype = col.dtype()
+            mask = col.get_null_mask()
 
-    for i in range(cpp_frame.num_cols()):
-        col = cpp_frame.column_by_index(i)
-        name = col.name()
-        dtype = col.dtype()
-        mask = col.get_null_mask()
+            if dtype == _DType.INT64:
+                arr = col.to_numpy_int()
+                pa_arr = pa.array(arr, mask=mask, type=pa.int64())
+            elif dtype == _DType.FLOAT64:
+                arr = col.to_numpy_float()
+                pa_arr = pa.array(arr, mask=mask, type=pa.float64())
+            elif dtype == _DType.BOOL:
+                arr = col.to_numpy_bool()
+                pa_arr = pa.array(arr, mask=mask, type=pa.bool_())
+            else:
+                values = col.to_python_list()
+                pa_arr = pa.array(values, type=pa.string())
 
-        if dtype == _DType.INT64:
-            arr = col.to_numpy_int()
-            pa_arr = pa.array(arr, mask=mask, type=pa.int64())
-        elif dtype == _DType.FLOAT64:
-            arr = col.to_numpy_float()
-            pa_arr = pa.array(arr, mask=mask, type=pa.float64())
-        elif dtype == _DType.BOOL:
-            arr = col.to_numpy_bool()
-            pa_arr = pa.array(arr, mask=mask, type=pa.bool_())
-        else:
-            values = col.to_python_list()
-            pa_arr = pa.array(values, type=pa.string())
+            arrays.append(pa_arr)
+            names.append(name)
 
-        arrays.append(pa_arr)
-        names.append(name)
+        table = pa.Table.from_arrays(arrays, names=names)
 
-    return pa.Table.from_arrays(arrays, names=names)
+    if frame._attrs:
+        try:
+            attrs_json = json.dumps(frame._attrs)
+        except TypeError as e:
+            raise TypeError(
+                "to_arrow() only supports JSON-serializable attrs metadata"
+            ) from e
+
+        metadata = dict(table.schema.metadata or {})
+        metadata[b"arnio.attrs"] = attrs_json.encode("utf-8")
+
+        table = table.replace_schema_metadata(metadata)
+
+    return table
 
 
 def _pandas_dtype_to_arnio(dtype: object) -> _DType | None:
     if dtype == pd.Int64Dtype():
+        return _DType.INT64
+    if str(dtype) == "int64":
         return _DType.INT64
     if dtype == pd.Float64Dtype():
         return _DType.FLOAT64
@@ -451,8 +469,6 @@ def _from_arrow_table(table: pa.Table) -> ArFrame:
             "Install it with: pip install arnio[arrow]"
         ) from exc
 
-    import pyarrow as pa_mod
-
     _ARROW_INT_TYPES = frozenset(
         [
             "int8",
@@ -529,6 +545,41 @@ def _from_arrow_table(table: pa.Table) -> ArFrame:
 
     cpp_frame = _Frame.from_dict(columns, dtype_hints, table.num_rows)
     return ArFrame(cpp_frame)
+
+
+def from_arrow(table: pa.Table) -> ArFrame:
+    """Convert a PyArrow Table to an ArFrame.
+
+    This function provides a direct, pandas-free Arrow import path.
+
+    Parameters
+    ----------
+    table : pyarrow.Table
+        Input PyArrow table.
+
+    Returns
+    -------
+    ArFrame
+        Equivalent ArFrame with inferred types and null values preserved.
+
+    Raises
+    ------
+    ImportError
+        If pyarrow is not installed.
+    TypeError
+        If the input is not a PyArrow Table.
+    """
+    try:
+        import pyarrow as pa
+    except ImportError as exc:
+        raise ImportError(
+            "pyarrow is not installed. Please install it with 'pip install arnio[arrow]'"
+        ) from exc
+
+    if not isinstance(table, pa.Table):
+        raise TypeError(f"Expected a PyArrow Table, but got {type(table).__name__}")
+
+    return _from_arrow_table(table)
 
 
 def from_polars(df: object) -> ArFrame:

@@ -17,8 +17,11 @@ test-quick: ## Run tests without coverage (fast, pass/fail only)
 	pytest tests/ -v
 
 lint: ## Check linting
-	ruff check .
-	black --check .
+	python scripts/check_docs_utf8.py
+	black --check --diff .
+	ruff check . --extend-exclude "*.ipynb"
+	mypy --config-file mypy.ini
+	find cpp/ bindings/ -type f \( -name '*.cpp' -o -name '*.h' \) | xargs clang-format --dry-run --Werror
 
 format: ## Format code
 	black .
