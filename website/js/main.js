@@ -96,6 +96,48 @@
         }
       });
     });
+    // ── Scroll-to-top button ───────────────────────────────────
+  const scrollTopBtn = document.createElement('button');
+
+  scrollTopBtn.className = 'scroll-top-btn';
+  scrollTopBtn.type = 'button';
+  scrollTopBtn.setAttribute('aria-label', 'Scroll to top');
+
+  scrollTopBtn.innerHTML = '↑';
+
+  document.body.appendChild(scrollTopBtn);
+
+  const threshold = 300;
+  let scrollBtnTicking = false;
+
+  function updateScrollTopButton() {
+    if (window.scrollY > threshold) {
+      scrollTopBtn.classList.add('visible');
+    } else {
+      scrollTopBtn.classList.remove('visible');
+    }
+  }
+  
+  window.addEventListener('scroll', function () {
+    if (!scrollBtnTicking) {
+      window.requestAnimationFrame(function () {
+        updateScrollTopButton();
+        scrollBtnTicking = false;
+      });
+
+      scrollBtnTicking = true;
+    }
+  });
+
+  scrollTopBtn.addEventListener('click', function () {
+    const prefersReducedMotion =
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    window.scrollTo({
+      top: 0,
+      behavior: prefersReducedMotion ? 'auto' : 'smooth'
+    });
+  });
 
     // Scroll reveal for landing page feature cards
     const featureList = document.querySelector('[data-scroll-reveal]');
