@@ -112,10 +112,9 @@
 frame = ar.read_csv(
     "sales.csv",
     dtype={"id": "string"},
-    encoding_errors="replace",
 )
 
-report = ar.profile(frame, exclude_columns=["internal_notes"])
+report = ar.profile(frame)
 clean, explanation = ar.auto_clean(frame, mode="safe", explain=True)
 
 schema = ar.Schema({

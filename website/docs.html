@@ -107,7 +107,7 @@ result = ar.validate(clean, schema, max_errors=50)</code></pre></div>
             <tr><td><code>mode</code></td><td>Control CSV parsing behavior for strict or relaxed ingestion workflows.</td></tr>
             <tr><td><code>decimal_separator</code></td><td>Parse locale-specific decimal characters such as comma decimals.</td></tr>
             <tr><td><code>dtype</code></td><td>Force selected columns to supported Arnio dtypes.</td></tr>
-            <tr><td><code>encoding_errors</code></td><td>Choose <code>strict</code>, <code>replace</code>, or <code>ignore</code> for decode failures.</td></tr>
+            <tr><td><code>encoding_errors</code> <span class="badge badge-unreleased">Unreleased</span></td><td>Choose <code>strict</code>, <code>replace</code>, or <code>ignore</code> for decode failures.</td></tr>
             <tr><td><code>on_bad_lines</code></td><td>Use <code>error</code>, <code>warn</code>, or <code>skip</code> for malformed row widths.</td></tr>
           </tbody>
         </table>
@@ -123,7 +123,7 @@ result = ar.validate(clean, schema, max_errors=50)</code></pre></div>
     decimal_separator=".",
     dtype={"order_id": "string"},
     mode="strict",
-    encoding_errors="replace",
+    encoding_errors="replace",  # Unreleased
 )</code></pre></div>
 <div class="callout callout-info"><p class="callout-title">Note</p><p><code>on_bad_lines</code> defaults to <code>"error"</code> for malformed rows. Use <code>"warn"</code> to log issues without failing, or <code>"skip"</code> to skip them silently.</p></div>
 
@@ -167,10 +167,10 @@ payload = frame.to_dict()</code></pre></div>
 
         <h2 id="quality">Quality Reports</h2>
         <p>The quality engine is now more than a summary. It supports privacy-aware exports, HTML/Markdown/Pandas output, near-constant and high-cardinality warnings, drift comparison, and CI gates.</p>
-        <div class="code-block"><div class="code-block-header">Python</div><pre><code class="language-python">report = ar.profile(frame, exclude_columns=["private_notes"])
+        <div class="code-block"><div class="code-block-header">Python</div><pre><code class="language-python">report = ar.profile(frame, exclude_columns=["private_notes"])  # exclude_columns is unreleased
 report.to_markdown()
 report.to_html("quality.html")
-report.to_dict(exclude_columns=["private_notes"])
+report.to_dict(exclude_columns=["private_notes"])  # Unreleased
 report.to_json()
 
 baseline = ar.profile(old_frame)
