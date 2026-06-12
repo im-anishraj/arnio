@@ -697,8 +697,22 @@ class DataQualityReport:
                 raise TypeError(
                     f"file_path must be a string, bytes, or os.PathLike object, got {type(file_path).__name__}"
                 )
-            if file_path == "":
+
+            # Normalize the input path to handle strings, bytes, and os.PathLike objects uniformly
+            norm_path = os.fspath(file_path)
+
+            # Reject empty string and empty bytes paths explicitly
+            if norm_path == "" or norm_path == b"":
                 raise ValueError("file_path must not be empty")
+
+            # Reject paths that point to a directory instead of a file
+            if os.path.isdir(norm_path):
+                raise ValueError("file_path must point to a file, not a directory")
+
+            # Reject missing parent directories without breaking simple relative filenames
+            parent_dir = os.path.dirname(norm_path)
+            if parent_dir and not os.path.exists(parent_dir):
+                raise ValueError("parent directory does not exist")
 
         redact_top_values = _validate_bool_option(
             redact_top_values, "redact_top_values"
@@ -729,7 +743,7 @@ class DataQualityReport:
             exclude_columns=validated_exclude,
         )
         if file_path is not None:
-            with open(file_path, "w", encoding="utf-8") as f:
+            with open(norm_path, "w", encoding="utf-8") as f:
                 f.write(html_out)
 
         if output is None:
