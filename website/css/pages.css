@@ -4,82 +4,134 @@
 
 /* ── HERO (Home) ─────────────────────────────────────────── */
 .hero {
-  padding: var(--space-24) 0 var(--space-16);
-  background: var(--color-navy);
-  color: #e6edf3;
+  position: relative;
+  overflow: hidden;
+  padding: 8rem 0 6rem;
+  background: linear-gradient(135deg, #071421 0%, #0d1b2a 100%);
+  color: #ffffff;
   text-align: center;
+}
+.hero .container {
+  position: relative;
+  z-index: 2;
 }
 
 .hero h1 {
+  font-size: clamp(2.8rem, 6vw, 5rem);
+  line-height: 1.08;
+  font-weight: 800;
+  max-width: 980px;
+  margin: 0 auto 1.5rem;
+  
   color: #ffffff;
-  font-size: var(--font-size-4xl);
-  max-width: 800px;
-  margin: 0 auto var(--space-6);
-  letter-spacing: var(--letter-spacing-tight);
 }
-
 .hero-subtitle {
-  font-size: var(--font-size-lg);
-  color: #8b949e;
-  max-width: 600px;
-  margin: 0 auto var(--space-8);
-  line-height: var(--line-height-relaxed);
+  font-size: clamp(1rem, 2vw, 1.35rem);
+  line-height: 1.8;
+  color: #aab6c5;
+  max-width: 760px;
+  margin: 0 auto 3rem;
 }
 
 .hero-actions {
   display: flex;
-  align-items: center;
   justify-content: center;
-  gap: var(--space-4);
-  margin-bottom: var(--space-8);
+  align-items: center;
+  gap: 1.2rem;
   flex-wrap: wrap;
+  margin-bottom: 2.5rem;
 }
 
+.hero-actions .btn {
+  min-width: 210px;
+  min-height: 60px;
+  border-radius: 18px;
+  font-size: 1rem;
+  font-weight: 600;
+  transition: all 0.28s ease;
+  backdrop-filter: blur(10px);
+  
+}
+
+.hero-actions .btn:hover {
+  background: linear-gradient(135deg, #2563eb, #3b82f6);
+  border-color: #3b82f6;
+  color: #ffffff;
+  transform: translateY(-4px);
+  box-shadow: 0 12px 28px rgba(37, 99, 235, 0.35);
+}
+.hero .btn-primary {
+  background: linear-gradient(135deg, #2563eb, #3b82f6);
+  border: none;
+  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.35);
+}
+
+.hero .btn-primary:hover {
+  background: linear-gradient(135deg, #1d4ed8, #2563eb);
+}
+
+.hero .btn-secondary {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.14);
+  color: #ffffff;
+}
+
+.hero .btn-secondary:hover {
+  background: linear-gradient(135deg, #2563eb, #3b82f6) !important;
+  border-color: #3b82f6 !important;
+  color: #ffffff !important;
+  box-shadow: 0 12px 28px rgba(37, 99, 235, 0.35);
+  transform: translateY(-4px);
+}
 .hero-install {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-3);
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: var(--radius-md);
-  padding: var(--space-3) var(--space-5);
+  gap: 1rem;
+  padding: 1rem 1.5rem;
+  border-radius: 20px;
+  margin-top: 0.5rem;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12);
+  backdrop-filter: blur(14px);
+  color: #f8fafc;
   font-family: var(--font-mono);
-  font-size: var(--font-size-sm);
-  color: #e6edf3;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  margin-top: var(--space-4);
+  transition: all 0.25s ease;
+
 }
 
 .hero-install:hover {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.2);
+  transform: translateY(-3px);
+  background: rgba(255,255,255,0.09);
+  border-color: rgba(255,255,255,0.22);
 }
 
 .hero-install .dollar {
-  color: #8b949e;
-  user-select: none;
+  color: #60a5fa;
+  font-weight: bold;
 }
 
 .hero-install .copy-hint {
-  color: #484f58;
-  font-size: var(--font-size-xs);
+  color: #94a3b8;
+  font-size: 0.8rem;
   margin-left: var(--space-2);
 }
 
 /* Hero badges row */
 .hero-badges {
   display: flex;
-  align-items: center;
   justify-content: center;
-  gap: var(--space-3);
+  align-items: center;
+  gap: 0.9rem;
   flex-wrap: wrap;
-  margin-top: var(--space-6);
+  margin-top: 2.5rem;
 }
 
 .hero-badges img {
-  display: inline-block;
-  height: 22px;
+  height: 24px;
+  transition: transform 0.2s ease;
+}
+.hero-badges img:hover {
+  transform: scale(1.05);
 }
 
 /* GitHub Star/Fork Badges */
@@ -125,16 +177,39 @@
   color: #58a6ff;
 }
 
-@media (max-width: 767px) {
+@media (max-width: 768px) {
   .hero {
-    padding: var(--space-16) 0 var(--space-10);
+    padding: 6rem 0 4rem;
   }
+
   .hero h1 {
-    font-size: var(--font-size-2xl);
+    font-size: 2.5rem;
+    line-height: 1.15;
   }
+
   .hero-subtitle {
-    font-size: var(--font-size-base);
+    font-size: 1rem;
+    line-height: 1.7;
+    padding: 0 0.5rem;
   }
+
+  .hero-actions {
+    flex-direction: column;
+    width: 100%;
+  }
+  .hero-actions .btn {
+    width: 100%;
+    max-width: 320px;
+  }
+
+  .hero-install {
+    width: 100%;
+    max-width: 95%;
+    justify-content: center;
+    overflow-x: auto;
+    font-size: 0.85rem;
+  }
+
 }
 
 /* Hero button overrides — visible on dark navy background */
