@@ -2553,6 +2553,53 @@ def coalesce_columns(
     return from_pandas(df) if is_arframe else df
 
 
+
+def _sanitize_column_name(name: str) -> str:
+    """Remove leading/trailing underscores and collapse consecutive underscores."""
+    import re
+
+    name = name.strip("_")
+    name = re.sub(r"__+", "_", name)
+    return name
+
+
+def sanitize_column_names(frame: ArFrame) -> ArFrame:
+    """Remove consecutive underscores and trim leading/trailing underscores from column names.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input data frame.
+
+    Returns
+    -------
+    ArFrame
+        New frame with sanitized column names.
+
+    Raises
+    ------
+    ValueError
+        If sanitization would create duplicate column names.
+    """
+    frame, _ = _validate_frame(frame)
+    sanitized = [_sanitize_column_name(col) for col in frame.columns]
+
+    if len(sanitized) != len(set(sanitized)):
+        raise ValueError(
+            f"Sanitizing column names would create duplicates: {sanitized}"
+        )
+
+    mapping = {
+        original: updated
+        for original, updated in zip(frame.columns, sanitized)
+        if original != updated
+    }
+    if mapping:
+        result = _rename_columns(frame._frame, mapping)
+        return ArFrame(result)
+    return frame
+
+
 def clean_column_names(
     frame: ArFrame,
     *,
