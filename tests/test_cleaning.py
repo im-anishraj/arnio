@@ -9,7 +9,11 @@ import pytest
 
 import arnio as ar
 from arnio import from_pandas, to_pandas
-from arnio.cleaning import _validate_column_sequence, _validate_string_mapping
+from arnio.cleaning import (
+    _is_null_mapping_key,
+    _validate_column_sequence,
+    _validate_string_mapping,
+)
 
 
 class TestDropNulls:
@@ -5603,3 +5607,36 @@ class TestHashColumns:
         assert df_after["email"].iloc[0] == df_before["email"].iloc[0]
         assert df_after["user_id"].iloc[0] == df_before["user_id"].iloc[0]
         assert pd.isna(df_after["email"].iloc[1]) == pd.isna(df_before["email"].iloc[1])
+
+
+class TestIsNullMappingKey:
+    """Tests for arnio.cleaning._is_null_mapping_key helper."""
+
+    def test_none_is_null_key(self):
+        assert _is_null_mapping_key(None) is True
+
+    def test_pd_na_is_null_key(self):
+        assert _is_null_mapping_key(pd.NA) is True
+
+    def test_numpy_nan_is_null_key(self):
+        assert _is_null_mapping_key(np.nan) is True
+
+    def test_tuple_is_not_null_key(self):
+        assert _is_null_mapping_key(("a", "b")) is False
+
+    def test_list_is_not_null_key(self):
+        assert _is_null_mapping_key(["a", "b"]) is False
+
+    def test_dict_is_not_null_key(self):
+        assert _is_null_mapping_key({"a": 1}) is False
+
+    def test_string_is_not_null_key(self):
+        assert _is_null_mapping_key("key") is False
+
+    def test_numeric_is_not_null_key(self):
+        assert _is_null_mapping_key(42) is False
+        assert _is_null_mapping_key(3.14) is False
+
+    def test_bool_is_not_null_key(self):
+        assert _is_null_mapping_key(True) is False
+        assert _is_null_mapping_key(False) is False
