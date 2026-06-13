@@ -185,6 +185,7 @@ __all__ = [
     "parse_bool_strings",
     "normalize_case",
     "rename_columns",
+    "rename_columns_matching",
     "round_numeric_columns",
     "cast_types",
     "CastFailure",

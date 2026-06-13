@@ -26,6 +26,7 @@ struct CsvConfig {
     std::optional<char> thousands_separator = std::nullopt;
     std::optional<size_t> sample_size = std::nullopt;
     std::optional<std::vector<std::string>> null_values = std::nullopt;
+    std::optional<char> comment_char = std::nullopt;
     std::string mode = "strict";
     std::string encoding_errors = "strict";
 };
@@ -51,6 +52,7 @@ class CsvParser {
     std::vector<std::string> parse_line(const std::string& line) const;
     void parse_line(const std::string& line, std::vector<std::string>& out_fields) const;
     bool is_null_sentinel(const std::string& value) const;
+    bool is_comment_line(const std::string& record) const;
     DType infer_type(const std::string& value) const;
     static DType promote_type(DType current, DType incoming);
     CellValue parse_value(const std::string& raw, DType dtype, bool is_forced = false) const;

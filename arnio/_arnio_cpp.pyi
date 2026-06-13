@@ -106,6 +106,7 @@ class CsvConfig:
     decimal_separator: str
     mode: str
     null_values: list[str] | None
+    comment_char: str | None
     usecols: list[str] | None
     nrows: int | None
     skip_rows: int | None

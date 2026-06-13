@@ -683,6 +683,14 @@ bool CsvParser::is_null_sentinel(const std::string& value) const {
     return value.empty();
 }
 
+bool CsvParser::is_comment_line(const std::string& record) const {
+    if (!config_.comment_char.has_value()) return false;
+    char comment = config_.comment_char.value();
+    auto it = std::find_if(record.begin(), record.end(),
+                           [](unsigned char ch) { return !std::isspace(ch); });
+    return it != record.end() && *it == comment;
+}
+
 DType CsvParser::infer_type(const std::string& value) const {
     const std::string sanitized = handle_utf8_errors(value, config_.encoding_errors);
     if (is_null_sentinel(sanitized)) return DType::NULL_TYPE;
@@ -838,14 +846,24 @@ CsvParseResult CsvReader::read(const std::string& path, const std::string& on_ba
             size_t to_skip = config.skip_rows.value();
             size_t skipped = 0;
             while (skipped < to_skip && record_reader.read(line, line_number)) {
+                if (parser_.is_comment_line(line)) continue;
                 ++record_number;
                 ++skipped;
             }
         }
 
         // Read header
-        if (config.has_header && record_reader.read(line, line_number)) {
-            ++record_number;
+        if (config.has_header) {
+            bool header_found = false;
+            while (record_reader.read(line, line_number)) {
+                if (parser_.is_comment_line(line)) continue;
+                header_found = true;
+                ++record_number;
+                break;
+            }
+            if (!header_found) {
+                return CsvParseResult{Frame(std::vector<Column>{}), std::move(bad_rows)};
+            }
             strip_utf8_bom(line);
             header = parser_.parse_line(line);
             for (auto& h : header) {
@@ -876,6 +894,8 @@ CsvParseResult CsvReader::read(const std::string& path, const std::string& on_ba
         }
 
         while (inference_pass_ran && record_reader.read(line, line_number)) {
+            if (parser_.is_comment_line(line)) continue;
+
             ++record_number;
 
             if (config.nrows.has_value() && (row_count + bad_rows.size()) >= config.nrows.value()) {
@@ -981,13 +1001,18 @@ CsvParseResult CsvReader::read(const std::string& path, const std::string& on_ba
             size_t to_skip = config.skip_rows.value();
             size_t skipped = 0;
             while (skipped < to_skip && record_reader2.read(line2, line_number2)) {
+                if (parser_.is_comment_line(line2)) continue;
                 ++record_number2;
                 ++skipped;
             }
         }
 
-        if (config.has_header && record_reader2.read(line2, line_number2)) {
-            ++record_number2;
+        if (config.has_header) {
+            while (record_reader2.read(line2, line_number2)) {
+                if (parser_.is_comment_line(line2)) continue;
+                ++record_number2;
+                break;
+            }
         }
 
         std::optional<size_t> expected_cols2 =
@@ -1000,6 +1025,7 @@ CsvParseResult CsvReader::read(const std::string& path, const std::string& on_ba
         }
 
         while (record_reader2.read(line2, line_number2)) {
+            if (parser_.is_comment_line(line2)) continue;
             ++record_number2;
 
             if (config.nrows.has_value() && (row_count2 + bad_row_count2) >= config.nrows.value()) {
@@ -1072,10 +1098,15 @@ CsvReader::scan_schema(const std::string& path, const std::string& on_bad_lines)
 
     std::vector<std::string> first_row;
 
-    if (record_reader.read(line)) {
-        strip_utf8_bom(line);
-
-        if (config.has_header) {
+    if (config.has_header) {
+        bool found_header = false;
+        while (record_reader.read(line)) {
+            if (parser_.is_comment_line(line)) continue;
+            found_header = true;
+            break;
+        }
+        if (found_header) {
+            strip_utf8_bom(line);
             header = parser_.parse_line(line);
 
             for (auto& h : header) {
@@ -1087,7 +1118,15 @@ CsvReader::scan_schema(const std::string& path, const std::string& on_bad_lines)
             }
 
             validate_header(header);
-        } else {
+        }
+    } else {
+        bool found_data = false;
+        while (record_reader.read(line)) {
+            if (parser_.is_comment_line(line)) continue;
+            found_data = true;
+            break;
+        }
+        if (found_data) {
             first_row = parser_.parse_line(line);
 
             header.reserve(first_row.size());
@@ -1120,6 +1159,7 @@ CsvReader::scan_schema(const std::string& path, const std::string& on_bad_lines)
     size_t record_number = 1;
 
     while (record_reader.read(line)) {
+        if (parser_.is_comment_line(line)) continue;
         if (sample_count >= max_samples) {
             break;
         }
@@ -1194,6 +1234,7 @@ bool CsvChunkReader::read_one_data_row(std::vector<std::string>& fields_out,
     const CsvConfig& config = parser_.config();
     std::string line;
     while (record_reader_->read(line)) {
+        if (parser_.is_comment_line(line)) continue;
         ++record_number_;
 
         if (line.empty()) {
@@ -1311,19 +1352,27 @@ void CsvChunkReader::open(const std::string& path) {
     expected_cols_ = std::nullopt;
 
     std::string line;
-    if (config.has_header && record_reader_->read(line)) {
-        ++record_number_;
-        strip_utf8_bom(line);
-        header_ = parser_.parse_line(line);
-        for (auto& h : header_) {
-            if (config.trim_headers) trim_in_place(h);
+    if (config.has_header) {
+        bool found_header = false;
+        while (record_reader_->read(line)) {
+            if (parser_.is_comment_line(line)) continue;
+            found_header = true;
+            break;
         }
-        validate_header(header_);
-        expected_cols_ = header_.size();
-        resolve_col_indices();
-        col_types_.assign(header_.size(), DType::NULL_TYPE);
-        auto dtype_result = apply_explicit_dtypes(config, header_, col_indices_, col_types_);
-        explicit_dtype_columns_ = std::move(dtype_result.explicit_columns);
+        if (found_header) {
+            ++record_number_;
+            strip_utf8_bom(line);
+            header_ = parser_.parse_line(line);
+            for (auto& h : header_) {
+                if (config.trim_headers) trim_in_place(h);
+            }
+            validate_header(header_);
+            expected_cols_ = header_.size();
+            resolve_col_indices();
+            col_types_.assign(header_.size(), DType::NULL_TYPE);
+            auto dtype_result = apply_explicit_dtypes(config, header_, col_indices_, col_types_);
+            explicit_dtype_columns_ = std::move(dtype_result.explicit_columns);
+        }
     }
 
     const size_t skip_target = config.skip_rows.value_or(0);

@@ -3088,6 +3088,174 @@ def test_read_csv_chunked_text_stream_encoding_override():
     assert pandas_df["col2"][0] == "café"
 
 
+class TestCommentChar:
+    """Tests for the comment character feature in CSV parsing."""
+
+    def test_comment_lines_skipped(self, tmp_path):
+        csv_path = tmp_path / "comments.csv"
+        csv_path.write_text(
+            "# This is a comment\nname,age\nAlice,30\n# Another comment\nBob,25\n"
+        )
+        frame = ar.read_csv(csv_path, comment="#")
+        assert frame.shape == (2, 2)
+        df = ar.to_pandas(frame)
+        assert df["name"].tolist() == ["Alice", "Bob"]
+        assert df["age"].tolist() == [30, 25]
+
+    def test_comment_with_leading_whitespace(self, tmp_path):
+        csv_path = tmp_path / "ws_comment.csv"
+        csv_path.write_text("  # indented comment\nname,age\nAlice,30\n")
+        frame = ar.read_csv(csv_path, comment="#")
+        assert frame.shape == (1, 2)
+
+    def test_comment_with_tab_whitespace(self, tmp_path):
+        csv_path = tmp_path / "tab_comment.csv"
+        csv_path.write_text("\t# tab-indented comment\nname,age\nAlice,30\n")
+        frame = ar.read_csv(csv_path, comment="#")
+        assert frame.shape == (1, 2)
+
+    def test_comment_char_inside_quotes_not_treated_as_comment(self, tmp_path):
+        csv_path = tmp_path / "quoted_hash.csv"
+        csv_path.write_text(
+            'name,note\nAlice,"# not a comment"\nBob,"value # with hash"\n'
+        )
+        frame = ar.read_csv(csv_path, comment="#")
+        assert frame.shape == (2, 2)
+        df = ar.to_pandas(frame)
+        assert df["note"].iloc[0] == "# not a comment"
+        assert df["note"].iloc[1] == "value # with hash"
+
+    def test_default_behavior_unchanged(self, tmp_path):
+        csv_path = tmp_path / "no_comment.csv"
+        csv_path.write_text("#hello,world\n1,2\n")
+        frame = ar.read_csv(csv_path)
+        assert frame.shape == (1, 2)
+        assert frame.columns == ["#hello", "world"]
+
+    def test_comment_scan_csv(self, tmp_path):
+        csv_path = tmp_path / "scan_comments.csv"
+        csv_path.write_text("# comment\nname,age\nAlice,30\n")
+        schema = ar.scan_csv(csv_path, comment="#")
+        assert schema == {"name": "string", "age": "int64"}
+
+    def test_comment_read_csv_chunked(self, tmp_path):
+        csv_path = tmp_path / "chunked_comments.csv"
+        csv_path.write_text(
+            "# this is a comment\nname,age\nAlice,30\n# another comment\nBob,25\n"
+        )
+        chunks = list(ar.read_csv_chunked(csv_path, chunksize=1, comment="#"))
+        assert len(chunks) == 2
+        df0 = ar.to_pandas(chunks[0])
+        df1 = ar.to_pandas(chunks[1])
+        assert df0["name"].iloc[0] == "Alice"
+        assert df1["name"].iloc[0] == "Bob"
+
+    def test_comment_with_empty_lines(self, tmp_path):
+        csv_path = tmp_path / "empty_and_comments.csv"
+        csv_path.write_text("# comment\nname,age\n\nAlice,30\n\n")
+        frame = ar.read_csv(csv_path, comment="#")
+        assert frame.shape == (1, 2)
+
+    def test_comment_with_nrows(self, tmp_path):
+        csv_path = tmp_path / "nrows_comments.csv"
+        csv_path.write_text(
+            "# comment\nname,age\nAlice,30\n# skip\nBob,25\nCharlie,35\n"
+        )
+        frame = ar.read_csv(csv_path, comment="#", nrows=2)
+        assert frame.shape == (2, 2)
+        df = ar.to_pandas(frame)
+        assert df["name"].tolist() == ["Alice", "Bob"]
+
+    def test_different_comment_characters(self, tmp_path):
+        csv_path = tmp_path / "percent_comments.csv"
+        csv_path.write_text("% comment\nname,age\nAlice,30\n% another\nBob,25\n")
+        frame = ar.read_csv(csv_path, comment="%")
+        assert frame.shape == (2, 2)
+
+    def test_invalid_comment_multiple_chars(self, tmp_path):
+        with pytest.raises(ValueError, match="single character"):
+            ar.read_csv("dummy.csv", comment="##")
+
+    def test_invalid_comment_newline(self, tmp_path):
+        with pytest.raises(ValueError, match="comment character must not"):
+            ar.read_csv("dummy.csv", comment="\n")
+
+    def test_invalid_comment_type(self, tmp_path):
+        with pytest.raises(TypeError, match="comment must be a string"):
+            ar.read_csv("dummy.csv", comment=123)
+
+    def test_comment_lines_not_counted_in_record_numbering(self, tmp_path):
+        csv_path = tmp_path / "record_numbers.csv"
+        csv_path.write_text("# comment\nname,age\nAlice,30\n# comment\nBob,25\n")
+        frame = ar.read_csv(csv_path, comment="#")
+        assert frame.shape == (2, 2)
+
+    def test_comment_with_no_header(self, tmp_path):
+        csv_path = tmp_path / "no_header_comments.csv"
+        csv_path.write_text("# comment\n1,Alice\n2,Bob\n")
+        frame = ar.read_csv(csv_path, has_header=False, comment="#")
+        assert frame.shape == (2, 2)
+        df = ar.to_pandas(frame)
+        assert df["col_0"].tolist() == [1, 2]
+        assert df["col_1"].tolist() == ["Alice", "Bob"]
+
+    def test_comment_with_skiprows(self, tmp_path):
+        csv_path = tmp_path / "skiprows_comments.csv"
+        csv_path.write_text("preamble\n# comment\nname,age\nAlice,30\nBob,25\n")
+        frame = ar.read_csv(csv_path, skiprows=1, comment="#")
+        assert frame.shape == (2, 2)
+        df = ar.to_pandas(frame)
+        assert df["name"].tolist() == ["Alice", "Bob"]
+
+    def test_comment_only_file(self, tmp_path):
+        csv_path = tmp_path / "all_comments.csv"
+        csv_path.write_text("# comment 1\n# comment 2\n# comment 3\n")
+        frame = ar.read_csv(csv_path, comment="#")
+        assert frame.shape == (0, 0)
+        assert frame.columns == []
+        assert len(frame) == 0
+
+    def test_comment_scan_csv_excludes_comments_from_schema(self, tmp_path):
+        csv_path = tmp_path / "scan_comments_schema.csv"
+        csv_path.write_text("# comment\nname,age\n# another\nAlice,30\n")
+        schema = ar.scan_csv(csv_path, comment="#")
+        assert schema == {"name": "string", "age": "int64"}
+
+    def test_comment_scan_csv_no_header_skips_comments(self, tmp_path):
+        csv_path = tmp_path / "scan_no_header_comments.csv"
+        csv_path.write_text("# comment\n1,2\n3,4\n")
+        schema = ar.scan_csv(csv_path, has_header=False, comment="#")
+        assert schema == {"col_0": "int64", "col_1": "int64"}
+
+    def test_comment_scan_csv_no_header_all_comments(self, tmp_path):
+        csv_path = tmp_path / "scan_no_header_all_comments.csv"
+        csv_path.write_text("# comment 1\n# comment 2\n")
+        schema = ar.scan_csv(csv_path, has_header=False, comment="#")
+        assert schema == {}
+
+    def test_comment_scan_csv_all_comments_returns_empty(self, tmp_path):
+        csv_path = tmp_path / "scan_all_comments.csv"
+        csv_path.write_text("# comment 1\n# comment 2\n")
+        schema = ar.scan_csv(csv_path, comment="#")
+        assert schema == {}
+
+    def test_comment_read_csv_no_header_skips_comments(self, tmp_path):
+        csv_path = tmp_path / "read_no_header_comments.csv"
+        csv_path.write_text("# comment\n1,Alice\n2,Bob\n")
+        frame = ar.read_csv(csv_path, has_header=False, comment="#")
+        assert frame.shape == (2, 2)
+        df = ar.to_pandas(frame)
+        assert df["col_0"].tolist() == [1, 2]
+        assert df["col_1"].tolist() == ["Alice", "Bob"]
+
+    def test_comment_read_csv_all_comments_returns_empty_frame(self, tmp_path):
+        csv_path = tmp_path / "read_all_comments.csv"
+        csv_path.write_text("# comment 1\n# comment 2\n")
+        frame = ar.read_csv(csv_path, comment="#")
+        assert frame.shape == (0, 0)
+        assert frame.columns == []
+
+
 # --- Tests for scan_csv file-like input support (issue #1842) ---
 
 
