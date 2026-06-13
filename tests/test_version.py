@@ -25,9 +25,9 @@ def test_version_matches_pyproject_pattern():
     from arnio._version import __version__
 
     pattern = r"^\d+\.\d+\.\d+"
-    assert re.match(pattern, __version__), (
-        f"Version '{__version__}' does not match expected pattern"
-    )
+    assert re.match(
+        pattern, __version__
+    ), f"Version '{__version__}' does not match expected pattern"
 
 
 def test_resolve_version_returns_string():
