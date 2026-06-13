@@ -20,6 +20,10 @@ from arnio.quality import (
     QUALITY_REPORT_COLUMNS,
     CleaningSuggestion,
     DataQualityReport,
+    _clean_scalar,
+    _is_numeric_dtype,
+    _markdown_cell,
+    _ratio,
     _validate_gate_bool,
     _validate_gate_ratio_threshold,
     _validate_gate_threshold,
@@ -5067,3 +5071,75 @@ def test_score_breakdown_with_real_values():
     for key in expected_keys:
         assert key in result, f"Missing key: {key}"
         assert isinstance(result[key], (int, float)), f"{key} must be numeric"
+
+
+class TestCleanScalar:
+    """Tests for arnio.quality._clean_scalar helper."""
+
+    def test_none_returns_none(self):
+        assert _clean_scalar(None) is None
+
+    def test_pd_na_returns_none(self):
+        assert _clean_scalar(pd.NA) is None
+
+    def test_float_nan_returns_none(self):
+        assert _clean_scalar(float("nan")) is None
+
+    def test_regular_int_returns_int(self):
+        assert _clean_scalar(42) == 42
+
+    def test_regular_float_returns_float(self):
+        assert _clean_scalar(3.14) == 3.14
+
+    def test_string_returns_string(self):
+        assert _clean_scalar("hello") == "hello"
+
+
+class TestRatio:
+    """Tests for arnio.quality._ratio helper."""
+
+    def test_ratio_calculates_correctly(self):
+        assert _ratio(1, 4) == 0.25
+
+    def test_ratio_handles_zero_total(self):
+        assert _ratio(5, 0) == 0.0
+
+    def test_ratio_rounds_to_six_decimals(self):
+        result = _ratio(1, 3)
+        assert result == round(1 / 3, 6)
+
+
+class TestIsNumericDtype:
+    """Tests for arnio.quality._is_numeric_dtype helper."""
+
+    def test_int64_is_numeric(self):
+        assert _is_numeric_dtype("int64") is True
+
+    def test_float64_is_numeric(self):
+        assert _is_numeric_dtype("float64") is True
+
+    def test_string_is_not_numeric(self):
+        assert _is_numeric_dtype("string") is False
+
+    def test_bool_is_not_numeric(self):
+        assert _is_numeric_dtype("bool") is False
+
+
+class TestMarkdownCell:
+    """Tests for arnio.quality._markdown_cell helper."""
+
+    def test_none_returns_dash(self):
+        assert _markdown_cell(None) == "-"
+
+    def test_regular_value_returns_string(self):
+        assert _markdown_cell("hello") == "hello"
+
+    def test_pipe_escaped(self):
+        assert _markdown_cell("a|b") == "a\\|b"
+
+    def test_newline_converted_to_br(self):
+        assert _markdown_cell("a\nb") == "a<br>b"
+
+    def test_backslash_escaped(self):
+        result = _markdown_cell("a\\b")
+        assert "\\\\" in result or result == "a\\\\b"
