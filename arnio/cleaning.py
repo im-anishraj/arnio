@@ -2553,7 +2553,6 @@ def coalesce_columns(
     return from_pandas(df) if is_arframe else df
 
 
-
 def _sanitize_column_name(name: str) -> str:
     """Remove leading/trailing underscores and collapse consecutive underscores."""
     import re
