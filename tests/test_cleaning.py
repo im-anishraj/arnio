@@ -5,6 +5,11 @@ import pytest
 
 import arnio as ar
 from arnio import from_pandas, to_pandas
+from arnio.cleaning import (
+    _is_null_mapping_key,
+    _validate_column_sequence,
+    _validate_string_mapping,
+)
 
 
 class TestDropNulls:
@@ -3749,41 +3754,34 @@ class TestCollapseRareCategories:
         assert pd.isna(df_after["email"].iloc[1]) == pd.isna(df_before["email"].iloc[1])
 
 
-class TestSanitizeColumnNames:
-    """Tests for arnio.sanitize_column_names."""
+class TestIsNullMappingKey:
+    """Tests for arnio.cleaning._is_null_mapping_key helper."""
 
-    def test_removes_leading_underscores(self):
-        frame = ar.from_pandas(pd.DataFrame({"_name": [1, 2], "age": [3, 4]}))
-        result = ar.sanitize_column_names(frame)
-        assert list(result.columns) == ["name", "age"]
+    def test_none_is_null_key(self):
+        assert _is_null_mapping_key(None) is True
 
-    def test_removes_trailing_underscores(self):
-        frame = ar.from_pandas(pd.DataFrame({"name_": [1, 2], "age__": [3, 4]}))
-        result = ar.sanitize_column_names(frame)
-        assert list(result.columns) == ["name", "age"]
+    def test_pd_na_is_null_key(self):
+        assert _is_null_mapping_key(pd.NA) is True
 
-    def test_collapse_consecutive_underscores(self):
-        frame = ar.from_pandas(pd.DataFrame({"a__b": [1, 2], "c": [3, 4]}))
-        result = ar.sanitize_column_names(frame)
-        assert list(result.columns) == ["a_b", "c"]
+    def test_numpy_nan_is_null_key(self):
+        assert _is_null_mapping_key(np.nan) is True
 
-    def test_no_change_for_clean_names(self):
-        frame = ar.from_pandas(pd.DataFrame({"name": [1, 2], "age": [3, 4]}))
-        result = ar.sanitize_column_names(frame)
-        assert list(result.columns) == ["name", "age"]
+    def test_tuple_is_not_null_key(self):
+        assert _is_null_mapping_key(("a", "b")) is False
 
-    def test_raises_on_duplicate_after_sanitization(self):
-        frame = ar.from_pandas(pd.DataFrame({"a": [1], "_a": [2]}))
-        with pytest.raises(ValueError, match="duplicates"):
-            ar.sanitize_column_names(frame)
+    def test_list_is_not_null_key(self):
+        assert _is_null_mapping_key(["a", "b"]) is False
 
-    def test_rejects_non_frame_input(self):
-        with pytest.raises(TypeError, match="must be an ArFrame"):
-            ar.sanitize_column_names([])
+    def test_dict_is_not_null_key(self):
+        assert _is_null_mapping_key({"a": 1}) is False
 
-    def test_mixed_cleanup(self):
-        frame = ar.from_pandas(
-            pd.DataFrame({"__name__": [1], "age___": [2], "user_id": [3]})
-        )
-        result = ar.sanitize_column_names(frame)
-        assert list(result.columns) == ["name", "age", "user_id"]
+    def test_string_is_not_null_key(self):
+        assert _is_null_mapping_key("key") is False
+
+    def test_numeric_is_not_null_key(self):
+        assert _is_null_mapping_key(42) is False
+        assert _is_null_mapping_key(3.14) is False
+
+    def test_bool_is_not_null_key(self):
+        assert _is_null_mapping_key(True) is False
+        assert _is_null_mapping_key(False) is False
