@@ -2477,6 +2477,13 @@ class CleanStepRecord:
                 )
             if value < 0:
                 raise ValueError(f"CleanStepRecord.{name} cannot be negative: {value}")
+        if self.rows_removed != self.rows_before - self.rows_after:
+            raise ValueError(
+                f"CleanStepRecord rows accounting is inconsistent: "
+                f"rows_before={self.rows_before}, rows_after={self.rows_after}, "
+                f"rows_removed={self.rows_removed} "
+                f"(expected rows_removed == rows_before - rows_after)"
+            )
 
 
 @dataclass(frozen=True)
