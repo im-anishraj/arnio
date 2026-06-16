@@ -1991,6 +1991,8 @@ def sniff_delimiter(
         raise ValueError("sample_size must be a positive integer greater than 0")
 
     # 2. Check File Exists and Check for Binary Content
+    if os.path.isdir(path):
+        raise IsADirectoryError(f"Path is a directory, not a file: {path!r}")
     try:
         if os.path.getsize(path) == 0:
             raise CsvReadError(f"CSV file is empty: {path!r}")
