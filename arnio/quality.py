@@ -43,9 +43,24 @@ class CleaningSuggestion(tuple):
         confidence_score: float,
         confidence_reason: str,
     ) -> CleaningSuggestion:
+        if not isinstance(step, str):
+            raise TypeError(f"step must be a string, got {type(step).__name__}")
+        if not step:
+            raise ValueError("step must be a non-empty string")
+        if not isinstance(kwargs, dict):
+            raise TypeError(f"kwargs must be a dict, got {type(kwargs).__name__}")
+        confidence_score = float(confidence_score)
+        if not 0.0 <= confidence_score <= 1.0:
+            raise ValueError(
+                f"confidence_score must be between 0.0 and 1.0, got {confidence_score}"
+            )
+        if not isinstance(confidence_reason, str):
+            raise TypeError(
+                f"confidence_reason must be a string, got {type(confidence_reason).__name__}"
+            )
         instance = super().__new__(cls, (step, kwargs))
-        instance._confidence_score = float(confidence_score)
-        instance._confidence_reason = str(confidence_reason)
+        instance._confidence_score = confidence_score
+        instance._confidence_reason = confidence_reason
         return instance
 
     @property
