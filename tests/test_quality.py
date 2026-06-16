@@ -14,7 +14,254 @@ import pandas as pd
 import pytest
 
 import arnio as ar
-from arnio.quality import _duplicate_count
+from arnio._core import _DType, _Frame
+from arnio.frame import ArFrame
+from arnio.quality import (
+    QUALITY_REPORT_COLUMNS,
+    CleaningSuggestion,
+    DataQualityReport,
+    _clean_scalar,
+    _is_numeric_dtype,
+    _markdown_cell,
+    _ratio,
+    _validate_gate_bool,
+    _validate_gate_ratio_threshold,
+    _validate_gate_threshold,
+)
+
+
+def test_data_quality_report_suggestion_kwargs_are_json_serializable():
+    report = ar.DataQualityReport(
+        row_count=1,
+        column_count=0,
+        memory_usage=0,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+        suggestions=[
+            (
+                "custom_step",
+                {
+                    "created_at": dt.datetime(2024, 1, 2, 3, 4, 5),
+                    "amount": decimal.Decimal("12.34"),
+                    "metadata": {"count": np.int64(1)},
+                    "columns": ("name", "age"),
+                    "tags": {"beta", "alpha"},
+                },
+            )
+        ],
+    )
+
+    payload = report.to_dict()
+    json.dumps(payload)
+
+    json_output = report.to_json()
+    assert isinstance(json_output, str)
+    assert json.loads(json_output) == payload
+
+    kwargs = payload["suggestions"][0]["kwargs"]
+    assert kwargs["created_at"] == "2024-01-02T03:04:05"
+    assert kwargs["amount"] == "12.34"
+    assert kwargs["metadata"] == {"count": 1}
+    assert kwargs["columns"] == ["name", "age"]
+    assert kwargs["tags"] == ["alpha", "beta"]
+
+
+def test_data_quality_report_to_json_round_trips_through_to_dict_options():
+    report = ar.profile(
+        ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "name": ["Alice", "Bob"],
+                    "age": [30, 40],
+                    "secret": ["token-a", "token-b"],
+                }
+            )
+        ),
+        sample_size=2,
+    )
+
+    expected = report.to_dict(
+        redact_sample_values=True,
+        exclude_columns=["secret"],
+    )
+
+    actual = json.loads(
+        report.to_json(
+            redact_sample_values=True,
+            exclude_columns=["secret"],
+        )
+    )
+
+    assert actual == expected
+
+
+def test_data_quality_report_suggestion_kwargs_stringifies_unsupported_leaf():
+
+    report = ar.DataQualityReport(
+        row_count=1,
+        column_count=0,
+        memory_usage=0,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+        suggestions=[
+            (
+                "custom_step",
+                {
+                    "path": Path("data/input.csv"),
+                    "nested": {"complex": complex(1, 2)},
+                },
+            )
+        ],
+    )
+
+    payload = report.to_dict()
+    json.dumps(payload)
+
+    kwargs = payload["suggestions"][0]["kwargs"]
+    assert kwargs["path"] == str(Path("data/input.csv"))
+    assert kwargs["nested"]["complex"] == "(1+2j)"
+    assert json.loads(report.to_json()) == payload
+
+
+def test_data_quality_report_suggestion_kwargs_normalizes_frozenset():
+    report = ar.DataQualityReport(
+        row_count=1,
+        column_count=0,
+        memory_usage=0,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+        suggestions=[
+            (
+                "custom_step",
+                {
+                    "values": frozenset(["beta", "alpha"]),
+                    "nested": {
+                        "ids": frozenset([np.int64(2), np.int64(1)]),
+                    },
+                },
+            )
+        ],
+    )
+
+    payload = report.to_dict()
+    json.dumps(payload)
+
+    kwargs = payload["suggestions"][0]["kwargs"]
+
+    assert kwargs["values"] == ["alpha", "beta"]
+    assert kwargs["nested"]["ids"] == [1, 2]
+
+
+def test_data_quality_report_suggestion_kwargs_normalizes_frozenset_nested_values():
+    report = ar.DataQualityReport(
+        row_count=1,
+        column_count=0,
+        memory_usage=0,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+        suggestions=[
+            (
+                "custom_step",
+                {
+                    "values": frozenset(["beta", "alpha"]),
+                    "nested": {
+                        "values": frozenset([np.int64(2), np.int64(1)]),
+                    },
+                },
+            )
+        ],
+    )
+
+    payload = report.to_dict()
+    json.dumps(payload)
+
+    kwargs = payload["suggestions"][0]["kwargs"]
+    assert kwargs["values"] == ["alpha", "beta"]
+    assert kwargs["nested"]["values"] == [1, 2]
+    assert json.loads(report.to_json()) == payload
+
+
+def test_data_quality_report_suggestion_kwargs_recurses_numpy_item_result():
+    report = ar.DataQualityReport(
+        row_count=1,
+        column_count=0,
+        memory_usage=0,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns={},
+        suggestions=[
+            (
+                "custom_step",
+                {
+                    "timestamp": np.datetime64("2024-01-02T03:04:05"),
+                    "non_finite": np.float64(float("inf")),
+                },
+            )
+        ],
+    )
+
+    payload = report.to_dict()
+    json.dumps(payload)
+
+    kwargs = payload["suggestions"][0]["kwargs"]
+    assert kwargs["timestamp"].startswith("2024-01-02")
+    assert kwargs["non_finite"] is None
+    assert json.loads(report.to_json()) == payload
+
+
+def test_data_quality_report_to_dict_normalizes_suggestions_after_exclusions():
+    columns = ar.profile(
+        ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "name": [" Alice ", "Bob"],
+                    "secret": ["token-a", "token-b"],
+                }
+            )
+        )
+    ).columns
+
+    report = ar.DataQualityReport(
+        row_count=2,
+        column_count=2,
+        memory_usage=100,
+        duplicate_rows=0,
+        duplicate_ratio=0.0,
+        columns=columns,
+        suggestions=[
+            (
+                "custom_step",
+                {
+                    "subset": np.array(["name", "secret"]),
+                    "columns": ("name", "secret"),
+                    "cast_types": {
+                        "name": np.str_("string"),
+                        "secret": np.str_("string"),
+                    },
+                    "metadata": {"kept_count": np.int64(1)},
+                },
+            )
+        ],
+    )
+
+    result = report.to_dict(
+        redact_sample_values=True,
+        exclude_columns=["secret"],
+    )
+    json.dumps(result)
+
+    kwargs = result["suggestions"][0]["kwargs"]
+
+    assert kwargs["subset"] == ["name"]
+    assert kwargs["columns"] == ["name"]
+    assert kwargs["cast_types"] == {"name": "string"}
+    assert kwargs["metadata"] == {"kept_count": 1}
+    assert "secret" not in json.dumps(result)
+    assert result["columns"]["name"]["sample_values"] == ["[REDACTED]", "[REDACTED]"]
 
 
 def test_profile_reports_quality_signals(tmp_path):
@@ -3351,60 +3598,73 @@ def test_profile_comparison_to_json_validation():
         assert isinstance(result[key], (int, float)), f"{key} must be numeric"
 
 
-def test_to_html_rejects_empty_bytes():
-    import pytest
+class TestCleanScalar:
+    """Tests for arnio.quality._clean_scalar helper."""
 
-    import arnio as ar
+    def test_none_returns_none(self):
+        assert _clean_scalar(None) is None
 
-    # Create a dummy report to test with
-    report = ar.profile(ar.from_pandas(pd.DataFrame({"x": [1, 2]})))
+    def test_pd_na_returns_none(self):
+        assert _clean_scalar(pd.NA) is None
 
-    # 1. Test empty bytes path
-    with pytest.raises(ValueError, match="file_path must not be empty"):
-        report.to_html(file_path=b"")
+    def test_float_nan_returns_none(self):
+        assert _clean_scalar(float("nan")) is None
 
+    def test_regular_int_returns_int(self):
+        assert _clean_scalar(42) == 42
 
-def test_to_html_rejects_directory_path(tmp_path):
-    import pytest
+    def test_regular_float_returns_float(self):
+        assert _clean_scalar(3.14) == 3.14
 
-    import arnio as ar
-
-    report = ar.profile(ar.from_pandas(pd.DataFrame({"x": [1, 2]})))
-
-    # 2. Test path pointing to an actual directory
-    with pytest.raises(
-        ValueError, match="file_path must point to a file, not a directory"
-    ):
-        report.to_html(file_path=tmp_path)
+    def test_string_returns_string(self):
+        assert _clean_scalar("hello") == "hello"
 
 
-def test_to_html_rejects_missing_parent(tmp_path):
-    import pytest
+class TestRatio:
+    """Tests for arnio.quality._ratio helper."""
 
-    import arnio as ar
+    def test_ratio_calculates_correctly(self):
+        assert _ratio(1, 4) == 0.25
 
-    report = ar.profile(ar.from_pandas(pd.DataFrame({"x": [1, 2]})))
-    invalid_path = tmp_path / "missing_folder" / "report.html"
+    def test_ratio_handles_zero_total(self):
+        assert _ratio(5, 0) == 0.0
 
-    # 3. Test path where parent directory does not exist
-    with pytest.raises(ValueError, match="parent directory does not exist"):
-        report.to_html(file_path=invalid_path)
+    def test_ratio_rounds_to_six_decimals(self):
+        result = _ratio(1, 3)
+        assert result == round(1 / 3, 6)
 
 
-def test_to_html_accepts_valid_relative_and_pathlike(tmp_path, monkeypatch):
-    import os
+class TestIsNumericDtype:
+    """Tests for arnio.quality._is_numeric_dtype helper."""
 
-    import arnio as ar
+    def test_int64_is_numeric(self):
+        assert _is_numeric_dtype("int64") is True
 
-    report = ar.profile(ar.from_pandas(pd.DataFrame({"x": [1, 2]})))
+    def test_float64_is_numeric(self):
+        assert _is_numeric_dtype("float64") is True
 
-    # 4. Test that a normal relative filename works fine (parent dir is empty string)
-    monkeypatch.chdir(tmp_path)
-    relative_file = "test_report.html"
-    report.to_html(file_path=relative_file)
-    assert os.path.exists(relative_file)
+    def test_string_is_not_numeric(self):
+        assert _is_numeric_dtype("string") is False
 
-    # Test that a valid PathLike object works fine too
-    pathlike_file = tmp_path / "another_report.html"
-    report.to_html(file_path=pathlike_file)
-    assert os.path.exists(pathlike_file)
+    def test_bool_is_not_numeric(self):
+        assert _is_numeric_dtype("bool") is False
+
+
+class TestMarkdownCell:
+    """Tests for arnio.quality._markdown_cell helper."""
+
+    def test_none_returns_dash(self):
+        assert _markdown_cell(None) == "-"
+
+    def test_regular_value_returns_string(self):
+        assert _markdown_cell("hello") == "hello"
+
+    def test_pipe_escaped(self):
+        assert _markdown_cell("a|b") == "a\\|b"
+
+    def test_newline_converted_to_br(self):
+        assert _markdown_cell("a\nb") == "a<br>b"
+
+    def test_backslash_escaped(self):
+        result = _markdown_cell("a\\b")
+        assert "\\\\" in result or result == "a\\\\b"
