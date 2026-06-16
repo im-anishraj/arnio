@@ -9,7 +9,11 @@ import pytest
 
 import arnio as ar
 from arnio import from_pandas, to_pandas
-from arnio.cleaning import _validate_column_sequence, _validate_string_mapping
+from arnio.cleaning import (
+    _validate_column_sequence,
+    _validate_mapping,
+    _validate_string_mapping,
+)
 
 
 class TestDropNulls:
@@ -5603,3 +5607,29 @@ class TestHashColumns:
         assert df_after["email"].iloc[0] == df_before["email"].iloc[0]
         assert df_after["user_id"].iloc[0] == df_before["user_id"].iloc[0]
         assert pd.isna(df_after["email"].iloc[1]) == pd.isna(df_before["email"].iloc[1])
+
+
+class TestValidateMapping:
+    """Tests for arnio.cleaning._validate_mapping helper."""
+
+    def test_non_mapping_raises_type_error(self):
+        with pytest.raises(TypeError, match="must be a mapping"):
+            _validate_mapping("not a dict", argument_name="arg_name")
+
+    def test_non_mapping_with_custom_message(self):
+        with pytest.raises(TypeError, match="custom message"):
+            _validate_mapping(
+                42, argument_name="my_arg", non_mapping_message="custom message"
+            )
+
+    def test_empty_mapping_allow_empty_false_raises(self):
+        with pytest.raises(ValueError, match="empty"):
+            _validate_mapping({}, argument_name="my_arg", allow_empty=False)
+
+    def test_empty_mapping_allow_empty_true_returns_empty_dict(self):
+        result = _validate_mapping({}, argument_name="my_arg", allow_empty=True)
+        assert result == {}
+
+    def test_valid_mapping_returns_dict(self):
+        result = _validate_mapping({"a": 1, "b": 2}, argument_name="my_arg")
+        assert result == {"a": 1, "b": 2}
