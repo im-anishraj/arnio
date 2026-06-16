@@ -904,16 +904,32 @@ class Field:
                 raise TypeError("required_if column name must be a string")
             if not pd.api.types.is_scalar(self.required_if[1]):
                 raise TypeError("required_if expected value must be a scalar")
-        if self.dtype in {"int64", "float64"}:
-            if self.min is not None:
-                if isinstance(self.min, bool) or not isinstance(self.min, (int, float)):
-                    raise TypeError("min must be numeric or None")
-            if self.max is not None:
-                if isinstance(self.max, bool) or not isinstance(self.max, (int, float)):
-                    raise TypeError("max must be numeric or None")
-            if self.min is not None and self.max is not None:
-                if self.min > self.max:
-                    raise ValueError("min must be less than or equal to max")
+        # Always validate min/max types, not just for numeric dtypes
+        if self.min is not None:
+            if isinstance(self.min, bool) or not isinstance(
+                self.min, (int, float, str)
+            ):
+                raise TypeError("min must be numeric, a datetime string, or None")
+        if self.max is not None:
+            if isinstance(self.max, bool) or not isinstance(
+                self.max, (int, float, str)
+            ):
+                raise TypeError("max must be numeric, a datetime string, or None")
+        if (
+            self.min is not None
+            and self.max is not None
+            and not isinstance(self.min, str)
+            and not isinstance(self.max, str)
+            and self.min > self.max
+        ):
+            raise ValueError("min must be less than or equal to max")
+        if self.dtype not in {"int64", "float64", "datetime", "date"} and (
+            self.min is not None or self.max is not None
+        ):
+            raise ValueError(
+                f"min/max bounds are only valid for numeric and date/datetime dtypes, "
+                f"got dtype={self.dtype!r}"
+            )
 
         if self.pattern is not None:
             if not isinstance(self.pattern, str):
