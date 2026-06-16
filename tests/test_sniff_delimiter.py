@@ -273,3 +273,10 @@ class TestSniffDelimiterPublicAPI:
         assert delim == ";"
         frame = ar.read_csv(str(path), delimiter=delim, decimal_separator=",")
         assert frame.columns == ["a", "b"]
+
+    def test_raises_on_mixed_delimiters_consistent_counts(self, tmp_path):
+        """sniff_delimiter raises ValueError when delimiter is ambiguous (mixed delimiters, consistent counts)."""
+        path = tmp_path / "ambiguous.csv"
+        path.write_text("a,b,c\nd;e;f\n")
+        with pytest.raises(ValueError, match="Could not determine CSV delimiter"):
+            ar.sniff_delimiter(str(path))
