@@ -927,6 +927,10 @@ class Field:
                     f"pattern is not a valid regular expression: {exc}"
                 ) from exc
             _reject_unsafe_regex_pattern(self.pattern)
+        if self.semantic is not None and not isinstance(self.semantic, str):
+            raise TypeError(
+                f"semantic must be a str or None, got {type(self.semantic).__name__}"
+            )
 
         if self.allowed is not None:
             if not isinstance(self.allowed, (list, tuple, set)):
