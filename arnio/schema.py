@@ -906,10 +906,14 @@ class Field:
                 raise TypeError("required_if expected value must be a scalar")
         # Always validate min/max types, not just for numeric dtypes
         if self.min is not None:
-            if isinstance(self.min, bool) or not isinstance(self.min, (int, float, str)):
+            if isinstance(self.min, bool) or not isinstance(
+                self.min, (int, float, str)
+            ):
                 raise TypeError("min must be numeric, a datetime string, or None")
         if self.max is not None:
-            if isinstance(self.max, bool) or not isinstance(self.max, (int, float, str)):
+            if isinstance(self.max, bool) or not isinstance(
+                self.max, (int, float, str)
+            ):
                 raise TypeError("max must be numeric, a datetime string, or None")
         if (
             self.min is not None
@@ -919,9 +923,8 @@ class Field:
             and self.min > self.max
         ):
             raise ValueError("min must be less than or equal to max")
-        if (
-            self.dtype not in {"int64", "float64", "datetime", "date"}
-            and (self.min is not None or self.max is not None)
+        if self.dtype not in {"int64", "float64", "datetime", "date"} and (
+            self.min is not None or self.max is not None
         ):
             raise ValueError(
                 f"min/max bounds are only valid for numeric and date/datetime dtypes, "
