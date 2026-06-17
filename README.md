@@ -1631,7 +1631,32 @@ report = ar.profile(
 )
 ```
 
-### Notebook dashboard (Jupyter / Colab)
+### Semantic Quality Scoring
+
+By default, the `quality_score` accounts for structural issues: duplicates, nulls, and suggested type mismatches. You can opt in to semantic validity scoring to detect issues like invalid email addresses or malformed URLs:
+
+```python
+# Default: structural scoring only (backward compatible)
+report = ar.profile(df)
+print(report.quality_score)  # Penalizes nulls, duplicates, type mismatches
+
+# Opt-in: include semantic validity penalties (emails, URLs, etc.)
+report = ar.profile(df, semantic_scoring=True)
+print(report.quality_score)  # Also penalizes invalid email/URL formats
+print(report.score_components)  # Shows breakdown of all penalties
+
+# Example score_components with semantic_scoring=True:
+# {
+#   'duplicate_penalty': -2.5,
+#   'null_penalty': -8.0,
+#   'email_invalid_ratio_penalty': -10.0,   # If email column has invalid entries
+#   'url_invalid_ratio_penalty': -5.5,      # If URL column has invalid entries
+# }
+```
+
+Semantic penalties are capped at a maximum of 15 points total, ensuring that structural issues remain the primary score driver. This opt-in design preserves backward compatibility: existing code continues to get the same scores without changes.
+
+### Notebook dashboard
 
 `DataQualityReport` includes a notebook-friendly HTML dashboard. In a notebook, simply evaluate `report` in a cell to see a rich, static summary (quality score, duplicates, nulls, warnings, top values, and cleaning suggestions).
 
@@ -1701,7 +1726,31 @@ if not result.passed:
     result.raise_for_failures()
 ```
 
-> **Scoring Contract:** The `quality_score` starts at 100.0 and subtracts capped penalties for duplicates, nulls, and suggested dtype mismatches. The `score_components` field exposes these penalties as negative values. (Note: Semantic-validity penalties are intentionally out of scope for the current implementation.)
+> **Scoring Contract:** The `quality_score` starts at 100.0 and subtracts capped penalties for:
+> - **Structural Penalties** (always applied):
+>   - Duplicates: max 20 points
+>   - Null ratios: max 40 points
+>   - Type mismatch suggestions: max 40 points
+> - **Semantic Penalties** (opt-in via `semantic_scoring=True`):
+>   - Invalid email addresses: max 10 points
+>   - Invalid URLs: max 10 points
+>   - **Total semantic cap: 15 points maximum**
+>
+> By default (`semantic_scoring=False`), only structural penalties apply, preserving backward compatibility.
+> The `score_components` field exposes all active penalties as negative values.
+>
+> **Example usage with semantic scoring:**
+> ```python
+> # Include semantic validity penalties (emails, URLs, etc.)
+> report = ar.profile(frame, semantic_scoring=True)
+> print(report.score_components)
+> # Example output:
+> # {
+> #   'duplicate_penalty': -5.0,
+> #   'null_penalty': -12.5,
+> #   'email_invalid_ratio_penalty': -8.3,  # 83% valid emails
+> # }
+> ```
 
 ### 1. Terminal Representation (Simplified Example)
 *A simplified view of the standard string representation of the report object:*
