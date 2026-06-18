@@ -11,6 +11,7 @@
 #include <stdexcept>
 #include <system_error>
 #include <unordered_set>
+#include <vector>
 
 namespace arnio {
 
@@ -834,5 +835,31 @@ Frame combine_columns(const Frame& frame, const std::vector<std::string>& subset
     new_cols.push_back(std::move(combined));
 
     return Frame(std::move(new_cols));
+}
+
+// The core C++ engine function
+std::vector<std::vector<double>> create_rolling_windows(const std::vector<double>& input,
+                                                        int window_size, int stride) {
+    if (window_size <= 0) {
+        throw std::invalid_argument("window_size must be greater than 0");
+    }
+    if (stride <= 0) {
+        throw std::invalid_argument("stride must be greater than 0");
+    }
+    if (window_size > input.size()) {
+        throw std::invalid_argument("window_size cannot be larger than the input array length");
+    }
+
+    std::vector<std::vector<double>> result;
+    int num_windows = (input.size() - window_size) / stride + 1;
+
+    result.reserve(num_windows);
+
+    for (size_t i = 0; i <= input.size() - window_size; i += stride) {
+        std::vector<double> window(input.begin() + i, input.begin() + i + window_size);
+        result.push_back(window);
+    }
+
+    return result;
 }
 }  // namespace arnio

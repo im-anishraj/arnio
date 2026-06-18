@@ -344,6 +344,10 @@ PYBIND11_MODULE(_arnio_cpp, m) {
         .def("write", &CsvWriter::write);
 
     // --- Cleaning functions ---
+    // Expose the function to Python
+    m.def("create_rolling_windows", &create_rolling_windows,
+          "Generate rolling windows from a 1D numeric array.");
+
     m.def(
         "drop_nulls",
         [](const Frame& frame, const std::optional<std::vector<std::string>>& subset) {

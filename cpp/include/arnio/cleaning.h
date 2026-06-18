@@ -87,4 +87,8 @@ Frame safe_divide_columns(const Frame& frame, const std::string& numerator,
                           const std::string& denominator, const std::string& output_column,
                           double fill_value);
 
+// Extract overlapping rolling windows from a 1D numeric array.
+std::vector<std::vector<double>> create_rolling_windows(const std::vector<double>& input,
+                                                        int window_size, int stride);
+
 }  // namespace arnio

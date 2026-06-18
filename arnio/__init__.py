@@ -33,6 +33,7 @@ from .cleaning import (
     rename_columns,
     rename_columns_matching,
     replace_values,
+    rolling_window,
     round_numeric_columns,
     safe_divide_columns,
     select_columns,
@@ -194,6 +195,7 @@ __all__ = [
     "slugify_column_names",
     "trim_column_names",
     "standardize_missing_tokens",
+    "rolling_window",
     "CleaningSuggestion",
     # Conversion
     "to_pandas",
