@@ -18,6 +18,284 @@ A technical reference guide to the public classes and functions within the **Arn
 
 ---
 
+## Current Public Export Index
+
+This index is audited against `arnio.__all__` on current `main`.
+
+| Category | Public exports |
+| :------- | :------------- |
+| **Core Class** | [`ArFrame`](#arframe), [`ColumnSummary`](#columnsummary) |
+| **I/O** | [`read_csv`](#read_csv), [`read_csv_chunked`](#read_csv_chunked), [`read_jsonl`](#read_jsonl), [`read_jsonl_chunked`](#read_jsonl_chunked), [`read_parquet`](#read_parquet), [`scan_csv`](#scan_csv), [`sniff_delimiter`](#sniff_delimiter), [`write_csv`](#write_csv), [`write_json`](#write_json), [`write_parquet`](#write_parquet) |
+| **Cleaning** | [`cast_types`](#cast_types), [`CastFailure`](#castfailure), [`CastReport`](#castreport), [`clean`](#clean), [`CleaningSuggestion`](#cleaningsuggestion), [`clean_column_names`](#clean_column_names), [`clip_numeric`](#clip_numeric), [`coalesce_columns`](#coalesce_columns), [`combine_columns`](#combine_columns), [`drop_columns`](#drop_columns), [`drop_columns_matching`](#drop_columns_matching), [`drop_constant_columns`](#drop_constant_columns), [`drop_duplicates`](#drop_duplicates), [`drop_empty_columns`](#drop_empty_columns), [`drop_nulls`](#drop_nulls), [`fill_nulls`](#fill_nulls), [`filter_rows`](#filter_rows), [`find_fuzzy_duplicates`](#find_fuzzy_duplicates), [`keep_rows_with_nulls`](#keep_rows_with_nulls), [`normalize_case`](#normalize_case), [`normalize_minmax`](#normalize_minmax), [`normalize_unicode`](#normalize_unicode), [`normalize_whitespace`](#normalize_whitespace), [`parse_bool_strings`](#parse_bool_strings), [`rename_columns`](#rename_columns), [`rename_columns_matching`](#rename_columns_matching), [`replace_values`](#replace_values), [`round_numeric_columns`](#round_numeric_columns), [`safe_divide_columns`](#safe_divide_columns), [`slugify_column_names`](#slugify_column_names), [`standardize_missing_tokens`](#standardize_missing_tokens), [`strip_whitespace`](#strip_whitespace), [`trim_column_names`](#trim_column_names), [`validate_columns_exist`](#validate_columns_exist), [`winsorize_outliers`](#winsorize_outliers) |
+| **Conversion** | [`from_dict`](#from_dict), [`from_pandas`](#from_pandas), [`from_polars`](#from_polars), [`from_records`](#from_records), [`to_arrow`](#to_arrow), [`to_pandas`](#to_pandas), [`to_polars`](#to_polars) |
+| **Integration** | [`ArnioPandasAccessor`](#arniopandasaccessor), [`encode_categorical`](#encode_categorical), [`register_duckdb`](#register_duckdb) |
+| **Pipeline** | [`pipeline`](#pipeline), [`register_step`](#register_step), [`unregister_step`](#unregister_step), [`get_builtin_step_signatures`](#get_builtin_step_signatures), [`list_steps`](#list_steps), [`PipelineContext`](#pipelinecontext), [`LineageReport`](#lineagereport), [`reset_steps`](#reset_steps), [`save_pipeline`](#save_pipeline), [`load_pipeline`](#load_pipeline) |
+| **Data Quality** | [`profile`](#profile), [`compare_profiles`](#compare_profiles), [`check_quality_gates`](#check_quality_gates), [`suggest_cleaning`](#suggest_cleaning), [`auto_clean`](#auto_clean), [`ColumnProfile`](#columnprofile), [`DataQualityReport`](#dataqualityreport), [`CleanStepRecord`](#cleansteprecord), [`CleanExplanation`](#cleanexplanation), [`ProfileComparison`](#profilecomparison), [`QualityGateIssue`](#qualitygateissue), [`QualityGateResult`](#qualitygateresult) |
+| **Schema Validation** | [`Schema`](#schema), [`SchemaDiff`](#schemadiff), [`SchemaDiffEntry`](#schemadiffentry), [`Field`](#field), [`ValidationIssue`](#validationissue), [`ValidationResult`](#validationresult), [`validate`](#validate), [`diff_schema`](#diff_schema), [`Int64`](#int64), [`Float64`](#float64), [`String`](#string), [`CountryCode`](#countrycode), [`CurrencyCode`](#currencycode), [`LanguageCode`](#languagecode), [`TimeZone`](#timezone), [`Bool`](#bool), [`Email`](#email), [`URL`](#url), [`PhoneNumber`](#phonenumber), [`DateTime`](#datetime), [`normalize_unicode`](#normalize_unicode), [`Regex`](#regex), [`Custom`](#custom), [`register_validator`](#register_validator), [`Date`](#date), [`schema_from_yaml`](#schema_from_yaml), [`schema_to_dict`](#schema_to_dict), [`schema_to_yaml`](#schema_to_yaml) |
+| **Custom Exceptions** | [`UnknownStepError`](#unknownsteperror), [`ArnioError`](#arnioerror), [`CsvReadError`](#csvreaderror), [`JsonlReadError`](#jsonlreaderror), [`RemoteReadError`](#remotereaderror), [`TypeCastError`](#typecasterror), [`PipelineStepError`](#pipelinesteperror), [`SchemaValidationError`](#schemavalidationerror), [`PipelineSerializationError`](#pipelineserializationerror) |
+
+## Documentation Coverage Check
+
+Run this static comparison from the repository root after updating public exports:
+
+```bash
+python -c "import ast, pathlib, re; tree=ast.parse(pathlib.Path('arnio/__init__.py').read_text(encoding='utf-8')); exports=[]; [exports.extend(e.value for e in node.value.elts if isinstance(e, ast.Constant) and isinstance(e.value, str)) for node in tree.body if isinstance(node, ast.Assign) for target in node.targets if isinstance(target, ast.Name) and target.id == '__all__']; doc=pathlib.Path('API_REFERENCE.md').read_text(encoding='utf-8'); missing=[name for name in exports if re.search(r'(?<![A-Za-z0-9_])'+re.escape(name)+r'(?![A-Za-z0-9_])', doc) is None]; print(f'public exports: {len(exports)}'); print(f'missing from API_REFERENCE.md: {len(missing)}'); print('missing names: ' + (', '.join(missing) if missing else 'none'))"
+```
+
+Current output:
+
+```text
+public exports: 116
+missing from API_REFERENCE.md: 0
+missing names: none
+```
+
+## Verified Public Export Addendum
+
+### ColumnSummary
+
+`ColumnSummary(name, dtype, nullable)` summarizes one `ArFrame` column.
+
+### read_csv_chunked
+
+Streams CSV input as `ArFrame` chunks.
+
+### read_jsonl
+
+Reads JSON Lines data into an `ArFrame`.
+
+### read_jsonl_chunked
+
+Streams JSON Lines input as `ArFrame` chunks.
+
+### read_parquet
+
+Reads Parquet input into an `ArFrame` through the optional Arrow integration.
+
+### write_parquet
+
+Writes an `ArFrame` to Parquet through the optional Arrow integration.
+
+### normalize_whitespace
+
+Collapses repeated whitespace in string values and trims surrounding whitespace.
+
+### drop_empty_columns
+
+Drops columns that contain only null or empty-string values.
+
+### clean_column_names
+
+`clean_column_names(frame, *, case_type="lower") -> ArFrame`
+
+Normalizes column names by replacing non-alphanumeric characters with underscores, collapsing repeated underscores, trimming boundary underscores, and applying `case_type`. This is distinct from [`trim_column_names`](#trim_column_names), which only removes surrounding whitespace.
+
+### winsorize_outliers
+
+Clips numeric values using quantile bounds.
+
+### normalize_minmax
+
+Scales numeric columns to a min-max range.
+
+### coalesce_columns
+
+Creates an output column from the first non-null value across a column subset.
+
+### rename_columns_matching
+
+Renames columns whose names match a regular expression.
+
+### drop_columns_matching
+
+Drops columns whose names match a regular expression.
+
+### parse_bool_strings
+
+Converts supported boolean-like strings to booleans.
+
+### find_fuzzy_duplicates
+
+Finds approximate duplicates using the configured fuzzy-matching options.
+
+### CastFailure
+
+Record describing one failed cast during cast reporting.
+
+### CastReport
+
+Report object returned by cast operations that collect cast failures.
+
+### CleaningSuggestion
+
+Suggested cleaning action returned by [`suggest_cleaning`](#suggest_cleaning).
+
+### slugify_column_names
+
+Converts column names to slug-style identifiers.
+
+### standardize_missing_tokens
+
+Replaces common missing-value sentinel strings with null values.
+
+### to_arrow
+
+Converts an `ArFrame` to a `pyarrow.Table`.
+
+### to_polars
+
+Converts an `ArFrame` to a Polars DataFrame.
+
+### from_polars
+
+Builds an `ArFrame` from a Polars DataFrame.
+
+### from_records
+
+Builds an `ArFrame` from record-style Python data.
+
+### from_dict
+
+`from_dict(data: dict) -> ArFrame`
+
+Builds an `ArFrame` from a dictionary whose keys are strings and whose values are same-length sequences of scalar values. The public Python helper accepts only the `data` mapping; dtype hints and row counts belong to the native core interface, not this public API.
+
+### register_duckdb
+
+Registers an `ArFrame` for DuckDB querying.
+
+### unregister_step
+
+`unregister_step(name: str) -> None`
+
+Removes a registered custom Python pipeline step by name. Built-in steps remain protected by the registry.
+
+### get_builtin_step_signatures
+
+Returns signatures for built-in pipeline steps.
+
+### list_steps
+
+Lists built-in and custom pipeline step names currently registered.
+
+### PipelineContext
+
+Context object passed to custom pipeline steps that opt in to pipeline metadata.
+
+### LineageReport
+
+Pipeline lineage metadata collected during pipeline execution.
+
+### reset_steps
+
+Resets the pipeline step registry to the built-in step set.
+
+### save_pipeline
+
+Serializes a pipeline definition.
+
+### load_pipeline
+
+Loads a serialized pipeline definition.
+
+### compare_profiles
+
+Compares two data quality profiles.
+
+### CleanStepRecord
+
+Record describing one cleaning step applied during automatic cleaning.
+
+### CleanExplanation
+
+Explanation object returned when automatic cleaning is requested with explanations.
+
+### ProfileComparison
+
+Result object returned by [`compare_profiles`](#compare_profiles).
+
+### QualityGateIssue
+
+Represents one quality gate failure.
+
+### SchemaDiff
+
+Result object returned by [`diff_schema`](#diff_schema).
+
+### SchemaDiffEntry
+
+One changed, added, or removed field in a schema diff.
+
+### diff_schema
+
+Compares two schemas and reports structural differences.
+
+### CurrencyCode
+
+Schema field for 3-letter ISO 4217 currency codes.
+
+### LanguageCode
+
+Schema field for lowercase ISO 639-1 language codes.
+
+### TimeZone
+
+Schema field that validates values against IANA timezone names exposed by Python's `zoneinfo.available_timezones()`, such as `"Asia/Kolkata"` or `"UTC"`.
+
+### PhoneNumber
+
+Schema field for common phone number formats.
+
+### Regex
+
+Schema field that validates values against a regular expression.
+
+### register_validator
+
+Registers a custom validation function for [`Custom`](#custom) schema fields.
+
+### Date
+
+Schema field for strict calendar dates.
+
+### schema_from_yaml
+
+Deserializes a schema from YAML.
+
+### schema_to_dict
+
+Serializes a schema to a dictionary.
+
+### schema_to_yaml
+
+Serializes a schema to YAML.
+
+### JsonlReadError
+
+Raised when JSON Lines input cannot be parsed.
+
+### RemoteReadError
+
+Raised when a remote data source cannot be read.
+
+### PipelineStepError
+
+Raised when a custom pipeline step fails during execution.
+
+### SchemaValidationError
+
+Raised by schema-validation workflows that convert validation failures into exceptions.
+
+### PipelineSerializationError
+
+Raised when pipeline serialization or loading fails.
+
+### encode_categorical
+
+Encodes categorical columns using the configured categorical encoding options.
+
+---
+
 ## Prerequisites
 
 ```python
