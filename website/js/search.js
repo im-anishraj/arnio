@@ -125,6 +125,12 @@ if (searchInput && resultsBox) {
 
     if (e.key === "Escape") {
       closeResults();
+      searchInput.blur();
+      return;
+    }
+
+    if (e.key === "Enter" && !resultsBox.classList.contains("show")) {
+      return;
     }
   });
 }
