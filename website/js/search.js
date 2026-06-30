@@ -48,9 +48,14 @@ if (searchInput && resultsBox) {
       return;
     }
 
-    items.forEach((item) => {
+    resultsBox.setAttribute("role", "listbox");
+
+    items.forEach((item, idx) => {
       const div = document.createElement("div");
       div.className = "search-result";
+      div.setAttribute("role", "option");
+      div.setAttribute("tabindex", "-1");
+      div.setAttribute("id", `search-result-${idx}`);
       div.textContent = item.title;
 
       div.addEventListener("click", () => {
@@ -113,13 +118,19 @@ if (searchInput && resultsBox) {
       results[selectedIndex].classList.add("active");
     }
 
-    if (e.key === "Enter" && selectedIndex >= 0) {
+    if (e.key === "Enter" && selectedIndex >= 0 && results.length > 0) {
       e.preventDefault();
       results[selectedIndex].click();
     }
 
     if (e.key === "Escape") {
       closeResults();
+      searchInput.blur();
+      return;
+    }
+
+    if (e.key === "Enter" && !resultsBox.classList.contains("show")) {
+      return;
     }
   });
 }

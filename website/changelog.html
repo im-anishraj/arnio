@@ -26,7 +26,7 @@
 <body>
   <a href="#main-content" class="skip-link">Skip to content</a>
   <nav class="top-nav" aria-label="Main navigation"><div class="container container--wide"><a href="index.html" class="nav-brand" aria-label="Arnio home"><img src="arnio-logo.svg" alt="Arnio" height="32"></a><ul class="nav-links"><li><a href="docs.html">Docs</a></li><li><a href="api.html">API</a></li><li><a href="benchmarks.html">Benchmarks</a></li><li><a href="contributing.html">Contributing</a></li><li><a href="architecture.html">Architecture</a></li><li><a href="roadmap.html">Roadmap</a></li><li><a href="community.html">Community</a></li><li><a href="changelog.html">Changelog</a></li></ul><div class="nav-actions"><a href="https://discord.gg/xsEw7r78M" class="nav-discord" target="_blank" rel="noopener" aria-label="Join Discord">Discord</a><a href="https://github.com/im-anishraj/arnio" class="nav-github" target="_blank" rel="noopener" aria-label="View on GitHub">GitHub</a><button class="theme-toggle" aria-label="Toggle theme">Theme</button><button class="nav-hamburger" aria-label="Open menu" aria-expanded="false" aria-controls="mobile-navigation">☰</button></div></div></nav>
-  <div id="mobile-navigation" class="mobile-menu" aria-label="Mobile navigation"><a href="index.html">Home</a><a href="docs.html">Documentation</a><a href="api.html">API Reference</a><a href="benchmarks.html">Benchmarks</a><a href="contributing.html">Contributing</a><a href="architecture.html">Architecture</a><a href="roadmap.html">Roadmap</a><a href="community.html">Community</a><a href="https://discord.gg/xsEw7r78M" target="_blank" rel="noopener">Discord</a><a href="changelog.html">Changelog</a></div>
+  <div id="mobile-navigation" class="mobile-menu" role="navigation" aria-label="Mobile navigation"><a href="index.html">Home</a><a href="docs.html">Documentation</a><a href="api.html">API Reference</a><a href="benchmarks.html">Benchmarks</a><a href="contributing.html">Contributing</a><a href="architecture.html">Architecture</a><a href="roadmap.html">Roadmap</a><a href="community.html">Community</a><a href="https://discord.gg/xsEw7r78M" target="_blank" rel="noopener">Discord</a><a href="changelog.html">Changelog</a></div>
 
   <header class="page-hero"><div class="container"><h1>Changelog</h1><p>Latest published release: v1.19.0. Current main also contains unreleased documentation, quality, frame, and benchmark updates.</p></div></header>
 
@@ -35,14 +35,14 @@
       <article class="changelog-entry">
         <div class="changelog-entry-header"><span class="changelog-entry-version">Current main</span><span class="badge badge-warning">Unreleased</span><span class="changelog-entry-date">after v1.19.0</span></div>
         <div class="changelog-entry-body">
-          <h3>Added</h3>
+          <h2 class="changelog-section-heading">Added</h2>
           <ul>
             <li><code>DataQualityReport.to_json()</code> for JSON report export.</li>
             <li><code>profile(exclude_columns=...)</code> and <code>DataQualityReport.to_dict(exclude_columns=...)</code> for privacy-aware quality exports.</li>
             <li><code>ArFrame.__getitem__</code> column selection and <code>ArFrame.drop_columns</code>.</li>
             <li>Lightweight benchmark regression checks and dry-run coverage for the pandas accessor.</li>
           </ul>
-          <h3>Fixed</h3>
+          <h2 class="changelog-section-heading">Fixed</h2>
           <ul>
             <li>Reject headers that differ only by whitespace.</li>
             <li>Safely handle tuple mapping keys in <code>replace_values</code>.</li>
@@ -53,7 +53,7 @@
        <article class="changelog-entry">
         <div class="changelog-entry-header"><span class="changelog-entry-version">v1.19.0</span><span class="badge badge-success">Latest release</span><span class="changelog-entry-date">2026-05-28</span></div>
         <div class="changelog-entry-body">
-          <h3>Documentation</h3>
+          <h2 class="changelog-section-heading">Documentation</h2>
           <ul>
             <li>Updated website latest-release references from v1.18.0 to v1.19.0 across all pages.</li>
           </ul>
@@ -63,12 +63,12 @@
       <article class="changelog-entry">
         <div class="changelog-entry-header"><span class="changelog-entry-version">v1.18.0</span><span class="badge badge-success">Released</span><span class="changelog-entry-date">2026-05-22</span></div>
         <div class="changelog-entry-body">
-          <h3>Features</h3>
+          <h2 class="changelog-section-heading">Features</h2>
           <ul>
             <li>Added Arrow export API with <code>ar.to_arrow(frame)</code> and bool dtype detection.</li>
             <li>Added <code>max_errors</code> support to <code>Schema.validate()</code> and <code>ar.validate()</code>.</li>
           </ul>
-          <h3>Bug fixes</h3>
+          <h2 class="changelog-section-heading">Bug fixes</h2>
           <ul>
             <li>Improved cleaning mapping validation errors by including the received type.</li>
           </ul>
@@ -78,7 +78,7 @@
       <article class="changelog-entry">
         <div class="changelog-entry-header"><span class="changelog-entry-version">v1.17.1</span><span class="badge badge-success">Released</span><span class="changelog-entry-date">2026-05-22</span></div>
         <div class="changelog-entry-body">
-          <h3>Documentation</h3>
+          <h2 class="changelog-section-heading">Documentation</h2>
           <ul>
             <li>Clarified that chunked schema validation is not a separate streaming schema-validation contract.</li>
           </ul>
@@ -88,19 +88,19 @@
       <article class="changelog-entry">
         <div class="changelog-entry-header"><span class="changelog-entry-version">v1.17.0</span><span class="badge badge-success">Released</span><span class="changelog-entry-date">2026-05-22</span></div>
         <div class="changelog-entry-body">
-          <h3>Features</h3>
+          <h2 class="changelog-section-heading">Features</h2>
           <ul>
             <li>Added URL <code>allowed_schemes</code>, <code>ArFrame.from_records</code>, <code>ArFrame.schema_summary</code>, schema YAML export, and <code>ArFrame.describe</code>.</li>
             <li>Added configurable bad-line handling, CSV dtype support, skip rows, encoding error handling, decimal separators, and DuckDB registration.</li>
             <li>Added <code>write_parquet</code>, <code>to_dict</code>, <code>drop_empty_columns</code>, <code>winsorize_outliers</code>, <code>select_columns</code>, near-constant warnings, and high-cardinality quality warnings.</li>
             <li>Added pipeline context and verbose diagnostics, plus Python interface and extension stub updates.</li>
           </ul>
-          <h3>Bug fixes</h3>
+          <h2 class="changelog-section-heading">Bug fixes</h2>
           <ul>
             <li>Hardened CSV parsing, malformed rows, permission messages, Unicode paths, duplicate headers, extra fields, and unterminated quoted-field diagnostics.</li>
             <li>Fixed zero-column row-count preservation, duplicate add-column guards, drop-duplicates row-key collisions, JSONL <code>nrows</code>, Windows clean target, and safer cleaning validation paths.</li>
           </ul>
-          <h3>Performance and docs</h3>
+          <h2 class="changelog-section-heading">Performance and docs</h2>
           <ul>
             <li>Optimized CSV parser allocation paths, integer parsing, string mutation paths, and unmodified-column moves.</li>
             <li>Added sparse-null benchmarks, optimized theme logos, schema validation tutorial docs, and Windows build troubleshooting.</li>
