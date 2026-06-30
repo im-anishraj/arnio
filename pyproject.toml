@@ -48,7 +48,7 @@ arnio = "arnio.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/im-anishraj/arnio"
-Documentation = "https://github.com/im-anishraj/arnio#readme"
+Documentation = "https://arniolib.vercel.app/docs.html"
 Repository = "https://github.com/im-anishraj/arnio"
 Issues = "https://github.com/im-anishraj/arnio/issues"
 Changelog = "https://github.com/im-anishraj/arnio/blob/main/CHANGELOG.md"
