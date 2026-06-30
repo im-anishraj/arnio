@@ -1,0 +1,27 @@
+name: Verify Release Tag Guard
+
+# Lightweight validation for the release-tag guard used by build_wheels.yml.
+# Runs only when the guard logic or its tests change. Proves a real existing
+# tag is accepted while a missing tag, a branch with a tag-shaped name, and an
+# invalid format are rejected.
+
+on:
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - "scripts/verify_release_tag.sh"
+      - "tests/test_verify_release_tag.sh"
+      - ".github/workflows/verify-release-tag-test.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-release-tag-guard:
+    name: Test release tag guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Run release-tag guard tests
+        run: bash tests/test_verify_release_tag.sh
