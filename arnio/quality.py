@@ -701,13 +701,13 @@ class DataQualityReport:
             # Normalize the input path to handle strings, bytes, and os.PathLike objects uniformly
             norm_path = os.fspath(file_path)
 
-            # Check if the path is provided as bytes and handle empty check
+            # Check if the path is provided as bytes and handle empty check via exception
             if isinstance(file_path, bytes) and file_path == b"":
-                return False, "Report path cannot be empty"
+                raise ValueError("Report path cannot be empty")
 
-            # Check if the path is provided as string and handle empty check
+            # Check if the path is provided as string and handle empty check via exception
             if isinstance(file_path, str) and file_path == "":
-                return False, "Report path cannot be empty"
+                raise ValueError("Report path cannot be empty")
 
             # NOW the rest of the code will run perfectly for valid paths below...
             if os.path.isdir(norm_path):
