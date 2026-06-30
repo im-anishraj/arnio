@@ -691,32 +691,31 @@ class DataQualityReport:
             names raise ``KeyError``.
         """
         if file_path is not None:
-            if isinstance(file_path, bool) or not isinstance(
-                file_path, (str, bytes, os.PathLike)
-            ):
-                raise TypeError(
-                    f"file_path must be a string, bytes, or os.PathLike object, got {type(file_path).__name__}"
-                )
+        if isinstance(file_path, bool) or not isinstance(
+            file_path, (str, bytes, os.PathLike)
+        ):
+            raise TypeError(
+                f"file_path must be a string, bytes, or os.PathLike object, got {type(file_path).__name__}"
+            )
 
-            # Normalize the input path to handle strings, bytes, and os.PathLike objects uniformly
-            norm_path = os.fspath(file_path)
+        # 1. Check for empty paths BEFORE calling os.fspath to avoid premature crashes
+        if isinstance(file_path, bytes) and file_path == b"":
+            raise ValueError("Report path cannot be empty")
 
-            # Check if the path is provided as bytes and handle empty check via exception
-            if isinstance(file_path, bytes) and file_path == b"":
-                raise ValueError("Report path cannot be empty")
+        if isinstance(file_path, str) and file_path == "":
+            raise ValueError("Report path cannot be empty")
 
-            # Check if the path is provided as string and handle empty check via exception
-            if isinstance(file_path, str) and file_path == "":
-                raise ValueError("Report path cannot be empty")
+        # 2. Normalize the input path once we are sure it is not empty
+        norm_path = os.fspath(file_path)
 
-            # NOW the rest of the code will run perfectly for valid paths below...
-            if os.path.isdir(norm_path):
-                raise ValueError("file_path must point to a file, not a directory")
+        # Reject paths that point to a directory instead of a file
+        if os.path.isdir(norm_path):
+            raise ValueError("file_path must point to a file, not a directory")
 
-            # Reject missing parent directories without breaking simple relative filenames
-            parent_dir = os.path.dirname(norm_path)
-            if parent_dir and not os.path.exists(parent_dir):
-                raise ValueError("parent directory does not exist")
+        # Reject missing parent directories without breaking simple relative filenames
+        parent_dir = os.path.dirname(norm_path)
+        if parent_dir and not os.path.exists(parent_dir):
+            raise ValueError("parent_dir does not exist")
 
         redact_top_values = _validate_bool_option(
             redact_top_values, "redact_top_values"
