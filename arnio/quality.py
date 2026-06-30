@@ -702,15 +702,14 @@ class DataQualityReport:
             norm_path = os.fspath(file_path)
 
             # Check if the path is provided as bytes and handle empty check
-            if isinstance(file_path, bytes):
-                if file_path == b"":
-                    return False, "Report path cannot be empty"
-            # Handle the path if it is a standard string
-            else:
-                if file_path == "":
-                    return False, "Report path cannot be empty"
+            if isinstance(file_path, bytes) and file_path == b"":
+                return False, "Report path cannot be empty"
 
-            # Reject paths that point to a directory instead of a file
+            # Check if the path is provided as string and handle empty check
+            if isinstance(file_path, str) and file_path == "":
+                return False, "Report path cannot be empty"
+
+            # NOW the rest of the code will run perfectly for valid paths below...
             if os.path.isdir(norm_path):
                 raise ValueError("file_path must point to a file, not a directory")
 
