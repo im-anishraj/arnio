@@ -5067,3 +5067,18 @@ def test_score_breakdown_with_real_values():
     for key in expected_keys:
         assert key in result, f"Missing key: {key}"
         assert isinstance(result[key], (int, float)), f"{key} must be numeric"
+
+
+def test_profile_comparison_drift_report_exclude_columns():
+    df = pd.DataFrame({"name": ["Alice", "Bob"], "secret_key": ["abc123", "xyz789"]})
+    frame = ar.from_pandas(df)
+    p1 = ar.profile(frame)
+    comparison = ar.compare_profiles(p1, p1)
+    exported_dict = comparison.to_dict(exclude_columns=["secret_key"])
+
+    assert "secret_key" not in exported_dict["left_profile"]["columns"]
+    assert "secret_key" not in exported_dict["right_profile"]["columns"]
+    assert "secret_key" not in exported_dict["drift_report"]
+
+
+# lint_sync

@@ -1148,6 +1148,7 @@ class ProfileComparison:
             "drift_report": {
                 name: _clean_drift_entry(entry)
                 for name, entry in self.drift_report.items()
+                if name not in (exclude_columns or [])
             },
         }
 

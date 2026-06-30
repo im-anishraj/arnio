@@ -32,7 +32,7 @@ from ._core import (
 )
 from .convert import from_pandas, to_pandas
 from .exceptions import TypeCastError
-from .frame import ArFrame, _validate_arframe
+from .frame import ArFrame
 
 # ---------------------------------------------------------------------------
 # Report types for errors="report" mode
