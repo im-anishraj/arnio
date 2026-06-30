@@ -69,6 +69,7 @@ _PYTHON_STEP_REGISTRY: dict[str, Callable] = {
     "standardize_missing_tokens": cleaning.standardize_missing_tokens,
     "coalesce_columns": cleaning.coalesce_columns,
     "normalize_whitespace": cleaning.normalize_whitespace,
+    "split_column": cleaning.split_column,
 }
 _BUILTIN_PYTHON_STEP_REGISTRY: dict[str, Callable] = {}
 

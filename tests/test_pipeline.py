@@ -1390,6 +1390,34 @@ def test_pipeline_combine_columns():
     assert list(result_df["full_name"]) == ["Alice Smith", "Bob Jones"]
 
 
+def test_pipeline_split_column():
+    import pandas as pd
+
+    import arnio as ar
+
+    df = pd.DataFrame({"name": ["Alice,Smith", "Bob,Jones"]})
+    frame = ar.from_pandas(df)
+
+    result = ar.pipeline(
+        frame,
+        [
+            (
+                "split_column",
+                {
+                    "column": "name",
+                    "into": ["first", "last"],
+                    "separator": ",",
+                },
+            )
+        ],
+    )
+
+    result_df = ar.to_pandas(result)
+    assert list(result_df["first"]) == ["Alice", "Bob"]
+    assert list(result_df["last"]) == ["Smith", "Jones"]
+    assert "name" not in result_df.columns
+
+
 def test_replace_values_simple():
     import pandas as pd
 

@@ -2553,6 +2553,133 @@ def coalesce_columns(
     return from_pandas(df) if is_arframe else df
 
 
+def split_column(
+    frame,
+    column: str,
+    *,
+    into: list[str],
+    separator: str | None = None,
+    pattern: str | None = None,
+    keep_original: bool = False,
+):
+    """Split a string column into multiple columns by delimiter or regex pattern.
+
+    Exactly one of ``separator`` or ``pattern`` must be provided.
+
+    Parameters
+    ----------
+    frame : ArFrame or pd.DataFrame
+        Input data frame.
+    column : str
+        Name of the column to split.
+    into : list[str]
+        Names of the output columns.
+    separator : str, optional
+        Literal string used to split the column values.
+        Mutually exclusive with ``pattern``.
+    pattern : str, optional
+        Regex pattern used to extract groups from the column values via
+        ``Series.str.extract(pattern, expand=True)``.
+        Mutually exclusive with ``separator``.
+    keep_original : bool, default False
+        If True, keep the original ``column`` in the output.
+
+    Returns
+    -------
+    ArFrame or pd.DataFrame
+        Frame with the split columns added.
+
+    Raises
+    ------
+    TypeError
+        If ``frame`` is not an ArFrame or DataFrame, ``column`` is not a
+        string, ``into`` is not a list of strings, or ``separator`` is not
+        a string.
+    ValueError
+        If neither or both ``separator`` and ``pattern`` are provided,
+        ``into`` is empty, any name in ``into`` already exists as a column,
+        or the number of resulting columns does not match ``len(into)``.
+    KeyError
+        If ``column`` does not exist in the frame.
+
+    Examples
+    --------
+    >>> frame = ar.read_csv("data.csv")
+    >>> result = ar.split_column(frame, "full_name", into=["first", "last"],
+    ...                          separator=" ")
+    """
+    from .convert import from_pandas, to_pandas
+
+    # -- validate frame -------------------------------------------------------
+    frame, is_arframe = _validate_frame(frame, allow_pandas=True)
+
+    if not isinstance(column, str) or not column.strip():
+        raise TypeError("column must be a non-empty string")
+
+    if column not in frame.columns:
+        raise KeyError(f"Column {column!r} not found in frame.")
+
+    if not isinstance(into, list) or not all(isinstance(n, str) and n.strip() for n in into):
+        raise TypeError("into must be a list of non-empty strings")
+
+    if len(into) == 0:
+        raise ValueError("into must contain at least one output column name")
+
+    if len(into) != len(set(into)):
+        raise ValueError(f"into contains duplicate names: {into}")
+
+    existing = [n for n in into if n in frame.columns]
+    if existing:
+        raise ValueError(
+            f"Cannot create split columns that already exist: {existing}"
+        )
+
+    if (separator is None) == (pattern is None):
+        raise ValueError(
+            "Exactly one of separator (literal string) or pattern (regex) "
+            "must be provided."
+        )
+
+    if separator is not None and not isinstance(separator, str):
+        raise TypeError("separator must be a string")
+
+    # -- perform the split ----------------------------------------------------
+    if is_arframe:
+        df = to_pandas(frame)
+    else:
+        df = frame.copy(deep=False)
+
+    col_series = df[column]
+
+    if separator is not None:
+        # str.split with n=len(into)-1 limits splits so we get exactly
+        # len(into) columns (the last column gets the remainder).
+        split_df = col_series.str.split(sep=separator, n=len(into) - 1, expand=True)
+    else:
+        split_df = col_series.str.extract(pat=pattern, expand=True)
+
+    n_result = split_df.shape[1]
+    if n_result != len(into):
+        raise ValueError(
+            f"Split produced {n_result} column(s) but {len(into)} output "
+            f"name(s) were provided in 'into': {into}"
+        )
+
+    split_df.columns = into
+
+    # Convert split columns to string so the output is consistent with the
+    # input type.  NaN values from the split propagate as NaN/NA.
+    for c in into:
+        split_df[c] = split_df[c].astype("string")
+
+    df = pd.concat([df, split_df], axis=1)
+
+    if not keep_original:
+        df = df.drop(columns=[column])
+
+    return from_pandas(df) if is_arframe else df
+
+
 def clean_column_names(
     frame: ArFrame,
     *,

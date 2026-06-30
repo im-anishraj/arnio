@@ -5603,3 +5603,182 @@ class TestHashColumns:
         assert df_after["email"].iloc[0] == df_before["email"].iloc[0]
         assert df_after["user_id"].iloc[0] == df_before["user_id"].iloc[0]
         assert pd.isna(df_after["email"].iloc[1]) == pd.isna(df_before["email"].iloc[1])
+
+class TestSplitColumn:
+    """Tests for split_column – split a string column by delimiter or regex."""
+
+    def test_split_by_comma(self):
+        import pandas as pd
+
+        import arnio as ar
+
+        df = pd.DataFrame({"name": ["Alice,Smith", "Bob,Jones"]})
+        frame = ar.from_pandas(df)
+
+        result = ar.split_column(frame, "name", into=["first", "last"], separator=",")
+        result_df = ar.to_pandas(result)
+
+        assert list(result_df["first"]) == ["Alice", "Bob"]
+        assert list(result_df["last"]) == ["Smith", "Jones"]
+        assert "name" not in result_df.columns
+
+    def test_split_by_whitespace(self):
+        import pandas as pd
+
+        import arnio as ar
+
+        df = pd.DataFrame({"full": ["Alice Smith", "Bob Jones"]})
+        frame = ar.from_pandas(df)
+
+        result = ar.split_column(frame, "full", into=["first", "last"], separator=" ")
+        result_df = ar.to_pandas(result)
+
+        assert list(result_df["first"]) == ["Alice", "Bob"]
+        assert list(result_df["last"]) == ["Smith", "Jones"]
+
+    def test_split_by_regex_pattern(self):
+        import pandas as pd
+
+        import arnio as ar
+
+        df = pd.DataFrame({"code": ["A-001", "B-002"]})
+        frame = ar.from_pandas(df)
+
+        result = ar.split_column(frame, "code", into=["letter", "number"], pattern=r"([A-Z])-(\d+)")
+        result_df = ar.to_pandas(result)
+
+        assert list(result_df["letter"]) == ["A", "B"]
+        assert list(result_df["number"]) == ["001", "002"]
+
+    def test_keep_original(self):
+        import pandas as pd
+
+        import arnio as ar
+
+        df = pd.DataFrame({"name": ["Alice,Smith"]})
+        frame = ar.from_pandas(df)
+
+        result = ar.split_column(
+            frame, "name", into=["first", "last"], separator=",", keep_original=True
+        )
+        result_df = ar.to_pandas(result)
+
+        assert "name" in result_df.columns
+        assert list(result_df["name"]) == ["Alice,Smith"]
+
+    def test_too_few_splits_raises(self):
+        import pandas as pd
+
+        import arnio as ar
+
+        df = pd.DataFrame({"x": ["a"]})
+        frame = ar.from_pandas(df)
+
+        with pytest.raises(ValueError, match="Split produced"):
+            ar.split_column(frame, "x", into=["a1", "a2", "a3"], separator=",")
+
+    def test_too_many_splits_raises(self):
+        import pandas as pd
+
+        import arnio as ar
+
+        df = pd.DataFrame({"x": ["a,b,c"]})
+        frame = ar.from_pandas(df)
+
+        with pytest.raises(ValueError, match="Split produced"):
+            ar.split_column(frame, "x", into=["first"], separator=",")
+
+    def test_missing_column_raises(self):
+        import pandas as pd
+
+        import arnio as ar
+
+        df = pd.DataFrame({"a": [1]})
+        frame = ar.from_pandas(df)
+
+        with pytest.raises(KeyError, match="missing"):
+            ar.split_column(frame, "missing", into=["x", "y"], separator=",")
+
+    def test_duplicate_output_names_raises(self):
+        import pandas as pd
+
+        import arnio as ar
+
+        df = pd.DataFrame({"x": ["a,b"]})
+        frame = ar.from_pandas(df)
+
+        with pytest.raises(ValueError, match="duplicate"):
+            ar.split_column(frame, "x", into=["a", "a"], separator=",")
+
+    def test_existing_output_column_raises(self):
+        import pandas as pd
+
+        import arnio as ar
+
+        df = pd.DataFrame({"x": ["a,b"], "y": [1]})
+        frame = ar.from_pandas(df)
+
+        with pytest.raises(ValueError, match="already exist"):
+            ar.split_column(frame, "x", into=["y", "z"], separator=",")
+
+    def test_empty_into_raises(self):
+        import pandas as pd
+
+        import arnio as ar
+
+        df = pd.DataFrame({"x": ["a"]})
+        frame = ar.from_pandas(df)
+
+        with pytest.raises(ValueError, match="at least one"):
+            ar.split_column(frame, "x", into=[], separator=",")
+
+    def test_neither_separator_nor_pattern_raises(self):
+        import pandas as pd
+
+        import arnio as ar
+
+        df = pd.DataFrame({"x": ["a,b"]})
+        frame = ar.from_pandas(df)
+
+        with pytest.raises(ValueError, match="Exactly one"):
+            ar.split_column(frame, "x", into=["a", "b"])
+
+    def test_both_separator_and_pattern_raises(self):
+        import pandas as pd
+
+        import arnio as ar
+
+        df = pd.DataFrame({"x": ["a,b"]})
+        frame = ar.from_pandas(df)
+
+        with pytest.raises(ValueError, match="Exactly one"):
+            ar.split_column(frame, "x", into=["a", "b"], separator=",", pattern=r".")
+
+    def test_pandas_input_returns_dataframe(self):
+        import pandas as pd
+
+        import arnio as ar
+
+        df = pd.DataFrame({"name": ["Alice,Smith"]})
+
+        result = ar.split_column(df, "name", into=["first", "last"], separator=",")
+
+        assert isinstance(result, pd.DataFrame)
+        assert list(result["first"]) == ["Alice"]
+        assert list(result["last"]) == ["Smith"]
+        assert "name" not in result.columns
+
+    def test_null_values_propagate(self):
+        import pandas as pd
+
+        import arnio as ar
+
+        df = pd.DataFrame({"name": ["Alice,Smith", None]})
+        frame = ar.from_pandas(df)
+
+        result = ar.split_column(frame, "name", into=["first", "last"], separator=",")
+        result_df = ar.to_pandas(result)
+
+        assert result_df["first"].iloc[0] == "Alice"
+        assert pd.isna(result_df["first"].iloc[1])
+        assert pd.isna(result_df["last"].iloc[1])
