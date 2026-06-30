@@ -2030,6 +2030,35 @@ Common symptoms:
 
 If you prefer a Linux-like toolchain on Windows, WSL is also supported.
 
+### Docker development workflow
+
+If you prefer not to install local C++ toolchain dependencies, use the
+development Docker Compose setup:
+
+```bash
+# Build the image (one-time, or after pyproject.toml changes)
+make docker-rebuild
+
+# Start the development container and open a shell
+make docker-dev
+
+# Run the test suite inside the container
+make docker-test
+```
+
+The image is built with `pip install -e ".[dev]"` already applied, so
+`make docker-test` runs against a fully-initialised environment without
+re-installing on every container start. Bind-mounted files in `/workspace`
+are owned by a non-root user whose UID/GID match the host, so generated
+files (caches, build outputs) stay owned by you on the host.
+
+To override the user mapping (for example, on a system where your UID is
+not `1000`):
+
+```bash
+DEV_UID=$(id -u) DEV_GID=$(id -g) make docker-rebuild
+```
+
 > **PR titles must follow [Conventional Commits](https://www.conventionalcommits.org/)** — `feat:`, `fix:`, `docs:`, `chore:`. Our release pipeline auto-generates changelogs from these.
 
 For GSSoC contributors, please read **[GSSOC_GUIDE.md](GSSOC_GUIDE.md)** before asking to be assigned. It explains issue claiming, contribution levels, review expectations, and what maintainers look for in a strong PR. If you want a quick onboarding refresher, see the [GSSoC FAQ](GSSOC_GUIDE.md#gssoc-faq).

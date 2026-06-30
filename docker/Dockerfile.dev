@@ -1,0 +1,50 @@
+FROM python:3.12-slim
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# Native build deps for the C++ extension
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+       build-essential \
+       cmake \
+       ninja-build \
+       git \
+       bash \
+    && rm -rf /var/lib/apt/lists/*
+
+# Non-root user with host-matched UID/GID to avoid root-owned files on bind mount.
+# Pass --build-arg USER_UID=$(id -u) USER_GID=$(id -g) (or set DEV_UID/DEV_GID
+# env vars consumed by docker-compose.yml) to match the host user.
+ARG USER_UID=1000
+ARG USER_GID=1000
+RUN groupadd --gid ${USER_GID} devuser \
+    && useradd --uid ${USER_UID} --gid ${USER_GID} --create-home --shell /bin/bash devuser
+
+WORKDIR /workspace
+
+# Copy package sources and dev tooling at build time so `pip install -e ".[dev]"`
+# can run inside the image. This avoids re-installing on every container start
+# (slow + network-dependent) and avoids the `docker compose run` command-override
+# pitfall that would otherwise skip the install for `make docker-test`.
+COPY --chown=devuser:devuser pyproject.toml ./
+COPY --chown=devuser:devuser README.md ./
+COPY --chown=devuser:devuser LICENSE ./
+COPY --chown=devuser:devuser arnio ./arnio/
+COPY --chown=devuser:devuser tests ./tests/
+COPY --chown=devuser:devuser examples ./examples/
+COPY --chown=devuser:devuser scripts ./scripts/
+COPY --chown=devuser:devuser benchmarks ./benchmarks/
+COPY --chown=devuser:devuser CMakeLists.txt ./
+COPY --chown=devuser:devuser cpp ./cpp/
+COPY --chown=devuser:devuser bindings ./bindings/
+
+# Pre-install the package (editable) + dev tooling into the image.
+# At container start, the bind mount in docker-compose.yml overlays /workspace
+# with the host checkout, but the installed packages remain in site-packages
+# so `make test`, `pre-commit`, `ruff`, and `black` all work immediately.
+RUN pip install --no-cache-dir -e ".[dev]"
+
+USER devuser
+
+CMD ["bash"]

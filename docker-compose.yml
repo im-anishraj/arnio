@@ -1,0 +1,18 @@
+services:
+  dev:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dev
+      args:
+        # Match the host UID/GID so bind-mounted files are owned correctly
+        # on the host. Override with DEV_UID / DEV_GID env vars if needed.
+        USER_UID: "${DEV_UID:-1000}"
+        USER_GID: "${DEV_GID:-1000}"
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+    # Just keep the service running; the image already has the package + dev
+    # tooling installed at build time. `make docker-dev` execs a shell into
+    # this container; `make docker-test` runs `make test` via `compose run`
+    # which overrides this command (intentionally — the install is baked in).
+    command: tail -f /dev/null
