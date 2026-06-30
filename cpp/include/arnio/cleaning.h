@@ -2,6 +2,7 @@
 
 #include <optional>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -46,7 +47,7 @@ Frame fill_nulls(const Frame& frame, const CellValue& value,
 // Drop duplicate rows
 Frame drop_duplicates(const Frame& frame,
                       const std::optional<std::vector<std::string>>& subset = std::nullopt,
-                      const std::string& keep = "first");
+                      std::string_view keep = "first");
 
 // Strip leading/trailing whitespace from string columns
 Frame strip_whitespace(const Frame& frame,
@@ -55,7 +56,7 @@ Frame strip_whitespace(const Frame& frame,
 // Normalize case of string columns
 Frame normalize_case(const Frame& frame,
                      const std::optional<std::vector<std::string>>& subset = std::nullopt,
-                     const std::string& case_type = "lower");
+                     std::string_view case_type = "lower");
 
 // Rename columns
 Frame rename_columns(const Frame& frame,
@@ -78,13 +79,13 @@ Frame clip_numeric(const Frame& frame, std::optional<double> lower, std::optiona
 
 // Combine multiple columns into a single string column
 Frame combine_columns(const Frame& frame, const std::vector<std::string>& subset,
-                      const std::string& separator, const std::string& output_column);
+                      std::string_view separator, std::string_view output_column);
 
 // Safely divide one numeric column by another.
 // Denominator nulls/zero values produce fill_value.
 // Output is stored as FLOAT64.
-Frame safe_divide_columns(const Frame& frame, const std::string& numerator,
-                          const std::string& denominator, const std::string& output_column,
+Frame safe_divide_columns(const Frame& frame, std::string_view numerator,
+                          std::string_view denominator, std::string_view output_column,
                           double fill_value);
 
 }  // namespace arnio

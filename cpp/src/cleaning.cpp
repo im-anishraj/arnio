@@ -339,7 +339,7 @@ Frame fill_nulls(const Frame& frame, const CellValue& value,
 }
 
 Frame drop_duplicates(const Frame& frame, const std::optional<std::vector<std::string>>& subset,
-                      const std::string& keep) {
+                      std::string_view keep) {
     if (subset.has_value() && subset->empty()) {
         throw std::invalid_argument("drop_duplicates subset cannot be empty");
     }
@@ -433,7 +433,7 @@ Frame strip_whitespace(const Frame& frame, const std::optional<std::vector<std::
 }
 
 Frame normalize_case(const Frame& frame, const std::optional<std::vector<std::string>>& subset,
-                     const std::string& case_type) {
+                     std::string_view case_type) {
     auto target_indices_set = resolve_subset(frame, subset);
     std::unordered_set<size_t> targets(target_indices_set.begin(), target_indices_set.end());
     auto ascii_lower = [](char c) -> char {
@@ -724,11 +724,11 @@ Frame clip_numeric(const Frame& frame, std::optional<double> lower, std::optiona
 
     return Frame(std::move(new_cols));
 }
-Frame safe_divide_columns(const Frame& frame, const std::string& numerator,
-                          const std::string& denominator, const std::string& output_column,
+Frame safe_divide_columns(const Frame& frame, std::string_view numerator,
+                          std::string_view denominator, std::string_view output_column,
                           double fill_value) {
-    const auto numerator_index = frame.column_index(numerator);
-    const auto denominator_index = frame.column_index(denominator);
+    const auto numerator_index = frame.column_index(std::string(numerator));
+    const auto denominator_index = frame.column_index(std::string(denominator));
 
     const auto& numerator_col = frame.column(numerator_index);
     const auto& denominator_col = frame.column(denominator_index);
@@ -739,7 +739,7 @@ Frame safe_divide_columns(const Frame& frame, const std::string& numerator,
             "safe_divide_columns native path requires INT64 or FLOAT64 columns");
     }
 
-    Column result_col(output_column, DType::FLOAT64);
+    Column result_col(std::string(output_column), DType::FLOAT64);
 
     for (size_t r = 0; r < frame.num_rows(); ++r) {
         if (numerator_col.is_null(r) || denominator_col.is_null(r)) {
@@ -793,14 +793,14 @@ Frame safe_divide_columns(const Frame& frame, const std::string& numerator,
 }
 
 Frame combine_columns(const Frame& frame, const std::vector<std::string>& subset,
-                      const std::string& separator, const std::string& output_column) {
+                      std::string_view separator, std::string_view output_column) {
     std::vector<size_t> col_indices;
     col_indices.reserve(subset.size());
     for (const auto& name : subset) {
         col_indices.push_back(frame.column_index(name));
     }
 
-    Column combined(output_column, DType::STRING);
+    Column combined(std::string(output_column), DType::STRING);
     size_t num_rows = frame.num_rows();
 
     for (size_t r = 0; r < num_rows; ++r) {
