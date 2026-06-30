@@ -47,16 +47,5 @@ jobs:
       - name: Build wheel
         run: pip wheel . --no-deps -w dist/
 
-      - name: Install wheel in fresh environment
-        run: |
-          python -m venv smoke_env
-          smoke_env\Scripts\pip install --upgrade pip
-          smoke_env\Scripts\pip install pandas numpy
-          smoke_env\Scripts\pip install --find-links dist/ arnio --no-index
-
-      - name: Run smoke test from temp directory
-        run: |
-          $smokePython = "${{ github.workspace }}\smoke_env\Scripts\python"
-          cd $env:TEMP
-          & $smokePython -c "import arnio; print('arnio import OK:', arnio.__version__)"
-          & $smokePython -c "from arnio import ArFrame; print('ArFrame import OK')"
+      - name: Run wheel smoke test
+        run: python tests/smoke_wheel_install.py --wheelhouse dist
