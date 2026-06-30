@@ -1844,6 +1844,11 @@ def filter_rows(
             f"filter_rows: cannot compare column {column!r} with value "
             f"{value!r} using operator {op!r}: {exc}"
         ) from exc
+    except ValueError as exc:
+        raise TypeCastError(
+            f"filter_rows: cannot compare column {column!r} with value "
+            f"{value!r} using operator {op!r}: {exc}"
+        ) from exc
 
     mask = mask.fillna(False).astype(bool)
     filtered = df[mask]

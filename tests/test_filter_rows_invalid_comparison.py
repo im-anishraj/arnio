@@ -8,6 +8,7 @@ import pandas as pd
 import pytest
 
 import arnio as ar
+from arnio.exceptions import TypeCastError
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -193,3 +194,15 @@ class TestFilterRowsInvalidComparisonTypesPipeline:
         result = ar.filter_rows(frame, column="age", op="!=", value="twenty")
         result_df = ar.to_pandas(result)
         assert len(result_df) == 2
+
+
+class TestFilterRowsTypeCastErrorRegression:
+    def test_non_numeric_string_on_numeric_column_arframe_raises_typecast_error(self):
+        frame = _make_frame({"score": [10, 20, 30]})
+        with pytest.raises(TypeCastError, match="filter_rows"):
+            ar.filter_rows(frame, column="score", op=">", value="not_a_number")
+
+    def test_non_numeric_string_on_numeric_column_dataframe_raises_typecast_error(self):
+        df = pd.DataFrame({"score": [10, 20, 30]})
+        with pytest.raises(TypeCastError, match="filter_rows"):
+            ar.filter_rows(df, column="score", op=">", value="not_a_number")
