@@ -698,15 +698,13 @@ class DataQualityReport:
                 f"file_path must be a string, bytes, or os.PathLike object, got {type(file_path).__name__}"
             )
 
-        # 1. Check for empty paths BEFORE calling os.fspath to avoid premature crashes
-        if isinstance(file_path, bytes) and file_path == b"":
-            raise ValueError("Report path cannot be empty")
-
-        if isinstance(file_path, str) and file_path == "":
-            raise ValueError("Report path cannot be empty")
-
-        # 2. Normalize the input path once we are sure it is not empty
         norm_path = os.fspath(file_path)
+
+        # Handle empty path validation for both bytes and strings securely
+        if isinstance(norm_path, bytes) and norm_path == b"":
+            raise ValueError("Report path cannot be empty")
+        if isinstance(norm_path, str) and norm_path == "":
+            raise ValueError("Report path cannot be empty")
 
         # Reject paths that point to a directory instead of a file
         if os.path.isdir(norm_path):
