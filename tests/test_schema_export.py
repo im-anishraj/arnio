@@ -323,6 +323,7 @@ def test_real_schema_with_rules_raises():
         schema_to_dict(schema)
 
 
+# ── Regression tests for issue #1441 ────────────────────────────────────────
 # test unsupported raw field value
 def test_raw_field_object_raises():
     with pytest.raises(TypeError):
@@ -334,6 +335,14 @@ def test_nested_set_normalized():
     result = schema_to_dict({"x": {"meta": {"tags": {"b", "a"}}}})
 
     assert result == {"fields": {"x": {"meta": {"tags": ["a", "b"]}}}}
+
+
+# ── Regression tests for issue #1573 ────────────────────────────────────────
+# test for nested set normalization
+def test_nested_set_inside_list_normalized():
+    result = schema_to_dict({"field": {"nested": [{"allowed_values": {"b", "a"}}]}})
+
+    assert result == {"fields": {"field": {"nested": [{"allowed_values": ["a", "b"]}]}}}
 
 
 # test for nested unsupported object inside dict
