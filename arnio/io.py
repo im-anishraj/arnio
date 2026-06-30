@@ -1112,10 +1112,13 @@ def read_csv_chunked(
     Parameters
     ----------
     path : str or file-like object
-        Path to the CSV file. Supports .csv, .txt, .tsv, and compressed .csv.gz extensions.
+        Filesystem path or text file-like object containing CSV data.
+        Any file extension is accepted.
         Text file-like objects are copied to a temporary file in bounded
-        chunks before native parsing.  For ``.tsv`` paths the delimiter is
-        automatically set to ``'\\t'`` when ``delimiter`` is omitted.
+        chunks before native parsing.
+        For ``.tsv`` files, the delimiter is automatically set to ``'\t'``
+        when ``delimiter`` is omitted.
+
     chunksize : int, default 10_000
         Maximum number of data rows per yielded chunk.
     delimiter : str or None, default None
@@ -1192,34 +1195,12 @@ def read_csv_chunked(
     >>> for chunk in ar.read_csv_chunked("data.tsv", delimiter=",", chunksize=10_000):
     ...     process(chunk)
     """
-    is_path_input = isinstance(path, (str, os.PathLike))
-    native_path, should_cleanup, is_materialized_text = _materialize_csv_input(
+    path, should_cleanup, is_materialized_text = _materialize_csv_input(
         path, caller="read_csv_chunked"
     )
     try:
-        path_lower = native_path.lower()
-        if is_path_input:
-            # We check the original path extension if it was passed as a path
-            if isinstance(path, str):
-                orig_path_lower = path.lower()
-            elif isinstance(path, os.PathLike):
-                orig_path_lower = os.fspath(path).lower()
-            else:
-                orig_path_lower = ""
-
-            if not (
-                orig_path_lower.endswith(".csv")
-                or orig_path_lower.endswith(".txt")
-                or orig_path_lower.endswith(".tsv")
-                or orig_path_lower.endswith(".gz")
-            ):
-                raise ValueError(
-                    f"Unsupported file format: {path}. "
-                    "Only .csv, .txt, .tsv, and compressed .csv.gz are supported."
-                )
-
-        # Explicitly validate the decompressed temp file (or local path) rather than the compressed bytes
-        _validate_csv_path(native_path, encoding, reject_utf8_nul_bytes=False)
+        path_lower = path.lower()
+        _validate_csv_path(path, encoding, reject_utf8_nul_bytes=False)
 
         # Resolve the sentinel: auto-detect tab for .tsv only when the caller
         # truly omitted delimiter (None).  An explicit delimiter="," is always
