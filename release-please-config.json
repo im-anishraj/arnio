@@ -1,9 +1,10 @@
 {
   "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "include-v-in-tag": true,
+  "include-component-in-tag": false,
   "packages": {
     ".": {
       "release-type": "python",
-      "package-name": "arnio",
       "changelog-path": "CHANGELOG.md"
     }
   }
