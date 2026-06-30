@@ -388,8 +388,20 @@ class TestValidateColumnsExist:
     def test_raises_clear_error_for_missing_columns(self, sample_csv):
         frame = ar.read_csv(sample_csv)
 
-        with pytest.raises(KeyError, match="Missing columns for test_op"):
+        with pytest.raises(KeyError, match=r"Missing columns for test_op: .*Available columns:"):
             ar.validate_columns_exist(frame, ["missing"], operation="test_op")
+
+    def test_multiple_missing_columns(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        with pytest.raises(
+            KeyError,
+            match=r"Missing columns for test_op: .*Available columns:",
+        ):
+            ar.validate_columns_exist(
+                frame,
+                ["missing1", "missing2"],
+                operation="test_op",
+            )
 
     def test_rejects_string_columns_argument(self, sample_csv):
         frame = ar.read_csv(sample_csv)
@@ -694,6 +706,11 @@ class TestDropDuplicates:
         result = ar.drop_duplicates(frame, subset=["name"])
         assert result.shape[0] == 3
 
+    def test_multiple_missing_columns(self,sample_csv):
+        frame = ar.read_csv(sample_csv)
+        with pytest.raises(KeyError,match=r"Missing columns for test_op: .*Available columns:"):
+            ar.validate_columns_exist(frame, ["missing1", "missing2"], operation="test_op")
+            
     def test_drop_duplicates_empty_subset_raises(self):
         frame = ar.from_pandas(pd.DataFrame({"id": [1, 2, 3], "name": ["a", "b", "c"]}))
 
