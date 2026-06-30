@@ -3174,43 +3174,170 @@ def _validate_datetime(
 ) -> list[ValidationIssue]:
     """Validate non-null datetime values against the format and min/max bounds in field_def."""
     issues: list[ValidationIssue] = []
-    parsed = pd.to_datetime(non_null, format=field_def.format, errors="coerce")
 
-    invalid_format = non_null[parsed.isna()]
-    issues.extend(
-        _row_issues(
-            invalid_format,
-            column=name,
-            rule="format",
-            message=f"Column {name!r} does not match the required datetime format",
-            severity=field_def.severity,
-        )
-    )
+    # Parse each element individually to prevent vector-wide parsing crash on mixed timezones,
+    # and to preserve individual timezone info.
+    parsed_vals = []
+    for idx, val in non_null.items():
+        try:
+            parsed_val = pd.to_datetime(val, format=field_def.format)
+        except (ValueError, TypeError, pd.errors.ParserError):
+            parsed_val = pd.NaT
+        parsed_vals.append((idx, val, parsed_val))
 
-    valid_mask = parsed.notna()
-    valid_non_null = non_null[valid_mask]
-    valid_parsed = parsed[valid_mask]
+    invalid_format_rows = []
+    valid_parsed = []  # list of (idx, val, parsed_timestamp)
+    for idx, val, p_val in parsed_vals:
+        if pd.isna(p_val):
+            invalid_format_rows.append((idx, val))
+        else:
+            valid_parsed.append((idx, val, p_val))
 
-    if field_def._datetime_min is not None:
-        issues.extend(
-            _row_issues(
-                valid_non_null[valid_parsed < field_def._datetime_min],
-                column=name,
-                rule="min",
-                message=f"Column {name!r} has values below {field_def._datetime_min}",
-                severity=field_def.severity,
+    # Add format issues
+    if invalid_format_rows:
+        for idx, val in invalid_format_rows:
+            issues.append(
+                ValidationIssue._fast_create(
+                    column=name,
+                    rule="format",
+                    message=f"Column {name!r} does not match the required datetime format",
+                    row_index=int(idx) + 1,
+                    value=val,
+                    severity=field_def.severity,
+                )
             )
-        )
-    if field_def._datetime_max is not None:
-        issues.extend(
-            _row_issues(
-                valid_non_null[valid_parsed > field_def._datetime_max],
-                column=name,
-                rule="max",
-                message=f"Column {name!r} has values above {field_def._datetime_max}",
-                severity=field_def.severity,
+
+    if not valid_parsed:
+        return issues
+
+    # Analyze timezone awareness of successfully parsed values
+    tz_aware_status = [p_val.tzinfo is not None for _, _, p_val in valid_parsed]
+    has_aware = any(tz_aware_status)
+    has_naive = not all(tz_aware_status)
+
+    # Handle mixed timezone-aware and timezone-naive values in the column
+    if has_aware and has_naive:
+        for idx, val, _ in valid_parsed:
+            issues.append(
+                ValidationIssue._fast_create(
+                    column=name,
+                    rule="timezone",
+                    message=f"Column {name!r} contains mixed timezone-aware and timezone-naive values",
+                    row_index=int(idx) + 1,
+                    value=val,
+                    severity=field_def.severity,
+                )
             )
-        )
+        return issues
+
+    # Validate against bounds with timezone compatibility checks
+    min_bound = field_def._datetime_min
+    max_bound = field_def._datetime_max
+
+    if has_aware:
+        # Check mismatch: aware data vs naive bounds
+        if min_bound is not None and min_bound.tzinfo is None:
+            for idx, val, _ in valid_parsed:
+                issues.append(
+                    ValidationIssue._fast_create(
+                        column=name,
+                        rule="timezone",
+                        message=f"Cannot compare timezone-aware values in column {name!r} with timezone-naive min boundary",
+                        row_index=int(idx) + 1,
+                        value=val,
+                        severity=field_def.severity,
+                    )
+                )
+            return issues
+        if max_bound is not None and max_bound.tzinfo is None:
+            for idx, val, _ in valid_parsed:
+                issues.append(
+                    ValidationIssue._fast_create(
+                        column=name,
+                        rule="timezone",
+                        message=f"Cannot compare timezone-aware values in column {name!r} with timezone-naive max boundary",
+                        row_index=int(idx) + 1,
+                        value=val,
+                        severity=field_def.severity,
+                    )
+                )
+            return issues
+
+        # Normalize data and bounds to UTC
+        normalized_parsed = []
+        for idx, val, p_val in valid_parsed:
+            normalized_parsed.append((idx, val, p_val.tz_convert("UTC")))
+        if min_bound is not None:
+            min_bound = min_bound.tz_convert("UTC")
+        if max_bound is not None:
+            max_bound = max_bound.tz_convert("UTC")
+    else:
+        # Check mismatch: naive data vs aware bounds
+        if min_bound is not None and min_bound.tzinfo is not None:
+            for idx, val, _ in valid_parsed:
+                issues.append(
+                    ValidationIssue._fast_create(
+                        column=name,
+                        rule="timezone",
+                        message=f"Cannot compare timezone-naive values in column {name!r} with timezone-aware min boundary",
+                        row_index=int(idx) + 1,
+                        value=val,
+                        severity=field_def.severity,
+                    )
+                )
+            return issues
+        if max_bound is not None and max_bound.tzinfo is not None:
+            for idx, val, _ in valid_parsed:
+                issues.append(
+                    ValidationIssue._fast_create(
+                        column=name,
+                        rule="timezone",
+                        message=f"Cannot compare timezone-naive values in column {name!r} with timezone-aware max boundary",
+                        row_index=int(idx) + 1,
+                        value=val,
+                        severity=field_def.severity,
+                    )
+                )
+            return issues
+
+        normalized_parsed = valid_parsed
+
+    # Compare values against bounds
+    for idx, val, p_val in normalized_parsed:
+        try:
+            if min_bound is not None and p_val < min_bound:
+                issues.append(
+                    ValidationIssue._fast_create(
+                        column=name,
+                        rule="min",
+                        message=f"Column {name!r} has values below {field_def._datetime_min}",
+                        row_index=int(idx) + 1,
+                        value=val,
+                        severity=field_def.severity,
+                    )
+                )
+            if max_bound is not None and p_val > max_bound:
+                issues.append(
+                    ValidationIssue._fast_create(
+                        column=name,
+                        rule="max",
+                        message=f"Column {name!r} has values above {field_def._datetime_max}",
+                        row_index=int(idx) + 1,
+                        value=val,
+                        severity=field_def.severity,
+                    )
+                )
+        except (TypeError, ValueError):
+            issues.append(
+                ValidationIssue._fast_create(
+                    column=name,
+                    rule="timezone",
+                    message=f"Incompatible timezone comparison for column {name!r}",
+                    row_index=int(idx) + 1,
+                    value=val,
+                    severity=field_def.severity,
+                )
+            )
 
     return issues
 

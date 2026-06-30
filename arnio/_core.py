@@ -22,13 +22,22 @@ try:
         rename_columns as _rename_columns,
         safe_divide_columns as _safe_divide_columns,
         strip_whitespace as _strip_whitespace,
-        encode_one_hot_native as _encode_one_hot_native,
-        encode_ordinal_native as _encode_ordinal_native,
     )
-except ImportError as e:
+except ImportError:
     raise ImportError(
         "arnio C++ extension (_arnio_cpp) not found.\n"
         "Install from source: pip install -e .\n"
         "Windows: Install 'Desktop development with C++' in Visual Studio Build Tools, or use WSL.\n"
         "Linux/macOS: Ensure gcc or clang is installed."
-    ) from e
+    )
+
+# isort: off
+try:
+    from ._arnio_cpp import (
+        encode_one_hot_native as _encode_one_hot_native,
+        encode_ordinal_native as _encode_ordinal_native,
+    )  # noqa: F401
+except ImportError:
+    _encode_one_hot_native = None
+    _encode_ordinal_native = None
+# isort: on
