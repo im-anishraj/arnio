@@ -349,6 +349,24 @@ class TestOnBadLinesQuotedDelimiters:
         assert "1 malformed CSV row(s)" in msg
         assert "CSV row 3 has 2 fields; expected 3" in msg
 
+    def test_empty_quoted_field_not_classified_bad(self, tmp_path):
+        csv_path = tmp_path / "empty_quoted.csv"
+        csv_path.write_text('a,b,c\n"",2,3\n4,5\n6,7,8\n')
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            frame = ar.read_csv(csv_path, on_bad_lines="warn")
+
+        assert frame.shape == (2, 3)
+
+        msg = str(caught[0].message)
+
+        assert "1 malformed CSV row(s)" in msg
+        assert "CSV row 3 has 2 fields; expected 3" in msg
+
+        df = ar.to_pandas(frame)
+        assert df["a"].isna().iloc[0]
+
 
 class TestOnBadLinesMultilineRecords:
     def test_multiline_record_is_not_classified_bad(self, tmp_path):
@@ -444,7 +462,7 @@ class TestOnBadLinesUsecols:
 
     def test_usecols_with_chunked_warn(self, tmp_path):
         csv_path = tmp_path / "usecols_chunked.csv"
-        csv_path.write_text("a,b,c,d\n" "1,2,3,4\n" "5,6,7\n" "8,9,10,11\n")
+        csv_path.write_text("a,b,c,d\n1,2,3,4\n5,6,7\n8,9,10,11\n")
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             frames = list(
