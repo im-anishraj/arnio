@@ -165,8 +165,10 @@ def _normalize_serializable(value: Any) -> Any:
         return {k: _normalize_serializable(v) for k, v in sorted(value.items())}
     # Convert sets into deterministic sorted lists since YAML
     # emission only supports list-like serialized output.
+    # Use a type-and-repr key so mixed-type sets (e.g. {1, "1"})
+    # sort deterministically instead of raising TypeError.
     if isinstance(value, set):
-        return sorted(_normalize_serializable(v) for v in value)
+        return sorted((_normalize_serializable(v) for v in value), key=lambda v: (type(v).__name__, repr(v)))
 
     if isinstance(value, list):
         return [_normalize_serializable(v) for v in value]

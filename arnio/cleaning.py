@@ -16,6 +16,8 @@ import numpy as np
 import pandas as pd
 from pandas.api.types import is_scalar
 
+from .schema import _reject_unsafe_regex_pattern
+
 from ._core import (
     _cast_types,
     _clip_numeric,
@@ -2159,6 +2161,7 @@ def drop_columns_matching(frame, pattern):
         re.compile(pattern)
     except re.error as e:
         raise re.error(f"Invalid regex pattern: {pattern!r}") from e
+    _reject_unsafe_regex_pattern(pattern)
 
     df = to_pandas(frame) if is_arframe else frame
 
@@ -2224,6 +2227,7 @@ def rename_columns_matching(frame, pattern, replacement):
         re.compile(pattern)
     except re.error as e:
         raise re.error(f"Invalid regex pattern: {pattern!r}") from e
+    _reject_unsafe_regex_pattern(pattern)
 
     is_arframe = not isinstance(frame, pd.DataFrame)
     df = to_pandas(frame) if is_arframe else frame
