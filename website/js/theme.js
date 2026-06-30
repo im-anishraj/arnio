@@ -46,6 +46,7 @@
     const btn = document.querySelector('.theme-toggle');
     if (!btn) return;
     btn.setAttribute('aria-label', theme === DARK ? 'Switch to light mode' : 'Switch to dark mode');
+    btn.setAttribute('aria-pressed', theme === DARK ? 'true' : 'false');
     btn.innerHTML = theme === DARK ? '☀️' : '🌙';
   }
 
