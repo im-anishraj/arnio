@@ -368,6 +368,15 @@
   font-size: var(--font-size-xl);
 }
 
+.home-card {
+  text-align: center;
+}
+
+.home-card h3 {
+  margin-top: 20px;
+  padding-bottom: 20px;
+}
+
 /* ── Badges ──────────────────────────────────────────────── */
 .badge {
   display: inline-flex;

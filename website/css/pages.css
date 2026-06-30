@@ -241,6 +241,7 @@
   text-decoration: none;
   color: var(--color-text);
   transition: all var(--transition-base);
+  text-align: center;
 }
 
 .quick-link-card:hover {
@@ -258,6 +259,8 @@
 .quick-link-card .card-title {
   font-size: var(--font-size-base);
   margin-bottom: var(--space-1);
+  margin-top: 5px;
+  padding-bottom: 10px;
 }
 
 .quick-link-card .card-desc {
