@@ -5067,3 +5067,62 @@ def test_score_breakdown_with_real_values():
     for key in expected_keys:
         assert key in result, f"Missing key: {key}"
         assert isinstance(result[key], (int, float)), f"{key} must be numeric"
+
+
+def test_to_html_rejects_empty_bytes():
+    import pytest
+
+    import arnio as ar
+
+    # Create a dummy report to test with
+    report = ar.profile(ar.from_pandas(pd.DataFrame({"x": [1, 2]})))
+
+    # 1. Test empty bytes path
+    with pytest.raises(ValueError, match="file_path must not be empty"):
+        report.to_html(file_path=b"")
+
+
+def test_to_html_rejects_directory_path(tmp_path):
+    import pytest
+
+    import arnio as ar
+
+    report = ar.profile(ar.from_pandas(pd.DataFrame({"x": [1, 2]})))
+
+    # 2. Test path pointing to an actual directory
+    with pytest.raises(
+        ValueError, match="file_path must point to a file, not a directory"
+    ):
+        report.to_html(file_path=tmp_path)
+
+
+def test_to_html_rejects_missing_parent(tmp_path):
+    import pytest
+
+    import arnio as ar
+
+    report = ar.profile(ar.from_pandas(pd.DataFrame({"x": [1, 2]})))
+    invalid_path = tmp_path / "missing_folder" / "report.html"
+
+    # 3. Test path where parent directory does not exist
+    with pytest.raises(ValueError, match="parent directory does not exist"):
+        report.to_html(file_path=invalid_path)
+
+
+def test_to_html_accepts_valid_relative_and_pathlike(tmp_path, monkeypatch):
+    import os
+
+    import arnio as ar
+
+    report = ar.profile(ar.from_pandas(pd.DataFrame({"x": [1, 2]})))
+
+    # 4. Test that a normal relative filename works fine (parent dir is empty string)
+    monkeypatch.chdir(tmp_path)
+    relative_file = "test_report.html"
+    report.to_html(file_path=relative_file)
+    assert os.path.exists(relative_file)
+
+    # Test that a valid PathLike object works fine too
+    pathlike_file = tmp_path / "another_report.html"
+    report.to_html(file_path=pathlike_file)
+    assert os.path.exists(pathlike_file)
