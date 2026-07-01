@@ -457,13 +457,15 @@
   padding: var(--space-5);
 }
 
-.changelog-entry-body h3 {
+.changelog-entry-body h3,
+.changelog-entry-body h2.changelog-section-heading {
   margin-top: var(--space-4);
   font-size: var(--font-size-base);
   color: var(--color-text);
 }
 
-.changelog-entry-body h3:first-child {
+.changelog-entry-body h3:first-child,
+.changelog-entry-body h2.changelog-section-heading:first-child {
   margin-top: 0;
 }
 
