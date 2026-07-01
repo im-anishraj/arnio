@@ -184,6 +184,16 @@ import json
 print(json.dumps(report.to_dict(), indent=2))
 </code></pre></div></div>
 
+        <div class="api-func"><div class="api-func-header">infer_schema(frame)</div><div class="api-func-body"><p>Infer probable column types with confidence scores for an <code>ArFrame</code>. Returns an <code>InferredSchema</code> containing one <code>ColumnInference</code> per column.</p><p><strong>ColumnInference fields:</strong></p><ul><li><code>inferred_type</code> – best-guess type: <code>int64</code>, <code>float64</code>, <code>bool</code>, <code>datetime</code>, <code>categorical</code>, or <code>string</code>.</li><li><code>confidence</code> – deterministic score in <code>[0.0, 1.0]</code>.</li><li><code>is_ambiguous</code> – <code>True</code> when the second candidate is within 0.15 of the top score.</li><li><code>candidates</code> – all candidate scores sorted by score descending.</li></ul><p><strong>InferredSchema methods:</strong></p><ul><li><code>to_dict()</code> – JSON-safe export with deterministic column ordering.</li><li><code>to_schema()</code> – convert to a <code>Schema</code> for use with <code>ar.validate()</code>. <code>categorical</code> maps to <code>string</code>; all fields are nullable by default.</li></ul><pre><code>frame = ar.read_csv("data.csv")
+schema = ar.infer_schema(frame)
+
+for name, col in schema.columns.items():
+    print(name, col.inferred_type, f"{col.confidence:.2f}", "ambiguous" if col.is_ambiguous else "")
+
+# Pipe directly into validate()
+result = ar.validate(frame, schema.to_schema())
+</code></pre></div></div>
+
         <h2 id="schema">Schema</h2>
         <div class="api-func"><div class="api-func-header">Schema(fields, strict=False, unique=None, rules=None).validate(frame, max_errors=None) / validate(frame, schema, max_errors=None)</div><div class="api-func-body"><p>Validate frames against field definitions. <code>max_errors</code> was added in v1.18.0.</p><p><code>unique</code>: list or tuple of column names that must contain no duplicate values in the frame.</p><p><code>rules</code>: list of callables <code>(pd.DataFrame) -&gt; list[ValidationIssue]</code> for cross-field or custom contract checks.</p><pre><code>schema = ar.Schema(
     fields={"email": ar.Email(), "user_id": ar.Int64()},

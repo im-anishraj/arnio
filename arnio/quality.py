@@ -27,6 +27,7 @@ from .cleaning import (
 )
 from .convert import to_pandas
 from .frame import ArFrame, _validate_arframe
+from .schema import Field, Schema
 
 
 class CleaningSuggestion(tuple):
@@ -3245,3 +3246,379 @@ def _filtered_suggestion_kwargs(
 _EMAIL_PATTERN = r"[^@\s]+@[^@\s]+\.[^@\s]+"
 _URL_PATTERN = r"https?://[^\s]+"
 _PHONE_PATTERN = r"\+?[0-9][0-9 .()\-]{6,}[0-9]"
+
+
+# ---------------------------------------------------------------------------
+# Schema inference with confidence scoring  (issue #855)
+# ---------------------------------------------------------------------------
+
+#: Candidate type set for infer_schema.  Order matters for display only;
+#: scoring is independent.
+_INFER_CANDIDATE_TYPES: tuple[str, ...] = (
+    "int64",
+    "float64",
+    "bool",
+    "datetime",
+    "categorical",
+    "string",
+)
+
+#: Two candidates are considered ambiguous when their confidence scores
+#: are within this threshold of each other.
+_AMBIGUITY_THRESHOLD: float = 0.15
+
+
+@dataclass(frozen=True)
+class ColumnInference:
+    """Inferred type information for a single column.
+
+    Attributes
+    ----------
+    name : str
+        Column name.
+    inferred_type : str
+        Best-guess type: one of ``"int64"``, ``"float64"``, ``"bool"``,
+        ``"datetime"``, ``"categorical"``, or ``"string"``.
+    confidence : float
+        Score in ``[0.0, 1.0]`` for the inferred type.
+    is_ambiguous : bool
+        ``True`` when the second-ranked candidate is within
+        :data:`_AMBIGUITY_THRESHOLD` of the top confidence score.
+    candidates : dict[str, float]
+        All candidate types and their scores, in deterministic order
+        (sorted by score descending, ties broken alphabetically).
+    """
+
+    name: str
+    inferred_type: str
+    confidence: float
+    is_ambiguous: bool
+    candidates: dict[str, float]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.name, str):
+            raise TypeError("name must be a str")
+        if self.inferred_type not in _INFER_CANDIDATE_TYPES:
+            raise ValueError(
+                f"inferred_type must be one of {_INFER_CANDIDATE_TYPES}, "
+                f"got {self.inferred_type!r}"
+            )
+        if (
+            isinstance(self.confidence, bool)
+            or not isinstance(self.confidence, (int, float))
+            or not math.isfinite(self.confidence)
+            or self.confidence < 0.0
+            or self.confidence > 1.0
+        ):
+            raise ValueError("confidence must be a finite float in [0.0, 1.0]")
+        if not isinstance(self.is_ambiguous, bool):
+            raise TypeError("is_ambiguous must be a bool")
+        if not isinstance(self.candidates, dict):
+            raise TypeError("candidates must be a dict")
+        for k, v in self.candidates.items():
+            if not isinstance(k, str):
+                raise TypeError("candidates keys must be strings")
+            if (
+                isinstance(v, bool)
+                or not isinstance(v, (int, float))
+                or not math.isfinite(v)
+                or v < 0.0
+                or v > 1.0
+            ):
+                raise ValueError(
+                    f"candidates[{k!r}] must be a finite float in [0.0, 1.0]"
+                )
+
+    def to_dict(self) -> dict[str, object]:
+        """Return a JSON-safe dictionary (deterministic ordering preserved)."""
+        return {
+            "name": self.name,
+            "inferred_type": self.inferred_type,
+            "confidence": self.confidence,
+            "is_ambiguous": self.is_ambiguous,
+            "candidates": dict(self.candidates),
+        }
+
+
+@dataclass(frozen=True)
+class InferredSchema:
+    """Inferred schema for all columns in an :class:`~arnio.ArFrame`.
+
+    Attributes
+    ----------
+    columns : dict[str, ColumnInference]
+        Mapping of column name → :class:`ColumnInference`, in the original
+        column order of the frame.
+    """
+
+    columns: dict[str, ColumnInference]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.columns, dict):
+            raise TypeError("columns must be a dict")
+        for k, v in self.columns.items():
+            if not isinstance(k, str):
+                raise TypeError("columns keys must be strings")
+            if not isinstance(v, ColumnInference):
+                raise TypeError(
+                    f"columns[{k!r}] must be a ColumnInference, "
+                    f"got {type(v).__name__}"
+                )
+
+    def to_dict(self) -> dict[str, object]:
+        """Return a JSON-safe dictionary with deterministic column ordering."""
+        return {"columns": {name: col.to_dict() for name, col in self.columns.items()}}
+
+    def to_schema(self) -> Schema:
+        """Convert to an :class:`~arnio.Schema` for use with :func:`~arnio.validate`.
+
+        Only the five Field-accepted dtypes (``int64``, ``float64``, ``string``,
+        ``bool``, ``datetime``) are mapped; ``categorical`` falls back to
+        ``"string"``.  All fields are marked ``nullable=True``, the
+        conservative default — callers may tighten this manually once they
+        have confirmed a column contains no nulls.
+
+        Returns
+        -------
+        Schema
+        """
+        _type_to_field_dtype: dict[str, str] = {
+            "int64": "int64",
+            "float64": "float64",
+            "bool": "bool",
+            "datetime": "datetime",
+            "datetime64": "datetime",
+            "categorical": "string",
+            "string": "string",
+        }
+
+        fields: dict[str, Field] = {}
+        for name, col in self.columns.items():
+            field_dtype = _type_to_field_dtype.get(col.inferred_type, "string")
+            # nullable=True conservatively; callers may tighten this manually
+            fields[name] = Field(dtype=field_dtype, nullable=True)
+        return Schema(fields=fields)
+
+
+# ---------------------------------------------------------------------------
+# Internal helpers for infer_schema
+# ---------------------------------------------------------------------------
+
+
+def _score_int(non_null: pd.Series, null_ratio: float) -> float:
+    """Confidence that *non_null* values are integers."""
+    if len(non_null) == 0:
+        return 0.0
+    as_str = non_null.astype("string").str.strip()
+    parse_ok = as_str.str.fullmatch(r"[+-]?\d+", na=False).sum()
+    parse_ratio = _ratio(int(parse_ok), len(as_str))
+    return round(max(0.0, parse_ratio - null_ratio * 0.3), 4)
+
+
+def _score_float(non_null: pd.Series, null_ratio: float) -> float:
+    """Confidence that *non_null* values are floats (but not integers)."""
+    if len(non_null) == 0:
+        return 0.0
+    as_str = non_null.astype("string").str.strip()
+    numeric = pd.to_numeric(as_str, errors="coerce")
+    parse_ratio = _ratio(int(numeric.notna().sum()), len(as_str))
+    # Penalise if all parse as integer (int64 wins instead)
+    int_ratio = _ratio(
+        int(as_str.str.fullmatch(r"[+-]?\d+", na=False).sum()), len(as_str)
+    )
+    raw = parse_ratio - int_ratio * 0.5
+    return round(max(0.0, raw - null_ratio * 0.3), 4)
+
+
+def _score_bool(non_null: pd.Series, null_ratio: float) -> float:
+    """Confidence that *non_null* values are boolean-like."""
+    if len(non_null) == 0:
+        return 0.0
+    _BOOL_VALUES = frozenset({"true", "false", "yes", "no", "1", "0"})
+    lower = non_null.astype("string").str.strip().str.lower()
+    parse_ratio = _ratio(int(lower.isin(_BOOL_VALUES).sum()), len(lower))
+    return round(max(0.0, parse_ratio - null_ratio * 0.3), 4)
+
+
+def _score_datetime(non_null: pd.Series, null_ratio: float) -> float:
+    """Confidence that *non_null* values are datetime-like."""
+    if len(non_null) == 0:
+        return 0.0
+    as_str = non_null.astype("string").str.strip()
+    parsed = pd.to_datetime(as_str, errors="coerce", format="mixed")
+    parse_ratio = _ratio(int(parsed.notna().sum()), len(as_str))
+    return round(max(0.0, parse_ratio - null_ratio * 0.2), 4)
+
+
+def _score_categorical(
+    non_null: pd.Series, null_ratio: float, unique_ratio: float
+) -> float:
+    """Confidence that *non_null* values are categorical.
+
+    Rule: at least 2 distinct values AND unique_ratio ≤ 0.2 (at most 20 % of
+    non-null values are distinct).  This documented rule prevents categorical
+    inference from uniqueness alone.
+    """
+    if len(non_null) == 0:
+        return 0.0
+    n_unique = int(non_null.nunique(dropna=True))
+    if n_unique < 2:
+        return 0.0
+    if unique_ratio <= 0.2:
+        base = 1.0 - unique_ratio
+    else:
+        base = 0.0
+    return round(max(0.0, base - null_ratio * 0.2), 4)
+
+
+def _score_string(null_ratio: float) -> float:
+    """Baseline confidence that a column is plain string (always ≥ 0.1)."""
+    return round(max(0.1, 1.0 - null_ratio * 0.1), 4)
+
+
+def _infer_column(
+    col_prof: ColumnProfile,
+) -> ColumnInference:
+    """Derive a :class:`ColumnInference` from an existing :class:`ColumnProfile`."""
+    # Reconstruct a minimal pandas Series from the profile so we can re-use
+    # the scoring helpers.  We only need non-null values for scoring.
+    #
+    # We store sample_values in the profile; for dtype-level inference these
+    # are sufficient for patterns — confidence is ultimately driven by ratios
+    # computed from counts, not the raw values.
+    null_ratio: float = col_prof.null_ratio
+    unique_ratio: float = col_prof.unique_ratio
+    dtype: str = col_prof.dtype
+
+    # Reconstruct a Series from sample_values for pattern testing.
+    # Fall back to empty Series if no samples are available.
+    if col_prof.sample_values:
+        sample_series = pd.Series(col_prof.sample_values, dtype=object)
+    else:
+        sample_series = pd.Series([], dtype=object)
+
+    non_null = sample_series.dropna()
+
+    # --- score each candidate ---
+    scores: dict[str, float] = {}
+
+    # If the stored dtype already tells us the type (C++ core / pandas native)
+    # we give that type a strong prior and still score the others.
+    if dtype == "int64":
+        scores["int64"] = round(min(1.0, 0.95 - null_ratio * 0.3), 4)
+        scores["float64"] = round(max(0.0, 0.6 - null_ratio * 0.3), 4)
+        scores["bool"] = 0.0
+        scores["datetime"] = 0.0
+        scores["categorical"] = _score_categorical(non_null, null_ratio, unique_ratio)
+        scores["string"] = min(0.4, _score_string(null_ratio))
+    elif dtype == "float64":
+        scores["int64"] = 0.0
+        scores["float64"] = round(min(1.0, 0.95 - null_ratio * 0.3), 4)
+        scores["bool"] = 0.0
+        scores["datetime"] = 0.0
+        scores["categorical"] = _score_categorical(non_null, null_ratio, unique_ratio)
+        scores["string"] = min(0.4, _score_string(null_ratio))
+    elif dtype == "bool":
+        scores["int64"] = 0.0
+        scores["float64"] = 0.0
+        scores["bool"] = round(min(1.0, 0.98 - null_ratio * 0.2), 4)
+        scores["datetime"] = 0.0
+        scores["categorical"] = _score_categorical(non_null, null_ratio, unique_ratio)
+        scores["string"] = min(0.4, _score_string(null_ratio))
+    else:
+        # String column — use heuristics based on value parsing.
+        scores["int64"] = _score_int(non_null, null_ratio)
+        scores["float64"] = _score_float(non_null, null_ratio)
+        scores["bool"] = _score_bool(non_null, null_ratio)
+        scores["datetime"] = _score_datetime(non_null, null_ratio)
+        scores["categorical"] = _score_categorical(non_null, null_ratio, unique_ratio)
+        scores["string"] = _score_string(null_ratio)
+
+        # Use suggested_dtype as a strong prior if one was identified.
+        if col_prof.suggested_dtype and col_prof.suggested_dtype in scores:
+            scores[col_prof.suggested_dtype] = round(
+                min(1.0, scores[col_prof.suggested_dtype] + 0.2), 4
+            )
+
+    # --- all-null columns: fall back to "string" with low confidence ---
+    if col_prof.null_count == col_prof.row_count:
+        for k in scores:
+            scores[k] = 0.0
+        scores["string"] = 0.1
+
+    # --- enforce [0.0, 1.0] ---
+    for k in scores:
+        scores[k] = max(0.0, min(1.0, scores[k]))
+
+    # --- sort: descending score, ties broken alphabetically ---
+    sorted_candidates = dict(sorted(scores.items(), key=lambda kv: (-kv[1], kv[0])))
+
+    top_type, top_score = next(iter(sorted_candidates.items()))
+
+    # Ambiguity: second candidate within threshold
+    candidate_list = list(sorted_candidates.values())
+    is_ambiguous = (
+        len(candidate_list) >= 2
+        and (top_score - candidate_list[1]) <= _AMBIGUITY_THRESHOLD
+    )
+
+    return ColumnInference(
+        name=col_prof.name,
+        inferred_type=top_type,
+        confidence=top_score,
+        is_ambiguous=is_ambiguous,
+        candidates=sorted_candidates,
+    )
+
+
+def infer_schema(frame: ArFrame) -> InferredSchema:
+    """Infer probable column types with confidence scores for an :class:`~arnio.ArFrame`.
+
+    This function is a thin layer over :func:`~arnio.profile`.  It reuses the
+    existing dtype/null/uniqueness signals from :class:`ColumnProfile` rather
+    than re-implementing a second parsing engine.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input frame to analyse.
+
+    Returns
+    -------
+    InferredSchema
+        Contains one :class:`ColumnInference` per column with:
+
+        * ``inferred_type`` — best-guess type from the candidate set
+          ``{int64, float64, bool, datetime, categorical, string}``.
+        * ``confidence`` — deterministic score in ``[0.0, 1.0]``.
+        * ``is_ambiguous`` — ``True`` when the second candidate is within
+          :data:`_AMBIGUITY_THRESHOLD` (0.15) of the top score.
+        * ``candidates`` — all candidate scores, sorted by score descending.
+
+    Notes
+    -----
+    * All-null columns receive ``inferred_type="string"`` with
+      ``confidence=0.1``.
+    * Categorical inference requires ≥ 2 distinct non-null values **and**
+      ``unique_ratio ≤ 0.20``; uniqueness alone is not sufficient.
+    * ``to_schema()`` maps inferred types to :class:`~arnio.Field` dtypes
+      accepted by :func:`~arnio.validate`; ``categorical`` maps to ``string``.
+
+    Examples
+    --------
+    >>> import arnio as ar
+    >>> frame = ar.read_csv("data.csv")
+    >>> schema = ar.infer_schema(frame)
+    >>> for name, col in schema.columns.items():
+    ...     print(name, col.inferred_type, f"{col.confidence:.2f}", col.is_ambiguous)
+    >>> validated = ar.validate(frame, schema.to_schema())
+    """
+    _validate_arframe(frame)
+
+    report = profile(frame)
+
+    inferred_columns: dict[str, ColumnInference] = {
+        name: _infer_column(col_prof) for name, col_prof in report.columns.items()
+    }
+
+    return InferredSchema(columns=inferred_columns)
