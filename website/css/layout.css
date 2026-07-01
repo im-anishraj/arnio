@@ -230,3 +230,44 @@
 
   h1 { font-size: var(--font-size-xl); }
 }
+
+/* =========================
+   Page transitions
+========================= */
+
+body {
+  opacity: 1;
+}
+
+/* Entry animation */
+body.page-enter {
+  animation: pageFadeIn 180ms ease-in-out;
+}
+
+/* Exit animation */
+body.page-exit {
+  opacity: 0;
+  transition: opacity 180ms ease-in-out;
+}
+
+@keyframes pageFadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+/* Accessibility */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}
