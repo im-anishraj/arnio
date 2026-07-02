@@ -1,0 +1,4 @@
+### Bandit Configuration File
+
+# Aggregate results by file
+aggregate: file

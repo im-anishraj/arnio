@@ -28,7 +28,7 @@ def _resolve_version() -> str:
             _match = re.search(r'^\s*version\s*=\s*"([^"]+)"', _text, re.MULTILINE)
             if _match:
                 return _match.group(1)
-        except Exception:
+        except Exception:  # nosec B110
             pass
 
     # Normal installed-package import: trust importlib.metadata.
@@ -36,7 +36,7 @@ def _resolve_version() -> str:
         from importlib.metadata import version
 
         return version("arnio")
-    except Exception:
+    except Exception:  # nosec B110
         pass
 
     return "unknown"
