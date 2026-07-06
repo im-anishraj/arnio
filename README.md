@@ -1848,4 +1848,4 @@ loaded_steps = ar.load_pipeline("my_pipeline.json")
 ## Security
 
 Please review our [Security Policy](SECURITY.md) for responsible vulnerability reporting guidelines.
-# TODO: bug: sniff_delimiter misdetects punctuation in single-column free-text files (#2446)
+# TODO: bug: write_csv writes directly to the destination path without atomic write semantics, leaving a truncated file on partial failure (#2069)
