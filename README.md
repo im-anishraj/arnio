@@ -1848,4 +1848,4 @@ loaded_steps = ar.load_pipeline("my_pipeline.json")
 ## Security
 
 Please review our [Security Policy](SECURITY.md) for responsible vulnerability reporting guidelines.
-# TODO: performance: remove inline pandas import in `_normalize_validator_result` to fix severe validation bottleneck (#2067)
+# TODO: [security/ci] integrate bandit for automated static security analysis in github actions (#2057)
