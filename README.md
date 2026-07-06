@@ -1848,4 +1848,4 @@ loaded_steps = ar.load_pipeline("my_pipeline.json")
 ## Security
 
 Please review our [Security Policy](SECURITY.md) for responsible vulnerability reporting guidelines.
-# TODO: feature: implement zero-copy conversion from c++ arframe to apache arrow recordbatch (#2323)
+# TODO: feature: add structured error reporting for pipeline dry runs (#2314)
