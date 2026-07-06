@@ -1848,4 +1848,4 @@ loaded_steps = ar.load_pipeline("my_pipeline.json")
 ## Security
 
 Please review our [Security Policy](SECURITY.md) for responsible vulnerability reporting guidelines.
-# TODO: bug: published wheel does not install the arnio cli (#2427)
+# TODO: bug: field accepts non-string semantic values that crash validation (#2425)
