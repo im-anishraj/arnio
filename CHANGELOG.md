@@ -883,3 +883,5 @@
 ## [0.1.2] - 2026-05-03
 ### Fixed
 - Stability improvements and initial PyPI release
+
+# TODO: issue #2449
