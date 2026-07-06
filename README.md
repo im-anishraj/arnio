@@ -1848,4 +1848,4 @@ loaded_steps = ar.load_pipeline("my_pipeline.json")
 ## Security
 
 Please review our [Security Policy](SECURITY.md) for responsible vulnerability reporting guidelines.
-# TODO: feature: add structured error reporting for pipeline dry runs (#2314)
+# TODO: bug: published 1.19.0 constructors stringify arbitrary python objects (#2453)
