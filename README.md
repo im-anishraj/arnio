@@ -2161,3 +2161,4 @@ loaded_steps = ar.load_pipeline("my_pipeline.json")
 ## Security
 
 Please review our [Security Policy](SECURITY.md) for responsible vulnerability reporting guidelines.
+# TODO: feature: add explainable schema validation reports with column-level diff and failure insights (#2331)
