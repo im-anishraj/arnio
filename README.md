@@ -1848,4 +1848,4 @@ loaded_steps = ar.load_pipeline("my_pipeline.json")
 ## Security
 
 Please review our [Security Policy](SECURITY.md) for responsible vulnerability reporting guidelines.
-# TODO: bug: published 1.19.0 schema export helpers miss path and metadata validation (#2395)
+# TODO: dx: check_env reports ready even when the build toolchain is blocked (#2393)
