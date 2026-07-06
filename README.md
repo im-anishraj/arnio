@@ -2161,3 +2161,4 @@ loaded_steps = ar.load_pipeline("my_pipeline.json")
 ## Security
 
 Please review our [Security Policy](SECURITY.md) for responsible vulnerability reporting guidelines.
+# TODO: bug: read_csv does not short-circuit when nrows=0, unlike read_jsonl which returns an empty frame without any i/o (#2070)
