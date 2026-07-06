@@ -1848,4 +1848,4 @@ loaded_steps = ar.load_pipeline("my_pipeline.json")
 ## Security
 
 Please review our [Security Policy](SECURITY.md) for responsible vulnerability reporting guidelines.
-# TODO: bug: published 1.19.0 scan_csv is missing mode=permissive support (#2397)
+# TODO: docs: api reference documents unsupported read_csv mode="lax" (#2396)
