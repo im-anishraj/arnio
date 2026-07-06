@@ -1848,4 +1848,4 @@ loaded_steps = ar.load_pipeline("my_pipeline.json")
 ## Security
 
 Please review our [Security Policy](SECURITY.md) for responsible vulnerability reporting guidelines.
-# TODO: dx: check_env reports ready even when the build toolchain is blocked (#2393)
+# TODO: bug: published 1.19.0 register_validator accepts whitespace names and lacks overwrite support (#2392)
