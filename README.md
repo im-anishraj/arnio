@@ -1848,4 +1848,4 @@ loaded_steps = ar.load_pipeline("my_pipeline.json")
 ## Security
 
 Please review our [Security Policy](SECURITY.md) for responsible vulnerability reporting guidelines.
-# TODO: bug: published 1.19.0 pipeline iterates bare string steps (#2384)
+# TODO: website: docs search is unavailable on mobile layouts (#2382)
