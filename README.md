@@ -1848,4 +1848,4 @@ loaded_steps = ar.load_pipeline("my_pipeline.json")
 ## Security
 
 Please review our [Security Policy](SECURITY.md) for responsible vulnerability reporting guidelines.
-# TODO: bug: published 1.19.0 register_step accepts invalid registry entries (#2444)
+# TODO: [security/ci] integrate bandit for automated static security analysis in github actions (#2057)
