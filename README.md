@@ -1848,4 +1848,4 @@ loaded_steps = ar.load_pipeline("my_pipeline.json")
 ## Security
 
 Please review our [Security Policy](SECURITY.md) for responsible vulnerability reporting guidelines.
-# TODO: [performance] c++ csv reader has no memory cap - parsing large files causes oom without user feedback (#2649)
+# TODO: bug: published 1.19.0 wheel is missing the arnio cli entry point (#2352)
