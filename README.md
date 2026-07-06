@@ -1848,4 +1848,4 @@ loaded_steps = ar.load_pipeline("my_pipeline.json")
 ## Security
 
 Please review our [Security Policy](SECURITY.md) for responsible vulnerability reporting guidelines.
-# TODO: website: install copy button shows success even when clipboard write fails (#2380)
+# TODO: bug: find_fuzzy_duplicates accepts invalid option types (#2378)
