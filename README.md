@@ -1848,4 +1848,4 @@ loaded_steps = ar.load_pipeline("my_pipeline.json")
 ## Security
 
 Please review our [Security Policy](SECURITY.md) for responsible vulnerability reporting guidelines.
-# TODO: [feature request] implement resilient error handling (on_error='strict' | 'coerce' | 'drop') during high-throughput parsing and validation (#2010)
+# TODO: bug: active website nav links do not expose aria-current (#2442)
