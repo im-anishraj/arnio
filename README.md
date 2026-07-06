@@ -1848,4 +1848,4 @@ loaded_steps = ar.load_pipeline("my_pipeline.json")
 ## Security
 
 Please review our [Security Policy](SECURITY.md) for responsible vulnerability reporting guidelines.
-# TODO: bug: published 1.19.0 cast_types is missing errors="report" mode (#2413)
+# TODO: bug: published 1.19.0 schema.from_json ignores unknown schema keys (#2412)
