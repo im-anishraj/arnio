@@ -2161,3 +2161,4 @@ loaded_steps = ar.load_pipeline("my_pipeline.json")
 ## Security
 
 Please review our [Security Policy](SECURITY.md) for responsible vulnerability reporting guidelines.
+# TODO: bug: `_normalize_scalar` silently passes `bool` values without normalization, risking type confusion in mixed-type columns (#2333)
