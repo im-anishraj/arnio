@@ -1848,4 +1848,4 @@ loaded_steps = ar.load_pipeline("my_pipeline.json")
 ## Security
 
 Please review our [Security Policy](SECURITY.md) for responsible vulnerability reporting guidelines.
-# TODO: bug: published 1.19.0 wheel is missing documented pipeline lineage and execution summary apis (#2361)
+# TODO: bug: published 1.19.0 wheel does not support documented http csv inputs (#2359)
