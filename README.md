@@ -1848,4 +1848,4 @@ loaded_steps = ar.load_pipeline("my_pipeline.json")
 ## Security
 
 Please review our [Security Policy](SECURITY.md) for responsible vulnerability reporting guidelines.
-# TODO: security: published 1.19.0 wheel is missing documented html report privacy controls (#2370)
+# TODO: bug: published 1.19.0 wheel is missing documented auto_clean confirmed_casts option (#2365)
