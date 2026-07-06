@@ -1848,4 +1848,4 @@ loaded_steps = ar.load_pipeline("my_pipeline.json")
 ## Security
 
 Please review our [Security Policy](SECURITY.md) for responsible vulnerability reporting guidelines.
-# TODO: feature:  multi-threaded execution engine for column-level data cleaning (#1945)
+# TODO: feature: advanced cross-column conditional dependency validation (rules graph) (#1624)
