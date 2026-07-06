@@ -1848,4 +1848,4 @@ loaded_steps = ar.load_pipeline("my_pipeline.json")
 ## Security
 
 Please review our [Security Policy](SECURITY.md) for responsible vulnerability reporting guidelines.
-# TODO: bug: published 1.19.0 from_records silently drops data when columns is empty (#2430)
+# TODO: bug: published 1.19.0 schema_to_yaml leaks raw filesystem errors for invalid paths (#2429)
