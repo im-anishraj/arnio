@@ -1848,11 +1848,4 @@ loaded_steps = ar.load_pipeline("my_pipeline.json")
 ## Security
 
 Please review our [Security Policy](SECURITY.md) for responsible vulnerability reporting guidelines.
-## Troubleshooting
-
-- [Bad CSV Troubleshooting Guide](docs/bad_csv_troubleshooting.md)
-</div>
-
-```
-
-
+# TODO: security: published 1.19.0 wheel is missing documented csv formula escaping option (#2362)
