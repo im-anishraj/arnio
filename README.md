@@ -1848,4 +1848,4 @@ loaded_steps = ar.load_pipeline("my_pipeline.json")
 ## Security
 
 Please review our [Security Policy](SECURITY.md) for responsible vulnerability reporting guidelines.
-# TODO: docs: normalize api_reference.md to valid utf-8 (#1386)
+# TODO: bug: published 1.19.0 write_parquet misclassifies non-string compression values (#2431)
