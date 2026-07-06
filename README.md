@@ -1848,4 +1848,4 @@ loaded_steps = ar.load_pipeline("my_pipeline.json")
 ## Security
 
 Please review our [Security Policy](SECURITY.md) for responsible vulnerability reporting guidelines.
-# TODO: bug: find_fuzzy_duplicates accepts invalid option types (#2378)
+# TODO: bug: published 1.19.0 register_step accepts an empty step name (#2377)
