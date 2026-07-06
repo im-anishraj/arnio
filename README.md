@@ -1848,4 +1848,4 @@ loaded_steps = ar.load_pipeline("my_pipeline.json")
 ## Security
 
 Please review our [Security Policy](SECURITY.md) for responsible vulnerability reporting guidelines.
-# TODO: feature: chunked & streaming processing engine for out-of-core datasets (#2131)
+# TODO: feat: add native uuid and ipaddress schema field validators (#2117)
