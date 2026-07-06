@@ -1848,4 +1848,4 @@ loaded_steps = ar.load_pipeline("my_pipeline.json")
 ## Security
 
 Please review our [Security Policy](SECURITY.md) for responsible vulnerability reporting guidelines.
-# TODO: performance: reduce pandas conversion overhead in duckdb integration for large datasets (#2330)
+# TODO: feature: expose detailed arframe memory usage profiling hooks (#2327)
