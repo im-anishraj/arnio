@@ -1848,4 +1848,4 @@ loaded_steps = ar.load_pipeline("my_pipeline.json")
 ## Security
 
 Please review our [Security Policy](SECURITY.md) for responsible vulnerability reporting guidelines.
-# TODO: bug: published 1.19.0 wheel is missing the arnio cli entry point (#2352)
+# TODO: bug: published 1.19.0 wheel does not export arniocleaner from arnio.integrations (#2351)
