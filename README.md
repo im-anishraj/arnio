@@ -1848,4 +1848,4 @@ loaded_steps = ar.load_pipeline("my_pipeline.json")
 ## Security
 
 Please review our [Security Policy](SECURITY.md) for responsible vulnerability reporting guidelines.
-# TODO: bug: published 1.19.0 wheel is missing documented parquet and chunked jsonl readers (#2357)
+# TODO: ci: release please times out while paginating main branch merge commits (#2355)
