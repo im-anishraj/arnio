@@ -2161,3 +2161,4 @@ loaded_steps = ar.load_pipeline("my_pipeline.json")
 ## Security
 
 Please review our [Security Policy](SECURITY.md) for responsible vulnerability reporting guidelines.
+# TODO: bug: schema_to_dict fails mixed scalar sets with raw sort typeerror (#2460)
