@@ -1848,4 +1848,4 @@ loaded_steps = ar.load_pipeline("my_pipeline.json")
 ## Security
 
 Please review our [Security Policy](SECURITY.md) for responsible vulnerability reporting guidelines.
-# TODO: security: markdown quality reports emit raw html from column names (#2385)
+# TODO: bug: published 1.19.0 pipeline iterates bare string steps (#2384)
