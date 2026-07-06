@@ -1848,4 +1848,4 @@ loaded_steps = ar.load_pipeline("my_pipeline.json")
 ## Security
 
 Please review our [Security Policy](SECURITY.md) for responsible vulnerability reporting guidelines.
-# TODO: security: cleaning regex helpers accept unsafe nested-quantifier patterns (#2448)
+# TODO: bug: auto_clean raises valueerror mid-pipeline when cast_types step is reached without allow_lossy_casts=true, discarding all earlier step results (#2072)
