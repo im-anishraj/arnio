@@ -1848,4 +1848,4 @@ loaded_steps = ar.load_pipeline("my_pipeline.json")
 ## Security
 
 Please review our [Security Policy](SECURITY.md) for responsible vulnerability reporting guidelines.
-# TODO: security: html quality report exclude_columns leaks excluded names in suggestions (#2373)
+# TODO: security: published 1.19.0 wheel is missing documented html report privacy controls (#2370)
