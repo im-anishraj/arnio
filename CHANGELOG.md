@@ -966,4 +966,4 @@
 ### Fixed
 - Stability improvements and initial PyPI release
 
-# TODO: issue #2404
+# TODO: issue #2403
