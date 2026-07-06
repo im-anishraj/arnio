@@ -2161,3 +2161,4 @@ loaded_steps = ar.load_pipeline("my_pipeline.json")
 ## Security
 
 Please review our [Security Policy](SECURITY.md) for responsible vulnerability reporting guidelines.
+# TODO: feature: expose detailed arframe memory usage profiling hooks (#2327)
