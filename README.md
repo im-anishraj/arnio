@@ -1848,4 +1848,4 @@ loaded_steps = ar.load_pipeline("my_pipeline.json")
 ## Security
 
 Please review our [Security Policy](SECURITY.md) for responsible vulnerability reporting guidelines.
-# TODO: feature: add jsonl multi-threaded streaming parser (#2326)
+# TODO: bug: python -m arnio.cli --help requires the c++ extension in source checkouts (#2462)
