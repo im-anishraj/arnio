@@ -1848,4 +1848,4 @@ loaded_steps = ar.load_pipeline("my_pipeline.json")
 ## Security
 
 Please review our [Security Policy](SECURITY.md) for responsible vulnerability reporting guidelines.
-# TODO: bug: sniff_delimiter reports directory paths as empty csv files (#2415)
+# TODO: security: published 1.19.0 markdown reports lack exclude_columns privacy control (#2414)
