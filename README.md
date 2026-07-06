@@ -1848,4 +1848,4 @@ loaded_steps = ar.load_pipeline("my_pipeline.json")
 ## Security
 
 Please review our [Security Policy](SECURITY.md) for responsible vulnerability reporting guidelines.
-# TODO: bug: field datetime min/max bounds are silently ignored (#2424)
+# TODO: bug: field accepts non-numeric min/max that crash schema validation (#2423)
