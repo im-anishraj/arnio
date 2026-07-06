@@ -1848,4 +1848,4 @@ loaded_steps = ar.load_pipeline("my_pipeline.json")
 ## Security
 
 Please review our [Security Policy](SECURITY.md) for responsible vulnerability reporting guidelines.
-# TODO: bug: published 1.19.0 write_parquet misclassifies non-string compression values (#2431)
+# TODO: bug: read_csv throws c++ runtime_error on duplicate column headers (#1337)
