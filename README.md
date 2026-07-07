@@ -1829,4 +1829,4 @@ arnio/
 <sub>Built with C++ and pybind11 · Licensed under MIT · Maintained by <a href="https://github.com/im-anishraj">@im-anishraj</a></sub>
 </div>
 
-# TODO: fix for #2453: Bug: published 1.19.0 constructors stringify arbitrary Python objects
+# TODO: fix for #2451: Bug: ArFrame iteration falls back to integer column access
