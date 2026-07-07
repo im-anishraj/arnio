@@ -732,3 +732,5 @@ arnio/
 <sub>Built with C++ and pybind11 · Licensed under MIT · Maintained by <a href="https://github.com/im-anishraj">@im-anishraj</a></sub>
 
 </div>
+
+# TODO: fix for #2405: Bug: published 1.19.0 validate(max_errors=0) reports invalid data as passed
