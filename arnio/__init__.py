@@ -113,6 +113,7 @@ from .schema import (
     UUID,
     Bool,
     CountryCode,
+    CreditCard,
     CurrencyCode,
     Custom,
     Date,
@@ -277,4 +278,5 @@ __all__ = [
     "UUID",
     "IPv4",
     "MACAddress",
+    "CreditCard",
 ]

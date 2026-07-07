@@ -288,6 +288,12 @@ result = schema.validate(frame)</code></pre></div></div>
                 <td>Validates IEEE 802 MAC-48 addresses in colon-separated (<code>"AA:BB:CC:DD:EE:FF"</code>) or hyphen-separated (<code>"AA-BB-CC-DD-EE-FF"</code>) notation.</td>
               </tr>
               <tr>
+                <td><code>CreditCard(...)</code></td>
+                <td>Semantic</td>
+                <td><code>nullable=True</code>, <code>unique=False</code>, <code>severity="error"</code>, <code>required_if=None</code></td>
+                <td>Validates credit-card PAN values with the Luhn checksum. Spaces and hyphens are accepted as visual separators.</td>
+              </tr>
+              <tr>
                 <td><code>Date(...)</code></td>
                 <td>Date / Time</td>
                 <td><code>nullable=True</code>, <code>min=None</code>, <code>max=None</code>, <code>unique=False</code>, <code>severity="error"</code>, <code>required_if=None</code></td>

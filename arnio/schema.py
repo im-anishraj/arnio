@@ -2710,6 +2710,41 @@ def MACAddress(
     )
 
 
+def CreditCard(
+    *,
+    nullable: bool = True,
+    unique: bool = False,
+    severity: str = "error",
+    required_if: tuple[str, Any] | None = None,
+) -> Field:
+    """Create a credit-card PAN schema field validated with the Luhn checksum.
+
+    Spaces and hyphens are accepted as visual separators and ignored during
+    validation. Other non-digit characters are rejected.
+
+    Args:
+        nullable: Whether null values are allowed.
+        unique: Whether non-null values must be unique.
+        severity: Severity level for validation issues.
+        required_if: Conditional requirement as a column/value pair.
+
+    Returns:
+        Field: Configured credit-card schema field.
+
+    Examples
+    --------
+    >>> schema = ar.Schema({"card": ar.CreditCard(nullable=False)})
+    """
+    return Field(
+        dtype="string",
+        nullable=nullable,
+        semantic="credit_card",
+        unique=unique,
+        required_if=required_if,
+        severity=severity,
+    )
+
+
 def Regex(
     pattern: str,
     *,
@@ -2836,6 +2871,29 @@ def _is_safely_convertible_to_dtype(
         return False
 
     return False
+
+
+def _is_luhn_valid_credit_card(value: Any) -> bool:
+    """Return True when value is a credit-card PAN with a valid Luhn checksum."""
+    if not isinstance(value, str):
+        return False
+
+    digits = value.replace(" ", "").replace("-", "")
+    if not digits.isdigit() or not 12 <= len(digits) <= 19:
+        return False
+
+    total = 0
+    double = False
+    for char in reversed(digits):
+        digit = int(char)
+        if double:
+            digit *= 2
+            if digit > 9:
+                digit -= 9
+        total += digit
+        double = not double
+
+    return total % 10 == 0
 
 
 def _validate_column(
@@ -3127,6 +3185,9 @@ def _validate_column(
                             else non_null
                         )
                         invalid = non_null[~values.isin(ISO_4217_CURRENCY_CODES)]
+
+                elif field_def.semantic == "credit_card":
+                    invalid = non_null[~non_null.map(_is_luhn_valid_credit_card)]
 
                 else:
                     invalid = non_null[~text.str.fullmatch(pattern, na=False)]
@@ -3481,6 +3542,8 @@ _SEMANTIC_PATTERNS = {
     "mac_address": (
         r"[0-9a-fA-F]{2}(?::[0-9a-fA-F]{2}){5}" r"|[0-9a-fA-F]{2}(?:-[0-9a-fA-F]{2}){5}"
     ),
+    # Credit-card PAN shape; validation applies the Luhn checksum separately.
+    "credit_card": r"[0-9][0-9 \-]{10,17}[0-9]",
 }
 
 # Registry for custom validators registered via register_validator()

@@ -4594,7 +4594,7 @@ def test_from_json_round_trip_is_accepted():
 
 
 """
-Tests for the UUID, IPv4, and MACAddress schema validators added in
+Tests for the UUID, IPv4, MACAddress, and CreditCard schema validators added in
 issue #1604 ("Add real-world schema validators").
 
 Covers:
@@ -4760,6 +4760,42 @@ class TestMACAddressPattern:
         assert not self._match(value), f"Expected no match for {value!r}"
 
 
+class TestCreditCardPattern:
+    PAT = _SEMANTIC_PATTERNS["credit_card"]
+
+    def _match(self, value: str) -> bool:
+        import re
+
+        return bool(re.compile(self.PAT).fullmatch(value))
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            "4111111111111111",
+            "5555-5555-5555-4444",
+            "378282246310005",
+            "6011 1111 1111 1117",
+        ],
+    )
+    def test_valid_credit_card_shapes(self, value):
+        assert self._match(value), f"Expected match for {value!r}"
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            "1234",
+            "41111111111111111111",
+            "4111x11111111111",
+            "4111_1111_1111_1111",
+            "4111111111111111 ",
+            " 4111111111111111",
+            "",
+        ],
+    )
+    def test_invalid_credit_card_shapes(self, value):
+        assert not self._match(value), f"Expected no match for {value!r}"
+
+
 # ===========================================================================
 # 2.  Factory functions – return type and Field attribute wiring
 # ===========================================================================
@@ -4856,6 +4892,37 @@ class TestMACAddressFactory:
     def test_invalid_severity_raises(self):
         with pytest.raises(ValueError):
             ar.MACAddress(severity="critical")
+
+
+class TestCreditCardFactory:
+    def test_returns_field(self):
+        assert isinstance(ar.CreditCard(), Field)
+
+    def test_semantic_attribute(self):
+        assert ar.CreditCard().semantic == "credit_card"
+
+    def test_dtype_is_string(self):
+        assert ar.CreditCard().dtype == "string"
+
+    def test_defaults(self):
+        f = ar.CreditCard()
+        assert f.nullable is True
+        assert f.unique is False
+        assert f.severity == "error"
+        assert f.required_if is None
+
+    def test_nullable_false(self):
+        assert ar.CreditCard(nullable=False).nullable is False
+
+    def test_unique_true(self):
+        assert ar.CreditCard(unique=True).unique is True
+
+    def test_severity_warning(self):
+        assert ar.CreditCard(severity="warning").severity == "warning"
+
+    def test_invalid_severity_raises(self):
+        with pytest.raises(ValueError):
+            ar.CreditCard(severity="critical")
 
 
 # ===========================================================================
@@ -5117,12 +5184,83 @@ class TestMACAddressValidation:
 
 
 # ===========================================================================
-# 6.  Schema JSON round-trip (to_json / from_json)
+# 6.  End-to-end validate() – CreditCard
+# ===========================================================================
+
+
+class TestCreditCardValidation:
+    def test_all_valid_passes(self):
+        frame = _frame(
+            {
+                "card": [
+                    "4111111111111111",
+                    "5555-5555-5555-4444",
+                    "378282246310005",
+                    "6011 1111 1111 1117",
+                ]
+            }
+        )
+        schema = Schema({"card": ar.CreditCard()})
+        assert validate(frame, schema).passed
+
+    def test_invalid_luhn_checksum_fails(self):
+        frame = _frame({"card": ["4111111111111112"]})
+        schema = Schema({"card": ar.CreditCard()})
+        result = validate(frame, schema)
+        assert not result.passed
+        assert _issues(result) == [("credit_card", "4111111111111112")]
+
+    def test_non_digit_characters_fail(self):
+        frame = _frame({"card": ["4111x11111111111"]})
+        schema = Schema({"card": ar.CreditCard()})
+        result = validate(frame, schema)
+        assert not result.passed
+
+    def test_short_value_fails(self):
+        frame = _frame({"card": ["1234"]})
+        schema = Schema({"card": ar.CreditCard()})
+        result = validate(frame, schema)
+        assert not result.passed
+
+    def test_spaces_and_hyphens_are_accepted(self):
+        frame = _frame({"card": ["5555-5555 5555-4444"]})
+        schema = Schema({"card": ar.CreditCard()})
+        assert validate(frame, schema).passed
+
+    def test_null_allowed_by_default(self):
+        frame = _frame({"card": [None, "4111111111111111"]})
+        schema = Schema({"card": ar.CreditCard()})
+        assert validate(frame, schema).passed
+
+    def test_null_rejected_when_not_nullable(self):
+        frame = _frame({"card": [None, "4111111111111111"]})
+        schema = Schema({"card": ar.CreditCard(nullable=False)})
+        result = validate(frame, schema)
+        assert not result.passed
+        assert any(i.rule == "nullable" for i in result.issues)
+
+    def test_duplicates_rejected_when_unique(self):
+        frame = _frame({"card": ["4111111111111111", "4111111111111111"]})
+        schema = Schema({"card": ar.CreditCard(unique=True)})
+        result = validate(frame, schema)
+        assert not result.passed
+        assert any(i.rule == "unique" for i in result.issues)
+
+    def test_severity_warning_propagates(self):
+        frame = _frame({"card": ["4111111111111112"]})
+        schema = Schema({"card": ar.CreditCard(severity="warning")})
+        result = validate(frame, schema)
+        assert result.passed
+        assert any(i.severity == "warning" for i in result.issues)
+
+
+# ===========================================================================
+# 7.  Schema JSON round-trip (to_json / from_json)
 # ===========================================================================
 
 
 class TestSemanticValidatorJSONRoundTrip:
-    """Verify that UUID, IPv4, and MACAddress survive Schema serialization."""
+    """Verify that semantic validators survive Schema serialization."""
 
     @pytest.mark.parametrize(
         "factory,semantic",
@@ -5130,6 +5268,7 @@ class TestSemanticValidatorJSONRoundTrip:
             (ar.UUID, "uuid"),
             (ar.IPv4, "ipv4"),
             (ar.MACAddress, "mac_address"),
+            (ar.CreditCard, "credit_card"),
         ],
     )
     def test_round_trip_preserves_semantic(self, factory, semantic):
@@ -5146,6 +5285,7 @@ class TestSemanticValidatorJSONRoundTrip:
             (ar.UUID, "uuid"),
             (ar.IPv4, "ipv4"),
             (ar.MACAddress, "mac_address"),
+            (ar.CreditCard, "credit_card"),
         ],
     )
     def test_restored_schema_validates_correctly(self, factory, semantic):
@@ -5157,6 +5297,7 @@ class TestSemanticValidatorJSONRoundTrip:
             "uuid": "not-a-uuid",
             "ipv4": "999.999.999.999",
             "mac_address": "ZZ:ZZ:ZZ:ZZ:ZZ:ZZ",
+            "credit_card": "4111111111111112",
         }
         frame = _frame({"col": [invalid_values[semantic]]})
         result = validate(frame, restored)
