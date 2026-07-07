@@ -1829,4 +1829,4 @@ arnio/
 <sub>Built with C++ and pybind11 · Licensed under MIT · Maintained by <a href="https://github.com/im-anishraj">@im-anishraj</a></sub>
 </div>
 
-# TODO: fix for #2424: Bug: Field datetime min/max bounds are silently ignored
+# TODO: security - Bug: Field accepts non-numeric min/max that crash schema val (#2423)
