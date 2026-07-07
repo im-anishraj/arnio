@@ -1829,4 +1829,4 @@ arnio/
 <sub>Built with C++ and pybind11 · Licensed under MIT · Maintained by <a href="https://github.com/im-anishraj">@im-anishraj</a></sub>
 </div>
 
-# TODO: fix for #2413: Bug: published 1.19.0 cast_types is missing errors="report" mode
+# TODO: fix for #2412: Bug: published 1.19.0 Schema.from_json ignores unknown schema keys
