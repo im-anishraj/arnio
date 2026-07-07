@@ -1829,4 +1829,4 @@ arnio/
 <sub>Built with C++ and pybind11 · Licensed under MIT · Maintained by <a href="https://github.com/im-anishraj">@im-anishraj</a></sub>
 </div>
 
-# TODO: security - Bug: published 1.19.0 cleaning helpers miss current validati (#2402)
+# TODO: fix for #2400: Bug: published 1.19.0 Arrow and Parquet exports lose zero-column row counts
