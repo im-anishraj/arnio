@@ -732,3 +732,5 @@ arnio/
 <sub>Built with C++ and pybind11 · Licensed under MIT · Maintained by <a href="https://github.com/im-anishraj">@im-anishraj</a></sub>
 
 </div>
+
+# TODO: security - Security: published 1.19.0 Markdown reports lack exclude_col (#2414)
