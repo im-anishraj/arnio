@@ -1829,4 +1829,4 @@ arnio/
 <sub>Built with C++ and pybind11 · Licensed under MIT · Maintained by <a href="https://github.com/im-anishraj">@im-anishraj</a></sub>
 </div>
 
-# TODO: security - Bug: Field accepts non-numeric min/max that crash schema val (#2423)
+# TODO: fix for #2417: Bug: CleanExplanation accepts inconsistent row accounting
