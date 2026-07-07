@@ -2578,6 +2578,7 @@ def CountryCode(
     *,
     nullable: bool = True,
     unique: bool = False,
+    case_sensitive: bool = True,
     severity: str = "error",
     required_if: tuple[str, Any] | None = None,
 ) -> Field:
@@ -2586,6 +2587,7 @@ def CountryCode(
     Args:
         nullable: Whether null values are allowed.
         unique: Whether non-null values must be unique.
+        case_sensitive: Whether country-code matching is case-sensitive.
         severity: Severity level for validation issues.
         required_if: Conditional requirement as a column/value pair.
 
@@ -2597,6 +2599,7 @@ def CountryCode(
         nullable=nullable,
         semantic="country_code",
         unique=unique,
+        case_sensitive=case_sensitive,
         required_if=required_if,
         severity=severity,
     )
@@ -2606,6 +2609,7 @@ def LanguageCode(
     *,
     nullable: bool = True,
     unique: bool = False,
+    case_sensitive: bool = True,
     severity: str = "error",
     required_if: tuple[str, Any] | None = None,
 ) -> Field:
@@ -2614,6 +2618,7 @@ def LanguageCode(
     Args:
         nullable: Whether null values are allowed.
         unique: Whether non-null values must be unique.
+        case_sensitive: Whether language-code matching is case-sensitive.
         severity: Severity level for validation issues.
         required_if: Conditional requirement as a column/value pair.
 
@@ -2625,6 +2630,7 @@ def LanguageCode(
         nullable=nullable,
         semantic="language_code",
         unique=unique,
+        case_sensitive=case_sensitive,
         required_if=required_if,
         severity=severity,
     )
@@ -2634,6 +2640,7 @@ def TimeZone(
     *,
     nullable: bool = True,
     unique: bool = False,
+    case_sensitive: bool = True,
     severity: str = "error",
     required_if: tuple[str, Any] | None = None,
 ) -> Field:
@@ -2642,6 +2649,7 @@ def TimeZone(
     Args:
         nullable: Whether null values are allowed.
         unique: Whether non-null values must be unique.
+        case_sensitive: Whether timezone matching is case-sensitive.
         severity: Severity level for validation issues.
         required_if: Conditional requirement as a column/value pair.
 
@@ -2653,6 +2661,7 @@ def TimeZone(
         nullable=nullable,
         semantic="timezone",
         unique=unique,
+        case_sensitive=case_sensitive,
         required_if=required_if,
         severity=severity,
     )
@@ -2662,6 +2671,7 @@ def CurrencyCode(
     *,
     nullable: bool = True,
     unique: bool = False,
+    case_sensitive: bool = True,
     severity: str = "error",
     required_if: tuple[str, Any] | None = None,
     allowed: set[Any] | list[Any] | tuple[Any, ...] | None = None,
@@ -2671,6 +2681,7 @@ def CurrencyCode(
     Args:
         nullable: Whether null values are allowed.
         unique: Whether non-null values must be unique.
+        case_sensitive: Whether currency-code matching is case-sensitive.
         severity: Severity level for validation issues.
         required_if: Conditional requirement as a column/value pair.
         allowed: Allowed currency codes, overriding the default active ISO 4217 set.
@@ -2694,6 +2705,7 @@ def CurrencyCode(
         nullable=nullable,
         semantic="currency_code",
         unique=unique,
+        case_sensitive=case_sensitive,
         severity=severity,
         required_if=required_if,
         allowed=allowed_set,
@@ -3345,7 +3357,12 @@ def _validate_column(
                     invalid = non_null[~values.isin(ISO_639_1_CODES)]
 
                 elif field_def.semantic == "timezone":
-                    invalid = non_null[~non_null.isin(IANA_TIMEZONES)]
+                    if field_def.case_sensitive:
+                        invalid = non_null[~non_null.isin(IANA_TIMEZONES)]
+                    else:
+                        valid_timezones = {zone.casefold() for zone in IANA_TIMEZONES}
+                        values = non_null.astype("string").str.casefold()
+                        invalid = non_null[~values.isin(valid_timezones)]
                 elif field_def.semantic == "currency_code":
                     if field_def.allowed is not None:
                         invalid = pd.Series(dtype=object)
