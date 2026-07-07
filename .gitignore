@@ -239,4 +239,7 @@ _arnio_cpp*.dll
 # csv
 /*.csv
 
-.DS_Store
+# Bug: published wheel rejects .csv.gz inputs as bin (#2428)
+*.zip
+*.log
+node_modules/
