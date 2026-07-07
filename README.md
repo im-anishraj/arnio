@@ -1829,4 +1829,4 @@ arnio/
 <sub>Built with C++ and pybind11 · Licensed under MIT · Maintained by <a href="https://github.com/im-anishraj">@im-anishraj</a></sub>
 </div>
 
-# TODO: security - Bug: published 1.19.0 schema export helpers miss path and me (#2395)
+# TODO: fix for #2393: DX: check_env reports ready even when the build toolchain is blocked
