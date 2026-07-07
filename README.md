@@ -1829,4 +1829,4 @@ arnio/
 <sub>Built with C++ and pybind11 · Licensed under MIT · Maintained by <a href="https://github.com/im-anishraj">@im-anishraj</a></sub>
 </div>
 
-# TODO: fix for #2451: Bug: ArFrame iteration falls back to integer column access
+# TODO: fix for #2449: Accessibility: theme toggle does not expose pressed state
