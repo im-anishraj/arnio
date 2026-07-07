@@ -1648,14 +1648,7 @@ def test_country_code_validation_respects_case_insensitive_field(tmp_path):
 
     result = ar.validate(
         ar.read_csv(path),
-        {
-            "country": ar.Field(
-                dtype="string",
-                semantic="country_code",
-                case_sensitive=False,
-                nullable=False,
-            )
-        },
+        {"country": ar.CountryCode(case_sensitive=False, nullable=False)},
     )
 
     assert result.passed
@@ -1704,20 +1697,26 @@ def test_timezone_validation_accepts_iana_timezones(tmp_path):
     assert result.issue_count == 0
 
 
+def test_timezone_validation_respects_case_insensitive_factory(tmp_path):
+    path = tmp_path / "mixed_case_timezones.csv"
+    path.write_text("timezone\nasia/kolkata\namerica/new_york\nEurope/Paris\n")
+
+    result = ar.validate(
+        ar.read_csv(path),
+        {"timezone": ar.TimeZone(case_sensitive=False, nullable=False)},
+    )
+
+    assert result.passed
+    assert result.issue_count == 0
+
+
 def test_language_code_validation_respects_case_insensitive_field(tmp_path):
     path = tmp_path / "mixed_case_languages.csv"
     path.write_text("language\nEN\nFr\nHI\n")
 
     result = ar.validate(
         ar.read_csv(path),
-        {
-            "language": ar.Field(
-                dtype="string",
-                semantic="language_code",
-                case_sensitive=False,
-                nullable=False,
-            )
-        },
+        {"language": ar.LanguageCode(case_sensitive=False, nullable=False)},
     )
 
     assert result.passed
@@ -3307,18 +3306,20 @@ def test_currency_code_validation_respects_case_insensitive_field(tmp_path):
 
     result = ar.validate(
         ar.read_csv(path),
-        {
-            "currency": ar.Field(
-                dtype="string",
-                semantic="currency_code",
-                case_sensitive=False,
-                nullable=False,
-            )
-        },
+        {"currency": ar.CurrencyCode(case_sensitive=False, nullable=False)},
     )
 
     assert result.passed
     assert result.issue_count == 0
+
+
+@pytest.mark.parametrize(
+    "factory",
+    [ar.CountryCode, ar.LanguageCode, ar.TimeZone, ar.CurrencyCode],
+)
+def test_semantic_factories_reject_non_bool_case_sensitive(factory):
+    with pytest.raises(TypeError, match="case_sensitive must be a bool"):
+        factory(case_sensitive="false")
 
 
 def test_schema_rules_issue_shape_matches_validation_issue(tmp_path):
