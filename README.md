@@ -1829,4 +1829,4 @@ arnio/
 <sub>Built with C++ and pybind11 · Licensed under MIT · Maintained by <a href="https://github.com/im-anishraj">@im-anishraj</a></sub>
 </div>
 
-<!-- fix: Bug: nested recipe examples fail when launched outside their (#2439) -->
+<!-- fix: Bug: docs search results are clickable divs without link sem (#2436) -->
