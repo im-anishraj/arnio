@@ -1829,4 +1829,4 @@ arnio/
 <sub>Built with C++ and pybind11 · Licensed under MIT · Maintained by <a href="https://github.com/im-anishraj">@im-anishraj</a></sub>
 </div>
 
-<!-- fix: Bug: published 1.19.0 metadata is missing documented duckdb  (#2434) -->
+# TODO: fix for #2432: Bug: published 1.19.0 required_if accepts non-scalar expected values
