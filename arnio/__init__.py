@@ -117,6 +117,7 @@ from .schema import (
     UUID,
     Bool,
     CountryCode,
+    CreditCard,
     CurrencyCode,
     Custom,
     Date,
@@ -265,6 +266,14 @@ __all__ = [
     "Date",
     "schema_to_dict",
     "schema_to_yaml",
+    "save_pipeline",
+    "load_pipeline",
+    "PipelineSerializationError",
+    "encode_categorical",
+    "UUID",
+    "IPv4",
+    "MACAddress",
+    "CreditCard",
 ]
 
 try:

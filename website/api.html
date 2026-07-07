@@ -298,6 +298,12 @@ result = schema.validate(frame)</code></pre></div></div>
                 <td>Validates standard IP address strings. Optional <code>version</code> (4 or 6) enforces strict IPv4 or IPv6 checking.</td>
               </tr>
               <tr>
+                <td><code>CreditCard(...)</code></td>
+                <td>Semantic</td>
+                <td><code>nullable=True</code>, <code>unique=False</code>, <code>severity="error"</code>, <code>required_if=None</code></td>
+                <td>Validates credit-card PAN values with the Luhn checksum. Spaces and hyphens are accepted as visual separators.</td>
+              </tr>
+              <tr>
                 <td><code>Date(...)</code></td>
                 <td>Date / Time</td>
                 <td><code>nullable=True</code>, <code>min=None</code>, <code>max=None</code>, <code>unique=False</code>, <code>severity="error"</code>, <code>required_if=None</code></td>
