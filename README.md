@@ -732,3 +732,5 @@ arnio/
 <sub>Built with C++ and pybind11 · Licensed under MIT · Maintained by <a href="https://github.com/im-anishraj">@im-anishraj</a></sub>
 
 </div>
+
+# TODO: fix for #2352: Bug: published 1.19.0 wheel is missing the arnio CLI entry point
