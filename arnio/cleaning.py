@@ -2547,8 +2547,12 @@ def coalesce_columns(
 
     df = to_pandas(frame) if is_arframe else frame.copy(deep=False)
 
-    # Select the first non-null/non-NaN/non-None value per row
-    df[output_column] = df[subset_columns].bfill(axis=1).iloc[:, 0]
+    # Select the first non-null/non-NaN/non-None value per row without
+    # relying on deprecated DataFrame.bfill(axis=1) behavior.
+    coalesced = df[subset_columns[0]]
+    for column in subset_columns[1:]:
+        coalesced = coalesced.combine_first(df[column])
+    df[output_column] = coalesced
 
     return from_pandas(df) if is_arframe else df
 
