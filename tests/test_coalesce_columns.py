@@ -153,6 +153,28 @@ def test_coalesce_columns_single_column_subset() -> None:
     pd.testing.assert_frame_equal(res_df, expected, check_dtype=False)
 
 
+def test_coalesce_columns_avoids_dataframe_bfill_with_nullable_dtypes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    df = pd.DataFrame(
+        {
+            "a": pd.Series([pd.NA, 2, pd.NA], dtype="Int64"),
+            "b": pd.Series([1, pd.NA, pd.NA], dtype="Int64"),
+            "c": pd.Series([pd.NA, 3, pd.NA], dtype="Int64"),
+        }
+    )
+
+    def fail_bfill(*_args, **_kwargs):
+        raise AssertionError("DataFrame.bfill should not be used")
+
+    monkeypatch.setattr(pd.DataFrame, "bfill", fail_bfill)
+
+    res_df = ar.coalesce_columns(df, subset=["a", "b", "c"], output_column="result")
+
+    expected = pd.Series([1, 2, pd.NA], dtype="Int64", name="result")
+    pd.testing.assert_series_equal(res_df["result"], expected)
+
+
 def test_coalesce_columns_invalid_frame_type() -> None:
     # Non-ArFrame / non-DataFrame input must raise TypeError
     with pytest.raises(TypeError):
