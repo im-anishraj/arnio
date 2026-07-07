@@ -1829,4 +1829,4 @@ arnio/
 <sub>Built with C++ and pybind11 · Licensed under MIT · Maintained by <a href="https://github.com/im-anishraj">@im-anishraj</a></sub>
 </div>
 
-<!-- fix: Docs: null_values pages incorrectly describe custom tokens a (#2447) -->
+# TODO: fix for #2446: Bug: sniff_delimiter misdetects punctuation in single-column free-text files
