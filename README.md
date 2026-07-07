@@ -1829,4 +1829,4 @@ arnio/
 <sub>Built with C++ and pybind11 · Licensed under MIT · Maintained by <a href="https://github.com/im-anishraj">@im-anishraj</a></sub>
 </div>
 
-# TODO: fix for #2473: Accessibility: website pages skip heading levels
+# TODO: fix for #2469: Bug: HTTP .csv.gz inputs fail before gzip decompression
