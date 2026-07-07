@@ -1829,4 +1829,4 @@ arnio/
 <sub>Built with C++ and pybind11 · Licensed under MIT · Maintained by <a href="https://github.com/im-anishraj">@im-anishraj</a></sub>
 </div>
 
-# TODO: fix for #2416: Bug: CleaningSuggestion accepts invalid metadata
+# TODO: fix for #2415: Bug: sniff_delimiter reports directory paths as empty CSV files
