@@ -1829,4 +1829,4 @@ arnio/
 <sub>Built with C++ and pybind11 · Licensed under MIT · Maintained by <a href="https://github.com/im-anishraj">@im-anishraj</a></sub>
 </div>
 
-# TODO: security - Security: Markdown quality reports emit raw HTML from column (#2385)
+# TODO: fix for #2384: Bug: published 1.19.0 pipeline iterates bare string steps
