@@ -572,6 +572,22 @@ class TestReadCsv:
         frame = ar.read_csv(sample_csv)
         assert frame.memory_usage() > 0
 
+    def test_memory_usage_deep_returns_column_mapping(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        usage = frame.memory_usage(deep=True)
+
+        assert set(usage) == set(frame.columns)
+        assert all(isinstance(value, int) for value in usage.values())
+        assert all(value >= 0 for value in usage.values())
+        assert sum(usage.values()) > 0
+
+    def test_memory_usage_deep_rejects_non_bool(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+
+        with pytest.raises(TypeError, match="deep must be a bool"):
+            frame.memory_usage(deep="yes")  # type: ignore[arg-type]
+
     def test_repr(self, sample_csv):
         frame = ar.read_csv(sample_csv)
         assert "3 rows" in repr(frame)
