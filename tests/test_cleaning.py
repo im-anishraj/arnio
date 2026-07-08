@@ -2091,6 +2091,88 @@ class TestReplaceValues:
         assert df.loc[2, "flag"] == "ok"
 
 
+class TestMapValues:
+    def test_map_values_applies_mapping_to_subset(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "gender": ["M", "F", "X"],
+                    "status": ["M", "active", "inactive"],
+                }
+            )
+        )
+
+        result = ar.map_values(
+            frame,
+            {"M": "Male", "F": "Female"},
+            subset=["gender"],
+        )
+        df = ar.to_pandas(result)
+
+        assert list(df["gender"]) == ["Male", "Female", "X"]
+        assert list(df["status"]) == ["M", "active", "inactive"]
+
+    def test_map_values_preserves_unmapped_values(self):
+        frame = ar.from_pandas(pd.DataFrame({"status": ["new", "done", "held"]}))
+
+        result = ar.map_values(frame, {"new": "open"}, subset=["status"])
+        df = ar.to_pandas(result)
+
+        assert list(df["status"]) == ["open", "done", "held"]
+
+    def test_map_values_supports_null_keys_and_pd_na_replacements(self):
+        frame = ar.from_pandas(
+            pd.DataFrame({"status": ["active", "missing", None, pd.NA]})
+        )
+
+        result = ar.map_values(
+            frame,
+            {"missing": pd.NA, pd.NA: "unknown"},
+            subset=["status"],
+        )
+        df = ar.to_pandas(result)
+
+        assert df.loc[0, "status"] == "active"
+        assert pd.isna(df.loc[1, "status"])
+        assert df.loc[2, "status"] == "unknown"
+        assert df.loc[3, "status"] == "unknown"
+
+    def test_map_values_rejects_unknown_subset_column(self):
+        frame = ar.from_pandas(pd.DataFrame({"status": ["active"]}))
+
+        with pytest.raises(ValueError, match="Unknown columns in subset"):
+            ar.map_values(frame, {"active": "A"}, subset=["missing"])
+
+    def test_map_values_dataframe_input_returns_dataframe(self):
+        df = pd.DataFrame({"gender": ["M", "F"], "score": [1, 2]})
+
+        result = ar.map_values(df, {"M": "Male"}, subset=["gender"])
+
+        assert isinstance(result, pd.DataFrame)
+        assert result["gender"].tolist() == ["Male", "F"]
+        assert result["score"].tolist() == [1, 2]
+        assert df["gender"].tolist() == ["M", "F"]
+
+    def test_map_values_pipeline_integration(self):
+        frame = ar.from_pandas(pd.DataFrame({"gender": ["M", "F", "M"]}))
+
+        result = ar.pipeline(
+            frame,
+            [
+                (
+                    "map_values",
+                    {
+                        "mapping": {"M": "Male", "F": "Female"},
+                        "subset": ["gender"],
+                    },
+                )
+            ],
+        )
+        df = ar.to_pandas(result)
+
+        assert list(df["gender"]) == ["Male", "Female", "Male"]
+
+
 class TestRoundNumericColumns:
     def test_round_all_numeric(self):
         import pandas as pd

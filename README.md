@@ -574,7 +574,7 @@ Total avg (Read+Strict)       0.077             4.52
 
 ## 🧰 Cleaning primitives
 
-Most operations below run natively in C++. Currently, `filter_rows`, `replace_values` and `standardize_missing_tokens` run via the Python (pandas) backend and may be optimized in C++ later.
+Most operations below run natively in C++. Currently, `filter_rows`, `replace_values`, `map_values` and `standardize_missing_tokens` run via the Python (pandas) backend and may be optimized in C++ later.
 
 | Primitive | What it does | Example |
 |:---|:---|:---|
@@ -593,8 +593,9 @@ Most operations below run natively in C++. Currently, `filter_rows`, `replace_va
 | `drop_columns` | Remove specified columns from the frame | `frame.drop_columns(["col1", "col2"])` |
 | `cast_types` | Cast column types | `ar.cast_types(frame, {"age": "int64"})` |
 | `round_numeric_columns` | Round numeric columns (non-numeric columns in subset ignored safely) | `ar.round_numeric_columns(frame, decimals=2)` |
-| `clean` | Convenience shorthand | `ar.clean(frame, drop_nulls=True)` |
-| `winsorize_outliers` | Cap extreme values at percentile bounds | `ar.winsorize_outliers(frame, lower=0.05, upper=0.95)` |
+| `replace_values` | Replace values using a mapping (column or whole-frame). Handles `None`/`NaN`. | `ar.replace_values(frame, {"active": "A", "inactive": "I"}, column="status")` |
+| `map_values` | Map selected column values while preserving unmapped values | `ar.map_values(frame, {"M": "Male"}, subset=["gender"])` |
+| `clean` | Convenience shorthand supporting config dicts | `ar.clean(frame, strip_whitespace={"subset": ["name"]}, drop_nulls=True)` |
 | `safe_divide_columns` | Divide one column by another, handling zero/null denominators | `ar.safe_divide_columns(frame, numerator="revenue", denominator="cost", output_column="ratio")` |
 | `drop_columns_matching` | Drop columns whose names match a regex pattern | `ar.drop_columns_matching(frame, pattern="^temp_")` |
 | `trim_column_names` | Strip leading/trailing whitespace from column names | `ar.trim_column_names(frame)` |

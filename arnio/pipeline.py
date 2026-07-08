@@ -467,4 +467,127 @@ register_step("winsorize_outliers", cleaning.winsorize_outliers)
 register_step("drop_columns_matching", cleaning.drop_columns_matching)
 register_step("safe_divide_columns", cleaning.safe_divide_columns)
 register_step("replace_values", cleaning.replace_values)
-register_step("parse_numeric_strings", cleaning.parse_numeric_strings)
+register_step("map_values", cleaning.map_values)
+_BUILTIN_PYTHON_STEP_REGISTRY.update(_PYTHON_STEP_REGISTRY)
+
+
+def reset_steps() -> None:
+    """Restore the Python pipeline registry to built-in steps only."""
+    with _REGISTRY_LOCK:
+        _PYTHON_STEP_REGISTRY.clear()
+        _PYTHON_STEP_REGISTRY.update(_BUILTIN_PYTHON_STEP_REGISTRY)
+
+
+def _validate_pipeline_structure(steps):
+    """Validate the structural integrity of pipeline steps."""
+    from .exceptions import PipelineSerializationError
+
+    if not isinstance(steps, list):
+        raise PipelineSerializationError("Pipeline steps must be a list.")
+    for step in steps:
+        if not isinstance(step, tuple):
+            raise PipelineSerializationError("Each pipeline step must be a tuple.")
+        if not (1 <= len(step) <= 2):
+            raise PipelineSerializationError(
+                "Each pipeline step tuple must have 1 or 2 elements."
+            )
+        if not isinstance(step[0], str):
+            raise PipelineSerializationError(
+                "The first element of a step must be a string (the step name)."
+            )
+        if len(step) == 2 and not isinstance(step[1], dict):
+            raise PipelineSerializationError(
+                "The second element of a step must be a dictionary (kwargs)."
+            )
+
+
+def save_pipeline(steps, filepath):
+    import json
+    import os
+    import tempfile
+
+    from .exceptions import PipelineSerializationError
+
+    # 1. Validate structure BEFORE writing
+    _validate_pipeline_structure(steps)
+
+    # Convert tuples to lists so YAML doesn't write !!python/tuple tags
+    safe_steps = [list(step) for step in steps]
+
+    # 2. Write atomically using a temporary file in the same directory
+    dirname = os.path.dirname(filepath) or "."
+    fd, temp_path = tempfile.mkstemp(dir=dirname, text=True)
+
+    try:
+        with os.fdopen(fd, "w") as f:
+            if str(filepath).endswith((".yaml", ".yml")):
+                import yaml
+
+                yaml.safe_dump(safe_steps, f)  # Use safe_dump instead of dump!
+            else:
+                json.dump(safe_steps, f)
+
+        # 3. If serialization succeeds, safely replace the target file
+        os.replace(temp_path, filepath)
+
+    except Exception as e:
+        # If anything fails (like a non-serializable kwarg), delete the temp file
+        os.remove(temp_path)
+        raise PipelineSerializationError(f"Failed to serialize pipeline: {e}") from e
+
+
+def load_pipeline(filepath: str | Path) -> list[tuple]:
+    """Load a list of pipeline steps from a JSON or YAML file."""
+    from .exceptions import PipelineSerializationError
+
+    path = Path(filepath)
+    if not path.exists():
+        raise PipelineSerializationError(f"File not found: {filepath}")
+
+    try:
+        if path.suffix == ".json":
+            with open(path, encoding="utf-8") as f:
+                content = f.read().strip()
+                if not content:
+                    raise PipelineSerializationError(
+                        "Malformed pipeline file: file is empty."
+                    )
+                loaded_steps = json.loads(content)
+        elif path.suffix in [".yaml", ".yml"]:
+            if not HAS_YAML:
+                raise PipelineSerializationError(
+                    "PyYAML is required for YAML support. Please install it."
+                )
+            with open(path, encoding="utf-8") as f:
+                content = f.read().strip()
+                if not content:
+                    raise PipelineSerializationError(
+                        "Malformed pipeline file: file is empty."
+                    )
+                loaded_steps = yaml.safe_load(content)
+        else:
+            raise PipelineSerializationError(
+                f"Unsupported format: {path.suffix}. Use .json or .yaml"
+            )
+
+        if loaded_steps is None:
+            raise PipelineSerializationError(
+                "Malformed pipeline file: file is empty or null."
+            )
+
+        # JSON and YAML load arrays as lists. We convert the inner lists
+        # back to tuples before passing them to the strict validator.
+        if isinstance(loaded_steps, list):
+            loaded_steps = [
+                tuple(step) if isinstance(step, list) else step for step in loaded_steps
+            ]
+
+        # Use the shared structural validator exactly as the maintainer requested
+        _validate_pipeline_structure(loaded_steps)
+
+        return loaded_steps
+
+    except Exception as e:
+        if isinstance(e, PipelineSerializationError):
+            raise
+        raise PipelineSerializationError(f"Failed to load pipeline: {e}")
