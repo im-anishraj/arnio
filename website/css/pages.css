@@ -4,11 +4,9 @@
 
 /* ── HERO (Home) ─────────────────────────────────────────── */
 .hero {
-  position: relative;
-  overflow: hidden;
-  padding: 8rem 0 6rem;
-  background: linear-gradient(135deg, #071421 0%, #0d1b2a 100%);
-  color: #ffffff;
+  padding: var(--space-16) 0 var(--space-12);
+  background: var(--color-navy);
+  color: #e6edf3;
   text-align: center;
 }
 .hero .container {
@@ -24,20 +22,24 @@
   margin: 0 auto 1.5rem;
   
   color: #ffffff;
+  font-size: var(--font-size-4xl);
+  max-width: 800px;
+  margin: 0 auto var(--space-5);
+  letter-spacing: var(--letter-spacing-tight);
 }
 .hero-subtitle {
-  font-size: clamp(1rem, 2vw, 1.35rem);
-  line-height: 1.8;
-  color: #aab6c5;
-  max-width: 760px;
-  margin: 0 auto 3rem;
+  font-size: var(--font-size-lg);
+  color: #8b949e;
+  max-width: 600px;
+  margin: 0 auto var(--space-6);
+  line-height: var(--line-height-relaxed);
 }
 
 .hero-actions {
   display: flex;
   justify-content: center;
-  align-items: center;
-  gap: 1.2rem;
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
   flex-wrap: wrap;
   margin-bottom: 2.5rem;
 }
@@ -95,8 +97,11 @@
   backdrop-filter: blur(14px);
   color: #f8fafc;
   font-family: var(--font-mono);
-  transition: all 0.25s ease;
-
+  font-size: var(--font-size-sm);
+  color: #e6edf3;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  margin-top: var(--space-3);
 }
 
 .hero-install:hover {
@@ -123,7 +128,7 @@
   align-items: center;
   gap: 0.9rem;
   flex-wrap: wrap;
-  margin-top: 2.5rem;
+  margin-top: var(--space-4);
 }
 
 .hero-badges img {
@@ -179,7 +184,7 @@
 
 @media (max-width: 768px) {
   .hero {
-    padding: 6rem 0 4rem;
+    padding: var(--space-12) 0 var(--space-8);
   }
 
   .hero h1 {
