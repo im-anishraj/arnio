@@ -8,7 +8,7 @@ from __future__ import annotations
 import copy
 import json
 import math
-from typing import Any
+from typing import Any, Literal, overload
 
 from ._core import _Frame
 
@@ -390,14 +390,40 @@ class ArFrame:
 
     # --- Methods ---
 
-    def memory_usage(self) -> int:
-        """Total bytes consumed in memory.
+    @overload
+    def memory_usage(self, deep: Literal[False] = False) -> int: ...
+
+    @overload
+    def memory_usage(self, deep: Literal[True]) -> dict[str, int]: ...
+
+    @overload
+    def memory_usage(self, deep: bool = False) -> int | dict[str, int]: ...
+
+    def memory_usage(self, deep: bool = False) -> int | dict[str, int]:
+        """Return memory usage for this frame.
+
+        Parameters
+        ----------
+        deep : bool, default False
+            When ``False``, return the total bytes consumed by the frame.
+            When ``True``, return a mapping of column names to bytes consumed
+            by each underlying C++ column buffer.
 
         Returns
         -------
-        int
-            Memory usage in bytes.
+        int or dict[str, int]
+            Total memory usage in bytes, or per-column memory usage when
+            ``deep=True``.
         """
+        if not isinstance(deep, bool):
+            raise TypeError("deep must be a bool")
+
+        if deep:
+            return {
+                name: self._frame.column_by_index(index).memory_usage()
+                for index, name in enumerate(self.columns)
+            }
+
         return self._frame.memory_usage()
 
     def head(self, n: int = 5) -> ArFrame:

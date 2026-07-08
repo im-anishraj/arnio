@@ -35,18 +35,19 @@ df = ar.read_csv("data.csv")
 | <a name="shape"></a>**shape**       | `tuple[int, int]` |
 | <a name="is_empty"></a>**is_empty** | `bool`            |
 
-| Method                                            | Return Type |
-| :------------------------------------------------ | :---------- |
-| <a name="memory_usage"></a>**memory_usage()**     | `int`       |
-| <a name="preview"></a>**preview()**               | `str`       |
-| <a name="select_columns"></a>**select_columns()** | `ArFrame`   |
-| <a name="select_dtypes"></a>**select_dtypes()**   | `ArFrame`   |
+| Method                                                   | Return Type                 |
+| :------------------------------------------------------- | :-------------------------- |
+| <a name="memory_usage"></a>**memory_usage(deep=False)**  | `int` or `dict[str, int]`   |
+| <a name="preview"></a>**preview()**                      | `str`                       |
+| <a name="select_columns"></a>**select_columns()**        | `ArFrame`                   |
+| <a name="select_dtypes"></a>**select_dtypes()**          | `ArFrame`                   |
 
 ```python
 print(f"Column Names: {df.columns}")
 print(f"Data Types: {df.dtypes}")
 print(f"Dataset Shape: {df.shape}")
 print(f"Memory: {df.memory_usage()} bytes")
+print(df.memory_usage(deep=True))  # {"id": 80, "name": 128, ...}
 print(df.preview())
 df = df.select_columns(columns=["id", "name"])
 df = df.select_dtypes(include=["int64", "float64"])
