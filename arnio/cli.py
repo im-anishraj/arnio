@@ -8,6 +8,7 @@ Entry point: ``arnio`` (registered in pyproject.toml).
 Commands
 --------
     arnio scan  --input FILE [--format json|text]
+    arnio profile --input FILE [--format text|json|markdown]
 
 Exit codes
 ----------
@@ -24,7 +25,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from typing import NoReturn
+from typing import Any, NoReturn
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -35,6 +36,16 @@ def _exit_error(message: str, code: int = 1) -> NoReturn:
     """Print an actionable error message to stderr and exit with *code*."""
     print(f"error: {message}", file=sys.stderr)
     sys.exit(code)
+
+
+def _validate_input_file(path: str) -> None:
+    """Validate that *path* points to a readable input file."""
+    import os
+
+    if not os.path.exists(path):
+        _exit_error(f"input file not found: {path!r}")
+    if not os.path.isfile(path):
+        _exit_error(f"input path is not a file: {path!r}")
 
 
 # ---------------------------------------------------------------------------
@@ -64,13 +75,8 @@ def _cmd_scan(args: argparse.Namespace) -> int:
         name            string
         score           float64
     """
-    import os
-
     path = args.input
-    if not os.path.exists(path):
-        _exit_error(f"input file not found: {path!r}")
-    if not os.path.isfile(path):
-        _exit_error(f"input path is not a file: {path!r}")
+    _validate_input_file(path)
 
     try:
         import arnio as ar  # lazy import keeps --help fast
@@ -98,6 +104,90 @@ def _cmd_scan(args: argparse.Namespace) -> int:
             print("-" * len(header))
             for col, dtype in ordered.items():
                 print(f"{col:<{col_w}}{dtype}")
+
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# profile
+# ---------------------------------------------------------------------------
+
+
+def _format_suggestion(suggestion: Any) -> str:
+    """Format a cleaning suggestion for compact CLI text output."""
+    if hasattr(suggestion, "step"):
+        step = suggestion.step
+        kwargs = suggestion.kwargs
+    else:
+        step = suggestion[0]
+        kwargs = suggestion[1]
+    confidence = getattr(suggestion, "confidence_score", None)
+
+    suffix = ""
+    if confidence is not None:
+        suffix = f" (confidence {confidence:.2f})"
+
+    return f"{step}{suffix}: {json.dumps(kwargs, sort_keys=True, default=str)}"
+
+
+def _format_profile_text(path: str, report: Any, *, max_suggestions: int = 5) -> str:
+    """Return a readable text summary for ``arnio profile``."""
+    lines = [
+        f"Profile: {path}",
+        f"Quality score: {report.quality_score:.2f}",
+        f"Rows: {report.row_count}",
+        f"Columns: {report.column_count}",
+        f"Duplicate rows: {report.duplicate_rows} ({report.duplicate_ratio:.2%})",
+        "",
+        "Null counts:",
+    ]
+
+    if report.columns:
+        name_width = max(len(str(name)) for name in report.columns) + 2
+        header = f"{'column':<{name_width}}nulls  null_ratio"
+        lines.append(header)
+        lines.append("-" * len(header))
+        for name in sorted(report.columns):
+            column = report.columns[name]
+            lines.append(
+                f"{name:<{name_width}}{column.null_count:<7}{column.null_ratio:.2%}"
+            )
+    else:
+        lines.append("  (no columns found)")
+
+    lines.extend(["", "Top suggestions:"])
+    suggestions = list(report.suggestions[:max_suggestions])
+    if suggestions:
+        for index, suggestion in enumerate(suggestions, start=1):
+            lines.append(f"{index}. {_format_suggestion(suggestion)}")
+    else:
+        lines.append("  (none)")
+
+    return "\n".join(lines)
+
+
+def _cmd_profile(args: argparse.Namespace) -> int:
+    """Run ``arnio profile`` and print a data-quality report."""
+    path = args.input
+    _validate_input_file(path)
+
+    try:
+        import arnio as ar  # lazy import keeps --help fast
+    except ImportError as exc:  # pragma: no cover
+        _exit_error(f"arnio package not importable: {exc}")
+
+    try:
+        frame = ar.read_csv(path)
+        report = ar.profile(frame)
+    except Exception as exc:
+        _exit_error(f"profile failed for {path!r}: {exc}")
+
+    if args.format == "json":
+        print(json.dumps(report.to_dict(), indent=2))
+    elif args.format == "markdown":
+        print(report.to_markdown())
+    else:
+        print(_format_profile_text(path, report))
 
     return 0
 
@@ -140,6 +230,25 @@ def _build_parser() -> argparse.ArgumentParser:
         help="output format (default: text)",
     )
 
+    # ---- profile ------------------------------------------------------------
+    p_profile = sub.add_parser(
+        "profile",
+        help="generate a data quality report for a CSV file",
+        description=(
+            "Load a CSV file and print a data quality report with row counts, "
+            "null counts, quality score, duplicates, and cleaning suggestions."
+        ),
+    )
+    p_profile.add_argument(
+        "--input", required=True, metavar="FILE", help="path to input CSV file"
+    )
+    p_profile.add_argument(
+        "--format",
+        choices=["text", "json", "markdown"],
+        default="text",
+        help="output format (default: text)",
+    )
+
     return parser
 
 
@@ -168,6 +277,7 @@ def main(argv: list[str] | None = None) -> None:
 
     _HANDLERS = {
         "scan": _cmd_scan,
+        "profile": _cmd_profile,
     }
 
     handler = _HANDLERS.get(args.command)

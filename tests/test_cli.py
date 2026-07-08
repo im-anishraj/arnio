@@ -11,6 +11,7 @@ Coverage targets
 * ``arnio scan``     – JSON keys correct, dtype values match, column ordering,
                        text format, default format, missing-file exit 1,
                        missing --input flag exit nonzero
+* ``arnio profile``  – text, JSON, Markdown, default format, missing-file exit 1
 * ``arnio --version`` – returns a version string
 * ``arnio --help``   – exits 0 and contains command names
 * ``arnio`` (no args) – exits 0 and prints help
@@ -42,6 +43,13 @@ def _simple_csv(tmp_path: Path, *, name: str = "data.csv") -> Path:
     """Write a minimal CSV fixture and return its path."""
     p = tmp_path / name
     p.write_text("name,age,score\nAlice,30,95.5\nBob,25,88.0\nCharlie,35,72.0\n")
+    return p
+
+
+def _quality_csv(tmp_path: Path, *, name: str = "quality.csv") -> Path:
+    """Write a CSV fixture with nulls, duplicates, and whitespace."""
+    p = tmp_path / name
+    p.write_text("name,age,status\nAlice,30, active\nBob,,inactive\nBob,,inactive\n")
     return p
 
 
@@ -135,6 +143,61 @@ class TestScan:
 
 
 # ---------------------------------------------------------------------------
+# profile
+# ---------------------------------------------------------------------------
+
+
+class TestProfile:
+    def test_profile_text_contains_quality_summary(self, tmp_path: Path):
+        csv = _quality_csv(tmp_path)
+        result = _run(["profile", "--input", str(csv), "--format", "text"])
+
+        assert result.returncode == 0, result.stderr
+        assert "Profile:" in result.stdout
+        assert "Quality score:" in result.stdout
+        assert "Rows: 3" in result.stdout
+        assert "Columns: 3" in result.stdout
+        assert "Null counts:" in result.stdout
+        assert "age" in result.stdout
+        assert "Top suggestions:" in result.stdout
+        assert "drop_duplicates" in result.stdout
+
+    def test_profile_text_default_format(self, tmp_path: Path):
+        csv = _quality_csv(tmp_path)
+        result = _run(["profile", "--input", str(csv)])
+
+        assert result.returncode == 0, result.stderr
+        assert "Quality score:" in result.stdout
+
+    def test_profile_json_emits_report_dict(self, tmp_path: Path):
+        csv = _quality_csv(tmp_path)
+        result = _run(["profile", "--input", str(csv), "--format", "json"])
+
+        assert result.returncode == 0, result.stderr
+        data = json.loads(result.stdout)
+        assert data["row_count"] == 3
+        assert data["column_count"] == 3
+        assert "quality_score" in data
+        assert set(data["columns"]) == {"name", "age", "status"}
+        assert isinstance(data["suggestions"], list)
+
+    def test_profile_markdown_emits_report_markdown(self, tmp_path: Path):
+        csv = _quality_csv(tmp_path)
+        result = _run(["profile", "--input", str(csv), "--format", "markdown"])
+
+        assert result.returncode == 0, result.stderr
+        assert "# Data Quality Report" in result.stdout
+        assert "## Overview" in result.stdout
+        assert "- Rows: 3" in result.stdout
+
+    def test_profile_missing_file_exits_1(self, tmp_path: Path):
+        result = _run(["profile", "--input", str(tmp_path / "missing.csv")])
+
+        assert result.returncode == 1
+        assert "error" in result.stderr.lower()
+
+
+# ---------------------------------------------------------------------------
 # misc / top-level
 # ---------------------------------------------------------------------------
 
@@ -152,6 +215,10 @@ class TestMisc:
     def test_help_mentions_scan(self):
         result = _run(["--help"])
         assert "scan" in result.stdout
+
+    def test_help_mentions_profile(self):
+        result = _run(["--help"])
+        assert "profile" in result.stdout
 
     def test_no_args_exits_0_and_prints_help(self):
         result = _run([])

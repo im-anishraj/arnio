@@ -19,6 +19,32 @@ make lint
 make benchmark
 ```
 
+## Available CLI Commands
+
+### `arnio scan`
+
+Infer CSV column names and types without loading the full dataset into memory.
+
+```bash
+arnio scan --input data.csv
+arnio scan --input data.csv --format json
+```
+
+### `arnio profile`
+
+Generate a data quality report for a CSV file, including row and column counts,
+null counts, duplicate rows, a quality score, and cleaning suggestions.
+
+```bash
+arnio profile --input data.csv
+arnio profile --input data.csv --format json
+arnio profile --input data.csv --format markdown
+```
+
+The `text` format is the default and prints a compact terminal-friendly summary.
+The `json` format emits `DataQualityReport.to_dict()` output. The `markdown`
+format emits `DataQualityReport.to_markdown()` output.
+
 ## Common Python Workflow Examples
 
 ```python
