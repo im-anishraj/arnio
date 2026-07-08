@@ -4,6 +4,60 @@ This directory contains deterministic and reproducible benchmarks to compare the
 
 ---
 
+## Quick Start for First-Time Benchmark Runs
+
+Start here if you only want to confirm that the benchmark workflow works on
+your machine before generating the full datasets.
+
+### 1. Install the development dependencies
+
+Run this from the repository root so the local C++ extension and benchmark
+dependencies are available:
+
+```bash
+pip install -e ".[dev]"
+```
+
+### 2. Run a tiny dry-run benchmark
+
+The dry-run path creates smaller deterministic inputs and runs only the first
+comparison case. It is intended for setup checks, not performance claims:
+
+```bash
+python benchmarks/generate_data.py --dry-run
+ARNIO_BENCHMARK_DRY_RUN=1 python benchmarks/benchmark_vs_pandas.py
+```
+
+Use this when you are checking a new environment, reviewing a benchmark script
+change, or preparing a contributor PR.
+
+### 3. Run the full benchmark suite
+
+After the dry-run succeeds, generate the full deterministic inputs and run the
+complete comparison:
+
+```bash
+python benchmarks/generate_data.py
+python benchmarks/benchmark_vs_pandas.py
+```
+
+### 4. Read the output
+
+- **Wall-clock time** is the average elapsed runtime for each engine and case.
+- **Peak traced memory** comes from Python allocation tracking with
+  `tracemalloc`.
+- **Peak RSS** reports process memory when `psutil` or platform support is
+  available.
+- **Regression checks** compare current results with `benchmarks/baseline.json`
+  when a baseline exists. Missing baselines mean there is no proven comparison
+  yet.
+
+For issue comments and PRs, include the full command output plus your operating
+system, Python version, CPU model, pandas version, NumPy version, and Arnio
+commit.
+
+---
+
 ## 🚀 Quoted Multiline CSV Parsing Benchmark (Issue #251)
 
 Parsing CSV files with quoted multiline strings (e.g., cell values containing embedded newlines `\n` or `\r\n`) is a common source of performance bottlenecks. While pandas parses these via complex Python/C fallback logic or the C parser engine, Arnio parses them natively in C++ using a high-performance stateful parser.
