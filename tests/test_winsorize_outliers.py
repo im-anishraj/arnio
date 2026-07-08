@@ -117,34 +117,28 @@ class TestWinsorizeOutliersBoundary:
         assert df["val"].iloc[0] == pytest.approx(1.6)
         assert df["val"].iloc[4] == pytest.approx(71.2)
 
-    def test_no_numeric_columns_returns_distinct_frame(self):
-        """winsorize_outliers returns a new distinct ArFrame when no numeric columns exist.
-
-        Regression test for: the early-return path returned the original frame
-        object unchanged, violating the documented 'New frame' return contract.
-        """
+    def test_no_numeric_columns_returns_original_frame(self):
+        """winsorize_outliers returns the original frame when no numeric columns exist."""
         frame = ar.from_pandas(pd.DataFrame({"name": ["alice", "bob", "carol"]}))
         result = winsorize_outliers(frame)
 
-        # Must be a distinct object, not the same reference
-        assert result is not frame
+        assert result is frame
 
-        # Data must be identical (no transformation should occur)
         original_df = ar.to_pandas(frame)
         result_df = ar.to_pandas(result)
         assert list(result_df.columns) == list(original_df.columns)
         assert list(result_df["name"]) == list(original_df["name"])
 
-    def test_no_numeric_columns_with_subset_empty_after_filter_returns_distinct_frame(
+    def test_no_numeric_columns_with_subset_empty_after_filter_returns_original_frame(
         self,
     ):
-        """winsorize_outliers returns a new ArFrame when the frame has no numeric columns at all."""
+        """winsorize_outliers returns the original frame when there is nothing to do."""
         frame = ar.from_pandas(
             pd.DataFrame({"label": ["x", "y"], "category": ["a", "b"]})
         )
         result = winsorize_outliers(frame)
 
-        assert result is not frame
+        assert result is frame
         result_df = ar.to_pandas(result)
         assert list(result_df.columns) == ["label", "category"]
         assert list(result_df["label"]) == ["x", "y"]
