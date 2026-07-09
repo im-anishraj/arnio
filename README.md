@@ -360,6 +360,54 @@ quality, and validation layer.
 
 > Product direction: **[PROJECT_DIRECTION.md](PROJECT_DIRECTION.md)**
 
+## 📘 Examples
+
+These examples demonstrate how Arnio integrates with the Python data ecosystem.
+
+They follow a simple workflow:
+
+**clean/validate data with Arnio → analyze with other tools**
+
+### 🔹 Interoperability Examples
+
+```markdown
+- **Arnio + pandas**
+  Clean and normalize messy tabular data using Arnio, then analyze it using pandas.
+  Run:
+  ```bash
+  python examples/arnio_with_pandas.py
+```
+
+- **Arnio + NumPy**
+  Prepare numeric data safely using Arnio, then perform computations using NumPy.
+  Run:
+```bash
+  python examples/arnio_with_numpy.py
+```
+
+- **Arnio + scikit-learn**
+  Prepare messy data with Arnio, then train a model with scikit-learn.
+  Run:
+```bash
+  python examples/arnio_with_sklearn.py
+```
+
+- **Arnio + DuckDB**
+  Clean data with Arnio, then run SQL queries using DuckDB.
+  Run:
+```bash
+  python examples/arnio_with_duckdb.py
+```
+
+- **Arnio + Arrow**
+  Export ArFrame to pyarrow.Table using ``ar.to_arrow()`` for zero-copy interop with Arrow-native tools.
+  Run:
+```bash
+  python examples/arnio_with_arrow.py
+```
+
+
+
 <br>
 
 ---
