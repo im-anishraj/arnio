@@ -5208,7 +5208,9 @@ class TestChoice:
         assert result.passed
 
     def test_choice_non_nullable_rejects_nulls(self):
-        schema = ar.Schema({"status": ar.Choice(["active", "inactive"], nullable=False)})
+        schema = ar.Schema(
+            {"status": ar.Choice(["active", "inactive"], nullable=False)}
+        )
         frame = ar.from_dict({"status": ["active", None]})
         result = schema.validate(frame)
         assert not result.passed
