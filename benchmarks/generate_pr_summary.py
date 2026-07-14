@@ -28,12 +28,20 @@ def generate_summary(results, baseline):
     for case_name, current in results.items():
         baseline_case = baseline.get(case_name)
 
-        if not baseline_case:
+        if baseline_case is None:
             lines.append(f"| {case_name} | No baseline available |")
             continue
 
-        current_time = current["arnio_exec_time"]
-        baseline_time = baseline_case["arnio_exec_time"]
+        current_time = current.get("arnio_exec_time")
+        baseline_time = baseline_case.get("arnio_exec_time")
+
+        if (
+            not isinstance(current_time, (int, float))
+            or not isinstance(baseline_time, (int, float))
+            or baseline_time <= 0
+        ):
+            lines.append(f"| {case_name} | No comparable baseline available |")
+            continue
 
         change_percent = ((current_time - baseline_time) / baseline_time) * 100
 

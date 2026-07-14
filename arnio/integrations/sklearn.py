@@ -163,9 +163,35 @@ class ArnioCleaner(BaseEstimator, TransformerMixin):
         return X_out
 
     def get_feature_names_out(self, input_features=None):
+        """Enable compatibility with ColumnTransformer workflows.
+
+        Parameters
+        ----------
+        input_features : array-like of str or None
+            If None, the fitted output feature names are returned.
+            If an array-like, it must be a non-string sequence of feature
+            names that match the fitted input feature names.
+
+        Returns
+        -------
+        feature_names_out : ndarray
+            The output feature names.
+        """
         check_is_fitted(self, "feature_names_out_")
+
         if input_features is None:
             return self.feature_names_out_
+
+        if isinstance(input_features, (str, bytes)):
+            raise TypeError("input_features must be a sequence of strings, not str")
+
+        if not hasattr(input_features, "__len__") or not hasattr(
+            input_features, "__iter__"
+        ):
+            raise TypeError("input_features must be a sequence of strings")
+
+        if not all(isinstance(f, str) for f in input_features):
+            raise TypeError("All input_features must be strings")
 
         if len(input_features) != self.n_features_in_:
             raise ValueError(f"input_features should have length {self.n_features_in_}")

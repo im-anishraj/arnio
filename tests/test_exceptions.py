@@ -197,3 +197,21 @@ def test_schema_validation_error_optional_result():
 
     assert str(exc) == message
     assert exc.result is None
+
+
+def test_pipeline_step_error_preserves_step_name_and_original_error():
+    orig_err = ValueError("bad custom transform")
+    step_err = ar.PipelineStepError("normalize_names", orig_err)
+
+    assert step_err.step_name == "normalize_names"
+    assert step_err.orig_err is orig_err
+
+
+def test_pipeline_step_error_has_clear_string_representation():
+    step_err = ar.PipelineStepError("normalize_names", RuntimeError("boom"))
+
+    message = str(step_err)
+    assert message
+    assert "custom pipeline step" in message.lower()
+    assert "normalize_names" in message
+    assert "boom" in message

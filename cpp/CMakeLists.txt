@@ -4,6 +4,7 @@ add_library(arnio_core STATIC
     src/csv_reader.cpp
     src/cleaning.cpp
     src/csv_writer.cpp
+    src/encode_categorical.cpp
 )
 target_include_directories(arnio_core PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include

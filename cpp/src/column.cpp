@@ -204,6 +204,18 @@ void Column::push_null() {
 void Column::set_name(const std::string& name) { name_ = name; }
 void Column::set_dtype(DType dtype) { dtype_ = dtype; }
 
+void Column::reserve(size_t capacity) {
+    null_mask_.reserve(capacity);
+    std::visit(
+        [capacity](auto& vec) {
+            using T = std::decay_t<decltype(vec)>;
+            if constexpr (!std::is_same_v<T, std::monostate>) {
+                vec.reserve(capacity);
+            }
+        },
+        data_);
+}
+
 void Column::assert_type_consistency() const {
     bool consistent = false;
     switch (dtype_) {

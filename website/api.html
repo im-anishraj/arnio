@@ -13,14 +13,15 @@
   <link rel="stylesheet" href="css/pages.css?v=20260522">
   <script src="js/theme.js"></script>
   <meta property="og:type" content="website">
-  <meta property="og:url" content="https://arnio.vercel.app/">
+  <meta property="og:url" content="https://arnio.vercel.app/api.html">
+  <link rel="canonical" href="https://arnio.vercel.app/api.html">
   <meta property="og:title" content="Arnio — Production Data Preparation for Python">
   <meta property="og:description" content="Arnio combines a native C++ CSV engine with Python APIs for cleaning, quality profiling, and schema validation.">
-  <meta property="og:image" content="https://arnio.vercel.app/arnio-social-card.svg">
+  <meta property="og:image" content="https://arniolib.vercel.app/arnio-social-card.svg">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Arnio — Production Data Preparation for Python">
   <meta name="twitter:description" content="Arnio combines a native C++ CSV engine with Python APIs for cleaning, quality profiling, and schema validation.">
-  <meta name="twitter:image" content="https://arnio.vercel.app/arnio-social-card.svg">
+  <meta name="twitter:image" content="https://arniolib.vercel.app/arnio-social-card.svg">
 </head>
 <body>
   <a href="#main-content" class="skip-link">Skip to content</a>
@@ -28,10 +29,22 @@
     <div class="container container--wide">
       <a href="index.html" class="nav-brand" aria-label="Arnio home"><img src="arnio-logo.svg" alt="Arnio" height="32"></a>
       <ul class="nav-links"><li><a href="docs.html">Docs</a></li><li><a href="api.html">API</a></li><li><a href="benchmarks.html">Benchmarks</a></li><li><a href="contributing.html">Contributing</a></li><li><a href="architecture.html">Architecture</a></li><li><a href="roadmap.html">Roadmap</a></li><li><a href="community.html">Community</a></li><li><a href="changelog.html">Changelog</a></li></ul>
-      <div class="nav-actions"><a href="https://discord.gg/xsEw7r78M" class="nav-discord" target="_blank" rel="noopener">Discord</a><a href="https://github.com/im-anishraj/arnio" class="nav-github" target="_blank" rel="noopener">GitHub</a><button class="theme-toggle" aria-label="Toggle theme">Theme</button><button class="nav-hamburger" aria-label="Open menu" aria-expanded="false">☰</button></div>
+      <div class="nav-actions">
+        <div class="search-wrapper">
+          <input
+            id="docs-search"
+            class="search-input"
+            type="text"
+            placeholder="Search docs... (Ctrl+K)"
+            aria-label="Search documentation"
+          />
+          <div id="search-results" class="search-results"></div>
+        </div>
+
+        <a href="https://discord.gg/xsEw7r78M" class="nav-discord" target="_blank" rel="noopener" aria-label="Join Discord">Discord</a><a href="https://github.com/im-anishraj/arnio" class="nav-github" target="_blank" rel="noopener" aria-label="View on GitHub">GitHub</a><button class="theme-toggle" aria-label="Toggle theme">Theme</button><button class="nav-hamburger" aria-label="Open menu" aria-expanded="false" aria-controls="mobile-navigation">☰</button></div>
     </div>
   </nav>
-  <div class="mobile-menu" aria-label="Mobile navigation"><a href="index.html">Home</a><a href="docs.html">Documentation</a><a href="api.html">API Reference</a><a href="benchmarks.html">Benchmarks</a><a href="contributing.html">Contributing</a><a href="architecture.html">Architecture</a><a href="roadmap.html">Roadmap</a><a href="community.html">Community</a><a href="https://discord.gg/xsEw7r78M" target="_blank" rel="noopener">Discord</a><a href="changelog.html">Changelog</a></div>
+  <div id="mobile-navigation" class="mobile-menu" aria-label="Mobile navigation"><a href="index.html">Home</a><a href="docs.html">Documentation</a><a href="api.html">API Reference</a><a href="benchmarks.html">Benchmarks</a><a href="contributing.html">Contributing</a><a href="architecture.html">Architecture</a><a href="roadmap.html">Roadmap</a><a href="community.html">Community</a><a href="https://discord.gg/xsEw7r78M" target="_blank" rel="noopener">Discord</a><a href="changelog.html">Changelog</a></div>
 
   <header class="page-hero"><div class="container"><h1>API Reference</h1><p>Public functions and classes available in Arnio's current Python API.</p></div></header>
 
@@ -51,7 +64,11 @@
         <div class="api-func"><div class="api-func-header">read_csv_chunked(path, *, chunksize=10000, dtype=None, delimiter=None, has_header=True, usecols=None, nrows=None, skip_rows=0, skiprows=None, encoding="utf-8", trim_headers=True, decimal_separator=".", thousands_separator=None, null_values=None, mode="strict", on_bad_lines="error")</div><div class="api-func-body"><p>Yield <code>ArFrame</code> chunks from large files. <code>delimiter=None</code> infers tab delimiters for <code>.tsv</code> paths and comma otherwise. <code>on_bad_lines</code> may error, warn, or skip malformed row-width records. Supports the same parser controls as <code>read_csv()</code>, including <code>dtype</code>, <code>usecols</code>, <code>null_values</code>, <code>thousands_separator</code>, <code>trim_headers</code>, and <code>mode</code>.</p></div></div>
         <div class="api-func"><div class="api-func-header">scan_csv(path, *, delimiter=None, encoding="utf-8", trim_headers=True, decimal_separator=".", thousands_separator=None, sample_size=None, null_values=None, has_header=True, encoding_errors="strict", mode="strict", on_bad_lines="error")</div><div class="api-func-body"><p>Infer column names and dtypes without loading the full file. Like <code>read_csv</code>, omitted delimiters use tab for <code>.tsv</code> paths and comma otherwise.</p><p><strong>Example:</strong> <code>ar.scan_csv("raw.csv", sample_size=500, null_values=["NA", "MISSING"])</code> keeps sampling and null-token handling aligned with a later <code>read_csv()</code> call.</p></div></div>
         <div class="api-func"><div class="api-func-header">read_jsonl(path, *, encoding="utf-8", encoding_errors="strict", nrows=None)</div><div class="api-func-body"><p>Read JSON Lines or NDJSON into an <code>ArFrame</code>; mixed object columns are coerced to strings. The <code>encoding</code> and <code>encoding_errors</code> parameters control how file bytes are decoded into text.</p></div></div>
-        <div class="api-func"><div class="api-func-header">write_csv(frame, path, *, delimiter=",", write_header=True, line_terminator="\n")</div><div class="api-func-body"><p>Write an <code>ArFrame</code> to CSV or TSV with delimiter and line terminator validation.</p></div></div>
+        <div class="api-func"><div class="api-func-header">read_jsonl_chunked(path, *, chunksize=10000, encoding="utf-8", encoding_errors="strict", nrows=None)</div><div class="api-func-body"><p>Yield JSON Lines or NDJSON records as <code>ArFrame</code> chunks without buffering the whole file. Uses the same validation, line-numbered errors, decoding controls, and <code>nrows</code> limit as <code>read_jsonl()</code>.</p></div></div>
+        <div class="api-func"><div class="api-func-header">write_csv(frame, path, *, delimiter=",", write_header=True, line_terminator="\n", escape_formulas=False, encoding="utf-8", encoding_errors="strict")</div><div class="api-func-body"><p>Write an <code>ArFrame</code> to CSV or TSV with delimiter and line terminator validation. Set <code>escape_formulas=True</code> to prefix string cells that start with spreadsheet formula trigger characters before CSV quoting. <code>encoding</code> defaults to <code>"utf-8"</code> (native fast path); any Python codec is accepted and transcoded in bounded chunks. <code>encoding_errors</code> controls unencodable character handling: <code>"strict"</code> (default), <code>"replace"</code>, or <code>"ignore"</code>.</p></div></div>
+        <div class="api-func"><div class="api-func-header">write_json(frame, path, *, orient="records", indent=None)</div><div class="api-func-body"><p>Export an <code>ArFrame</code> to JSON without pandas conversion. Supported orient formats: <code>"records"</code>, <code>"list"</code>, and <code>"split"</code>.</p></div></div>
+        <div class="api-func"><div class="api-func-header">write_jsonl(frame, path, *, encoding=&quot;utf-8&quot;, encoding_errors=&quot;strict&quot;)</div><div class="api-func-body"><p>Export an <code>ArFrame</code> to JSON Lines or NDJSON. Emits one compact JSON object per row, preserves JSON <code>null</code>, and supports <code>.jsonl</code> and <code>.ndjson</code> output paths. <code>encoding_errors</code> controls unencodable character handling: <code>&quot;strict&quot;</code>, <code>&quot;replace&quot;</code>, or <code>&quot;ignore&quot;</code>.</p></div></div>
+        <div class="api-func"><div class="api-func-header">read_parquet(path, *, columns=None, usecols=None)</div><div class="api-func-body"><p>Read a Parquet file into an <code>ArFrame</code> via the optional <code>pyarrow</code> dependency. Install with <code>pip install "arnio[parquet]"</code>. Use <code>usecols</code> or <code>columns</code> for column subset selection.</p></div></div>
         <div class="api-func"><div class="api-func-header">write_parquet(frame, path, *, compression="snappy", row_group_size=None, preserve_attrs=True)</div><div class="api-func-body"><p>Write an <code>ArFrame</code> to Parquet via the optional <code>pyarrow</code> dependency. Install with <code>pip install "arnio[parquet]"</code>. <code>preserve_attrs=True</code> writes JSON-serializable <code>DataFrame.attrs</code> into Parquet metadata; set to <code>False</code> to skip that export. Accepted compression values: <code>"snappy"</code> (default), <code>"gzip"</code>, <code>"brotli"</code>, <code>"zstd"</code>, and <code>"none"</code>.</p></div></div>
         <div class="api-func"><div class="api-func-header">sniff_delimiter(path, *, encoding="utf-8", sample_size=2048)</div><div class="api-func-body"><p>Detect a likely delimiter for CSV-like input before reading or scanning. <code>sample_size</code> controls how many characters are read from the start of the file for detection; the default of <code>2048</code> is sufficient for most files. Increase it when the file has an unusual delimiter that only appears further into the content.</p></div></div>
 
@@ -65,6 +82,7 @@
         <div class="api-func"><div class="api-func-header">frame.select_dtypes(include=..., exclude=...)</div><div class="api-func-body"><p>Return a new <code>ArFrame</code> filtered by dtype names like <code>int64</code>, <code>float64</code>, <code>string</code>, <code>bool</code>, or <code>null</code>.</p></div></div>
         <div class="api-func"><div class="api-func-header">frame.astype(dtype)</div><div class="api-func-body"><p>Cast one or more columns to a specified dtype or per-column type mapping and return a new <code>ArFrame</code>.</p></div></div>
         <div class="api-func"><div class="api-func-header">frame.to_dict()</div><div class="api-func-body"><p>Return a <code>dict[str, list]</code> representation for serialization or tests.</p></div></div>
+        <div class="api-func"><div class="api-func-header">frame.to_csv(path, *, delimiter=",", write_header=True, **kwargs)</div><div class="api-func-body"><p>Convenience wrapper to write the frame to a CSV file. Delegates to <code>arnio.write_csv</code>.</p></div></div>
         <div class="api-func"><div class="api-func-header">frame.drop_columns(columns)</div><div class="api-func-body"><p>Current-main method equivalent to the top-level <code>drop_columns</code> helper.</p></div></div>
         <div class="api-func"><div class="api-func-header">frame.describe() / frame.schema_summary</div><div class="api-func-body"><p>Summary statistics and column summaries. <code>schema_summary</code> returns <code>ColumnSummary</code> objects with name, dtype, and nullability.</p></div></div>
 
@@ -73,24 +91,37 @@
         <div class="api-func"><div class="api-func-header">from_pandas(df)</div><div class="api-func-body"><p>Convert a pandas DataFrame to <code>ArFrame</code> with dtype validation, duplicate-column checks, attrs preservation, and zero-column row-count preservation.</p></div></div>
         <div class="api-func"><div class="api-func-header">from_dict(data)</div><div class="api-func-body"><p>Build an <code>ArFrame</code> from a mapping of column names to column values.</p></div></div>
         <div class="api-func"><div class="api-func-header">to_arrow(frame)</div><div class="api-func-body"><p>Export to <code>pyarrow.Table</code>. Install with <code>pip install "arnio[arrow]"</code>. Added in v1.18.0.</p></div></div>
+        <div class="api-func"><div class="api-func-header">from_arrow(table)</div><div class="api-func-body"><p>Convert a PyArrow Table to an <code>ArFrame</code>. Install with <code>pip install "arnio[arrow]"</code>.</p></div></div>
+        <div class="api-func"><div class="api-func-header">to_polars(frame)</div><div class="api-func-body"><p>Convert an <code>ArFrame</code> to a Polars DataFrame via Arrow. Requires optional Polars dependency; install with <code>pip install "arnio[polars]"</code>.</p></div></div>
+        <div class="api-func"><div class="api-func-header">from_polars(df)</div><div class="api-func-body"><p>Convert a Polars DataFrame to <code>ArFrame</code> with inferred types and null values preserved. Requires optional Polars dependency; install with <code>pip install "arnio[polars]"</code>.</p></div></div>
 
         <h2 id="cleaning">Cleaning</h2>
         <p class="section-lede">Cleaning functions return new frames and are usable directly or from <code>pipeline()</code>.</p>
         <table><thead><tr><th>Function</th><th>Purpose</th></tr></thead><tbody>
           <tr><td><code>drop_nulls</code>, <code>keep_rows_with_nulls</code>, <code>fill_nulls</code></td><td>Control null-bearing rows and values.</td></tr>
           <tr><td><code>validate_columns_exist</code>, <code>drop_columns</code>, <code>select_columns</code>, <code>drop_empty_columns</code>, <code>drop_constant_columns</code>, <code>drop_columns_matching</code></td><td>Validate and manage columns explicitly, by emptiness, constants, or regex.</td></tr>
-          <tr><td><code>filter_rows</code>, <code>drop_duplicates</code></td><td>Filter row sets and remove duplicate rows.</td></tr>
-          <tr><td><code>strip_whitespace</code>, <code>normalize_whitespace</code>, <code>normalize_case</code>, <code>normalize_unicode</code>, <code>clean_column_names</code>, <code>trim_column_names</code>, <code>slugify_column_names</code>, <code>rename_columns</code></td><td>Normalize text, headers, and column names.</td></tr>
-          <tr><td><code>cast_types</code>, <code>parse_bool_strings</code>, <code>round_numeric_columns</code>, <code>clip_numeric</code>, <code>winsorize_outliers</code></td><td>Type and numeric cleanup.</td></tr>
+          <tr><td><code>filter_rows</code>, <code>drop_duplicates</code>, <code>find_fuzzy_duplicates</code></td><td>Filter row sets, remove duplicate rows, and detect near-duplicate rows by similarity.</td></tr>
+          <tr><td><code>hash_columns</code>, <code>strip_whitespace</code>, <code>normalize_whitespace</code>, <code>normalize_case</code>, <code>normalize_unicode</code>, <code>clean_column_names</code>, <code>trim_column_names</code>, <code>slugify_column_names</code>, <code>rename_columns</code>, <code>rename_columns_matching</code></td><td>Normalize text, headers, and column names.</td></tr>
+          <tr><td><code>cast_types</code>, <code>parse_bool_strings</code>, <code>round_numeric_columns</code>, <code>clip_numeric</code>, <code>winsorize_outliers</code>, <code>normalize_minmax</code></td><td>Type and numeric cleanup.</td></tr>
+          <tr><td><code>encode_categorical</code></td><td>Encode STRING columns using one-hot indicator columns or caller-supplied ordinal mappings.</td></tr>
           <tr><td><code>replace_values</code>, <code>standardize_missing_tokens</code>, <code>combine_columns</code>, <code>coalesce_columns</code>, <code>safe_divide_columns</code></td><td>Common feature engineering and value repair helpers.</td></tr>
         </tbody></table>
+        <div class="api-func"><div class="api-func-header">hash_columns(frame, *, subset, algorithm=&quot;sha256&quot;)</div><div class="api-func-body"><p>Replace values in string columns with their lowercase hex-encoded hash digest. Uses the standard-library <code>hashlib</code> module — no custom digest code. Null cells are preserved as null; empty strings are hashed normally. <code>algorithm</code> accepts <code>"sha256"</code> (default, recommended) or <code>"md5"</code> (for deduplication workloads only — not cryptographically strong). Raises <code>ValueError</code> for missing columns; raises <code>TypeError</code> for non-string columns. Available as a pipeline step: <code>("hash_columns", {"subset": ["email"], "algorithm": "sha256"})</code>.</p><p><strong>Warning:</strong> hashing is deterministic pseudonymization, not encryption. This does not constitute anonymization under GDPR or equivalent regulations.</p></div></div>
+        <div class="api-func"><div class="api-func-header">CastReport and CastFailure</div><div class="api-func-body"><p>Returned by <code>cast_types(..., errors="report")</code>. <code>CastReport</code> holds the cast <code>frame</code> and a <code>failures</code> list of <code>CastFailure</code> records. Each <code>CastFailure</code> has <code>column</code>, <code>row</code>, <code>value</code>, and <code>target_dtype</code> attributes. <code>bool(report)</code> is <code>True</code> when there is at least one failure.</p></div></div>
 
         <h2 id="pipeline">Pipeline</h2>
-        <div class="api-func"><div class="api-func-header">pipeline(frame, steps, *, verbose=False)</div><div class="api-func-body"><p>Run named cleaning steps or registered Python callables. <code>verbose=True</code> enables lightweight diagnostics through the <code>arnio</code> logger and optional <code>PipelineContext</code>.</p></div></div>
+        <div class="api-func"><div class="api-func-header">pipeline(frame, steps, *, verbose=False, track_lineage=False)</div><div class="api-func-body"><p>Run named cleaning steps or registered Python callables. <code>verbose=True</code> enables lightweight diagnostics through the <code>arnio</code> logger and optional <code>PipelineContext</code>. Pass <code>track_lineage=True</code> to receive a <code>(ArFrame, LineageReport)</code> tuple that maps every dropped row back to its original index and the step that removed it.</p></div></div>
+        <div class="api-func"><div class="api-func-header">LineageReport</div><div class="api-func-body"><p>Returned by <code>pipeline(..., track_lineage=True)</code>. Attributes: <code>dropped_by_step</code> (dict mapping step name → sorted list of original row indices dropped by that step; steps that dropped no rows have an empty list) and <code>total_dropped</code> (int). Method: <code>to_pandas()</code> returns a flat <code>DataFrame</code> with columns <code>original_index</code> and <code>step</code>.</p></div></div>
         <div class="api-func"><div class="api-func-header">register_step(name, fn, overwrite=False), unregister_step(name), list_steps(), reset_steps(), get_builtin_step_signatures()</div><div class="api-func-body"><p>Manage the step registry and discover available built-in signatures.</p></div></div>
-
+        <h3>Pipeline Serialization</h3>
+<ul>
+    <li><code>save_pipeline(steps, filepath)</code>: Save a list of pipeline steps to a JSON or YAML file for reproducible jobs.</li>
+    <li><code>load_pipeline(filepath)</code>: Load a list of pipeline steps from a JSON or YAML file.</li>
+    <li><code>PipelineSerializationError</code>: Exception raised when a declarative pipeline cannot be saved or loaded.</li>
+</ul>
         <h2 id="quality">Quality</h2>
         <div class="api-func"><div class="api-func-header">profile(frame, *, exclude_columns=None, sample_size=5, approx_top_values=False, approx_top_values_min_unique=1000, approx_top_values_min_ratio=0.2, approx_top_values_sample_size=2000)</div><div class="api-func-body"><p>Return <code>DataQualityReport</code> with row/column counts, duplicate metrics, column profiles, warnings, quality score, score components, and cleaning suggestions.</p></div></div>
+        
         <div class="api-func"><div class="api-func-header">DataQualityReport._repr_html_()</div><div class="api-func-body"><p>Jupyter/IPython automatically calls this to render the report dashboard HTML directly in the notebook output area.</p></div></div>
         <div class="api-func"><div class="api-func-header">DataQualityReport.to_dict(redact_sample_values=False, exclude_columns=None), to_json(), to_markdown(), to_html(), summary(), to_pandas()</div><div class="api-func-body"><p>Export reports for notebooks, CI, docs, and automation.</p></div></div>
         <div class="api-func"><div class="api-func-header">compare_profiles(left, right), suggest_cleaning(frame_or_report), auto_clean(frame, *, mode="safe", return_report=False, dry_run=False, allow_lossy_casts=False, confirmed_casts=None, explain=False)</div><div class="api-func-body"><p>Compare quality over time, generate pipeline-compatible steps, or run automatic cleaning with optional reports and audit output.</p><p><strong>Additional options:</strong></p><ul><li><code>return_report</code> – return the pre-cleaning quality report alongside cleaned output.</li><li><code>allow_lossy_casts</code> – opt in to strict-mode casts that may lose information.</li><li><code>confirmed_casts</code> – explicit column-to-dtype confirmations required before strict-mode casts are applied.</li></ul><p><strong>Return values:</strong></p><ul><li><code>auto_clean(...)</code> → <code>ArFrame</code></li><li><code>auto_clean(..., return_report=True)</code> → <code>(ArFrame, DataQualityReport)</code></li><li><code>auto_clean(..., dry_run=True)</code> → <code>DataQualityReport</code></li><li><code>auto_clean(..., explain=True)</code> → <code>(ArFrame, CleanExplanation)</code></li><li><code>auto_clean(..., return_report=True, explain=True)</code> → <code>(ArFrame, DataQualityReport, CleanExplanation)</code></li></ul><pre><code># Preview proposed changes
@@ -138,7 +169,20 @@ if not result.passed:
     print(result.to_markdown())
     result.raise_for_failures()
 </code></pre></div></div>
-        <div class="api-func"><div class="api-func-header">Quality result classes</div><div class="api-func-body"><p><code>ColumnProfile</code>, <code>CleaningSuggestion</code>, <code>CleanStepRecord</code>, <code>CleanExplanation</code>, <code>ProfileComparison</code>, <code>QualityGateIssue</code>, and <code>QualityGateResult</code> describe structured profiling, cleaning, comparison, and gate output.</p></div></div>
+        <div class="api-func"><div class="api-func-header">Quality result classes</div><div class="api-func-body"><p><code>ColumnProfile</code>, <code>CleaningSuggestion</code>, <code>CleanStepRecord</code>, <code>CleanExplanation</code>, <code>DriftReport</code>, <code>ProfileComparison</code>, <code>QualityGateIssue</code>, and <code>QualityGateResult</code> describe structured profiling, cleaning, comparison, and gate output.</p></div></div>
+        <div class="api-func"><div class="api-func-header">detect_drift(old, new)</div><div class="api-func-body"><p>Compare two <code>ArFrame</code> datasets and return a <code>DriftReport</code> describing structural and statistical changes. Unlike <code>compare_profiles</code>, this function handles added or removed columns without raising an error.</p><p><strong>DriftReport fields:</strong></p><ul><li><code>added_columns</code> – columns present in <code>new</code> but absent from <code>old</code>.</li><li><code>removed_columns</code> – columns present in <code>old</code> but absent from <code>new</code>.</li><li><code>dtype_changes</code> – shared columns whose dtype changed: <code>{col: (old_dtype, new_dtype)}</code>.</li><li><code>null_ratio_changes</code> – shared columns whose null ratio changed: <code>{col: (old_ratio, new_ratio)}</code>.</li><li><code>row_count</code> – row counts as <code>(old_rows, new_rows)</code>.</li><li><code>has_drift</code> – <code>True</code> when any of the above are non-empty or row counts differ.</li><li><code>to_dict()</code> – JSON-safe export of the report.</li></ul><pre><code>old_frame = ar.read_csv("data_v1.csv")
+new_frame = ar.read_csv("data_v2.csv")
+report = ar.detect_drift(old_frame, new_frame)
+
+if report.has_drift:
+    print("Added columns:", report.added_columns)
+    print("Removed columns:", report.removed_columns)
+    print("Dtype changes:", report.dtype_changes)
+    print("Null ratio changes:", report.null_ratio_changes)
+
+import json
+print(json.dumps(report.to_dict(), indent=2))
+</code></pre></div></div>
 
         <h2 id="schema">Schema</h2>
         <div class="api-func"><div class="api-func-header">Schema(fields, strict=False, unique=None, rules=None).validate(frame, max_errors=None) / validate(frame, schema, max_errors=None)</div><div class="api-func-body"><p>Validate frames against field definitions. <code>max_errors</code> was added in v1.18.0.</p><p><code>unique</code>: list or tuple of column names that must contain no duplicate values in the frame.</p><p><code>rules</code>: list of callables <code>(pd.DataFrame) -&gt; list[ValidationIssue]</code> for cross-field or custom contract checks.</p><pre><code>schema = ar.Schema(
@@ -146,6 +190,7 @@ if not result.passed:
     unique=["email"],
 )
 result = schema.validate(frame)</code></pre></div></div>
+        <div class="api-func"><div class="api-func-header">validate_chunked(chunks, schema, *, max_errors=None)</div><div class="api-func-body"><p>Validate an iterable of <code>ArFrame</code> chunks against a <code>Schema</code> and return a single <code>ValidationResult</code>. Row indices in all <code>ValidationIssue</code> objects are adjusted to reflect global positions across chunk boundaries. Supports <code>max_errors</code> for early termination. Does not modify <code>validate()</code>.</p></div></div>
         <div class="api-func"><div class="api-func-header">Field builders</div><div class="api-func-body">
           <p>Each builder returns a <code>Field</code> for use in <code>Schema(fields={...})</code>. All builders accept keyword-only arguments unless noted otherwise.</p>
           <table class="param-table">
@@ -225,10 +270,28 @@ result = schema.validate(frame)</code></pre></div></div>
                 <td>Validates IANA timezone identifiers (e.g. <code>"America/New_York"</code>).</td>
               </tr>
               <tr>
+                <td><code>UUID(...)</code></td>
+                <td>Semantic</td>
+                <td><code>nullable=True</code>, <code>unique=False</code>, <code>severity="error"</code>, <code>required_if=None</code></td>
+                <td>Validates the canonical 8-4-4-4-12 hexadecimal UUID format (RFC 4122, e.g. <code>"550e8400-e29b-41d4-a716-446655440000"</code>). Both upper- and lower-case hex digits are accepted.</td>
+              </tr>
+              <tr>
+                <td><code>IPv4(...)</code></td>
+                <td>Semantic</td>
+                <td><code>nullable=True</code>, <code>unique=False</code>, <code>severity="error"</code>, <code>required_if=None</code></td>
+                <td>Validates strict dotted-decimal IPv4 addresses (e.g. <code>"192.168.1.1"</code>). Each octet must be 0&#8211;255; leading zeros are rejected.</td>
+              </tr>
+              <tr>
+                <td><code>MACAddress(...)</code></td>
+                <td>Semantic</td>
+                <td><code>nullable=True</code>, <code>unique=False</code>, <code>severity="error"</code>, <code>required_if=None</code></td>
+                <td>Validates IEEE 802 MAC-48 addresses in colon-separated (<code>"AA:BB:CC:DD:EE:FF"</code>) or hyphen-separated (<code>"AA-BB-CC-DD-EE-FF"</code>) notation.</td>
+              </tr>
+              <tr>
                 <td><code>Date(...)</code></td>
                 <td>Date / Time</td>
-                <td><code>nullable=True</code>, <code>unique=False</code>, <code>severity="error"</code>, <code>required_if=None</code></td>
-                <td>Validates ISO 8601 date strings (<code>YYYY-MM-DD</code>).</td>
+                <td><code>nullable=True</code>, <code>min=None</code>, <code>max=None</code>, <code>unique=False</code>, <code>severity="error"</code>, <code>required_if=None</code></td>
+                <td>Validates ISO 8601 date strings (<code>YYYY-MM-DD</code>). <code>min</code> / <code>max</code> accept ISO date strings, <code>datetime.date</code>, or <code>pd.Timestamp</code>; numeric values raise <code>TypeError</code>.</td>
               </tr>
               <tr>
                 <td><code>DateTime(...)</code></td>
@@ -252,7 +315,7 @@ result = schema.validate(frame)</code></pre></div></div>
           </table>
           <p style="margin-top:1rem"><strong>Common parameters:</strong> <code>nullable</code> — allow null values; <code>unique</code> — require all non-null values to be distinct; <code>severity</code> — <code>"error"</code> (default) or <code>"warning"</code>; <code>required_if</code> — a <code>(column, value)</code> tuple that makes the field mandatory when another column equals a given value.</p>
         </div></div>
-        <div class="api-func"><div class="api-func-header">diff_schema, schema_to_dict, schema_to_yaml, register_validator</div><div class="api-func-body"><p>Compare schema contracts, export schema definitions, and register custom semantic validators. Structured results include <code>SchemaDiff</code>, <code>SchemaDiffEntry</code>, <code>ValidationIssue</code>, and <code>ValidationResult</code>.</p></div></div>
+        <div class="api-func"><div class="api-func-header">diff_schema, schema_to_dict, schema_to_yaml, schema_from_yaml, register_validator</div><div class="api-func-body"><p>Compare schema contracts, export schema definitions, and register custom semantic validators. Structured results include <code>SchemaDiff</code>, <code>SchemaDiffEntry</code>, <code>ValidationIssue</code>, and <code>ValidationResult</code>.</p></div></div>
 
         <h2 id="integrations">Integrations</h2>
         <div class="api-func"><div class="api-func-header">ArnioPandasAccessor / pandas accessor: df.arnio.to_arframe(), pipeline(), clean(), profile(), suggest_cleaning(), auto_clean(), validate()</div><div class="api-func-body"><p>Run Arnio workflows directly from pandas DataFrames.</p></div></div>
@@ -266,7 +329,7 @@ cleaned = df.arnio.clean(drop_duplicates=True)
         <div class="api-func"><div class="api-func-header">ArnioCleaner</div><div class="api-func-body"><p>Optional scikit-learn transformer for pipeline-safe data preparation. Install with <code>pip install "arnio[sklearn]"</code>.</p></div></div>
 
         <h2 id="exceptions">Exceptions</h2>
-        <div class="api-func"><div class="api-func-header">ArnioError and specialized exceptions</div><div class="api-func-body"><p><code>ArnioError</code> is the package-level base exception. Public specialized exceptions include <code>CsvReadError</code>, <code>JsonlReadError</code>, <code>TypeCastError</code>, <code>PipelineStepError</code>, <code>UnknownStepError</code>, and <code>SchemaValidationError</code>.</p></div></div>
+        <div class="api-func"><div class="api-func-header">ArnioError and specialized exceptions</div><div class="api-func-body"><p><code>ArnioError</code> is the package-level base exception. Public specialized exceptions include <code>CsvReadError</code>, <code>JsonlReadError</code>, <code>RemoteReadError</code>, <code>TypeCastError</code>, <code>PipelineStepError</code>, <code>UnknownStepError</code>, and <code>SchemaValidationError</code>.</p></div></div>
       </article>
     </div>
   </main>
@@ -297,5 +360,6 @@ cleaned = df.arnio.clean(drop_duplicates=True)
   </footer>
   <script src="js/main.js" defer></script>
   <script src="js/code.js" defer></script>
+  <script src="js/search.js" defer></script>
 </body>
 </html>

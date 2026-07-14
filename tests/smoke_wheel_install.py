@@ -104,20 +104,77 @@ def main() -> int:
 
         import_check = (
             "import arnio as ar; "
-            "import tempfile, pathlib; "
+            "import inspect, tempfile, pathlib; "
             "print('arnio import ok:', ar.__version__); "
             "assert hasattr(ar, 'read_csv'); "
             "assert hasattr(ar, 'pipeline'); "
             "assert hasattr(ar, 'to_pandas'); "
+            "assert hasattr(ar, 'slugify_column_names'), 'slugify_column_names missing from public API'; "
+            "assert hasattr(ar, 'rename_columns_matching'), 'rename_columns_matching missing from public API'; "
+            "assert 'slugify_column_names' in ar.list_steps(), 'slugify_column_names missing from list_steps()'; "
+            "assert 'rename_columns_matching' in ar.list_steps(), 'rename_columns_matching missing from list_steps()'; "
+            "print('column-name helper parity check passed'); "
             "tmp = tempfile.mkdtemp(); "
             "csv = pathlib.Path(tmp) / 'smoke.csv'; "
             "csv.write_text('name,age\\nAlice,30\\nBob,25\\n'); "
             "frame = ar.read_csv(str(csv)); "
             "assert frame is not None; "
-            "print('read_csv smoke test passed')"
+            "print('read_csv smoke test passed'); "
+            "sig = inspect.signature(ar.read_jsonl); "
+            "params = sig.parameters; "
+            "assert 'encoding_errors' in params, 'read_jsonl is missing encoding_errors parameter'; "
+            "assert params['encoding_errors'].default == 'strict', 'read_jsonl encoding_errors default must be strict'; "
+            "sig2 = inspect.signature(ar.read_jsonl_chunked); "
+            "assert 'encoding_errors' in sig2.parameters, 'read_jsonl_chunked is missing encoding_errors parameter'; "
+            "print('read_jsonl signature parity check passed')"
         )
 
         run([str(python), "-c", import_check], cwd=tmp_dir)
+
+        # Verify that cloud-scheme rejection is present in the installed wheel.
+        # The ValueError must be raised by Python before the C++ extension is
+        # reached, so no real network access or cloud credentials are needed.
+        # Write to a temp script file to avoid shell quoting complexity.
+        cloud_scheme_script = (
+            "import arnio as ar\n"
+            "schemes = ['s3', 'gs', 'az', 'abfs', 'abfss']\n"
+            "errors = []\n"
+            "for scheme in schemes:\n"
+            "    url = f'{scheme}://bucket/file.csv'\n"
+            "    for fn in [ar.read_csv, ar.scan_csv]:\n"
+            "        try:\n"
+            "            fn(url)\n"
+            "            errors.append(f'{fn.__name__}({url}): expected ValueError, got no exception')\n"
+            "        except ValueError as exc:\n"
+            "            if 'pip install' not in str(exc):\n"
+            "                errors.append(f'{fn.__name__}({url}): missing pip hint — {exc}')\n"
+            "        except Exception as exc:\n"
+            "            errors.append(f'{fn.__name__}({url}): wrong exception type {type(exc).__name__} — {exc}')\n"
+            "    # read_csv_chunked must be iterated to trigger the guard\n"
+            "    try:\n"
+            "        next(iter(ar.read_csv_chunked(url)))\n"
+            "        errors.append(f'read_csv_chunked({url}): expected ValueError, got no exception')\n"
+            "    except ValueError as exc:\n"
+            "        if 'pip install' not in str(exc):\n"
+            "            errors.append(f'read_csv_chunked({url}): missing pip hint — {exc}')\n"
+            "    except Exception as exc:\n"
+            "        errors.append(f'read_csv_chunked({url}): wrong exception type {type(exc).__name__} — {exc}')\n"
+            "if errors:\n"
+            "    raise SystemExit('Cloud scheme smoke test FAILED:\\n' + '\\n'.join(errors))\n"
+            "print('cloud scheme smoke test passed')\n"
+        )
+
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            suffix=".py",
+            delete=False,
+            dir=tmp_dir,
+            encoding="utf-8",
+        ) as script_file:
+            script_file.write(cloud_scheme_script)
+            script_path = script_file.name
+
+        run([str(python), script_path], cwd=tmp_dir)
 
     print("Wheel install smoke test passed.")
     return 0

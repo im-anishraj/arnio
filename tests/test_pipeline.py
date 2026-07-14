@@ -1,6 +1,8 @@
 """Tests for the pipeline function."""
 
 import importlib
+import os
+import tempfile
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from inspect import Signature
@@ -9,6 +11,8 @@ import pandas as pd
 import pytest
 
 import arnio as ar
+from arnio.exceptions import PipelineSerializationError
+from arnio.pipeline import load_pipeline, save_pipeline
 
 pipeline_module = importlib.import_module("arnio.pipeline")
 
@@ -322,6 +326,32 @@ class TestPipeline:
         assert result.dtypes["years"] == "float64"
         assert "age" not in result.columns
 
+    def test_pipeline_cast_types_shorthand_rejects_reserved_kwargs(self):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "age": ["1", "2"],
+                }
+            )
+        )
+
+        with pytest.raises(
+            ValueError,
+            match="cast_types shorthand mapping cannot be mixed",
+        ):
+            ar.pipeline(
+                frame,
+                [
+                    (
+                        "cast_types",
+                        {
+                            "age": "int64",
+                            "errors": "coerce",
+                        },
+                    ),
+                ],
+            )
+
     def test_pipeline_mapping_keyword_form(self, sample_csv):
         frame = ar.read_csv(sample_csv)
         result = ar.pipeline(
@@ -563,7 +593,12 @@ class TestPipeline:
         )
 
         assert isinstance(result, ar.ArFrame)
-        assert list(metadata.keys()) == ["applied_steps", "row_counts", "step_timings"]
+        assert list(metadata.keys()) == [
+            "applied_steps",
+            "row_counts",
+            "step_timings",
+            "execution_summary",
+        ]
         assert metadata["applied_steps"] == ["strip_whitespace", "normalize_case"]
         assert len(metadata["row_counts"]) == 2
         assert metadata["row_counts"][0]["step"] == "strip_whitespace"
@@ -631,8 +666,13 @@ class TestPipeline:
             ar.unregister_step("missing_step")
 
     def test_unregister_builtin_python_step(self):
-        with pytest.raises(ar.UnknownStepError):
-            ar.unregister_step("standardize_missing_tokens")
+        for step_name in [
+            "standardize_missing_tokens",
+            "filter_rows",
+            "replace_values",
+        ]:
+            with pytest.raises(ValueError):
+                ar.unregister_step(step_name)
 
     def test_unregister_custom_step(self):
         def custom_step(df):
@@ -2040,3 +2080,264 @@ class TestPipelineStepContainerValidation:
     def test_pipeline_accepts_valid_step_container(self, frame):
         result = ar.pipeline(frame, [("strip_whitespace",)])
         assert isinstance(result, ar.ArFrame)
+
+
+class TestExecutionSummary:
+    def test_execution_summary_present_in_metadata(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        _, metadata = ar.pipeline(
+            frame,
+            [("drop_nulls",)],
+            return_metadata=True,
+        )
+        assert "execution_summary" in metadata
+
+    def test_execution_summary_total_runtime_is_float(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        _, metadata = ar.pipeline(
+            frame,
+            [("drop_nulls",)],
+            return_metadata=True,
+        )
+        assert isinstance(metadata["execution_summary"]["total_runtime_ms"], float)
+
+    def test_execution_summary_steps_count_matches(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        _, metadata = ar.pipeline(
+            frame,
+            [("drop_nulls",), ("strip_whitespace",)],
+            return_metadata=True,
+        )
+        assert len(metadata["execution_summary"]["steps"]) == 2
+
+    def test_execution_summary_step_fields(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        _, metadata = ar.pipeline(
+            frame,
+            [("drop_nulls",)],
+            return_metadata=True,
+        )
+        step = metadata["execution_summary"]["steps"][0]
+        assert step["name"] == "drop_nulls"
+        assert step["status"] == "success"
+        assert isinstance(step["runtime_ms"], float)
+        assert isinstance(step["rows_before"], int)
+        assert isinstance(step["rows_after"], int)
+        assert isinstance(step["rows_affected"], int)
+        assert isinstance(step["columns_before"], int)
+        assert isinstance(step["columns_after"], int)
+
+    def test_execution_summary_only_contains_successful_steps(self):
+        def bad_step(df):
+            raise ValueError("boom")
+
+        ar.register_step("bad_step_summary", bad_step)
+        frame = ar.from_pandas(pd.DataFrame({"a": [1, 2]}))
+        with pytest.raises(Exception):
+            ar.pipeline(
+                frame,
+                [("drop_nulls",), ("bad_step_summary",)],
+                return_metadata=True,
+            )
+        ar.unregister_step("bad_step_summary")
+
+        frame2 = ar.from_pandas(pd.DataFrame({"a": [1, None, 2]}))
+        _, metadata = ar.pipeline(
+            frame2,
+            [("drop_nulls",), ("strip_whitespace",)],
+            return_metadata=True,
+        )
+        assert all(
+            s["status"] == "success" for s in metadata["execution_summary"]["steps"]
+        )
+        assert len(metadata["execution_summary"]["steps"]) == 2
+
+    def test_execution_summary_dry_run_rows_unchanged(self, sample_csv):
+        frame = ar.read_csv(sample_csv)
+        _, metadata = ar.pipeline(
+            frame,
+            [("drop_nulls",)],
+            return_metadata=True,
+            dry_run=True,
+        )
+        step = metadata["execution_summary"]["steps"][0]
+        assert step["rows_before"] == step["rows_after"]
+        assert step["rows_affected"] == 0
+
+    def test_execution_summary_python_step(self):
+        def add_col(df):
+            df["x"] = 1
+            return df
+
+        ar.register_step("es_python_step", add_col)
+        frame = ar.from_pandas(pd.DataFrame({"a": [1, 2, 3]}))
+        _, metadata = ar.pipeline(
+            frame,
+            [("es_python_step",)],
+            return_metadata=True,
+        )
+        ar.unregister_step("es_python_step")
+        step = metadata["execution_summary"]["steps"][0]
+        assert step["name"] == "es_python_step"
+        assert step["status"] == "success"
+
+
+def test_pipeline_serialization_errors():
+    with pytest.raises(PipelineSerializationError, match="File not found"):
+        load_pipeline("non_existent_file.json")
+
+
+def test_malformed_pipeline_structures():
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        dict_path = os.path.join(tmpdirname, "dict.json")
+        with open(dict_path, "w") as f:
+            f.write('{"this_is_a_dictionary_not_a_list": true}')
+        with pytest.raises(
+            PipelineSerializationError, match="Pipeline steps must be a list"
+        ):
+            load_pipeline(dict_path)
+
+        empty_path = os.path.join(tmpdirname, "empty.json")
+        with open(empty_path, "w") as f:
+            f.write("")
+        with pytest.raises(PipelineSerializationError, match="file is empty"):
+            load_pipeline(empty_path)
+
+        bad_step_path = os.path.join(tmpdirname, "bad_step.json")
+        with open(bad_step_path, "w") as f:
+            f.write('[["drop_nulls", "not_a_dictionary_kwargs"]]')
+        with pytest.raises(
+            PipelineSerializationError,
+            match="The second element of a step must be a dictionary",
+        ):
+            load_pipeline(bad_step_path)
+
+
+def test_roundtrip_kwargs_determinism():
+    original_steps = [
+        ("cast_types", {"mapping": {"score": "float64", "age": "int64"}}),
+        ("rename_columns", {"mapping": {"old_name": "new_name", "a": "b"}}),
+    ]
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        filepath = os.path.join(tmpdirname, "kwargs_job.json")
+        save_pipeline(original_steps, filepath)
+        loaded_steps = load_pipeline(filepath)
+        assert loaded_steps == original_steps
+
+
+def test_unknown_step_serialization():
+    steps = [("this_step_does_not_exist", {"foo": "bar"})]
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        filepath = os.path.join(tmpdirname, "unknown_step.json")
+        save_pipeline(steps, filepath)
+        loaded_steps = load_pipeline(filepath)
+        assert loaded_steps == steps
+
+
+def test_pipeline_execution_roundtrip():
+    """Verify that a loaded pipeline can be directly executed against an ArFrame."""
+    import pandas as pd
+
+    import arnio as ar
+
+    # 1. Create a dummy frame with whitespace and a null
+    df = pd.DataFrame({"name": [" Alice ", "Bob", None]})
+    frame = ar.from_pandas(df)
+
+    # 2. Define the steps
+    steps = [
+        ("drop_nulls",),
+        ("strip_whitespace", {"subset": ["name"]}),
+    ]
+
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        filepath = os.path.join(tmpdirname, "execution_job.json")
+
+        # 3. Save and load the pipeline
+        ar.save_pipeline(steps, filepath)
+        loaded_steps = ar.load_pipeline(filepath)
+
+        # 4. Execute the loaded pipeline
+        result = ar.pipeline(frame, loaded_steps)
+        result_df = ar.to_pandas(result)
+
+        # 5. Assert the cleaning actually happened
+        assert len(result_df) == 2
+        assert result_df["name"].iloc[0] == "Alice"
+
+
+def test_yaml_pipeline_serialization_roundtrip():
+    """Verify that a pipeline can be saved to and loaded from a YAML file."""
+    import pytest
+
+    pytest.importorskip("yaml")
+    import os
+    import tempfile
+
+    import arnio as ar
+
+    steps = [
+        ("drop_nulls",),
+        ("strip_whitespace", {"subset": ["name"]}),
+    ]
+
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        filepath = os.path.join(tmpdirname, "pipeline.yaml")
+
+        # Save and load the pipeline
+        ar.save_pipeline(steps, filepath)
+        loaded_steps = ar.load_pipeline(filepath)
+
+        # Assert the loaded steps match the original steps
+        assert steps == loaded_steps
+
+
+def test_save_pipeline_atomic_failure():
+    """Verify that an existing file is unchanged after a serialization error."""
+    import os
+    import tempfile
+
+    import arnio as ar
+    from arnio.exceptions import PipelineSerializationError
+
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        filepath = os.path.join(tmpdirname, "pipeline.json")
+
+        # Create a valid pre-existing file
+        with open(filepath, "w") as f:
+            f.write('["original_content"]')
+
+        # Attempt to save a pipeline with an unserializable object (a function)
+        invalid_steps = [("drop_nulls", {"func": lambda x: x})]
+
+        try:
+            ar.save_pipeline(invalid_steps, filepath)
+        except PipelineSerializationError:
+            pass
+
+        # Assert the original file was completely untouched
+        with open(filepath) as f:
+            assert f.read() == '["original_content"]'
+
+
+def test_save_pipeline_validation():
+    """Verify that malformed steps are rejected without creating a file."""
+    import os
+    import tempfile
+
+    import arnio as ar
+    from arnio.exceptions import PipelineSerializationError
+
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        filepath = os.path.join(tmpdirname, "pipeline.json")
+
+        # Attempt to save a malformed structure
+        malformed_steps = [[], ("drop_nulls", "not-a-dict")]
+
+        try:
+            ar.save_pipeline(malformed_steps, filepath)
+        except PipelineSerializationError:
+            pass
+
+        # Assert the bad structure was caught and no file was ever created
+        assert not os.path.exists(filepath)

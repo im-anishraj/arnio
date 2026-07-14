@@ -1,0 +1,43 @@
+name: Dependency Audit
+
+on:
+  push:
+    paths:
+      - 'pyproject.toml'
+  pull_request:
+    paths:
+      - 'pyproject.toml'
+  schedule:
+    - cron: '0 6 * * 1' # Weekly Monday morning run
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install audit tools
+        run: python -m pip install --upgrade pip pip-audit
+
+      - name: Install full dependency tree
+        run: pip install -e ".[dev,arrow,sklearn,parquet]"
+
+      - name: Run pip-audit
+        run: pip-audit --strict --format json --output audit-results.json
+
+      - name: Upload audit results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-results
+          path: audit-results.json

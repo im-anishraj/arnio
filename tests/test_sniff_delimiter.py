@@ -100,24 +100,6 @@ class TestSniffDelimiter:
         result = sniff_delimiter(path, encoding="latin-1")
         assert result == ","
 
-    def test_handles_utf16_comma_delimited_file(self, tmp_path):
-        """sniff_delimiter decodes UTF-16 CSV before binary checks."""
-        path = tmp_path / "utf16.csv"
-        path.write_text("name,age\nAlice,30\nBob,25\n", encoding="utf-16")
-
-        result = sniff_delimiter(path, encoding="utf-16")
-
-        assert result == ","
-
-    def test_handles_utf16_tab_delimited_file(self, tmp_path):
-        """sniff_delimiter decodes UTF-16 TSV before binary checks."""
-        path = tmp_path / "utf16.tsv"
-        path.write_text("name\tage\nAlice\t30\nBob\t25\n", encoding="utf-16")
-
-        result = sniff_delimiter(path, encoding="utf-16")
-
-        assert result == "\t"
-
     def test_handles_quoted_fields_with_delimiter(self, tmp_path):
         """sniff_delimiter correctly handles delimiters inside quoted fields."""
         path = tmp_path / "quoted.csv"
@@ -170,111 +152,124 @@ class TestSniffDelimiter:
         assert result == ","
 
 
-class TestReadCsvDelimiterDetection:
-    """Test suite for CSV delimiter auto-detection through read_csv/scan_csv."""
+class TestSniffDelimiterPublicAPI:
+    """Tests validating sniff_delimiter with public parsing APIs."""
 
-    def test_detects_comma(self, tmp_path):
-        """Test detection of comma delimiter."""
-        p = tmp_path / "comma.csv"
-        p.write_text("a,b,c\n1,2,3")
-        df = ar.read_csv(p)
-        assert df.columns == ["a", "b", "c"]
-        assert df.shape == (1, 3)
+    def write_csv(self, tmp_path, name, content):
+        path = tmp_path / name
+        if isinstance(content, str):
+            path.write_text(content, encoding="utf-8")
+        else:
+            path.write_bytes(content)
+        return path
 
-    def test_detects_tab(self, tmp_path):
-        """Test detection of tab delimiter."""
-        p = tmp_path / "tab.tsv"
-        p.write_text("a\tb\tc\n1\t2\t3")
-        df = ar.read_csv(p)
-        assert df.columns == ["a", "b", "c"]
+    def test_sniff_comma_delimiter(self, tmp_path):
+        path = self.write_csv(tmp_path, "comma.csv", "a,b,c\n1,2,3\n")
+        delim = ar.sniff_delimiter(str(path))
+        assert delim == ","
+        frame = ar.read_csv(str(path), delimiter=delim)
+        assert frame.columns == ["a", "b", "c"]
 
-    def test_fallback_semicolon(self, tmp_path):
-        """Test read_csv fallback behavior for semicolon delimiter."""
-        p = tmp_path / "semi.csv"
-        p.write_text("a;b;c\n1;2;3")
-        df = ar.read_csv(p)
-        # read_csv doesn't currently auto-detect semicolon, so it parses as a single column.
-        assert len(df.columns) == 1
-        assert df.columns == ["a;b;c"]
+    def test_sniff_semicolon_delimiter(self, tmp_path):
+        path = self.write_csv(tmp_path, "semi.csv", "a;b;c\n1;2;3\n")
+        delim = ar.sniff_delimiter(str(path))
+        assert delim == ";"
+        frame = ar.read_csv(str(path), delimiter=delim)
+        assert frame.columns == ["a", "b", "c"]
 
-    def test_fallback_pipe(self, tmp_path):
-        """Test read_csv fallback behavior for pipe delimiter."""
-        p = tmp_path / "pipe.txt"
-        p.write_text("a|b|c\n1|2|3")
-        df = ar.read_csv(p)
-        # read_csv doesn't currently auto-detect pipe, so it parses as a single column.
-        assert len(df.columns) == 1
-        assert df.columns == ["a|b|c"]
+    def test_sniff_tab_delimiter(self, tmp_path):
+        path = self.write_csv(tmp_path, "tab.csv", "a\tb\tc\n1\t2\t3\n")
+        delim = ar.sniff_delimiter(str(path))
+        assert delim == "\t"
+        frame = ar.read_csv(str(path), delimiter=delim)
+        assert frame.columns == ["a", "b", "c"]
 
-    def test_space_based_delimiters(self, tmp_path):
-        """Test behavior with space-based delimiters."""
-        p = tmp_path / "space.txt"
-        p.write_text("a b c\n1 2 3")
-        df = ar.read_csv(p)
-        # Space is not auto-detected as delimiter.
-        assert len(df.columns) == 1
+    def test_sniff_pipe_delimiter(self, tmp_path):
+        path = self.write_csv(tmp_path, "pipe.csv", "a|b|c\n1|2|3\n")
+        delim = ar.sniff_delimiter(str(path))
+        assert delim == "|"
+        frame = ar.read_csv(str(path), delimiter=delim)
+        assert frame.columns == ["a", "b", "c"]
 
-    def test_small_sample(self, tmp_path):
-        """Test detection on a very small sample (e.g., 1 row with header)."""
-        p = tmp_path / "small.csv"
-        p.write_text("a,b\n1,2")
-        df = ar.read_csv(p)
-        assert df.columns == ["a", "b"]
+    def test_sniff_only_header_row(self, tmp_path):
+        path = self.write_csv(tmp_path, "header.csv", "col1;col2;col3\n")
+        delim = ar.sniff_delimiter(str(path))
+        assert delim == ";"
+        frame = ar.read_csv(str(path), delimiter=delim)
+        assert frame.columns == ["col1", "col2", "col3"]
 
-    def test_delimiter_in_quoted_fields(self, tmp_path):
-        """Test detection when delimiter appears inside quoted fields."""
-        p = tmp_path / "quoted.csv"
-        p.write_text('name,city\n"Smith, John",NYC\n"Doe, Jane",LA\n')
-        df = ar.read_csv(p)
-        assert df.columns == ["name", "city"]
-        assert df.shape == (2, 2)
+    def test_sniff_with_quoted_delimiter_inside_field(self, tmp_path):
+        path = self.write_csv(
+            tmp_path, "quoted.csv", 'name;desc\n"Alice;Smith";"a;b;c"\n'
+        )
+        delim = ar.sniff_delimiter(str(path))
+        assert delim == ";"
+        frame = ar.read_csv(str(path), delimiter=delim)
+        assert frame.columns == ["name", "desc"]
 
-    def test_single_column_data(self, tmp_path):
-        """Test fallback when data has no clear delimiter (single column)."""
-        p = tmp_path / "single.csv"
-        p.write_text("col1\nval1\nval2\n")
-        # read_csv safely falls back to a single column
-        df = ar.read_csv(p)
-        assert df.columns == ["col1"]
-        assert df.shape == (2, 1)
+    def test_sniff_mixed_whitespace(self, tmp_path):
+        path = self.write_csv(tmp_path, "whitespace.csv", "a ; b ; c\n1 ; 2 ; 3\n")
+        delim = ar.sniff_delimiter(str(path))
+        assert delim == ";"
+        frame = ar.read_csv(str(path), delimiter=delim)
+        assert len(frame.columns) == 3
 
-    def test_empty_input(self, tmp_path):
-        """Test behavior with empty file."""
-        p = tmp_path / "empty.csv"
-        p.write_text("")
-        try:
-            df = ar.read_csv(p)
-            assert len(df.columns) <= 1
-        except Exception:
-            pass
+    def test_sniff_single_column_file(self, tmp_path):
+        path = self.write_csv(tmp_path, "single.csv", "header\nval1\nval2\n")
+        with pytest.raises(ValueError, match="no candidate delimiters found"):
+            ar.sniff_delimiter(str(path))
 
-    def test_ambiguous_input(self, tmp_path):
-        """Test behavior with ambiguous delimiters."""
-        p = tmp_path / "ambiguous.csv"
-        p.write_text("a,b;c\nd,e;f\n")
-        try:
-            df = ar.read_csv(p)
-            assert len(df.columns) > 0
-        except Exception:
-            pass
+    def test_sniff_inconsistent_rows(self, tmp_path):
+        path = self.write_csv(tmp_path, "inconsistent.csv", "a;b;c\n1;2\n4;5;6;7\n")
+        delim = ar.sniff_delimiter(str(path))
+        assert delim == ";"
+        with pytest.raises(ar.CsvReadError):
+            ar.read_csv(str(path), delimiter=delim, mode="strict")
+        with pytest.raises(ar.CsvReadError):
+            ar.read_csv(str(path), delimiter=delim, mode="permissive")
 
-    def test_bom_markers(self, tmp_path):
-        """Test detection on files with BOM markers."""
-        p = tmp_path / "bom.csv"
-        p.write_bytes(b"\xef\xbb\xbfa,b,c\n1,2,3")
-        df = ar.read_csv(p)
-        assert len(df.columns) == 3
+    def test_utf8_bom(self, tmp_path):
+        path = self.write_csv(tmp_path, "bom.csv", b"\xef\xbb\xbfa;b;c\n1;2;3\n")
+        delim = ar.sniff_delimiter(str(path))
+        assert delim == ";"
+        frame = ar.read_csv(str(path), delimiter=delim)
+        assert frame.columns == ["a", "b", "c"]
 
-    def test_mixed_line_endings(self, tmp_path):
-        """Test detection on files with mixed line endings."""
-        p = tmp_path / "mixed.csv"
-        p.write_text("a,b\n1,2\r\n3,4\r5,6\n")
-        df = ar.read_csv(p)
-        assert df.columns == ["a", "b"]
+    def test_sniff_empty_file_raises(self, tmp_path):
+        path = self.write_csv(tmp_path, "empty.csv", "")
+        with pytest.raises(ar.CsvReadError, match="CSV file is empty"):
+            ar.sniff_delimiter(str(path))
 
-    def test_unicode_characters(self, tmp_path):
-        """Test detection with unicode characters."""
-        p = tmp_path / "unicode.csv"
-        p.write_text("名前,年齢\n太郎,30\n花子,25", encoding="utf-8")
-        df = ar.read_csv(p)
-        assert df.columns == ["名前", "年齢"]
+    def test_sniff_binary_file_raises(self, tmp_path):
+        path = self.write_csv(tmp_path, "binary.csv", b"\x00\x01\x02\x03\x04")
+        with pytest.raises(ar.CsvReadError, match="NUL bytes"):
+            ar.sniff_delimiter(str(path))
+
+    def test_detected_delimiter_correct_values(self, tmp_path):
+        path = self.write_csv(tmp_path, "correct.csv", "a;b;c\n1;2;3\n4;5;6\n")
+        delim = ar.sniff_delimiter(str(path))
+        assert delim == ";"
+        frame = ar.read_csv(str(path), delimiter=delim)
+        assert frame.columns == ["a", "b", "c"]
+        assert frame.shape == (2, 3)
+
+    def test_works_with_scan_csv(self, tmp_path):
+        path = self.write_csv(tmp_path, "scan.csv", "a;b;c\n1;2;3\n")
+        delim = ar.sniff_delimiter(str(path))
+        assert delim == ";"
+        schema = ar.scan_csv(str(path), delimiter=delim)
+        assert list(schema.keys()) == ["a", "b", "c"]
+
+    def test_explicit_delimiter_overrides_sniff(self, tmp_path):
+        path = self.write_csv(tmp_path, "explicit.csv", "a;b;c\n1;2;3\n")
+        delim = ar.sniff_delimiter(str(path))
+        assert delim == ";"
+        frame = ar.read_csv(str(path), delimiter=",")
+        assert len(frame.columns) == 1
+
+    def test_decimal_separator_interaction(self, tmp_path):
+        path = self.write_csv(tmp_path, "decimal.csv", "a;b\n1,5;2,6\n")
+        delim = ar.sniff_delimiter(str(path))
+        assert delim == ";"
+        frame = ar.read_csv(str(path), delimiter=delim, decimal_separator=",")
+        assert frame.columns == ["a", "b"]

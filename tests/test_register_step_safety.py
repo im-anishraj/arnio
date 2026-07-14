@@ -153,8 +153,7 @@ class TestUnregisterStepBuiltinAlias:
         Ensures the fix does not weaken protection for real built-in names
         such as 'filter_rows', 'normalize_whitespace', 'coalesce_columns'.
         """
-        from arnio.exceptions import UnknownStepError
 
         for step_name in list(_BUILTIN_PYTHON_STEP_REGISTRY):
-            with pytest.raises(UnknownStepError):
+            with pytest.raises(ValueError):
                 unregister_step(step_name)

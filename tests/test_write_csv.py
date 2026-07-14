@@ -124,6 +124,113 @@ class TestWriteCsv:
             ar.write_csv(frame, str(tmp_path / "out.csv"), delimiter=delimiter)
 
 
+class TestWriteCsvFormulaEscaping:
+    def test_default_preserves_formula_like_strings(self, tmp_path):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "text": ["=SUM(A1:A2)", "+cmd", "-not-a-number", "@user"],
+                    "amount": [-10, 25, -3, 4],
+                }
+            )
+        )
+        out = tmp_path / "out.csv"
+
+        ar.write_csv(frame, out)
+
+        assert out.read_text(encoding="utf-8").splitlines() == [
+            "text,amount",
+            "=SUM(A1:A2),-10",
+            "+cmd,25",
+            "-not-a-number,-3",
+            "@user,4",
+        ]
+
+    def test_escape_formulas_prefixes_string_cells_only(self, tmp_path):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "text": [
+                        "=SUM(A1:A2)",
+                        "+cmd",
+                        "-not-a-number",
+                        "@user",
+                        "\tTabbed",
+                    ],
+                    "amount": [-10, 25, -3, 4, -8],
+                }
+            )
+        )
+        out = tmp_path / "out.csv"
+
+        ar.write_csv(frame, out, escape_formulas=True)
+
+        assert out.read_text(encoding="utf-8").splitlines() == [
+            "text,amount",
+            "'=SUM(A1:A2),-10",
+            "'+cmd,25",
+            "'-not-a-number,-3",
+            "'@user,4",
+            "'\tTabbed,-8",
+        ]
+
+    def test_escape_formulas_runs_before_csv_quoting(self, tmp_path):
+        frame = ar.from_pandas(
+            pd.DataFrame({"note": ['=HYPERLINK("http://example.test", "x")']})
+        )
+        out = tmp_path / "out.csv"
+
+        ar.write_csv(frame, out, escape_formulas=True)
+
+        assert (
+            out.read_text(encoding="utf-8")
+            == 'note\n"\'=HYPERLINK(""http://example.test"", ""x"")"\n'
+        )
+
+    def test_escape_formulas_does_not_modify_headers_nulls_or_empty_strings(
+        self, tmp_path
+    ):
+        frame = ar.from_pandas(
+            pd.DataFrame(
+                {
+                    "=header": ["", None, "safe"],
+                    "value": ["=formula", None, ""],
+                }
+            )
+        )
+        out = tmp_path / "out.csv"
+
+        ar.write_csv(frame, out, escape_formulas=True)
+
+        assert out.read_text(encoding="utf-8").splitlines() == [
+            "=header,value",
+            ",'=formula",
+            ",",
+            "safe,",
+        ]
+
+    def test_escape_formulas_respects_delimiter_and_line_terminator(self, tmp_path):
+        frame = ar.from_pandas(pd.DataFrame({"a": ["=x"], "b": ["safe"]}))
+        out = tmp_path / "out.tsv"
+
+        ar.write_csv(
+            frame,
+            out,
+            delimiter="\t",
+            line_terminator="\r\n",
+            escape_formulas=True,
+        )
+
+        assert out.read_bytes() == b"a\tb\r\n'=x\tsafe\r\n"
+
+    @pytest.mark.parametrize("value", [None, 1, "true"])
+    def test_escape_formulas_rejects_non_bool(self, tmp_path, value):
+        frame = ar.from_pandas(pd.DataFrame({"a": ["=x"]}))
+
+        with pytest.raises(TypeError, match="escape_formulas"):
+            ar.write_csv(frame, tmp_path / "out.csv", escape_formulas=value)
+
+
 class TestWriteCsvLineTerminatorBytes:
     """Raw-byte regression tests for line_terminator.
 
@@ -389,3 +496,153 @@ def test_write_csv_accepts_pathlike_bytes_path(tmp_path):
     out = tmp_path / "out.csv"
     ar.write_csv(frame, _BytesPathLike(os.fsencode(out)))
     assert out.exists()
+
+
+# ---------------------------------------------------------------------------
+# encoding / encoding_errors tests
+# ---------------------------------------------------------------------------
+
+
+class TestWriteCsvEncoding:
+    def _simple_frame(self):
+        return ar.from_pandas(pd.DataFrame({"name": ["Alice", "Bob"], "score": [1, 2]}))
+
+    def test_default_utf8_unchanged(self, tmp_path):
+        """Default encoding="utf-8" writes correct content, existing behavior intact."""
+        frame = self._simple_frame()
+        out = tmp_path / "out.csv"
+        ar.write_csv(frame, str(out))
+        content = out.read_text(encoding="utf-8")
+        assert "Alice" in content
+        assert "Bob" in content
+
+    def test_latin1_output_round_trips(self, tmp_path):
+        """latin-1 encoded output round-trips back via read_csv(encoding="latin-1")."""
+        frame = ar.from_pandas(pd.DataFrame({"city": ["München", "Zürich"]}))
+        out = tmp_path / "out.csv"
+        ar.write_csv(frame, str(out), encoding="latin-1")
+        result = ar.read_csv(str(out), encoding="latin-1")
+        df = ar.to_pandas(result)
+        assert list(df["city"]) == ["München", "Zürich"]
+
+    def test_non_default_line_terminator_through_transcoding(self, tmp_path):
+        """Non-default line_terminator is preserved through the transcoding path."""
+        frame = self._simple_frame()
+        out = tmp_path / "out.csv"
+        ar.write_csv(frame, str(out), encoding="latin-1", line_terminator="\r\n")
+        raw = out.read_bytes()
+        assert b"\r\n" in raw
+
+    def test_escape_formulas_unchanged_through_transcoding(self, tmp_path):
+        """escape_formulas output is identical through the transcoding path."""
+        frame = ar.from_pandas(pd.DataFrame({"cmd": ["=SUM(A1)", "normal"]}))
+        out_utf8 = tmp_path / "utf8.csv"
+        out_latin1 = tmp_path / "latin1.csv"
+        ar.write_csv(frame, str(out_utf8), escape_formulas=True)
+        ar.write_csv(frame, str(out_latin1), encoding="latin-1", escape_formulas=True)
+        assert out_utf8.read_text(encoding="utf-8") == out_latin1.read_text(
+            encoding="latin-1"
+        )
+
+    def test_unencodable_character_strict_raises_valueerror(self, tmp_path):
+        """Unencodable character with encoding_errors="strict" raises ValueError."""
+        frame = ar.from_pandas(pd.DataFrame({"val": ["こんにちは"]}))
+        out = tmp_path / "out.csv"
+        with pytest.raises(ValueError, match="cannot be encoded"):
+            ar.write_csv(frame, str(out), encoding="latin-1", encoding_errors="strict")
+
+    def test_unencodable_character_strict_preserves_existing_file(self, tmp_path):
+        """Strict transcoding failures do not replace an existing destination."""
+        frame = ar.from_pandas(pd.DataFrame({"val": ["こんにちは"]}))
+        out = tmp_path / "out.csv"
+        out.write_bytes(b"sentinel")
+
+        with pytest.raises(ValueError, match="cannot be encoded"):
+            ar.write_csv(frame, str(out), encoding="latin-1", encoding_errors="strict")
+
+        assert out.read_bytes() == b"sentinel"
+
+    def test_missing_destination_parent_raises_runtimeerror(self, tmp_path):
+        """Destination filesystem errors use the public RuntimeError contract."""
+        frame = self._simple_frame()
+        out = tmp_path / "missing" / "out.csv"
+
+        with pytest.raises(RuntimeError) as exc_info:
+            ar.write_csv(frame, str(out), encoding="latin-1")
+
+        assert isinstance(exc_info.value.__cause__, FileNotFoundError)
+
+    def test_replace_error_preserves_existing_file_and_cleans_temp(
+        self, tmp_path, monkeypatch
+    ):
+        """Atomic replacement errors preserve the destination and clean the output temp."""
+        frame = self._simple_frame()
+        out = tmp_path / "out.csv"
+        out.write_bytes(b"sentinel")
+
+        def fail_replace(_src, _dst):
+            raise PermissionError("replace denied")
+
+        monkeypatch.setattr(os, "replace", fail_replace)
+
+        with pytest.raises(RuntimeError, match="replace denied") as exc_info:
+            ar.write_csv(frame, str(out), encoding="latin-1")
+
+        assert isinstance(exc_info.value.__cause__, PermissionError)
+        assert out.read_bytes() == b"sentinel"
+        assert list(tmp_path.iterdir()) == [out]
+
+    def test_unencodable_character_replace_writes_file(self, tmp_path):
+        """encoding_errors="replace" writes replacement characters instead of raising."""
+        frame = ar.from_pandas(pd.DataFrame({"val": ["こんにちは"]}))
+        out = tmp_path / "out.csv"
+        ar.write_csv(frame, str(out), encoding="latin-1", encoding_errors="replace")
+        assert out.exists()
+        content = out.read_text(encoding="latin-1")
+        assert "?" in content  # replacement character
+
+    def test_encoding_non_string_raises_typeerror(self, tmp_path):
+        """Non-string encoding raises TypeError before any file I/O."""
+        frame = self._simple_frame()
+        out = tmp_path / "out.csv"
+        with pytest.raises(TypeError, match="encoding"):
+            ar.write_csv(frame, str(out), encoding=123)
+
+    def test_encoding_unknown_codec_raises_valueerror(self, tmp_path):
+        """Unknown codec raises ValueError before any file I/O."""
+        frame = self._simple_frame()
+        out = tmp_path / "out.csv"
+        with pytest.raises(ValueError, match="Unknown encoding"):
+            ar.write_csv(frame, str(out), encoding="not-a-real-codec")
+
+    def test_encoding_errors_non_string_raises_typeerror(self, tmp_path):
+        """Non-string encoding_errors raises TypeError."""
+        frame = self._simple_frame()
+        out = tmp_path / "out.csv"
+        with pytest.raises(TypeError, match="encoding_errors"):
+            ar.write_csv(frame, str(out), encoding_errors=0)
+
+    def test_encoding_errors_invalid_value_raises_valueerror(self, tmp_path):
+        """Unrecognised encoding_errors value raises ValueError."""
+        frame = self._simple_frame()
+        out = tmp_path / "out.csv"
+        with pytest.raises(ValueError, match="encoding_errors"):
+            ar.write_csv(frame, str(out), encoding_errors="xmlcharrefreplace")
+
+    def test_utf8_alias_uses_fast_path(self, tmp_path):
+        """'utf8' (no hyphen) is recognised as UTF-8 and uses the fast path."""
+        frame = self._simple_frame()
+        out = tmp_path / "out.csv"
+        ar.write_csv(frame, str(out), encoding="utf8")
+        assert "Alice" in out.read_text(encoding="utf-8")
+
+    def test_temp_file_cleaned_up_after_success(self, tmp_path):
+        """No stray temp files remain in tmp_path after a successful transcoding write."""
+        import glob
+
+        frame = ar.from_pandas(pd.DataFrame({"city": ["München"]}))
+        out = tmp_path / "out.csv"
+        before = set(glob.glob(str(tmp_path / "*.csv")))
+        ar.write_csv(frame, str(out), encoding="latin-1")
+        after = set(glob.glob(str(tmp_path / "*.csv")))
+        assert after - before == {str(out)}
