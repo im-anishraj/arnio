@@ -12,8 +12,8 @@ from dataclasses import dataclass
 from ipaddress import IPv4Address, IPv6Address
 from typing import Any
 
+from arnio.exceptions import SchemaError
 from arnio.schema._fields import Field
-
 
 # Pre-compiled patterns for performance
 _EMAIL_PATTERN = re.compile(
@@ -52,6 +52,10 @@ class Email(Field):
     def expected_dtype(self) -> str:
         return "string"
 
+    @property
+    def pattern(self) -> re.Pattern:
+        return _EMAIL_PATTERN
+
     def validate_value(self, value: Any) -> str | None:
         base = super().validate_value(value)
         if base is not None:
@@ -77,6 +81,10 @@ class URL(Field):
     @property
     def expected_dtype(self) -> str:
         return "string"
+
+    @property
+    def pattern(self) -> re.Pattern:
+        return _URL_PATTERN
 
     def validate_value(self, value: Any) -> str | None:
         base = super().validate_value(value)
@@ -105,6 +113,10 @@ class PhoneNumber(Field):
     @property
     def expected_dtype(self) -> str:
         return "string"
+
+    @property
+    def pattern(self) -> re.Pattern:
+        return _PHONE_PATTERN
 
     def validate_value(self, value: Any) -> str | None:
         base = super().validate_value(value)
@@ -196,11 +208,12 @@ class Regex(Field):
     def __post_init__(self) -> None:
         super().__post_init__()
         if not self.pattern:
-            raise ValueError("Regex field requires a non-empty pattern")
+            raise SchemaError("Regex field requires a non-empty pattern")
         try:
-            re.compile(self.pattern)
+            compiled = re.compile(self.pattern)
+            object.__setattr__(self, "_compiled_pattern", compiled)
         except re.error as exc:
-            raise ValueError(f"Invalid regex pattern: {exc}") from exc
+            raise SchemaError(f"Invalid regex pattern: {exc}") from exc
 
     @property
     def expected_dtype(self) -> str:
@@ -211,6 +224,6 @@ class Regex(Field):
         if base is not None:
             return base
         s = str(value)
-        if not re.fullmatch(self.pattern, s):
+        if not getattr(self, "_compiled_pattern").fullmatch(s):
             return f"Value {s!r} does not match pattern {self.pattern!r}"
         return None

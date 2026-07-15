@@ -8,7 +8,7 @@ from typing import Any
 
 import pandas as pd
 
-from arnio.adapt._protocol import DataFrameAdapter, NumericStats, StringLengthStats
+from arnio.adapt._protocol import NumericStats, StringLengthStats
 
 
 def _is_string_dtype(series: pd.Series) -> bool:
@@ -16,7 +16,7 @@ def _is_string_dtype(series: pd.Series) -> bool:
     dtype = series.dtype
     dtype_str = str(dtype).lower()
     return (
-        dtype == object
+        dtype.name == "object"
         or dtype.kind in ("U", "S")
         or "string" in dtype_str
         or dtype_str == "str"
@@ -103,7 +103,7 @@ class PandasAdapter:
 
     def value_counts(self, column: str, *, top_n: int = 10) -> dict[Any, int]:
         counts = self._df[column].value_counts(dropna=True).head(top_n)
-        return dict(zip(counts.index.tolist(), counts.values.tolist()))
+        return dict(zip(counts.index.tolist(), counts.values.tolist(), strict=False))
 
     def values_in_set(self, column: str, allowed: set[Any]) -> int:
         series = self._df[column].dropna()
@@ -114,21 +114,120 @@ class PandasAdapter:
         return int(series.str.fullmatch(pattern).sum())
 
     def column_values(self, column: str) -> list[Any]:
-        return self._df[column].tolist()
+        return self._df[column].tolist()  # type: ignore[no-any-return]
+
+    def check_per_value(
+        self, column: str, field_def: Any, max_issues: int | None = None
+    ) -> list[Any]:
+        import arnio.schema as schema
+        from arnio.validate._result import Issue
+        
+        issues: list[Any] = []
+        series = self._df[column]
+        mask = series.notna()
+        if not mask.any():
+            return issues
+            
+        valid_series = series[mask]
+        
+        def _add_issues(fail_mask: pd.Series, msg_template: str, rule: str) -> None:
+            if not fail_mask.any():
+                return
+            fail_indices = fail_mask[fail_mask].index
+            if max_issues is not None:
+                remaining = max_issues - len(issues)
+                if remaining <= 0:
+                    return
+                fail_indices = fail_indices[:remaining]
+            
+            # Extract just the bad values at once
+            bad_vals = series.loc[fail_indices]
+            for idx, val in bad_vals.items():
+                issues.append(Issue(
+                    column=column,
+                    rule=rule,
+                    message=msg_template.format(value=val),
+                    severity=field_def.severity,
+                    row_index=int(str(idx)),
+                    value=val
+                ))
+
+        # We must support min/max for Numeric
+        if getattr(field_def, "min", None) is not None or getattr(field_def, "max", None) is not None:
+            if isinstance(field_def, (schema.Int, schema.Float)):
+                numeric_series = pd.to_numeric(valid_series, errors="coerce")
+                
+                # Identify values that could not be coerced
+                invalid_mask = numeric_series.isna() & valid_series.notna() & (valid_series != "")
+                _add_issues(invalid_mask, "Cannot interpret {value!r} as number", "value_validation")
+                
+                # Compare valid numeric values
+                if getattr(field_def, "min", None) is not None:
+                    fails = numeric_series < field_def.min
+                    _add_issues(fails, f"Value {{value}} is less than minimum {field_def.min}", "value_validation")
+                if getattr(field_def, "max", None) is not None:
+                    fails = numeric_series > field_def.max
+                    _add_issues(fails, f"Value {{value}} is greater than maximum {field_def.max}", "value_validation")
+            else:
+                if getattr(field_def, "min", None) is not None:
+                    fails = valid_series < field_def.min
+                    _add_issues(fails, f"Value {{value}} is less than minimum {field_def.min}", "value_validation")
+                if getattr(field_def, "max", None) is not None:
+                    fails = valid_series > field_def.max
+                    _add_issues(fails, f"Value {{value}} is greater than maximum {field_def.max}", "value_validation")
+
+        # Support length for String
+        if getattr(field_def, "min_length", None) is not None:
+            fails = valid_series.str.len() < field_def.min_length
+            _add_issues(fails, f"String length is less than minimum {field_def.min_length}", "value_validation")
+        if getattr(field_def, "max_length", None) is not None:
+            fails = valid_series.str.len() > field_def.max_length
+            _add_issues(fails, f"String length is greater than maximum {field_def.max_length}", "value_validation")
+            
+        # Support Regex and semantic patterns
+        pattern = getattr(field_def, "pattern", None)
+        if pattern is not None:
+            try:
+                fails = ~valid_series.astype(str).str.fullmatch(pattern)
+                msg = f"String does not match pattern {pattern!r}" if isinstance(field_def, schema.String) else "Value does not match required format"
+                _add_issues(fails, msg, "value_validation")
+            except AttributeError:
+                pass
+
+        # Fallback for complex validation without pattern
+        if hasattr(field_def, "validate_value") and not pattern and not isinstance(field_def, (schema.Int, schema.Float, schema.String, schema.Regex)):
+            # We don't want to fallback if we just checked pattern, because the fallback might do the same
+            # Wait, Email and URL might use validate_value instead of exposing pattern.
+            # Let's just run validate_value if it exists and we didn't just check a pattern.
+            # Actually, `validate_value` is defined on all Fields. But if we already verified min/max/pattern,
+            # we should skip it for Int/Float/String/Regex to avoid double-checking.
+            for idx, val in valid_series.items():
+                if max_issues is not None and len(issues) >= max_issues:
+                    break
+                err = field_def.validate_value(val)
+                if err:
+                    issues.append(Issue(column=column, rule="value_validation", message=err, severity=field_def.severity, row_index=int(str(idx)), value=val))
+                        
+        return issues
 
     # -- Numeric statistics -------------------------------------------------
 
     def numeric_stats(self, column: str) -> NumericStats:
         series = self._df[column].dropna()
         desc = series.describe()
+        def _to_float(val: Any, default: float = 0.0) -> float:
+            if pd.isna(val):
+                return default
+            return float(val)
+
         return NumericStats(
-            mean=float(desc.get("mean", 0)),
-            std=float(desc.get("std", 0)),
-            min=float(desc.get("min", 0)),
-            max=float(desc.get("max", 0)),
-            median=float(series.median()),
-            q1=float(desc.get("25%", 0)),
-            q3=float(desc.get("75%", 0)),
+            min=_to_float(desc.get("min")),
+            max=_to_float(desc.get("max")),
+            mean=_to_float(desc.get("mean")),
+            std=_to_float(desc.get("std")),
+            q1=_to_float(desc.get("25%")),
+            median=_to_float(desc.get("50%")),
+            q3=_to_float(desc.get("75%")),
         )
 
     # -- String statistics --------------------------------------------------
@@ -151,36 +250,39 @@ class PandasAdapter:
             return PandasAdapter(self._df.head(0))
         return PandasAdapter(self._df.sample(n=actual_n, random_state=42))
 
-    # -- Mutating operations (return new adapter) ---------------------------
+    def working_copy(self) -> "PandasAdapter":
+        return PandasAdapter(self._df.copy())
+
+    # -- Mutating operations (mutate in-place and return self) --------------
 
     def strip_whitespace(self, columns: list[str] | None = None) -> PandasAdapter:
-        df = self._df.copy()
-        cols = columns or [c for c in df.columns if _is_string_dtype(df[c])]
+        cols = columns or [c for c in self._df.columns if _is_string_dtype(self._df[c])]
         for col in cols:
-            if col in df.columns and _is_string_dtype(df[col]):
-                df[col] = df[col].str.strip()
-        return PandasAdapter(df)
+            if col in self._df.columns and _is_string_dtype(self._df[col]):
+                self._df[col] = self._df[col].str.strip()
+        return self
 
     def normalize_case(
         self, columns: list[str] | None = None, *, case: str = "lower"
     ) -> PandasAdapter:
-        df = self._df.copy()
-        cols = columns or [c for c in df.columns if _is_string_dtype(df[c])]
+        cols = columns or [c for c in self._df.columns if _is_string_dtype(self._df[c])]
 
-        case_fn = {"lower": str.lower, "upper": str.upper, "title": str.title}
-        if case not in case_fn:
+        if case not in {"lower", "upper", "title"}:
             raise ValueError(f"case must be 'lower', 'upper', or 'title', got {case!r}")
 
         for col in cols:
-            if col in df.columns and _is_string_dtype(df[col]):
-                fn = case_fn[case]
-                df[col] = df[col].map(
-                    lambda x, _fn=fn: _fn(x) if isinstance(x, str) else x
-                )
-        return PandasAdapter(df)
+            if col in self._df.columns and _is_string_dtype(self._df[col]):
+                if case == "lower":
+                    self._df[col] = self._df[col].str.lower()
+                elif case == "upper":
+                    self._df[col] = self._df[col].str.upper()
+                elif case == "title":
+                    self._df[col] = self._df[col].str.title()
+        return self
 
     def drop_duplicates(self) -> PandasAdapter:
-        return PandasAdapter(self._df.drop_duplicates().reset_index(drop=True))
+        self._df = self._df.drop_duplicates().reset_index(drop=True)
+        return self
 
     def drop_nulls(
         self,
@@ -188,23 +290,23 @@ class PandasAdapter:
         *,
         how: str = "any",
     ) -> PandasAdapter:
-        df = self._df.dropna(subset=columns, how=how).reset_index(drop=True)
-        return PandasAdapter(df)
+        self._df = self._df.dropna(subset=columns, how=how).reset_index(drop=True)  # type: ignore
+        return self
 
     def fill_nulls(self, column: str, value: Any) -> PandasAdapter:
-        df = self._df.copy()
-        df[column] = df[column].fillna(value)
-        return PandasAdapter(df)
+        self._df[column] = self._df[column].fillna(value)
+        return self
 
     def rename_columns(self, mapping: dict[str, str]) -> PandasAdapter:
-        return PandasAdapter(self._df.rename(columns=mapping))
+        self._df = self._df.rename(columns=mapping)
+        return self
 
     def drop_columns(self, columns: list[str]) -> PandasAdapter:
         existing = [c for c in columns if c in self._df.columns]
-        return PandasAdapter(self._df.drop(columns=existing))
+        self._df = self._df.drop(columns=existing)
+        return self
 
     def cast_column(self, column: str, dtype: str) -> PandasAdapter:
-        df = self._df.copy()
         dtype_map: dict[str, str] = {
             "int64": "int64",
             "float64": "float64",
@@ -212,13 +314,12 @@ class PandasAdapter:
             "bool": "bool",
         }
         pd_dtype = dtype_map.get(dtype, dtype)
-        df[column] = df[column].astype(pd_dtype)
-        return PandasAdapter(df)
+        self._df[column] = self._df[column].astype(pd_dtype)  # type: ignore
+        return self
 
     def replace_values(self, column: str, mapping: dict[Any, Any]) -> PandasAdapter:
-        df = self._df.copy()
-        df[column] = df[column].replace(mapping)
-        return PandasAdapter(df)
+        self._df[column] = self._df[column].replace(mapping)
+        return self
 
     def slugify_column_names(self) -> PandasAdapter:
         def _slugify(name: str) -> str:
@@ -239,14 +340,13 @@ class PandasAdapter:
         tokens: set[str] | None = None,
         columns: list[str] | None = None,
     ) -> PandasAdapter:
-        df = self._df.copy()
         token_set = tokens if tokens is not None else _DEFAULT_MISSING_TOKENS
-        cols = columns or [c for c in df.columns if _is_string_dtype(df[c])]
+        cols = columns or [c for c in self._df.columns if _is_string_dtype(self._df[c])]
         for col in cols:
-            if col in df.columns and _is_string_dtype(df[col]):
-                mask = df[col].isin(token_set)
-                df.loc[mask, col] = pd.NA
-        return PandasAdapter(df)
+            if col in self._df.columns and _is_string_dtype(self._df[col]):
+                mask = self._df[col].isin(token_set)
+                self._df.loc[mask, col] = None
+        return self
 
     # -- Unwrap -------------------------------------------------------------
 

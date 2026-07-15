@@ -1,7 +1,6 @@
 """Tests for the validation engine."""
 
 import pandas as pd
-import pytest
 
 import arnio as ar
 
@@ -89,6 +88,30 @@ class TestValidateConstraints:
         schema = ar.Schema({"age": ar.Int(min=0)})
         result = ar.validate(df, schema, max_errors=2)
         assert result.issue_count <= 2
+
+    def test_mixed_type_numeric_vectorization_robustness(self):
+        # Chaos test reproduction: mixed types in Int/Float should not crash vectorization
+        df = pd.DataFrame({"age": [20, "invalid_age", 15, None]})
+        schema = ar.Schema({"age": ar.Int(min=18)})
+        result = ar.validate(df, schema)
+        
+        issues = result.issues
+        # Should catch "invalid_age" as not a number
+        assert any("Cannot interpret" in i.message and "invalid_age" in i.message for i in issues)
+        # Should catch 15 as less than minimum
+        assert any("less than minimum" in i.message for i in issues)
+
+    def test_semantic_field_vectorization(self):
+        df = pd.DataFrame({"contact": ["valid@test.com", "bad-email", "https://example.com", "not-a-url"]})
+        schema = ar.Schema({"contact": ar.Email()})
+        result = ar.validate(df, schema)
+        # Ensure it works correctly and the issues are registered
+        assert result.issue_count == 3
+        
+        # Test URL
+        schema2 = ar.Schema({"contact": ar.URL()})
+        result2 = ar.validate(df, schema2)
+        assert result2.issue_count == 3
 
 
 class TestValidationResult:
