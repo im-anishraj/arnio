@@ -200,7 +200,7 @@ class Regex(Field):
         severity: Issue severity level.
 
     Examples:
-        >>> ar.Regex(pattern=r"^[A-Z]{2}\\d{4}$")  # e.g., "AB1234"
+        >>> ar.Regex(pattern=r"^[A-Z]{2}\d{4}$")  # e.g., "AB1234"
     """
 
     pattern: str = ""
