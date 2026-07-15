@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import math
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
@@ -193,6 +193,7 @@ class String(Field):
     min_length: int | None = None
     max_length: int | None = None
     pattern: str | None = None
+    _compiled_pattern: Any = field(init=False, repr=False, default=None)
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -236,7 +237,7 @@ class String(Field):
             return f"String length {len(s)} is below minimum {self.min_length}"
         if self.max_length is not None and len(s) > self.max_length:
             return f"String length {len(s)} exceeds maximum {self.max_length}"
-        if self.pattern is not None and not getattr(self, "_compiled_pattern").fullmatch(s):
+        if self.pattern is not None and not self._compiled_pattern.fullmatch(s):
             return f"Value {s!r} does not match pattern {self.pattern!r}"
         return None
 

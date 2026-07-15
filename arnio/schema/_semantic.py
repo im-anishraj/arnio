@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 import uuid as _uuid_module
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from ipaddress import IPv4Address, IPv6Address
 from typing import Any
 
@@ -204,6 +204,7 @@ class Regex(Field):
     """
 
     pattern: str = ""
+    _compiled_pattern: Any = field(init=False, repr=False, default=None)
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -224,6 +225,6 @@ class Regex(Field):
         if base is not None:
             return base
         s = str(value)
-        if not getattr(self, "_compiled_pattern").fullmatch(s):
+        if not self._compiled_pattern.fullmatch(s):
             return f"Value {s!r} does not match pattern {self.pattern!r}"
         return None

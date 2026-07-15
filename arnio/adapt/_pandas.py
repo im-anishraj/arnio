@@ -250,7 +250,7 @@ class PandasAdapter:
             return PandasAdapter(self._df.head(0))
         return PandasAdapter(self._df.sample(n=actual_n, random_state=42))
 
-    def working_copy(self) -> "PandasAdapter":
+    def working_copy(self) -> PandasAdapter:
         return PandasAdapter(self._df.copy())
 
     # -- Mutating operations (mutate in-place and return self) --------------

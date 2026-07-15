@@ -47,7 +47,7 @@ class DataFrameAdapter(Protocol):
     before a chain of mutations to avoid modifying the original data.
     """
 
-    def working_copy(self) -> "DataFrameAdapter":
+    def working_copy(self) -> DataFrameAdapter:
         """Return a new adapter wrapping a deep copy of the data."""
         ...
 
