@@ -8,6 +8,6 @@ Public API:
 from arnio.clean._pipeline import Pipeline, clean
 
 __all__ = [
-    "clean",
     "Pipeline",
+    "clean",
 ]

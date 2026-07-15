@@ -6,10 +6,10 @@ This is Arnio's most unique feature — intelligent, profile-driven suggestions.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from arnio.adapt._detect import resolve_adapter
-from arnio.profile._report import ColumnProfile
+if TYPE_CHECKING:
+    from arnio.profile._report import ColumnProfile
 
 
 def _suggest_from_profiles(
@@ -34,7 +34,6 @@ def _suggest_from_profiles(
 
     # Per-column suggestions
     strip_cols: list[str] = []
-    case_cols: list[str] = []
     high_null_cols: list[str] = []
     empty_str_cols: list[str] = []
 

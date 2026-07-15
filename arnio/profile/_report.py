@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from arnio.adapt._protocol import NumericStats, StringLengthStats
+if TYPE_CHECKING:
+    from arnio.adapt._protocol import NumericStats, StringLengthStats
 
 
 @dataclass(frozen=True)
@@ -47,7 +48,7 @@ class ProfileReport:
     """Comprehensive data quality report.
 
     Attributes:
-        quality_score: Overall quality score (0–100).
+        quality_score: Overall quality score (0-100).
         row_count: Total number of rows.
         column_count: Total number of columns.
         duplicate_count: Number of duplicate rows.
@@ -83,15 +84,15 @@ class ProfileReport:
     def to_markdown(self) -> str:
         """Render as a Markdown report."""
         lines = [
-            f"# Data Quality Report",
-            f"",
+            "# Data Quality Report",
+            "",
             f"**Quality Score:** {self.quality_score:.1f}/100",
             f"**Rows:** {self.row_count:,} | **Columns:** {self.column_count} | **Duplicates:** {self.duplicate_count:,}",
-            f"",
-            f"## Column Profiles",
-            f"",
-            f"| Column | Type | Nulls | Null% | Unique | Warnings |",
-            f"|--------|------|-------|-------|--------|----------|",
+            "",
+            "## Column Profiles",
+            "",
+            "| Column | Type | Nulls | Null% | Unique | Warnings |",
+            "|--------|------|-------|-------|--------|----------|",
         ]
         for name, cp in self.columns.items():
             warn_str = ", ".join(cp.warnings) if cp.warnings else "—"

@@ -5,11 +5,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
-from arnio.schema._fields import Field
-from arnio.schema._schema import Schema
+if TYPE_CHECKING:
+    from arnio.schema._fields import Field
+    from arnio.schema._schema import Schema
 
 
 @dataclass(frozen=True)
@@ -65,20 +66,34 @@ def _compare_fields(column: str, old: Field, new: Field) -> FieldDiff | None:
 
     details: list[str] = []
 
-    if type(old) != type(new):
+    if type(old) is not type(new):
         details.append(
             f"type changed from {type(old).__name__} to {type(new).__name__}"
         )
-    if old.nullable != new.nullable:
-        details.append(
-            f"nullable changed from {old.nullable} to {new.nullable}"
-        )
-    if old.unique != new.unique:
-        details.append(
-            f"unique changed from {old.unique} to {new.unique}"
-        )
-    if old.allowed != new.allowed:
-        details.append("allowed values changed")
+    else:
+        # Same type — compare all dataclass fields
+        import dataclasses
+
+        for dc_field in dataclasses.fields(old):
+            old_val = getattr(old, dc_field.name)
+            new_val = getattr(new, dc_field.name)
+            if old_val != new_val:
+                details.append(
+                    f"{dc_field.name} changed from {old_val!r} to {new_val!r}"
+                )
+
+    # If types differ, also check common base attributes
+    if type(old) is not type(new):
+        if old.nullable != new.nullable:
+            details.append(
+                f"nullable changed from {old.nullable} to {new.nullable}"
+            )
+        if old.unique != new.unique:
+            details.append(
+                f"unique changed from {old.unique} to {new.unique}"
+            )
+        if old.allowed != new.allowed:
+            details.append("allowed values changed")
 
     return FieldDiff(
         column=column,

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import math
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
@@ -115,12 +115,16 @@ class Int(Field):
         base = super().validate_value(value)
         if base is not None:
             return base
-        try:
-            num = int(value) if not isinstance(value, (int, float)) else value
-        except (ValueError, TypeError):
-            return f"Cannot interpret {value!r} as integer"
+        # bool is a subclass of int in Python; accept it as a valid integer
         if isinstance(value, bool):
-            return None
+            num = int(value)
+        elif isinstance(value, (int, float)):
+            num = value  # type: ignore[assignment]
+        else:
+            try:
+                num = int(value)
+            except (ValueError, TypeError):
+                return f"Cannot interpret {value!r} as integer"
         if self.min is not None and num < self.min:
             return f"Value {num} is below minimum {self.min}"
         if self.max is not None and num > self.max:
@@ -160,7 +164,7 @@ class Float(Field):
         if base is not None:
             return base
         try:
-            num = float(value) if not isinstance(value, (int, float)) else float(value)
+            num = float(value)
         except (ValueError, TypeError):
             return f"Cannot interpret {value!r} as float"
         if not math.isfinite(num):
@@ -214,7 +218,8 @@ class String(Field):
             if not isinstance(self.pattern, str):
                 raise SchemaError(f"pattern must be str, got {type(self.pattern).__name__}")
             try:
-                re.compile(self.pattern)
+                compiled = re.compile(self.pattern)
+                object.__setattr__(self, "_compiled_pattern", compiled)
             except re.error as exc:
                 raise SchemaError(f"Invalid regex pattern: {exc}") from exc
 
@@ -231,7 +236,7 @@ class String(Field):
             return f"String length {len(s)} is below minimum {self.min_length}"
         if self.max_length is not None and len(s) > self.max_length:
             return f"String length {len(s)} exceeds maximum {self.max_length}"
-        if self.pattern is not None and not re.fullmatch(self.pattern, s):
+        if self.pattern is not None and not getattr(self, "_compiled_pattern").fullmatch(s):
             return f"Value {s!r} does not match pattern {self.pattern!r}"
         return None
 

@@ -7,11 +7,15 @@ The engine orchestrates these rules for each schema field.
 from __future__ import annotations
 
 import math
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from arnio.adapt._protocol import DataFrameAdapter
-from arnio.schema._fields import Field
+import pandas as pd
+
 from arnio.validate._result import Issue
+
+if TYPE_CHECKING:
+    from arnio.adapt._protocol import DataFrameAdapter
+    from arnio.schema._fields import Field
 
 
 def check_column_exists(
@@ -123,36 +127,14 @@ def check_per_value_validation(
     column: str,
     field_def: Field,
     *,
-    max_issues: int = 100,
+    max_issues: int | None = 100,
 ) -> list[Issue]:
-    """Run per-value validation using the field's validate_value() method.
+    """Run per-value validation using the adapter's vectorized checks.
 
     This handles semantic validation (email format, URL format, etc.),
     min/max for numeric fields, and pattern matching for string fields.
     """
-    issues: list[Issue] = []
-    values = adapter.column_values(column)
-
-    for row_idx, value in enumerate(values):
-        if len(issues) >= max_issues:
-            break
-
-        # Skip nulls — they're handled by check_null_constraint
-        if _is_null(value):
-            continue
-
-        error_msg = field_def.validate_value(value)
-        if error_msg is not None:
-            issues.append(Issue(
-                column=column,
-                rule="value_validation",
-                message=error_msg,
-                severity=field_def.severity,
-                row_index=row_idx,
-                value=value,
-            ))
-
-    return issues
+    return adapter.check_per_value(column, field_def, max_issues=max_issues)
 
 
 def _is_null(value: Any) -> bool:
@@ -164,9 +146,8 @@ def _is_null(value: Any) -> bool:
             return True
     except (TypeError, ValueError):
         pass
-    # pandas NA
+    # pandas NA / NaT
     try:
-        import pandas as pd
         if pd.isna(value):
             return True
     except (TypeError, ValueError):

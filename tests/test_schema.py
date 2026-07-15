@@ -21,7 +21,7 @@ class TestFieldTypes:
         assert f.nullable is False
 
     def test_int_min_greater_than_max_raises(self):
-        with pytest.raises(SchemaError, match="min.*<=.*max"):
+        with pytest.raises(SchemaError, match=r"min.*<=.*max"):
             ar.Int(min=10, max=5)
 
     def test_int_validate_value(self):
@@ -138,7 +138,7 @@ class TestSemanticFields:
         assert f.validate_value("ab1234") is not None
 
     def test_regex_empty_pattern_raises(self):
-        with pytest.raises(ValueError, match="non-empty"):
+        with pytest.raises(SchemaError, match="non-empty"):
             ar.Regex(pattern="")
 
 

@@ -4,7 +4,7 @@ import pandas as pd
 import pytest
 
 import arnio as ar
-from arnio.exceptions import CleaningError, PipelineError
+from arnio.exceptions import CleaningError
 
 
 class TestCleanBasic:

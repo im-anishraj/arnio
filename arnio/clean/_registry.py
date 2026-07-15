@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from threading import Lock
-from typing import Any
 
 from arnio.adapt._protocol import DataFrameAdapter
 from arnio.clean._steps import (

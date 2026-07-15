@@ -88,14 +88,14 @@ class TestReadOperations:
 
 
 class TestMutatingOperations:
-    """Mutating operations return new adapters, never mutate in place."""
+    """Mutating operations mutate the working copy in place."""
 
     def test_strip_whitespace(self):
         df = pd.DataFrame({"name": ["  Alice  ", "  Bob  "]})
         adapter = PandasAdapter(df)
-        result = adapter.strip_whitespace()
+        result = adapter.working_copy().strip_whitespace()
         assert result.column_values("name") == ["Alice", "Bob"]
-        # Original unchanged
+        # Original unchanged because we used working_copy()
         assert adapter.column_values("name") == ["  Alice  ", "  Bob  "]
 
     def test_normalize_case_lower(self):

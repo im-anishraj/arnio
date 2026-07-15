@@ -6,12 +6,14 @@ on failure. Designed for test files and CI pipelines.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from arnio.exceptions import ValidationError
-from arnio.schema._fields import Field
-from arnio.schema._schema import Schema
 from arnio.validate._engine import validate
+
+if TYPE_CHECKING:
+    from arnio.schema._fields import Field
+    from arnio.schema._schema import Schema
 
 
 def check(

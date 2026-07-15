@@ -42,9 +42,14 @@ class DataFrameAdapter(Protocol):
 
     Read-only operations are used by validate and profile.
     Mutating operations are used by clean. Mutating operations
-    return a NEW adapter wrapping the modified data — they never
-    mutate in place.
+    mutate the data in place and return the same adapter.
+    The caller is responsible for calling `working_copy()` once
+    before a chain of mutations to avoid modifying the original data.
     """
+
+    def working_copy(self) -> "DataFrameAdapter":
+        """Return a new adapter wrapping a deep copy of the data."""
+        ...
 
     # -- Identity & metadata ------------------------------------------------
 
@@ -100,6 +105,12 @@ class DataFrameAdapter(Protocol):
         Used for per-value validation (semantic fields, custom validators).
         For large datasets, consider using ``sample()`` first.
         """
+        ...
+
+    def check_per_value(
+        self, column: str, field_def: Any, max_issues: int | None = None
+    ) -> list[Any]:
+        """Run vectorized per-value validation. Returns a list of Issues."""
         ...
 
     # -- Numeric statistics -------------------------------------------------

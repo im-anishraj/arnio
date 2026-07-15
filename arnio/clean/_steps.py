@@ -6,9 +6,10 @@ and returns a new adapter with the cleaning applied.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from arnio.adapt._protocol import DataFrameAdapter
+if TYPE_CHECKING:
+    from arnio.adapt._protocol import DataFrameAdapter
 
 
 def step_strip_whitespace(

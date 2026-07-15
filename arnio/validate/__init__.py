@@ -6,11 +6,11 @@ Public API:
     Issue             — Single validation issue.
 """
 
-from arnio.validate._result import Issue, ValidationResult
 from arnio.validate._engine import validate
+from arnio.validate._result import Issue, ValidationResult
 
 __all__ = [
-    "validate",
-    "ValidationResult",
     "Issue",
+    "ValidationResult",
+    "validate",
 ]

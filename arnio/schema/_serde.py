@@ -10,8 +10,8 @@ from typing import Any
 
 from arnio.exceptions import SchemaError
 from arnio.schema._fields import Bool, Date, DateTime, Field, Float, Int, String
-from arnio.schema._semantic import Email, IPAddress, PhoneNumber, Regex, URL, UUID
 from arnio.schema._schema import Schema
+from arnio.schema._semantic import URL, UUID, Email, IPAddress, PhoneNumber, Regex
 
 # Maps type names to classes for deserialization
 _FIELD_TYPE_REGISTRY: dict[str, type[Field]] = {
@@ -63,9 +63,10 @@ def _field_to_dict(field_def: Field) -> dict[str, Any]:
         if field_def.pattern is not None:
             result["pattern"] = field_def.pattern
 
-    if isinstance(field_def, (Date, DateTime)):
-        if field_def.format != ("%Y-%m-%d" if isinstance(field_def, Date) else "%Y-%m-%d %H:%M:%S"):
-            result["format"] = field_def.format
+    if isinstance(field_def, (Date, DateTime)) and field_def.format != (
+        "%Y-%m-%d" if isinstance(field_def, Date) else "%Y-%m-%d %H:%M:%S"
+    ):
+        result["format"] = field_def.format
 
     if isinstance(field_def, Regex):
         result["pattern"] = field_def.pattern
@@ -103,7 +104,8 @@ def schema_to_dict(schema: Schema) -> dict[str, Any]:
     }
     if schema.strict:
         result["strict"] = True
-    if not schema.allow_extra:
+    elif not schema.allow_extra:
+        # Only emit allow_extra when explicitly set without strict
         result["allow_extra"] = False
     return result
 
@@ -117,6 +119,9 @@ def schema_from_dict(data: dict[str, Any]) -> Schema:
     Returns:
         A Schema instance.
     """
+    if not isinstance(data, dict):
+        raise SchemaError(f"Expected a dictionary, got {type(data).__name__}")
+
     if "fields" not in data:
         raise SchemaError("Schema dict must contain a 'fields' key")
 

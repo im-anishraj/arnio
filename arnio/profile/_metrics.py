@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from arnio.adapt._protocol import DataFrameAdapter, NumericStats, StringLengthStats
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from arnio.adapt._protocol import DataFrameAdapter
 
 
 def compute_null_rate(adapter: DataFrameAdapter, column: str) -> float:

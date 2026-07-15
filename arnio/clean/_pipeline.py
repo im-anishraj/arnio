@@ -9,7 +9,6 @@ from arnio.adapt._detect import resolve_adapter
 from arnio.clean._registry import get_step
 from arnio.exceptions import PipelineError
 
-
 # Step specification types that users can pass:
 #   - str:                    "strip_whitespace"
 #   - tuple[str, dict]:       ("normalize_case", {"case": "lower"})
@@ -46,6 +45,7 @@ def clean(data: Any, steps: list[StepSpec]) -> Any:
         Cleaned data in the same type as the input.
     """
     adapter = resolve_adapter(data)
+    adapter = adapter.working_copy()
 
     for idx, spec in enumerate(steps):
         name, params = _normalize_step(spec)
@@ -116,8 +116,15 @@ class Pipeline:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Pipeline:
         """Deserialize a pipeline from a dict."""
+        if not isinstance(data, dict):
+            raise ValueError(f"Expected a dictionary, got {type(data).__name__}")
+        
         steps: list[StepSpec] = []
-        for step_data in data.get("steps", []):
+        raw_steps = data.get("steps", [])
+        if not isinstance(raw_steps, list):
+            raise ValueError(f"Pipeline 'steps' must be a list, got {type(raw_steps).__name__}")
+            
+        for step_data in raw_steps:
             name = step_data["name"]
             params = step_data.get("params", {})
             if params:

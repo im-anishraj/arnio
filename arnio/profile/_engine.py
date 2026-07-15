@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 from typing import Any
 
 from arnio.adapt._detect import resolve_adapter
@@ -48,16 +49,12 @@ def profile(data: Any) -> ProfileReport:
         empty_string_count = 0
 
         if dtype in ("int64", "float64"):
-            try:
+            with contextlib.suppress(Exception):
                 numeric_stats = adapter.numeric_stats(col)
-            except Exception:  # noqa: BLE001
-                pass
 
         if dtype in ("string", "object"):
-            try:
+            with contextlib.suppress(Exception):
                 string_lengths = adapter.string_lengths(col)
-            except Exception:  # noqa: BLE001
-                pass
             empty_string_count = compute_empty_string_count(adapter, col)
 
         # Detect quality warnings

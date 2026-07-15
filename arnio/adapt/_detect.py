@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 
 from arnio.adapt._dict import DictAdapter
 from arnio.adapt._pandas import PandasAdapter
-from arnio.adapt._protocol import DataFrameAdapter
 from arnio.exceptions import AdapterError
+
+if TYPE_CHECKING:
+    from arnio.adapt._protocol import DataFrameAdapter
 
 
 def resolve_adapter(data: Any) -> DataFrameAdapter:
@@ -28,9 +30,8 @@ def resolve_adapter(data: Any) -> DataFrameAdapter:
     if isinstance(data, pd.DataFrame):
         return PandasAdapter(data)
 
-    if isinstance(data, list):
-        if not data or isinstance(data[0], dict):
-            return DictAdapter(data)
+    if isinstance(data, list) and (not data or isinstance(data[0], dict)):
+        return DictAdapter(data)
 
     if isinstance(data, dict):
         # Column-oriented dict: {"col": [values...]}

@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from arnio.adapt._detect import resolve_adapter
-from arnio.schema._fields import Field
 from arnio.schema._schema import Schema
 from arnio.validate._result import Issue, ValidationResult
 from arnio.validate._rules import (
@@ -16,6 +15,9 @@ from arnio.validate._rules import (
     check_per_value_validation,
     check_uniqueness,
 )
+
+if TYPE_CHECKING:
+    from arnio.schema._fields import Field
 
 
 def validate(
@@ -105,7 +107,7 @@ def validate(
             break
 
         # 6. Per-value validation (semantic, min/max, pattern)
-        remaining = (max_errors - len(issues)) if max_errors else 100
+        remaining = (max_errors - len(issues)) if max_errors is not None else None
         _add_many(check_per_value_validation(
             adapter, col_name, field_def, max_issues=remaining,
         ))

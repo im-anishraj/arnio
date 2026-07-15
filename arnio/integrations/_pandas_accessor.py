@@ -67,7 +67,7 @@ class ArnioPandasAccessor:
             A cleaned pandas DataFrame.
         """
         from arnio.clean import clean
-        return clean(self._df, steps)
+        return clean(self._df, steps)  # type: ignore[no-any-return]
 
     def suggest(self) -> list[dict[str, Any]]:
         """Suggest cleaning steps based on data profiling.

@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 from arnio.adapt._detect import resolve_adapter
-from arnio.schema._fields import Bool, Date, DateTime, Field, Float, Int, String
+from arnio.schema._fields import Bool, DateTime, Field, Float, Int, String
 from arnio.schema._schema import Schema
 
 

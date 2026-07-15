@@ -7,19 +7,21 @@ can use arnio without requiring pandas as part of their mental model.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 
 from arnio.adapt._pandas import PandasAdapter
-from arnio.adapt._protocol import DataFrameAdapter, NumericStats, StringLengthStats
+
+if TYPE_CHECKING:
+    from arnio.adapt._protocol import NumericStats, StringLengthStats
 
 
 def _to_dataframe(data: dict[str, list[Any]] | list[dict[str, Any]]) -> pd.DataFrame:
     """Convert dict-like input to a pandas DataFrame."""
     if isinstance(data, list):
-        return pd.DataFrame(data)
-    return pd.DataFrame(data)
+        return pd.DataFrame(data)  # type: ignore[no-any-return]
+    return pd.DataFrame(data)  # type: ignore[no-any-return]
 
 
 class DictAdapter:
@@ -77,16 +79,24 @@ class DictAdapter:
     def numeric_stats(self, column: str) -> NumericStats:
         return self._inner.numeric_stats(column)
 
+    def check_per_value(
+        self, column: str, field_def: Any, max_issues: int | None = None
+    ) -> list[Any]:
+        return self._inner.check_per_value(column, field_def, max_issues=max_issues)
+
     def string_lengths(self, column: str) -> StringLengthStats:
         return self._inner.string_lengths(column)
 
     def sample(self, n: int) -> DictAdapter:
-        return DictAdapter._from_pandas_adapter(self._inner.sample(n))
+        return self._wrap(self._inner.sample(n))
 
     # -- Mutating operations ------------------------------------------------
 
     def _wrap(self, inner: PandasAdapter) -> DictAdapter:
         return DictAdapter._from_pandas_adapter(inner)
+
+    def working_copy(self) -> DictAdapter:
+        return self._wrap(self._inner.working_copy())
 
     def strip_whitespace(self, columns: list[str] | None = None) -> DictAdapter:
         return self._wrap(self._inner.strip_whitespace(columns))
@@ -135,7 +145,7 @@ class DictAdapter:
     # -- Unwrap returns list[dict] ------------------------------------------
 
     def unwrap(self) -> list[dict[str, Any]]:
-        return self._inner.unwrap().to_dict(orient="records")
+        return self._inner.unwrap().to_dict(orient="records")  # type: ignore[return-value]
 
     def __repr__(self) -> str:
         return f"DictAdapter({self.row_count()} rows, {len(self.column_names())} columns)"

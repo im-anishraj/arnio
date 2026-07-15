@@ -22,14 +22,14 @@ def _resolve_version() -> str:
             match = re.search(r'^\s*version\s*=\s*"([^"]+)"', text, re.MULTILINE)
             if match:
                 return match.group(1)
-        except Exception:  # noqa: BLE001
+        except Exception:
             pass
 
     try:
         from importlib.metadata import version
 
         return version("arnio")
-    except Exception:  # noqa: BLE001
+    except Exception:
         pass
 
     return "unknown"

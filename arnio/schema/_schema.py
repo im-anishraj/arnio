@@ -15,10 +15,13 @@ Both produce the same internal representation.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from arnio.exceptions import SchemaError
 from arnio.schema._fields import Field
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 
 class _SchemaMeta(type):
@@ -95,6 +98,8 @@ class Schema(metaclass=_SchemaMeta):
     ) -> None:
         if fields is not None:
             # Dict-based construction
+            if not fields:
+                raise SchemaError("Schema must define at least one field.")
             self._validate_fields_dict(fields)
             self._fields = dict(fields)
         elif not self._fields:
@@ -154,7 +159,7 @@ class Schema(metaclass=_SchemaMeta):
     def __len__(self) -> int:
         return len(self._fields)
 
-    def __iter__(self):  # noqa: ANN204
+    def __iter__(self) -> Iterator[str]:
         return iter(self._fields)
 
     def __repr__(self) -> str:

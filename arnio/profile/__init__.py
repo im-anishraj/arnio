@@ -12,8 +12,8 @@ from arnio.profile._report import ColumnProfile, ProfileReport
 from arnio.profile._suggest import suggest
 
 __all__ = [
+    "ColumnProfile",
+    "ProfileReport",
     "profile",
     "suggest",
-    "ProfileReport",
-    "ColumnProfile",
 ]

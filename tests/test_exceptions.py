@@ -1,6 +1,5 @@
 """Tests for arnio.exceptions."""
 
-import pytest
 
 from arnio.exceptions import (
     AdapterError,
