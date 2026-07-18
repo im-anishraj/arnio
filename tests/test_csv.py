@@ -3180,3 +3180,32 @@ def test_read_csv_unterminated_quote_raises_csv_read_error(tmp_path):
     f.write_text('a,b\n"unterminated,1\n')
     with pytest.raises(ar.CsvReadError):
         ar.read_csv(f)
+
+def test_reserve_normal_csv(tmp_path):
+    """Normal CSV parses correctly after reserve optimization."""
+    f = tmp_path / "test.csv"
+    f.write_text("id,name,score\n1,alice,95\n2,bob,88\n3,carol,72\n")
+    frame = ar.read_csv(str(f))
+    assert len(frame) == 3
+
+def test_reserve_empty_csv(tmp_path):
+    """Empty CSV (header only) does not crash with reserve(0)."""
+    f = tmp_path / "empty.csv"
+    f.write_text("id,name,score\n")
+    frame = ar.read_csv(str(f))
+    assert len(frame) == 0
+
+def test_reserve_single_row_csv(tmp_path):
+    """Single row CSV works correctly."""
+    f = tmp_path / "single.csv"
+    f.write_text("id,name\n1,alice\n")
+    frame = ar.read_csv(str(f))
+    assert len(frame) == 1
+
+def test_reserve_malformed_csv(tmp_path):
+    """Malformed rows still raise errors as before."""
+    f = tmp_path / "bad.csv"
+    f.write_text("id,name\n1,alice,extra\n")
+    import pytest
+    with pytest.raises(Exception):
+        ar.read_csv(str(f), on_bad_lines="error")

@@ -818,6 +818,7 @@ CsvParseResult CsvReader::read(const std::string& path, const std::string& on_ba
     std::vector<bool> explicit_dtype_columns;
     std::optional<size_t> expected_cols;
     bool inference_pass_ran = true;
+    size_t total_row_count = 0;
 
     // =================================================================
     // PASS 1: Infer column types from data rows when needed (nothing stored).
@@ -932,6 +933,7 @@ CsvParseResult CsvReader::read(const std::string& path, const std::string& on_ba
             }
             ++row_count;
         }
+        total_row_count = row_count;
     }
 
     // Finalise: promote all-null columns to STRING.
@@ -961,10 +963,16 @@ CsvParseResult CsvReader::read(const std::string& path, const std::string& on_ba
     }
 
     // Initialise output columns with the statically-known types.
+    // Reserve each column's internal storage using the row count
+    // discovered in pass 1, avoiding repeated reallocations as pass 2
+    // streams rows into the columns below.
     std::vector<Column> columns;
     columns.reserve(col_indices.size());
-    for (size_t ci : col_indices) columns.push_back(Column(header[ci], col_types[ci]));
-
+    for (size_t ci : col_indices) {
+        Column col(header[ci], col_types[ci]);
+        col.reserve(total_row_count);
+        columns.push_back(std::move(col));
+    }
     // =================================================================
     // PASS 2: Stream rows directly into typed columns.
     // =================================================================
