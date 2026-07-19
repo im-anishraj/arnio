@@ -1,5 +1,5 @@
 <div align="center">
-<img src="assets/arnio.png" alt="Arnio: Data trust for Python" width="800">
+<img src="assets/arnio_banner.png" alt="Arnio: Data trust for Python" width="800">
 
 Validate, clean, and profile DataFrames before everything else.
 
@@ -66,11 +66,11 @@ suggestions = ar.suggest(df)
 
 ## Three Core Verbs
 
-| Verb | Function | Purpose |
-|------|----------|---------|
-| **Validate** | `ar.validate(df, schema)` | Check if data matches a contract |
-| **Clean** | `ar.clean(df, steps)` | Apply declarative cleaning operations |
-| **Profile** | `ar.profile(df)` | Measure data quality with scores and metrics |
+| Verb         | Function                  | Purpose                                      |
+| ------------ | ------------------------- | -------------------------------------------- |
+| **Validate** | `ar.validate(df, schema)` | Check if data matches a contract             |
+| **Clean**    | `ar.clean(df, steps)`     | Apply declarative cleaning operations        |
+| **Profile**  | `ar.profile(df)`          | Measure data quality with scores and metrics |
 
 ## Schema Definition
 
@@ -93,20 +93,20 @@ class Customers(ar.Schema):
 
 ### Available Field Types
 
-| Type | Description |
-|------|-------------|
-| `ar.Int` | Integer with optional min/max |
-| `ar.Float` | Float with optional min/max |
-| `ar.String` | String with optional length/pattern |
-| `ar.Bool` | Boolean |
-| `ar.Date` | Date string with format validation |
-| `ar.DateTime` | DateTime string with format validation |
-| `ar.Email` | Email address |
-| `ar.URL` | HTTP/HTTPS URL |
-| `ar.PhoneNumber` | Phone number |
-| `ar.IPAddress` | IPv4 or IPv6 address |
-| `ar.UUID` | UUID string |
-| `ar.Regex` | Custom regex pattern |
+| Type             | Description                            |
+| ---------------- | -------------------------------------- |
+| `ar.Int`         | Integer with optional min/max          |
+| `ar.Float`       | Float with optional min/max            |
+| `ar.String`      | String with optional length/pattern    |
+| `ar.Bool`        | Boolean                                |
+| `ar.Date`        | Date string with format validation     |
+| `ar.DateTime`    | DateTime string with format validation |
+| `ar.Email`       | Email address                          |
+| `ar.URL`         | HTTP/HTTPS URL                         |
+| `ar.PhoneNumber` | Phone number                           |
+| `ar.IPAddress`   | IPv4 or IPv6 address                   |
+| `ar.UUID`        | UUID string                            |
+| `ar.Regex`       | Custom regex pattern                   |
 
 ## Cleaning Pipeline
 
