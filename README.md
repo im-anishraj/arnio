@@ -10,7 +10,7 @@ Validate, clean, and profile DataFrames before everything else.
 </div>
 
 ---
-
+[![PyPI Downloads](https://static.pepy.tech/badge/arnio)](https://pepy.tech/projects/arnio)
 ## What is Arnio?
 
 Arnio is the data trust layer for Python. It answers one question:
