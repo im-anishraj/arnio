@@ -871,25 +871,10 @@ CsvParseResult CsvReader::read(const std::string& path, const std::string& on_ba
             }
         }
 
-    }
-}
-    if (config.mode == "strict" && expected_cols.has_value()) {
-    validate_row_width(
-        record_number,
-        expected_cols.value(),
-        fields.size()
-    );}
-    if (expected_cols.has_value()) {
-    while (fields.size() < expected_cols.value()) {
-        fields.push_back("");
+        raw_data.push_back(std::move(fields));
+        ++row_count;
     }
 
-    if (fields.size() > expected_cols.value()) {
-        fields.resize(expected_cols.value());
-    }}
-    raw_data.push_back(std::move(fields));
-    ++row_count;
-    
     file.close();
 
     // If no header, generate column names
