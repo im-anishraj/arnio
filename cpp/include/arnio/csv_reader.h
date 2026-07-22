@@ -87,6 +87,11 @@ class CsvChunkReader {
     explicit CsvChunkReader(const CsvConfig& config = CsvConfig{});
     ~CsvChunkReader();
 
+    void open(const std::string& path);
+    std::optional<CsvParseResult> next_chunk(size_t chunksize,
+                                             const std::string& on_bad_lines = "error");
+    void close();
+
     // Infer DType from a string value
     DType infer_type(const std::string& value) const;
 

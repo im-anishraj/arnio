@@ -1180,9 +1180,9 @@ CsvReader::scan_schema(const std::string& path, const std::string& on_bad_lines)
 
     if (record_reader.read(line)) {
         strip_utf8_bom(line);
-        header = parse_line(line);
+        header = parser_.parse_line(line);
         for (auto& h : header) {
-            if (config_.trim_headers) trim_in_place(h);
+            if (config.trim_headers) trim_in_place(h);
         }
     }
 
