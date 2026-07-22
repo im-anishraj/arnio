@@ -663,28 +663,7 @@ void CsvParser::parse_line(const std::string& line, std::vector<std::string>& fi
     }
 }
 
-DType CsvReader::infer_type(const std::string& value) const {
-    if (value.empty()) return DType::NULL_TYPE;
 
-    // Check configurable null sentinel values (pandas-compatible defaults)
-    if (config_.null_values.count(value)) return DType::NULL_TYPE;
-
-    // Try bool
-    std::string lower = value;
-    std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
-    if (lower == "true" || lower == "false") return DType::BOOL;
-
-    // Try int64
-    {
-        const char* start = value.c_str();
-        char* end = nullptr;
-        long long val = std::strtoll(start, &end, 10);
-        (void)val;
-        if (end != start && *end == '\0') return DType::INT64;
-    }
-
-    return value.empty();
-}
 
 DType CsvParser::infer_type(const std::string& value) const {
     const std::string sanitized = handle_utf8_errors(value, config_.encoding_errors);
@@ -761,8 +740,9 @@ DType CsvParser::promote_type(DType current, DType incoming) {
     return DType::STRING;
 }
 
-CellValue CsvReader::parse_value(const std::string& raw, DType dtype) {
-    if (raw.empty() || config_.null_values.count(raw)) return std::monostate{};
+CellValue CsvParser::parse_value(const std::string& raw, DType dtype, bool is_forced) const {
+    const std::string sanitized = handle_utf8_errors(raw, config_.encoding_errors);
+    if (is_null_sentinel(sanitized)) return std::monostate{};
 
     switch (dtype) {
         case DType::BOOL: {

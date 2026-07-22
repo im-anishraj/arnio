@@ -100,7 +100,7 @@ Frame Frame::clone() const {
     for (const auto& col : columns_) {
         cloned.push_back(col.clone());
     }
-    return Frame(row_count_, std::move(cloned));
+    return Frame(std::move(cloned), row_count_);
 }
 
 void Frame::validate_column_size(const Column& col) const {
@@ -119,7 +119,7 @@ Frame Frame::select_columns(const std::vector<std::string>& columns) const {
         selected.push_back(column(name).clone());
     }
 
-    return Frame(row_count_, std::move(selected));
+    return Frame(std::move(selected), row_count_);
 }
 
 Frame Frame::select_rows(size_t start, size_t count) const {
@@ -159,7 +159,7 @@ Frame Frame::select_rows(size_t start, size_t count) const {
         selected_columns.push_back(std::move(new_col));
     }
 
-    return Frame(actual_count, std::move(selected_columns));
+    return Frame(std::move(selected_columns), actual_count);
 }
 
 void Frame::rebuild_index() {
@@ -169,7 +169,6 @@ void Frame::rebuild_index() {
     }
 }
 
- main
 
 std::vector<std::pair<std::string, std::vector<std::pair<std::string, double>>>> Frame::describe()
     const {
@@ -327,5 +326,5 @@ std::vector<std::pair<std::string, std::vector<std::pair<std::string, double>>>>
     return summary;
 }
 
- main
+
 }  // namespace arnio
