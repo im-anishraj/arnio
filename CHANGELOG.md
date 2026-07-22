@@ -1,5 +1,68 @@
 # Changelog
 
+## [1.21.0](https://github.com/im-anishraj/arnio/compare/v1.20.0...v1.21.0) (2026-07-22)
+
+
+### Features
+
+* add credit card schema validator ([6588a67](https://github.com/im-anishraj/arnio/commit/6588a678cc4cc4d62095cf57539fbfd6c70ddc90))
+* add credit card schema validator ([3a718b6](https://github.com/im-anishraj/arnio/commit/3a718b6707626fbbb8d7726ec2cf916b007b5c8a))
+* add map values cleaning step ([5fc60ab](https://github.com/im-anishraj/arnio/commit/5fc60ab20cc779b8e082b98e54913911c43e28a3))
+* add map values cleaning step ([61c9879](https://github.com/im-anishraj/arnio/commit/61c9879640690b6a54eec69153fbab35756546c9))
+* add native UUID and IPAddress schema field validators ([#2117](https://github.com/im-anishraj/arnio/issues/2117)) ([a01a1cd](https://github.com/im-anishraj/arnio/commit/a01a1cdf21d4d009c3d68fa927daa23cb480b5c5))
+* add native UUID and IPAddress schema field validators ([#2117](https://github.com/im-anishraj/arnio/issues/2117)) ([1061608](https://github.com/im-anishraj/arnio/commit/1061608f6f0d327b0ba5a0db1448da2802d3f9c2))
+* add native UUID and IPAddress schema field validators ([#2117](https://github.com/im-anishraj/arnio/issues/2117)) ([c3353c9](https://github.com/im-anishraj/arnio/commit/c3353c9bc0878b4935c10f05bd3f04bb05c2630f))
+* add native UUID and IPAddress schema field validators ([#2117](https://github.com/im-anishraj/arnio/issues/2117)) ([5f0f164](https://github.com/im-anishraj/arnio/commit/5f0f1649d7c25d4f6b7b1c6df39760ad88ab36a0))
+* add per-column memory usage ([cf527a0](https://github.com/im-anishraj/arnio/commit/cf527a0ba79487b259b6003a1fdad014d3e931d7))
+* add per-column memory usage ([2156207](https://github.com/im-anishraj/arnio/commit/21562078402209ee4683901df8537366174162a2))
+* add profile CLI command ([b54a185](https://github.com/im-anishraj/arnio/commit/b54a1850ee8d2836b65509c44cfe48d9aaa72079))
+* add profile CLI command ([af44a84](https://github.com/im-anishraj/arnio/commit/af44a842072fcc16aed342f93e3d96c8422bcb35))
+
+
+### Bug Fixes
+
+* add case sensitivity to semantic factories ([e71b454](https://github.com/im-anishraj/arnio/commit/e71b4546017f67349b6c9841daeee90ade165b11))
+* add case sensitivity to semantic factories ([6aee649](https://github.com/im-anishraj/arnio/commit/6aee64911bcc2c3b372e83e650b82689a2f3818c))
+* avoid deprecated coalesce bfill axis ([d874761](https://github.com/im-anishraj/arnio/commit/d874761ead7267938f74bda7699a743aaa949a4e))
+* avoid deprecated coalesce bfill axis ([69c298f](https://github.com/im-anishraj/arnio/commit/69c298f4e407235672efb0582a7659ae312fe21d))
+* block remote CSV redirects ([06dff89](https://github.com/im-anishraj/arnio/commit/06dff89a8a7831b5f3c9481c41e1d5031f409a73))
+* block remote CSV redirects ([3cea713](https://github.com/im-anishraj/arnio/commit/3cea713e2c915753943b87fbbb3a0ca53d465aa4))
+* **cpp:** declare CsvChunkReader methods in header and fix scan_schema member accesses ([875c378](https://github.com/im-anishraj/arnio/commit/875c378bd96a8afab5323c2558426a79d1c20a39))
+* **cpp:** fix CsvReader::parse_value scope and Frame constructor calls ([555c9ec](https://github.com/im-anishraj/arnio/commit/555c9ec70166f2a13c339a980628a0317fce1b52))
+* **cpp:** remove corrupt read loop duplicating PASS 1 logic in csv_reader.cpp ([82c467b](https://github.com/im-anishraj/arnio/commit/82c467b687bd35aae34051208e477ca1de4d2f2e))
+* **cpp:** remove stray duplicated closing block in csv_reader.cpp ([6ed0a0e](https://github.com/im-anishraj/arnio/commit/6ed0a0e0884099358f78f3f12ea6cf7f8a19878d))
+* **cpp:** resolve compilation syntax errors in frame.h and cleaning.cpp ([92147bf](https://github.com/im-anishraj/arnio/commit/92147bf94820a110ef2bf82d3a458302816940e2))
+* preserve safe_divide_columns attrs ([669c4e9](https://github.com/im-anishraj/arnio/commit/669c4e97beb5ca3ba4221ca19bbd29c61f3e9cef))
+* preserve safe_divide_columns attrs ([c37dcf4](https://github.com/im-anishraj/arnio/commit/c37dcf48f47a0af7305525eae868d018b3989137))
+* reduce hero vertical whitespace ([8d4da3e](https://github.com/im-anishraj/arnio/commit/8d4da3e67c8dd2e6352f5538e57c592b216395d9))
+* reduce hero vertical whitespace ([4aa5544](https://github.com/im-anishraj/arnio/commit/4aa55446abd83e4b63a654a10533268adc3d579d))
+* skip winsorize no-op conversion ([726e98c](https://github.com/im-anishraj/arnio/commit/726e98cf250551725673664b37239552416f99f9))
+* skip winsorize no-op conversion ([a9bdacd](https://github.com/im-anishraj/arnio/commit/a9bdacdb86789c6b102bf5dd90ea267e76613d3c))
+* write json outputs atomically ([81cbbab](https://github.com/im-anishraj/arnio/commit/81cbbab23828dbda816dbd5211bc4235ba2c4ce0))
+* write json outputs atomically ([561e588](https://github.com/im-anishraj/arnio/commit/561e5888830e4e4f58e26f5daa67c888888cd3e1))
+
+
+### Performance Improvements
+
+* reserve column capacity from row count ([#257](https://github.com/im-anishraj/arnio/issues/257)) ([600e9c3](https://github.com/im-anishraj/arnio/commit/600e9c3db59b863b02028690ff412b4be89c9374))
+* reserve column capacity from row count ([#257](https://github.com/im-anishraj/arnio/issues/257)) ([861c2f5](https://github.com/im-anishraj/arnio/commit/861c2f51b3edb05415de7f8d1064afaafb5906b9))
+
+
+### Documentation
+
+* add benchmark quick start ([4ace8a5](https://github.com/im-anishraj/arnio/commit/4ace8a5e1e86395c3d76b24da4ee55d0fb03ab72))
+* add benchmark quick start ([d60f506](https://github.com/im-anishraj/arnio/commit/d60f506b26adebcb90b81165334104c8413fc584))
+* API reference documents unsupported read_csv mode="lax" ([#2396](https://github.com/im-anishraj/arnio/issues/2396)) ([378e018](https://github.com/im-anishraj/arnio/commit/378e018112d6fcaffdac677430504d994237a57e))
+* API reference documents unsupported read_csv mode="lax" ([#2396](https://github.com/im-anishraj/arnio/issues/2396)) ([ae213df](https://github.com/im-anishraj/arnio/commit/ae213df943f4df3d1631af4ed386cfe1512d209c))
+* indent code blocks in interoperability examples list ([6ee02a1](https://github.com/im-anishraj/arnio/commit/6ee02a1bd985de1fcaf820e29f700906913116a1))
+* indent code blocks in interoperability examples list ([6a5eca4](https://github.com/im-anishraj/arnio/commit/6a5eca4b1300ac13a2024cacad004e0538eccc3c))
+* keep check_env example dashboard in sync with examples directory ([#1400](https://github.com/im-anishraj/arnio/issues/1400)) ([d68fc51](https://github.com/im-anishraj/arnio/commit/d68fc5191004ad23e5cc27cbc528ab51b37ae616))
+* normalize API_REFERENCE.md to valid UTF-8 ([#1386](https://github.com/im-anishraj/arnio/issues/1386)) ([f1c8ea2](https://github.com/im-anishraj/arnio/commit/f1c8ea27438aa7527fdddea5b21486f5ca93b063))
+* null_values pages incorrectly describe custom tokens as additive ([#2447](https://github.com/im-anishraj/arnio/issues/2447)) ([aa76b7c](https://github.com/im-anishraj/arnio/commit/aa76b7c3420e790915d1e3bd9478556e5403860b))
+* null_values pages incorrectly describe custom tokens as additive ([#2447](https://github.com/im-anishraj/arnio/issues/2447)) ([311d6dc](https://github.com/im-anishraj/arnio/commit/311d6dc68f481eb5a65bed8c4ceb40e5b3c77a05))
+* sync website release metadata ([8d5a1d8](https://github.com/im-anishraj/arnio/commit/8d5a1d8ba993078068ef84831fbd53a08835f52f))
+* sync website release metadata ([58573d7](https://github.com/im-anishraj/arnio/commit/58573d787aea33ba84a128f6693b88e707cd7601))
+
 ## 0.1.0 (2026-06-10)
 
 
