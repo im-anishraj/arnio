@@ -36,7 +36,7 @@
         mobileMenu.classList.remove('open');
         hamburger.setAttribute('aria-expanded', 'false');
         hamburger.setAttribute('aria-label', 'Open menu');
-        hamburger.innerHTML = '☰';
+        hamburger.textContent = '☰';
         document.body.style.overflow = '';
       }
 
@@ -48,7 +48,7 @@
           mobileMenu.classList.add('open');
           hamburger.setAttribute('aria-expanded', 'true');
           hamburger.setAttribute('aria-label', 'Close menu');
-          hamburger.innerHTML = '✕';
+          hamburger.textContent = '✕';
           document.body.style.overflow = 'hidden';
         }
       });
@@ -104,7 +104,7 @@
   scrollTopBtn.type = 'button';
   scrollTopBtn.setAttribute('aria-label', 'Scroll to top');
 
-  scrollTopBtn.innerHTML = '↑';
+  scrollTopBtn.textContent = '↑';
 
   document.body.appendChild(scrollTopBtn);
 
