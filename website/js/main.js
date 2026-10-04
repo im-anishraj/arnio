@@ -227,7 +227,7 @@
           let activeSection = sections[0];
 
           if (isAtBottom) {
-            activeSection = sections[sections.length - 1];
+            activeSection = sections.at(-1);
           } else {
             const scrollPos =
               window.scrollY + window.innerHeight * 0.35;
