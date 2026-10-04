@@ -36,10 +36,7 @@ from ._core import (
 )
 from .exceptions import TypeCastError
 from .frame import ArFrame
-
-import pandas as pd
 from .convert import from_pandas, to_pandas
-from .frame import ArFrame
 
 
 def validate_columns_exist(
@@ -98,6 +95,43 @@ def _validate_column_sequence(
     invalid_columns = [column for column in normalized if not isinstance(column, str)]
     if invalid_columns:
         raise TypeError(f"{argument_name} must contain only string column names")
+
+    return normalized
+
+
+def _validate_existing_column_sequence(
+    columns: Sequence[str],
+    *,
+    available_columns: Sequence[str],
+    argument_name: str,
+    allow_empty: bool = True,
+    reject_duplicates: bool = False,
+    missing_error: type[Exception] = KeyError,
+    missing_message: Callable[[list[str], str], str] | None = None,
+) -> list[str]:
+    from collections.abc import Callable
+
+    normalized = _validate_column_sequence(columns, argument_name=argument_name)
+
+    if not normalized and not allow_empty:
+        raise ValueError(f"{argument_name} must be non-empty")
+
+    if reject_duplicates:
+        seen = set()
+        for c in normalized:
+            if c in seen:
+                raise ValueError(f"{argument_name} contains duplicate column: {c!r}")
+            seen.add(c)
+
+    available_set = set(available_columns)
+    missing = [c for c in normalized if c not in available_set]
+    if missing:
+        available_str = ", ".join(available_columns)
+        if missing_message:
+            msg = missing_message(missing, available_str)
+        else:
+            msg = f"Columns not found: {missing}. Available columns: {available_str}"
+        raise missing_error(msg)
 
     return normalized
 

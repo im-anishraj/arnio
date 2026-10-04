@@ -6,6 +6,9 @@ Pandas conversion functions.
 from __future__ import annotations
 
 import copy
+import decimal
+import math
+from typing import Any, TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
@@ -217,11 +220,11 @@ def to_pandas(frame: ArFrame, *, copy: bool = False) -> pd.DataFrame:
             data[name] = series
         elif dtype == _DType.FLOAT64:
             arr = col.to_numpy_float()
-            if copy or mask.any():
+            if copy:
                 arr = arr.copy()
-            if mask.any():
-                arr[mask] = np.nan
-            data[name] = arr
+            series = pd.Series(arr, dtype=pd.Float64Dtype())
+            series[mask] = pd.NA
+            data[name] = series
         elif dtype == _DType.BOOL:
             arr = col.to_numpy_bool()
             if copy:
