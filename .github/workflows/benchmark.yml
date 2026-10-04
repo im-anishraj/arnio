@@ -11,6 +11,16 @@ on:
       - "benchmarks/**"
       - ".github/workflows/benchmark.yml"
 
+  push:
+    branches:
+      - main
+    paths:
+      - "arnio/**"
+      - "bindings/**"
+      - "cpp/**"
+      - "benchmarks/**"
+      - ".github/workflows/benchmark.yml"
+
 permissions:
   contents: read
   pull-requests: write
