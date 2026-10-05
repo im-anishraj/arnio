@@ -100,6 +100,10 @@ def test_coalesce_columns_validation() -> None:
     with pytest.raises(ValueError, match="must be a non-empty string"):
         ar.coalesce_columns(frame, subset=["a"], output_column="")
 
+    # Duplicate subset entries
+    with pytest.raises(ValueError, match="duplicate column names"):
+        ar.coalesce_columns(frame, subset=["a", "a"], output_column="result")
+
 
 def test_coalesce_columns_pandas_index() -> None:
     # Test coalesce on pandas DataFrame with pandas Index for subset

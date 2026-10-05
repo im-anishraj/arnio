@@ -7,6 +7,7 @@ import arnio as ar
 from arnio import from_pandas, to_pandas
 from arnio.cleaning import (
     _validate_column_sequence,
+    _validate_existing_column_sequence,
     _validate_mapping,
     _validate_string_mapping,
 )
@@ -2143,6 +2144,12 @@ class TestMapValues:
         with pytest.raises(ValueError, match="Unknown columns in subset"):
             ar.map_values(frame, {"active": "A"}, subset=["missing"])
 
+    def test_map_values_rejects_duplicate_subset_columns(self):
+        frame = ar.from_pandas(pd.DataFrame({"status": ["active", "done"]}))
+
+        with pytest.raises(ValueError, match="duplicate column names"):
+            ar.map_values(frame, {"active": "A"}, subset=["status", "status"])
+
     def test_map_values_dataframe_input_returns_dataframe(self):
         df = pd.DataFrame({"gender": ["M", "F"], "score": [1, 2]})
 
@@ -3230,22 +3237,78 @@ class TestValidateExistingColumnSequence:
         result = _validate_existing_column_sequence(
             ["col1", "col3"], available_columns=available, argument_name="columns"
         )
-        result = ar.fill_nulls(frame, "1.0", subset=["x"])
-        df = to_pandas(result)
-        assert df["x"].iloc[0] == pytest.approx(1.0)
-        assert df["x"].iloc[2] == pytest.approx(1.0)
+        assert result == ["col1", "col3"]
 
-    def test_fill_nulls_float64_non_finite_fill_rejected_under_de_locale(self):
-        """Non-finite fill values must still be rejected regardless of locale."""
-        prev = _set_locale("de_DE.UTF-8")
-        try:
-            frame = ar.from_pandas(
-                pd.DataFrame({"x": pd.array([None, 1.0], dtype="Float64")})
+    def test_rejects_duplicate_columns_when_enabled(self):
+        with pytest.raises(ValueError, match="duplicate column names"):
+            _validate_existing_column_sequence(
+                ["col1", "col1", "col2"],
+                available_columns=["col1", "col2"],
+                argument_name="columns",
+                reject_duplicates=True,
             )
-            with pytest.raises(Exception):
-                ar.fill_nulls(frame, "inf", subset=["x"])
-        finally:
-            _locale.setlocale(_locale.LC_NUMERIC, prev)
+
+    def test_allows_duplicate_columns_by_default(self):
+        result = _validate_existing_column_sequence(
+            ["col1", "col1"],
+            available_columns=["col1", "col2"],
+            argument_name="columns",
+        )
+        assert result == ["col1", "col1"]
+
+    def test_missing_columns_use_custom_error_type(self):
+        with pytest.raises(ValueError, match="not found"):
+            _validate_existing_column_sequence(
+                ["col1", "missing"],
+                available_columns=["col1", "col2"],
+                argument_name="columns",
+                missing_error=ValueError,
+                missing_message=lambda missing, available: (
+                    f"column(s) not found: {missing}. Available: {available}"
+                ),
+            )
+
+    def test_missing_message_receives_missing_and_available(self):
+        seen = {}
+
+        def _capture(missing, available):
+            seen["missing"] = missing
+            seen["available"] = available
+            return "custom message"
+
+        with pytest.raises(KeyError, match="custom message"):
+            _validate_existing_column_sequence(
+                ["col1", "bad"],
+                available_columns=["col1", "col2"],
+                argument_name="columns",
+                missing_message=_capture,
+            )
+        assert seen["missing"] == ["bad"]
+        assert "col1" in seen["available"] and "col2" in seen["available"]
+
+    def test_bare_string_raises_type_error(self):
+        with pytest.raises(TypeError, match="must be a sequence"):
+            _validate_existing_column_sequence(
+                "col1",
+                available_columns=["col1"],
+                argument_name="columns",
+            )
+
+    def test_non_string_entries_raise_type_error(self):
+        with pytest.raises(TypeError, match="only string"):
+            _validate_existing_column_sequence(
+                ["col1", 123],
+                available_columns=["col1"],
+                argument_name="columns",
+            )
+
+    def test_accepts_pandas_index_input(self):
+        result = _validate_existing_column_sequence(
+            pd.Index(["col1", "col2"]),
+            available_columns=["col1", "col2", "col3"],
+            argument_name="columns",
+        )
+        assert result == ["col1", "col2"]
 
 
 class TestHashColumns:
