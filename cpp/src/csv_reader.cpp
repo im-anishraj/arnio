@@ -663,7 +663,26 @@ void CsvParser::parse_line(const std::string& line, std::vector<std::string>& fi
     }
 }
 
+bool CsvParser::is_null_sentinel(const std::string& value) const {
+    if (config_.null_values.has_value()) {
+        const auto& sentinels = config_.null_values.value();
+        for (const auto& sentinel : sentinels) {
+            if (value.size() != sentinel.size()) continue;
+            bool match = true;
+            for (size_t i = 0; i < value.size(); ++i) {
+                if (std::tolower(static_cast<unsigned char>(value[i])) !=
+                    std::tolower(static_cast<unsigned char>(sentinel[i]))) {
+                    match = false;
+                    break;
+                }
+            }
+            if (match) return true;
+        }
+        return false;
+    }
 
+    return value.empty();
+}
 
 DType CsvParser::infer_type(const std::string& value) const {
     const std::string sanitized = handle_utf8_errors(value, config_.encoding_errors);

@@ -12,6 +12,7 @@ namespace arnio {
 class Frame {
    public:
     Frame() = default;
+    explicit Frame(size_t row_count);
     explicit Frame(std::vector<Column> columns, size_t row_count = 0);
 
     // Accessors
@@ -20,7 +21,9 @@ class Frame {
     size_t num_cols() const;
     std::vector<std::string> column_names() const;
     std::unordered_map<std::string, std::string> dtypes() const;
-    size_t memory_usage() const;
+    size_t memory_usage(bool deep = false) const;
+    std::vector<std::pair<std::string, std::vector<std::pair<std::string, double>>>> describe()
+        const;
 
     // Column access
     const Column& column(size_t idx) const;

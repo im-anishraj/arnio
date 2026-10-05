@@ -8,6 +8,8 @@
 
 namespace arnio {
 
+Frame::Frame(size_t row_count) : row_count_(row_count), row_count_known_(true) {}
+
 Frame::Frame(std::vector<Column> columns, size_t row_count)
     : columns_(std::move(columns)),
       row_count_(columns_.empty() ? row_count : columns_[0].size()) {

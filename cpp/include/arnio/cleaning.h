@@ -68,13 +68,12 @@ Frame rename_columns(const Frame& frame,
                      const std::unordered_map<std::string, std::string>& mapping);
 
 // Cast column types
-Frame cast_types(const Frame& frame, const std::unordered_map<std::string, std::string>& mapping);
+CastResult cast_types(const Frame& frame,
+                      const std::unordered_map<std::string, std::string>& mapping,
+                      CastErrors errors = CastErrors::kRaise);
 
 // Make column names unique by appending suffixes
 Frame make_column_names_unique(const Frame& frame);
-
-Frame cast_types(const Frame& frame, const std::unordered_map<std::string, std::string>& mapping,
-                 bool coerce_invalid = false);
 
 // Clip numeric columns to lower and/or upper bounds.
 // Only INT64 and FLOAT64 columns are affected; all other columns are cloned
