@@ -7,7 +7,6 @@ import pandas as pd
 import pytest
 
 import arnio as ar
-import arnio.io
 
 
 @pytest.mark.parametrize(
@@ -24,45 +23,6 @@ def test_write_csv_invalid_frame(bad_input, tmp_path):
 
 
 class TestWriteCsv:
-    def test_atomic_write_success(self, tmp_path, sample_csv):
-        frame = ar.read_csv(sample_csv)
-        out = str(tmp_path / "out.csv")
-        ar.write_csv(frame, out)
-        assert Path(out).exists()
-        frame2 = ar.read_csv(out)
-        pd.testing.assert_frame_equal(ar.to_pandas(frame), ar.to_pandas(frame2))
-
-    def test_atomic_write_preserves_dest_on_failure(self, tmp_path, monkeypatch):
-        frame = ar.from_pandas(pd.DataFrame({"a": [1, 2, 3]}))
-        out = str(tmp_path / "out.csv")
-        ar.write_csv(frame, out)
-        original_content = Path(out).read_text()
-
-        orig_write = arnio.io._CsvWriter.write
-        def failing_write(self_, f, p):
-            raise RuntimeError("Writer failed")
-
-        monkeypatch.setattr(arnio.io._CsvWriter, "write", failing_write)
-
-        with pytest.raises(RuntimeError, match="Writer failed"):
-            ar.write_csv(frame, out)
-        assert Path(out).read_text() == original_content
-
-    def test_atomic_write_cleans_up_temp_on_failure(self, tmp_path, monkeypatch):
-        frame = ar.from_pandas(pd.DataFrame({"a": [1, 2, 3]}))
-        out = str(tmp_path / "out.csv")
-
-        orig_write = arnio.io._CsvWriter.write
-        def failing_write(self_, f, p):
-            raise RuntimeError("Writer failed")
-
-        monkeypatch.setattr(arnio.io._CsvWriter, "write", failing_write)
-
-        with pytest.raises(RuntimeError, match="Writer failed"):
-            ar.write_csv(frame, out)
-        leftovers = [p for p in tmp_path.iterdir() if p.name.startswith(".out.csv")]
-        assert len(leftovers) == 0
-
     def test_basic_write(self, tmp_path, sample_csv):
         frame = ar.read_csv(sample_csv)
         out = str(tmp_path / "out.csv")
@@ -138,14 +98,6 @@ class TestWriteCsv:
         frame2 = ar.read_csv(out)
         df = ar.to_pandas(frame2)
         assert abs(df["val"].iloc[0] - 1.23456789012345678) < 1e-15
-
-    def test_high_precision_float_writes_max_digits10(self, tmp_path):
-        frame = ar.from_pandas(pd.DataFrame({"val": [1.2345678901234567]}))
-        out = tmp_path / "float.csv"
-
-        ar.write_csv(frame, out)
-
-        assert out.read_text(encoding="utf-8") == "val\n1.2345678901234567\n"
 
     def test_invalid_delimiter(self, tmp_path):
         frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
@@ -357,112 +309,274 @@ class TestWriteCsvLineTerminatorBytes:
         assert df["note"].iloc[1] == "plain"
 
 
-class TestWriteCsvSafeForSpreadsheet:
-    """Tests for the safe_for_spreadsheet CSV export mode (issue #681)."""
+class TestBooleanOptionValidation:
+    """Tests for strict bool validation on has_header, trim_headers, write_header."""
 
-    def test_prefixes_formula_cells(self, tmp_path):
-        """Dangerous formula triggers are prefixed with a single-quote."""
-        frame = ar.from_pandas(
-            pd.DataFrame(
-                {
-                    "data": [
-                        "=SUM(A1:A10)",
-                        "+cmd|'/C calc'!A0",
-                        "-1+1",
-                        "@SUM(A1)",
-                    ]
-                }
-            )
-        )
-        out = tmp_path / "safe.csv"
-        ar.write_csv(frame, out, safe_for_spreadsheet=True)
-        frame2 = ar.read_csv(out)
-        df = ar.to_pandas(frame2)
-        assert df["data"].iloc[0] == "'=SUM(A1:A10)"
-        assert df["data"].iloc[1] == "'+cmd|'/C calc'!A0"
-        assert df["data"].iloc[2] == "'-1+1"
-        assert df["data"].iloc[3] == "'@SUM(A1)"
+    # --- write_csv: write_header ---
 
-    def test_leaves_non_dangerous_strings(self, tmp_path):
-        """Normal strings without dangerous prefixes are unchanged."""
-        frame = ar.from_pandas(pd.DataFrame({"name": ["Alice", "Bob", "hello world"]}))
-        out = tmp_path / "safe.csv"
-        ar.write_csv(frame, out, safe_for_spreadsheet=True)
-        frame2 = ar.read_csv(out)
-        df = ar.to_pandas(frame2)
-        assert list(df["name"]) == ["Alice", "Bob", "hello world"]
+    def test_write_header_none_rejected(self, tmp_path):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
+        with pytest.raises(TypeError, match="write_header"):
+            ar.write_csv(frame, str(tmp_path / "out.csv"), write_header=None)
 
-    def test_skips_numeric_and_bool_columns(self, tmp_path):
-        """Non-string columns (int, float, bool) are not modified."""
-        frame = ar.from_pandas(
-            pd.DataFrame({"val": [-1, 0, 1], "flag": [True, False, True]})
-        )
-        out = tmp_path / "safe.csv"
-        ar.write_csv(frame, out, safe_for_spreadsheet=True)
-        frame2 = ar.read_csv(out)
-        df = ar.to_pandas(frame2)
-        assert list(df["val"]) == [-1, 0, 1]
-        assert list(df["flag"]) == [True, False, True]
+    def test_write_header_int_zero_rejected(self, tmp_path):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
+        with pytest.raises(TypeError, match="write_header"):
+            ar.write_csv(frame, str(tmp_path / "out.csv"), write_header=0)
 
-    def test_handles_nulls(self, tmp_path):
-        """Null values are not corrupted; dangerous cells are still prefixed."""
-        frame = ar.from_pandas(pd.DataFrame({"data": ["=cmd", None, "safe"]}))
-        out = tmp_path / "safe.csv"
-        ar.write_csv(frame, out, safe_for_spreadsheet=True)
-        raw = out.read_text()
-        # The dangerous cell must be prefixed in the raw output
-        assert "'=cmd" in raw
-        # The safe cell must appear unchanged
-        assert "safe" in raw
+    def test_write_header_int_one_rejected(self, tmp_path):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
+        with pytest.raises(TypeError, match="write_header"):
+            ar.write_csv(frame, str(tmp_path / "out.csv"), write_header=1)
 
-    def test_round_trip_content(self, tmp_path):
-        """Written content is readable and matches expectations."""
-        frame = ar.from_pandas(pd.DataFrame({"a": ["=1", "normal"], "b": [10, 20]}))
-        out = tmp_path / "rt.csv"
-        ar.write_csv(frame, out, safe_for_spreadsheet=True)
-        raw = out.read_text()
-        # The prefixed cell should appear as '=1 in the raw CSV
-        assert "'=1" in raw
-        assert "normal" in raw
+    def test_write_header_string_rejected(self, tmp_path):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
+        with pytest.raises(TypeError, match="write_header"):
+            ar.write_csv(frame, str(tmp_path / "out.csv"), write_header="true")
 
-    def test_default_is_false(self, tmp_path):
-        """Default write_csv does NOT prefix dangerous strings."""
-        frame = ar.from_pandas(pd.DataFrame({"data": ["=SUM(A1)"]}))
-        out = tmp_path / "default.csv"
-        ar.write_csv(frame, out)
-        frame2 = ar.read_csv(out)
-        df = ar.to_pandas(frame2)
-        assert df["data"].iloc[0] == "=SUM(A1)"
+    def test_write_header_true_accepted(self, tmp_path):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
+        ar.write_csv(frame, str(tmp_path / "out.csv"), write_header=True)
 
-    def test_tab_and_cr_prefixed(self, tmp_path):
-        """Tab and carriage-return leading characters are prefixed."""
-        frame = ar.from_pandas(pd.DataFrame({"data": ["\tcmd", "\rmalicious"]}))
-        out = tmp_path / "special.csv"
-        ar.write_csv(frame, out, safe_for_spreadsheet=True)
-        frame2 = ar.read_csv(out)
-        df = ar.to_pandas(frame2)
-        assert df["data"].iloc[0].startswith("'")
-        assert df["data"].iloc[1].startswith("'")
+    def test_write_header_false_accepted(self, tmp_path):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
+        ar.write_csv(frame, str(tmp_path / "out.csv"), write_header=False)
 
-    def test_strict_bool_rejects_none(self, tmp_path):
-        """safe_for_spreadsheet=None raises TypeError."""
-        frame = ar.from_pandas(pd.DataFrame({"a": ["hello"]}))
+    # --- read_csv: has_header and trim_headers ---
+
+    def test_has_header_none_rejected(self, tmp_path):
+        p = tmp_path / "f.csv"
+        p.write_text("a,b\n1,2\n")
+        with pytest.raises(TypeError, match="has_header"):
+            ar.read_csv(str(p), has_header=None)
+
+    def test_has_header_int_rejected(self, tmp_path):
+        p = tmp_path / "f.csv"
+        p.write_text("a,b\n1,2\n")
+        with pytest.raises(TypeError, match="has_header"):
+            ar.read_csv(str(p), has_header=0)
+
+    def test_has_header_string_rejected(self, tmp_path):
+        p = tmp_path / "f.csv"
+        p.write_text("a,b\n1,2\n")
+        with pytest.raises(TypeError, match="has_header"):
+            ar.read_csv(str(p), has_header="yes")
+
+    def test_trim_headers_none_rejected(self, tmp_path):
+        p = tmp_path / "f.csv"
+        p.write_text("a,b\n1,2\n")
+        with pytest.raises(TypeError, match="trim_headers"):
+            ar.read_csv(str(p), trim_headers=None)
+
+    def test_trim_headers_int_rejected(self, tmp_path):
+        p = tmp_path / "f.csv"
+        p.write_text("a,b\n1,2\n")
+        with pytest.raises(TypeError, match="trim_headers"):
+            ar.read_csv(str(p), trim_headers=1)
+
+    def test_has_header_true_accepted(self, tmp_path):
+        p = tmp_path / "f.csv"
+        p.write_text("a,b\n1,2\n")
+        frame = ar.read_csv(str(p), has_header=True)
+        assert frame is not None
+
+    def test_has_header_false_accepted(self, tmp_path):
+        p = tmp_path / "f.csv"
+        p.write_text("1,2\n3,4\n")
+        frame = ar.read_csv(str(p), has_header=False)
+        assert frame is not None
+
+    # --- scan_csv: trim_headers ---
+
+    def test_scan_csv_trim_headers_none_rejected(self, tmp_path):
+        p = tmp_path / "f.csv"
+        p.write_text("a,b\n1,2\n")
+        with pytest.raises(TypeError, match="trim_headers"):
+            ar.scan_csv(str(p), trim_headers=None)
+
+    def test_scan_csv_trim_headers_int_rejected(self, tmp_path):
+        p = tmp_path / "f.csv"
+        p.write_text("a,b\n1,2\n")
+        with pytest.raises(TypeError, match="trim_headers"):
+            ar.scan_csv(str(p), trim_headers=1)
+
+    def test_scan_csv_trim_headers_string_rejected(self, tmp_path):
+        p = tmp_path / "f.csv"
+        p.write_text("a,b\n1,2\n")
+        with pytest.raises(TypeError, match="trim_headers"):
+            ar.scan_csv(str(p), trim_headers="yes")
+
+    def test_scan_csv_trim_headers_true_accepted(self, tmp_path):
+        p = tmp_path / "f.csv"
+        p.write_text("a,b\n1,2\n")
+        result = ar.scan_csv(str(p), trim_headers=True)
+        assert result is not None
+
+    def test_scan_csv_trim_headers_false_accepted(self, tmp_path):
+        p = tmp_path / "f.csv"
+        p.write_text("a,b\n1,2\n")
+        result = ar.scan_csv(str(p), trim_headers=False)
+        assert result is not None
+
+
+class TestWriteCsvDelimiterValidation:
+    """Delimiter type validation: non-string values must be rejected."""
+
+    @pytest.mark.parametrize("delimiter", [1, None, []])
+    def test_non_string_delimiter_rejected(self, tmp_path, delimiter):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
+        with pytest.raises(TypeError, match="delimiter must be a string"):
+            ar.write_csv(frame, str(tmp_path / "out.csv"), delimiter=delimiter)
+
+
+class TestWriteCsvDelimiterNewlineRejection:
+    """Delimiter newline rejection: newline characters must not be used as delimiter."""
+
+    @pytest.mark.parametrize("delimiter", ["\n", "\r"])
+    def test_newline_delimiter_rejected(self, tmp_path, delimiter):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
+        with pytest.raises(
+            ValueError, match="delimiter must not be a newline character"
+        ):
+            ar.write_csv(frame, str(tmp_path / "out.csv"), delimiter=delimiter)
+
+
+class TestWriteCsvQuoteCharValidation:
+    """Quote-character validation: the CSV quote character must not be used as delimiter."""
+
+    def test_quote_char_as_delimiter_rejected(self, tmp_path):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
+        with pytest.raises(
+            ValueError, match="delimiter must not be the CSV quote character"
+        ):
+            ar.write_csv(frame, str(tmp_path / "out.csv"), delimiter='"')
+
+
+class TestWriteCsvControlCharValidation:
+    """Control character validation: unsafe control characters must be rejected."""
+
+    @pytest.mark.parametrize("delimiter", ["\0", "\x1f", "\x7f"])
+    def test_control_character_delimiter_rejected(self, tmp_path, delimiter):
+        frame = ar.from_pandas(pd.DataFrame({"a": [1]}))
+        with pytest.raises(
+            ValueError, match="delimiter must not be a control character"
+        ):
+            ar.write_csv(frame, str(tmp_path / "out.csv"), delimiter=delimiter)
+
+
+def test_write_csv_rejects_bool_path(tmp_path):
+    frame = ar.from_pandas(pd.DataFrame({"a": [1, 2, 3]}))
+    with pytest.raises(TypeError, match="path must be a string"):
+        ar.write_csv(frame, True)
+
+
+def test_write_csv_rejects_int_path(tmp_path):
+    frame = ar.from_pandas(pd.DataFrame({"a": [1, 2, 3]}))
+    with pytest.raises(TypeError, match="path must be a string"):
+        ar.write_csv(frame, 42)
+
+
+class _BytesPathLike:
+    def __init__(self, path: bytes) -> None:
+        self._path = path
+
+    def __fspath__(self) -> bytes:
+        return self._path
+
+
+def test_write_csv_accepts_bytes_path(tmp_path):
+    frame = ar.from_pandas(pd.DataFrame({"a": [1, 2, 3]}))
+    out = tmp_path / "out.csv"
+    ar.write_csv(frame, os.fsencode(out))
+    assert out.exists()
+
+
+def test_write_csv_accepts_pathlike_bytes_path(tmp_path):
+    frame = ar.from_pandas(pd.DataFrame({"a": [1, 2, 3]}))
+    out = tmp_path / "out.csv"
+    ar.write_csv(frame, _BytesPathLike(os.fsencode(out)))
+    assert out.exists()
+
+
+# ---------------------------------------------------------------------------
+# encoding / encoding_errors tests
+# ---------------------------------------------------------------------------
+
+
+class TestWriteCsvEncoding:
+    def _simple_frame(self):
+        return ar.from_pandas(pd.DataFrame({"name": ["Alice", "Bob"], "score": [1, 2]}))
+
+    def test_default_utf8_unchanged(self, tmp_path):
+        """Default encoding="utf-8" writes correct content, existing behavior intact."""
+        frame = self._simple_frame()
         out = tmp_path / "out.csv"
-        with pytest.raises(TypeError):
-            ar.write_csv(frame, out, safe_for_spreadsheet=None)
+        ar.write_csv(frame, str(out))
+        content = out.read_text(encoding="utf-8")
+        assert "Alice" in content
+        assert "Bob" in content
 
-    def test_strict_bool_rejects_int(self, tmp_path):
-        """safe_for_spreadsheet=1 or 0 raises TypeError."""
-        frame = ar.from_pandas(pd.DataFrame({"a": ["hello"]}))
+    def test_latin1_output_round_trips(self, tmp_path):
+        """latin-1 encoded output round-trips back via read_csv(encoding="latin-1")."""
+        frame = ar.from_pandas(pd.DataFrame({"city": ["München", "Zürich"]}))
         out = tmp_path / "out.csv"
-        with pytest.raises(TypeError):
-            ar.write_csv(frame, out, safe_for_spreadsheet=1)
-        with pytest.raises(TypeError):
-            ar.write_csv(frame, out, safe_for_spreadsheet=0)
+        ar.write_csv(frame, str(out), encoding="latin-1")
+        result = ar.read_csv(str(out), encoding="latin-1")
+        df = ar.to_pandas(result)
+        assert list(df["city"]) == ["München", "Zürich"]
 
-    def test_strict_bool_rejects_string(self, tmp_path):
-        """safe_for_spreadsheet='true' raises TypeError."""
-        frame = ar.from_pandas(pd.DataFrame({"a": ["hello"]}))
+    def test_non_default_line_terminator_through_transcoding(self, tmp_path):
+        """Non-default line_terminator is preserved through the transcoding path."""
+        frame = self._simple_frame()
+        out = tmp_path / "out.csv"
+        ar.write_csv(frame, str(out), encoding="latin-1", line_terminator="\r\n")
+        raw = out.read_bytes()
+        assert b"\r\n" in raw
+
+    def test_escape_formulas_unchanged_through_transcoding(self, tmp_path):
+        """escape_formulas output is identical through the transcoding path."""
+        frame = ar.from_pandas(pd.DataFrame({"cmd": ["=SUM(A1)", "normal"]}))
+        out_utf8 = tmp_path / "utf8.csv"
+        out_latin1 = tmp_path / "latin1.csv"
+        ar.write_csv(frame, str(out_utf8), escape_formulas=True)
+        ar.write_csv(frame, str(out_latin1), encoding="latin-1", escape_formulas=True)
+        assert out_utf8.read_text(encoding="utf-8") == out_latin1.read_text(
+            encoding="latin-1"
+        )
+
+    def test_unencodable_character_strict_raises_valueerror(self, tmp_path):
+        """Unencodable character with encoding_errors="strict" raises ValueError."""
+        frame = ar.from_pandas(pd.DataFrame({"val": ["こんにちは"]}))
+        out = tmp_path / "out.csv"
+        with pytest.raises(ValueError, match="cannot be encoded"):
+            ar.write_csv(frame, str(out), encoding="latin-1", encoding_errors="strict")
+
+    def test_unencodable_character_strict_preserves_existing_file(self, tmp_path):
+        """Strict transcoding failures do not replace an existing destination."""
+        frame = ar.from_pandas(pd.DataFrame({"val": ["こんにちは"]}))
+        out = tmp_path / "out.csv"
+        out.write_bytes(b"sentinel")
+
+        with pytest.raises(ValueError, match="cannot be encoded"):
+            ar.write_csv(frame, str(out), encoding="latin-1", encoding_errors="strict")
+
+        assert out.read_bytes() == b"sentinel"
+
+    def test_missing_destination_parent_raises_runtimeerror(self, tmp_path):
+        """Destination filesystem errors use the public RuntimeError contract."""
+        frame = self._simple_frame()
+        out = tmp_path / "missing" / "out.csv"
+
+        with pytest.raises(RuntimeError) as exc_info:
+            ar.write_csv(frame, str(out), encoding="latin-1")
+
+        assert isinstance(exc_info.value.__cause__, FileNotFoundError)
+
+    def test_replace_error_preserves_existing_file_and_cleans_temp(
+        self, tmp_path, monkeypatch
+    ):
+        """Atomic replacement errors preserve the destination and clean the output temp."""
+        frame = self._simple_frame()
         out = tmp_path / "out.csv"
         out.write_bytes(b"sentinel")
 
@@ -532,68 +646,3 @@ class TestWriteCsvSafeForSpreadsheet:
         ar.write_csv(frame, str(out), encoding="latin-1")
         after = set(glob.glob(str(tmp_path / "*.csv")))
         assert after - before == {str(out)}
-
-
-class TestWriteCsvAppend:
-    def test_append_to_empty(self, tmp_path):
-        path = str(tmp_path / "test_append_empty.csv")
-        frame1 = ar.from_pandas(pd.DataFrame({"A": [1, 2], "B": ["x", "y"]}))
-
-        ar.write_csv(frame1, path, append=True)
-        res1 = ar.to_pandas(ar.read_csv(path))
-        assert len(res1) == 2
-        assert list(res1.columns) == ["A", "B"]
-
-    def test_append_to_existing(self, tmp_path):
-        path = str(tmp_path / "test_append_existing.csv")
-        frame1 = ar.from_pandas(pd.DataFrame({"A": [1, 2], "B": ["x", "y"]}))
-        frame2 = ar.from_pandas(pd.DataFrame({"A": [3, 4], "B": ["z", "w"]}))
-
-        ar.write_csv(frame1, path)
-        ar.write_csv(frame2, path, append=True)
-
-        res = ar.to_pandas(ar.read_csv(path))
-        assert len(res) == 4
-        assert list(res["A"]) == [1, 2, 3, 4]
-        assert list(res["B"]) == ["x", "y", "z", "w"]
-
-    def test_append_schema_mismatch(self, tmp_path):
-        path = str(tmp_path / "test_schema_mismatch.csv")
-        frame1 = ar.from_pandas(pd.DataFrame({"A": [1, 2], "B": ["x", "y"]}))
-        frame3 = ar.from_pandas(pd.DataFrame({"A": [5], "C": ["diff"]}))
-
-        ar.write_csv(frame1, path)
-        with pytest.raises(ValueError, match="Schema mismatch"):
-            ar.write_csv(frame3, path, append=True)
-
-    def test_append_missing_newline(self, tmp_path):
-        path = tmp_path / "test_missing_newline.csv"
-        path.write_bytes(b"A,B\n1,x\n2,y")  # No trailing newline
-
-        frame2 = ar.from_pandas(pd.DataFrame({"A": [3], "B": ["z"]}))
-        with pytest.raises(ValueError, match="lacks a final line terminator"):
-            ar.write_csv(frame2, str(path), append=True)
-
-    def test_append_non_utf8(self, tmp_path):
-        path = str(tmp_path / "test_append_non_utf8.csv")
-        frame1 = ar.from_pandas(pd.DataFrame({"city": ["München"]}))
-        frame2 = ar.from_pandas(pd.DataFrame({"city": ["Zürich"]}))
-
-        ar.write_csv(frame1, path, encoding="latin-1")
-        ar.write_csv(frame2, path, encoding="latin-1", append=True)
-
-        res = ar.to_pandas(ar.read_csv(path, encoding="latin-1"))
-        assert len(res) == 2
-        assert list(res["city"]) == ["München", "Zürich"]
-
-    def test_append_false_overwrites(self, tmp_path):
-        path = str(tmp_path / "test_append_false.csv")
-        frame1 = ar.from_pandas(pd.DataFrame({"A": [1, 2]}))
-        frame2 = ar.from_pandas(pd.DataFrame({"A": [3, 4]}))
-
-        ar.write_csv(frame1, path)
-        ar.write_csv(frame2, path, append=False)  # default is False
-
-        res = ar.to_pandas(ar.read_csv(path))
-        assert len(res) == 2
-        assert list(res["A"]) == [3, 4]

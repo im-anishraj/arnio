@@ -5,7 +5,11 @@ Pandas conversion functions.
 
 from __future__ import annotations
 
-import copy
+import copy as copylib
+import decimal
+import json
+import math
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
@@ -87,10 +91,6 @@ def _check_unsupported_dtype(col_name: object, series: pd.Series) -> None:
         )
 
 
-INT64_MIN = -(2**63)
-INT64_MAX = 2**63 - 1
-
-
 def _normalize_scalar(value: object) -> object:
     if isinstance(value, decimal.Decimal):
         return _to_binding_safe(value)
@@ -106,18 +106,6 @@ def _normalize_scalar(value: object) -> object:
             )
     if isinstance(value, float):
         return _to_binding_safe(value)
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, int):
-        if value < INT64_MIN or value > INT64_MAX:
-            raise ValueError(
-                f"Integer value {value!r} is outside the signed int64 range "
-                f"[{INT64_MIN}, {INT64_MAX}]. "
-                "Convert the column to string first: df[col] = df[col].astype(str)"
-            )
-        return value
-    if not isinstance(value, str):
-        return str(value)
     return value
 
 
@@ -144,11 +132,42 @@ def _series_to_python_values(series: pd.Series, col_name: object) -> list[object
                 f"of type '{type(raw).__name__}' at value {raw!r}. "
                 "Convert nested objects to strings or flatten them first."
             )
-        try:
-            value = _normalize_scalar(raw)
-        except ValueError as e:
-            raise ValueError(f"Column '{col_name}': {e}") from e
 
+        if isinstance(raw, pd.Timestamp):
+            raise TypeError(
+                f"Column '{col_name}' contains unsupported scalar value "
+                f"of type 'Timestamp' at value {raw!r}. "
+                f'Fix: df["{col_name}"] = df["{col_name}"].astype(str)'
+            )
+
+        if isinstance(raw, pd.Timedelta):
+            raise TypeError(
+                f"Column '{col_name}' contains unsupported scalar value "
+                f"of type 'Timedelta' at value {raw!r}. "
+                f'Fix: convert df["{col_name}"] to strings or a supported '
+                "numeric duration before from_pandas()"
+            )
+
+        if isinstance(raw, (complex, np.complexfloating)):
+            raise TypeError(
+                f"Column '{col_name}' contains unsupported scalar value "
+                f"of type '{type(raw).__name__}' at value {raw!r}. "
+                f'Fix: split df["{col_name}"] into real/imag columns or '
+                "convert it to strings before from_pandas()"
+            )
+
+        unpacked_raw = raw.item() if isinstance(raw, np.generic) else raw
+
+        if unpacked_raw is not None and not pd.isna(unpacked_raw):
+            if not isinstance(unpacked_raw, _ALLOWED_SCALAR_TYPES):
+                raise TypeError(
+                    f"Column '{col_name}' contains unsupported scalar value "
+                    f"of type '{type(raw).__name__}' at value {raw!r}. "
+                    f'Fix: convert df["{col_name}"] to strings or supported primitives '
+                    "before running from_pandas()"
+                )
+
+        value = _normalize_scalar(raw)
         values.append(value)
         if value is not None:
             kinds.add(_scalar_kind(value))
@@ -239,35 +258,142 @@ def to_pandas(frame: ArFrame, *, copy: bool = False) -> pd.DataFrame:
         result = pd.DataFrame(index=pd.RangeIndex(cpp_frame.num_rows()))
     else:
         result = pd.DataFrame(data)
-    
-    # Always preserve attrs (DO NOT condition on index)
     if frame._attrs:
         result.attrs = copylib.deepcopy(frame._attrs)
-
-    # Restore index only if explicitly stored
-    saved_index = frame._attrs.get("_arnio_index") if frame._attrs else None
-
-    if saved_index is not None:
-        result.index = saved_index.copy()
-
     return result
+
+
+def to_arrow(frame: ArFrame) -> pa.Table:
+    """Convert ArFrame to pyarrow.Table.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input ArFrame to convert.
+
+    Returns
+    -------
+    pa.Table
+        Equivalent pyarrow Table with typed columns.
+
+    Raises
+    ------
+    TypeError
+        If the input is not an ArFrame.
+    ImportError
+        If pyarrow is not installed.
+
+    Examples
+    --------
+    >>> frame = ar.read_csv("data.csv")
+    >>> table = ar.to_arrow(frame)
+    """
+    if not isinstance(frame, ArFrame):
+        raise TypeError(f"to_arrow() expects an ArFrame, got {type(frame).__name__}")
+
+    try:
+        import pyarrow as pa
+    except ImportError as e:
+        raise ImportError(
+            "to_arrow() requires pyarrow. Install it with: pip install arnio[arrow]"
+        ) from e
+
+    cpp_frame = frame._frame
+    arrays: list[pa.Array] = []
+    names: list[str] = []
+
+    if cpp_frame.num_cols() == 0:
+        empty = pd.DataFrame(index=pd.RangeIndex(cpp_frame.num_rows()))
+        table = pa.Table.from_pandas(empty)
+    else:
+        for i in range(cpp_frame.num_cols()):
+            col = cpp_frame.column_by_index(i)
+            name = col.name()
+            dtype = col.dtype()
+            mask = col.get_null_mask()
+
+            if dtype == _DType.INT64:
+                arr = col.to_numpy_int()
+                pa_arr = pa.array(arr, mask=mask, type=pa.int64())
+            elif dtype == _DType.FLOAT64:
+                arr = col.to_numpy_float()
+                pa_arr = pa.array(arr, mask=mask, type=pa.float64())
+            elif dtype == _DType.BOOL:
+                arr = col.to_numpy_bool()
+                pa_arr = pa.array(arr, mask=mask, type=pa.bool_())
+            else:
+                values = col.to_python_list()
+                pa_arr = pa.array(values, type=pa.string())
+
+            arrays.append(pa_arr)
+            names.append(name)
+
+        table = pa.Table.from_arrays(arrays, names=names)
+
+    if frame._attrs:
+        try:
+            attrs_json = json.dumps(frame._attrs)
+        except TypeError as e:
+            raise TypeError(
+                "to_arrow() only supports JSON-serializable attrs metadata"
+            ) from e
+
+        metadata = dict(table.schema.metadata or {})
+        metadata[b"arnio.attrs"] = attrs_json.encode("utf-8")
+
+        table = table.replace_schema_metadata(metadata)
+
+    return table
 
 
 def _pandas_dtype_to_arnio(dtype: object) -> _DType | None:
     if dtype == pd.Int64Dtype():
         return _DType.INT64
-    if dtype == pd.Float64Dtype() or dtype == np.dtype("float64"):
+    if str(dtype) == "int64":
+        return _DType.INT64
+    if dtype == pd.Float64Dtype():
         return _DType.FLOAT64
-
-    if dtype == pd.BooleanDtype() or dtype == np.dtype("bool"):
+    if str(dtype) == "float64":
+        return _DType.FLOAT64
+    if dtype == pd.BooleanDtype() or str(dtype) == "bool":
         return _DType.BOOL
     if dtype == pd.StringDtype():
         return _DType.STRING
     # object dtype is intentionally left to value-based inference
-    if dtype == pd.BooleanDtype() or str(dtype) == "bool":
-        return _DType.BOOL
-
     return None
+
+
+def _validate_unique_column_labels(labels: pd.Index) -> None:
+    seen: set[object] = set()
+    dupes: list[object] = []
+    for label in labels:
+        if label in seen and label not in dupes:
+            dupes.append(label)
+        seen.add(label)
+    if dupes:
+        raise ValueError(
+            "from_pandas() does not support duplicate column labels: "
+            f"{[repr(label) for label in dupes]}"
+        )
+
+    normalized: dict[str, object] = {}
+    collisions: dict[str, list[object]] = {}
+    for label in labels:
+        name = str(label)
+        if name in normalized:
+            collisions.setdefault(name, [normalized[name]]).append(label)
+        else:
+            normalized[name] = label
+
+    if collisions:
+        details = ", ".join(
+            f"{name!r}: {[repr(label) for label in labels]}"
+            for name, labels in collisions.items()
+        )
+        raise ValueError(
+            "from_pandas() column labels must remain unique after string "
+            f"conversion: {details}"
+        )
 
 
 def from_pandas(df: pd.DataFrame) -> ArFrame:
@@ -286,8 +412,7 @@ def from_pandas(df: pd.DataFrame) -> ArFrame:
     Raises
     ------
     TypeError
-        If the input is not a pandas DataFrame, or if DataFrame contains
-        unsupported nested/complex types.
+        If DataFrame contains unsupported nested/complex types.
 
     Examples
     --------
@@ -295,11 +420,6 @@ def from_pandas(df: pd.DataFrame) -> ArFrame:
     >>> df = pd.DataFrame({"name": ["Alice"], "age": [25]})
     >>> frame = ar.from_pandas(df)
     """
-    if not isinstance(df, pd.DataFrame):
-        raise TypeError(
-            f"from_pandas() expects a pandas DataFrame, got {type(df).__name__}"
-        )
-
     _validate_unique_column_labels(df.columns)
 
     columns = {}
@@ -309,7 +429,7 @@ def from_pandas(df: pd.DataFrame) -> ArFrame:
         series = df[col_name]
         name = str(col_name)
 
-        _check_unsupported_dtype(col_name, series)
+        _check_unsupported_dtype(col_name, series)  # NEW: check before converting
 
         columns[name] = _series_to_python_values(series, col_name)
 
@@ -318,15 +438,226 @@ def from_pandas(df: pd.DataFrame) -> ArFrame:
             dtype_hints[name] = dtype_hint
 
     cpp_frame = _Frame.from_dict(columns, dtype_hints, len(df))
-    
-    attrs = copylib.deepcopy(df.attrs)
+    return ArFrame(cpp_frame, attrs=copylib.deepcopy(df.attrs))
 
-    # Store index ONLY if it's not default RangeIndex
 
-    if not isinstance(df.index, pd.RangeIndex):
-        attrs["_arnio_index"] = df.index.copy()
+def _from_arrow_table(table: pa.Table) -> ArFrame:
+    """Import a ``pyarrow.Table`` into an ArFrame without a pandas intermediate.
 
-    return ArFrame(cpp_frame, attrs=attrs)
+    Reads each Arrow column's buffers directly and constructs the ArFrame
+    column-by-column, preserving nulls via the Arrow validity bitmap.
+
+    Parameters
+    ----------
+    table : pa.Table
+        Input Arrow table, typically produced by ``polars.DataFrame.to_arrow()``.
+
+    Returns
+    -------
+    ArFrame
+        Equivalent ArFrame with inferred types and null values preserved.
+
+    Raises
+    ------
+    ImportError
+        If pyarrow is not installed.
+    TypeError
+        If a column's Arrow type cannot be mapped to an Arnio native dtype.
+    """
+    try:
+        import pyarrow as pa_mod
+    except ImportError as exc:
+        raise ImportError(
+            "_from_arrow_table() requires pyarrow. "
+            "Install it with: pip install arnio[arrow]"
+        ) from exc
+
+    _ARROW_INT_TYPES = frozenset(
+        [
+            "int8",
+            "int16",
+            "int32",
+            "int64",
+            "uint8",
+            "uint16",
+            "uint32",
+            "uint64",
+        ]
+    )
+    _ARROW_FLOAT_TYPES = frozenset(["float", "double", "float32", "float64"])
+    _ARROW_STRING_TYPES = frozenset(["string", "large_string", "utf8", "large_utf8"])
+
+    columns: dict[str, list[object]] = {}
+    dtype_hints: dict[str, _DType] = {}
+
+    for i, name in enumerate(table.column_names):
+        raw_col = table.column(i)
+        # Flatten any ChunkedArray into a single Array
+        arr = (
+            raw_col.combine_chunks()
+            if isinstance(raw_col, pa_mod.ChunkedArray)
+            else raw_col
+        )
+        type_str = str(arr.type)
+
+        if type_str in _ARROW_INT_TYPES:
+            arr64 = arr.cast(pa_mod.int64())
+            null_mask = arr64.is_null()
+            values: list[object] = [
+                None if null_mask[j].as_py() else arr64[j].as_py()
+                for j in range(len(arr64))
+            ]
+            dtype_hints[name] = _DType.INT64
+
+        elif type_str in _ARROW_FLOAT_TYPES:
+            arr64 = arr.cast(pa_mod.float64())
+            null_mask = arr64.is_null()
+            values = [
+                None if null_mask[j].as_py() else arr64[j].as_py()
+                for j in range(len(arr64))
+            ]
+            dtype_hints[name] = _DType.FLOAT64
+
+        elif type_str == "bool":
+            null_mask = arr.is_null()
+            values = [
+                None if null_mask[j].as_py() else arr[j].as_py()
+                for j in range(len(arr))
+            ]
+            dtype_hints[name] = _DType.BOOL
+
+        elif type_str in _ARROW_STRING_TYPES:
+            null_mask = arr.is_null()
+            values = [
+                None if null_mask[j].as_py() else arr[j].as_py()
+                for j in range(len(arr))
+            ]
+            # STRING is ArFrame's default dtype — no hint needed
+
+        elif type_str == "null":
+            values = [None] * len(arr)
+
+        else:
+            raise TypeError(
+                f"Column '{name}' has Arrow type '{arr.type}' which cannot be "
+                "imported into ArFrame. Convert it to int64, float64, bool, or "
+                "string before calling from_polars()."
+            )
+
+        columns[name] = values
+
+    cpp_frame = _Frame.from_dict(columns, dtype_hints, table.num_rows)
+    return ArFrame(cpp_frame)
+
+
+def from_arrow(table: pa.Table) -> ArFrame:
+    """Convert a PyArrow Table to an ArFrame.
+
+    This function provides a direct, pandas-free Arrow import path.
+
+    Parameters
+    ----------
+    table : pyarrow.Table
+        Input PyArrow table.
+
+    Returns
+    -------
+    ArFrame
+        Equivalent ArFrame with inferred types and null values preserved.
+
+    Raises
+    ------
+    ImportError
+        If pyarrow is not installed.
+    TypeError
+        If the input is not a PyArrow Table.
+    """
+    try:
+        import pyarrow as pa
+    except ImportError as exc:
+        raise ImportError(
+            "pyarrow is not installed. Please install it with 'pip install arnio[arrow]'"
+        ) from exc
+
+    if not isinstance(table, pa.Table):
+        raise TypeError(f"Expected a PyArrow Table, but got {type(table).__name__}")
+
+    return _from_arrow_table(table)
+
+
+def from_polars(df: object) -> ArFrame:
+    """Convert a Polars DataFrame to ArFrame.
+
+    Delegates to :func:`arnio.integrations.polars.from_polars`.
+    Polars and pyarrow are optional dependencies; install both with
+    ``pip install arnio[polars]``.
+
+    The conversion goes through the Arrow buffer bridge
+    (``pl.DataFrame.to_arrow()`` → ``_from_arrow_table()``) with no pandas
+    intermediate frame involved.
+
+    Parameters
+    ----------
+    df : polars.DataFrame
+        Input Polars DataFrame.
+
+    Returns
+    -------
+    ArFrame
+        Equivalent ArFrame with inferred types and null values preserved.
+
+    Raises
+    ------
+    ImportError
+        If ``polars`` or ``pyarrow`` is not installed.
+        Install both with: ``pip install arnio[polars]``.
+    TypeError
+        If *df* is not a ``pl.DataFrame`` or contains unsupported dtypes.
+
+    Examples
+    --------
+    >>> import polars as pl
+    >>> import arnio as ar
+    >>> pldf = pl.DataFrame({"name": ["Alice"], "score": [9.5]})
+    >>> frame = ar.from_polars(pldf)
+    """
+    from arnio.integrations.polars import from_polars as _from_polars
+
+    return _from_polars(df)
+
+
+def to_polars(frame: ArFrame) -> object:
+    """Convert an ArFrame to a Polars DataFrame.
+
+    Delegates to :func:`arnio.integrations.polars.to_polars`.
+    Polars is an optional dependency; install it with ``pip install arnio[polars]``.
+
+    Parameters
+    ----------
+    frame : ArFrame
+        Input ArFrame to convert.
+
+    Returns
+    -------
+    polars.DataFrame
+        Equivalent Polars DataFrame.
+
+    Raises
+    ------
+    ImportError
+        If polars or pyarrow is not installed.
+    TypeError
+        If *frame* is not an ArFrame.
+
+    Examples
+    --------
+    >>> import arnio as ar
+    >>> frame = ar.read_csv("data.csv")
+    >>> pldf = ar.to_polars(frame)
+    """
+    from arnio.integrations.polars import to_polars as _to_polars
+
+    return _to_polars(frame)
 
 
 def from_dict(data: dict) -> ArFrame:
@@ -376,4 +707,3 @@ def from_dict(data: dict) -> ArFrame:
         _check_unsupported_dtype(col_name, df[col_name])
 
     return from_pandas(df)
-    

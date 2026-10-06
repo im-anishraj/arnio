@@ -5,14 +5,30 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
-import numpy as np
 import pandas as pd
 
+from arnio.cleaning import (
+    clip_numeric as clip_numeric_values,
+)
+from arnio.cleaning import (
+    drop_nulls as drop_null_rows,
+)
+from arnio.cleaning import (
+    fill_nulls as fill_null_values,
+)
+from arnio.cleaning import (
+    strip_whitespace as strip_whitespace_values,
+)
 from arnio.convert import from_pandas, to_pandas
-from arnio.diff import DataFrameDiffReport, diff_dataframes
 from arnio.frame import ArFrame
 from arnio.pipeline import pipeline as run_pipeline
-from arnio.quality import DataQualityReport, auto_clean, profile, suggest_cleaning
+from arnio.quality import (
+    CleanExplanation,
+    DataQualityReport,
+    auto_clean,
+    profile,
+    suggest_cleaning,
+)
 from arnio.schema import Schema, ValidationResult, validate
 
 
@@ -27,47 +43,10 @@ class ArnioPandasAccessor:
         """Convert the DataFrame into an Arnio frame."""
         return from_pandas(self._df)
 
-    def pipeline(
-        self,
-        steps: Sequence[Any],
-        *,
-        return_metadata: bool = False,
-        dry_run: bool = False,
-        verbose: bool = False,
-    ) -> pd.DataFrame | tuple[pd.DataFrame, dict[str, Any]]:
-        """Run an Arnio pipeline and return a pandas DataFrame.
-
-        Parameters
-        ----------
-        steps : Sequence[tuple]
-            List of pipeline steps to apply.
-        return_metadata : bool, default False
-            When True, also return a metadata dictionary with per-step timing
-            and row count information.
-        dry_run : bool, default False
-            Validate pipeline structure without applying transformations.
-        verbose : bool, default False
-            Enable diagnostic logging for each pipeline step.
-
-        Returns
-        -------
-        pd.DataFrame or tuple[pd.DataFrame, dict]
-            If return_metadata is False (default), returns a pandas DataFrame.
-            If return_metadata is True, returns (DataFrame, metadata_dict).
-        """
+    def pipeline(self, steps: Sequence[Any]) -> pd.DataFrame:
+        """Run an Arnio pipeline and return a pandas DataFrame."""
         frame = self.to_arframe()
-        result = run_pipeline(
-            frame,
-            steps,
-            return_metadata=return_metadata,
-            dry_run=dry_run,
-            verbose=verbose,
-        )
-
-        if return_metadata:
-            ar_frame, metadata = result
-            return to_pandas(ar_frame), metadata
-        return to_pandas(result)
+        return to_pandas(run_pipeline(frame, steps))
 
     def clean(
         self,
@@ -95,9 +74,57 @@ class ArnioPandasAccessor:
         )
         return to_pandas(frame)
 
-    def profile(self, *, sample_size: int = 5) -> DataQualityReport:
+    def strip_whitespace(self, *, subset: list[str] | None = None) -> pd.DataFrame:
+        """Trim leading/trailing whitespace and return pandas output."""
+        frame = strip_whitespace_values(self.to_arframe(), subset=subset)
+        return to_pandas(frame)
+
+    def drop_nulls(self, *, subset: list[str] | None = None) -> pd.DataFrame:
+        """Drop rows with nulls in the selected columns."""
+        frame = drop_null_rows(self.to_arframe(), subset=subset)
+        return to_pandas(frame)
+
+    def fill_nulls(
+        self, value: Any, *, subset: list[str] | None = None
+    ) -> pd.DataFrame:
+        """Fill nulls in the selected columns and return pandas output."""
+        frame = fill_null_values(self.to_arframe(), value, subset=subset)
+        return to_pandas(frame)
+
+    def clip_numeric(
+        self,
+        *,
+        lower: int | float | None = None,
+        upper: int | float | None = None,
+        subset: list[str] | None = None,
+    ) -> pd.DataFrame:
+        """Clip numeric values in the selected columns and return pandas output."""
+        frame = clip_numeric_values(
+            self.to_arframe(),
+            lower=lower,
+            upper=upper,
+            subset=subset,
+        )
+        return to_pandas(frame)
+
+    def profile(
+        self,
+        *,
+        sample_size: int = 5,
+        approx_top_values: bool = False,
+        approx_top_values_min_unique: int = 1000,
+        approx_top_values_min_ratio: float = 0.2,
+        approx_top_values_sample_size: int = 2000,
+    ) -> DataQualityReport:
         """Profile DataFrame quality with Arnio."""
-        return profile(self.to_arframe(), sample_size=sample_size)
+        return profile(
+            self.to_arframe(),
+            sample_size=sample_size,
+            approx_top_values=approx_top_values,
+            approx_top_values_min_unique=approx_top_values_min_unique,
+            approx_top_values_min_ratio=approx_top_values_min_ratio,
+            approx_top_values_sample_size=approx_top_values_sample_size,
+        )
 
     def suggest_cleaning(self) -> list[tuple[str, dict[str, Any]]]:
         """Return Arnio pipeline-compatible cleaning suggestions."""
@@ -108,57 +135,70 @@ class ArnioPandasAccessor:
         *,
         mode: str = "safe",
         return_report: bool = False,
-    ) -> pd.DataFrame | tuple[pd.DataFrame, DataQualityReport]:
-        """Run Arnio's automatic cleaning and return pandas output."""
+        dry_run: bool = False,
+        allow_lossy_casts: bool = False,
+        confirmed_casts: dict[str, str] | None = None,
+        explain: bool = False,
+    ) -> (
+        pd.DataFrame
+        | DataQualityReport
+        | tuple[pd.DataFrame, DataQualityReport]
+        | tuple[pd.DataFrame, CleanExplanation]
+        | tuple[pd.DataFrame, DataQualityReport, CleanExplanation]
+    ):
+        """Run Arnio's automatic cleaning and return pandas output.
+
+        Parameters
+        ----------
+        explain : bool, default False
+            When ``True``, also return a :class:`~arnio.quality.CleanExplanation`
+            audit trail describing which steps ran and why.
+        confirmed_casts : dict[str, str] or None, default None
+            Exact strict-mode ``cast_types`` mapping to confirm after previewing
+            proposed casts with ``dry_run=True`` or ``suggest_cleaning()``.
+        """
         result = auto_clean(
             self.to_arframe(),
             mode=mode,
             return_report=return_report,
+            dry_run=dry_run,
+            allow_lossy_casts=allow_lossy_casts,
+            confirmed_casts=confirmed_casts,
+            explain=explain,
         )
+
+        if dry_run:
+            return result
+
+        if return_report and explain:
+            frame, report, explanation = result
+            return to_pandas(frame), report, explanation
 
         if return_report:
             frame, report = result
             return to_pandas(frame), report
 
+        if explain:
+            frame, explanation = result
+            return to_pandas(frame), explanation
+
         return to_pandas(result)
 
-    def validate(self, schema: Schema | dict[str, Any]) -> ValidationResult:
-        """Validate the DataFrame against an Arnio schema."""
-        return validate(self.to_arframe(), schema)
-
-    def to_numpy(
+    def validate(
         self,
-        columns: list[str] | None = None,
+        schema: Schema | dict[str, Any],
         *,
-        null_value: float = float("nan"),
-        allow_non_numeric: bool = False,
-    ) -> np.ndarray:
-        """Extract numeric columns as a 2-D NumPy ``float64`` array.
-
-        This is ideal for preparing clean arrays from messy DataFrames
-        for use in scikit-learn models or other numerical workflows.
-
-        Converts the DataFrame to an ArFrame internally, then delegates
-        to :func:`arnio.to_numpy`.  See that function for full parameter
-        documentation.
-        """
-        return validate(self.to_arframe(), schema, max_errors=max_errors)
-
-    def diff(
-        self,
-        other: pd.DataFrame,
-        *,
-        null_ratio_threshold: float = 0.0,
-    ) -> DataFrameDiffReport:
-        """Compare this DataFrame against another for drift.
+        max_errors: int | None = None,
+    ) -> ValidationResult:
+        """Validate the DataFrame against an Arnio schema.
 
         Parameters
         ----------
-        other : pd.DataFrame
-            DataFrame to compare against.
-        null_ratio_threshold : float, default 0.0
-            Minimum absolute change in null ratio to flag as drift.
+        schema : Schema or dict[str, Field]
+            Schema to validate against.
+        max_errors : int or None, default None
+            Maximum number of validation issues to collect. Mirrors the
+            ``max_errors`` parameter of ``ar.validate()``. When None all
+            issues are collected.
         """
-        return diff_dataframes(
-            self._df, other, null_ratio_threshold=null_ratio_threshold
-        )
+        return validate(self.to_arframe(), schema, max_errors=max_errors)

@@ -2,7 +2,6 @@
 
 #include <array>
 #include <fstream>
-#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -16,7 +15,6 @@ namespace arnio {
 
 struct CsvConfig {
     char delimiter = ',';
-    std::string on_bad_lines = "warn";
     bool has_header = true;
     std::optional<std::vector<std::string>> usecols = std::nullopt;
     std::optional<std::unordered_map<std::string, std::string>> dtype = std::nullopt;
@@ -30,8 +28,6 @@ struct CsvConfig {
     std::optional<std::vector<std::string>> null_values = std::nullopt;
     std::string mode = "strict";
     std::string encoding_errors = "strict";
-    size_t progress_interval_rows = 10000;
-    std::function<void(size_t, size_t, std::optional<size_t>, bool)> progress_hook = nullptr;
 };
 
 struct BadRow {
@@ -92,9 +88,6 @@ class CsvChunkReader {
                                              const std::string& on_bad_lines = "error");
     void close();
 
-    // Infer DType from a string value
-    DType infer_type(const std::string& value) const;
-
    private:
     CsvParser parser_;
     std::ifstream file_;
@@ -111,7 +104,6 @@ class CsvChunkReader {
     std::unique_ptr<class RecordReader> record_reader_;
 
     void resolve_col_indices();
-    void apply_explicit_dtypes();
     bool read_one_data_row(std::vector<std::string>& fields_out,
                            const std::string& on_bad_lines = "error",
                            std::vector<BadRow>* bad_rows_out = nullptr);

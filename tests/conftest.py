@@ -53,10 +53,19 @@ def csv_no_header(tmp_path):
 
 
 @pytest.fixture
-def csv_with_duplicate_columns(tmp_path):
-    """CSV with duplicate column names."""
-    csv_content = "col,col,age\n1,2,3\n4,5,6\n"
-    path = tmp_path / "duplicate_cols.csv"
+def empty_csv(tmp_path):
+    """CSV with header only, no data rows."""
+    csv_content = "name,age,score\n"
+    path = tmp_path / "empty.csv"
+    path.write_text(csv_content)
+    return str(path)
+
+
+@pytest.fixture
+def csv_with_all_nulls(tmp_path):
+    """CSV where all values are null/empty."""
+    csv_content = "a,b,c\n,,\n,,\n"
+    path = tmp_path / "allnulls.csv"
     path.write_text(csv_content)
     return str(path)
 

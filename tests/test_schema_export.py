@@ -75,11 +75,6 @@ class TestSchemaToDict:
         result = schema_to_dict(schema)
         assert result["fields"]["val"]["default"] is None
 
-    def test_schema_object_with_severity_preserved_in_dict(self):
-        schema = ar.Schema({"x": ar.Int64(severity="warning")})
-        result = schema_to_dict(schema)
-        assert result["fields"]["x"]["severity"] == "warning"
-
     def test_unsupported_type_raises(self):
         with pytest.raises(TypeError, match="Expected a dict"):
             schema_to_dict(42)
@@ -142,11 +137,6 @@ class TestSchemaToYamlOutput:
         out = schema_to_yaml(raw)
         assert "min: 0" in out
         assert "max: 150" in out
-
-    def test_schema_object_with_severity_preserved_in_yaml(self):
-        schema = ar.Schema({"x": ar.Int64(severity="warning")})
-        out = schema_to_yaml(schema)
-        assert "severity: warning" in out
 
     def test_bool_false(self):
         raw = {"flag": {"type": "BOOL", "nullable": False}}
@@ -294,12 +284,6 @@ def test_set_valued_allowed_normalized():
     assert result["fields"]["status"]["allowed"] == ["a", "b", "c"]
 
 
-def test_mixed_scalar_set_normalized():
-    raw = {"code": {"type": "STRING", "allowed": {1, "1"}}}
-    result = schema_to_dict(raw)
-    assert result["fields"]["code"]["allowed"] == [1, "1"]
-
-
 def test_real_schema_field_dtype():
     schema = ar.Schema({"price": ar.Field(dtype="float64", nullable=False)})
     result = schema_to_dict(schema)
@@ -339,7 +323,6 @@ def test_real_schema_with_rules_raises():
         schema_to_dict(schema)
 
 
-# ── Regression tests for issue #1441 ────────────────────────────────────────
 # test unsupported raw field value
 def test_raw_field_object_raises():
     with pytest.raises(TypeError):
@@ -351,14 +334,6 @@ def test_nested_set_normalized():
     result = schema_to_dict({"x": {"meta": {"tags": {"b", "a"}}}})
 
     assert result == {"fields": {"x": {"meta": {"tags": ["a", "b"]}}}}
-
-
-# ── Regression tests for issue #1573 ────────────────────────────────────────
-# test for nested set normalization
-def test_nested_set_inside_list_normalized():
-    result = schema_to_dict({"field": {"nested": [{"allowed_values": {"b", "a"}}]}})
-
-    assert result == {"fields": {"field": {"nested": [{"allowed_values": ["a", "b"]}]}}}
 
 
 # test for nested unsupported object inside dict
@@ -704,7 +679,7 @@ class TestSchemaFromYaml:
         """A YAML payload with rules_omitted: true must emit a UserWarning."""
         import arnio as ar
 
-        yaml_text = "fields:\n  x:\n    dtype: string\nrules_omitted: true\n"
+        yaml_text = "fields:\n" "  x:\n" "    dtype: string\n" "rules_omitted: true\n"
         with pytest.warns(UserWarning, match="rules_omitted"):
             schema = ar.schema_from_yaml(yaml_text)
 

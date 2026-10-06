@@ -12,7 +12,6 @@ struct CsvWriteConfig {
     bool write_header = true;
     std::string line_terminator = "\n";
     bool escape_formulas = false;
-    bool append = false;
 };
 
 class CsvWriter {

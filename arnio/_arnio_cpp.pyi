@@ -136,7 +136,6 @@ class CsvWriteConfig:
     write_header: bool
     line_terminator: str
     escape_formulas: bool
-    append: bool
 
     def __init__(self) -> None: ...
 

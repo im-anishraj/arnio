@@ -1,8 +1,6 @@
 ## Summary
 <!-- What changed and why? Keep this short but specific. -->
 
-<!-- Need quick setup or contribution help? Join Discord: https://discord.gg/xsEw7r78M -->
-
 ## Linked issue
 <!-- Use "Fixes #123" when the PR fully resolves an issue. Use "Refs #123" for partial work. -->
 
@@ -45,6 +43,9 @@
 
 ## Performance Impact
 <!-- If this PR affects speed or memory, paste a snippet from `make benchmark` or other tools. -->
+
+## GSSoC labels
+<!-- Maintainers only: use exact scoring labels where applicable, for example `gssoc:approved`, `level:beginner`, `quality:clean`, and `type:bug`. Do not add labels only to increase points. -->
 
 ## Contributor checklist
 - [ ] I read the contributing guide.

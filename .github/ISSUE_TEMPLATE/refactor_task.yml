@@ -1,7 +1,7 @@
 name: Refactor task
 description: Propose a code refactor to improve maintainability, performance, or clarity.
 title: "Refactor: "
-labels: ["type: refactor", "status: needs triage"]
+labels: ["type:refactor", "status:needs-triage"]
 body:
   - type: markdown
     attributes:

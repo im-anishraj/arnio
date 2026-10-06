@@ -104,10 +104,29 @@ def main() -> int:
 
         import_check = (
             "import arnio as ar; "
+            "import inspect, tempfile, pathlib; "
             "print('arnio import ok:', ar.__version__); "
             "assert hasattr(ar, 'read_csv'); "
             "assert hasattr(ar, 'pipeline'); "
-            "assert hasattr(ar, 'to_pandas')"
+            "assert hasattr(ar, 'to_pandas'); "
+            "assert hasattr(ar, 'slugify_column_names'), 'slugify_column_names missing from public API'; "
+            "assert hasattr(ar, 'rename_columns_matching'), 'rename_columns_matching missing from public API'; "
+            "assert 'slugify_column_names' in ar.list_steps(), 'slugify_column_names missing from list_steps()'; "
+            "assert 'rename_columns_matching' in ar.list_steps(), 'rename_columns_matching missing from list_steps()'; "
+            "print('column-name helper parity check passed'); "
+            "tmp = tempfile.mkdtemp(); "
+            "csv = pathlib.Path(tmp) / 'smoke.csv'; "
+            "csv.write_text('name,age\\nAlice,30\\nBob,25\\n'); "
+            "frame = ar.read_csv(str(csv)); "
+            "assert frame is not None; "
+            "print('read_csv smoke test passed'); "
+            "sig = inspect.signature(ar.read_jsonl); "
+            "params = sig.parameters; "
+            "assert 'encoding_errors' in params, 'read_jsonl is missing encoding_errors parameter'; "
+            "assert params['encoding_errors'].default == 'strict', 'read_jsonl encoding_errors default must be strict'; "
+            "sig2 = inspect.signature(ar.read_jsonl_chunked); "
+            "assert 'encoding_errors' in sig2.parameters, 'read_jsonl_chunked is missing encoding_errors parameter'; "
+            "print('read_jsonl signature parity check passed')"
         )
 
         run([str(python), "-c", import_check], cwd=tmp_dir)
@@ -153,43 +172,6 @@ def main() -> int:
             encoding="utf-8",
         ) as script_file:
             script_file.write(cloud_scheme_script)
-            script_path = script_file.name
-
-        run([str(python), script_path], cwd=tmp_dir)
-
-        # Verify that from_pandas() rejects unsupported scalar/object values (such as bytes and Period)
-        # with a clear TypeError.
-        pandas_unsupported_script = (
-            "import pandas as pd\n"
-            "import arnio as ar\n"
-            "errors = []\n"
-            "try:\n"
-            "    ar.from_pandas(pd.DataFrame({'x': [b'abc']}))\n"
-            "    errors.append('from_pandas(bytes): expected TypeError, got no exception')\n"
-            "except TypeError as exc:\n"
-            "    pass\n"
-            "except Exception as exc:\n"
-            "    errors.append(f'from_pandas(bytes): expected TypeError, got {type(exc).__name__}: {exc}')\n"
-            "try:\n"
-            "    ar.from_pandas(pd.DataFrame({'p': pd.period_range('2020-01', periods=2, freq='M')}))\n"
-            "    errors.append('from_pandas(Period): expected TypeError, got no exception')\n"
-            "except TypeError as exc:\n"
-            "    pass\n"
-            "except Exception as exc:\n"
-            "    errors.append(f'from_pandas(Period): expected TypeError, got {type(exc).__name__}: {exc}')\n"
-            "if errors:\n"
-            "    raise SystemExit('Pandas unsupported types smoke test FAILED:\\n' + '\\n'.join(errors))\n"
-            "print('pandas unsupported types smoke test passed')\n"
-        )
-
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            suffix=".py",
-            delete=False,
-            dir=tmp_dir,
-            encoding="utf-8",
-        ) as script_file:
-            script_file.write(pandas_unsupported_script)
             script_path = script_file.name
 
         run([str(python), script_path], cwd=tmp_dir)

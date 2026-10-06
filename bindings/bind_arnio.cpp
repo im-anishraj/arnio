@@ -1,4 +1,3 @@
-#include <pybind11/functional.h>
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
@@ -35,7 +34,7 @@ PYBIND11_MODULE(_arnio_cpp, m) {
         .def("dtype", &Column::dtype)
         .def("size", &Column::size)
         .def("is_null", &Column::is_null)
-        .def("memory_usage", &Column::memory_usage, py::arg("deep") = false)
+        .def("memory_usage", &Column::memory_usage)
         .def("push_null", &Column::push_null)
         .def("push_back",
              [](Column& col, py::object value) {
@@ -152,7 +151,7 @@ PYBIND11_MODULE(_arnio_cpp, m) {
         .def("num_cols", &Frame::num_cols)
         .def("column_names", &Frame::column_names)
         .def("dtypes", &Frame::dtypes)
-        .def("memory_usage", &Frame::memory_usage, py::arg("deep") = false)
+        .def("memory_usage", &Frame::memory_usage)
         .def("has_column", &Frame::has_column)
         .def(
             "column_by_index", [](const Frame& f, size_t idx) { return f.column(idx); },
@@ -163,62 +162,94 @@ PYBIND11_MODULE(_arnio_cpp, m) {
             py::return_value_policy::copy)
         .def("add_column", &Frame::add_column)
         .def("clone", &Frame::clone)
-        .def_static("from_dict",
-                    [](py::dict cols_dict, py::dict dtype_hints) {
-                        Frame frame;
+        .def("describe",
+             [](const Frame& f) {
+                 py::dict summary;
+                 auto raw_summary = f.describe();
+                 for (const auto& col_pair : raw_summary) {
+                     py::dict stats;
+                     for (const auto& metric_pair : col_pair.second) {
+                         stats[py::str(metric_pair.first)] = metric_pair.second;
+                     }
+                     summary[py::str(col_pair.first)] = stats;
+                 }
 
-                        for (auto item : cols_dict) {
-                            std::string name = py::cast<std::string>(item.first);
-                            py::list values = py::cast<py::list>(item.second);
+                 return summary;
+             })
+        .def_static(
+            "from_dict",
+            [](py::dict cols_dict, py::dict dtype_hints, py::object row_count_obj) {
+                Frame frame =
+                    row_count_obj.is_none() ? Frame() : Frame(row_count_obj.cast<size_t>());
 
-                            DType dtype = DType::STRING;
-                            py::str py_name(name);
+                // Extract the row count once so we can pre-allocate each column's
+                // internal vectors before the push_back loop.  This eliminates the
+                // O(log N) heap-reallocation cascade that occurs when vectors grow
+                // from zero capacity.
+                std::optional<size_t> row_count;
+                if (!row_count_obj.is_none()) {
+                    row_count = row_count_obj.cast<size_t>();
+                }
 
-                            if (dtype_hints.contains(py_name)) {
-                                dtype = dtype_hints[py_name].cast<DType>();
-                            } else {
-                                for (auto val : values) {
-                                    if (val.is_none()) continue;
-                                    if (py::isinstance<py::bool_>(val)) {
-                                        dtype = DType::BOOL;
-                                        break;
-                                    }
-                                    if (py::isinstance<py::int_>(val)) {
-                                        dtype = DType::INT64;
-                                        break;
-                                    }
-                                    if (py::isinstance<py::float_>(val)) {
-                                        dtype = DType::FLOAT64;
-                                        break;
-                                    }
-                                    break;
-                                }
+                for (auto item : cols_dict) {
+                    std::string name = py::cast<std::string>(item.first);
+                    py::list values = py::cast<py::list>(item.second);
+
+                    DType dtype = DType::STRING;
+                    py::str py_name(name);
+
+                    if (dtype_hints.contains(py_name)) {
+                        dtype = dtype_hints[py_name].cast<DType>();
+                    } else {
+                        for (auto val : values) {
+                            if (val.is_none()) continue;
+                            if (py::isinstance<py::bool_>(val)) {
+                                dtype = DType::BOOL;
+                                break;
                             }
-
-                            Column col(name, dtype);
-                            for (auto val : values) {
-                                if (val.is_none()) {
-                                    col.push_null();
-                                    continue;
-                                }
-
-                                if (dtype == DType::BOOL)
-                                    col.push_back(val.cast<bool>());
-                                else if (dtype == DType::INT64)
-                                    col.push_back(val.cast<int64_t>());
-                                else if (dtype == DType::FLOAT64)
-                                    col.push_back(val.cast<double>());
-                                else
-                                    col.push_back(py::str(val).cast<std::string>());
+                            if (py::isinstance<py::int_>(val)) {
+                                dtype = DType::INT64;
+                                break;
                             }
+                            if (py::isinstance<py::float_>(val)) {
+                                dtype = DType::FLOAT64;
+                                break;
+                            }
+                            break;
+                        }
+                    }
 
-                            frame.add_column(col);
+                    Column col(name, dtype);
+
+                    // Pre-allocate to the known row count to avoid repeated
+                    // vector growth reallocations during the push_back loop below.
+                    if (row_count.has_value()) {
+                        col.reserve(*row_count);
+                    }
+
+                    for (auto val : values) {
+                        if (val.is_none()) {
+                            col.push_null();
+                            continue;
                         }
 
-                        return frame;
-                    },
-                    py::arg("cols_dict"),
-                    py::arg("dtype_hints") = py::dict());
+                        if (dtype == DType::BOOL)
+                            col.push_back(val.cast<bool>());
+                        else if (dtype == DType::INT64)
+                            col.push_back(val.cast<int64_t>());
+                        else if (dtype == DType::FLOAT64)
+                            col.push_back(val.cast<double>());
+                        else
+                            col.push_back(py::str(val).cast<std::string>());
+                    }
+
+                    frame.add_column(col);
+                }
+
+                return frame;
+            },
+            py::arg("cols_dict"), py::arg("dtype_hints") = py::dict(),
+            py::arg("row_count") = py::none());
 
     // --- CsvReader ---
     py::class_<BadRow>(m, "BadRow")
@@ -233,14 +264,14 @@ PYBIND11_MODULE(_arnio_cpp, m) {
         .def_readwrite("dtype", &CsvConfig::dtype)
         .def_readwrite("usecols", &CsvConfig::usecols)
         .def_readwrite("nrows", &CsvConfig::nrows)
+        .def_readwrite("skip_rows", &CsvConfig::skip_rows)
         .def_readwrite("encoding", &CsvConfig::encoding)
         .def_readwrite("trim_headers", &CsvConfig::trim_headers)
+        .def_readwrite("decimal_separator", &CsvConfig::decimal_separator)
         .def_readwrite("thousands_separator", &CsvConfig::thousands_separator)
         .def_readwrite("sample_size", &CsvConfig::sample_size)
         .def_readwrite("mode", &CsvConfig::mode)
         .def_readwrite("encoding_errors", &CsvConfig::encoding_errors)
-        .def_readwrite("progress_hook", &CsvConfig::progress_hook)
-        .def_readwrite("progress_interval_rows", &CsvConfig::progress_interval_rows)
         .def_readwrite("null_values", &CsvConfig::null_values);
 
     py::class_<CsvReader>(m, "CsvReader")
@@ -306,18 +337,13 @@ PYBIND11_MODULE(_arnio_cpp, m) {
         .def_readwrite("delimiter", &CsvWriteConfig::delimiter)
         .def_readwrite("write_header", &CsvWriteConfig::write_header)
         .def_readwrite("line_terminator", &CsvWriteConfig::line_terminator)
-        .def_readwrite("escape_formulas", &CsvWriteConfig::escape_formulas)
-        .def_readwrite("append", &CsvWriteConfig::append);
+        .def_readwrite("escape_formulas", &CsvWriteConfig::escape_formulas);
 
     py::class_<CsvWriter>(m, "CsvWriter")
         .def(py::init<const CsvWriteConfig&>(), py::arg("config") = CsvWriteConfig{})
         .def("write", &CsvWriter::write);
 
     // --- Cleaning functions ---
-    // Expose the function to Python
-    m.def("create_rolling_windows", &create_rolling_windows,
-          "Generate rolling windows from a 1D numeric array.");
-
     m.def(
         "drop_nulls",
         [](const Frame& frame, const std::optional<std::vector<std::string>>& subset) {
@@ -346,15 +372,22 @@ PYBIND11_MODULE(_arnio_cpp, m) {
         },
         py::arg("frame"), py::arg("value"), py::arg("subset") = std::nullopt);
 
-    m.def("drop_duplicates", &drop_duplicates, py::arg("frame"), py::arg("subset") = std::nullopt,
-          py::arg("keep") = "first");
+    m.def(
+        "drop_duplicates",
+        [](const Frame& frame, const std::optional<std::vector<std::string>>& subset,
+           const std::string& keep) {
+            py::gil_scoped_release release;
+            return drop_duplicates(frame, subset, keep);
+        },
+        py::arg("frame"), py::arg("subset") = std::nullopt, py::arg("keep") = "first");
 
-    m.def("strip_whitespace", &strip_whitespace, py::arg("frame"),
-          py::arg("subset") = std::nullopt);
-
-    m.def("remove_control_characters", &remove_control_characters,
-          py::arg("frame"),
-          py::arg("subset") = std::nullopt);
+    m.def(
+        "strip_whitespace",
+        [](const Frame& frame, const std::optional<std::vector<std::string>>& subset) {
+            py::gil_scoped_release release;
+            return strip_whitespace(frame, subset);
+        },
+        py::arg("frame"), py::arg("subset") = std::nullopt);
 
     m.def(
         "normalize_case",
@@ -367,12 +400,40 @@ PYBIND11_MODULE(_arnio_cpp, m) {
 
     m.def("rename_columns", &rename_columns, py::arg("frame"), py::arg("mapping"));
 
-    m.def("cast_types", &cast_types, py::arg("frame"), py::arg("mapping"));
-
-    m.def("make_column_names_unique", &make_column_names_unique, py::arg("frame"));
-}
-    m.def("cast_types", &cast_types, py::arg("frame"), py::arg("mapping"),
-          py::arg("coerce_invalid") = false);
+    m.def(
+        "cast_types",
+        [](const Frame& frame, const std::unordered_map<std::string, std::string>& mapping,
+           const std::string& errors) {
+            CastErrors mode;
+            if (errors == "raise") {
+                mode = CastErrors::kRaise;
+            } else if (errors == "coerce") {
+                mode = CastErrors::kCoerce;
+            } else if (errors == "report") {
+                mode = CastErrors::kReport;
+            } else {
+                throw std::invalid_argument(
+                    "errors must be 'raise', 'coerce', or 'report', got: '" + errors + "'");
+            }
+            CastResult result;
+            {
+                py::gil_scoped_release release;
+                result = cast_types(frame, mapping, mode);
+            }
+            // Build a list of plain dicts so the Python layer can wrap them
+            // into whatever public type it chooses (CastReport, dataclass, etc.)
+            py::list failures_list;
+            for (const auto& f : result.failures) {
+                py::dict d;
+                d["column"] = f.column;
+                d["row"] = f.row;
+                d["value"] = f.value;
+                d["target_dtype"] = f.target_dtype;
+                failures_list.append(d);
+            }
+            return py::make_tuple(std::move(result.frame), failures_list);
+        },
+        py::arg("frame"), py::arg("mapping"), py::arg("errors") = std::string("raise"));
 
     m.def(
         "clip_numeric",

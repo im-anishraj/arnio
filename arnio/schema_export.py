@@ -165,10 +165,8 @@ def _normalize_serializable(value: Any) -> Any:
         return {k: _normalize_serializable(v) for k, v in sorted(value.items())}
     # Convert sets into deterministic sorted lists since YAML
     # emission only supports list-like serialized output.
-    # Use a type-and-repr key so mixed-type sets (e.g. {1, "1"})
-    # sort deterministically instead of raising TypeError.
     if isinstance(value, set):
-        return sorted((_normalize_serializable(v) for v in value), key=lambda v: (type(v).__name__, repr(v)))
+        return sorted(_normalize_serializable(v) for v in value)
 
     if isinstance(value, list):
         return [_normalize_serializable(v) for v in value]
@@ -176,8 +174,11 @@ def _normalize_serializable(value: Any) -> Any:
     return value
 
 
-def _serializable_sort_key(value: Any) -> tuple[str, str]:
-    return (type(value).__name__, repr(value))
+def _validate_schema_field_names(raw_fields: dict[Any, Any]) -> None:
+    """Require schema field names to be strings before sorting or emitting."""
+    for field_name in raw_fields:
+        if not isinstance(field_name, str):
+            raise TypeError("schema field names must be strings")
 
 
 def _emit_value(value: Any, depth: int) -> str:
@@ -538,7 +539,7 @@ def schema_from_yaml(source: str | os.PathLike) -> Schema:
 
     if payload is None:
         raise ValueError(
-            "Schema YAML is empty. Expected a mapping with at least a 'fields' key."
+            "Schema YAML is empty. " "Expected a mapping with at least a 'fields' key."
         )
 
     if not isinstance(payload, dict):

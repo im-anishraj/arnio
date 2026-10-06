@@ -11,7 +11,6 @@
 #include <stdexcept>
 #include <system_error>
 #include <unordered_set>
-#include <vector>
 
 namespace arnio {
 
@@ -340,7 +339,7 @@ Frame fill_nulls(const Frame& frame, const CellValue& value,
 }
 
 Frame drop_duplicates(const Frame& frame, const std::optional<std::vector<std::string>>& subset,
-                      std::string_view keep) {
+                      const std::string& keep) {
     if (subset.has_value() && subset->empty()) {
         throw std::invalid_argument("drop_duplicates subset cannot be empty");
     }
@@ -400,11 +399,13 @@ Frame strip_whitespace(const Frame& frame, const std::optional<std::vector<std::
     // Clone the frame once so we can move unmodified columns out of it
     // (move_clone is O(1) vs clone which is O(n)).  Modified columns are
     // rebuilt from scratch as before.
-    std::vector<Column> new_cols;
-    new_cols.reserve(frame.num_cols());
+    Frame src_frame = frame.clone();
 
-    for (size_t ci = 0; ci < frame.num_cols(); ++ci) {
-        const auto& src = frame.column(ci);
+    std::vector<Column> new_cols;
+    new_cols.reserve(src_frame.num_cols());
+
+    for (size_t ci = 0; ci < src_frame.num_cols(); ++ci) {
+        auto& src = src_frame.column_mut(ci);
         if (targets.count(ci) && src.dtype() == DType::STRING) {
             Column col(src.name(), src.dtype());
             for (size_t r = 0; r < src.size(); ++r) {
@@ -424,66 +425,15 @@ Frame strip_whitespace(const Frame& frame, const std::optional<std::vector<std::
             }
             new_cols.push_back(std::move(col));
         } else {
-            new_cols.push_back(src.clone());
+            // O(1) move instead of O(n) clone for unmodified columns.
+            new_cols.push_back(src.move_clone());
         }
     }
     return Frame(std::move(new_cols));
 }
 
-Frame remove_control_characters(
-    const Frame& frame,
-    const std::optional<std::vector<std::string>>& subset) {
-
-    auto target_indices_set = resolve_subset(frame, subset);
-    std::unordered_set<size_t> targets(
-        target_indices_set.begin(),
-        target_indices_set.end());
-
-    std::vector<Column> new_cols;
-    new_cols.reserve(frame.num_cols());
-
-    for (size_t ci = 0; ci < frame.num_cols(); ++ci) {
-        const auto& src = frame.column(ci);
-
-        if (targets.count(ci) && src.dtype() == DType::STRING) {
-
-            Column col(src.name(), src.dtype());
-
-            for (size_t r = 0; r < src.size(); ++r) {
-
-                if (src.is_null(r)) {
-                    col.push_null();
-
-                } else {
-
-                    std::string val =
-                        std::get<std::string>(src.at(r));
-
-                    std::string cleaned;
-
-                    for (char c : val) {
-                        if (!std::iscntrl(
-                                static_cast<unsigned char>(c))) {
-                            cleaned += c;
-                        }
-                    }
-
-                    col.push_back(cleaned);
-                }
-            }
-
-            new_cols.push_back(std::move(col));
-
-        } else {
-
-            new_cols.push_back(src.clone());
-        }
-    }
-
-    return Frame(std::move(new_cols));
-}
 Frame normalize_case(const Frame& frame, const std::optional<std::vector<std::string>>& subset,
-                     std::string_view case_type) {
+                     const std::string& case_type) {
     auto target_indices_set = resolve_subset(frame, subset);
     std::unordered_set<size_t> targets(target_indices_set.begin(), target_indices_set.end());
     auto ascii_lower = [](char c) -> char {
@@ -533,8 +483,8 @@ Frame normalize_case(const Frame& frame, const std::optional<std::vector<std::st
             std::string result = s;
             bool next_upper = true;
             auto is_word_boundary = [](char c) -> bool {
-                return std::isspace(static_cast<unsigned char>(c)) ||
-                       c == '-' || c == '_' || c == '.' || c == '/';
+                return std::isspace(static_cast<unsigned char>(c)) || c == '-' || c == '_' ||
+                       c == '.' || c == '/';
             };
             for (auto& c : result) {
                 if (is_word_boundary(c)) {
@@ -558,8 +508,11 @@ Frame normalize_case(const Frame& frame, const std::optional<std::vector<std::st
     std::vector<Column> new_cols;
     new_cols.reserve(frame.num_cols());
 
-    for (size_t ci = 0; ci < frame.num_cols(); ++ci) {
-        const auto& src = frame.column(ci);
+    // Clone the frame once so we can move unmodified columns out of it.
+    Frame src_frame = frame.clone();
+
+    for (size_t ci = 0; ci < src_frame.num_cols(); ++ci) {
+        auto& src = src_frame.column_mut(ci);
         if (targets.count(ci) && src.dtype() == DType::STRING) {
             Column col(src.name(), src.dtype());
             for (size_t r = 0; r < src.size(); ++r) {
@@ -571,7 +524,8 @@ Frame normalize_case(const Frame& frame, const std::optional<std::vector<std::st
             }
             new_cols.push_back(std::move(col));
         } else {
-            new_cols.push_back(src.clone());
+            // O(1) move instead of O(n) clone for unmodified columns.
+            new_cols.push_back(src.move_clone());
         }
     }
     return Frame(std::move(new_cols));
@@ -704,74 +658,6 @@ CastResult cast_types(const Frame& frame,
     return CastResult{Frame(std::move(new_cols)), std::move(failures)};
 }
 
-Frame make_column_names_unique(const Frame& frame) {
-    std::vector<Column> new_cols;
-    new_cols.reserve(frame.num_cols());
-
-    std::unordered_set<std::string> used_names;
-    std::unordered_map<std::string, int> suffix_counters;
-
-    for (size_t ci = 0; ci < frame.num_cols(); ++ci) {
-        Column col = frame.column(ci).clone();
-        std::string orig_name = col.name();
-        std::string unique_name = orig_name;
-
-        // Detect existing numeric suffix of the form "base_N" and update counters
-        std::string base_key = orig_name;
-        size_t pos = orig_name.find_last_of('_');
-        if (pos != std::string::npos && pos + 1 < orig_name.size()) {
-            bool all_digits = true;
-            for (size_t i = pos + 1; i < orig_name.size(); ++i) {
-                if (!std::isdigit(static_cast<unsigned char>(orig_name[i]))) {
-                    all_digits = false;
-                    break;
-                }
-            }
-            if (all_digits) {
-                std::string parsed_base = orig_name.substr(0, pos);
-                if (!parsed_base.empty()) {
-                    int parsed_suffix = 0;
-                    try {
-                        parsed_suffix = std::stoi(orig_name.substr(pos + 1));
-                    } catch (...) {
-                        parsed_suffix = 0;
-                    }
-                    base_key = parsed_base;
-                    auto it = suffix_counters.find(base_key);
-                    if (it == suffix_counters.end() || it->second < parsed_suffix) {
-                        suffix_counters[base_key] = parsed_suffix;
-                    }
-                }
-            }
-        }
-
-        if (used_names.count(unique_name)) {
-            int suffix = 0;
-            if (suffix_counters.count(base_key))
-                suffix = suffix_counters[base_key] + 1;
-            else
-                suffix = 1;
-            while (true) {
-                std::string candidate = base_key + "_" + std::to_string(suffix);
-                if (!used_names.count(candidate)) {
-                    unique_name = candidate;
-                    suffix_counters[base_key] = suffix;
-                    break;
-                }
-                suffix += 1;
-            }
-        }
-
-        col.set_name(unique_name);
-        used_names.insert(unique_name);
-        if (!suffix_counters.count(base_key)) {
-            suffix_counters[base_key] = 0;
-        }
-        new_cols.push_back(std::move(col));
-    }
-    return Frame(std::move(new_cols));
-}
-
 Frame clip_numeric(const Frame& frame, std::optional<double> lower, std::optional<double> upper,
                    const std::optional<std::vector<std::string>>& subset) {
     // Build the set of column indices to clip.
@@ -838,11 +724,11 @@ Frame clip_numeric(const Frame& frame, std::optional<double> lower, std::optiona
 
     return Frame(std::move(new_cols));
 }
-Frame safe_divide_columns(const Frame& frame, std::string_view numerator,
-                          std::string_view denominator, std::string_view output_column,
+Frame safe_divide_columns(const Frame& frame, const std::string& numerator,
+                          const std::string& denominator, const std::string& output_column,
                           double fill_value) {
-    const auto numerator_index = frame.column_index(std::string(numerator));
-    const auto denominator_index = frame.column_index(std::string(denominator));
+    const auto numerator_index = frame.column_index(numerator);
+    const auto denominator_index = frame.column_index(denominator);
 
     const auto& numerator_col = frame.column(numerator_index);
     const auto& denominator_col = frame.column(denominator_index);
@@ -853,7 +739,7 @@ Frame safe_divide_columns(const Frame& frame, std::string_view numerator,
             "safe_divide_columns native path requires INT64 or FLOAT64 columns");
     }
 
-    Column result_col(std::string(output_column), DType::FLOAT64);
+    Column result_col(output_column, DType::FLOAT64);
 
     for (size_t r = 0; r < frame.num_rows(); ++r) {
         if (numerator_col.is_null(r) || denominator_col.is_null(r)) {
@@ -907,14 +793,14 @@ Frame safe_divide_columns(const Frame& frame, std::string_view numerator,
 }
 
 Frame combine_columns(const Frame& frame, const std::vector<std::string>& subset,
-                      std::string_view separator, std::string_view output_column) {
+                      const std::string& separator, const std::string& output_column) {
     std::vector<size_t> col_indices;
     col_indices.reserve(subset.size());
     for (const auto& name : subset) {
         col_indices.push_back(frame.column_index(name));
     }
 
-    Column combined(std::string(output_column), DType::STRING);
+    Column combined(output_column, DType::STRING);
     size_t num_rows = frame.num_rows();
 
     for (size_t r = 0; r < num_rows; ++r) {
@@ -983,11 +869,12 @@ Frame collapse_rare_categories(const Frame& frame, const std::string& column, do
         }
     }
 
+    Frame src_frame = frame.clone();
     std::vector<Column> new_cols;
-    new_cols.reserve(frame.num_cols());
+    new_cols.reserve(src_frame.num_cols());
 
-    for (size_t ci = 0; ci < frame.num_cols(); ++ci) {
-        const auto& col = frame.column(ci);
+    for (size_t ci = 0; ci < src_frame.num_cols(); ++ci) {
+        auto& col = src_frame.column_mut(ci);
         if (ci == col_idx) {
             Column new_col(col.name(), DType::STRING);
             for (size_t r = 0; r < col.size(); ++r) {
@@ -1001,7 +888,7 @@ Frame collapse_rare_categories(const Frame& frame, const std::string& column, do
             }
             new_cols.push_back(std::move(new_col));
         } else {
-            new_cols.push_back(col.clone());
+            new_cols.push_back(col.move_clone());
         }
     }
     return Frame(std::move(new_cols));

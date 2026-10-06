@@ -1,0 +1,184 @@
+# Contributing to Arnio
+
+First off, thank you for considering contributing to Arnio. Whether you're fixing a bug, adding a new pipeline step, improving tests, or writing documentation, your help makes the project stronger.
+
+If you are contributing through GSSoC 2026, read [GSSOC_GUIDE.md](../GSSOC_GUIDE.md) before asking to be assigned.
+
+Need quick setup or onboarding help? Join the [Arnio Discord Community](https://discord.gg/xsEw7r78M). GitHub remains the source of truth for issue assignment and PR reviews.
+
+## Quick Start (Local Setup)
+
+To set up your local development environment:
+
+### macOS / Linux
+```bash
+git clone https://github.com/im-anishraj/arnio.git
+cd arnio
+make install
+make test
+make lint
+```
+
+### Windows Setup
+Install [Visual Studio Build Tools](https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2022) with the "Desktop development with C++" workload, then run:
+
+```bash
+git clone https://github.com/im-anishraj/arnio.git
+cd arnio
+pip install -e ".[dev]"
+pre-commit install
+```
+> `pip install -e ".[dev]"` builds Arnio's native C++ extension. If you see `nmake` or `CMAKE_CXX_COMPILER` errors on Windows, install the "Desktop development with C++" workload in Visual Studio Build Tools or use WSL, then retry the install.
+Alternatively, use WSL for a faster setup experience.
+
+If the editable install or wheel build fails, see the Windows build troubleshooting section in the [README](../README.md#windows-build-troubleshooting).
+
+**Windows users:** Install `make` via [Chocolatey](https://chocolatey.org/): `choco install make`  
+Or run the commands manually — each `make` target is just one or two commands inside the `Makefile`.
+
+---
+
+## Security
+
+We take the security of Arnio and its dependencies seriously.
+
+### Dependency Auditing
+We use `pip-audit` to scan our dependencies for known vulnerabilities. This happens automatically in two ways:
+1. **Weekly Audit**: A full scan runs every Monday morning.
+2. **Pull Request Review**: Every PR that modifies `pyproject.toml` is scanned for new vulnerabilities.
+
+### Local Auditing
+You can run the audit locally to check for issues before submitting a PR:
+```bash
+pip install pip-audit
+pip-audit
+```
+
+### What to do if an audit fails
+If the CI audit fails:
+1. Check the `audit-results.json` artifact in the GitHub Action run.
+2. Verify if the vulnerability affects our usage of the package.
+3. Update the dependency to a secure version in `pyproject.toml` if a fix is available.
+4. If no fix is available or it's a false positive, discuss it in the PR or an issue.
+
+---
+
+## Contributor Glossary
+
+- **ArFrame**: Arnio's internal table object. It stores data in a C++-backed, column-oriented format before you convert it to a pandas DataFrame.
+- **pipeline step**: One cleaning action inside `ar.pipeline(...)`, such as `strip_whitespace` or `drop_duplicates`. Steps run in order to transform a frame.
+- **schema**: A set of rules that describes what valid data should look like, such as required columns, expected types, allowed values, or limits.
+- **quality report**: A summary of data health for a frame. It highlights things like nulls, duplicates, whitespace problems, semantic hints, and suggested cleanup steps.
+- **zero-copy**: A fast conversion style where Arnio can expose existing C++ memory to pandas without duplicating the data first, especially for numeric and boolean columns.
+- **C++ core**: The compiled engine underneath the Python API that performs the heavy CSV reading and cleaning work.
+- **pandas bridge**: The conversion path between Arnio data structures and pandas DataFrames, used when exporting results or running pure-Python custom steps.
+- **validation result**: The object returned after checking a frame against a schema. It tells you whether validation passed and lists any issues that were found.
+
+---
+
+## Adding a Pure Python Pipeline Step (No C++ Required)
+
+Most new features do not require touching C++! You can write a pure Python step and register it with Arnio. This is how 90% of GSSoC contributors will contribute.
+
+1. Write a function that accepts and returns a `pd.DataFrame`.
+2. Register it before calling `pipeline()`.
+3. Write tests in `tests/test_cleaning.py`.
+4. Open a PR.
+
+### Example
+```python
+import arnio as ar
+
+def remove_special_chars(df, subset=None):
+    cols = subset or df.select_dtypes("object").columns
+    for col in cols:
+        df[col] = df[col].str.replace(r"[^a-zA-Z0-9\s]", "", regex=True)
+    return df
+
+ar.register_step("remove_special_chars", remove_special_chars)
+```
+
+### Calling a step with custom parameters
+
+Every step must use tuple syntax — always wrap the step name in a tuple, even when no parameters are needed.
+```python
+import arnio as ar
+
+def remove_special_chars(df, columns=None):
+    cols = columns or df.select_dtypes("object").columns
+    for col in cols:
+        df[col] = df[col].str.replace(r"[^a-zA-Z0-9\s]", "", regex=True)
+    return df
+
+ar.register_step("remove_special_chars", remove_special_chars)
+
+frame = ar.read_csv("data.csv")
+
+# Without parameters — wrap step name in a single-element tuple
+result = ar.pipeline(frame, [
+    ("remove_special_chars",)
+])
+
+# With custom parameters — cleans only specified columns
+result = ar.pipeline(frame, [
+    ("remove_special_chars", {"columns": ["name", "city"]})
+])
+```
+
+### Contribution Testing Standard
+When adding new pipeline steps (like the Python registry example above), you must write tests that mirror the round-trip verification pattern.
+
+Example in `tests/test_cleaning.py`:
+```python
+def test_remove_special_chars(sample_csv):
+    ar.register_step("remove_special_chars", remove_special_chars)
+    frame = ar.read_csv(sample_csv)
+    
+    result = ar.pipeline(frame, [
+        ("remove_special_chars",),
+    ])
+    df = ar.to_pandas(result)
+    
+    assert "name" in df.columns
+    # Add your specific assertions here
+```
+
+---
+
+## Pull Request Process
+
+1. Fork the repo and create your branch from `main`.
+2. Claim one issue by commenting with your approach. Wait for maintainer confirmation before starting GSSoC-scored work.
+3. Keep your PR focused. One issue should normally mean one pull request.
+4. If you've added code that should be tested, add tests.
+5. If you've changed public behavior, update documentation or examples.
+6. Ensure the test suite passes (`make test`).
+7. Ensure your code passes linting (`make lint`). This checks docs encoding, formatting (`black`, `ruff`), types (`mypy`), and C++ styling (`clang-format`). This is a required pre-PR step.
+8. Open the pull request and link the issue with `Fixes #issue-number` when complete.
+9. Ensure your PR title follows **Conventional Commits**.
+
+## C++ extension stubs
+
+If you change the C++ pybind11 API, update the stub file at
+[arnio/_arnio_cpp.pyi](../arnio/_arnio_cpp.pyi) and keep the Python call sites
+aligned. See [STUBS_UPDATE.md](../STUBS_UPDATE.md) for the short checklist.
+
+### Review expectations
+
+- Do not open duplicate PRs for the same issue.
+- Do not mix unrelated formatting, refactors, and features in one PR.
+- Do not edit generated files, build output, cache folders, or local logs.
+- Be patient during review. Maintainers may ask for tests, edge cases, or a narrower scope.
+- If you stop working on an assigned issue, please comment so it can be reassigned.
+- If you need more time, comment within 3 days of assignment.
+
+### Commit Message Convention
+We use an automated release system that relies on [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/). Your PR title must use one of the following prefixes:
+- `feat:` for new features (e.g., `feat: add robust boolean parsing`)
+- `fix:` for bug fixes (e.g., `fix: memory leak in string allocation`)
+- `docs:` for documentation changes
+- `chore:` for maintenance (e.g., CI/CD changes)
+
+This allows our CI to automatically generate changelogs and bump version numbers.
+
+We use `black`, `ruff`, and `clang-format` to format our code. `pre-commit` will run these automatically before each commit if installed.

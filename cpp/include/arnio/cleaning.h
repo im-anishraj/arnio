@@ -2,7 +2,6 @@
 
 #include <optional>
 #include <string>
-#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -47,34 +46,29 @@ Frame fill_nulls(const Frame& frame, const CellValue& value,
 // Drop duplicate rows
 Frame drop_duplicates(const Frame& frame,
                       const std::optional<std::vector<std::string>>& subset = std::nullopt,
-                      std::string_view keep = "first");
+                      const std::string& keep = "first");
 
 // Strip leading/trailing whitespace from string columns
 Frame strip_whitespace(const Frame& frame,
                        const std::optional<std::vector<std::string>>& subset = std::nullopt);
 
-// Remove control characters from string columns                       
-Frame remove_control_characters(
-    const Frame& frame,
-    const std::optional<std::vector<std::string>>& subset = std::nullopt);
-
 // Normalize case of string columns
 Frame normalize_case(const Frame& frame,
                      const std::optional<std::vector<std::string>>& subset = std::nullopt,
-                     std::string_view case_type = "lower");
+                     const std::string& case_type = "lower");
 
 // Rename columns
 Frame rename_columns(const Frame& frame,
                      const std::unordered_map<std::string, std::string>& mapping);
 
-// Cast column types
-Frame cast_types(const Frame& frame, const std::unordered_map<std::string, std::string>& mapping);
-
-// Make column names unique by appending suffixes
-Frame make_column_names_unique(const Frame& frame);
-
-Frame cast_types(const Frame& frame, const std::unordered_map<std::string, std::string>& mapping,
-                 bool coerce_invalid = false);
+// Cast column types.
+// errors controls what happens when a value cannot be parsed:
+//   kRaise  – throw std::invalid_argument (column, row, value, dtype) [default]
+//   kCoerce – push null, continue (legacy "coerce_invalid" behaviour)
+//   kReport – push null AND append a CastFailure entry to CastResult::failures
+CastResult cast_types(const Frame& frame,
+                      const std::unordered_map<std::string, std::string>& mapping,
+                      CastErrors errors = CastErrors::kRaise);
 
 // Clip numeric columns to lower and/or upper bounds.
 // Only INT64 and FLOAT64 columns are affected; all other columns are cloned
@@ -84,13 +78,13 @@ Frame clip_numeric(const Frame& frame, std::optional<double> lower, std::optiona
 
 // Combine multiple columns into a single string column
 Frame combine_columns(const Frame& frame, const std::vector<std::string>& subset,
-                      std::string_view separator, std::string_view output_column);
+                      const std::string& separator, const std::string& output_column);
 
 // Safely divide one numeric column by another.
 // Denominator nulls/zero values produce fill_value.
 // Output is stored as FLOAT64.
-Frame safe_divide_columns(const Frame& frame, std::string_view numerator,
-                          std::string_view denominator, std::string_view output_column,
+Frame safe_divide_columns(const Frame& frame, const std::string& numerator,
+                          const std::string& denominator, const std::string& output_column,
                           double fill_value);
 
 // Collapse rare string categories into a single unified label based on frequency.

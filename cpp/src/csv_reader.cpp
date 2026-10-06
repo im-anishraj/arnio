@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <cctype>
-#include <iostream>
 #include <cerrno>
 #include <charconv>
 #include <cmath>
@@ -663,7 +662,26 @@ void CsvParser::parse_line(const std::string& line, std::vector<std::string>& fi
     }
 }
 
+bool CsvParser::is_null_sentinel(const std::string& value) const {
+    if (config_.null_values.has_value()) {
+        const auto& sentinels = config_.null_values.value();
+        for (const auto& sentinel : sentinels) {
+            if (value.size() != sentinel.size()) continue;
+            bool match = true;
+            for (size_t i = 0; i < value.size(); ++i) {
+                if (std::tolower(static_cast<unsigned char>(value[i])) !=
+                    std::tolower(static_cast<unsigned char>(sentinel[i]))) {
+                    match = false;
+                    break;
+                }
+            }
+            if (match) return true;
+        }
+        return false;
+    }
 
+    return value.empty();
+}
 
 DType CsvParser::infer_type(const std::string& value) const {
     const std::string sanitized = handle_utf8_errors(value, config_.encoding_errors);
@@ -1040,21 +1058,6 @@ CsvParseResult CsvReader::read(const std::string& path, const std::string& on_ba
                 }
             }
             ++row_count2;
-
-            // Intermediate Progress Signal
-            if (config.progress_hook != nullptr && row_count2 > 0 &&
-                row_count2 % config.progress_interval_rows == 0) {
-                std::streampos pos = file2.tellg();
-                size_t bytes_read = (pos == std::streampos(-1)) ? 0 : static_cast<size_t>(pos);
-                config.progress_hook(row_count2, bytes_read, std::nullopt, false);
-            }
-        }
-
-        // Final Progress Signal
-        if (config.progress_hook != nullptr) {
-            std::streampos pos = file2.tellg();
-            size_t bytes_read = (pos == std::streampos(-1)) ? 0 : static_cast<size_t>(pos);
-            config.progress_hook(row_count2, bytes_read, std::nullopt, true);
         }
     }
 
@@ -1077,20 +1080,29 @@ CsvReader::scan_schema(const std::string& path, const std::string& on_bad_lines)
 
     std::vector<std::string> first_row;
 
-// Advance the reader past the skipped rows
-    if (config.skip_rows.has_value()) {
-        size_t to_skip = config.skip_rows.value();
-        size_t skipped = 0;
-        while (skipped < to_skip && record_reader.read(line)) {
-            ++skipped;
-        }
-    }
-
     if (record_reader.read(line)) {
         strip_utf8_bom(line);
-        header = parser_.parse_line(line);
-        for (auto& h : header) {
-            if (config.trim_headers) trim_in_place(h);
+
+        if (config.has_header) {
+            header = parser_.parse_line(line);
+
+            for (auto& h : header) {
+                h = handle_utf8_errors(h, config.encoding_errors);
+            }
+
+            for (auto& h : header) {
+                if (config.trim_headers) trim_in_place(h);
+            }
+
+            validate_header(header);
+        } else {
+            first_row = parser_.parse_line(line);
+
+            header.reserve(first_row.size());
+
+            for (size_t i = 0; i < first_row.size(); ++i) {
+                header.push_back("col_" + std::to_string(i));
+            }
         }
     }
 
@@ -1180,25 +1192,6 @@ void CsvChunkReader::resolve_col_indices() {
     } else {
         for (size_t i = 0; i < num_cols; ++i) {
             col_indices_.push_back(i);
-        }
-    }
-}
-
-void CsvChunkReader::apply_explicit_dtypes() {
-    const CsvConfig& config = parser_.config();
-    if (config.dtype.has_value()) {
-        for (const auto& [column_name, dtype_name] : config.dtype.value()) {
-            auto header_it = std::find(header_.begin(), header_.end(), column_name);
-            if (header_it == header_.end()) {
-                throw std::runtime_error("Column not found in dtype mapping: " + column_name);
-            }
-            size_t column_index = static_cast<size_t>(std::distance(header_.begin(), header_it));
-            bool selected = std::find(col_indices_.begin(), col_indices_.end(), column_index) !=
-                            col_indices_.end();
-            if (!selected) {
-                throw std::runtime_error("dtype specified for non-selected column: " + column_name);
-            }
-            col_types_[column_index] = string_to_dtype(dtype_name);
         }
     }
 }
@@ -1337,7 +1330,8 @@ void CsvChunkReader::open(const std::string& path) {
         expected_cols_ = header_.size();
         resolve_col_indices();
         col_types_.assign(header_.size(), DType::NULL_TYPE);
-        apply_explicit_dtypes();
+        auto dtype_result = apply_explicit_dtypes(config, header_, col_indices_, col_types_);
+        explicit_dtype_columns_ = std::move(dtype_result.explicit_columns);
     }
 
     const size_t skip_target = config.skip_rows.value_or(0);
@@ -1384,18 +1378,8 @@ std::optional<CsvParseResult> CsvChunkReader::next_chunk(size_t chunksize,
             break;
         }
         raw_data.push_back(std::move(fields));
-
-        size_t current_row = rows_read_total_ + raw_data.size();
-
-        if (config.progress_hook != nullptr && current_row > 0 &&
-            current_row % config.progress_interval_rows == 0) {
-            std::streampos pos = file_.tellg();
-
-            size_t bytes_read = (pos == std::streampos(-1)) ? 0 : static_cast<size_t>(pos);
-
-            config.progress_hook(current_row, bytes_read, std::nullopt, false);
-        }
     }
+
     if (raw_data.empty()) {
         if (bad_rows.empty()) {
             return std::nullopt;
@@ -1413,14 +1397,15 @@ std::optional<CsvParseResult> CsvChunkReader::next_chunk(size_t chunksize,
         expected_cols_ = header_.size();
         resolve_col_indices();
         col_types_.assign(header_.size(), DType::NULL_TYPE);
-        apply_explicit_dtypes();
+        auto dtype_result = apply_explicit_dtypes(config, header_, col_indices_, col_types_);
+        explicit_dtype_columns_ = std::move(dtype_result.explicit_columns);
     }
 
     if (!schema_locked_) {
         for (const auto& row : raw_data) {
             for (size_t ci : col_indices_) {
                 if (ci < row.size()) {
-                    if (config.dtype.has_value() && config.dtype.value().count(header_[ci]) > 0) {
+                    if (ci < explicit_dtype_columns_.size() && explicit_dtype_columns_[ci]) {
                         continue;
                     }
                     DType inferred = parser_.infer_type(row[ci]);
@@ -1446,6 +1431,7 @@ std::optional<CsvParseResult> CsvChunkReader::next_chunk(size_t chunksize,
             schema_locked_ = true;
         }
     }
+
     rows_read_total_ += raw_data.size() + bad_rows.size();
     return CsvParseResult{build_frame(raw_data, schema_locked_), std::move(bad_rows)};
 }

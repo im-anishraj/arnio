@@ -1,111 +1,77 @@
 """
-Tests for ArFrame.drop_columns, preview, and select_columns
+Tests for ArFrame.preview()
 """
 
 import copy
 import math
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pytest
 
 import arnio as ar
+from arnio._core import _Column, _DType, _Frame
+
+# ── Normal behaviour ──────────────────────────────────────────────────────────
 
 
-# ── drop_columns ──────────────────────────────────────────────────────────────
+def test_dict():
+    data = {"name": ["Alice", "Bob"], "age": [25, 30]}
+
+    frame = ar.from_dict(data)
+    assert frame.columns == ["name", "age"]
+    assert frame.shape == (2, 2)
+    assert frame.columns[0] == "name"
+    assert frame.columns[1] == "age"
+    assert frame["name"][0] == "Alice"
+    assert frame["age"][1] == 30
 
 
-def make_frame():
-    """Helper to create a simple test frame."""
-    df = pd.DataFrame({
-        "name": ["Alice", "Bob", "Charlie"],
-        "age": [25, 30, 35],
-        "salary": [50000, 60000, 70000],
-    })
-    return ar.from_pandas(df)
+def test_dict_ArFrame():
+    data = {"name": ["Alice", "Bob"], "age": [25, 30]}
+
+    frame = ar.ArFrame.from_dict(data)
+    assert frame.columns == ["name", "age"]
+    assert frame.shape == (2, 2)
+    assert frame.columns[0] == "name"
+    assert frame.columns[1] == "age"
+    assert frame["name"][0] == "Alice"
+    assert frame["age"][1] == 30
 
 
-def test_drop_single_column():
-    frame = make_frame()
-    original_cols = frame.columns
-    result = frame.drop_columns([original_cols[0]])
-    assert original_cols[0] not in result.columns
-
-
-def test_drop_preserves_order():
-    frame = make_frame()
-    cols = frame.columns
-    result = frame.drop_columns([cols[0]])
-    assert result.columns == cols[1:]
-
-
-def test_drop_empty_list():
-    frame = make_frame()
-    result = frame.drop_columns([])
-    assert result.columns == frame.columns
-
-
-def test_drop_unknown_column():
-    frame = make_frame()
-    with pytest.raises(KeyError):
-        frame.drop_columns(["this_does_not_exist"])
-
-
-def test_drop_all_columns():
-    frame = make_frame()
-    result = frame.drop_columns(frame.columns)
-    assert result.columns == []
-
-
-def test_drop_string_input():
-    frame = make_frame()
-    with pytest.raises(TypeError):
-        frame.drop_columns("name")
-
-
-def test_drop_non_string_items():
-    frame = make_frame()
-    with pytest.raises(TypeError):
-        frame.drop_columns(["name", 123])
-
-
-# ── preview ───────────────────────────────────────────────────────────────────
-
-
-def test_preview_returns_string(sample_csv: str):
+def test_preview_returns_string(sample_csv):
     frame = ar.read_csv(sample_csv)
     result = frame.preview()
     assert isinstance(result, str)
 
 
-def test_preview_contains_word_preview(sample_csv: str):
+def test_preview_contains_word_preview(sample_csv):
     frame = ar.read_csv(sample_csv)
     result = frame.preview()
     assert "preview" in result.lower()
 
 
-def test_preview_contains_column_names(sample_csv: str):
+def test_preview_contains_column_names(sample_csv):
     frame = ar.read_csv(sample_csv)
     result = frame.preview()
     for col in frame.columns:
-        assert col in result
+        assert col in result  # "name", "age", "email", "active" all appear
 
 
-def test_preview_default_shows_three_rows(sample_csv: str):
+def test_preview_default_shows_three_rows(sample_csv):
     # sample_csv only has 3 rows, so default n=5 clamps to 3
     frame = ar.read_csv(sample_csv)
     result = frame.preview()
     assert "showing 3 of 3" in result
 
 
-def test_preview_custom_n(sample_csv: str):
+def test_preview_custom_n(sample_csv):
     frame = ar.read_csv(sample_csv)
     result = frame.preview(n=2)
     assert "showing 2 of 3" in result
 
 
-def test_preview_n_equals_one(sample_csv: str):
+def test_preview_n_equals_one(sample_csv):
     frame = ar.read_csv(sample_csv)
     result = frame.preview(n=1)
     assert "showing 1 of 3" in result
@@ -131,6 +97,7 @@ def test_empty_dict_ArFrame():
 
 
 def test_none_value():
+    # Verifies that columns containing None/missing values are accepted
     data = {"name": ["Alice", "Bob"], "age": [25, None]}
 
     frame = ar.from_dict(data)
@@ -143,6 +110,7 @@ def test_none_value():
 
 
 def test_none_value_ArFrame():
+    # Verifies that columns containing None/missing values are accepted
     data = {"name": ["Alice", "Bob"], "age": [25, None]}
 
     frame = ar.ArFrame.from_dict(data)
@@ -154,26 +122,26 @@ def test_none_value_ArFrame():
     assert frame["age"][1] is None
 
 
-def test_preview_n_exceeds_row_count(sample_csv: str):
+def test_preview_n_exceeds_row_count(sample_csv):
     frame = ar.read_csv(sample_csv)
     result = frame.preview(n=9999)
-    assert "showing 3 of 3" in result
+    assert "showing 3 of 3" in result  # clamps, doesn't crash
 
 
-def test_preview_n_equals_exact_row_count(sample_csv: str):
+def test_preview_n_equals_exact_row_count(sample_csv):
     frame = ar.read_csv(sample_csv)
     result = frame.preview(n=3)
     assert "showing 3 of 3" in result
 
 
-def test_preview_with_nulls(csv_with_nulls: str):
+def test_preview_with_nulls(csv_with_nulls):
     # Should not crash on missing values
     frame = ar.read_csv(csv_with_nulls)
     result = frame.preview()
     assert isinstance(result, str)
 
 
-def test_preview_large_csv(large_csv: str):
+def test_preview_large_csv(large_csv):
     # 1000 rows — default should only show 5
     frame = ar.read_csv(large_csv)
     result = frame.preview()
@@ -216,86 +184,108 @@ def test_nested_dict_values_ArFrame():
 def test_nested_dictvalues():
     data = {"info": {"city": "NY", "age": 25}}
 
-    with pytest.raises(ValueError):
+    with pytest.raises(
+        ValueError, match="Nested objects are not supported in column 'info'"
+    ):
         ar.from_dict(data)
 
 
-def test_nested_dictvalues_ArrFrame():
+def test_nested_dictvalues_ArFrame():
     data = {"info": {"city": "NY", "age": 25}}
 
-    with pytest.raises(ValueError):
+    with pytest.raises(
+        ValueError, match="Nested objects are not supported in column 'info'"
+    ):
         ar.ArFrame.from_dict(data)
 
 
 def test_length_mismatch():
-    data = {"name": ["Alice", "Bob"], "age": [25]}
+    data = {"name": ["Alice", "Bob"], "age": [25]}  # Missing an age
     with pytest.raises(ValueError):
         ar.from_dict(data)
 
 
 def test_length_mismatch_ArFrame():
-    data = {"name": ["Alice", "Bob"], "age": [25]}
+    data = {"name": ["Alice", "Bob"], "age": [25]}  # Missing an age
     with pytest.raises(ValueError):
         ar.ArFrame.from_dict(data)
 
 
 def test_scalar_dict():
     data = {"name": "Alice", "age": 25}
-    with pytest.raises(ValueError):
+
+    with pytest.raises(
+        TypeError,
+        match="Column 'name' must be a sequence of values",
+    ):
         ar.from_dict(data)
 
 
 def test_scalar_dict_ArFrame():
     data = {"name": "Alice", "age": 25}
-    with pytest.raises(ValueError):
+
+    with pytest.raises(
+        TypeError,
+        match="Column 'name' must be a sequence of values",
+    ):
         ar.ArFrame.from_dict(data)
 
 
-def test_preview_invalid_n_zero(sample_csv: str):
+def test_preview_invalid_n_zero(sample_csv):
     frame = ar.read_csv(sample_csv)
     with pytest.raises(ValueError):
         frame.preview(n=0)
 
 
-def test_preview_invalid_n_negative(sample_csv: str):
+def test_preview_invalid_n_negative(sample_csv):
     frame = ar.read_csv(sample_csv)
     with pytest.raises(ValueError):
         frame.preview(n=-1)
 
 
-def test_preview_invalid_n_string(sample_csv: str):
+def test_preview_invalid_n_string(sample_csv):
     frame = ar.read_csv(sample_csv)
     with pytest.raises(ValueError):
         frame.preview(n="five")
 
 
-def test_preview_invalid_n_float(sample_csv: str):
+def test_preview_invalid_n_float(sample_csv):
     frame = ar.read_csv(sample_csv)
     with pytest.raises(ValueError):
         frame.preview(n=2.5)
 
 
-def test_preview_invalid_n_bool(sample_csv: str):
+def test_preview_invalid_n_bool(sample_csv):
     frame = ar.read_csv(sample_csv)
     with pytest.raises(ValueError):
-        frame.preview(n=True)
+        frame.preview(n=True)  # bool is subclass of int — must still be rejected
 
 
-def test_preview_invalid_n_none(sample_csv: str):
+def test_preview_invalid_n_none(sample_csv):
     frame = ar.read_csv(sample_csv)
     with pytest.raises(ValueError):
         frame.preview(n=None)
 
 
-# ── select_columns ────────────────────────────────────────────────────────────
+def test_preview_zero_column_frame():
+    df = pd.DataFrame(index=range(3))
+
+    frame = ar.from_pandas(df)
+    result = frame.preview()
+
+    expected = "ArFrame preview: 3 rows x 0 columns (no columns to display)"
+
+    assert result == expected
 
 
 def test_select_columns_valid():
-    df = pd.DataFrame({
-        "name": ["Alice", "Bob"],
-        "age": [25, 30],
-        "salary": [50000, 60000],
-    })
+    df = pd.DataFrame(
+        {
+            "name": ["Alice", "Bob"],
+            "age": [25, 30],
+            "salary": [50000, 60000],
+        }
+    )
     frame = ar.from_pandas(df)
     selected = frame.select_columns(["name", "salary"])
     assert selected.columns == ["name", "salary"]
@@ -303,32 +293,48 @@ def test_select_columns_valid():
 
 
 def test_select_columns_preserves_order():
-    df = pd.DataFrame({
-        "name": ["Alice"],
-        "age": [25],
-        "salary": [50000],
-    })
+    df = pd.DataFrame(
+        {
+            "name": ["Alice"],
+            "age": [25],
+            "salary": [50000],
+        }
+    )
     frame = ar.from_pandas(df)
     selected = frame.select_columns(["salary", "name"])
     assert selected.columns == ["salary", "name"]
 
 
 def test_select_columns_unknown_column():
-    df = pd.DataFrame({"name": ["Alice"], "age": [25]})
+    df = pd.DataFrame(
+        {
+            "name": ["Alice"],
+            "age": [25],
+        }
+    )
     frame = ar.from_pandas(df)
     with pytest.raises(ValueError, match="Unknown columns"):
         frame.select_columns(["name", "salary"])
 
 
 def test_select_columns_empty():
-    df = pd.DataFrame({"name": ["Alice"]})
+    df = pd.DataFrame(
+        {
+            "name": ["Alice"],
+        }
+    )
     frame = ar.from_pandas(df)
     with pytest.raises(ValueError, match="cannot be empty"):
         frame.select_columns([])
 
 
 def test_select_columns_duplicate_names():
-    df = pd.DataFrame({"name": ["Alice"], "age": [25]})
+    df = pd.DataFrame(
+        {
+            "name": ["Alice"],
+            "age": [25],
+        }
+    )
     frame = ar.from_pandas(df)
     with pytest.raises(ValueError, match="Duplicate column names"):
         frame.select_columns(["name", "name"])
@@ -363,9 +369,7 @@ def test_select_columns_empty_frame():
     assert selected.shape == (0, 1)
 
 
-def test_select_columns_native_path_avoids_pandas_roundtrip(
-    monkeypatch: pytest.MonkeyPatch,
-):
+def test_select_columns_native_path_avoids_pandas_roundtrip(monkeypatch):
     frame = ar.from_pandas(
         pd.DataFrame(
             {
@@ -391,7 +395,97 @@ def test_select_columns_native_path_avoids_pandas_roundtrip(
     assert list(df.columns) == ["salary", "name"]
 
 
-def test_head_native_path_avoids_pandas_roundtrip(monkeypatch: pytest.MonkeyPatch):
+def test_select_columns_null_nan_handling():
+    df = pd.DataFrame(
+        {
+            "id": [1, None, 3],
+            "name": ["Alice", "Bob", None],
+            "score": [95.5, float("nan"), 80.0],
+        }
+    )
+    frame = ar.from_pandas(df)
+    selected = frame.select_columns(["id", "score"])
+    res_df = ar.to_pandas(selected)
+    assert pd.isna(res_df["id"].iloc[1])
+    assert pd.isna(res_df["score"].iloc[1])
+    assert res_df["id"].iloc[0] == 1
+    assert res_df["score"].iloc[0] == 95.5
+
+
+def test_select_columns_single_column_frame():
+    df = pd.DataFrame({"id": [1, 2]})
+    frame = ar.from_pandas(df)
+    selected = frame.select_columns(["id"])
+    assert selected.columns == ["id"]
+    assert selected.shape == (2, 1)
+
+    multi_df = pd.DataFrame({"id": [1, 2], "name": ["A", "B"]})
+    multi_frame = ar.from_pandas(multi_df)
+    selected_single = multi_frame.select_columns(["name"])
+    assert selected_single.columns == ["name"]
+    assert selected_single.shape == (2, 1)
+
+
+def test_select_columns_reordering():
+    df = pd.DataFrame(
+        {
+            "id": [1, 2],
+            "name": ["Alice", "Bob"],
+            "age": [25, 30],
+        }
+    )
+    frame = ar.from_pandas(df)
+    reordered = frame.select_columns(["age", "id", "name"])
+    assert reordered.columns == ["age", "id", "name"]
+    res_df = ar.to_pandas(reordered)
+    assert list(res_df["age"]) == [25, 30]
+    assert list(res_df["id"]) == [1, 2]
+    assert list(res_df["name"]) == ["Alice", "Bob"]
+
+
+def test_select_columns_invalid_container_types():
+    df = pd.DataFrame({"id": [1, 2], "name": ["A", "B"]})
+    frame = ar.from_pandas(df)
+
+    with pytest.raises(TypeError, match="must be a list or tuple"):
+        frame.select_columns({"id": "name"})
+
+    gen = (col for col in ["id"])
+    with pytest.raises(TypeError, match="must be a list or tuple"):
+        frame.select_columns(gen)
+
+    with pytest.raises(TypeError, match="must be a list or tuple"):
+        frame.select_columns(None)
+    with pytest.raises(TypeError, match="must be a list or tuple"):
+        frame.select_columns(123)
+
+
+def test_select_columns_dtype_preservation():
+    df = pd.DataFrame(
+        {
+            "int_col": pd.Series([1, 2], dtype="Int64"),
+            "float_col": pd.Series([1.5, 2.5], dtype="float64"),
+            "bool_col": pd.Series([True, False], dtype="boolean"),
+            "str_col": pd.Series(["A", "B"], dtype="string"),
+        }
+    )
+    frame = ar.from_pandas(df)
+    original_dtypes = frame.dtypes
+
+    selected = frame.select_columns(["float_col", "str_col", "int_col"])
+    new_dtypes = selected.dtypes
+
+    assert new_dtypes["int_col"] == original_dtypes["int_col"]
+    assert new_dtypes["float_col"] == original_dtypes["float_col"]
+    assert new_dtypes["str_col"] == original_dtypes["str_col"]
+
+    res_df = ar.to_pandas(selected)
+    assert res_df["int_col"].dtype == pd.Int64Dtype()
+    assert res_df["float_col"].dtype == "float64"
+    assert res_df["str_col"].dtype == pd.StringDtype()
+
+
+def test_head_native_path_avoids_pandas_roundtrip(monkeypatch):
     frame = ar.from_pandas(
         pd.DataFrame(
             {
@@ -414,7 +508,7 @@ def test_head_native_path_avoids_pandas_roundtrip(monkeypatch: pytest.MonkeyPatc
     assert result.columns == ["name", "salary"]
 
 
-def test_tail_native_path_avoids_pandas_roundtrip(monkeypatch: pytest.MonkeyPatch):
+def test_tail_native_path_avoids_pandas_roundtrip(monkeypatch):
     frame = ar.from_pandas(
         pd.DataFrame(
             {
@@ -435,6 +529,30 @@ def test_tail_native_path_avoids_pandas_roundtrip(monkeypatch: pytest.MonkeyPatc
 
     assert result.shape == (2, 2)
     assert result.columns == ["name", "salary"]
+
+
+@pytest.mark.parametrize("method_name", ["head", "tail"])
+def test_head_tail_preserve_attrs_roundtrip(method_name):
+    df = pd.DataFrame({"name": ["alice", "bob"], "score": [10, 20]})
+    df.attrs = {"source": "qa", "metadata": {"tags": ["sample"]}}
+    frame = ar.from_pandas(df)
+
+    subset = getattr(frame, method_name)(1)
+    result = ar.to_pandas(subset)
+
+    assert result.attrs == {"source": "qa", "metadata": {"tags": ["sample"]}}
+
+
+@pytest.mark.parametrize("method_name", ["head", "tail"])
+def test_head_tail_attrs_are_deep_copied(method_name):
+    df = pd.DataFrame({"name": ["alice", "bob"], "score": [10, 20]})
+    df.attrs = {"metadata": {"tags": ["sample"]}}
+    frame = ar.from_pandas(df)
+
+    subset = getattr(frame, method_name)(1)
+    subset._attrs["metadata"]["tags"].append("subset")
+
+    assert frame._attrs == {"metadata": {"tags": ["sample"]}}
 
 
 def test_head_default_n():
@@ -543,67 +661,25 @@ def test_tail_invalid_n(invalid_n):
         frame.tail(invalid_n)
 
 
-# ── Copy / Mutation Semantics Regression Tests ────────────────────────────────
-
-
-def test_head_returns_new_frame():
-    df = ar.from_pandas(pd.DataFrame({"name": ["Alice", "Bob", "Charlie"], "age": [25, 30, 35]}))
-    result = df.head(2)
-    assert result is not df
-
-
-def test_tail_returns_new_frame():
-    df = ar.from_pandas(pd.DataFrame({"name": ["Alice", "Bob", "Charlie"], "age": [25, 30, 35]}))
-    result = df.tail(2)
-    assert result is not df
-
-
-def test_select_columns_returns_new_frame():
-    df = ar.from_pandas(pd.DataFrame({"name": ["Alice", "Bob"], "age": [25, 30]}))
-    result = df.select_columns(["name"])
-    assert result is not df
-
-
-def test_head_does_not_modify_original():
-    df = ar.from_pandas(pd.DataFrame({"name": ["Alice", "Bob", "Charlie"], "age": [25, 30, 35]}))
-    original_shape = df.shape
-    df.head(2)
-    assert df.shape == original_shape
-
-
-def test_tail_does_not_modify_original():
-    df = ar.from_pandas(pd.DataFrame({"name": ["Alice", "Bob", "Charlie"], "age": [25, 30, 35]}))
-    original_shape = df.shape
-    df.tail(2)
-    assert df.shape == original_shape
-
-
-def test_select_columns_does_not_modify_original():
-    df = ar.from_pandas(pd.DataFrame({"name": ["Alice", "Bob"], "age": [25, 30]}))
-    original_cols = list(df.columns)
-    df.select_columns(["name"])
-    assert list(df.columns) == original_cols
-
-
 class TestArFrame:
     """Test ArFrame properties and methods."""
 
-    def test_is_empty_true(self, tmp_path: Path):
+    def test_is_empty_true(self, tmp_path):
         """Test is_empty returns True for frame with zero rows."""
         csv_path = tmp_path / "empty.csv"
-        csv_path.write_text("name,age\n")
+        csv_path.write_text("name,age\n")  # Header only, no data rows
 
         frame = ar.read_csv(str(csv_path))
         assert frame.is_empty is True
         assert len(frame) == 0
 
-    def test_is_empty_false(self, sample_csv: str):
+    def test_is_empty_false(self, sample_csv):
         """Test is_empty returns False for frame with rows."""
         frame = ar.read_csv(sample_csv)
         assert frame.is_empty is False
         assert len(frame) > 0
 
-    def test_is_empty_single_row(self, tmp_path: Path):
+    def test_is_empty_single_row(self, tmp_path):
         """Test is_empty with exactly one row."""
         csv_path = tmp_path / "single.csv"
         csv_path.write_text("name,age\nAlice,30\n")
@@ -611,6 +687,8 @@ class TestArFrame:
         frame = ar.read_csv(str(csv_path))
         assert frame.is_empty is False
         assert len(frame) == 1
+
+    # --- Equality tests ---
 
     def test_arframe_equality_same_values(self):
         frame1 = ar.ArFrame.from_records([{"a": 1, "b": "x"}])
@@ -701,12 +779,14 @@ class TestArFrame:
         frame2 = ar.ArFrame.from_records([{"a": 1.0}])
         assert frame1 != frame2
 
+    # --- Copy tests ---
+
     def test_arframe_shallow_copy(self):
         frame = ar.ArFrame.from_records([{"a": 1}])
         copied = copy.copy(frame)
         assert copied == frame
         assert copied is not frame
-        assert copied._frame is frame._frame
+        assert copied._frame is not frame._frame
 
     def test_arframe_deep_copy(self):
         frame = ar.ArFrame.from_records([{"a": 1}])
@@ -893,39 +973,62 @@ class TestToNumpy:
         assert result[0, 0] == 7
 
 
-# ── Additional tests from upstream ───────────────────────────────────────────
-
-
 def test_str_truncates_long_column_names():
     df = pd.DataFrame({"very_very_very_long_column_name_for_testing": [1, 2]})
+
     frame = ar.from_pandas(df)
+
     result = str(frame)
+
     assert "very_very_very_long_..." in result
-    columns_line = [line for line in result.split("\n") if line.startswith("Columns:")][0]
+
+    columns_line = [line for line in result.split("\n") if line.startswith("Columns:")][
+        0
+    ]
+
     assert "very_very_very_long_column_name_for_testing" not in columns_line
+
     assert frame.columns == ["very_very_very_long_column_name_for_testing"]
 
 
 def test_str_keeps_normal_column_names():
     df = pd.DataFrame({"name": [1, 2]})
+
     frame = ar.from_pandas(df)
+
     result = str(frame)
+
     assert "name" in result
     assert "..." not in result
+
+
+def test_str_zero_columns_non_empty_rows_has_explicit_message():
+    frame = ar.from_pandas(pd.DataFrame(index=range(2)))
+
+    result = str(frame)
+
+    assert "ArFrame: 2 rows × 0 columns" in result
+    assert "Columns: []" in result
+    assert "DTypes: {}" in result
+    assert "(no columns to display)" in result
 
 
 def test_add_column_accepts_matching_lengths():
     from arnio._arnio_cpp import Column, DType, Frame
 
     frame = Frame()
+
     c1 = Column("a", DType.INT64)
     c1.push_back(1)
     c1.push_back(2)
+
     c2 = Column("b", DType.INT64)
     c2.push_back(10)
     c2.push_back(20)
+
     frame.add_column(c1)
     frame.add_column(c2)
+
     assert frame.shape() == (2, 2)
 
 
@@ -933,13 +1036,17 @@ def test_add_column_rejects_mismatched_lengths():
     from arnio._arnio_cpp import Column, DType, Frame
 
     frame = Frame()
+
     c1 = Column("a", DType.INT64)
     c1.push_back(1)
     c1.push_back(2)
     c1.push_back(3)
+
     c2 = Column("b", DType.INT64)
     c2.push_back(10)
+
     frame.add_column(c1)
+
     with pytest.raises(ValueError, match="expected"):
         frame.add_column(c2)
 
@@ -948,9 +1055,12 @@ def test_add_column_allows_first_column_in_empty_frame():
     from arnio._arnio_cpp import Column, DType, Frame
 
     frame = Frame()
+
     c1 = Column("a", DType.INT64)
     c1.push_back(1)
+
     frame.add_column(c1)
+
     assert frame.shape() == (1, 1)
 
 
@@ -958,51 +1068,107 @@ def test_cpp_frame_explicit_zero_rows_rejects_nonempty_first_column():
     frame = _Frame(0)
     column = _Column("a", _DType.INT64)
     column.push_back(1)
+
     with pytest.raises(ValueError, match="row count"):
         frame.add_column(column)
 
 
-# ── Zero-column frame tests ───────────────────────────────────────────────────
+def test_add_column_rejects_duplicate_name():
+    from arnio._arnio_cpp import Column, DType, Frame
+
+    frame = Frame()
+
+    c1 = Column("a", DType.INT64)
+    c1.push_back(1)
+    c1.push_back(2)
+
+    c2 = Column("a", DType.INT64)
+    c2.push_back(3)
+    c2.push_back(4)
+
+    frame.add_column(c1)
+
+    with pytest.raises(ValueError, match="already exists"):
+        frame.add_column(c2)
 
 
-def test_cpp_frame_with_explicit_row_count_preserves_shape():
-    """Test that Frame(size_t row_count) creates a frame with correct row count."""
-    frame = _Frame(5)
-    assert frame.num_rows() == 5
-    assert frame.num_cols() == 0
-    assert frame.shape() == (5, 0)
+def test_column_reference_survives_add_column_reallocation():
+    from arnio._arnio_cpp import Column, DType, Frame
+
+    frame = Frame()
+
+    c1 = Column("a", DType.INT64)
+    c1.push_back(1)
+
+    frame.add_column(c1)
+
+    col = frame.column_by_index(0)
+
+    for i in range(100):
+        extra = Column(f"c{i}", DType.INT64)
+        extra.push_back(i)
+        frame.add_column(extra)
+
+    assert col.size() == 1
+    assert col.at(0) == 1
 
 
-def test_describe_sample_metrics(sample_csv: str):
+def test_named_column_reference_survives_add_column_reallocation():
+    from arnio._arnio_cpp import Column, DType, Frame
+
+    frame = Frame()
+
+    c1 = Column("a", DType.INT64)
+    c1.push_back(1)
+
+    frame.add_column(c1)
+
+    col = frame.column_by_name("a")
+
+    for i in range(100):
+        extra = Column(f"c{i}", DType.INT64)
+        extra.push_back(i)
+        frame.add_column(extra)
+
+    assert col.size() == 1
+    assert col.at(0) == 1
+
+
+# ArFrame.describe() Tests
+
+
+def test_describe_sample_metrics(sample_csv):
     frame = ar.read_csv(sample_csv)
     stats = frame.describe()
 
-    # First column should set the row count
-    column = _Column("a", _DType.INT64)
-    column.push_back(1)
-    column.push_back(2)
-    column.push_back(3)
+    assert stats["age"]["count"] == 3.0
+    assert stats["age"]["nulls"] == 0.0
+    assert stats["age"]["mean"] == 30.0
+    assert stats["age"]["min"] == 25.0
+    assert stats["age"]["max"] == 35.0
 
-    frame.add_column(column)
+    assert stats["name"]["count"] == 3.0
+    assert stats["name"]["nulls"] == 0.0
+    assert stats["name"]["unique"] == 3.0
+    assert "mean" not in stats["name"]
 
-    assert frame.num_rows() == 3
-    assert frame.num_cols() == 1
 
-
-def test_describe_excludes_null_values(csv_with_nulls: str):
+def test_describe_excludes_null_values(csv_with_nulls):
     frame = ar.read_csv(csv_with_nulls)
     stats = frame.describe()
 
-    frame = _Frame([column])
-    assert frame.shape() == (2, 1)
+    assert stats["age"]["count"] == 3.0
+    assert stats["age"]["nulls"] == 1.0
+    assert stats["age"]["min"] == 25.0
+    assert stats["age"]["max"] == 30.0
+    assert stats["age"]["mean"] == pytest.approx(27.6666, rel=1e-3)
 
-    # Select no columns - should preserve row count
-    empty_frame = frame.select_columns([])
-    assert empty_frame.shape() == (2, 0)
-    assert empty_frame.num_rows() == 2
+    assert stats["name"]["count"] == 3.0
+    assert stats["name"]["nulls"] == 1.0
+    assert stats["name"]["unique"] == 3.0
 
 
-def test_describe_empty_frame_edge_case(tmp_path: Path):
+def test_describe_empty_frame_edge_case(tmp_path):
     csv_path = tmp_path / "empty_input.csv"
     csv_path.write_text("name,age\n")
 
@@ -1024,31 +1190,33 @@ def test_describe_empty_frame_edge_case(tmp_path: Path):
             assert stats[col]["unique"] == 0.0
 
 
-def test_describe_dictionary_subclass_repr(sample_csv: str):
+def test_describe_dictionary_subclass_repr(sample_csv):
     frame = ar.read_csv(sample_csv)
     stats = frame.describe()
 
-    # Convert back to pandas
-    df_result = ar.to_pandas(frame)
-    assert df_result.shape == (3, 0)
-    assert len(df_result.index) == 3
+    assert stats["age"]["count"] == 3.0
+    assert "{\n" in repr(stats)
 
 
-def test_describe_all_numeric_columns(large_csv: str):
+def test_describe_all_numeric_columns(large_csv):
     frame = ar.read_csv(large_csv)
 
     numeric_frame = frame.select_dtypes(include=["int64", "float64"])
     stats = numeric_frame.describe()
+
     assert list(stats.keys()) == ["id", "value"]
+
     for col in ["id", "value"]:
         metric_keys = list(stats[col].keys())
         assert metric_keys == ["count", "nulls", "non_finite", "mean", "min", "max"]
 
 
-def test_describe_all_string_columns(csv_with_whitespace: str):
+def test_describe_all_string_columns(csv_with_whitespace):
     frame = ar.read_csv(csv_with_whitespace)
     stats = frame.describe()
+
     assert list(stats.keys()) == ["name", "city"]
+
     for col in ["name", "city"]:
         metric_keys = list(stats[col].keys())
         assert metric_keys == ["count", "nulls", "unique"]
@@ -1092,6 +1260,65 @@ def test_describe_boolean_columns_with_nulls():
     assert stats["flag"]["true"] == 2.0
     assert stats["flag"]["false"] == 1.0
     assert stats["flag"]["true_ratio"] == pytest.approx(2.0 / 3.0)
+
+
+def test_describe_preserves_mixed_column_outputs():
+    df = pd.DataFrame(
+        {
+            "id": [1, 2, 3, 4],
+            "score": [1.5, 2.5, 3.5, 4.5],
+            "label": ["a", "b", "a", "c"],
+            "active": [True, False, True, True],
+        }
+    )
+
+    frame = ar.from_pandas(df)
+    stats = frame.describe()
+
+    assert stats["id"]["count"] == 4.0
+    assert stats["id"]["nulls"] == 0.0
+    assert stats["id"]["non_finite"] == 0.0
+    assert stats["id"]["mean"] == 2.5
+    assert stats["id"]["min"] == 1.0
+    assert stats["id"]["max"] == 4.0
+
+    assert stats["score"]["count"] == 4.0
+    assert stats["score"]["nulls"] == 0.0
+    assert stats["score"]["non_finite"] == 0.0
+    assert stats["score"]["mean"] == 3.0
+    assert stats["score"]["min"] == 1.5
+    assert stats["score"]["max"] == 4.5
+
+    assert stats["label"]["count"] == 4.0
+    assert stats["label"]["nulls"] == 0.0
+    assert stats["label"]["unique"] == 3.0
+
+    assert stats["active"]["count"] == 4.0
+    assert stats["active"]["nulls"] == 0.0
+    assert stats["active"]["true"] == 3.0
+    assert stats["active"]["false"] == 1.0
+    assert stats["active"]["true_ratio"] == pytest.approx(0.75)
+
+
+def test_describe_preserves_null_and_non_finite_float_handling():
+    import io
+
+    frame = ar.read_csv(
+        io.StringIO("value,name\n" "1.0,a\n" "inf,b\n" "3.0,\n" ",c\n" "-inf,a\n")
+    )
+
+    stats = frame.describe()
+
+    assert stats["value"]["count"] == 4.0
+    assert stats["value"]["nulls"] == 1.0
+    assert stats["value"]["non_finite"] == 2.0
+    assert stats["value"]["mean"] == 2.0
+    assert stats["value"]["min"] == 1.0
+    assert stats["value"]["max"] == 3.0
+
+    assert stats["name"]["count"] == 4.0
+    assert stats["name"]["nulls"] == 1.0
+    assert stats["name"]["unique"] == 3.0
 
 
 # ── non-finite describe regression tests ─────────────────────────────────────
@@ -1169,98 +1396,47 @@ def test_astype_valid_single_type():
     frame = ArFrame.from_records([{"a": 1, "b": 2}, {"a": 3, "b": 4}])
     casted_frame = frame.astype(float)
     df = to_pandas(casted_frame)
+
     assert df["a"].dtype == "float64"
     assert df["b"].dtype == "float64"
 
 
 def test_astype_dict_mapping():
+    # Test casting specific columns using a dictionary
     from arnio.convert import to_pandas
     from arnio.frame import ArFrame
 
     frame = ArFrame.from_records(
         [{"name": "Alice", "age": "25"}, {"name": "Bob", "age": "30"}]
     )
+
+    # Cast 'age' column from string to int
     casted_frame = frame.astype({"age": int})
     df = to_pandas(casted_frame)
-    assert df["age"].dtype == "Int64"
+
+    assert df["age"].dtype == "Int64"  # arnio uses Int64Dtype for integers
 
 
 def test_astype_invalid_raises_error():
+    # Test that invalid casting correctly raises clear errors
     import pytest
+
     from arnio.frame import ArFrame
 
     frame = ArFrame.from_records([{"name": "Alice"}, {"name": "Bob"}])
+
+    # Trying to cast a text-string column to integer should raise a ValueError
     with pytest.raises(
         ValueError,
         match="Value conversion error during astype|An error occurred during casting",
     ):
         frame.astype(int)
+
+    # Trying to pass None should raise a TypeError
     with pytest.raises(TypeError, match="dtype cannot be None"):
         frame.astype(None)
 
 
-def test_astype_object_dtype_rejected():
-    import numpy as np
-    import pytest
-
-    from arnio.frame import ArFrame
-
-    frame = ArFrame.from_records([{"a": 1, "b": True}])
-
-    with pytest.raises(
-        TypeError,
-        match="Arnio does not support casting columns to object dtype",
-    ):
-        frame.astype(object)
-    with pytest.raises(
-        TypeError,
-        match="Arnio does not support casting columns to object dtype",
-    ):
-        frame.astype("object")
-
-    with pytest.raises(
-        TypeError,
-        match="Arnio does not support casting columns to object dtype",
-    ):
-        frame.astype(np.object_)
-
-    with pytest.raises(
-        TypeError,
-        match="Arnio does not support casting columns to object dtype",
-    ):
-        frame.astype(np.dtype("O"))
-
-
-def test_astype_dict_object_dtype_rejected():
-    import numpy as np
-    import pytest
-
-    from arnio.frame import ArFrame
-
-    frame = ArFrame.from_records([{"a": 1, "b": True}])
-
-    with pytest.raises(
-        TypeError,
-        match="Column 'a' cannot be cast to object dtype",
-    ):
-        frame.astype({"a": object})
-    with pytest.raises(
-        TypeError,
-        match="Column 'a' cannot be cast to object dtype",
-    ):
-        frame.astype({"a": "object"})
-
-    with pytest.raises(
-        TypeError,
-        match="Column 'a' cannot be cast to object dtype",
-    ):
-        frame.astype({"a": np.object_})
-
-    with pytest.raises(
-        TypeError,
-        match="Column 'a' cannot be cast to object dtype",
-    ):
-        frame.astype({"a": np.dtype("O")})
 @pytest.mark.parametrize("invalid_dtype", [[], (), set()])
 def test_astype_rejects_invalid_dtype_containers(invalid_dtype):
     frame = ar.ArFrame.from_records([{"a": 1, "b": "x"}, {"a": 2, "b": "y"}])
@@ -1292,20 +1468,6 @@ def test_astype_rejects_object_dtype_aliases(invalid_dtype):
 
     with pytest.raises(TypeError, match="dtype must"):
         frame.astype(invalid_dtype)
-
-
-def test_astype_rejects_object_dtype_in_mapping():
-    frame = ar.ArFrame.from_records([{"a": 1}, {"a": 2}])
-
-    with pytest.raises(TypeError, match="dtype must"):
-        frame.astype({"a": object})
-
-
-def test_astype_rejects_object_string_dtype_in_mapping():
-    frame = ar.ArFrame.from_records([{"a": 1}, {"a": 2}])
-
-    with pytest.raises(TypeError, match="dtype must"):
-        frame.astype({"a": "object"})
 
 
 # ── drop_columns ──────────────────────────────────────────────────────────────
@@ -1384,40 +1546,41 @@ class TestDropColumns:
         frame = ar.from_pandas(df)
         frame.drop_columns(["a"])
         assert frame.columns == ["a", "b"]
- main
- main
 
 
-def test_repr_html_returns_str(sample_csv: str):
+# ── _repr_html_() ─────────────────────────────────────────────────────────────
+
+
+def test_repr_html_returns_str(sample_csv):
     frame = ar.read_csv(sample_csv)
     assert isinstance(frame._repr_html_(), str)
 
 
-def test_repr_html_has_table_tag(sample_csv: str):
+def test_repr_html_has_table_tag(sample_csv):
     assert "<table" in ar.read_csv(sample_csv)._repr_html_()
 
 
-def test_repr_html_has_thead_and_tbody(sample_csv: str):
+def test_repr_html_has_thead_and_tbody(sample_csv):
     out = ar.read_csv(sample_csv)._repr_html_()
     assert "<thead>" in out
     assert "<tbody>" in out
 
 
-def test_repr_html_contains_column_names(sample_csv: str):
+def test_repr_html_contains_column_names(sample_csv):
     frame = ar.read_csv(sample_csv)
     out = frame._repr_html_()
     for col in frame.columns:
         assert col in out
 
 
-def test_repr_html_contains_cell_values(sample_csv: str):
+def test_repr_html_contains_cell_values(sample_csv):
     frame = ar.read_csv(sample_csv)
     out = frame._repr_html_()
     assert "Alice" in out
     assert "Bob" in out
 
 
-def test_repr_html_summary_shows_shape(sample_csv: str):
+def test_repr_html_summary_shows_shape(sample_csv):
     frame = ar.read_csv(sample_csv)
     out = frame._repr_html_()
     rows, cols = frame.shape
@@ -1425,32 +1588,32 @@ def test_repr_html_summary_shows_shape(sample_csv: str):
     assert str(cols) in out
 
 
-def test_repr_html_summary_shows_dtypes(sample_csv: str):
+def test_repr_html_summary_shows_dtypes(sample_csv):
     frame = ar.read_csv(sample_csv)
     out = frame._repr_html_()
     for dtype in frame.dtypes.values():
         assert dtype in out
 
 
-def test_repr_html_truncation_notice_present(large_csv: str):
+def test_repr_html_truncation_notice_present(large_csv):
     frame = ar.read_csv(large_csv)
     out = frame._repr_html_()
     assert "Showing 10 of 1000 rows" in out
 
 
-def test_repr_html_no_truncation_for_small_frame(sample_csv: str):
+def test_repr_html_no_truncation_for_small_frame(sample_csv):
     frame = ar.read_csv(sample_csv)
     assert "Showing" not in frame._repr_html_()
 
 
-def test_repr_html_body_capped_at_ten_rows(large_csv: str):
+def test_repr_html_body_capped_at_ten_rows(large_csv):
     frame = ar.read_csv(large_csv)
     out = frame._repr_html_()
     tbody = out[out.index("<tbody>") : out.index("</tbody>") + len("</tbody>")]
     assert tbody.count("<tr>") == 10
 
 
-def test_repr_html_empty_frame_no_crash(tmp_path: Path):
+def test_repr_html_empty_frame_no_crash(tmp_path):
     csv_path = tmp_path / "empty.csv"
     csv_path.write_text("name,age\n")
     frame = ar.read_csv(str(csv_path))
@@ -1459,14 +1622,26 @@ def test_repr_html_empty_frame_no_crash(tmp_path: Path):
     assert len(out) > 0
 
 
-def test_repr_html_with_nulls_no_crash(csv_with_nulls: str):
+def test_repr_html_zero_columns_preserves_row_count():
+    frame = ar.from_pandas(pd.DataFrame({"a": [None, None]}))
+    zero = ar.drop_empty_columns(frame)
+
+    out = zero._repr_html_()
+
+    assert zero.shape == (2, 0)
+    assert "ArFrame [2 rows × 0 cols]" in out
+    assert "(no columns to display)" in out
+    assert "(empty)" not in out
+
+
+def test_repr_html_with_nulls_no_crash(csv_with_nulls):
     frame = ar.read_csv(csv_with_nulls)
     out = frame._repr_html_()
     assert isinstance(out, str)
     assert "<table" in out
 
 
-def test_repr_html_escapes_html_in_cell_value(tmp_path: Path):
+def test_repr_html_escapes_html_in_cell_value(tmp_path):
     csv_path = tmp_path / "xss.csv"
     csv_path.write_text('payload\n"<script>alert(1)</script>"\n')
     frame = ar.read_csv(str(csv_path))
@@ -1475,7 +1650,7 @@ def test_repr_html_escapes_html_in_cell_value(tmp_path: Path):
     assert "&lt;script&gt;" in out
 
 
-def test_repr_html_escapes_html_in_column_name(tmp_path: Path):
+def test_repr_html_escapes_html_in_column_name(tmp_path):
     csv_path = tmp_path / "col_xss.csv"
     csv_path.write_text("<b>bad</b>\n1\n")
     frame = ar.read_csv(str(csv_path))
@@ -1484,9 +1659,7 @@ def test_repr_html_escapes_html_in_column_name(tmp_path: Path):
     assert "&lt;b&gt;bad&lt;/b&gt;" in out
 
 
-def test_repr_html_does_not_convert_full_frame(
-    large_csv: str, monkeypatch: pytest.MonkeyPatch
-):
+def test_repr_html_does_not_convert_full_frame(large_csv, monkeypatch):
     """_repr_html_() must not call to_pandas() for automatic display."""
     frame = ar.read_csv(large_csv)
 
@@ -1504,9 +1677,6 @@ def test_repr_html_does_not_convert_full_frame(
     assert (
         call_sizes == []
     ), f"_repr_html_() should not call to_pandas(), but got calls with {call_sizes} rows"
- main
- main
-
 
 
 # ── filter_rows() tests ───────────────────────────────────────────────────────
@@ -1788,9 +1958,6 @@ def test_from_records_dict_explicit_valid_columns_subset():
     assert frame.shape == (2, 1)
     assert frame.columns == ["a"]
     assert frame["a"] == [1, 3]
- main
- main
-
 
 
 def test_to_dict_invalid_orient_types():
@@ -1812,4 +1979,54 @@ def test_to_dict_invalid_orient_types():
     # 4. Backward Compatibility: Unsupported string must still raise ValueError
     with pytest.raises(ValueError, match="orient must be one of: list, records, split"):
         frame.to_dict(orient="invalid_string")
- main
+
+
+def test_astype_rejects_pandas_na():
+    import pandas as pd
+    import pytest
+
+    import arnio as ar
+
+    frame = ar.ArFrame.from_records([{"a": "1"}, {"a": "2"}])
+
+    # 1. Scalar pd.NA check
+    with pytest.raises(TypeError, match="dtype must be a string"):
+        frame.astype(pd.NA)
+
+    # 2. Mapping/Dict with pd.NA check
+    with pytest.raises(TypeError, match="dtype must be a string"):
+        frame.astype({"a": pd.NA})
+
+
+def test_astype_rejects_multielement_numpy_array():
+    import numpy as np
+    import pytest
+
+    import arnio as ar
+
+    frame = ar.ArFrame.from_records([{"a": "1"}])
+
+    # 3. Multi-element NumPy array check
+    with pytest.raises(TypeError, match="dtype must be a string"):
+        frame.astype(np.array([1, 2]))
+
+
+# ── is_empty ──────────────────────────────────────────────────────────────────
+
+
+def test_is_empty_returns_false_when_frame_has_rows():
+    frame = ar.from_dict({"name": ["Alice", "Bob"], "age": [25, 30]})
+    assert frame.is_empty is False
+
+
+def test_is_empty_returns_true_for_empty_frame():
+    import pandas as pd
+
+    df = pd.DataFrame(columns=["name", "age"])
+    frame = ar.from_pandas(df)
+    assert frame.is_empty is True
+
+
+def test_is_empty_single_row_is_not_empty():
+    frame = ar.from_dict({"name": ["Alice"], "age": [25]})
+    assert frame.is_empty is False

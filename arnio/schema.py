@@ -5,12 +5,11 @@ Production data contracts and validation.
 
 from __future__ import annotations
 
-import ipaddress
+import datetime as _dt
 import json
 import math
 import numbers
 import re
-import uuid
 import warnings
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
@@ -211,28 +210,6 @@ def _validate_numeric_bound(value: float | int, name: str) -> None:
     """Raise ValueError if value is not a finite number."""
     if not math.isfinite(value):
         raise ValueError(f"{name} must be a finite number, got {value!r}")
-
-
-def _validate_allowed_collection(allowed: Any, param_name: str = "allowed") -> set:
-    """Validate and convert an allowed-value collection to a set."""
-    if isinstance(allowed, (str, bytes)):
-        raise TypeError(
-            f"{param_name} must be an iterable of hashable scalar values, "
-            f"not a bare {'string' if isinstance(allowed, str) else 'bytes'}"
-        )
-    if not hasattr(allowed, "__iter__"):
-        raise TypeError(f"{param_name} must be an iterable of hashable scalar values")
-    result = []
-    for item in allowed:
-        try:
-            hash(item)
-        except TypeError:
-            raise TypeError(
-                f"{param_name} values must be hashable scalar values, "
-                f"got unhashable type: '{type(item).__name__}'"
-            )
-        result.append(item)
-    return set(result)
 
 
 def _validate_field_dtype(dtype: str | None) -> None:
@@ -913,15 +890,8 @@ class Field:
             raise TypeError("nullable must be a bool")
         if not isinstance(self.unique, bool):
             raise TypeError("unique must be a bool")
-        valid_dtypes = {
-            "int64",
-            "float64",
-            "string",
-            "bool",
-            "null",
-            "datetime",
-            None,
-        }
+        if not isinstance(self.case_sensitive, bool):
+            raise TypeError("case_sensitive must be a bool")
 
         if self.required_if is not None:
             if not isinstance(self.required_if, tuple):
@@ -934,32 +904,16 @@ class Field:
                 raise TypeError("required_if column name must be a string")
             if not pd.api.types.is_scalar(self.required_if[1]):
                 raise TypeError("required_if expected value must be a scalar")
-        # Always validate min/max types, not just for numeric dtypes
-        if self.min is not None:
-            if isinstance(self.min, bool) or not isinstance(
-                self.min, (int, float, str)
-            ):
-                raise TypeError("min must be numeric, a datetime string, or None")
-        if self.max is not None:
-            if isinstance(self.max, bool) or not isinstance(
-                self.max, (int, float, str)
-            ):
-                raise TypeError("max must be numeric, a datetime string, or None")
-        if (
-            self.min is not None
-            and self.max is not None
-            and not isinstance(self.min, str)
-            and not isinstance(self.max, str)
-            and self.min > self.max
-        ):
-            raise ValueError("min must be less than or equal to max")
-        if self.dtype not in {"int64", "float64", "datetime", "date"} and (
-            self.min is not None or self.max is not None
-        ):
-            raise ValueError(
-                f"min/max bounds are only valid for numeric and date/datetime dtypes, "
-                f"got dtype={self.dtype!r}"
-            )
+        if self.dtype in {"int64", "float64"}:
+            if self.min is not None:
+                if isinstance(self.min, bool) or not isinstance(self.min, (int, float)):
+                    raise TypeError("min must be numeric or None")
+            if self.max is not None:
+                if isinstance(self.max, bool) or not isinstance(self.max, (int, float)):
+                    raise TypeError("max must be numeric or None")
+            if self.min is not None and self.max is not None:
+                if self.min > self.max:
+                    raise ValueError("min must be less than or equal to max")
 
         if self.pattern is not None:
             if not isinstance(self.pattern, str):
@@ -973,10 +927,6 @@ class Field:
                     f"pattern is not a valid regular expression: {exc}"
                 ) from exc
             _reject_unsafe_regex_pattern(self.pattern)
-        if self.semantic is not None and not isinstance(self.semantic, str):
-            raise TypeError(
-                f"semantic must be a str or None, got {type(self.semantic).__name__}"
-            )
 
         if self.allowed is not None:
             if not isinstance(self.allowed, (list, tuple, set)):
@@ -1058,8 +1008,7 @@ class Schema:
                 raise TypeError("Schema 'rules' must be a list of callables")
             for rule in self.rules:
                 if not callable(rule):
-                    raise TypeError(
-                        "Schema 'rules' must be a list of callables")
+                    raise TypeError("Schema 'rules' must be a list of callables")
 
     def validate(
         self,
@@ -1147,8 +1096,7 @@ class Schema:
 
         unique = payload.get("unique")
         if unique is not None and not isinstance(unique, list):
-            raise TypeError(
-                "Schema JSON 'unique' must be a list of strings or null.")
+            raise TypeError("Schema JSON 'unique' must be a list of strings or null.")
 
         # rules_omitted marker is accepted and silently ignored — rules
         # cannot be round-tripped through JSON and must be re-attached
@@ -1178,8 +1126,7 @@ class Schema:
         from .quality import DataQualityReport
 
         if not isinstance(report, DataQualityReport):
-            raise TypeError(
-                f"Expected DataQualityReport, got {type(report).__name__}")
+            raise TypeError(f"Expected DataQualityReport, got {type(report).__name__}")
         if not report.columns:
             raise ValueError(
                 "Cannot bootstrap schema from an empty report (no columns)."
@@ -1196,8 +1143,7 @@ class Schema:
                 )
 
             arnio_dtype = _DTYPE_MAP.get(str(dtype_val).lower(), "string")
-            fields[col_name] = Field(
-                dtype=arnio_dtype, nullable=null_count > 0)
+            fields[col_name] = Field(dtype=arnio_dtype, nullable=null_count > 0)
 
         return cls(fields=fields)
 
@@ -1349,18 +1295,14 @@ class ValidationResult:
         }
 
     def summary(self) -> dict[str, Any]:
-        """Return a compact validation summary.
-
-        Severity counts are not included because ``ValidationIssue`` does not
-        currently carry severity information.
-        """
+        """Return a compact validation summary."""
         by_rule: dict[str, int] = {}
         by_column: dict[str, int] = {}
         by_column_and_rule: dict[str, dict[str, int]] = {}
+        severity_counts: dict[str, int] = {}
         for issue in self.issues:
             by_rule[issue.rule] = by_rule.get(issue.rule, 0) + 1
-            severity_counts[issue.severity] = severity_counts.get(
-                issue.severity, 0) + 1
+            severity_counts[issue.severity] = severity_counts.get(issue.severity, 0) + 1
             if issue.column is not None:
                 by_column[issue.column] = by_column.get(issue.column, 0) + 1
                 column_rules = by_column_and_rule.setdefault(issue.column, {})
@@ -1387,66 +1329,8 @@ class ValidationResult:
         *,
         max_issues: int | None = None,
         redact_values: bool = False,
-        output: object = None,
     ) -> str:
         """Return a GitHub-friendly Markdown validation report.
-
-        Parameters
-        ----------
-        max_issues : int, optional
-            Maximum number of issues to include in the table. When omitted, all
-            issues are shown.
-        """
-        if max_issues is not None and (
-            not isinstance(max_issues, int) or isinstance(max_issues, bool)
-        ):
-            raise TypeError("max_issues must be an integer or None")
-        if max_issues is not None and max_issues < 0:
-            raise ValueError("max_issues must be non-negative")
-
-        status = "passed" if self.passed else "failed"
-        lines = [
-            "## Validation Report",
-            "",
-            f"- Status: **{status}**",
-            f"- Rows checked: {self.row_count}",
-            f"- Issues found: {self.issue_count}",
-            f"- Bad rows: {len(self.bad_rows)}",
-        ]
-
-        if self.passed:
-            return "\n".join(lines)
-
-        visible_issues = self.issues if max_issues is None else self.issues[:max_issues]
-        if not visible_issues:
-            lines.extend(["", "_Issue table omitted by `max_issues=0`._"])
-            return "\n".join(lines)
-
-        lines.extend(
-            [
-                "",
-                "| Column | Rule | Row | Value | Message |",
-                "| --- | --- | ---: | --- | --- |",
-            ]
-        )
-        for issue in visible_issues:
-            lines.append(
-                "| "
-                f"{_markdown_cell(issue.column)} | "
-                f"{_markdown_cell(issue.rule)} | "
-                f"{_markdown_cell(issue.row_index)} | "
-                f"{_markdown_cell(_clean_scalar(issue.value))} | "
-                f"{_markdown_cell(issue.message)} |"
-            )
-
-        hidden_count = self.issue_count - len(visible_issues)
-        if hidden_count > 0:
-            lines.extend(
-                ["", f"_Showing {len(visible_issues)} of {self.issue_count} issues._"]
-            )
-
-        return "\n".join(lines)
-
 
         Parameters
         ----------
@@ -1511,19 +1395,10 @@ class ValidationResult:
         hidden_count = self.issue_count - len(visible_issues)
         if hidden_count > 0:
             lines.extend(
-                ["",
-                    f"_Showing {len(visible_issues)} of {self.issue_count} issues._"]
+                ["", f"_Showing {len(visible_issues)} of {self.issue_count} issues._"]
             )
 
-        md = "\n".join(lines)
-        if output is not None:
-            if not hasattr(output, "write"):
-                raise TypeError(
-                    f"output must be a writable object, got {type(output).__name__}"
-                )
-            output.write(md)
-            return None
-        return md
+        return "\n".join(lines)
 
     def raise_for_errors(self) -> None:
         """Raise an ArnioError when validation failed.
@@ -1624,7 +1499,7 @@ class SchemaDiff:
             "differences_by_column": by_column,
         }
 
-    def to_markdown(self, output: object = None) -> str:
+    def to_markdown(self) -> str:
         """Return a GitHub-friendly Markdown schema diff report."""
         lines = [
             "## Schema Diff",
@@ -1651,16 +1526,7 @@ class SchemaDiff:
                 f"{_markdown_cell(_clean_scalar(diff.expected))} | "
                 f"{_markdown_cell(_clean_scalar(diff.observed))} |"
             )
-
-            md = "\n".join(lines)
-            if output is not None:
-                if not hasattr(output, "write"):
-                    raise TypeError(
-                        f"output must be a writable object, got {type(output).__name__}"
-                    )
-                output.write(md)
-                return None
-            return md
+        return "\n".join(lines)
 
 
 def _schema_rule_name(rule: Callable[[pd.DataFrame], list[ValidationIssue]]) -> str:
@@ -1708,10 +1574,8 @@ def diff_schema(
         visible callable names and rule count; exact callable equivalence is
         intentionally not inferred.
     """
-    expected_schema = expected if isinstance(
-        expected, Schema) else Schema(expected)
-    observed_schema = observed if isinstance(
-        observed, Schema) else Schema(observed)
+    expected_schema = expected if isinstance(expected, Schema) else Schema(expected)
+    observed_schema = observed if isinstance(observed, Schema) else Schema(observed)
     differences: list[SchemaDiffEntry] = []
 
     expected_columns = set(expected_schema.fields)
@@ -2375,7 +2239,7 @@ def String(
 
     if isinstance(allowed, (str, bytes)):
         raise TypeError(
-            "allowed must be an iterable of hashable scalar values, not a bare string"
+            "allowed must be a sequence of allowed values, not a bare string"
         )
 
     if pattern is not None:
@@ -2399,7 +2263,7 @@ def String(
             if value < 0:
                 raise ValueError(f"{name} must be greater than or equal to 0")
 
-    allowed_set = _validate_allowed_collection(allowed) if allowed is not None else None
+    allowed_set = set(allowed) if allowed is not None else None
 
     return Field(
         dtype="string",
@@ -2461,8 +2325,7 @@ def Email(
     """
 
     if not isinstance(validation, str):
-        raise TypeError(
-            "Email validation must be a string: 'light' or 'strict'")
+        raise TypeError("Email validation must be a string: 'light' or 'strict'")
 
     if validation not in {"light", "strict"}:
         raise ValueError("Email validation must be 'light' or 'strict'")
@@ -2503,34 +2366,30 @@ def URL(
             )
 
         if not isinstance(allowed_schemes, (list, tuple, set)):
-            raise TypeError(
-                "allowed_schemes must be a sequence of scheme names")
+            raise TypeError("allowed_schemes must be a sequence of scheme names")
 
         normalized_schemes = set()
 
         for scheme in allowed_schemes:
             if not isinstance(scheme, str):
-                raise ValueError(
-                    "allowed_schemes must contain non-empty strings")
+                raise ValueError("allowed_schemes must contain non-empty strings")
 
             scheme = scheme.strip()
 
             if scheme == "":
-                raise ValueError(
-                    "allowed_schemes must contain non-empty strings")
+                raise ValueError("allowed_schemes must contain non-empty strings")
 
             if URL_SCHEME_PATTERN.fullmatch(scheme) is None:
                 raise ValueError(
                     "allowed_schemes must contain URL scheme names such as 'http' or 'https'"
                 )
 
-            normalized_schemes.add(scheme.lower())
+            normalized_schemes.add(scheme)
 
         if len(normalized_schemes) == 0:
             raise ValueError("allowed_schemes must be a non-empty sequence")
 
-        schemes = "|".join(re.escape(scheme)
-                           for scheme in sorted(normalized_schemes))
+        schemes = "|".join(re.escape(scheme) for scheme in sorted(normalized_schemes))
 
         semantic = f"url:{schemes}"
 
@@ -2689,16 +2548,18 @@ def CurrencyCode(
     Returns:
         Field: Configured 3-letter uppercase currency-code schema field.
     """
-    if allowed is not None:
-        allowed_set = _validate_allowed_collection(allowed)
-        for value in allowed_set:
-            if not isinstance(value, str):
-                raise TypeError(
-                    f"allowed values for CurrencyCode must be strings, got {type(value).__name__!r}"
-                )
 
-    else:
-        allowed_set = None
+    if isinstance(allowed, (str, bytes)):
+        raise TypeError(
+            "allowed must be a sequence of currency codes, not a bare string"
+        )
+
+    if allowed is not None:
+        for value in allowed:
+            if not isinstance(value, str):
+                raise TypeError("all allowed currency codes must be strings")
+
+    allowed_set = set(allowed) if allowed is not None else None
 
     return Field(
         dtype="string",
@@ -2709,79 +2570,6 @@ def CurrencyCode(
         severity=severity,
         required_if=required_if,
         allowed=allowed_set,
-    )
-
-
-def UUID(
-    *,
-    nullable: bool = True,
-    unique: bool = False,
-    severity: str = "error",
-    version: int | None = None,
-    required_if: tuple[str, Any] | None = None,
-) -> Field:
-    """Create a UUID schema field.
-
-    Args:
-        nullable: Whether null values are allowed.
-        unique: Whether non-null values must be unique.
-        severity: Severity level for validation issues.
-        version: Expected UUID version (e.g. 4). If None, any UUID version is accepted.
-            When version is None, any string format accepted by Python's standard
-            uuid.UUID constructor is accepted (including canonical forms, 32-character
-            hexadecimal strings, UUIDs with braces, and URNs). When a strict version is
-            specified, the Nil UUID (00000000-0000-0000-0000-000000000000) will be
-            rejected as its version attribute is None.
-        required_if: Conditional requirement as a column/value pair.
-
-    Returns:
-        Field: Configured UUID schema field.
-    """
-    if version is not None and version not in {1, 2, 3, 4, 5}:
-        raise ValueError("UUID version must be one of 1, 2, 3, 4, 5")
-
-    semantic = f"uuid:{version}" if version is not None else "uuid"
-    return Field(
-        dtype="string",
-        nullable=nullable,
-        semantic=semantic,
-        unique=unique,
-        required_if=required_if,
-        severity=severity,
-    )
-
-
-def IPAddress(
-    *,
-    nullable: bool = True,
-    unique: bool = False,
-    severity: str = "error",
-    version: int | None = None,
-    required_if: tuple[str, Any] | None = None,
-) -> Field:
-    """Create an IP address schema field.
-
-    Args:
-        nullable: Whether null values are allowed.
-        unique: Whether non-null values must be unique.
-        severity: Severity level for validation issues.
-        version: Expected IP version (4 or 6). If None, both are accepted.
-        required_if: Conditional requirement as a column/value pair.
-
-    Returns:
-        Field: Configured IP address schema field.
-    """
-    if version is not None and version not in {4, 6}:
-        raise ValueError("IPAddress version must be 4 or 6")
-
-    semantic = f"ip_address:{version}" if version is not None else "ip_address"
-    return Field(
-        dtype="string",
-        nullable=nullable,
-        semantic=semantic,
-        unique=unique,
-        required_if=required_if,
-        severity=severity,
     )
 
 
@@ -3158,8 +2946,7 @@ def _validate_column(
 
     is_null_mask = series.isna()
     if actual_dtype in ("object", "string"):
-        is_null_mask = is_null_mask | (
-            series.fillna("").astype(str).str.strip() == "")
+        is_null_mask = is_null_mask | (series.fillna("").astype(str).str.strip() == "")
 
     if not field_def.nullable:
         issues.extend(
@@ -3289,7 +3076,7 @@ def _validate_column(
 
     if field_def.semantic is not None:
         if field_def.semantic.startswith("custom:"):
-            validator_name = field_def.semantic[len("custom:"):]
+            validator_name = field_def.semantic[len("custom:") :]
             fn = _CUSTOM_VALIDATORS.get(validator_name)
             if fn is None:
                 issues.append(
@@ -3303,17 +3090,12 @@ def _validate_column(
             else:
                 invalid = non_null[
                     ~non_null.map(
-<<<<<<< HEAD
-                        lambda v: _normalize_validator_result(
-                            fn(v), validator_name)
-=======
                         lambda v: _run_custom_validator(
                             fn,
                             v,
                             column=name,
                             validator_name=validator_name,
                         )
->>>>>>> upstream/main
                     )
                 ]
                 issues.extend(
@@ -3329,21 +3111,11 @@ def _validate_column(
                     )
                 )
         else:
-            is_known = (
-                field_def.semantic in _SEMANTIC_PATTERNS
-                or field_def.semantic.startswith("url:")
-                or field_def.semantic
-                in {
-                    "date",
-                    "country_code",
-                    "language_code",
-                    "timezone",
-                    "currency_code",
-                }
-                or field_def.semantic.startswith("uuid")
-                or field_def.semantic.startswith("ip_address")
-            )
-            if not is_known:
+            pattern = _SEMANTIC_PATTERNS.get(field_def.semantic)
+            if pattern is None and field_def.semantic.startswith("url:"):
+                schemes = field_def.semantic[len("url:") :]
+                pattern = rf"({schemes})://[^\s]+"
+            if pattern is None:
                 issues.append(
                     ValidationIssue(
                         column=name,
@@ -3425,91 +3197,17 @@ def _validate_column(
                     if field_def.allowed is not None:
                         invalid = pd.Series(dtype=object)
                     else:
-<<<<<<< HEAD
-                        invalid = non_null[~non_null.isin(
-                            ISO_4217_CURRENCY_CODES)]
-=======
                         values = (
                             non_null.str.upper()
                             if not field_def.case_sensitive
                             else non_null
                         )
                         invalid = non_null[~values.isin(ISO_4217_CURRENCY_CODES)]
->>>>>>> upstream/main
-
-                elif field_def.semantic.startswith("uuid"):
-                    version = None
-                    if ":" in field_def.semantic:
-                        parts = field_def.semantic.split(":")
-                        if len(parts) != 2:
-                            raise ValueError(
-                                f"Invalid semantic configuration for UUID: {field_def.semantic}"
-                            )
-                        try:
-                            version = int(parts[1])
-                        except ValueError as e:
-                            raise ValueError(
-                                f"Invalid UUID version suffix in semantic: {field_def.semantic}"
-                            ) from e
-                        if version not in {1, 2, 3, 4, 5}:
-                            raise ValueError(
-                                f"UUID version must be one of 1, 2, 3, 4, 5, got {version}"
-                            )
-
-                    # Optimize per-row UUID validation using unique non-null values
-                    unique_vals = non_null.drop_duplicates()
-                    invalid_unique = []
-                    for value in unique_vals:
-                        try:
-                            u = uuid.UUID(str(value))
-                            if version is not None and u.version != version:
-                                invalid_unique.append(value)
-                        except ValueError:
-                            invalid_unique.append(value)
-
-                    invalid = non_null[non_null.isin(invalid_unique)]
-
-                elif field_def.semantic.startswith("ip_address"):
-                    version = None
-                    if ":" in field_def.semantic:
-                        parts = field_def.semantic.split(":")
-                        if len(parts) != 2:
-                            raise ValueError(
-                                f"Invalid semantic configuration for IPAddress: {field_def.semantic}"
-                            )
-                        try:
-                            version = int(parts[1])
-                        except ValueError as e:
-                            raise ValueError(
-                                f"Invalid IPAddress version suffix in semantic: {field_def.semantic}"
-                            ) from e
-                        if version not in {4, 6}:
-                            raise ValueError(
-                                f"IPAddress version must be 4 or 6, got {version}"
-                            )
-
-                    # Optimize per-row IPAddress validation using unique non-null values
-                    unique_vals = non_null.drop_duplicates()
-                    invalid_unique = []
-                    for value in unique_vals:
-                        try:
-                            ip = ipaddress.ip_address(str(value))
-                            if version is not None and ip.version != version:
-                                invalid_unique.append(value)
-                        except ValueError:
-                            invalid_unique.append(value)
-
-                    invalid = non_null[non_null.isin(invalid_unique)]
 
                 elif field_def.semantic == "credit_card":
                     invalid = non_null[~non_null.map(_is_luhn_valid_credit_card)]
 
                 else:
-                    if field_def.semantic.startswith("url:"):
-                        schemes = field_def.semantic[len("url:") :]
-                        pattern = rf"({schemes})://[^\s]+"
-                    else:
-                        pattern = _SEMANTIC_PATTERNS.get(field_def.semantic)
                     invalid = non_null[~text.str.fullmatch(pattern, na=False)]
 
                 issues.extend(
@@ -3555,170 +3253,43 @@ def _validate_datetime(
 ) -> list[ValidationIssue]:
     """Validate non-null datetime values against the format and min/max bounds in field_def."""
     issues: list[ValidationIssue] = []
+    parsed = pd.to_datetime(non_null, format=field_def.format, errors="coerce")
 
-    # Parse each element individually to prevent vector-wide parsing crash on mixed timezones,
-    # and to preserve individual timezone info.
-    parsed_vals = []
-    for idx, val in non_null.items():
-        try:
-            parsed_val = pd.to_datetime(val, format=field_def.format)
-        except (ValueError, TypeError, pd.errors.ParserError):
-            parsed_val = pd.NaT
-        parsed_vals.append((idx, val, parsed_val))
+    invalid_format = non_null[parsed.isna()]
+    issues.extend(
+        _row_issues(
+            invalid_format,
+            column=name,
+            rule="format",
+            message=f"Column {name!r} does not match the required datetime format",
+            severity=field_def.severity,
+        )
+    )
 
-    invalid_format_rows = []
-    valid_parsed = []  # list of (idx, val, parsed_timestamp)
-    for idx, val, p_val in parsed_vals:
-        if pd.isna(p_val):
-            invalid_format_rows.append((idx, val))
-        else:
-            valid_parsed.append((idx, val, p_val))
+    valid_mask = parsed.notna()
+    valid_non_null = non_null[valid_mask]
+    valid_parsed = parsed[valid_mask]
 
-    # Add format issues
-    if invalid_format_rows:
-        for idx, val in invalid_format_rows:
-            issues.append(
-                ValidationIssue._fast_create(
-                    column=name,
-                    rule="format",
-                    message=f"Column {name!r} does not match the required datetime format",
-                    row_index=int(idx) + 1,
-                    value=val,
-                    severity=field_def.severity,
-                )
+    if field_def._datetime_min is not None:
+        issues.extend(
+            _row_issues(
+                valid_non_null[valid_parsed < field_def._datetime_min],
+                column=name,
+                rule="min",
+                message=f"Column {name!r} has values below {field_def._datetime_min}",
+                severity=field_def.severity,
             )
-
-    if not valid_parsed:
-        return issues
-
-    # Analyze timezone awareness of successfully parsed values
-    tz_aware_status = [p_val.tzinfo is not None for _, _, p_val in valid_parsed]
-    has_aware = any(tz_aware_status)
-    has_naive = not all(tz_aware_status)
-
-    # Handle mixed timezone-aware and timezone-naive values in the column
-    if has_aware and has_naive:
-        for idx, val, _ in valid_parsed:
-            issues.append(
-                ValidationIssue._fast_create(
-                    column=name,
-                    rule="timezone",
-                    message=f"Column {name!r} contains mixed timezone-aware and timezone-naive values",
-                    row_index=int(idx) + 1,
-                    value=val,
-                    severity=field_def.severity,
-                )
+        )
+    if field_def._datetime_max is not None:
+        issues.extend(
+            _row_issues(
+                valid_non_null[valid_parsed > field_def._datetime_max],
+                column=name,
+                rule="max",
+                message=f"Column {name!r} has values above {field_def._datetime_max}",
+                severity=field_def.severity,
             )
-        return issues
-
-    # Validate against bounds with timezone compatibility checks
-    min_bound = field_def._datetime_min
-    max_bound = field_def._datetime_max
-
-    if has_aware:
-        # Check mismatch: aware data vs naive bounds
-        if min_bound is not None and min_bound.tzinfo is None:
-            for idx, val, _ in valid_parsed:
-                issues.append(
-                    ValidationIssue._fast_create(
-                        column=name,
-                        rule="timezone",
-                        message=f"Cannot compare timezone-aware values in column {name!r} with timezone-naive min boundary",
-                        row_index=int(idx) + 1,
-                        value=val,
-                        severity=field_def.severity,
-                    )
-                )
-            return issues
-        if max_bound is not None and max_bound.tzinfo is None:
-            for idx, val, _ in valid_parsed:
-                issues.append(
-                    ValidationIssue._fast_create(
-                        column=name,
-                        rule="timezone",
-                        message=f"Cannot compare timezone-aware values in column {name!r} with timezone-naive max boundary",
-                        row_index=int(idx) + 1,
-                        value=val,
-                        severity=field_def.severity,
-                    )
-                )
-            return issues
-
-        # Normalize data and bounds to UTC
-        normalized_parsed = []
-        for idx, val, p_val in valid_parsed:
-            normalized_parsed.append((idx, val, p_val.tz_convert("UTC")))
-        if min_bound is not None:
-            min_bound = min_bound.tz_convert("UTC")
-        if max_bound is not None:
-            max_bound = max_bound.tz_convert("UTC")
-    else:
-        # Check mismatch: naive data vs aware bounds
-        if min_bound is not None and min_bound.tzinfo is not None:
-            for idx, val, _ in valid_parsed:
-                issues.append(
-                    ValidationIssue._fast_create(
-                        column=name,
-                        rule="timezone",
-                        message=f"Cannot compare timezone-naive values in column {name!r} with timezone-aware min boundary",
-                        row_index=int(idx) + 1,
-                        value=val,
-                        severity=field_def.severity,
-                    )
-                )
-            return issues
-        if max_bound is not None and max_bound.tzinfo is not None:
-            for idx, val, _ in valid_parsed:
-                issues.append(
-                    ValidationIssue._fast_create(
-                        column=name,
-                        rule="timezone",
-                        message=f"Cannot compare timezone-naive values in column {name!r} with timezone-aware max boundary",
-                        row_index=int(idx) + 1,
-                        value=val,
-                        severity=field_def.severity,
-                    )
-                )
-            return issues
-
-        normalized_parsed = valid_parsed
-
-    # Compare values against bounds
-    for idx, val, p_val in normalized_parsed:
-        try:
-            if min_bound is not None and p_val < min_bound:
-                issues.append(
-                    ValidationIssue._fast_create(
-                        column=name,
-                        rule="min",
-                        message=f"Column {name!r} has values below {field_def._datetime_min}",
-                        row_index=int(idx) + 1,
-                        value=val,
-                        severity=field_def.severity,
-                    )
-                )
-            if max_bound is not None and p_val > max_bound:
-                issues.append(
-                    ValidationIssue._fast_create(
-                        column=name,
-                        rule="max",
-                        message=f"Column {name!r} has values above {field_def._datetime_max}",
-                        row_index=int(idx) + 1,
-                        value=val,
-                        severity=field_def.severity,
-                    )
-                )
-        except (TypeError, ValueError):
-            issues.append(
-                ValidationIssue._fast_create(
-                    column=name,
-                    rule="timezone",
-                    message=f"Incompatible timezone comparison for column {name!r}",
-                    row_index=int(idx) + 1,
-                    value=val,
-                    severity=field_def.severity,
-                )
-            )
+        )
 
     return issues
 
@@ -3767,8 +3338,7 @@ def _parse_datetime_bound(value: Any, name: str) -> pd.Timestamp | None:
         ) from exc
 
     if not isinstance(parsed, pd.Timestamp) or pd.isna(parsed):
-        raise ValueError(
-            f"DateTime {name} must be a parseable datetime scalar")
+        raise ValueError(f"DateTime {name} must be a parseable datetime scalar")
     return parsed
 
 
@@ -3874,23 +3444,9 @@ def _field_from_json_dict(name: str, payload: Any) -> Field:
                 f"Schema JSON field {name!r} 'required_if' must be a 2-item list or null."
             )
         required_if = tuple(required_if)
-    dtype = payload.get("dtype")
-
-    valid_dtypes = {
-        "int64",
-        "float64",
-        "string",
-        "bool",
-        "null",
-        "datetime",
-        None,
-    }
-
-    if dtype not in valid_dtypes:
-        raise ValueError(f"Schema JSON field {name!r} has invalid dtype: {dtype!r}")
 
     return Field(
-        dtype=dtype,
+        dtype=payload.get("dtype"),
         nullable=payload.get("nullable", True),
         min=payload.get("min"),
         max=payload.get("max"),
@@ -3966,6 +3522,7 @@ def _clean_scalar(value: Any) -> Any:
 
 
 def _markdown_cell(value: Any) -> str:
+    """Escape a value for safe rendering inside a Markdown table cell."""
     if value is None:
         return ""
     text = str(value).replace("\n", "<br>").replace("|", "\\|")
